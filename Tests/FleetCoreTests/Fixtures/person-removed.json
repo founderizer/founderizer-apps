@@ -1,0 +1,12 @@
+{
+ "person": {
+  "id": 4,
+  "name": "Rafa Soto"
+ },
+ "deleted": true,
+ "conversations": 0,
+ "ok": true,
+ "request_id": "6ab2160a-2c7a-45a1-bc57-bd71e8459f9e",
+ "client": "deterministic-test",
+ "replayed": false
+}

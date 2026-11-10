@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+<key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+<key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
+<key>CFBundleDisplayName</key><string>Founderizer</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
+<key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
+<key>LSRequiresIPhoneOS</key><true/>
+<!-- The Mac draws a phone's one-time code as fleet://enroll?hub=…&code=… (OwnerDevices.enrollPayload), so the
+     phone's camera opens the app with both, and the phone joins with nothing typed (MobileStore.openLink). -->
+<key>CFBundleURLTypes</key><array><dict>
+<key>CFBundleURLName</key><string>com.founderizer.mobile.enroll</string>
+<key>CFBundleURLSchemes</key><array><string>fleet</string></array>
+</dict></array>
+<!-- The first thing the phone draws, before any view exists: the brand's own canvas, so the app does not
+     open on a white or a black flash. The colour is a set of Assets.xcassets, which carries its light and its
+     dark value, so this follows the phone too. It carries no mark (fix round 2, item 82): with a kept fleet the
+     first frame is the list, and the mark faded over its rows; a launch with nothing to draw gets the mark from
+     Chats, in the middle at 96 points (the owner's yes of 28 October 2026 to D-8), until the list comes. -->
+<key>UILaunchScreen</key><dict>
+<key>UIColorName</key><string>BrandCanvas</string>
+<key>UIImageName</key><string>LaunchMark</string>
+</dict>
+<key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
+<key>UISupportedInterfaceOrientations</key><array>
+<string>UIInterfaceOrientationPortrait</string>
+</array>
+<!-- No style of its own: the app follows the phone, light and dark, as this platform's own apps do. -->
+<!-- The device key is read from the keychain behind the owner's presence (DeviceKey.swift). -->
+<!-- Export compliance, so a TestFlight build needs no answer from the owner for each upload: the app's
+     only encryption is the platform's own — TLS in URLSession, the keychain, and CryptoKit for a SHA-256
+     digest and one Ed25519 signature check. Hashing and signature checking are exempt. -->
+<key>ITSAppUsesNonExemptEncryption</key><false/>
+<key>NSFaceIDUsageDescription</key><string>Founderizer unlocks this phone's own key for the hub.</string>
+<!-- Plain HTTP inside the tailnet, the same pattern as app/Info.plist: the hub's Tailscale address, and the
+     loopback address of the owner app's fixture (ui_fixture.py) for a check on this Mac. -->
+<key>NSAppTransportSecurity</key><dict>
+<!-- A customer's hub is their own machine at an address this app cannot know when it is built,
+     so no exception domain can name it. This key must stand alone: iOS ignores it when
+     NSAllowsLocalNetworking is present too. The app's own code keeps TLS where it belongs. -->
+<key>NSAllowsArbitraryLoads</key><true/>
+</dict>
+</dict></plist>

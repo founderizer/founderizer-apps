@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Pings from the hub (MOBILE-APP.md 9). The App ID com.founderizer.mobile carries the push capability already.
+     Xcode signs a build to run with "development" and changes it to "production" when it exports for TestFlight,
+     which is why PushRegistration.environment follows the build configuration.
+     The keychain group is the one the app shares with NeedSeal, the extension that opens a sealed ping (SealKey). -->
+<plist version="1.0"><dict>
+<key>aps-environment</key><string>development</string>
+<key>keychain-access-groups</key><array><string>$(AppIdentifierPrefix)com.founderizer.mobile.seal</string></array>
+</dict></plist>

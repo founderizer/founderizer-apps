@@ -1,0 +1,8 @@
+# Xcode's own per-user and per-machine state. The project, the scheme and the sources are the checkout.
+xcuserdata/
+*.xcuserdatad/
+project.xcworkspace/xcshareddata/swiftpm/
+DerivedData/
+
+# The archive and the .ipa of a TestFlight build.
+build/

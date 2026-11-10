@@ -1,0 +1,84 @@
+{
+ "db": "decode-check",
+ "limits": {
+  "duties_per_agent": 12,
+  "repeat_days": 30,
+  "watches_per_duty": 8
+ },
+ "responsibilities": [
+  {
+   "agent": "vps",
+   "cases": [],
+   "cases_30d": 0,
+   "cases_prev_30d": 0,
+   "created": 1793117747.644754,
+   "created_by": "manager",
+   "id": 1,
+   "last_case": null,
+   "marker": null,
+   "open_cases": 0,
+   "repeats_30d": 0,
+   "repeats_prev_30d": 0,
+   "request_id": "duty-0",
+   "revision": 1,
+   "state": "active",
+   "text": "Keep the support queue empty. Answer each new ticket the same day.",
+   "title": "Keep the support queue empty",
+   "updated": 1793117747.644754,
+   "watch": [
+    {
+     "check": {
+      "condition": {
+       "op": ">",
+       "value": 0
+      },
+      "path": "checks/queue.py",
+      "repeat_minutes": null,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+     },
+     "failures": 0,
+     "kind": "check",
+     "last_run": {
+      "created": 1793117747.644754,
+      "id": 1,
+      "reason": null,
+      "state": "quiet",
+      "task": null,
+      "value": 7.0
+     },
+     "needs": "none",
+     "next_due": 1793118647.637702,
+     "paused_by": null,
+     "paused_reason": null,
+     "schedule": {
+      "kind": "every",
+      "minutes": 15
+     },
+     "state": "active",
+     "trigger": 1
+    },
+    {
+     "check": {
+      "condition": null,
+      "path": null,
+      "repeat_minutes": null,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     },
+     "failures": 0,
+     "kind": "check",
+     "last_run": null,
+     "needs": "none",
+     "next_due": 1793118647.644754,
+     "paused_by": null,
+     "paused_reason": null,
+     "schedule": {
+      "kind": "every",
+      "minutes": 15
+     },
+     "state": "active",
+     "trigger": 2
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Founderizer ships outside the App Store with the owner's Developer ID (PRODUCT.md 3 and P3), and it is not
+     sandboxed. It installs a Linux machine of a fleet from this Mac, over the owner's own SSH connection: it runs
+     /usr/bin/ssh with the key they already use, and that key is read by ssh and never by this app. A sandboxed app
+     cannot do that, and that SSH path is the reason the Mac app is not in the store.
+
+     What it reaches: the hub and the release channel over the network, an installer on the local network while a Mac
+     is added, one loopback listener for Google's answer in the browser, and the one Mach service of the signed
+     Fleet Vault writer on this Mac — which needs no temporary exception once there is no sandbox to except it
+     from. -->
+<plist version="1.0"><dict>
+<key>com.apple.security.app-sandbox</key><false/>
+<key>com.apple.security.network.client</key><true/>
+<key>com.apple.security.network.server</key><true/>
+</dict></plist>

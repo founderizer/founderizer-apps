@@ -1,0 +1,586 @@
+{
+ "accounts": [
+  {
+   "error": null,
+   "group": "anthropic:cccccccc",
+   "label": null,
+   "labels": [],
+   "mismatch": null,
+   "plan": "max",
+   "provider": "anthropic",
+   "read_at": 1791699940.0,
+   "reason": null,
+   "retry_at": null,
+   "routes": [
+    {
+     "agent": "studio",
+     "route": "primary"
+    }
+   ],
+   "samples": [
+    {
+     "agent": "studio",
+     "error": null,
+     "read_at": 1791699940.0,
+     "route": "primary",
+     "stale": false
+    }
+   ],
+   "stale": false,
+   "state": "available",
+   "until": null,
+   "windows": [
+    {
+     "label": "codex / 7 days",
+     "remaining_percent": 80,
+     "resets_at": 1791709000.0,
+     "used_percent": 20,
+     "window_minutes": 10080
+    }
+   ]
+  },
+  {
+   "error": null,
+   "group": "openai:aaaaaaaa",
+   "label": "codex-main",
+   "labels": [
+    "codex-main"
+   ],
+   "mismatch": null,
+   "plan": "pro",
+   "provider": "openai",
+   "read_at": 1791699940.0,
+   "reason": null,
+   "retry_at": null,
+   "routes": [
+    {
+     "agent": "vps",
+     "route": "primary"
+    }
+   ],
+   "samples": [
+    {
+     "agent": "vps",
+     "error": null,
+     "read_at": 1791699940.0,
+     "route": "primary",
+     "stale": false
+    }
+   ],
+   "stale": false,
+   "state": "available",
+   "until": null,
+   "windows": [
+    {
+     "label": "codex / 7 days",
+     "remaining_percent": 99,
+     "resets_at": 1792100000.0,
+     "used_percent": 1,
+     "window_minutes": 10080
+    }
+   ]
+  },
+  {
+   "error": null,
+   "group": "openai:bbbbbbbb",
+   "label": "codex-team",
+   "labels": [
+    "codex-team"
+   ],
+   "mismatch": null,
+   "plan": "pro",
+   "provider": "openai",
+   "read_at": 1791699940.0,
+   "reason": "A session of studio, worker4 on this account reached its usage limit.",
+   "retry_at": null,
+   "routes": [
+    {
+     "agent": "studio",
+     "route": "screen"
+    },
+    {
+     "agent": "worker4",
+     "route": "primary"
+    }
+   ],
+   "samples": [
+    {
+     "agent": "studio",
+     "error": null,
+     "read_at": 1791698800.0,
+     "route": "screen",
+     "stale": true
+    },
+    {
+     "agent": "worker4",
+     "error": null,
+     "read_at": 1791699940.0,
+     "route": "primary",
+     "stale": false
+    }
+   ],
+   "stale": false,
+   "state": "limited",
+   "until": 1791706000.0,
+   "windows": [
+    {
+     "label": "codex / 7 days",
+     "remaining_percent": 60,
+     "resets_at": 1791707200.0,
+     "used_percent": 40,
+     "window_minutes": 10080
+    }
+   ]
+  },
+  {
+   "error": null,
+   "group": "openai:dddddddd",
+   "label": null,
+   "labels": [],
+   "mismatch": null,
+   "plan": "pro",
+   "provider": "openai",
+   "read_at": 1791699940.0,
+   "reason": "The provider reports 100% used: codex / 7 days.",
+   "retry_at": null,
+   "routes": [
+    {
+     "agent": "seo",
+     "route": "primary"
+    }
+   ],
+   "samples": [
+    {
+     "agent": "seo",
+     "error": null,
+     "read_at": 1791699940.0,
+     "route": "primary",
+     "stale": false
+    }
+   ],
+   "stale": false,
+   "state": "limited",
+   "until": 1791707200.0,
+   "windows": [
+    {
+     "label": "codex / 7 days",
+     "remaining_percent": 0,
+     "resets_at": 1791707200.0,
+     "used_percent": 100,
+     "window_minutes": 10080
+    }
+   ]
+  },
+  {
+   "error": null,
+   "group": "unknown:ads:primary",
+   "label": null,
+   "labels": [],
+   "mismatch": null,
+   "plan": null,
+   "provider": null,
+   "read_at": null,
+   "reason": "A session of ads on this account reached its usage limit.",
+   "retry_at": 1791703500.0,
+   "routes": [
+    {
+     "agent": "ads",
+     "route": "primary"
+    }
+   ],
+   "samples": [],
+   "stale": null,
+   "state": "limited",
+   "until": null,
+   "windows": []
+  },
+  {
+   "error": null,
+   "group": "unknown:manager:primary",
+   "label": null,
+   "labels": [],
+   "mismatch": null,
+   "plan": null,
+   "provider": null,
+   "read_at": null,
+   "reason": "There is no account reading.",
+   "retry_at": null,
+   "routes": [
+    {
+     "agent": "manager",
+     "route": "primary"
+    }
+   ],
+   "samples": [],
+   "stale": null,
+   "state": "unknown",
+   "until": null,
+   "windows": []
+  },
+  {
+   "error": null,
+   "group": "unknown:newbie:primary",
+   "label": null,
+   "labels": [],
+   "mismatch": null,
+   "plan": null,
+   "provider": null,
+   "read_at": null,
+   "reason": "There is no account reading.",
+   "retry_at": null,
+   "routes": [
+    {
+     "agent": "newbie",
+     "route": "primary"
+    }
+   ],
+   "samples": [],
+   "stale": null,
+   "state": "unknown",
+   "until": null,
+   "windows": []
+  }
+ ],
+ "agents": [
+  {
+   "account": null,
+   "active": true,
+   "agent": "manager",
+   "can": [],
+   "eligible": true,
+   "expertise": [],
+   "hold": null,
+   "knowledge_files": [],
+   "logins": {
+    "eligible": [],
+    "probe": null
+   },
+   "projects": [],
+   "reports_to": null,
+   "responsible_for": "Turning the owner's goals into tasks, keeping every goal moving, answering workers, checking results, and reporting to the owner in plain words.",
+   "role": "manager",
+   "routes": [
+    {
+     "group": "unknown:manager:primary",
+     "read_at": null,
+     "reason": "There is no account reading.",
+     "retry_at": null,
+     "route": "primary",
+     "runtime": "claude",
+     "stale": false,
+     "state": "unknown",
+     "until": null
+    }
+   ],
+   "seen_at": 1791699990.0,
+   "title": null,
+   "why_not": [],
+   "workload": {
+    "by_state": {},
+    "open": 0,
+    "tasks": []
+   }
+  },
+  {
+   "account": "codex-main",
+   "active": true,
+   "agent": "vps",
+   "can": [
+    "shell"
+   ],
+   "eligible": true,
+   "expertise": [
+    "development"
+   ],
+   "hold": null,
+   "knowledge_files": [],
+   "logins": {
+    "eligible": [
+     "bws://18eaf23b-f5d2-4623-a4fb-b4de012c53fb",
+     "bws://f5bd54d3-434b-42c3-aedb-b4de012c72f5"
+    ],
+    "probe": null
+   },
+   "projects": [],
+   "reports_to": "manager",
+   "responsible_for": "Research, writing, code and files. It has no browser and no screen.",
+   "role": "worker",
+   "routes": [
+    {
+     "group": "openai:aaaaaaaa",
+     "read_at": 1791699940.0,
+     "reason": null,
+     "retry_at": null,
+     "route": "primary",
+     "runtime": "codex",
+     "stale": false,
+     "state": "available",
+     "until": null
+    }
+   ],
+   "seen_at": 1791699990.0,
+   "title": "Developer",
+   "why_not": [],
+   "workload": {
+    "by_state": {},
+    "open": 0,
+    "tasks": []
+   }
+  },
+  {
+   "account": null,
+   "active": true,
+   "agent": "studio",
+   "can": [
+    "shell",
+    "browser",
+    "screen"
+   ],
+   "eligible": true,
+   "expertise": [],
+   "hold": {
+    "reason": "A session reached its usage limit; the hub holds all of this agent's work until then.",
+    "retry_at": null,
+    "route": "screen",
+    "task": 1,
+    "until": 1791706000.0
+   },
+   "knowledge_files": [],
+   "logins": {
+    "eligible": [
+     "bws://18eaf23b-f5d2-4623-a4fb-b4de012c53fb"
+    ],
+    "probe": null
+   },
+   "projects": [],
+   "reports_to": "manager",
+   "responsible_for": "Browser work in Chrome on the Mac Studio: signed-in sites, screenshots, forms. Screen tasks use the helper's bundled Codex app-server runner to operate the desktop apps named by the task. Browser-only tasks keep the existing Claude Chrome route.",
+   "role": "worker",
+   "routes": [
+    {
+     "group": "anthropic:cccccccc",
+     "read_at": 1791699940.0,
+     "reason": null,
+     "retry_at": null,
+     "route": "primary",
+     "runtime": "claude",
+     "stale": false,
+     "state": "available",
+     "until": null
+    },
+    {
+     "group": "openai:bbbbbbbb",
+     "read_at": 1791699940.0,
+     "reason": "A session of studio, worker4 on this account reached its usage limit.",
+     "retry_at": null,
+     "route": "screen",
+     "runtime": "codex",
+     "stale": false,
+     "state": "limited",
+     "until": 1791706000.0
+    }
+   ],
+   "seen_at": 1791699990.0,
+   "title": "Browser specialist",
+   "why_not": [],
+   "workload": {
+    "by_state": {
+     "working": 1
+    },
+    "open": 1,
+    "tasks": [
+     1
+    ]
+   }
+  },
+  {
+   "account": "codex-team",
+   "active": true,
+   "agent": "worker4",
+   "can": [
+    "shell"
+   ],
+   "eligible": true,
+   "expertise": [],
+   "hold": {
+    "reason": "A session reached its usage limit; the hub holds all of this agent's work until then.",
+    "retry_at": null,
+    "route": "primary",
+    "task": null,
+    "until": 1791705000.0
+   },
+   "knowledge_files": [],
+   "logins": {
+    "eligible": [],
+    "probe": null
+   },
+   "projects": [],
+   "reports_to": "manager",
+   "responsible_for": "Research, writing, code and files on a Linux server. It has no browser and no screen.",
+   "role": "worker",
+   "routes": [
+    {
+     "group": "openai:bbbbbbbb",
+     "read_at": 1791699940.0,
+     "reason": "A session of studio, worker4 on this account reached its usage limit.",
+     "retry_at": null,
+     "route": "primary",
+     "runtime": "codex",
+     "stale": false,
+     "state": "limited",
+     "until": 1791706000.0
+    }
+   ],
+   "seen_at": 1791699990.0,
+   "title": null,
+   "why_not": [],
+   "workload": {
+    "by_state": {},
+    "open": 0,
+    "tasks": []
+   }
+  },
+  {
+   "account": null,
+   "active": true,
+   "agent": "ads",
+   "can": [
+    "shell"
+   ],
+   "eligible": true,
+   "expertise": [],
+   "hold": {
+    "reason": "A session reached its usage limit; the hub holds all of this agent's work until then.",
+    "retry_at": 1791703500.0,
+    "route": "primary",
+    "task": null,
+    "until": null
+   },
+   "knowledge_files": [],
+   "logins": {
+    "eligible": [],
+    "probe": null
+   },
+   "projects": [],
+   "reports_to": "manager",
+   "responsible_for": null,
+   "role": "worker",
+   "routes": [
+    {
+     "group": "unknown:ads:primary",
+     "read_at": null,
+     "reason": "A session of ads on this account reached its usage limit.",
+     "retry_at": 1791703500.0,
+     "route": "primary",
+     "runtime": "codex",
+     "stale": false,
+     "state": "limited",
+     "until": null
+    }
+   ],
+   "seen_at": 1791699990.0,
+   "title": null,
+   "why_not": [],
+   "workload": {
+    "by_state": {},
+    "open": 0,
+    "tasks": []
+   }
+  },
+  {
+   "account": null,
+   "active": true,
+   "agent": "seo",
+   "can": [
+    "shell"
+   ],
+   "eligible": true,
+   "expertise": [
+    "seo"
+   ],
+   "hold": null,
+   "knowledge_files": [],
+   "logins": {
+    "eligible": [],
+    "probe": null
+   },
+   "projects": [],
+   "reports_to": "manager",
+   "responsible_for": null,
+   "role": "worker",
+   "routes": [
+    {
+     "group": "openai:dddddddd",
+     "read_at": 1791699940.0,
+     "reason": "The provider reports 100% used: codex / 7 days.",
+     "retry_at": null,
+     "route": "primary",
+     "runtime": "codex",
+     "stale": false,
+     "state": "limited",
+     "until": 1791707200.0
+    }
+   ],
+   "seen_at": 1791699990.0,
+   "title": "SEO Expert",
+   "why_not": [],
+   "workload": {
+    "by_state": {},
+    "open": 0,
+    "tasks": []
+   }
+  },
+  {
+   "account": null,
+   "active": false,
+   "agent": "newbie",
+   "can": [
+    "shell"
+   ],
+   "eligible": false,
+   "expertise": [],
+   "hold": null,
+   "knowledge_files": [],
+   "logins": {
+    "eligible": [],
+    "probe": null
+   },
+   "projects": [],
+   "reports_to": "manager",
+   "responsible_for": null,
+   "role": "worker",
+   "routes": [
+    {
+     "group": "unknown:newbie:primary",
+     "read_at": null,
+     "reason": "The owner has not activated it.",
+     "retry_at": null,
+     "route": "primary",
+     "runtime": "codex",
+     "stale": false,
+     "state": "in_setup",
+     "until": null
+    }
+   ],
+   "seen_at": null,
+   "title": null,
+   "why_not": [
+    "in setup"
+   ],
+   "workload": {
+    "by_state": {},
+    "open": 0,
+    "tasks": []
+   }
+  }
+ ],
+ "db": "test-generation",
+ "filters": {
+  "expertise": null,
+  "login": null,
+  "needs": null,
+  "project": null
+ },
+ "stale_after": 900,
+ "time": 1791700000.0
+}

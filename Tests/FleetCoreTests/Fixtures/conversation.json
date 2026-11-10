@@ -1,0 +1,77 @@
+{
+ "id": 1,
+ "agent": "studio",
+ "person": {
+  "id": 1,
+  "name": "Laura",
+  "role": "employee"
+ },
+ "account": "whatsapp-studio",
+ "state": "open",
+ "created": 1792317171.78396,
+ "last": 1792317171.796903,
+ "messages": 4,
+ "waiting": 0,
+ "newest": null,
+ "open_needs": 0,
+ "db": "test-generation",
+ "items": [
+  {
+   "id": "CM-1",
+   "who": "person",
+   "text": "Can you ask Sam to call me today?",
+   "created": 1792317171.78396,
+   "read_at": 1792317171.786237,
+   "in_reply_to": null,
+   "need": null,
+   "delivery": null
+  },
+  {
+   "id": "CM-2",
+   "who": "agent",
+   "text": "I will ask him.",
+   "created": 1792317171.788883,
+   "read_at": null,
+   "in_reply_to": "CM-1",
+   "need": null,
+   "delivery": {
+    "outbound": 4,
+    "state": "read",
+    "at": 1792317171.797611,
+    "error": null
+   }
+  },
+  {
+   "id": "CM-3",
+   "who": "action",
+   "text": "Asked the owner: Can you call Laura today?",
+   "created": 1792317171.790752,
+   "read_at": null,
+   "in_reply_to": null,
+   "need": {
+    "id": 1,
+    "kind": "question",
+    "title": "Studio asks you, for Laura (employee)",
+    "answer": "Yes, at 17:00.",
+    "answered": 1792317171.796903
+   },
+   "delivery": null
+  },
+  {
+   "id": "CM-4",
+   "who": "owner",
+   "text": "Yes, at 17:00.",
+   "created": 1792317171.796903,
+   "read_at": null,
+   "in_reply_to": null,
+   "need": {
+    "id": 1,
+    "kind": "question",
+    "title": "Studio asks you, for Laura (employee)",
+    "answer": "Yes, at 17:00.",
+    "answered": 1792317171.796903
+   },
+   "delivery": null
+  }
+ ]
+}

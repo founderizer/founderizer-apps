@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>FleetSetupService</string>
+<key>CFBundleIdentifier</key><string>com.founderizer.setup</string>
+<key>CFBundleName</key><string>Founderizer Setup</string>
+<!-- Both names, and a version, because macOS showed "(null)" where this bundle's name belonged in a
+     quarantine dialog. A service is not an app, so the name it is asked for is not always the same key. -->
+<key>CFBundleDisplayName</key><string>Founderizer Setup</string>
+<key>CFBundleShortVersionString</key><string>0.1.0</string>
+<key>CFBundlePackageType</key><string>XPC!</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>XPCService</key><dict><key>ServiceType</key><string>Application</string></dict>
+</dict></plist>

@@ -1,0 +1,47 @@
+{
+ "db": "test-generation",
+ "conversations": [
+  {
+   "id": 2,
+   "agent": "studio",
+   "person": {
+    "id": 2,
+    "name": "Ana Ruiz",
+    "role": "customer"
+   },
+   "account": "discord-studio",
+   "state": "open",
+   "created": 1792317171.8139572,
+   "last": 1792317171.8139572,
+   "messages": 1,
+   "waiting": 1,
+   "newest": {
+    "who": "person",
+    "text": "Is the invoice of October ready?",
+    "created": 1792317171.8139572
+   },
+   "open_needs": 0
+  },
+  {
+   "id": 1,
+   "agent": "studio",
+   "person": {
+    "id": 1,
+    "name": "Laura",
+    "role": "employee"
+   },
+   "account": "whatsapp-studio",
+   "state": "open",
+   "created": 1792317171.78396,
+   "last": 1792317171.796903,
+   "messages": 4,
+   "waiting": 0,
+   "newest": {
+    "who": "owner",
+    "text": "Yes, at 17:00.",
+    "created": 1792317171.796903
+   },
+   "open_needs": 0
+  }
+ ]
+}

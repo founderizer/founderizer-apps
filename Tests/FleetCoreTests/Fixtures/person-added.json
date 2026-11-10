@@ -1,0 +1,27 @@
+{
+ "person": {
+  "id": 4,
+  "name": "Rafa Soto",
+  "role": "supervisor",
+  "role_means": "a person the owner lets watch the work. Answer about state and progress, and take a request that needs tools, money or a decision to the owner with request_work.",
+  "note": null,
+  "daily": 100,
+  "daily_set": null,
+  "blocked": null,
+  "added": 1792317171.838603,
+  "today": 0,
+  "agents": [
+   {
+    "agent": "studio",
+    "can_chat": true,
+    "says": null
+   }
+  ],
+  "handles": [],
+  "conversations": []
+ },
+ "ok": true,
+ "request_id": "f3eb3726-c068-4688-b193-d13d2f296f8b",
+ "client": "deterministic-test",
+ "replayed": false
+}

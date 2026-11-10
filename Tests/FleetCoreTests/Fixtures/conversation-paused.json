@@ -1,0 +1,27 @@
+{
+ "conversation": {
+  "id": 1,
+  "agent": "studio",
+  "person": {
+   "id": 1,
+   "name": "Laura",
+   "role": "employee"
+  },
+  "account": "whatsapp-studio",
+  "state": "paused",
+  "created": 1792317171.78396,
+  "last": 1792317171.796903,
+  "messages": 4,
+  "waiting": 0,
+  "newest": {
+   "who": "owner",
+   "text": "Yes, at 17:00.",
+   "created": 1792317171.796903
+  },
+  "open_needs": 0
+ },
+ "ok": true,
+ "request_id": "89fd7e3b-9512-4b2f-aac9-3c5174014ab8",
+ "client": "deterministic-test",
+ "replayed": false
+}

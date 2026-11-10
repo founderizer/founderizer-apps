@@ -1,0 +1,745 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AC00000000000000000001 /* MobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000001 /* MobileApp.swift */; };
+		AC00000000000000000002 /* MobileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000002 /* MobileStore.swift */; };
+		AC00000000000000000003 /* MobileStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000003 /* MobileStyle.swift */; };
+		AC00000000000000000004 /* DeviceKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000004 /* DeviceKey.swift */; };
+		AC00000000000000000005 /* ChatsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000005 /* ChatsPage.swift */; };
+		AC00000000000000000006 /* ChatPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000006 /* ChatPage.swift */; };
+		AC00000000000000000007 /* NeedsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000007 /* NeedsPage.swift */; };
+		AC00000000000000000008 /* TasksPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000008 /* TasksPage.swift */; };
+		AC00000000000000000009 /* TaskPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000009 /* TaskPage.swift */; };
+		AC0000000000000000000A /* AgentPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000A /* AgentPage.swift */; };
+		AC0000000000000000000B /* SettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000B /* SettingsPage.swift */; };
+		AC0000000000000000000C /* MobileAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000C /* MobileAPI.swift */; };
+		AC0000000000000000000D /* MobileClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000D /* MobileClient.swift */; };
+		AC0000000000000000000E /* EnrollPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000E /* EnrollPage.swift */; };
+		AC0000000000000000000F /* AttachmentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000F /* AttachmentViews.swift */; };
+		AC00000000000000000010 /* AgentMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000010 /* AgentMark.swift */; };
+		AC00000000000000000011 /* PushNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000011 /* PushNotifications.swift */; };
+		AC00000000000000000012 /* ChatAppMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000012 /* ChatAppMark.swift */; };
+		AC00000000000000000040 /* NotificationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000040 /* NotificationViewController.swift */; };
+		AC00000000000000000041 /* NeedActions.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA00000000000000000030 /* NeedActions.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AC00000000000000000042 /* UserNotificationsUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB00000000000000000042 /* UserNotificationsUI.framework */; };
+		AC00000000000000000050 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000050 /* NotificationService.swift */; };
+		AC00000000000000000051 /* NeedSeal.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA00000000000000000050 /* NeedSeal.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AC00000000000000000052 /* SealedPing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000053 /* SealedPing.swift */; };
+		AC00000000000000000053 /* SealedPing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000053 /* SealedPing.swift */; };
+		AA00000000000000000014 /* FleetCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000013 /* FleetCore */; };
+		AA00000000000000000016 /* FleetMark in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000015 /* FleetMark */; };
+		AC00000000000000000030 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000030 /* Assets.xcassets */; };
+		AC00000000000000000031 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000031 /* PrivacyInfo.xcprivacy */; };
+		AC0000000000000000001A /* MobileKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000001A /* MobileKeyTests.swift */; };
+		AC0000000000000000001B /* MobileReadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000001B /* MobileReadTests.swift */; };
+		AC0000000000000000001C /* MobileAttachmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000001C /* MobileAttachmentTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AA00000000000000000032 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AC00000000000000000041 /* NeedActions.appex in Embed Foundation Extensions */,
+				AC00000000000000000051 /* NeedSeal.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000F /* FleetMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FleetMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA00000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AA00000000000000000011 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		AB00000000000000000001 /* MobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileApp.swift; sourceTree = "<group>"; };
+		AB00000000000000000002 /* MobileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileStore.swift; sourceTree = "<group>"; };
+		AB00000000000000000003 /* MobileStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileStyle.swift; sourceTree = "<group>"; };
+		AB00000000000000000004 /* DeviceKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceKey.swift; sourceTree = "<group>"; };
+		AB00000000000000000005 /* ChatsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatsPage.swift; sourceTree = "<group>"; };
+		AB00000000000000000006 /* ChatPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPage.swift; sourceTree = "<group>"; };
+		AB00000000000000000007 /* NeedsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeedsPage.swift; sourceTree = "<group>"; };
+		AB00000000000000000008 /* TasksPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksPage.swift; sourceTree = "<group>"; };
+		AB00000000000000000009 /* TaskPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskPage.swift; sourceTree = "<group>"; };
+		AB0000000000000000000A /* AgentPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPage.swift; sourceTree = "<group>"; };
+		AB0000000000000000000B /* SettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPage.swift; sourceTree = "<group>"; };
+		AB0000000000000000000C /* MobileAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAPI.swift; sourceTree = "<group>"; };
+		AB0000000000000000000D /* MobileClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileClient.swift; sourceTree = "<group>"; };
+		AB0000000000000000000E /* EnrollPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollPage.swift; sourceTree = "<group>"; };
+		AB0000000000000000000F /* AttachmentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentViews.swift; sourceTree = "<group>"; };
+		AB00000000000000000010 /* AgentMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMark.swift; sourceTree = "<group>"; };
+		AB00000000000000000011 /* PushNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotifications.swift; sourceTree = "<group>"; };
+		AB00000000000000000012 /* ChatAppMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAppMark.swift; sourceTree = "<group>"; };
+		AB00000000000000000032 /* FleetMobile.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FleetMobile.entitlements; sourceTree = "<group>"; };
+		AA00000000000000000030 /* NeedActions.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NeedActions.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB00000000000000000040 /* NotificationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationViewController.swift; sourceTree = "<group>"; };
+		AB00000000000000000041 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AA00000000000000000050 /* NeedSeal.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NeedSeal.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB00000000000000000050 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		AB00000000000000000051 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AB00000000000000000052 /* NeedSeal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NeedSeal.entitlements; sourceTree = "<group>"; };
+		AB00000000000000000053 /* SealedPing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SealedPing.swift; sourceTree = "<group>"; };
+		AB00000000000000000042 /* UserNotificationsUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotificationsUI.framework; path = System/Library/Frameworks/UserNotificationsUI.framework; sourceTree = SDKROOT; };
+		AB00000000000000000030 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AB00000000000000000031 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		AA00000000000000000021 /* FleetMobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FleetMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB0000000000000000001A /* MobileKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileKeyTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000001B /* MobileReadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileReadTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000001C /* MobileAttachmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAttachmentTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA0000000000000000000D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000014 /* FleetCore in Frameworks */,
+				AA00000000000000000016 /* FleetMark in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA00000000000000000029 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA00000000000000000038 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC00000000000000000042 /* UserNotificationsUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA00000000000000000058 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA00000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				AA00000000000000000004 /* Sources */,
+				AA00000000000000000031 /* NeedActions */,
+				AA00000000000000000051 /* NeedSeal */,
+				AA00000000000000000028 /* Tests */,
+				AB00000000000000000030 /* Assets.xcassets */,
+				AB00000000000000000031 /* PrivacyInfo.xcprivacy */,
+				AA00000000000000000010 /* Info.plist */,
+				AB00000000000000000032 /* FleetMobile.entitlements */,
+				AA00000000000000000011 /* README.md */,
+				AA00000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA00000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000F /* FleetMobile.app */,
+				AA00000000000000000021 /* FleetMobileTests.xctest */,
+				AA00000000000000000030 /* NeedActions.appex */,
+				AA00000000000000000050 /* NeedSeal.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AA00000000000000000004 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				AB00000000000000000001 /* MobileApp.swift */,
+				AB00000000000000000002 /* MobileStore.swift */,
+				AB00000000000000000003 /* MobileStyle.swift */,
+				AB00000000000000000004 /* DeviceKey.swift */,
+				AB00000000000000000005 /* ChatsPage.swift */,
+				AB00000000000000000006 /* ChatPage.swift */,
+				AB00000000000000000007 /* NeedsPage.swift */,
+				AB00000000000000000008 /* TasksPage.swift */,
+				AB00000000000000000009 /* TaskPage.swift */,
+				AB0000000000000000000A /* AgentPage.swift */,
+				AB0000000000000000000B /* SettingsPage.swift */,
+				AB0000000000000000000C /* MobileAPI.swift */,
+				AB0000000000000000000D /* MobileClient.swift */,
+				AB0000000000000000000E /* EnrollPage.swift */,
+				AB0000000000000000000F /* AttachmentViews.swift */,
+				AB00000000000000000010 /* AgentMark.swift */,
+				AB00000000000000000011 /* PushNotifications.swift */,
+				AB00000000000000000012 /* ChatAppMark.swift */,
+				AB00000000000000000053 /* SealedPing.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		AA00000000000000000031 /* NeedActions */ = {
+			isa = PBXGroup;
+			children = (
+				AB00000000000000000040 /* NotificationViewController.swift */,
+				AB00000000000000000041 /* Info.plist */,
+				AB00000000000000000042 /* UserNotificationsUI.framework */,
+			);
+			path = NeedActions;
+			sourceTree = "<group>";
+		};
+		AA00000000000000000051 /* NeedSeal */ = {
+			isa = PBXGroup;
+			children = (
+				AB00000000000000000050 /* NotificationService.swift */,
+				AB00000000000000000051 /* Info.plist */,
+				AB00000000000000000052 /* NeedSeal.entitlements */,
+			);
+			path = NeedSeal;
+			sourceTree = "<group>";
+		};
+		AA00000000000000000028 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000001A /* MobileKeyTests.swift */,
+				AB0000000000000000001B /* MobileReadTests.swift */,
+				AB0000000000000000001C /* MobileAttachmentTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA00000000000000000005 /* FleetMobile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA00000000000000000007 /* Build configuration list for PBXNativeTarget "FleetMobile" */;
+			buildPhases = (
+				AA0000000000000000000C /* Sources */,
+				AA0000000000000000000D /* Frameworks */,
+				AA0000000000000000000E /* Resources */,
+				AA00000000000000000032 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA00000000000000000036 /* PBXTargetDependency */,
+				AA00000000000000000056 /* PBXTargetDependency */,
+			);
+			name = FleetMobile;
+			packageProductDependencies = (
+				AA00000000000000000013 /* FleetCore */,
+				AA00000000000000000015 /* FleetMark */,
+			);
+			productName = FleetMobile;
+			productReference = AA0000000000000000000F /* FleetMobile.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AA00000000000000000020 /* FleetMobileTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA00000000000000000023 /* Build configuration list for PBXNativeTarget "FleetMobileTests" */;
+			buildPhases = (
+				AA00000000000000000022 /* Sources */,
+				AA00000000000000000029 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA00000000000000000027 /* PBXTargetDependency */,
+			);
+			name = FleetMobileTests;
+			productName = FleetMobileTests;
+			productReference = AA00000000000000000021 /* FleetMobileTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		AA00000000000000000033 /* NeedActions */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA00000000000000000034 /* Build configuration list for PBXNativeTarget "NeedActions" */;
+			buildPhases = (
+				AA00000000000000000037 /* Sources */,
+				AA00000000000000000038 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NeedActions;
+			productName = NeedActions;
+			productReference = AA00000000000000000030 /* NeedActions.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		AA00000000000000000053 /* NeedSeal */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA00000000000000000054 /* Build configuration list for PBXNativeTarget "NeedSeal" */;
+			buildPhases = (
+				AA00000000000000000057 /* Sources */,
+				AA00000000000000000058 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NeedSeal;
+			productName = NeedSeal;
+			productReference = AA00000000000000000050 /* NeedSeal.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA00000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2620;
+				LastUpgradeCheck = 2620;
+				TargetAttributes = {
+					AA00000000000000000005 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					AA00000000000000000020 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = AA00000000000000000005;
+					};
+					AA00000000000000000033 = {
+						CreatedOnToolsVersion = 27.1;
+					};
+					AA00000000000000000053 = {
+						CreatedOnToolsVersion = 27.2;
+					};
+				};
+			};
+			buildConfigurationList = AA00000000000000000006 /* Build configuration list for PBXProject "FleetMobile" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA00000000000000000002;
+			packageReferences = (
+				AA00000000000000000012 /* XCLocalSwiftPackageReference ".." */,
+			);
+			preferredProjectObjectVersion = 56;
+			productRefGroup = AA00000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA00000000000000000005 /* FleetMobile */,
+				AA00000000000000000020 /* FleetMobileTests */,
+				AA00000000000000000033 /* NeedActions */,
+				AA00000000000000000053 /* NeedSeal */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA0000000000000000000E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC00000000000000000030 /* Assets.xcassets in Resources */,
+				AC00000000000000000031 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXContainerItemProxy section */
+		AA00000000000000000026 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA00000000000000000005;
+			remoteInfo = FleetMobile;
+		};
+		AA00000000000000000035 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA00000000000000000033;
+			remoteInfo = NeedActions;
+		};
+		AA00000000000000000055 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA00000000000000000053;
+			remoteInfo = NeedSeal;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		AA00000000000000000027 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA00000000000000000005 /* FleetMobile */;
+			targetProxy = AA00000000000000000026 /* PBXContainerItemProxy */;
+		};
+		AA00000000000000000036 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA00000000000000000033 /* NeedActions */;
+			targetProxy = AA00000000000000000035 /* PBXContainerItemProxy */;
+		};
+		AA00000000000000000056 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA00000000000000000053 /* NeedSeal */;
+			targetProxy = AA00000000000000000055 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA0000000000000000000C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC00000000000000000001 /* MobileApp.swift in Sources */,
+				AC00000000000000000002 /* MobileStore.swift in Sources */,
+				AC00000000000000000003 /* MobileStyle.swift in Sources */,
+				AC00000000000000000004 /* DeviceKey.swift in Sources */,
+				AC00000000000000000005 /* ChatsPage.swift in Sources */,
+				AC00000000000000000006 /* ChatPage.swift in Sources */,
+				AC00000000000000000007 /* NeedsPage.swift in Sources */,
+				AC00000000000000000008 /* TasksPage.swift in Sources */,
+				AC00000000000000000009 /* TaskPage.swift in Sources */,
+				AC0000000000000000000A /* AgentPage.swift in Sources */,
+				AC0000000000000000000B /* SettingsPage.swift in Sources */,
+				AC0000000000000000000C /* MobileAPI.swift in Sources */,
+				AC0000000000000000000D /* MobileClient.swift in Sources */,
+				AC0000000000000000000E /* EnrollPage.swift in Sources */,
+				AC0000000000000000000F /* AttachmentViews.swift in Sources */,
+				AC00000000000000000010 /* AgentMark.swift in Sources */,
+				AC00000000000000000011 /* PushNotifications.swift in Sources */,
+				AC00000000000000000012 /* ChatAppMark.swift in Sources */,
+				AC00000000000000000052 /* SealedPing.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA00000000000000000037 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC00000000000000000040 /* NotificationViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA00000000000000000057 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC00000000000000000050 /* NotificationService.swift in Sources */,
+				AC00000000000000000053 /* SealedPing.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA00000000000000000022 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC0000000000000000001A /* MobileKeyTests.swift in Sources */,
+				AC0000000000000000001B /* MobileReadTests.swift in Sources */,
+				AC0000000000000000001C /* MobileAttachmentTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AA00000000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AA00000000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		AA0000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = FleetMobile.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 6EBZ756H9Q;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = FleetMobile.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 6EBZ756H9Q;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		AA00000000000000000024 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 6EBZ756H9Q;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FleetMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FleetMobile";
+			};
+			name = Debug;
+		};
+		AA00000000000000000025 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 6EBZ756H9Q;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FleetMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FleetMobile";
+			};
+			name = Release;
+		};
+		AA0000000000000000003A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 6EBZ756H9Q;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NeedActions/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Founderizer;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.needs;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		AA0000000000000000003B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 6EBZ756H9Q;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NeedActions/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Founderizer;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.needs;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		AA0000000000000000005A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = NeedSeal/NeedSeal.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 6EBZ756H9Q;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NeedSeal/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Founderizer;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.seal;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		AA0000000000000000005B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = NeedSeal/NeedSeal.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 6EBZ756H9Q;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NeedSeal/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Founderizer;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.seal;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA00000000000000000006 /* Build configuration list for PBXProject "FleetMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA00000000000000000008 /* Debug */,
+				AA00000000000000000009 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA00000000000000000007 /* Build configuration list for PBXNativeTarget "FleetMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000A /* Debug */,
+				AA0000000000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA00000000000000000023 /* Build configuration list for PBXNativeTarget "FleetMobileTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA00000000000000000024 /* Debug */,
+				AA00000000000000000025 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA00000000000000000034 /* Build configuration list for PBXNativeTarget "NeedActions" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000003A /* Debug */,
+				AA0000000000000000003B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA00000000000000000054 /* Build configuration list for PBXNativeTarget "NeedSeal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000005A /* Debug */,
+				AA0000000000000000005B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		AA00000000000000000012 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA00000000000000000013 /* FleetCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FleetCore;
+		};
+		AA00000000000000000015 /* FleetMark */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FleetMark;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = AA00000000000000000001 /* Project object */;
+}

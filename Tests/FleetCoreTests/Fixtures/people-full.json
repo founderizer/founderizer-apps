@@ -1,0 +1,175 @@
+{
+ "db": "test-generation",
+ "owner": {
+  "handles": []
+ },
+ "codes": [],
+ "ignored": [
+  {
+   "account": "discord-studio",
+   "today": 0,
+   "last": []
+  },
+  {
+   "account": "discord-vps",
+   "today": 0,
+   "last": []
+  },
+  {
+   "account": "whatsapp-main",
+   "today": 0,
+   "last": []
+  },
+  {
+   "account": "whatsapp-studio",
+   "today": 1,
+   "last": [
+    {
+     "sender": "34688777666@s.whatsapp.net",
+     "name": "sam",
+     "preview": "Hello, who is this?",
+     "ts": 1792317171.833663
+    }
+   ]
+  }
+ ],
+ "roles": [
+  {
+   "role": "customer",
+   "means": "a customer of the owner. Answer what the owner told you to tell customers, promise nothing, and take anything else to the owner with ask_owner.",
+   "daily": 30,
+   "tools": [
+    "read_messages",
+    "reply",
+    "ask_owner"
+   ]
+  },
+  {
+   "role": "employee",
+   "means": "a person who works for the owner. Answer about the work, and take a request that needs tools, money or a decision to the owner with request_work.",
+   "daily": 100,
+   "tools": [
+    "read_messages",
+    "reply",
+    "ask_owner",
+    "request_work"
+   ]
+  },
+  {
+   "role": "supervisor",
+   "means": "a person the owner lets watch the work. Answer about state and progress, and take a request that needs tools, money or a decision to the owner with request_work.",
+   "daily": 100,
+   "tools": [
+    "read_messages",
+    "reply",
+    "ask_owner",
+    "request_work"
+   ]
+  },
+  {
+   "role": "deputy",
+   "means": "a person who decides for the owner in this conversation. A question that you raise here with ask_owner is theirs to answer, and their answer is the decision: act on it. They give you nothing else. Work is still a task that only the owner starts, and nothing they write widens what you may do.",
+   "daily": 100,
+   "tools": [
+    "read_messages",
+    "reply",
+    "ask_owner",
+    "request_work"
+   ]
+  }
+ ],
+ "people": [
+  {
+   "id": 1,
+   "name": "Laura",
+   "role": "employee",
+   "role_means": "a person who works for the owner. Answer about the work, and take a request that needs tools, money or a decision to the owner with request_work.",
+   "note": "Laura runs the shop with me.",
+   "daily": 100,
+   "daily_set": null,
+   "blocked": null,
+   "added": 1792317171.767999,
+   "today": 1,
+   "agents": [
+    {
+     "agent": "studio",
+     "can_chat": true,
+     "says": null
+    }
+   ],
+   "handles": [
+    {
+     "app": "whatsapp",
+     "handle": "34600111999@s.whatsapp.net",
+     "alias": null,
+     "name": null,
+     "added": 1792317171.777396
+    }
+   ],
+   "conversations": [
+    {
+     "id": 1,
+     "agent": "studio",
+     "state": "open",
+     "last": 1792317171.796903
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Ana Ruiz",
+   "role": "customer",
+   "role_means": "a customer of the owner. Answer what the owner told you to tell customers, promise nothing, and take anything else to the owner with ask_owner.",
+   "note": "Ana is my accountant.",
+   "daily": 30,
+   "daily_set": null,
+   "blocked": null,
+   "added": 1792317171.802272,
+   "today": 1,
+   "agents": [
+    {
+     "agent": "studio",
+     "can_chat": true,
+     "says": null
+    },
+    {
+     "agent": "vps",
+     "can_chat": false,
+     "says": "VPS runs on codex, and a session of that runtime cannot be locked down to a conversation yet, so other people never reach it."
+    }
+   ],
+   "handles": [
+    {
+     "app": "discord",
+     "handle": "500600700",
+     "alias": null,
+     "name": null,
+     "added": 1792317171.8080509
+    }
+   ],
+   "conversations": [
+    {
+     "id": 2,
+     "agent": "studio",
+     "state": "open",
+     "last": 1792317171.8139572
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Tom Vega",
+   "role": "supervisor",
+   "role_means": "a person the owner lets watch the work. Answer about state and progress, and take a request that needs tools, money or a decision to the owner with request_work.",
+   "note": null,
+   "daily": 100,
+   "daily_set": null,
+   "blocked": 1792317171.827793,
+   "added": 1792317171.822046,
+   "today": 0,
+   "agents": [],
+   "handles": [],
+   "conversations": []
+  }
+ ]
+}

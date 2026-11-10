@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The answer buttons of a Needs-you ping. Xcode writes the bundle's own keys; this file adds only the extension:
+     the category the hub sets on a ping with options ("need", PushDelegate.needCategory), and iOS's own title and
+     text, which stay visible under this extension's empty view. -->
+<plist version="1.0"><dict>
+<key>NSExtension</key><dict>
+<key>NSExtensionAttributes</key><dict>
+<key>UNNotificationExtensionCategory</key><string>need</string>
+<key>UNNotificationExtensionDefaultContentHidden</key><false/>
+<key>UNNotificationExtensionInitialContentSizeRatio</key><real>0.01</real>
+</dict>
+<key>NSExtensionPointIdentifier</key><string>com.apple.usernotifications.content-extension</string>
+<key>NSExtensionPrincipalClass</key><string>$(PRODUCT_MODULE_NAME).NotificationViewController</string>
+</dict>
+</dict></plist>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>FleetVault</string>
+<key>CFBundleIdentifier</key><string>local.agent-fleet.vault</string>
+<key>CFBundleName</key><string>Founderizer Vault</string>
+<key>CFBundleDisplayName</key><string>Founderizer Vault</string>
+<key>CFBundleShortVersionString</key><string>0.3.7</string>
+<key>CFBundleVersion</key><string>10</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>LSMinimumSystemVersion</key><string>15.0</string>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSAppleEventsUsageDescription</key><string>Fleet Vault fills an approved sign-in form in Chrome, and reads one named field of a page to save a key, without showing the value to an agent.</string>
+<key>NSAppTransportSecurity</key><dict>
+    <!-- The configuration accepts HTTP only inside the Tailscale address range.
+         macOS 14 and later require an explicit ATS exception for IP addresses. -->
+    <key>NSExceptionDomains</key><dict>
+        <key>100.64.0.0/10</key><dict>
+            <key>NSExceptionAllowsInsecureHTTPLoads</key><true/>
+        </dict>
+    </dict>
+</dict>
+</dict></plist>

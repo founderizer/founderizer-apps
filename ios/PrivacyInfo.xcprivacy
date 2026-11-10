@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<!-- The app collects nothing and tracks nobody: it reads the owner's own hub over his own tailnet.
+     Apple asks for a reason for each API on its list that the app uses. The app uses one: its own
+     user defaults, for the hub's address and this installation's id (MobileStore.swift). -->
+<key>NSPrivacyTracking</key><false/>
+<key>NSPrivacyTrackingDomains</key><array/>
+<key>NSPrivacyCollectedDataTypes</key><array/>
+<key>NSPrivacyAccessedAPITypes</key><array>
+<dict>
+<key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+<key>NSPrivacyAccessedAPITypeReasons</key><array><string>CA92.1</string></array>
+</dict>
+</array>
+</dict></plist>

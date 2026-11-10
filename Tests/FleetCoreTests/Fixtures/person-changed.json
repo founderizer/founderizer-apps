@@ -1,0 +1,31 @@
+{
+ "person": {
+  "id": 4,
+  "name": "Rafa Soto",
+  "role": "employee",
+  "role_means": "a person who works for the owner. Answer about the work, and take a request that needs tools, money or a decision to the owner with request_work.",
+  "note": null,
+  "daily": 25,
+  "daily_set": 25,
+  "blocked": null,
+  "added": 1792317171.838603,
+  "today": 0,
+  "agents": [
+   {
+    "agent": "studio",
+    "can_chat": true,
+    "says": null
+   }
+  ],
+  "handles": [],
+  "conversations": []
+ },
+ "changed": [
+  "daily",
+  "role"
+ ],
+ "ok": true,
+ "request_id": "631b35a0-772b-40a4-b871-d02e5abffff8",
+ "client": "deterministic-test",
+ "replayed": false
+}
