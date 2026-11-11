@@ -24,7 +24,7 @@ struct VaultTests {
         ] { #expect(throws: VaultFailure.self) { try VaultRequest(data: Data(input.utf8)) } }
     }
 
-    @Test func probeAcceptsOnlyTheExactHubJobAndNamedBitwardenReferences() throws {
+    @Test func probeAcceptsOnlyTheExactHubJobAndItsNamedReferences() throws {
         let request = try VaultRequest(data: Data(#"{"v":2,"op":"probe","job":12}"#.utf8))
         let login = "bws://12345678-1234-1234-1234-123456789012"
         let good: [String: Any] = ["ok": true, "kind": "probe", "job": 12, "logins": [login]]
@@ -83,13 +83,13 @@ struct VaultTests {
     }
 
     @Test func configurationRejectsRedirectsAndPublicHTTP() throws {
-        let base: [String: Any] = ["agent": "studio", "hub": "http://100.96.10.20:8765", "region": "eu",
+        let base: [String: Any] = ["agent": "studio", "hub": "http://100.96.10.20:8765", "store": "fleet",
                                    "socket": NSHomeDirectory() + "/Library/Application Support/AgentFleet/vault.sock", "worker_uid": 501]
         #expect(try VaultConfiguration(data: JSONSerialization.data(withJSONObject: base)).agent == "studio")
         for (key, value) in [("hub", "http://example.com" as Any), ("hub", "https://user:pass@example.com" as Any),
                              ("hub", "http://100.invalid.64.1.1" as Any), ("hub", "http://100..64.1.1" as Any),
                              ("hub", "https://example.com?redirect=bad" as Any), ("socket", "/tmp/vault.sock" as Any),
-                             ("region", "custom" as Any), ("agent", "../studio" as Any)] {
+                             ("store", "custom" as Any), ("agent", "../studio" as Any)] {
             var bad = base; bad[key] = value
             #expect(throws: VaultFailure.self) { try VaultConfiguration(data: JSONSerialization.data(withJSONObject: bad)) }
         }

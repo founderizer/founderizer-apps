@@ -24,7 +24,7 @@ struct ChatsPage: View {
     private static let underCorner: CGFloat = 12
     /// **10 points under the line over the page while it shows**, as Needs you's first head stands under it (margins
     /// pass, fault 7): the corner's control touched the line.
-    private var underLine: CGFloat { store.unavailableWords == nil ? 0 : 10 }
+    private var underLine: CGFloat { store.unavailableWords == nil && !store.sample ? 0 : 10 }
 
     /// The agents whose name or last line hold the words of the search, in the hub's order; every agent while the
     /// field is empty.
@@ -39,10 +39,13 @@ struct ChatsPage: View {
 
     var body: some View {
         List {
-            searchField
-                .listRowSeparator(.hidden)
-                .brandRows(cards: false)
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 6, trailing: 16))
+            // No search over a phone with no hub: there is nothing to find.
+            if !store.hasNoHub {
+                searchField
+                    .listRowSeparator(.hidden)
+                    .brandRows(cards: false)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 6, trailing: 16))
+            }
             // Nothing of this hub was ever read and its read is on its way: after a second, the one loading line.
             if store.readsTheHub {
                 LoadingLine("Reading the hub…")
@@ -75,11 +78,30 @@ struct ChatsPage: View {
             } else if store.snapshot == nil {
                 // **The launch mark stays until the list comes** (the owner's yes of 28 October 2026 to D-8): the
                 // violet plate with its white chevrons, 96 points, in the middle of the screen, where the launch
-                // screen drew it, so nothing moves from the launch to the first frame.
-                FounderizerMark(size: 96, plate: Brand.violet)
+                // screen drew it, so nothing moves from the launch to the first frame. **A phone with no hub says under
+                // it how to add one, and offers the sample fleet** (the owner's yes of 11 November 2026 to its picture).
+                if store.hasNoHub && typeSize.isAccessibilitySize {
+                    // At the largest sizes the words do not fit under a mark that stays still: they scroll with it.
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            FounderizerMark(size: 96, plate: Brand.violet).accessibilityHidden(true)
+                            NoHubWords(store: store)
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 48)
+                        .frame(maxWidth: .infinity)
+                    }
+                } else {
+                    VStack(spacing: 24) {
+                        FounderizerMark(size: 96, plate: Brand.violet)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                        if store.hasNoHub { NoHubWords(store: store).frame(width: 300) }
+                    }
+                    // The mark's middle is the stack's middle, so the words hang under a mark that does not move.
+                    .alignmentGuide(VerticalAlignment.center) { $0[.top] + 48 }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
-                    .allowsHitTesting(false)
+                }
             }
         }
         .refreshable { await store.refresh() }
@@ -204,5 +226,30 @@ struct ChatsPage: View {
         guard let last else { return "No messages yet" }
         let text = last.isFromAgent ? MessageBlock.plain(last.preview) : "You: " + MessageBlock.plain(last.preview)
         return text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
+    }
+}
+
+/// **What a phone with no hub says under the launch mark** (the owner's yes of 11 November 2026 to its picture): where
+/// on the Mac its code is made, and the sample fleet to look at first. The way in on the Mac is the code's picture,
+/// which the phone's camera opens (`MobileStore.openLink`).
+private struct NoHubWords: View {
+    let store: MobileStore
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("Add this phone")
+                .font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
+            Text("In Founderizer on your Mac: Settings, Servers, Add device.")
+                .font(.body)
+                .foregroundStyle(Brand.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            TextAction(title: "See a sample fleet", font: .body) { store.startSample() }
+                .padding(.top, 10)
+                .accessibilityIdentifier("see-sample")
+        }
+        // Every line in the middle, also where the largest text sizes wrap the title and the action.
+        .multilineTextAlignment(.center)
+        .accessibilityIdentifier("no-hub")
     }
 }

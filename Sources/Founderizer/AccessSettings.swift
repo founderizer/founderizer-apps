@@ -55,6 +55,9 @@ struct AccessSettings: View {
     @State private var working: String?
     /// The result or the problem of the last change, in its resource's detail.
     @State private var note: (resource: String, text: String, warning: Bool)?
+    /// The rows of an agent's repositories that he opened, each "<agent> <owner>/<level>" (`repositoryRows`): closed again
+    /// when the page opens again.
+    @State private var opened: Set<String> = []
 
     private var offered: Bool { store.state?.ui_features?.contains(ResourceList.feature) == true }
     private var canChange: Bool { offered && store.isFresh && working == nil }
@@ -148,13 +151,72 @@ struct AccessSettings: View {
         VStack(alignment: .leading, spacing: FleetSpace.inside) {
             FormSection(lazy: true) {
                 if held.isEmpty { FormEmpty(Self.emptyForAgent(kind), symbol: Self.symbol(kind)) }
-                if let info { ForEach(held) { row($0, kind: info, reading: reading) } }
+                if let info {
+                    if kind == "repo" { repositoryRows(held, agent: agent, kind: info, reading: reading) }
+                    else { ForEach(held) { row($0, kind: info, reading: reading) } }
+                }
             }
             if let said: String = store.reading(Self.saidName(agent, kind: kind)) {
                 Text(said).font(FormMetrics.detail).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled).accessibilityIdentifier("access-said-\(kind)")
             }
         }
+    }
+
+    /// **An agent's repositories, an owner's at one level as one row once there are more than three** (the owner's yes
+    /// of 9 November 2026 to "AbcCorp 179 Read" as one row, and of 11 November 2026 to its picture on ABC
+    /// Developer's Can use: "Yes, as shown"): the rows of its 179 repositories stood one by one. In the order of
+    /// `Integrations.groups`: by owner, then from the lowest level to the highest. A row of an owner opens to its
+    /// repositories' own rows, each with its card and its −.
+    @ViewBuilder private func repositoryRows(_ held: [FleetResource], agent: String, kind: ResourceKind,
+                                             reading: ResourceList) -> some View {
+        let byName = Dictionary(held.map { ($0.what, $0) }) { first, _ in first }
+        let levels = byName.mapValues { resource in
+            resource.holders.first { $0.agent == agent }.flatMap { RepositoryAccess(rawValue: $0.level) } ?? .read
+        }
+        ForEach(Integrations.groups(levels), id: \.id) { group in
+            let resources = group.repos.compactMap { byName[$0] }
+            if group.grouped { groupRow(group, resources: resources, agent: agent, reading: reading) }
+            if !group.grouped || opened.contains("\(agent) \(group.id)") {
+                ForEach(resources) { row($0, kind: kind, reading: reading) }
+            }
+        }
+    }
+
+    /// **One owner's repositories at one level, in one row**: the account as GitHub writes it, how many, the level and a
+    /// chevron in the column of the rows' −. A click opens it to their own rows and closes it again. It carries the orange
+    /// mark of a row in it that the GitHub App does not reach, as Apps' GitHub row does.
+    private func groupRow(_ group: RepositoryGroup, resources: [FleetResource], agent: String,
+                          reading: ResourceList) -> some View {
+        let key = "\(agent) \(group.id)", open = opened.contains(key)
+        let list: RepositoryList? = store.reading(RepositoryPicking.listName)
+        let account = list?.account(group.owner) ?? group.owner
+        let level = Self.levelName(group.access.rawValue, kind: "repo")
+        let unreached = resources.contains { reading.unreachedPage($0) != nil }
+        return Button { if open { opened.remove(key) } else { opened.insert(key) } } label: {
+            HStack(spacing: 12) {
+                IconTile(symbol: Self.symbol("repo"))
+                Text(account).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 12)
+                if unreached {
+                    Image(systemName: "exclamationmark.triangle.fill").font(IconMetrics.symbol(13)).foregroundStyle(.orange)
+                        .help(Self.unreachedWords).accessibilityHidden(true)
+                }
+                HStack(spacing: 10) {
+                    Text("\(group.repos.count)").monospacedDigit()
+                    Text(level)
+                }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1).fixedSize()
+                Image(systemName: open ? "chevron.down" : "chevron.right").font(IconMetrics.symbol(11, weight: .semibold))
+                    .foregroundStyle(FleetStyle.muted).frame(width: IconMetrics.side, height: IconMetrics.side)
+            }.padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 10)
+        }
+        .buttonStyle(FleetRowButtonStyle())
+        .help(open ? "Hide these repositories" : "Show these repositories")
+        .accessibilityLabel("\(account), \(group.repos.count) repositories, \(level)" + (unreached ? ", \(Self.unreachedWords)" : ""))
+        .accessibilityValue(open ? "Expanded" : "Collapsed")
+        .accessibilityIdentifier("access-repo-group-\(group.id)")
+        // The account as GitHub writes it, from the list that the + reads; until then, as team.json keeps it.
+        .task(id: "\(store.hub)/\(store.state?.db ?? "")") { await RepositoryPicking.keepNames(store) }
     }
 
     /// The empty card of one kind on an agent's Can use, under its heading, which already names the kind.

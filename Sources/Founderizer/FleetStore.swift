@@ -22,7 +22,7 @@ enum Destination: Hashable {
     /// the manager's chat (`FleetStore.home`). `agents` is every agent with its role, server, account and usage, from the
     /// sidebar's row under Tasks (`AgentsPage`). `app` is one app's own page of Settings › Apps (the owner's yes of 10
     /// November 2026 to its split), as `server` is one server's page of Settings › Servers.
-    case needs, activity, goals, agents, addAgent, server(String), addServer, task(Int), agent(String),
+    case needs, activity, agents, addAgent, server(String), addServer, task(Int), agent(String),
          agentDetail(String, AgentTab), signIn(String), agentRule(String, ProfileSectionID?), settings(SettingsTab),
          app(AppsGroup)
 
@@ -269,7 +269,6 @@ final class FleetStore {
             return SettingsTab.named(String(page.dropFirst("settings.".count))).map { .settings($0) }
         case "needs": return .needs
         case "activity", "tasks": return .activity
-        case "goals": return .goals
         case "agents", "usage": return .agents
         case "servers", "devices": return .settings(.servers)
         // `server.<name>`: one server's page, which no sidebar row opens on its own.
@@ -967,7 +966,6 @@ final class FleetStore {
     /// Nothing is written on a kept reading alone: a write waits for the hub's own answer of this launch.
     var canWrite: Bool { answersWrites && !sending && pending == nil && storageError == nil }
     var openNeeds: [OwnerNeed] { state?.needs.filter(\.isOpen) ?? [] }
-    var currentNeed: OwnerNeed? { state?.needs.first { $0.id == selectedNeed } }
     var currentTask: FleetTask? {
         if case .task(let id) = destination { return state?.tasks.first { $0.id == id } }
         return nil
@@ -1118,7 +1116,6 @@ final class FleetStore {
             if let pending, pending.hub == hub, (fresh.receipt(for: pending) != nil || fresh.hasSteeringReceipt(for: pending)) {
                 try finish(pending)
             }
-            if selectedNeed == nil { selectedNeed = openNeeds.first?.id }
             await notifications.update(hub: requestedHub, state: fresh)
         } catch {
             guard requestedHub == hub else { return }

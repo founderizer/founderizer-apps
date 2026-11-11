@@ -119,7 +119,26 @@ extension PeopleSnapshot {
         public let agent: String
         public let can_chat: Bool
         public let says: String?
+        /// **What this person may use of the agent** (feature `person_scope`): nil where the hub sends no `scope` (no
+        /// list can hold there, or an older hub), `.all` for its null, and the list otherwise. A `scope` of a shape
+        /// that this app cannot read is nil too: the read never fails, and the app never writes over a list that it
+        /// cannot read.
+        public let scope: PersonScope?
         public var id: String { agent }
+
+        public init(agent: String, can_chat: Bool, says: String?, scope: PersonScope? = nil) {
+            self.agent = agent; self.can_chat = can_chat; self.says = says; self.scope = scope
+        }
+
+        private enum CodingKeys: String, CodingKey { case agent, can_chat, says, scope }
+
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            agent = try values.decode(String.self, forKey: .agent)
+            can_chat = try values.decode(Bool.self, forKey: .can_chat)
+            says = try values.decodeIfPresent(String.self, forKey: .says)
+            scope = PersonScope.read(values, .scope)
+        }
     }
 
     /// One handle of a person on a chat app: the ID that the app sends, and what the owner wrote down about it.
@@ -177,6 +196,12 @@ extension PeopleSnapshot {
         public var unreachable: [PersonAgent] { agents.filter { !$0.can_chat } }
         public var limit: Int { daily ?? 0 }
         public var sentToday: Int { today ?? 0 }
+        /// The messages a day that count, where a number does: the hub's, else the owner's own, which the hub counts only
+        /// for an agent that this person has a list with (the person access plan, section 8). nil: no limit.
+        public var dailyLimit: Int? { daily ?? (agents.contains { $0.scope.map { !$0.isAll } ?? false } ? daily_set : nil) }
+        /// What a person's page says of today: "3 today of 30", or "3 today" with no number to count against, never
+        /// "of 0" for a limit that is not there.
+        public var todayWords: String { dailyLimit.map { "\(sentToday) today of \($0)" } ?? "\(sentToday) today" }
 
         /// The one line under a person's name: what stops them first, else what they have. Orange where the owner
         /// can act. Never more than a handful of words.
@@ -257,6 +282,161 @@ extension PeopleSnapshot {
             let parts = account.split(separator: "-", maxSplits: 1).map(String.init)
             return parts.count == 2 && parts[1] != "main" ? parts[1] : nil
         }
+    }
+}
+
+// MARK: - what one person may use of an agent (the person access plan, owner feature `person_scope`)
+
+/// **One person's access with one agent of their list** (`GET /ui/people` `agents[].scope`; the owner's yes of 11
+/// November 2026): All, which is whatever the agent holds now and later, or only a list of the agent's own
+/// repositories and secrets, each at a level. The hub sends `scope` only where a list can hold, and wherever the person
+/// has one, so that the owner can always set All again.
+public enum PersonScope: Equatable, Sendable {
+    case all
+    case only([Entry])
+
+    /// `ui_features` of a hub that reads and writes a person's list.
+    public static let feature = "person_scope"
+    /// The kinds that a list can name.
+    public static let kinds = ["repo", "secret"]
+
+    /// One resource of a list, as the hub gives it back.
+    public struct Entry: Decodable, Equatable, Sendable, Identifiable {
+        /// `repo:<owner/name>` or `secret:bws://<uuid>`.
+        public let resource: String
+        /// The resource in words: a repository as `owner/name`, a secret by its name.
+        public let title: String
+        /// `read` or `write` for a repository, `use` or `read` for a secret.
+        public let level: String
+        /// The agent holds it now. One that it does not hold stays in the list at the hub, and works again when the
+        /// agent gets it back; the app does not draw it, and its next write leaves it out, as the hub would refuse it.
+        public let held: Bool
+        public var id: String { resource }
+        /// `repo` or `secret`.
+        public var kind: String { PersonScope.kind(of: resource) }
+        /// The repository or the reference after the kind.
+        public var what: String { String(resource.drop { $0 != ":" }.dropFirst()) }
+        /// The entry in the fewest words: a repository without its owner, a secret by its name.
+        public var shortName: String { kind == "repo" ? Integrations.name(what) : title }
+
+        public init(resource: String, title: String, level: String, held: Bool) {
+            self.resource = resource; self.title = title; self.level = level; self.held = held
+        }
+
+        private enum CodingKeys: String, CodingKey { case resource, title, level, held }
+
+        /// The resource and its level are the entry: without them it is no entry, and a list that holds one is a list
+        /// that this app does not read. Its words and `held` read leniently.
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            resource = try values.decode(String.self, forKey: .resource)
+            level = try values.decode(String.self, forKey: .level)
+            guard let colon = resource.firstIndex(of: ":"), colon > resource.startIndex,
+                  resource.index(after: colon) < resource.endIndex, !level.isEmpty else {
+                throw DecodingError.dataCorruptedError(forKey: .resource, in: values,
+                                                       debugDescription: "A resource of a list is <kind>:<what>.")
+            }
+            let words = ((try? values.decodeIfPresent(String.self, forKey: .title)) ?? nil)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            title = words.flatMap { $0.isEmpty ? nil : $0 } ?? String(resource[resource.index(after: colon)...])
+            held = ((try? values.decodeIfPresent(Bool.self, forKey: .held)) ?? nil) ?? true
+        }
+    }
+
+    /// `scope` of one agent of a person's list: nil where the hub sends none, All for its null, and the list
+    /// otherwise. A value of another shape is nil too, so the read never fails.
+    static func read<Key: CodingKey>(_ values: KeyedDecodingContainer<Key>, _ key: Key) -> PersonScope? {
+        guard values.contains(key) else { return nil }
+        if (try? values.decodeNil(forKey: key)) == true { return .all }
+        return (try? values.decode([Entry].self, forKey: key)).map(PersonScope.only)
+    }
+
+    public var isAll: Bool { self == .all }
+    /// The entries of the list, as the hub gave them; none for All.
+    public var entries: [Entry] { if case .only(let entries) = self { entries } else { [] } }
+    /// The list as a page edits it, {resource: level}: the entries that the agent holds now. Empty for All.
+    public var list: [String: String] {
+        Dictionary(entries.filter(\.held).map { ($0.resource, $0.level) }) { first, _ in first }
+    }
+
+    /// The longest two names that the list in a few words writes out both of.
+    static let shortMost = 24
+    /// The longest name that it writes out whole: a capsule's words never wrap, so a longer one ends in "…".
+    static let nameMost = 28
+
+    /// **The list in a few words**, for the select on the person's row of the agent: "abc-crm" for a list of
+    /// `exampleowner/abc-crm`, a secret by its name, two short names both, and else the first one and how many more.
+    /// Only what the agent holds now. nil for All, and for a list with nothing that the agent holds.
+    public var short: String? {
+        let names = entries.filter(\.held).map { entry in
+            entry.shortName.count > Self.nameMost ? String(entry.shortName.prefix(Self.nameMost - 1)) + "…" : entry.shortName
+        }
+        guard let first = names.first else { return nil }
+        if names.count == 1 { return first }
+        if names.count == 2, first.count + names[1].count <= Self.shortMost { return "\(first), \(names[1])" }
+        return "\(first) and \(names.count - 1) more"
+    }
+
+    /// `repo` or `secret` of a resource id, or what stands before its colon.
+    public static func kind(of resource: String) -> String { String(resource.prefix { $0 != ":" }) }
+
+    /// The levels of a kind that a list can give, from the lowest. Deploy is none of them: no list reaches it.
+    static func order(_ kind: String) -> [String] {
+        switch kind {
+        case "repo": ["read", "write"]
+        case "secret": ["use", "read"]
+        default: []
+        }
+    }
+
+    /// **The levels that a list can give one resource of an agent that holds it at `agentHas`**: the kind's levels up
+    /// to the agent's own, so an agent at Read offers Read only, and Write is a repository's most, whatever the agent
+    /// holds above it. Empty for a level that this app does not know.
+    public static func levels(_ kind: String, agentHas: String) -> [String] {
+        let order = order(kind)
+        let top = kind == "repo" && agentHas == "deploy" ? "write" : agentHas
+        guard let at = order.firstIndex(of: top) else { return [] }
+        return Array(order[...at])
+    }
+
+    /// One entry's level as the hub takes it: the lower of the list's and the agent's, or nil when neither fits.
+    public static func level(_ wanted: String, kind: String, agentHas: String) -> String? {
+        let offered = levels(kind, agentHas: agentHas)
+        if let level = offered.first(where: { $0 == (wanted == "deploy" ? "write" : wanted) }) { return level }
+        return order(kind).contains(wanted) || wanted == "deploy" ? offered.last : nil
+    }
+
+    /// **What a change of the list sends**: each repository and secret that the agent holds now (`holdings`, by
+    /// resource, at the agent's own level), at the lower of its level and the agent's, since the hub refuses a level
+    /// above the agent's and deploy; one that the agent does not hold is left out, as the hub would refuse it. An entry
+    /// of a kind that this app does not draw goes as the hub gave it.
+    public static func written(_ list: [String: String], holdings: [String: String]) -> [String: String] {
+        var out: [String: String] = [:]
+        for (resource, wanted) in list {
+            let kind = kind(of: resource)
+            guard kinds.contains(kind) else { out[resource] = wanted; continue }
+            if let has = holdings[resource], let level = level(wanted, kind: kind, agentHas: has) { out[resource] = level }
+        }
+        return out
+    }
+
+    /// The body of one change of one person's access with one agent (`POST /ui/people`): `scopes` with that agent
+    /// alone, so no other agent of the person's list changes; nil is All.
+    static func fields(person: Int, agent: String, list: [String: String]?) -> [String: Any] {
+        ["id": person, "scopes": [agent: list.map { $0 as Any } ?? NSNull()]]
+    }
+}
+
+extension ResourceList {
+    /// **What a person's list can name of what `agent` holds** (the person access plan): each of its repositories and
+    /// secrets by resource (`repo:<owner/name>`, `secret:bws://<uuid>`), at the agent's own level, as its Can use
+    /// shows them.
+    public func scopeHoldings(of agent: String) -> [String: String] {
+        var out: [String: String] = [:]
+        for resource in resources where PersonScope.kinds.contains(resource.kind) {
+            if let level = resource.holders.first(where: { $0.agent == agent })?.level { out[resource.id] = level }
+        }
+        return out
     }
 }
 
@@ -760,6 +940,14 @@ public final class PeopleClient: Sendable {
         guard !fields.isEmpty else { return nil }
         return try await write("ui/people", fields: fields.merging(["id": person.id]) { _, new in new },
                                hub: hub, database: database, client: client)
+    }
+
+    /// **Sets what one person may use of one agent of their list** (feature `person_scope`): All with nil, else only
+    /// the list, {resource: level}. Only that agent's access changes.
+    public func scope(hub: URL, database: String, client: String, person: Int, agent: String,
+                      list: [String: String]?) async throws -> PersonReceipt {
+        try await write("ui/people", fields: PersonScope.fields(person: person, agent: agent, list: list), hub: hub,
+                        database: database, client: client)
     }
 
     /// Blocks a person, or lets them write again.

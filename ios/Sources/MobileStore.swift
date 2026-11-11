@@ -118,6 +118,14 @@ final class MobileStore {
     var addressText: String
     private(set) var hub: URL
     private(set) var addressError: String?
+    /// **The sample fleet is open** (`SampleFleet.swift`): the pages read it in place of a hub, until the owner leaves
+    /// it or adds this phone. It lasts one launch: at its next start, a phone with no hub offers it again.
+    private(set) var sample = false
+    /// **This phone has no hub yet** (the owner's yes of 11 November 2026 to its picture): no address was ever set, and
+    /// the sample is not open. It reads nothing and says nothing about a hub, and Chats says how to add one.
+    var hasNoHub: Bool { !sample && hub == Self.noHub }
+    /// The built-in address, which names no hub (`HubClient.defaultAddress`).
+    private static let noHub = try! MobileClient.address(defaultAddress)
     /// The client label of every write of this installation, as the plan asks (MOBILE-APP.md 6.3).
     let installation: String
     /// The keychain holder of this phone's own key.
@@ -193,7 +201,9 @@ final class MobileStore {
     /// The system's own words for an enrollment that failed on this phone, as the problem line's value for VoiceOver.
     private(set) var enrollDetail: String?
 
-    private let client = MobileClient()
+    /// The one client of every read and write. It answers the sample fleet's address itself (`SampleHub`), and only
+    /// that address, so a request to the sample never leaves the phone, also when it was on its way at Leave.
+    private let client = MobileClient(answering: SampleHub.host, with: SampleHub.self)
     private let outbox: Outbox
     /// Where the bytes of a file that is not on the hub yet wait, beside the Outbox.
     private let stagedDirectory: URL
@@ -211,7 +221,8 @@ final class MobileStore {
 
     init() {
         let address = UserDefaults.standard.string(forKey: "hubAddress") ?? MobileStore.defaultAddress
-        addressText = address
+        // A phone with no hub shows an empty field with its example: the built-in address names no hub.
+        addressText = UserDefaults.standard.string(forKey: "hubAddress") ?? ""
         hub = (try? MobileClient.address(address)) ?? (try! MobileClient.address(MobileStore.defaultAddress))
         installation = Self.installationLabel()
         if let seen = UserDefaults.standard.dictionary(forKey: "mobileRepliesSeen"), let context = seen["context"] as? String,
@@ -246,7 +257,27 @@ final class MobileStore {
             storageError = "Cannot read the saved request. Sending is blocked."
             storageErrorDetail = error.localizedDescription
         }
+        // A refused write of the sample fleet, which a launch that ended in the sample left: the sample is not kept.
+        if let left = pending, left.hub == SampleHub.address, (try? outbox.clear(matching: left.requestID)) != nil {
+            pending = nil
+        }
         keyState = deviceKey.has ? .locked : .none
+        shareRoster()
+    }
+
+    /// What the share extension last got from this app (`SharedPlace`), so that an unchanged roster is not written
+    /// again at every read.
+    @ObservationIgnored private var sharedRoster: SharedRoster?
+
+    /// **Gives the share extension the hub, this installation's label and the agents** as this app reads them now:
+    /// at the launch, after each read that brought a new body, and when the owner chose another hub. A roster that did
+    /// not change is not written again, and the app that hosts the unit tests writes none. **The sample fleet gives it
+    /// nothing**: a share never goes to an agent of the sample.
+    private func shareRoster() {
+        guard !Self.hostsTests, !sample else { return }
+        let roster = SharedRoster(hub: hub, installation: installation, snapshot: snapshot, features: features)
+        guard roster != sharedRoster else { return }
+        if SharedPlace.keep(roster) { sharedRoster = roster }
     }
 
     /// The hub inside the owner's tailnet, as the Mac app knows it.
@@ -301,7 +332,9 @@ final class MobileStore {
     /// This phone holds a key that is not in hand, so a read now would go without it and the hub would refuse it.
     /// Reading anyway would blame the hub for something only the owner's presence can give.
     var keyIsHeldBack: Bool {
-        switch keyState {
+        // A phone with no hub, or in the sample fleet, has no hub to reach with a key (a key outlives a reinstall).
+        guard !hasNoHub, !sample else { return false }
+        return switch keyState {
         case .locked, .failed: true
         case .none, .ready: false
         }
@@ -309,7 +342,8 @@ final class MobileStore {
 
     /// What the owner must know about the key, or nil while it is in hand or not wanted.
     var keyWords: String? {
-        switch keyState {
+        guard !hasNoHub, !sample else { return nil }
+        return switch keyState {
         case .none, .ready: nil
         case .locked: "This phone's key is locked. Unlock it in Settings to read the hub."
         // The keychain's own words go to VoiceOver (`keyDetail`), not on the screen.
@@ -452,7 +486,8 @@ final class MobileStore {
                 }
             }
             reading = Task { [weak self] in
-                await self?.unlock()
+                // No Face ID for a phone with no hub, or in the sample fleet: there is no hub to reach with the key.
+                if self?.hasNoHub == false, self?.sample == false { await self?.unlock() }
                 await self?.refresh()
                 while !Task.isCancelled {
                     // The read on the clock counts from the last read, whoever ran it: a read that a change of the
@@ -476,7 +511,7 @@ final class MobileStore {
     }
 
     /// This process runs the unit tests (Xcode's test host): it reads nothing from any hub.
-    nonisolated static let hostsTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    nonisolated static var hostsTests: Bool { MobileClient.hostsTests }
 
     /// Whether a return to the front holds the marks of the reading it has for the first second of its read: a reading
     /// that is there and whose last read did not fail.
@@ -541,6 +576,8 @@ final class MobileStore {
 
     private func readOnce() async {
         defer { lastReadUptime = ProcessInfo.processInfo.systemUptime; firstReadWaits = false }
+        // A phone with no hub reads nothing: no hub can answer the built-in address, and no line may say one did not.
+        guard !hasNoHub else { return }
         if snapshot == nil, fleetSince == nil { fleetSince = .now }
         refreshing = true
         guard !keyIsHeldBack else { refreshing = false; clock = Date(); return }
@@ -629,6 +666,7 @@ final class MobileStore {
         keepSnapshot(answer.body, etag: answer.etag)
         let names = Set(answer.snapshot.ui_features ?? [])
         if features != names { features = names }
+        shareRoster()
         markRepliesSeen()
     }
 
@@ -751,8 +789,9 @@ final class MobileStore {
     }
 
     /// Writes each new compact read to this phone, so the next launch draws the fleet in its first frame. A copy of
-    /// what the hub said: nothing is sent from it, and its first read replaces it.
+    /// what the hub said: nothing is sent from it, and its first read replaces it. The sample fleet is not kept.
     private func keepSnapshot(_ body: Data, etag: String?) {
+        guard !sample else { return }
         let kept = KeptSnapshot(hub: hub.absoluteString, etag: etag, at: Date().timeIntervalSince1970, body: body)
         guard let data = try? JSONEncoder().encode(kept) else { return }
         try? FileManager.default.createDirectory(at: snapshotFile.deletingLastPathComponent(),
@@ -777,9 +816,9 @@ final class MobileStore {
 
     /// Writes the chats to this phone, the newest 40 items of each, in the hub's own words, so the next launch opens
     /// a chat drawn with them and a chat stays drawn while the hub is away. It is a copy of what the hub said, and
-    /// nothing is sent from it: the first read of a launch replaces it.
+    /// nothing is sent from it: the first read of a launch replaces it. The sample fleet is not kept.
     private func keepChats() {
-        guard let database = snapshot?.db ?? keptDatabase else { return }
+        guard !sample, let database = snapshot?.db ?? keptDatabase else { return }
         let chats = chatItems.mapValues { $0.suffix(40).map(\.wire) }
         guard let data = try? JSONSerialization.data(withJSONObject: ["hub": hub.absoluteString, "db": database,
                                                                       "chats": chats]) else { return }
@@ -858,22 +897,71 @@ final class MobileStore {
     func connect() async {
         do {
             let next = try MobileClient.address(addressText)
+            // The sample fleet's address is no hub: this app answers it itself.
+            guard next.host?.lowercased() != SampleHub.host else { throw MobileError.invalidAddress }
             addressError = nil
+            // A hub of his own ends the sample fleet: the camera's link of a code comes here too.
+            if sample { endSample() }
             if next != hub {
-                hub = next
                 UserDefaults.standard.set(next.absoluteString, forKey: "hubAddress")
-                forgetGeneration()
-                device = nil
-                lastRead = nil
-                readError = nil
-                readHeld = false
-                lastRequestTook = .zero
-                authProblem = nil
-                chatRoute = []
-                taskRoute = []
+                use(next)
             }
             await refresh()
         } catch { addressError = error.localizedDescription }
+    }
+
+    /// The phone moves to another hub, or to or from the sample fleet: nothing of one shows under another.
+    private func use(_ next: URL) {
+        hub = next
+        forgetGeneration()
+        shareRoster()
+        device = nil
+        lastRead = nil
+        readError = nil
+        readWasRefused = false
+        readHeld = false
+        lastRequestTook = .zero
+        authProblem = nil
+        chatRoute = []
+        taskRoute = []
+    }
+
+    // MARK: The sample fleet
+
+    /// Opens the sample fleet (`SampleFleet.swift`) from a phone with no hub: the pages read it from now on, from its
+    /// first frame, and every time in it counts back from this moment.
+    func startSample() {
+        guard !sample else { return }
+        SampleHub.begin()
+        sample = true
+        use(SampleHub.address)
+        tab = .chats
+        Task { await refresh() }
+    }
+
+    /// Leaves the sample fleet: what it held goes, and the phone is as it was before it, with no hub.
+    func leaveSample() {
+        guard sample else { return }
+        endSample()
+        use(Self.savedHub())
+        tab = .chats
+        Task { await refresh() }
+    }
+
+    /// Takes the sample off this phone: a write of it that waits or that was refused, and the drafts written in it,
+    /// which were never kept (`setDraft`), so the drafts of before it come back.
+    private func endSample() {
+        sample = false
+        if let left = pending, left.hub == SampleHub.address, (try? outbox.clear(matching: left.requestID)) != nil {
+            pending = nil
+        }
+        sendError = nil
+        fileFailed(nil)
+        drafts = UserDefaults.standard.dictionary(forKey: "agentDrafts") as? [String: String] ?? [:]
+        answers = UserDefaults.standard.dictionary(forKey: "answerDrafts") as? [String: String] ?? [:]
+        let seen = UserDefaults.standard.dictionary(forKey: "mobileRepliesSeen")
+        seenContext = seen?["context"] as? String ?? ""
+        seenReplies = seen?["seen"] as? [String: Double] ?? [:]
     }
 
     /// Reads this phone as the hub names it. Settings asks for it; no page needs it to work.
@@ -1085,7 +1173,8 @@ final class MobileStore {
 
     /// What the owner must know about the connection, or nil while the read is current.
     var unavailableWords: String? {
-        guard !isFresh, !firstReadWaits else { return nil }
+        // A phone with no hub has no connection to speak of.
+        guard !hasNoHub, !isFresh, !firstReadWaits else { return nil }
         // The key comes first: when this phone holds one that is not in hand, that is the whole reason, and the
         // hub's own refusal would send the owner to make a new code for something a Face ID prompt gives back.
         if let words = keyWords { return words }
@@ -1112,7 +1201,7 @@ final class MobileStore {
 
     /// Nothing of this hub was ever read and its read is on its way: the pages show the one loading line. When no
     /// read can come, the line over the page is the one thing that says so (D-2).
-    var readsTheHub: Bool { snapshot == nil && readCanCome }
+    var readsTheHub: Bool { snapshot == nil && readCanCome && !hasNoHub }
 
     // MARK: The lists of the pages
 
@@ -1192,6 +1281,8 @@ final class MobileStore {
         guard seen != seenReplies || seenContext != context else { return }
         seenContext = context
         seenReplies = seen
+        // What he saw in the sample fleet is not kept: it ends with the sample (`endSample`).
+        guard !sample else { return }
         UserDefaults.standard.set(["context": context, "seen": seen], forKey: "mobileRepliesSeen")
     }
 
@@ -1212,20 +1303,11 @@ final class MobileStore {
     }
 
     /// This hub takes a message to this agent: the route is there and the agent is active.
-    func canChat(with name: String) -> Bool {
-        guard let agent = agent(name) else { return false }
-        return (name == "manager" || supportsDirectChat) && agent.direct_chat != false && agent.active != false
-    }
+    func canChat(with name: String) -> Bool { snapshot?.canChat(with: name, features: features) ?? false }
 
     /// Why this chat takes no message, in the owner's words, or nil when it takes one. The connection line says it
     /// when nothing was read.
-    func chatUnavailableWords(_ name: String) -> String? {
-        guard snapshot != nil, !canChat(with: name) else { return nil }
-        // The Mac's words, with the place he goes adapted (fix round 3, item 38).
-        if agent(name)?.active == false { return "This agent is in setup. Activate it in the Mac app before sending work." }
-        if !supportsDirectChat && name != "manager" { return "This hub needs an update before direct chat is available." }
-        return "Direct chat is unavailable for this agent. Send a task to Manager."
-    }
+    func chatUnavailableWords(_ name: String) -> String? { snapshot?.chatUnavailableWords(name, features: features) }
 
     /// A write may go: the hub answered the last read (`answersWrites`), nothing else waits for its receipt, and the
     /// Outbox can be used. One request at a time, as on the Mac.
@@ -1241,10 +1323,11 @@ final class MobileStore {
     // MARK: The drafts
 
     func draft(for name: String) -> String { drafts[name] ?? "" }
+    /// A draft is kept across a force quit, except one written in the sample fleet, which ends with the sample.
     func setDraft(_ text: String, for name: String) {
         guard drafts[name] ?? "" != text else { return }
         if text.isEmpty { drafts[name] = nil } else { drafts[name] = text }
-        UserDefaults.standard.set(drafts, forKey: "agentDrafts")
+        if !sample { UserDefaults.standard.set(drafts, forKey: "agentDrafts") }
     }
 
     func answerDraft(for need: Int) -> String { answers[String(need)] ?? "" }
@@ -1252,7 +1335,7 @@ final class MobileStore {
         let key = String(need)
         guard answers[key] ?? "" != text else { return }
         if text.isEmpty { answers[key] = nil } else { answers[key] = text }
-        UserDefaults.standard.set(answers, forKey: "answerDrafts")
+        if !sample { UserDefaults.standard.set(answers, forKey: "answerDrafts") }
     }
 
     // MARK: The files that the owner picked
@@ -1286,6 +1369,11 @@ final class MobileStore {
     /// goes up with its own number; the message that carries it names only that number.
     func stage(_ data: Data, name: String, mime: String, for composer: String) async {
         guard storageError == nil else { return }
+        // The sample fleet takes no file, as it takes no write: the hub's refusal, at once, where a file's words go.
+        guard !sample else {
+            fileFailed(MobileError.refusal(status: 409, auth: nil, message: SampleHub.refusal).notSentWords)
+            return
+        }
         guard stagedFiles(for: composer).count < MessageAttachment.perMessage else {
             fileFailed("A message carries at most \(MessageAttachment.perMessage) files.")
             return

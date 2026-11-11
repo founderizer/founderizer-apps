@@ -56,9 +56,9 @@ extension VaultCallerTests {
     /// The helper reads `withdrawals`, and the hub asks this machine for a withdrawal only when it is there.
     @Test func theStatusSaysWithdrawalsOnlyWhenAsked() {
         let recipient = "age1" + String(repeating: "q", count: 58)
-        let both = VaultBroker.status(agent: "studio", user: "sam", recipient: recipient, backend: .store, deposits: true, withdrawals: true)
+        let both = VaultBroker.status(agent: "studio", user: "sam", recipient: recipient, deposits: true, withdrawals: true)
         #expect(both["withdrawals"] as? Bool == true && both["deposits"] as? Bool == true)
-        #expect(VaultBroker.status(agent: "studio", user: "sam", recipient: recipient, backend: .store, deposits: true)["withdrawals"] == nil)
+        #expect(VaultBroker.status(agent: "studio", user: "sam", recipient: recipient, deposits: true)["withdrawals"] == nil)
     }
 
     @Test func theHubNamesTheSecretAndTheStoreRemovesIt() async throws {
@@ -91,18 +91,6 @@ extension VaultCallerTests {
         // A login that no delivery saved stays, and the answer says why.
         FakeHub.reset(answer: Self.withdrawAnswers(Self.withdrawFields()))
         #expect(try await Self.withdrawReply { _ in throw VaultFailure.withdrawNotDelivered } == Self.withdrawRefusal(.withdrawNotDelivered))
-    }
-
-    /// A broker that opens a Bitwarden project holds no delivered secret: it refuses before it asks the hub anything.
-    @Test func aBitwardenVaultRefusesAWithdrawalBeforeAnyHubCall() async throws {
-        FakeHub.reset(answer: Self.withdrawAnswers(Self.withdrawFields()))
-        let broker = VaultBroker(configuration: try Self.withdrawConfiguration(["region": "eu"]), bundle: .main, protocolClasses: [FakeHub.self])
-        let line = try JSONSerialization.data(withJSONObject: ["v": 2, "op": "withdraw", "job": 6, "agent": "studio",
-                                                               "agent_key": Self.withdrawKey]) + Data([10])
-        let reply = await broker.handle(line, uid: 501)
-        let object = try #require(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
-        #expect(NSDictionary(dictionary: object) == Self.withdrawRefusal(.withdrawBitwarden))
-        #expect(FakeHub.seen.isEmpty)
     }
 }
 

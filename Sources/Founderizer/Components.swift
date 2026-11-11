@@ -508,48 +508,6 @@ extension View {
     }
 }
 
-/// A message at the top of the content area, with the one thing the owner can do about it. Every notice carries an
-/// action, because a line that says something is wrong and offers nothing is a line he can only read twice (the
-/// owner, 19 October 2026: "I also don't understand these messages that offer no CTA"). A state he can do nothing
-/// about is no notice: it belongs on the page where that state already shows.
-///
-/// It stands in the page's own column, so its words begin where the page's words begin and its action sits over the
-/// page's own actions; the tint runs the whole width, so the strip is seen before it is read. Over a conversation and
-/// a task thread that column is the narrower one of prose (`noticeReading`), because those are no pages: the owner,
-/// 25 October 2026, on a strip over an agent's chat whose words and button stood wider than the chat under them: "it
-/// is not aligned!"
-struct FleetNotice<Actions: View>: View {
-    private let text: String
-    private let symbol: String
-    private let color: Color
-    private let actions: Actions
-    @Environment(\.noticeReading) private var reading
-
-    init(_ text: String, symbol: String = "exclamationmark.triangle.fill", color: Color = .orange,
-         @ViewBuilder actions: () -> Actions) {
-        self.text = text; self.symbol = symbol; self.color = color; self.actions = actions()
-    }
-
-    var body: some View {
-        // Centred, not top-aligned: the band is as tall as its buttons, which are taller than one line of text, so
-        // `.top` left the words and the icon sitting above the middle of the tint (the owner, 19 October 2026). The
-        // two 22-point frames keep one line of text and its icon on the same baseline inside that height; when the
-        // words wrap, the text is the tallest thing here and the icon and the buttons centre against it.
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: symbol).font(IconMetrics.symbol(12.5)).foregroundStyle(color).accessibilityHidden(true)
-                .frame(height: 22, alignment: .center)
-            Text(text).font(FormMetrics.text).foregroundStyle(FleetStyle.text).textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true).frame(minHeight: 22, alignment: .center)
-            Spacer(minLength: 12)
-            HStack(spacing: FleetSpace.actions) { actions }
-        }
-        .padding(.vertical, 9).fleetColumn(reading: reading)
-        .background(color.opacity(0.1))
-        .overlay(alignment: .bottom) { Rule() }
-        .accessibilityElement(children: .contain)
-    }
-}
-
 /// The count of a sidebar row, as an unread count is: the number in a small capsule at the right of the row. It
 /// shows only while there is something to count. **A grey pill** (the owner's yes of 28 October 2026, D-8): violet is
 /// what he can press and the brand's mark, and a count is neither.
@@ -560,7 +518,7 @@ struct SidebarBadge: View {
     var body: some View {
         if count > 0 {
             Text("\(count)").font(FormMetrics.detailTitle).monospacedDigit()
-                .foregroundStyle(FleetStyle.text)
+                .foregroundStyle(FleetStyle.text).rolls(count)
                 .padding(.horizontal, 6).frame(minWidth: 18, minHeight: 16)
                 // Lighter than the selected row's fill, so it reads on the row it counts for when that row is open.
                 .background(Color.white.opacity(0.12), in: Capsule(style: .circular))

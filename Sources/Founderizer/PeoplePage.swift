@@ -62,6 +62,8 @@ struct PeoplePage: View {
     enum Route: Hashable {
         case add(app: String?, handle: String?, name: String?)
         case person(Int)
+        /// What one person may use of one agent of their list ("<agent> for <person>"), from the person's page.
+        case access(person: Int, agent: String)
         case conversation(Int)
         case role(String)
     }
@@ -97,7 +99,11 @@ struct PeoplePage: View {
                 PersonPage(store: store, id: id, snapshot: reading.value, back: { route.removeLast() },
                            changed: { await read() },
                            removed: { route = []; Task { await read() } },
-                           open: { route.append(.conversation($0)) })
+                           open: { route.append(.conversation($0)) },
+                           openAccess: { route.append(.access(person: id, agent: $0)) })
+            case .access(let id, let agent):
+                PersonAccessPage(store: store, id: id, agent: agent, snapshot: reading.value, back: { route.removeLast() },
+                                 changed: { await read() })
             case .conversation(let id):
                 ConversationPage(store: store, id: id, backTitle: backTitle, back: { route.removeLast() })
             case .role(let name):

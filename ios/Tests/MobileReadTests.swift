@@ -410,6 +410,52 @@ struct MobileReadTests {
         #expect(try snapshot(agents: [agentFields(["machine": "atlas-mac"])]).agents.first?.machine == "atlas-mac")
         #expect(try snapshot(agents: [agentFields()]).agents.first?.machine == nil)
     }
+
+    @Test("The chat and the share sheet ask one rule which agent takes a message, and say why one does not")
+    func whoTakesAMessage() throws {
+        let read = try snapshot(agents: [agentFields(["name": "manager", "role": "manager"]), agentFields(),
+                                         agentFields(["name": "scout", "active": false]),
+                                         agentFields(["name": "mini", "direct_chat": false])])
+        let direct: Set<String> = ["direct_chat"]
+        #expect(read.canChat(with: "studio", features: direct))
+        #expect(read.chatUnavailableWords("studio", features: direct) == nil)
+        #expect(!read.canChat(with: "scout", features: direct))
+        #expect(read.chatUnavailableWords("scout", features: direct)
+            == "This agent is in setup. Activate it in the Mac app before sending work.")
+        #expect(read.chatUnavailableWords("mini", features: direct)
+            == "Direct chat is unavailable for this agent. Send a task to Manager.")
+        // A hub without direct chat takes a message to the manager alone.
+        #expect(read.canChat(with: "manager", features: []))
+        #expect(read.chatUnavailableWords("studio", features: [])
+            == "This hub needs an update before direct chat is available.")
+        // An agent that the read does not name takes nothing.
+        #expect(!read.canChat(with: "gone", features: direct))
+    }
+
+    @Test("The roster for the share sheet names the hub, the label and each agent in order, its role, and whether it takes a message")
+    func theRosterForTheShareSheet() throws {
+        let read = try snapshot(agents: [agentFields(["name": "manager", "role": "manager", "title": "Fleet Manager"]),
+                                         agentFields(["title": "Support"]),
+                                         agentFields(["name": "scout", "active": false])])
+        let hub = try MobileClient.address("http://127.0.0.1:9")
+        let roster = SharedRoster(hub: hub, installation: "founderizer-ios/1/check", snapshot: read,
+                                  features: ["direct_chat"])
+        #expect(roster.team.map(\.name) == ["manager", "studio", "scout"])
+        #expect(roster.team.map(\.title) == ["Fleet Manager", "Support", nil])
+        #expect(roster.team.map(\.takesMessage) == [true, true, false])
+        #expect(roster.hubURL == hub)
+        // Before any read it names the hub and the label, and no agent.
+        #expect(SharedRoster(hub: hub, installation: "x", snapshot: nil, features: []).team.isEmpty)
+        // The keychain gives back what the app left, and the newest roster takes the place of the one before.
+        let account = "roster-check-\(UUID().uuidString)"
+        defer { SharedPlace.forget(account: account) }
+        #expect(SharedPlace.roster(account: account) == nil)
+        #expect(SharedPlace.keep(roster, account: account))
+        #expect(SharedPlace.roster(account: account) == roster)
+        let next = SharedRoster(hub: hub, installation: "founderizer-ios/1/check", snapshot: nil, features: [])
+        #expect(SharedPlace.keep(next, account: account))
+        #expect(SharedPlace.roster(account: account) == next)
+    }
 }
 
 /// What a chat draws from what it read: the waiting line's state, Send's arrow and a chat app's mark.

@@ -102,8 +102,11 @@ enum MobileError: LocalizedError, Sendable, Equatable {
 /// hardened in the same way: ephemeral, no cookie, no credential, no redirect, and no cache.
 final class MobileClient: Sendable {
     private let session: URLSession
+    /// The one host whose requests never leave this phone, because `protocolClass` answers them inside the app: the
+    /// sample fleet's (`SampleHub`). Nil for a client of a hub.
+    private let localHost: String?
 
-    init() {
+    init(answering host: String? = nil, with protocolClass: AnyClass? = nil) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
@@ -111,7 +114,9 @@ final class MobileClient: Sendable {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 10
         configuration.timeoutIntervalForResource = 15
+        if let protocolClass { configuration.protocolClasses = [protocolClass] + (configuration.protocolClasses ?? []) }
         session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
+        localHost = protocolClass == nil ? nil : host?.lowercased()
     }
 
     static func address(_ text: String) throws -> URL {
@@ -157,11 +162,21 @@ final class MobileClient: Sendable {
     /// **Every request of the phone goes through here, and in the app that hosts the unit tests none leaves this Mac**
     /// (review B9i): whatever path asks — a read, a send, a link, a file, a press on a ping — a request to any other
     /// host is refused before it goes, because the built-in address is the owner's own hub. A stand-in on this Mac
-    /// still answers a check.
+    /// still answers a check, and so does the sample fleet, which this app answers itself.
     private func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        if MobileStore.hostsTests, !Self.isLoopback(request.url) { throw OffThisMac() }
+        if Self.hostsTests, !Self.isLoopback(request.url), !answersHere(request.url) { throw OffThisMac() }
         return try await session.data(for: request)
     }
+
+    /// The request goes to the host that this app answers itself (`localHost`), so it never leaves the phone.
+    private func answersHere(_ url: URL?) -> Bool {
+        guard let localHost, let host = url?.host?.lowercased() else { return false }
+        return host == localHost
+    }
+
+    /// This process runs the unit tests (Xcode's test host). It lives here and not on the store, because the share
+    /// extension sends through this client and has no store.
+    static let hostsTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 
     /// What a request off this Mac meets in the app that hosts the checks: no answer of a network can be this.
     struct OffThisMac: Error {}

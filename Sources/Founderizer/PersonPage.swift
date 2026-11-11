@@ -15,6 +15,8 @@ struct PersonPage: View {
     let changed: () async -> Void
     let removed: () -> Void
     let open: (Int) -> Void
+    /// Opens the page of what this person may use of one agent ("<agent> for <person>", `PersonAccessPage`).
+    var openAccess: (String) -> Void = { _ in }
 
     @State private var name = ""
     @State private var note = ""
@@ -39,10 +41,20 @@ struct PersonPage: View {
             Group {
                 if let person {
                     card(person)
+                    let access = accessOf(person)
                     PersonAgentsCard(agents: agents, says: says(person),
                                      chosen: Binding(get: { person.agentNames }, set: { names in
                                          Task { await save("agents") { $0.agents = names } }
-                                     }), saving: saving["agents"], disabled: !canWrite)
+                                     }), saving: saving["agents"], disabled: !canWrite,
+                                     access: access,
+                                     accessSaving: saving.reduce(into: [:]) { mine, entry in
+                                         if entry.key.hasPrefix("access.") { mine[String(entry.key.dropFirst(7))] = entry.value }
+                                     },
+                                     chooseAccess: { agent, all in
+                                         if !all { openAccess(agent) }
+                                         else if access[agent]?.isAll == false { Task { await setAll(agent) } }
+                                     },
+                                     retryAccess: { agent in Task { await setAll(agent) } })
                     handles(person)
                     conversations(person)
                     remove(person)
@@ -60,6 +72,13 @@ struct PersonPage: View {
         .onChange(of: person?.name) { if focus != "name" { fill() } }
         .onChange(of: person?.note) { if focus != "note" { fill() } }
         .onChange(of: person?.daily_set) { if focus != "daily" { fill() } }
+    }
+
+    /// What this person may use of each agent of their list, where the hub gives it (feature `person_scope`): the select
+    /// of the agent's row.
+    private func accessOf(_ person: PeopleSnapshot.Person) -> [String: PersonScope] {
+        guard store.state?.ui_features?.contains(PersonScope.feature) == true else { return [:] }
+        return Dictionary(person.agents.compactMap { agent in agent.scope.map { (agent.agent, $0) } }) { first, _ in first }
     }
 
     /// The hub's own line for an agent of this person's list that cannot hold a conversation now.
@@ -89,10 +108,12 @@ struct PersonPage: View {
             }), saving: saving["role"], disabled: !canWrite)
             // No symbol on Role, Messages a day and Blocked (the owner, 30 October 2026: "Remove the 3 icons"; margins
             // row 14): the card's titles begin at one edge, 16 points in, with Name and the note's.
-            FormRow("Messages a day", detail: "\(person.sentToday) today of \(person.limit)") {
+            // **With no number to count against, no "of 0"** (the person access plan, section 8): no limit shows, where
+            // "0 today of 0" stood for a role with no limit.
+            FormRow("Messages a day", detail: person.todayWords) {
                 HStack(spacing: 8) {
                     SaveMark(state: saving["daily"], retry: { Task { await saveDaily() } })
-                    let usual = String(roles.first { $0.role == person.role }?.daily ?? person.limit)
+                    let usual = (roles.first { $0.role == person.role }?.daily ?? person.dailyLimit).map(String.init) ?? ""
                     TextField(text: $daily, prompt: Text(verbatim: "")) { Text(usual) }
                         .fieldPlaceholder(usual, shows: daily.isEmpty)
                         .fleetField(focus: $focus, equals: "daily").frame(width: 64)
@@ -276,6 +297,25 @@ struct PersonPage: View {
             return
         }
         await save("daily") { $0.daily = said.isEmpty ? nil : Int(said) }
+    }
+
+    /// **All access with one agent of their list**, chosen in its row's select: one write of that agent alone, as the
+    /// page's other fields save themselves. Try again sends All again.
+    private func setAll(_ agent: String) async {
+        guard let person, canWrite, let db = store.state?.db else { return }
+        let field = "access.\(agent)"
+        saving[field] = .saving; problem = nil
+        do {
+            _ = try await client.scope(hub: store.hub, database: db, client: store.installation, person: person.id,
+                                       agent: agent, list: nil)
+            saving[field] = .saved
+            await changed()
+            markSaved(field)
+        } catch {
+            saving[field] = .failed(People.reason(error))
+            problem = People.reason(error)
+            await changed()
+        }
     }
 
     private func block(_ blocked: Bool) async {

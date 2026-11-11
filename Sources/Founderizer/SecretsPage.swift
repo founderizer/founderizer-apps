@@ -85,6 +85,8 @@ struct SecretsPage: View {
     @State private var opened = ContinuousClock.now
     /// The form of Add secret shows in the list's place.
     @State private var adding = false
+    /// The import of secrets from another password manager shows in the list's place (`SecretImportView`).
+    @State private var importing = false
     /// The catalog's references when Add secret opened. A reference that comes later is the result of that visit.
     @State private var before: Set<String>?
     @State private var copied: String?
@@ -117,7 +119,7 @@ struct SecretsPage: View {
     private var vault: CentralVaultModel { store.vaultModel() }
 
     var body: some View {
-        Group { if adding && offered { addPage } else { list } }
+        Group { if importing && offered { importPage } else if adding && offered { addPage } else { list } }
             .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(offered)") { await poll() }
     }
 
@@ -132,6 +134,16 @@ struct SecretsPage: View {
                 // The page's one group has no heading, so its old-reading line stands with the header's actions.
                 if reading != nil { lastReading }
                 if offered {
+                    Button {
+                        note = nil; removed = nil
+                        // As for Add secret: what is new after the import comes from the reading.
+                        Task {
+                            if reading == nil { await read() }
+                            before = reading.map { Set($0.catalog.keys) }; importing = true
+                        }
+                    } label: {
+                        Label("Import", systemImage: "square.and.arrow.down")
+                    }.buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("secret-import")
                     Button {
                         note = nil; removed = nil
                         // What is new after the form comes from the reading: a press that comes before the first one
@@ -446,6 +458,18 @@ struct SecretsPage: View {
         .accessibilityIdentifier("secret-back")
     }
 
+    /// Import, in the list's place: a setup's wizard with its own Back (`SecretImportView`). Its end, and its Back from the
+    /// first page, come here; the list reads the catalog again, and what the import saved shows as new.
+    private var importPage: some View {
+        SecretImportView(store: store) { finishImport($0) }
+    }
+
+    private func finishImport(_ references: [String]) {
+        importing = false
+        if references.isEmpty { before = nil }
+        Task { await read() }
+    }
+
     /// After the form: the list reads the catalog again, and the secret that the form saved opens its detail with each
     /// agent's access and each vault. Cancel saves nothing.
     private func finishAdd(_ reference: String?) {
@@ -556,7 +580,7 @@ struct SecretsPage: View {
     /// hub or hub generation starts again without the form of the old connection; its readings are the store's, which
     /// keeps none of another hub or generation.
     private func poll() async {
-        failed = false; before = nil; adding = false; note = nil; shown = nil; removed = nil
+        failed = false; before = nil; adding = false; importing = false; note = nil; shown = nil; removed = nil
         let start = ContinuousClock.now
         while !Task.isCancelled {
             let current = await read(since: start)

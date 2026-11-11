@@ -2,28 +2,29 @@ import Darwin
 import FleetVaultIPC
 import Foundation
 
-/// Why the writer did not do a step. No text repeats a value.
+/// Why the writer did not do a step. No text repeats a value. `setup`, `provider` and `check` are the words that the
+/// broker of a Mac with the fleet's own store gave already, so its answers stay the same.
 public enum VaultWriteRefusal: String, Error, Sendable, CaseIterable {
     case request = "The request is not valid."
     case login = "The secret is not valid: a login needs a name, a user name, a password and an http or https address, and an API key needs a name and its key."
-    case tooLong = "The login is too long for Bitwarden."
+    case tooLong = "The login is too long for the vault store."
     case unresolved = "An earlier save has no known outcome. Check it or discard it first."
-    case setup = "Founderizer Vault has no Bitwarden write token. Open Founderizer Vault to add it."
-    case provider = "Bitwarden refused the write token or its project. Nothing was made."
+    case setup = "This machine's vault has no store of its own yet."
+    case provider = "The vault store could not be opened for a save. Nothing was made."
     case state = "This save is not at that step."
     case journal = "Founderizer Vault could not keep its record of this save, so it made nothing."
-    case check = "Bitwarden did not answer the check. Nothing changed."
+    case check = "The vault store did not answer the check. Nothing changed."
     case changed = "This save was made with other values. It is not made again."
 }
 
-/// What one create call gave. `refused`: the server answered that it made nothing. `unknown`: no answer proves the
-/// outcome, so the item can exist.
+/// What one create call gave. `refused`: the store said that it made nothing. `unknown`: no answer proves the outcome,
+/// so the item can exist.
 enum VaultCreateOutcome: Equatable, Sendable { case created(String), refused, unknown }
 
-/// The Bitwarden calls of the writer, after sign-in with the write token. `VaultBitwarden` gives them; tests use a
-/// stand-in, so no test needs a token or makes an item.
+/// What the writer asks of a store. The fleet's own store gives it (`VaultLocalStore`); tests use a stand-in that
+/// counts the create calls, so no test makes an item in a real store.
 protocol VaultItems {
-    /// The organization of the project, which also proves that the token reaches the project.
+    /// The organization of the place, which also proves that the store opens there.
     func organization(ofProject project: String) throws -> String
     /// The IDs of the project's items with exactly this name.
     func items(named name: String, project: String, organization: String) throws -> [String]
@@ -41,9 +42,10 @@ protocol VaultJournalStore: Sendable {
     func save(_ data: Data) throws
 }
 
-/// The journal of the owner's writer: a file of mode 600 in the vault's own folder. One exclusive lock on a file
-/// beside it, held for the life of the store, gives the journal to one writer process: a second process, or a second
-/// writer in this process, gets a refusal and reads or writes nothing.
+/// A journal in one file of mode 600. One exclusive lock on a file beside it, held for the life of the store, gives the
+/// journal to one writer process: a second process, or a second writer in this process, gets a refusal and reads or
+/// writes nothing. It was the journal of the owner's writer, and no program of the vault uses it now: the tests of the
+/// journal do (`init(journal:)`).
 final class VaultJournalFile: VaultJournalStore, @unchecked Sendable {
     private let file: URL
     private let lock: Int32
@@ -104,17 +106,19 @@ struct VaultJournalKeychain: VaultJournalStore {
     func save(_ data: Data) throws { try keychain.save(data, item: item) }
 }
 
-/// The writer of new logins: it makes one Bitwarden item for one submission. Bitwarden has no create that is safe
-/// to repeat, and a look-up that finds nothing does not prove that an earlier create failed. So the journal decides,
-/// not a look-up: a `request_id` gets a create call only while it has no record, the record is kept before the
-/// call, and a submission with an unknown outcome is only reconciled (looked for by its mark), never sent again. The
-/// actor handles one call at a time. The journal keeps the record of every `request_id` that it ever used.
+/// The writer of new logins: it makes one item of the store for one submission. The journal decides, not a look-up: a
+/// `request_id` gets a create call only while it has no record, the record is kept before the call, and a submission
+/// with an unknown outcome (a process that ended during its call) is only reconciled (looked for by its mark), never
+/// sent again. The actor handles one call at a time. The journal keeps the record of every `request_id` that it ever
+/// used.
 ///
-/// Two users. The owner's Mac (`add`): Fleet sends the value, and no new submission starts while another one is
-/// open. A worker's vault (`create`): the hub's confirmed job gives the input, the vault makes the password itself,
-/// and the record is bound to that job's generation, agent, task, project and input.
+/// A worker's vault uses `create`: the hub's confirmed job gives the input, the vault makes the password itself, and
+/// the record is bound to that job's generation, agent, task, project and input. `add` takes a value from outside the
+/// vault, and no new submission starts while another one is open. It was the owner's writer's, and it has no caller
+/// now: the owner's Add secret seals each value into the hub's central vault. Its tests still prove the journal rules
+/// that `create` shares.
 public actor VaultWriter {
-    /// The limits of the SDK's create call (2.1.0): a name of 1 to 500 characters and a value of at most 25000.
+    /// The limits of one save: a name of 1 to 500 characters and a value of at most 25000.
     static let maxName = 500, maxValue = 25_000
     /// No record is ever dropped, so the journal has a size limit. A new submission that does not fit is refused
     /// before any create call; the reserve keeps room for the later states of the records that are in it.
@@ -126,8 +130,8 @@ public actor VaultWriter {
     private let clock: @Sendable () -> Double
     private var records: [VaultWriteRecord]
 
-    /// `session`: signs in with the token that can write and gives the calls and the project's ID. It throws `setup`
-    /// without the one-time setup; any other failure counts as a refusal of the provider.
+    /// `session`: opens the store and gives its calls and its place. It throws `setup` when the store does not open;
+    /// any other failure counts as a refusal of the store.
     init(store: any VaultJournalStore, limit: Int = VaultWriter.maxJournalBytes,
          clock: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 },
          session: @escaping @Sendable () throws -> (items: any VaultItems, project: String)) throws {
@@ -148,14 +152,14 @@ public actor VaultWriter {
         } catch { throw VaultWriteRefusal.journal }
     }
 
-    /// The owner's writer, with its journal file.
+    /// A writer with its journal in a file (`VaultJournalFile`), for the tests of the journal.
     init(journal: URL, limit: Int = VaultWriter.maxJournalBytes, clock: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 },
          session: @escaping @Sendable () throws -> (items: any VaultItems, project: String)) throws {
         try self.init(store: VaultJournalFile(journal), limit: limit, clock: clock, session: session)
     }
 
-    /// The mark in the note of an item that the owner added in Fleet: the item can be found again without its value.
-    /// A worker's save has its own mark, which its record keeps.
+    /// The mark in the note of an item of `add`: the item can be found again without its value. A worker's save has
+    /// its own mark, which its record keeps.
     static func mark(_ requestID: String) -> String { "fleet-add:" + requestID }
 
     static func canonical(_ requestID: String) -> String? { UUID(uuidString: requestID)?.uuidString.lowercased() }
@@ -196,7 +200,7 @@ public actor VaultWriter {
               hub.utf8.count <= 512, db.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", options: .regularExpression) != nil else {
             throw VaultWriteRefusal.request
         }
-        // Sign-in and the project come before the password is made: a machine without the setup makes nothing.
+        // The store opens before the password is made: a machine without its store makes nothing.
         let reached = try reach()
         return try send(id: id, title: title, hub: hub, db: db, binding: binding, mark: mark, value: try value(), reached: reached)
     }
@@ -224,7 +228,7 @@ public actor VaultWriter {
         guard (1...Self.maxName).contains(title.unicodeScalars.count), Self.isAddable(value, label: title),
               let text = String(data: value, encoding: .utf8) else { throw VaultWriteRefusal.login }
         guard text.unicodeScalars.count <= Self.maxValue else { throw VaultWriteRefusal.tooLong }
-        // Sign-in and the project come first: a failure here made nothing and leaves no record.
+        // The store opens first: a failure here made nothing and leaves no record.
         let (items, project, organization) = try reached ?? reach()
         let time = clock()
         var record = VaultWriteRecord(request_id: id, title: title, hub: hub, db: db, state: .creating, login: nil, started_at: time,

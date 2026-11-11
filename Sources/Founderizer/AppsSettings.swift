@@ -138,7 +138,8 @@ struct AppsPage: View {
 /// control. An agent's own Apps are this same view scoped to that agent, in its Can use: the same rows, each of which
 /// opens the same card (D-5, one editor for each kind), with a − that takes it back from that agent, a + on each heading
 /// that gives it one more the fleet already holds (`AccessGive`), and the empty card where it has nothing (the owner's
-/// yes of 3 November 2026).
+/// yes of 3 November 2026). GitHub's + opens the list of every repository that the fleet's GitHub Apps reach, where the
+/// hub has it (`RepositoryPicking`): a repository that no agent holds yet is in no list of what the fleet holds.
 struct AppsSettings: View {
     @Bindable var store: FleetStore
     /// One agent's own, or nil for the fleet's.
@@ -167,6 +168,9 @@ struct AppsSettings: View {
     @State private var gmail = GoogleConnecting()
     /// Adding an MCP server on the fleet's page, whose Add stands on the group's heading (`MCPAddSection`).
     @State private var mcp = MCPAdding()
+    /// The list that gives an agent its repositories, whose + stands on the GitHub heading of its Can use and whose card
+    /// opens under it (`RepositoryPicking`).
+    @State private var repositories = RepositoryPicking()
     /// This visit has read the GitHub App.
     @State private var appRead = false
     /// This visit's first read of the resources failed: the lists' own line says so once, in the place of the three.
@@ -221,6 +225,10 @@ struct AppsSettings: View {
             }
         }
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/apps") { await readFirst() }
+        // One agent's ticks never stand on another agent's page: the page keeps this view when it goes from one agent's
+        // Can use to another's, or to another hub. A new hub generation closes the list too: its reading is kept by
+        // generation, so the open card would wait for ever on the old one.
+        .onChange(of: "\(store.hub)\n\(store.state?.db ?? "")\n\(agent ?? "")") { repositories.close() }
         // The MCP servers' form keeps its state here, where the page always is (`MCPAdding`).
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/mcp") {
             if agent == nil && hasMCP && (only == nil || only == .mcp) { await mcp.start(store: store) }
@@ -281,7 +289,7 @@ struct AppsSettings: View {
     /// Bringing another account of one Google service into the fleet.
     private func connectButton(_ service: GoogleService) -> some View {
         let connect = connecting(service)
-        return Button { connect.start(store: store, service: service, giveTo: nil) { connects += 1 } } label: {
+        return Button { connect.start(store: store, service: service) { connects += 1 } } label: {
             Label("Connect account", systemImage: "plus")
         }
         .buttonStyle(FleetOutlineButtonStyle()).disabled(!connect.canConnect(store))
@@ -324,7 +332,18 @@ struct AppsSettings: View {
                 heading("GitHub") { GitHubMark(size: Self.markSide).foregroundStyle(FleetStyle.text) } accessory: {
                     lastReading
                     addOnGitHub
-                    if let agent { AccessGive(store: store, agent: agent, kind: "repo") }
+                    if let agent {
+                        // Every repository that the GitHub Apps reach, where the hub lists them; else what the fleet
+                        // already holds.
+                        if RepositoryPicking.offered(store) {
+                            RepositoryPickerPlus(store: store, agent: agent, model: repositories)
+                        } else {
+                            AccessGive(store: store, agent: agent, kind: "repo")
+                        }
+                    }
+                }
+                if let agent, repositories.openFor == agent, RepositoryPicking.offered(store) {
+                    RepositoryPickerCard(store: store, agent: agent, model: repositories)
                 }
                 // Whether this card is there at all is the card's own business. The condition was here, and it took
                 // the whole section out of the tree the moment a save succeeded — so the one line that tells him to

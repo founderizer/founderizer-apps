@@ -397,7 +397,7 @@ struct MachineInstallTests {
                                    authKey: nil)
         let network = try #require(plan.steps.first { $0.id == "network" })
         guard case .run(let program) = network.action else { Issue.record("no network step to run"); return }
-        #expect(program.hasPrefix("tailscale ip -4"))
+        #expect(program.hasPrefix("tailscale status >/dev/null 2>&1 && tailscale ip -4"))
         #expect(InstallPlan.needsNetworkKey(program), "a machine that is not on the network asks for the key")
         #expect(plan.steps.map(\.id).firstIndex(of: "network") == 1)
     }
@@ -472,7 +472,10 @@ struct MachineInstallTests {
     // MARK: the private network, by a link that the owner approves
 
     private static let tags = "tag:claude-code-dev,tag:terminal-relay-worker"
-    private static let hubLine = "command -v tailscale >/dev/null || curl -fsSL https://tailscale.com/install.sh | sh; "
+    private static let hubLine = "command -v tailscale >/dev/null || for try in 1 2 3; do "
+        + "DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install </dev/null >/dev/null 2>&1; "
+        + "curl -fsSL https://tailscale.com/install.sh | sh && command -v tailscale >/dev/null && break; "
+        + "sleep 20; done; "
         + "tailscale status >/dev/null 2>&1 || tailscale up --advertise-tags=\(tags) --accept-dns=false; "
         + "curl -fsS http://100.64.0.1:8765/join | FLEET_JOIN=7KMQ2PRJ4TVW sh"
 
@@ -944,42 +947,234 @@ struct MachineInstallTests {
         #expect(root.arguments(for: "tailscale ip -4", runs: .rootWithPassword).last == "tailscale ip -4")
     }
 
-    /// A bare server may have no curl, which Tailscale's installer comes over: the install brings it first.
+    /// A bare server may have no curl, which Tailscale's installer comes over: the install brings it first. Its
+    /// `apt-get update` is tried again after 15 seconds when the first updates of the server hold the lock of the
+    /// package lists. A try of the installer counts only when `tailscale` is there after it: a curl that gives no
+    /// script leaves `sh` with 0, and that try is made again, three times at most.
     @Test func theTailscaleInstallBringsCurlToAServerWithout() throws {
         let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("fleet-curl-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
-        for (name, text) in [("apt-get", "echo \"apt-get $*\" >> \"\(folder.path)/ran\""),
-                             ("curl", "echo 'echo tailscale-installed'")] {
+        // Tailscale's installer as curl gives it: it puts `tailscale` where `command -v` looks in the case with curl.
+        let installer = "echo tailscale-installed; ln -sf /usr/bin/true \(folder.path)/with/tailscale"
+        // apt-get says what it got. Its first `update` finds the lock of the package lists held, as apt says it.
+        let lists = "case \" $* \" in *\" update \"*) test -e \(folder.path)/listed || { : > \(folder.path)/listed; "
+            + "echo 'E: Could not get lock /var/lib/apt/lists/lock.' >&2; exit 100; } ;; esac"
+        for (name, text) in [("apt-get", "echo \"apt-get $*\" >> \"\(folder.path)/ran\"\n\(lists)"),
+                             ("curl", "echo '\(installer)'"), ("sleep", "echo \"$1\" >> \"\(folder.path)/slept\"")] {
             let path = folder.appendingPathComponent(name).path
             try "#!/bin/sh\n\(text)\n".write(toFile: path, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
         }
-        func install(curl: Bool) throws -> (String, String) {
-            try? FileManager.default.removeItem(at: folder.appendingPathComponent("ran"))
+        func install(curl: Bool) throws -> (out: String, ran: String, slept: String) {
+            for file in ["ran", "slept", "listed"] {
+                try? FileManager.default.removeItem(at: folder.appendingPathComponent(file))
+            }
             let shell = Process(), out = Pipe()
             shell.executableURL = URL(fileURLWithPath: "/bin/dash")
             shell.arguments = ["-c", InstallPlan.tailscaleInstall]
             // `command -v` looks only here: no tailscale, and curl when the case has it.
             let bin = folder.appendingPathComponent(curl ? "with" : "without")
             try? FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-            for name in ["apt-get"] + (curl ? ["curl"] : []) {
+            for name in ["apt-get", "sleep"] + (curl ? ["curl"] : []) {
                 try? FileManager.default.createSymbolicLink(atPath: bin.appendingPathComponent(name).path,
                                                             withDestinationPath: folder.appendingPathComponent(name).path)
             }
             shell.environment = ["PATH": bin.path + ":/bin"]
             shell.standardOutput = out; shell.standardError = out
             try shell.run(); shell.waitUntilExit()
-            let ran = (try? String(contentsOf: folder.appendingPathComponent("ran"), encoding: .utf8)) ?? ""
-            return (String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self), ran)
+            let read = { (name: String) in
+                (try? String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8)) ?? ""
+            }
+            return (String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self), read("ran"),
+                    read("slept"))
         }
         let without = try install(curl: false)
-        #expect(without.1.contains("install curl ca-certificates"), "\(without)")
+        #expect(without.ran.contains("install curl ca-certificates"), "\(without)")
+        // Its first `update` found the lock of the lists held, so it was tried again after 15 seconds.
+        #expect(without.ran.split(separator: "\n").filter { $0.hasSuffix(" -q update") }.count == 2, "\(without)")
+        // The stand-in apt-get brings no curl, so no try got a script: each one waited for the lock, three in all.
+        #expect(without.ran.split(separator: "\n").filter { $0.hasSuffix(" -q install") }.count == 3, "\(without)")
+        #expect(without.slept == "15\n20\n20\n20\n", "\(without)")
         let with = try install(curl: true)
-        #expect(!with.1.contains("install curl"), "apt-get installed curl on a server that has it")
+        #expect(!with.ran.contains("install curl"), "apt-get installed curl on a server that has it")
         // Tailscale's installer runs apt-get with no wait of its own: the lock is waited for first.
-        #expect(with.1 == "apt-get -o DPkg::Lock::Timeout=\(InstallPlan.aptLockWait) -q install\n", "\(with)")
-        #expect(with.0.contains("tailscale-installed"))
+        #expect(with.ran == "apt-get -o DPkg::Lock::Timeout=\(InstallPlan.aptLockWait) -q install\n", "\(with)")
+        #expect(with.out.contains("tailscale-installed") && with.slept.isEmpty, "\(with)")
+    }
+
+    /// **The keyed network step's `tailscale up` has `--reset`, and waits 300 seconds at most**
+    /// (`InstallPlan.keyedNetwork`). This app's own sign-in runs `tailscale up` with the tags of the hub's join line
+    /// and no key (`NetworkSignIn`). When the tailnet refuses those tags, or nobody approves the link, the owner gives
+    /// the key, and this step runs on the same machine. Tailscale kept the settings of the sign-in, and it refuses a
+    /// `tailscale up` that does not name each of them again, unless it has `--reset`: until 11 November 2026 the key
+    /// never brought such a machine up. With no `--timeout`, `tailscale up` waits for ever on a tailnet that approves
+    /// each new machine by hand, until the step's own time ends, and the key file stays. Such a machine has its
+    /// address already, but nothing reaches it there until an admin approves it: the step gives no address then, and
+    /// ends with Tailscale's words. The step's own shell text runs under dash, with the stand-in `tailscale` of
+    /// `NetworkPromptRootTests`.
+    @Test func theKeyedNetworkStepBringsUpAMachineThatTheSignInLeftAndWaitsFiveMinutesAtMost() throws {
+        guard case .sendAuthKey(let step) = InstallPlan.keyedNetwork,
+              case .signIn(let start, _, _, _) = NetworkSignIn.action(install: "", tags: ["tag:founderizer"]) else {
+            Issue.record("the keyed network step sends no key, or the sign-in is no sign-in")
+            return
+        }
+        let up = try #require(start.range(of: "tailscale up [^;']*", options: .regularExpression))
+        let signIn = start[up].split(separator: " ").dropFirst(2).map(String.init)
+        for approval in [false, true] {
+            let folder = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("fleet-keyed-" + UUID().uuidString)
+            let bin = folder.appendingPathComponent("bin"), state = folder.appendingPathComponent("state")
+            for part in [bin, state] {
+                try FileManager.default.createDirectory(at: part, withIntermediateDirectories: true)
+            }
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let tailscale = bin.appendingPathComponent("tailscale")
+            try NetworkPromptRootTests.StandInServer.tailscale.write(to: tailscale, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tailscale.path)
+            let kept = try NetworkPromptRootTests.StandInServer.earlierUp(signIn, tailscale: tailscale, state: state)
+            #expect(kept.contains("--advertise-tags=tag:founderizer"), "the sign-in kept \(kept)")
+            if approval { try Data("yes\n".utf8).write(to: state.appendingPathComponent("approval")) }
+            let keyFile = folder.appendingPathComponent("fleet-authkey"), input = folder.appendingPathComponent("input")
+            try "tskey-auth-k0000-secret\n".write(to: input, atomically: true, encoding: .utf8)
+            let shell = Process(), out = Pipe()
+            shell.executableURL = URL(fileURLWithPath: "/bin/dash")
+            shell.arguments = ["-c", step.replacingOccurrences(of: InstallPlan.authKeyFile, with: keyFile.path)]
+            shell.environment = ["PATH": bin.path + ":/bin", "STATE": state.path]
+            shell.standardInput = try FileHandle(forReadingFrom: input)
+            shell.standardOutput = out; shell.standardError = out
+            try shell.run(); shell.waitUntilExit()
+            let said = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            let read = { (name: String) in
+                (try? String(contentsOf: state.appendingPathComponent(name), encoding: .utf8)) ?? ""
+            }
+            let who = approval ? "on a tailnet that approves each machine by hand" : "after the sign-in"
+            #expect(read("key") == "tskey-auth-k0000-secret\n", "\(who): Tailscale got no key: \(said)")
+            #expect(!FileManager.default.fileExists(atPath: keyFile.path), "\(who): the key file stayed")
+            #expect(read("up-waits") == "300s\n", "\(who): tailscale up waited \(read("up-waits")), not 300s at most")
+            if approval {
+                let last = said.split(separator: "\n").last.map(String.init) ?? ""
+                #expect(shell.terminationStatus != 0
+                        && last.hasPrefix("timeout waiting for Tailscale service to enter a Running state")
+                        && !said.contains("waits here for ever") && !said.contains("100.64.2.1"), "\(who): \(said)")
+            } else {
+                #expect(shell.terminationStatus == 0 && said.hasSuffix("100.64.2.1\n"), "\(who): \(said)")
+            }
+        }
+    }
+
+    /// **A hub with no key takes the address of its machine only while Tailscale runs there** (`InstallPlan.onNetwork`).
+    /// A machine that waits for an admin's approval (NeedsMachineAuth) has its address already: `tailscale ip -4` prints
+    /// it. Only `tailscale status` says that Tailscale does not run. Until 11 November 2026 the step took that address,
+    /// and the install went on to it. Nothing answered there, so the owner got an SSH time-out. Now the step ends with
+    /// Tailscale's own line for such a machine, and the app does not ask for a key: the machine waits for the approval.
+    /// A machine with no sign-in, with a stopped Tailscale or with no Tailscale still gets the question for the key.
+    /// The step's shell text runs under this Mac's `/bin/sh` and under dash, with the stand-in `tailscale` of
+    /// `NetworkPromptRootTests`. `RootThroughSudoTests` proves that the same text reaches `/bin/sh` unchanged through
+    /// `sudo`.
+    @Test func aHubWithNoKeyTakesTheAddressOnlyWhileTailscaleRuns() throws {
+        let plan = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: InstallPlan.defaultSource,
+                                   authKey: nil)
+        let network = try #require(plan.steps.first { $0.id == "network" })
+        guard case .run(let program) = network.action else {
+            Issue.record("the network step of a hub with no key runs no program")
+            return
+        }
+        // Each machine: whether it has Tailscale, and the state that the stand-in keeps for it (none: no sign-in).
+        let machines: [(who: String, tailscale: Bool, backend: String?)] = [
+            ("a machine where Tailscale runs", true, "Running"),
+            ("a machine that waits for an admin's approval", true, "NeedsMachineAuth"),
+            ("a machine with no sign-in", true, nil),
+            ("a machine where Tailscale is stopped", true, "Stopped"),
+            ("a machine with no Tailscale", false, nil)]
+        for sh in NetworkPromptRootTests.shells {
+            for machine in machines {
+                let folder = URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent("fleet-on-network-" + UUID().uuidString)
+                let bin = folder.appendingPathComponent("bin"), state = folder.appendingPathComponent("state")
+                for part in [bin, state] {
+                    try FileManager.default.createDirectory(at: part, withIntermediateDirectories: true)
+                }
+                defer { try? FileManager.default.removeItem(at: folder) }
+                if machine.tailscale {
+                    let tailscale = bin.appendingPathComponent("tailscale")
+                    try NetworkPromptRootTests.StandInServer.tailscale.write(to: tailscale, atomically: true,
+                                                                             encoding: .utf8)
+                    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tailscale.path)
+                }
+                if let backend = machine.backend {
+                    try "\(backend)\n".write(to: state.appendingPathComponent("backend"), atomically: true,
+                                             encoding: .utf8)
+                }
+                let shell = Process(), out = Pipe()
+                shell.executableURL = URL(fileURLWithPath: sh)
+                shell.arguments = ["-c", program]
+                shell.environment = ["PATH": bin.path + ":/usr/bin:/bin", "STATE": state.path]
+                shell.standardInput = FileHandle.nullDevice
+                shell.standardOutput = out; shell.standardError = out
+                try shell.run(); shell.waitUntilExit()
+                let said = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                let last = said.split(separator: "\n").last.map(String.init) ?? ""
+                // The stop as the app reads it: the runner keeps the step's last line (`MachineInstaller`), and the
+                // screen asks for the key when `needsNetworkKey` finds it in the whole stop (`MachineInstallModel`).
+                let stop = InstallError.step(network.title, last)
+                let asksForKey = InstallPlan.needsNetworkKey(stop.errorDescription ?? "")
+                let who = "\(machine.who), under \(sh)"
+                switch machine.backend {
+                case "Running":
+                    #expect(shell.terminationStatus == 0 && said == "100.64.2.1\n", "\(who): \(said)")
+                    #expect(InstallPlan.privateAddress(in: [last]) == "100.64.2.1", "\(who): \(said)")
+                case "NeedsMachineAuth":
+                    #expect(shell.terminationStatus != 0 && !said.contains("100.64.2.1"), "\(who): \(said)")
+                    #expect(last == "Machine is not yet approved by tailnet admin." && !asksForKey, "\(who): \(said)")
+                    #expect(stop.plain(host: "198.51.100.7") == "It stopped at “\(network.title)”.", "\(who)")
+                default:
+                    #expect(shell.terminationStatus != 0 && last == NetworkSignIn.notOnNetwork && asksForKey,
+                            "\(who): \(said)")
+                }
+            }
+        }
+    }
+
+    /// **The code step's git comes only after an update that worked, and `apt-get update` gets up to 10 tries, 15
+    /// seconds apart** (`InstallPlan.gitInstall`, INSTALL-PROMPT.md A3's first line). `update` tries the lock of the
+    /// package lists once, and the first updates of a new server hold it while they read the lists.
+    @Test func theGitInstallGivesAptGetUpdateTenTries() throws {
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("fleet-git-" + UUID().uuidString)
+        let bin = folder.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // apt-get says what it got. Its `update` finds the lock of the lists held while `stops` has tries left.
+        let apt = "echo \"apt-get $*\" >> \(folder.path)/ran\ncase \" $* \" in *\" update \"*)\n"
+            + "  n=$(cat \(folder.path)/stops)\n"
+            + "  if [ \"$n\" -gt 0 ]; then echo \"$((n - 1))\" > \(folder.path)/stops\n"
+            + "    echo 'E: Could not get lock /var/lib/apt/lists/lock.' >&2; exit 100; fi ;;\nesac"
+        for (name, text) in [("apt-get", apt), ("sleep", "echo \"$1\" >> \(folder.path)/slept")] {
+            let path = bin.appendingPathComponent(name).path
+            try "#!/bin/sh\n\(text)\n".write(toFile: path, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        }
+        for (stops, installs) in [(1, true), (9, true), (10, false)] {
+            for file in ["ran", "slept"] {
+                try? FileManager.default.removeItem(at: folder.appendingPathComponent(file))
+            }
+            try "\(stops)\n".write(to: folder.appendingPathComponent("stops"), atomically: true, encoding: .utf8)
+            let shell = Process()
+            shell.executableURL = URL(fileURLWithPath: "/bin/dash")
+            shell.arguments = ["-c", InstallPlan.gitInstall]
+            shell.environment = ["PATH": bin.path + ":/bin"]     // no git here
+            shell.standardOutput = FileHandle.nullDevice; shell.standardError = FileHandle.nullDevice
+            try shell.run(); shell.waitUntilExit()
+            let read = { (name: String) in
+                (try? String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8)) ?? ""
+            }
+            let ran = read("ran").split(separator: "\n")
+            #expect(ran.filter { $0.hasSuffix(" -q update") }.count == min(stops + 1, 10), "\(stops): \(ran)")
+            #expect(ran.contains { $0.hasSuffix(" install git") } == installs, "\(stops): \(ran)")
+            #expect(read("slept") == String(repeating: "15\n", count: min(stops, 9)), "\(stops): \(read("slept"))")
+            #expect(shell.terminationStatus == (installs ? 0 : 100), "\(stops): \(shell.terminationStatus)")
+        }
     }
 
     @Test func aKeyIsLookedForInThePersonsOwnSshFolder() {

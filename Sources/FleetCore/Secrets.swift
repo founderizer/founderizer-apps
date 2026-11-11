@@ -274,7 +274,7 @@ public enum SecretCommand {
     }
 
     /// `POST /ui/team/logins` with `delete`: one reference leaves the catalog, on the `team.json` that has this hash. The
-    /// value stays in Bitwarden. The hub refuses while a grant, a profile or a project lists the reference.
+    /// value stays in the vaults. The hub refuses while a grant, a profile or a project lists the reference.
     public static func removal(requestID: UUID, database: String, sha256: String, login: String) throws -> Data {
         guard LoginSecret.isReference(login), sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else {
             throw HubError.invalidResponse

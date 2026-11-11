@@ -9,7 +9,7 @@ tasks and their records. These two apps are how you work with them:
 The apps run no AI. They talk to your own hub on your private network (Tailscale), and the agents use your own
 accounts with the AI providers.
 
-The hub is a separate repository: <https://github.com/miguelpieras/founderizer-fleet>.
+The hub is a separate repository: <https://github.com/founderizer/founderizer>.
 
 ## What the Mac app does
 
@@ -41,7 +41,7 @@ The package also builds three helpers: the setup service (an XPC service inside 
   their APIs behind availability checks. The tests pass with Xcode 27.2. The apps run on macOS 15 and iOS 18 or
   later.
 - A checkout of the hub repository. The Mac app's setup service carries the hub's `onboard.py`.
-- For Fleet Vault only: Rust 1.88 or later, and an Apple Developer ID.
+- For Fleet Vault only: an Apple Developer ID.
 
 ## Build and run the Mac app
 
@@ -53,8 +53,8 @@ runs the unit tests of the shared code (`FleetCore`, `FleetMark`) and of the vau
 tests need the `age` and `age-keygen` programs.
 
 ```sh
-git clone https://github.com/miguelpieras/founderizer-fleet.git ../founderizer-fleet
-FLEET_KIT_SOURCE=../founderizer-fleet ./run.sh
+git clone https://github.com/founderizer/founderizer.git ../founderizer
+FLEET_KIT_SOURCE=../founderizer ./run.sh
 ```
 
 builds a release build, makes `build/Founderizer.app` with the setup service inside it, signs it ad hoc and opens it.
@@ -116,10 +116,22 @@ For a build on your own iPhone, set your own team and bundle identifiers in the 
 
 Founderizer is licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 
+The name Founderizer and its logo belong to Amura Ventures SL, and the licence gives no right to use them (section 6).
+You can say that your work is based on Founderizer. A changed copy that you share uses a different name and a
+different logo.
+
 The provider logos in `Sources/FleetMark`, the chat app marks and the GitHub mark are the marks of their owners. The
 apps show them only to name each one. The chat app and cloud provider marks are Simple Icons paths (CC0). The GitHub
 mark's path is from Octicons, under the MIT License; its notice stands beside it in
 `Sources/Founderizer/LibraryPages.swift`.
+
+## Changes from outside
+
+Issues and pull requests are welcome. This repository is a copy that we publish from our own repository, so we do not
+merge a pull request here. We apply its change to our repository, run the tests, and publish the next copy with it.
+Then we close the pull request with a link to that copy. The commit of that copy names you as co-author, so GitHub
+lists you as a contributor. Under section 5 of the licence, what you send is under the Apache License 2.0. Before you
+send a change, run `swift test`.
 
 ## Credit
 

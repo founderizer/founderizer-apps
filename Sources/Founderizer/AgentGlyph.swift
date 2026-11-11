@@ -48,6 +48,8 @@ struct AgentGlyph: View {
     /// What the dot's ring stands on, so the ring parts the dot from the glyph: nil for a card's surface on a card and the
     /// canvas elsewhere.
     var ground: Color?
+    /// It makes its one jump when this turns true: the agent took his answer to its request (`NeedsBoard.took`).
+    var jumps = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.glyphTeam) private var team
     @Environment(\.glyphPresence) private var presences
@@ -85,6 +87,7 @@ struct AgentGlyph: View {
         }
         // The small jump is for the pointer only: work starts from the glyph at rest, without a jump of its own.
         .onHover { inside in if inside && !reduceMotion { pops += 1 } }
+        .onChange(of: jumps) { _, now in if now && !reduceMotion { pops += 1 } }
         .onChange(of: moving, initial: true) { _, now in if now { layered = true } }
         .accessibilityHidden(true)
         // The one dot of the app, 6 points at every size of the glyph, its centre on the glyph's lower right corner; it
@@ -122,7 +125,7 @@ extension EnvironmentValues {
     /// Every agent's presence, as the window reads it, for the glyphs that are given none: the Agents table drew
     /// Scout filled and Mini in colour while the sidebar beside it drew Scout in setup and Mini offline.
     @Entry var glyphPresence: [String: AgentPresence] = [:]
-    /// The notices stand over a conversation or a task thread, whose column is the narrower one of prose (FleetNotice).
+    /// The notices stand over a conversation or a task thread, whose column is the narrower one of prose (`BandNotice`).
     @Entry var noticeReading = false
     /// False where a glyph is the subject of what shows and no status: **a setup step's mark draws no dot** (the lead's
     /// call of 29 October 2026, fix round 2; `SetupStep`), as the agent being set up is the step's subject.

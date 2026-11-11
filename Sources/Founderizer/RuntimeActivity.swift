@@ -514,10 +514,18 @@ struct TaskControls: View {
                             .foregroundStyle(hold.state == "not_confirmed" ? .orange : FleetStyle.muted)
                         Spacer()
                         if hold.state == "stopped" {
-                            if let goalID = task.goal_id, store.state?.goals?.first(where: { $0.id == goalID })?.state != "active" {
-                                Button("Goal controls") { store.destination = .goals }
-                                    .buttonStyle(FleetOutlineButtonStyle()).help("Resume its goal before its task.")
-                            } else {
+                            let goal = store.state?.goals?.first(where: { $0.id == task.goal_id })
+                            if let goal, goal.state == "paused" {
+                                // **Its goal is paused: the button resumes the goal, which resumes its tasks** (11
+                                // November 2026, when the Goals page went: "Goal controls" led there). The hub refuses
+                                // a resume of the task alone ("Resume the goal, not the task.").
+                                Button("Resume goal", systemImage: "play") {
+                                    Task { await store.command(.goalState(id: goal.id, revision: goal.revision, action: .resume)) }
+                                }.buttonStyle(FleetOutlineButtonStyle()).help("Its goal is paused. This resumes the goal and its tasks.")
+                            } else if goal == nil || goal?.state == "active" {
+                                // **No Resume on a task whose goal is done or dropped** (review of 11 November 2026):
+                                // the hub refuses it ("Reopen the goal to work on it again."), and the Fleet Manager
+                                // cancels such a task.
                                 // One word (fix round 2): "Check and resume" when a result is not known, which the
                                 // hub checks before the task goes on.
                                 Button("Resume", systemImage: "play") {

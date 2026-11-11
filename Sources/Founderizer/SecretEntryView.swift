@@ -85,7 +85,7 @@ struct SecretProgress: Equatable {
 struct SecretEntryView: View {
     @Bindable var store: FleetStore
     private let preset: SecretPreset
-    /// A card in a chat or in Needs you: no headings of its own, and the request's own card around it.
+    /// A request's form, in its card in a chat or under the request at hand on Needs you: no headings of its own.
     private let compact: Bool
     /// The reference of the saved secret, or nil when the owner closed the form without one.
     let onDone: (String?) -> Void
@@ -132,6 +132,8 @@ struct SecretEntryView: View {
     /// The reference of a central save that the hub did not confirm: the same Save again goes under it, so a save that
     /// did reach the catalog is not added twice. Any change of the fields drops it.
     @State private var centralLogin: String?
+    /// The form stands under the title of a step: the request at hand on Needs you (`NeedStep`).
+    @Environment(\.stepText) private var stepText
 
     init(store: FleetStore, preset: SecretPreset = SecretPreset(), compact: Bool = false, onDone: @escaping (String?) -> Void) {
         self.store = store; self.preset = preset; self.compact = compact; self.onDone = onDone
@@ -152,6 +154,14 @@ struct SecretEntryView: View {
 
     private var features: [String] { store.state?.ui_features ?? [] }
     private var isRequest: Bool { preset.need != nil }
+    /// A request's form on a step: what it draws stands in the middle, as a step's field and its button do.
+    private var onStep: Bool { stepText != nil && isRequest }
+    /// **On a step, a request that names all but the value is the fields for the value alone** (the owner's yes of 11
+    /// November 2026 to the picture of a request at hand: a Key field, Save, Decline): its site, and for a key its
+    /// variable, stand in the request's own title. Any other request keeps the rows of its card there.
+    private var fieldsAlone: Bool { onStep && knowsSite && (login.kind == .login || !preset.env.isEmpty) }
+    /// Save can go: the vault's key is known, and what he typed is a login or a key.
+    private var canSave: Bool { !busy && central != nil && login.problem == nil && context != nil }
     /// A request that names its site keeps it: the card's title already says the host, so the form asks for no address.
     private var knowsSite: Bool { isRequest && !preset.url.isEmpty }
     /// A request whose proposal names one agent is for that agent: the save gives it what it asked for, with no list.
@@ -172,7 +182,7 @@ struct SecretEntryView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: onStep ? .center : .leading, spacing: 14) {
             switch phase {
             // **An error is its line and one sentence, with no footer that explains** (fix round 3, item 35).
             case .noVault:
@@ -189,14 +199,16 @@ struct SecretEntryView: View {
             case .saved(let progress): saved(progress)
             }
             if let message {
-                Text(message).font(FormMetrics.detail).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                Text(message).font(FormMetrics.onStep(onStep ? stepText : nil) ?? FormMetrics.detail).foregroundStyle(.orange)
+                    .multilineTextAlignment(onStep ? .center : .leading).fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled).accessibilityIdentifier("secret-message")
             }
-            actions
+            if onStep { stepActions } else { actions }
         }
         // **The form's width** (margins row 26): Add secret's cards take the 680 points of every form page's cards, as a
-        // secret request's form does in its card on Needs you. It stood 560, 120 points short of the cards beside it.
-        .frame(maxWidth: FormMetrics.formWidth, alignment: .leading)
+        // secret request's form does in its card in a chat. It stood 560, 120 points short of the cards beside it.
+        // Under a request at hand it stands in the middle of the step, as its title does.
+        .frame(maxWidth: FormMetrics.formWidth, alignment: onStep ? .center : .leading)
         .task { await start() }
         .task(id: preset.need) { await readFits() }
         .onDisappear { clear() }
@@ -224,13 +236,66 @@ struct SecretEntryView: View {
                 }
                 if phase == .form {
                     Button(saveLabel) { Task { await save() } }.buttonStyle(FleetPrimaryButtonStyle())
-                        .disabled(busy || central == nil || login.problem != nil || context == nil).accessibilityIdentifier("secret-save")
+                        .disabled(!canSave).accessibilityIdentifier("secret-save")
                 }
             }
         }
     }
 
     private var saveLabel: String { preset.tell.map { "Save and tell \($0.agentLabel)" } ?? "Save" }
+
+    /// **The same actions under a request at hand, in the middle** (`onStep`): Save, the step's one button, and Decline
+    /// as the quiet link under it, where a step has its way back; after a save, Try again and Done.
+    @ViewBuilder private var stepActions: some View {
+        if case .saved(let progress) = phase {
+            HStack(spacing: 8) {
+                if !progress.isDone {
+                    Button("Try again") { Task { await proceed(progress) } }.buttonStyle(FleetOutlineButtonStyle())
+                        .disabled(busy || context == nil).accessibilityIdentifier("secret-retry")
+                }
+                Button("Done") { onDone(progress.login) }.buttonStyle(FleetPrimaryButtonStyle()).disabled(busy)
+                    .keyboardShortcut(.defaultAction).accessibilityIdentifier("secret-done-saving")
+            }
+        } else {
+            VStack(spacing: 14) {
+                // The second click of a double-click on the request before this one presses nothing here (`SecondClick`).
+                if phase == .form {
+                    Button(saveLabel) { if !SecondClick.isNow { Task { await save() } } }.buttonStyle(FleetPrimaryButtonStyle())
+                        .disabled(!canSave).accessibilityIdentifier("secret-save")
+                }
+                SetupLink("Decline") { if !SecondClick.isNow { Task { await decline() } } }.disabled(busy || context == nil)
+                    .help("Tell \(need?.by.agentLabel ?? "the agent") that you do not give it").accessibilityIdentifier("secret-decline")
+            }
+        }
+    }
+
+    /// One field of a request at hand: the app's field in the step's size (`setupField`), its name as its placeholder,
+    /// no wider than a step's field. Return saves, as Return is a step's way on.
+    @ViewBuilder private func stepField(_ words: String, text: Binding<String>, secure: Bool, id: String) -> some View {
+        Group {
+            if secure { SecureField(text: text, prompt: Text(verbatim: "")) { Text(words) } }
+            else { TextField(text: text, prompt: Text(verbatim: "")) { Text(words) } }
+        }
+        .fieldPlaceholder(words, shows: text.wrappedValue.isEmpty)
+        .modifier(FleetFieldLook(text: SetupMetrics.text, height: SetupMetrics.fieldHeight))
+        .frame(maxWidth: SetupMetrics.field)
+        .onSubmit { if canSave { Task { await save() } } }
+        .accessibilityIdentifier(id)
+    }
+
+    /// The fields of a request that names all but the value (`fieldsAlone`).
+    private var stepFields: some View {
+        VStack(spacing: 10) {
+            if login.kind == .login {
+                stepField("User name or email", text: $login.username, secure: false, id: "secret-user")
+                stepField("Password", text: $login.password, secure: true, id: "secret-password")
+            } else {
+                stepField("Key", text: $login.password, secure: true, id: "secret-password")
+            }
+            // In the middle, as the step's lines are: the line's own row keeps its words at its leading edge.
+            waitRow.fixedSize()
+        }
+    }
 
     /// **The app's one loading look, as the last row of the section it is about** (T-13; review B1, fix round 2): nothing
     /// for a second, then the moving words, never a spinner. It stood in the actions row, straight in the card over the
@@ -242,6 +307,18 @@ struct SecretEntryView: View {
     }
 
     private var form: some View {
+        Group { if fieldsAlone { stepFields } else { rows } }
+            .disabled(busy)
+            .onChange(of: login.kind) { _, kind in
+                // The other kind's fields go: a password never becomes a key, and the reverse.
+                var fresh = LoginSecret(); fresh.kind = kind
+                login = fresh; withSeed = false; sameName = nil; message = nil
+            }
+            .onChange(of: login.title) { _, _ in sameName = nil }
+            .onChange(of: login) { _, _ in centralLogin = nil }
+    }
+
+    private var rows: some View {
         // The page header or the request's card says what this is: the form's card has no heading of its own, and a
         // request's form has no footer either (the owner, 29 October 2026: "the panel should be much more compact").
         FormSection(footer: isRequest ? nil : footer) {
@@ -299,14 +376,7 @@ struct SecretEntryView: View {
                 }
             }
             waitRow
-        }.disabled(busy)
-            .onChange(of: login.kind) { _, kind in
-                // The other kind's fields go: a password never becomes a key, and the reverse.
-                var fresh = LoginSecret(); fresh.kind = kind
-                login = fresh; withSeed = false; sameName = nil; message = nil
-            }
-            .onChange(of: login.title) { _, _ in sameName = nil }
-            .onChange(of: login) { _, _ in centralLogin = nil }
+        }
     }
 
     private var footer: String {
@@ -365,7 +435,9 @@ struct SecretEntryView: View {
                     footer: "Answer with it, or save a new one below.") {
             ForEach(fitting) { found in
                 FormRow("“\(found.entry.name)” is in the vault", symbol: "key", detail: found.login) {
-                    Button("Answer with it") { Task { await answerWith(found.login, entry: found.entry) } }
+                    Button("Answer with it") {
+                        if !(onStep && SecondClick.isNow) { Task { await answerWith(found.login, entry: found.entry) } }
+                    }
                         .buttonStyle(FleetOutlineButtonStyle()).disabled(busy || context == nil)
                         .accessibilityIdentifier("secret-answer-with")
                 }
@@ -478,10 +550,8 @@ struct SecretEntryView: View {
         let reference = centralLogin ?? "bws://\(UUID().uuidString.lowercased())"
         centralLogin = reference
         do {
-            let salts = try await client.secretSalts(hub: context.hub, database: context.db, login: reference)
-            _ = try await SecretsClient().add(hub: context.hub, database: context.db, client: store.installation, login: reference,
-                                              title: title, kind: kind, variable: variable,
-                                              fingerprints: SecretFingerprint.of(value, salts: salts))
+            try await Self.register(reference, title: title, kind: kind, variable: variable, value: value, hub: context.hub,
+                                    database: context.db, installation: store.installation)
         } catch {
             // The hub takes no new secret while the central vault does not answer: nothing was sent.
             if case HubError.refusal(503, _) = error { central = nil; phase = .noVault; return }
@@ -609,5 +679,19 @@ struct SecretEntryView: View {
             if case HubError.refusal(409, _) = error { declineID = UUID() }      // the request had its answer; a new one is another command
             message = "The decline did not reach the hub. \(text(error))"
         }
+    }
+}
+
+extension SecretEntryView {
+    /// **The hub's half of a save into the central vault**, which Add secret's form and the import of secrets from
+    /// another password manager (`SecretImportView`) both make, so that there is one rule for it: the fingerprints of
+    /// the value, made here from the salts that the hub gives for this reference, and the catalog entry under it. The
+    /// hub takes the same reference again, so a save that it did not confirm goes under the same one. The value does
+    /// not leave this call.
+    static func register(_ reference: String, title: String, kind: LoginSecret.Kind, variable: String?, value: Data, hub: URL,
+                         database: String, installation: String) async throws {
+        let salts = try await HubClient().secretSalts(hub: hub, database: database, login: reference)
+        _ = try await SecretsClient().add(hub: hub, database: database, client: installation, login: reference, title: title,
+                                          kind: kind, variable: variable, fingerprints: SecretFingerprint.of(value, salts: salts))
     }
 }

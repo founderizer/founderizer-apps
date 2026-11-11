@@ -72,9 +72,9 @@ struct ManagerView: View {
         guard let request = requestOnItsWay, !request.text.isEmpty else { return entries }
         return entries + [.message(OwnerMessage(onItsWay: request))]
     }
-    /// **What this agent asked him and still waits for** (the owner's yes of 28 October 2026, D-7): the request card
-    /// itself — Needs you's, at the column's width — so he answers in the chat where the agent told him about it ("It is
-    /// in Needs you."), and Needs you keeps them all. A key or a login it asked for comes with its secure form.
+    /// **What this agent asked him and still waits for** (the owner's yes of 28 October 2026, D-7): the request's card
+    /// itself, at the column's width, so he answers in the chat where the agent told him about it ("It is in Needs
+    /// you."), and Needs you has them all in its lane. A key or a login it asked for comes with its secure form.
     private var requests: [OwnerNeed] {
         store.openNeeds.filter { $0.by == agent }.sorted { ($0.raised, $0.id) < ($1.raised, $1.id) }
     }
@@ -220,9 +220,9 @@ struct ManagerView: View {
         SentMessageView(store: store, message: message).id("message-\(message.id)")
     }
 
-    /// A request's card in the chat: Needs you's own, at the column's width, waiting or folded.
+    /// A request's card in the chat, at the column's width, waiting or folded.
     private func requestCard(_ need: OwnerNeed) -> some View {
-        NeedRequestCard(store: store, need: need, inChat: true).padding(.bottom, Self.footer).id("need-\(need.id)")
+        NeedRequestCard(store: store, need: need).padding(.bottom, Self.footer).id("need-\(need.id)")
     }
 
     /// A reply, with its delivery icons when it went to a channel. **A message that the agent wrote first

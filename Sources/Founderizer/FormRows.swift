@@ -515,23 +515,41 @@ struct FormEmpty<Action: View>: View {
     private let symbol: String
     private let text: String
     private let action: Action
+    /// **The mark draws itself, and the words come after it** (Needs you, when his answer sent the last request away;
+    /// the owner's yes of 11 November 2026 to its moving picture). Every other empty state stands at once. It is
+    /// what the page said when the state first showed: a later change of it does not cut the drawing short.
+    @State private var draws: Bool
+    @State private var drawn = false
+    @State private var said = false
 
-    init(_ text: String, symbol: String, @ViewBuilder action: () -> Action) {
-        self.text = text; self.symbol = symbol; self.action = action()
+    init(_ text: String, symbol: String, draws: Bool = false, @ViewBuilder action: () -> Action) {
+        self.text = text; self.symbol = symbol; _draws = State(initialValue: draws); self.action = action()
     }
 
     var body: some View {
+        let mark = Image(systemName: symbol).font(IconMetrics.symbol(22, weight: .light)).foregroundStyle(FleetStyle.text).accessibilityHidden(true)
         VStack(spacing: 12) {
-            Image(systemName: symbol).font(IconMetrics.symbol(22, weight: .light)).foregroundStyle(FleetStyle.text).accessibilityHidden(true)
+            if draws {
+                mark.hidden().overlay { if drawn { mark.transition(.drawsOn) } }
+            } else {
+                mark
+            }
             Text(text).font(FormMetrics.text).foregroundStyle(FleetStyle.muted).multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+                .fixedSize(horizontal: false, vertical: true).opacity(draws && !said ? 0 : 1)
             action
         }.frame(maxWidth: .infinity).padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 26)
+        .task {
+            guard draws, !drawn else { return }
+            try? await Task.sleep(for: .milliseconds(180))
+            withAnimation(.easeInOut(duration: 0.8)) { drawn = true }
+            try? await Task.sleep(for: .milliseconds(640))
+            withAnimation(.easeOut(duration: 0.32)) { said = true }
+        }
     }
 }
 
 extension FormEmpty where Action == EmptyView {
-    init(_ text: String, symbol: String) { self.init(text, symbol: symbol) { EmptyView() } }
+    init(_ text: String, symbol: String, draws: Bool = false) { self.init(text, symbol: symbol, draws: draws) { EmptyView() } }
 }
 
 /// **The room a row's detail and warning ask for beside its control** (`FormMetrics.detailRoom`): what `ViewThatFits`

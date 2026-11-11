@@ -228,6 +228,10 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     public let case_id: String?
     public let accepted: Int?
     public let live_path: String?
+    /// The time until which its agent parked the task with a reminder, or nil: it does no work until then, so the
+    /// board shows it in Waiting with "Until 10:00". nil on a hub that does not send it, where a parked task still
+    /// shows as work.
+    public let parked_until: Double?
     public let stalled_since: Double?
     public let stalled_reason: String?
 
@@ -263,7 +267,7 @@ extension FleetTask {
     /// `inWork` is true only for a task in work now with nothing that holds it.
     ///
     /// **An outcome that is not known comes before all of it** (`outcomeUnknown`; fix round 3b, item 7): the orange "?"
-    /// with "Outcome not known: check it", as the board's Needs-you lane and Needs you draw it, over the owner's hold and
+    /// with "Outcome not known: check it", as the Tasks board and the lane of Needs you draw it, over the owner's hold and
     /// over a result. Those two drew it before they asked for the mark, so T-401 — paused, its outcome not known — was
     /// a grey pause in its agent's panel.
     public func mark(holds: [TaskHold], limited: Bool = false,
@@ -455,6 +459,9 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     public let kind: String?
     /// The conversation the item came from. The owner's answer goes back into that conversation and nowhere else.
     public let conversation: Int?
+    /// The number of the agent's question that this item carries to the owner, or nil. A task that waits on that
+    /// question ("Q-68" in its `waiting_on`) waits for his answer to this item (`HubState.ownerWaits`).
+    public let question: Int?
     /// Owner feature `secret_requests`: what a `request_secret` item asks for (its `kind` is `secret`), and nil on
     /// every other item. It names a secret and never holds a value.
     public let secret: NeedSecret?
@@ -463,6 +470,9 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     public let door_call: String?
     /// The fleet id that a phone's door-call statement names (API 1.81), on an item with a `door_call` only.
     public let door_fleet: String?
+    /// Owner feature `door_modes` (API 1.121): the server of a run that the door refused, on the door's card only. Its
+    /// second option, Full access on that server, is the server's mode, which the Mac signs (`OwnerStatement.doorMode`).
+    public let door_host: String?
     /// Owner feature `door_setup` (API 1.94): the GitHub account that the item's first option makes a private App in,
     /// with GitHub's manifest flow (`GitHubManifestFlow`), and nil on every other item. The option's words are the
     /// answer, as for any other item.

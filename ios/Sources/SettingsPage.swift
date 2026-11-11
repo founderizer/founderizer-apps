@@ -42,7 +42,8 @@ struct SettingsPage: View {
 
             // **"Last read" only while the reading is not current**: a row that says "just now" in green says only
             // that nothing is wrong. Current as the marks are (fix round 3d, D-1 rule 2): not in a read's first second.
-            if !store.showsCurrent {
+            // None on a phone with no hub: there is no reading to be old.
+            if !store.showsCurrent && !store.hasNoHub {
                 Section {
                     LabeledContent("Last reading") {
                         Text(store.lastRead.map { fleetAge($0.timeIntervalSince1970,
@@ -85,7 +86,8 @@ struct SettingsPage: View {
                 .wholePoints()
                 // The keychain's own words, when it gave some, for VoiceOver; the screen says it in its own.
                 .accessibilityHint(store.keyDetail ?? "")
-            if store.keyState == .locked || store.keyWords != nil {
+            // No Unlock on a phone with no hub, or in the sample fleet: there is no hub to reach with the key.
+            if !store.hasNoHub && !store.sample && (store.keyState == .locked || store.keyWords != nil) {
                 // The read follows the unlock: with the key in hand the hub answers, so the page stops saying that
                 // it does not.
                 Button("Unlock") { Task { await store.unlock(); await store.refresh() } }

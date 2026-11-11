@@ -1,3 +1,4 @@
+import FleetVaultIPC
 import Foundation
 import Testing
 @testable import FleetVaultCore
@@ -25,7 +26,7 @@ import Testing
     }
 
     static func temporary() throws -> URL {
-        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("fleet-store-" + UUID().uuidString)
+        let folder = StoreTestFolder.url.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         return folder
     }
@@ -213,7 +214,7 @@ import Testing
         #expect(throws: (any Error).self) { try made.store.secret(id: UUID().uuidString) }
     }
 
-    // MARK: what a writer asks of a store (the owner's Add secret, and `create_login`)
+    // MARK: what a writer asks of a store (`create_login` and `save_key`)
 
     @Test func theStoreIsOnePlaceAndNamesNoProject() throws {
         let made = try Self.store()
@@ -236,20 +237,26 @@ import Testing
 
     /// The writer's own journal decides whether a request makes an item; the store is what it saves into. One save,
     /// one reference, and the reference is what the hub registers.
-    @Test func aSubmissionOfTheOwnerMakesOneItemOfThisStore() async throws {
+    @Test func aSaveOfAJobMakesOneItemOfThisStore() async throws {
         let made = try Self.store()
         let store = made.store
         let journal = MemoryJournal()
         let writer = try VaultWriter(store: journal, limit: 1_048_576) { (store, VaultLocalStore.place) }
         let request = UUID().uuidString.lowercased()
-        let record = try await writer.add(requestID: request, label: "Shop admin", hub: "http://100.96.10.20:8765", db: "g1",
-                                          value: Data(Self.login().utf8))
+        let creation = VaultCreation(requestID: request, db: "g1", agent: "studio", task: "T-7", attempt: 1, project: nil,
+                                     label: "Shop admin", username: "owner@example.test", url: "https://shop.example.test")
+        let mark = VaultCreateJob.mark(agent: "studio", requestID: request)
+        func save() async throws -> VaultWriteRecord {
+            try await writer.create(requestID: request, binding: creation.binding, title: creation.label, hub: "http://100.96.10.20:8765",
+                                    db: creation.db, mark: mark) { Data(Self.login().utf8) }
+        }
+        let record = try await save()
         #expect(record.state == .created)
         let reference = try #require(record.login)
-        #expect(try store.item(id: String(reference.dropFirst(6))).key == "Shop admin")
+        let item = try store.item(id: String(reference.dropFirst(6)))
+        #expect(item.key == "Shop admin" && item.note == mark)
         // The same request again makes no second item.
-        let again = try await writer.add(requestID: request, label: "Shop admin", hub: "http://100.96.10.20:8765", db: "g1",
-                                         value: Data(Self.login().utf8))
+        let again = try await save()
         #expect(again.login == reference)
         #expect(try store.opened().count == 1)
         // The fingerprints come from the store's own item, and are not the value.
@@ -265,21 +272,16 @@ import Testing
 
     // MARK: the words of this store
 
-    /// A broker opens one store or the other, so the owner never reads a Bitwarden sentence about the fleet's own
-    /// store (`vault.py`'s `says()`).
+    /// The broker opens only the fleet's own store, so each fixed outcome of a save is in that store's words: the words
+    /// that a Mac with this store gave already, so the answers of the live Mac do not change. The two outcomes of a save
+    /// are the Linux broker's words for its store too.
     @Test func everyFixedOutcomeIsSaidInTheWordsOfThisStore() {
-        for failure in [VaultFailure.creates, .saveRefused, .saveUnknown, .provider] {
-            #expect(failure.said(by: .bitwarden) == failure)
-            let store = failure.said(by: .store)
-            #expect(store != failure)
-            #expect(!store.rawValue.contains("Bitwarden"))
-        }
-        #expect(VaultFailure.hub.said(by: .store) == .hub)
-        for refusal in [VaultWriteRefusal.setup, .provider, .check] {
-            #expect(refusal.said(by: .bitwarden) == refusal.rawValue)
-            #expect(!refusal.said(by: .store).contains("Bitwarden"))
-        }
-        #expect(VaultWriteRefusal.login.said(by: .store) == VaultWriteRefusal.login.rawValue)
+        #expect(VaultFailure.creates.rawValue == "This machine's vault has no store of its own yet.")
+        #expect(VaultFailure.saveRefused.rawValue == "The vault store refused this save and made nothing.")
+        #expect(VaultFailure.saveUnknown.rawValue == "The vault could not confirm that its store saved the login. It is not sent again.")
+        #expect(VaultWriteRefusal.setup.rawValue == VaultFailure.creates.rawValue)
+        #expect(VaultWriteRefusal.provider.rawValue == "The vault store could not be opened for a save. Nothing was made.")
+        #expect(VaultWriteRefusal.check.rawValue == "The vault store did not answer the check. Nothing changed.")
     }
 
     // MARK: `store-put`: the item that the owner gives this store
@@ -315,42 +317,89 @@ import Testing
         #expect(listing.allSatisfy { $0.savedAt > 1_700_000_000 })
     }
 
-    // MARK: the configuration that chooses the store
+    // MARK: the configuration of the store
 
-    @Test func aConfigurationNamesOneStoreAndNeverBoth() throws {
+    /// The configuration that `install.py` writes for a worker Mac, in the bytes that its `json.dump` writes, loads as
+    /// before. So a Mac that opens this store now keeps its configuration, and with it its Keychain items.
+    @Test func theConfigurationThatTheInstallerWritesLoadsAsBefore() throws {
+        let socket = NSHomeDirectory() + "/Library/Application Support/AgentFleet/vault.sock"
+        let written = #"{"agent": "studio", "hub": "http://100.96.10.20:8765", "store": "fleet", "worker_uid": 501, "socket": "\#(socket)"}"#
+        let configuration = try VaultConfiguration(data: Data(written.utf8))
+        #expect(configuration.agent == "studio" && configuration.store == VaultBackend.fleetStore && configuration.workerUID == 501)
+        #expect(configuration.hub.absoluteString == "http://100.96.10.20:8765" && configuration.socket == socket)
+    }
+
+    /// A configuration names the fleet's own store and nothing else. A worker's configuration that names a region, of
+    /// the store that this vault opened before, has its own refusal, which says what to do; so the broker does not start
+    /// on it. The owner's Mac has its own form, and no broker.
+    @Test func aConfigurationNamesTheFleetsOwnStoreOnly() throws {
         let socket = NSHomeDirectory() + "/Library/Application Support/AgentFleet/vault.sock"
         func configuration(_ object: [String: Any]) throws -> VaultConfiguration {
             try VaultConfiguration(data: try JSONSerialization.data(withJSONObject: object))
         }
         let base: [String: Any] = ["agent": "studio", "hub": "http://100.96.10.20:8765", "socket": socket, "worker_uid": 501]
-        let bitwarden = try configuration(base.merging(["region": "eu"]) { _, new in new })
-        #expect(bitwarden.backend == .bitwarden)
-        #expect(try bitwarden.bitwardenRegion() == "eu")
-        let store = try configuration(base.merging(["store": "fleet"]) { _, new in new })
-        #expect(store.backend == .store)
-        #expect(store.region == nil)
-        #expect(throws: VaultFailure.configuration) { try store.bitwardenRegion() }
-        for bad in [base, base.merging(["region": "eu", "store": "fleet"]) { _, new in new },
-                    base.merging(["store": "bitwarden"]) { _, new in new },
-                    base.merging(["store": "fleet", "region": "eu"]) { _, new in new },
-                    base.merging(["region": "uk"]) { _, new in new }] {
+        #expect(try configuration(base.merging(["store": "fleet"]) { _, new in new }).store == "fleet")
+        for old in [base.merging(["region": "eu"]) { _, new in new }, base.merging(["region": "us", "store": "fleet"]) { _, new in new },
+                    base.merging(["region": NSNull()]) { _, new in new }, ["region": "eu"]] {
+            #expect(throws: VaultFailure.regionConfiguration) { try configuration(old) }
+        }
+        let owner: [String: Any] = ["role": "owner", "fleet_app": "/Applications/Founderizer.app", "owner_uid": 501]
+        for bad in [base, base.merging(["store": "other"]) { _, new in new }, base.merging(["store": "fleet", "role": "worker"]) { _, new in new },
+                    owner.merging(["region": "eu"]) { _, new in new }, owner.merging(["store": "fleet"]) { _, new in new }] {
             #expect(throws: VaultFailure.configuration) { try configuration(bad) }
         }
     }
 
-    @Test func theOwnersWriterConfigurationNamesOneStoreToo() throws {
-        func configuration(_ object: [String: Any]) throws -> VaultWriterConfiguration {
-            try VaultWriterConfiguration(data: try JSONSerialization.data(withJSONObject: object))
+    // MARK: the items of the store that this vault opened before
+
+    /// The cleanup deletes the old items by their names, each one once, and it has no way to read one. None of the
+    /// names is an item of the fleet's own store, so the store key, the handover key and the two journals stay.
+    @Test func theCleanupDeletesOnlyTheOldItemsAndReadsNone() {
+        let kept = [VaultLocalStore.keyItem, "age", VaultJournalKeychain(keychain: VaultKeychain(agent: "studio")).item, "calls"]
+        #expect(VaultOldItems.workerItems == ["token", "write-project"])
+        #expect(VaultOldItems.writerAccount == "_writer" && VaultOldItems.writerItems == ["token", "project"])
+        #expect(Set(VaultOldItems.workerItems).isDisjoint(with: kept))
+        #expect(!VaultCaller.isAgent(VaultOldItems.writerAccount))         // no agent's item has the writer's account
+        var asked: [String] = []
+        let gone = VaultOldItems.remove(VaultOldItems.workerItems) { asked.append($0) }
+        #expect(gone && asked == ["token", "write-project"])
+        // A delete that fails makes the answer false, and the next item is still deleted: the next start tries again.
+        asked = []
+        let failed = VaultOldItems.remove(VaultOldItems.writerItems) { item in
+            asked.append(item)
+            if item == "token" { throw VaultFailure.keychain }
         }
-        let base: [String: Any] = ["role": "owner", "fleet_app": "/Applications/Founderizer.app", "owner_uid": Int(getuid())]
-        #expect(try configuration(base.merging(["region": "eu"]) { _, new in new }).backend == .bitwarden)
-        let store = try configuration(base.merging(["store": "fleet"]) { _, new in new })
-        #expect(store.backend == .store)
-        #expect(store.region == nil)
-        for bad in [base, base.merging(["region": "eu", "store": "fleet"]) { _, new in new },
-                    base.merging(["store": "project"]) { _, new in new }] {
-            #expect(throws: VaultFailure.configuration) { try configuration(bad) }
+        #expect(!failed && asked == ["token", "project"])
+    }
+
+    @Test func onlyTheOwnersConfigurationMakesTheOwnersMac() {
+        for owner in [#"{"role": "owner", "region": "eu", "fleet_app": "/Applications/Founderizer.app", "owner_uid": 501}"#,
+                      #"{"role": "owner", "store": "fleet", "fleet_app": "/Applications/Founderizer.app", "owner_uid": 501}"#] {
+            #expect(VaultOldItems.isOwner(Data(owner.utf8)))
         }
+        for other in [#"{"agent": "studio", "hub": "http://100.96.10.20:8765", "store": "fleet"}"#, #"{"role": "worker"}"#,
+                      #"{"role": 1}"#, "[]", "not json"] {
+            #expect(!VaultOldItems.isOwner(Data(other.utf8)))
+        }
+    }
+}
+
+/// The one folder of this suite's files in a test process: a folder for each store, and the copy of the two programs.
+/// It goes when the process ends, so a run that passes leaves nothing in the temporary folder. Until 11 November 2026
+/// each store's folder stayed there, and each run's copy of `age` and `age-keygen` (1.4 MB): 5,000 folders and 390 MB
+/// on the owner's Mac, which macOS empties of their files only after three days.
+enum StoreTestFolder {
+    static let url: URL = {
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("fleet-store-tests-" + UUID().uuidString)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
+        atexit { StoreTestFolder.remove() }
+        return folder
+    }()
+
+    static func remove() {
+        try? FileManager.default.removeItem(at: url)
     }
 }
 
@@ -366,7 +415,7 @@ let ageTools: (programs: URL, key: Data)? = {
         ["age", "age-keygen"].allSatisfy { FileManager.default.isExecutableFile(atPath: place.appendingPathComponent($0).path) }
     }) else { return nil }
     // A copy of its own, because `VaultPrograms` reads the two names of that folder and nothing else of it.
-    let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("fleet-age-" + UUID().uuidString)
+    let folder = StoreTestFolder.url.appendingPathComponent("age")
     guard (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
                                                      attributes: [.posixPermissions: 0o700])) != nil else { return nil }
     for name in ["age", "age-keygen"] {

@@ -1,10 +1,19 @@
 import Darwin
 import Foundation
 
-/// The fleet's own store on a Mac: the owner's logins and keys in one `age` file of this helper, with no Bitwarden
-/// account, no organization and no network. It is the Mac half of `vault.py`'s `LocalStore`, with the same format and
-/// the same surface, so `read`, `signin`, `handover`, `probe` and `create` work against it exactly as against
-/// Bitwarden.
+/// What the broker's own operations ask of the store (`vault.py`'s `opened_store`): one login, one value, and which
+/// logins of a probe job it can open.
+/// One store is opened for one request and used by that request alone — the broker serves one job at a time — so a
+/// store crosses a task boundary (`request` reads its login inside the call) and is `Sendable` by that use.
+protocol VaultStore: Sendable {
+    func login(secretID: String) throws -> VaultLogin
+    func secret(id: String) throws -> VaultSecret
+    func probe(job: VaultProbeJob) -> [VaultProbeResult]
+}
+
+/// The fleet's own store on a Mac: the owner's logins and keys in one `age` file of this helper, with no account, no
+/// organization and no network. It is the only store of this vault. It is the Mac half of `vault.py`'s `LocalStore`,
+/// with the same format and the same surface, so `read`, `signin`, `handover`, `probe` and `create` work against it.
 ///
 /// The file holds `{"v": 1, "items": {id: {key, value, note, made_at}}}` — an item of the shape that the rest of the
 /// helper already reads — encrypted to the public half of the store key with the bundled `age`, and opened with that
@@ -13,12 +22,12 @@ import Foundation
 ///
 /// **The key, and why the file itself may be readable.** On a worker Mac the agents run as the vault's own user, so
 /// file permissions keep nothing from them: what keeps the store shut is that its key is one item of this helper's
-/// Keychain group, which the OS gives only to code that satisfies the helper's own signature — the protection the
-/// Bitwarden token already has. The ciphertext alone opens nothing. The store key is not the handover key, on
-/// purpose: rotating a handover key must not leave every saved value unreadable.
+/// Keychain group, which the OS gives only to code that satisfies the helper's own signature. The ciphertext alone
+/// opens nothing. The store key is not the handover key, on purpose: rotating a handover key must not leave every
+/// saved value unreadable.
 ///
 /// The store is read again for every request, so a replaced file counts at once, and a save takes the store's lock,
-/// because a worker's broker and the owner's writer each write this one file.
+/// because the broker and the helper's own `store-put` each write this one file.
 final class VaultLocalStore: VaultItems, VaultStore, @unchecked Sendable {
     /// The format of the store, as `vault.py`'s `STORE`.
     static let version = 1
@@ -34,8 +43,8 @@ final class VaultLocalStore: VaultItems, VaultStore, @unchecked Sendable {
     /// `vault.py`'s `DELIVERED`.
     static let delivered = "delivered from the owner's vault"
 
-    /// This helper's store file. One path for every mode, because a configuration is a worker's or the owner's and
-    /// never both, so two stores never meet in one home.
+    /// This helper's store file. One path, because a configuration names one agent and one store, so two stores never
+    /// meet in one home.
     static var file: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Fleet Vault/store.age")
     }
@@ -97,7 +106,7 @@ final class VaultLocalStore: VaultItems, VaultStore, @unchecked Sendable {
         return found
     }
 
-    /// One item of the store: its id, its name and its value, as Bitwarden's.
+    /// One item of the store: its id, its name and its value.
     func item(id: String) throws -> Item {
         guard let id = Self.canonical(id) else { throw VaultFailure.storeMissing }
         guard let found = try opened()[id] else { throw VaultFailure.storeMissing }
@@ -110,8 +119,8 @@ final class VaultLocalStore: VaultItems, VaultStore, @unchecked Sendable {
         return try VaultLogin(data: Data(found.value.utf8), label: found.key)
     }
 
-    /// Which logins of a probe job this store can open. The fixed codes of a probe, as Bitwarden's: no part of a
-    /// login leaves the helper.
+    /// Which logins of a probe job this store can open, in the fixed codes of a probe: no part of a login leaves the
+    /// helper.
     func probe(job: VaultProbeJob) -> [VaultProbeResult] {
         let items: [String: Item]
         do { items = try opened() } catch { return job.logins.map { VaultProbeResult(login: $0, reason: .error) } }
@@ -364,33 +373,6 @@ public enum VaultStoreSetup {
     }
 }
 
-/// One fixed refusal in the words of the store that this vault opens, as `vault.py`'s `says()`. A broker opens one
-/// store or the other, so the owner never reads a Bitwarden sentence about the fleet's own store.
-extension VaultFailure {
-    func said(by backend: VaultBackend) -> VaultFailure {
-        guard backend == .store else { return self }
-        switch self {
-        case .creates: return .storeCreates
-        case .saveRefused: return .storeRefused
-        case .saveUnknown: return .storeUnknown
-        case .provider: return .store
-        default: return self
-        }
-    }
-}
-
-extension VaultWriteRefusal {
-    func said(by backend: VaultBackend) -> String {
-        guard backend == .store else { return rawValue }
-        switch self {
-        case .setup: return VaultFailure.storeCreates.rawValue
-        case .provider: return VaultFailure.storeNoWrite.rawValue
-        case .check: return "The vault store did not answer the check. Nothing changed."
-        default: return rawValue
-        }
-    }
-}
-
 /// The two commands of the fleet's own store on a Mac, as `vault.py`'s `store-put` and `store-list` are on Linux:
 /// the owner saves one login or key, and reads the names that are in the store. The value comes on **standard
 /// input**, so it never stands in an argument, and no answer repeats it.
@@ -404,9 +386,6 @@ public enum VaultStoreCommand {
     /// `store-put`: one login or key of the owner's, and its reference comes back. Never a value.
     public static func put(title: String, note: String, item: Data, bundle: Bundle = .main) throws -> [String: Any] {
         let configuration = try VaultBroker.loadConfiguration()
-        guard configuration.backend == .store else {
-            throw VaultFailure.configuration        // this vault opens a Bitwarden project, so the owner saves there
-        }
         guard VaultLocalStore.isPlainLine(title, 60) else { throw VaultFailure.login }
         guard note.isEmpty || VaultLocalStore.isPlainLine(note, 200) else { throw VaultFailure.login }
         let value = try canonical(item, label: title)
@@ -420,7 +399,6 @@ public enum VaultStoreCommand {
     /// `store-list`: the references, names and dates of this store. Never a value.
     public static func list(bundle: Bundle = .main) throws -> [[String: Any]] {
         let configuration = try VaultBroker.loadConfiguration()
-        guard configuration.backend == .store else { throw VaultFailure.configuration }
         let store = try VaultLocalStore(keychain: VaultKeychain(agent: configuration.agent),
                                         programs: bundle.bundleURL.appendingPathComponent("Contents/Helpers"))
         let stamp = DateFormatter()

@@ -60,35 +60,3 @@ public struct ChatRequestPlaces: Sendable, Equatable {
         return nil
     }
 }
-
-/// **Needs you keeps its order while he looks at it** (fix round 3b; D-7 item 2, B-MOT-12): a request he answers there
-/// folds where it stands in the frame he answers it (`WordsOnTheirWay`), and the reading that confirms the answer moves
-/// nothing — neither that card nor any other. The page sorted its list again with that reading, a round trip after the
-/// fold: the open requests first, newest first, then the answered ones, so "Nothing needs you" came over the list and the
-/// card he answered went 268 points down. The page's own order comes back the next time he opens it.
-public struct NeedsOrder: Sendable, Equatable {
-    /// The requests that this visit drew in the open group at the top, and in the answered group under the owner's tasks,
-    /// each in the order it drew them.
-    public private(set) var top: [Int] = []
-    public private(set) var bottom: [Int] = []
-
-    public init() {}
-
-    /// The two groups of `needs` as the page draws them now: every request it drew keeps its group and its place, also
-    /// one that was answered meanwhile; a new open request comes at the top, and a new answered one at the head of the
-    /// answered ones, newest first; a request that the hub no longer lists goes. With nothing drawn yet, that is the
-    /// page's own order.
-    public func groups(of needs: [OwnerNeed]) -> (top: [OwnerNeed], bottom: [OwnerNeed]) {
-        let byID = Dictionary(needs.map { ($0.id, $0) }) { first, _ in first }
-        let drawn = Set(top).union(bottom)
-        let new = needs.filter { !drawn.contains($0.id) }.sorted { $0.id > $1.id }
-        return (new.filter(\.isOpen) + top.compactMap { byID[$0] }, new.filter { !$0.isOpen } + bottom.compactMap { byID[$0] })
-    }
-
-    /// Keeps the groups that the page draws for `needs`.
-    public mutating func keep(_ needs: [OwnerNeed]) {
-        let now = groups(of: needs)
-        top = now.top.map(\.id)
-        bottom = now.bottom.map(\.id)
-    }
-}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The two keychain groups that the app's items can be in. Since build 9 the app puts an item that names no group in
+     its first group, the one it shares with NeedSeal: there stand the roster that it leaves for this extension
+     (SharedPlace) and this phone's key; a key saved before then is in the app's own group. This extension reads the
+     roster, and the key behind Face ID, and writes nothing. No App Group: it needs a step on Apple's developer site
+     that the build's key cannot take. -->
+<plist version="1.0"><dict>
+<key>keychain-access-groups</key><array>
+<string>$(AppIdentifierPrefix)com.founderizer.mobile.seal</string>
+<string>$(AppIdentifierPrefix)com.founderizer.mobile</string>
+</array>
+</dict></plist>

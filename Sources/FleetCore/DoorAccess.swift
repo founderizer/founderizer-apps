@@ -209,8 +209,9 @@ public enum DoorAccess {
         /// hub before that, which puts them on no server.
         public var rollout: Bool? = nil
         /// The servers that a plan step holds, from the manager's `door_hold` (API 1.101): `parts` (no door parts, and
-        /// no entry in the door's file, so nobody gets the server through the door) or `judged` (its parts and its
-        /// Operator, and the door's file holds it as rule-only, so the door runs no judged call there).
+        /// no entry in the door's file, so nobody gets the server through the door) or `rule-only` (its parts and its
+        /// Operator, and the door's file holds it as rule-only, so only rule calls run there). `judged` is the old
+        /// name of `rule-only`, which a hub still gives for a hold that it kept from before.
         public var holds: [String: String]? = nil
         /// A GitOps repository that the manager's `door_gitops` gives Operators through the door (API 1.111): its caller
         /// workflow, which the door dispatches to sync an app, and the agents that get it.
@@ -221,8 +222,14 @@ public enum DoorAccess {
         /// {owner/name: GitOps}. nil from a hub before API 1.111, which leaves the file's GitOps targets as they are.
         public var gitops: [String: GitOps]? = nil
 
+        /// The names of a hold that keeps a server's parts and makes it rule-only.
+        public static let ruleOnlyHolds: Set<String> = ["rule-only", "judged"]
+
         /// The servers held at `parts`.
-        public var heldOut: Set<String> { Set((holds ?? [:]).filter { $0.value != "judged" }.keys) }
+        public var heldOut: Set<String> { Set((holds ?? [:]).filter { !Self.ruleOnlyHolds.contains($0.value) }.keys) }
+
+        /// The servers held at `rule-only`.
+        public var ruleOnly: Set<String> { Set((holds ?? [:]).filter { Self.ruleOnlyHolds.contains($0.value) }.keys) }
 
         /// True when the hub reads the central vault and holds no pin of the door's own key under door.
         public func needsPin(of recipient: String) -> Bool { vault_read == true && vault_pin != recipient }
@@ -259,7 +266,7 @@ public enum DoorAccess {
     /// whole access file that has a name it does not know.
     static let cardProviders = ["backblaze:", "cloudflare:", "hetzner:", "azure:", "tailscale:"]
     static func cardCredential(_ name: String) -> Bool {
-        name == "model" || cardProviders.contains { name.hasPrefix($0) }
+        cardProviders.contains { name.hasPrefix($0) }
             || name.range(of: "^app:[a-z][a-z0-9-]{0,23}:[A-Z][A-Z0-9_]{0,63}$", options: .regularExpression) != nil
     }
 
@@ -345,7 +352,7 @@ public enum DoorAccess {
         let byName = Dictionary(facts.devices.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
         // a server that a plan step holds at `parts` gets no entry, and so no holder (API 1.101)
         let owners = servers(access: current, devices: facts.devices).filter { !(facts.hub?.heldOut.contains($0.key) ?? false) }
-        let judged = Set((facts.hub?.holds ?? [:]).filter { $0.value == "judged" }.keys)
+        let ruleOnly = facts.hub?.ruleOnly ?? []
         var hosts: [String: Any] = [:], waiting: [String] = []
         for (name, names) in owners.sorted(by: { $0.key < $1.key }) {
             var entry: [String: Any]
@@ -353,12 +360,12 @@ public enum DoorAccess {
                 let old = oldHosts[name] as? [String: Any] ?? [:]
                 entry = ["address": address, "port": (old["port"] as? Int) ?? sshdPort, "host_key": reading.hostKey,
                          "business": names[0],
-                         "mode": names.count > 1 || reading.fleet || judged.contains(name) ? "rule-only" : reading.mode,
+                         "mode": names.count > 1 || reading.fleet || ruleOnly.contains(name) ? "rule-only" : reading.mode,
                          "kind": reading.fleet ? "fleet" : ((old["kind"] as? String).flatMap { $0 == "fleet" ? nil : $0 } ?? "app")]
             } else if let old = oldHosts[name] as? [String: Any], !facts.bare.contains(name) {
                 entry = old
                 entry["business"] = names.contains(old["business"] as? String ?? "") ? old["business"] : names[0]
-                if names.count > 1 || judged.contains(name) { entry["mode"] = "rule-only" }
+                if names.count > 1 || ruleOnly.contains(name) { entry["mode"] = "rule-only" }
             } else {
                 waiting.append(name)
                 continue
@@ -456,9 +463,10 @@ public enum DoorAccess {
     /// `providers` for each account of which the door holds an App and the Operator holds a repository, so that its
     /// reads there work (`ops github:<owner>`). A commit target of kind `app` goes in its `repos` for each repository
     /// that it holds and that no other agent holds at write or deploy, its records repository among them; a records
-    /// target of kind `devops` becomes `app`, so that its commits are judged. A target that the app did not write stays
-    /// as the file has it: one of another kind (`gitops`), and one with fields of its own (a deploy workflow, a branch).
-    /// A repository that the door made gets its one target from the door's own record, not from here.
+    /// target of kind `devops` becomes `app`, so that its commits pass only as the door's checked forms or as the
+    /// agent's own call, which the door's record names. A target that the app did not write stays as the file has it:
+    /// one of another kind (`gitops`), and one with fields of its own (a deploy workflow, a branch). A repository that
+    /// the door made gets its one target from the door's own record, not from here.
     static func operatorGitHub(_ agents: [String: Any], operators: Set<String>, hub: HubDoor,
                                apps: [(owner: String, login: String, appID: String)]) -> [String: Any] {
         var agents = agents

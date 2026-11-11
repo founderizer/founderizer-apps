@@ -3,23 +3,34 @@ import Foundation
 
 /// **The owner's signed yes to a door call** (owner feature `door_calls`, DevOps plan 5.4, decisions D11 and D22).
 ///
-/// The DevOps door refuses a judged call that its judge refused, such as an AWS call that adds cost. The manager takes
-/// it to the owner as a Needs-you item that names the call's hash, and the item's first option is the yes. When he
-/// presses it, this Mac signs that yes with the owner key that signs his grants, and the answer carries the statement.
-/// The door reads it from the hub and checks the signature against the owner key in its own access file, so the hub
-/// can hold a yes back and forge none. Nothing shows: a hub without `door_calls`, an item with no door call, another
-/// option, or a Mac with no owner key for this fleet sends the answer as before, and the door then refuses the call
-/// again.
+/// The DevOps door refuses a call that is the owner's: a delete of what no agent made through the door, an AWS delete,
+/// or a host's `run`, a root script with no box. The manager takes it to the owner as a Needs-you item that names the
+/// call's hash, and the item's first option is the yes. When he presses it, this Mac signs that yes with the owner key
+/// that signs his grants, and the answer carries the statement. The door reads it from the hub and checks the signature against the owner key in its
+/// own access file, so the hub can hold a yes back and forge none. Nothing shows: a hub without `door_calls`, an item
+/// with no door call, another option, or a Mac with no owner key for this fleet sends the answer as before, and the
+/// door then refuses the call again.
+///
+/// The door's card of a refused `run` (owner feature `door_modes`, the owner's "Yes, as shown" of 11 November 2026)
+/// has a second answer, Full access on its server: this Mac signs that server's mode with the same key, and the door
+/// then lets every later root script there through.
 @MainActor
 enum DoorCallSigning {
     static let feature = "door_calls"
+    static let modes = "door_modes"
 
     static func approval(for need: OwnerNeed, choice: Int, store: FleetStore, hub: URL,
                          database: String) async -> (statement: String, signature: String)? {
-        guard choice == 0, let call = need.door_call, store.state?.ui_features?.contains(feature) == true,
-              let fleet = try? await VaultClient().reading(hub: hub, database: database)?.fleetID,
+        let features = store.state?.ui_features ?? []
+        var make: ((String) -> String)?
+        if choice == 0, let call = need.door_call, features.contains(feature) {
+            make = { OwnerStatement.doorCall(fleet: $0, need: need.id, call: call) }
+        } else if choice == 1, need.door_call != nil, let host = need.door_host, features.contains(modes) {
+            make = { OwnerStatement.doorMode(fleet: $0, host: host, mode: "full") }
+        }
+        guard let make, let fleet = try? await VaultClient().reading(hub: hub, database: database)?.fleetID,
               let key = OwnerKeychain.key(fleet: fleet) else { return nil }
-        let statement = OwnerStatement.doorCall(fleet: fleet, need: need.id, call: call)
+        let statement = make(fleet)
         guard let signature = try? key.sign(statement) else { return nil }
         return (statement, signature)
     }

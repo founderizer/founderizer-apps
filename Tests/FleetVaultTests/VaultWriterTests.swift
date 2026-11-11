@@ -3,7 +3,8 @@ import Foundation
 import Testing
 @testable import FleetVaultCore
 
-/// A stand-in for Bitwarden: no token, no network and no real item. It counts the create calls.
+/// A stand-in for a store: no Keychain, no file and no real item. It counts the create calls. It can also lose the
+/// answer of a call that made its item, as a process that ends during its save leaves the outcome unknown.
 final class FakeItems: VaultItems, @unchecked Sendable {
     static let project = "11111111-2222-3333-4444-555555555555", organization = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     struct Item { var name: String; var value: String; var note: String; var project: String }
@@ -17,11 +18,11 @@ final class FakeItems: VaultItems, @unchecked Sendable {
     var lookupFails = false
 
     func organization(ofProject project: String) throws -> String {
-        guard project == Self.project else { throw VaultFailure.provider }
+        guard project == Self.project else { throw VaultFailure.store }
         return Self.organization
     }
     func items(named name: String, project: String, organization: String) throws -> [String] {
-        if lookupFails { throw VaultFailure.provider }
+        if lookupFails { throw VaultFailure.store }
         return hidden ? [] : stored.filter { $0.value.name == name && $0.value.project == project }.map(\.key)
     }
     func notes(of ids: [String]) throws -> [String: String] {
@@ -35,11 +36,11 @@ final class FakeItems: VaultItems, @unchecked Sendable {
         return answer == .made ? .created(id) : .unknown
     }
     func login(id: String) throws -> VaultLogin {
-        guard let item = stored.first(where: { $0.key.lowercased() == id.lowercased() })?.value else { throw VaultFailure.provider }
+        guard let item = stored.first(where: { $0.key.lowercased() == id.lowercased() })?.value else { throw VaultFailure.storeMissing }
         return try VaultLogin(data: Data(item.value.utf8), label: item.name)
     }
     func secret(id: String) throws -> VaultSecret {
-        guard let item = stored.first(where: { $0.key.lowercased() == id.lowercased() })?.value else { throw VaultFailure.provider }
+        guard let item = stored.first(where: { $0.key.lowercased() == id.lowercased() })?.value else { throw VaultFailure.storeMissing }
         return try VaultSecret(data: Data(item.value.utf8))
     }
 }
@@ -84,6 +85,8 @@ private extension VaultWriter {
     }
 }
 
+/// The rules of the journal through `add` and a journal file. No program of the vault uses either of them now, and
+/// `create` shares each rule of the journal that these checks prove.
 struct VaultWriterTests {
     private let first = "0a0a0a0a-1111-4222-8333-444444444444", second = "0b0b0b0b-1111-4222-8333-444444444444"
 
@@ -201,16 +204,16 @@ struct VaultWriterTests {
         #expect(try await writer.add(requestID: second, label: "Shop admin", value: value()).state == .created && items.creates == 2)
     }
 
-    @Test func nothingIsSentWithoutSignInAValidLoginAndARecordOnDisk() async throws {
+    @Test func nothingIsSentWithoutAStoreAValidLoginAndARecordOnDisk() async throws {
         let journal = Journal(), items = FakeItems()
         defer { journal.remove() }
         let login = try value(), id = first
         func attempt(_ session: @escaping @Sendable () throws -> (items: any VaultItems, project: String)) async -> VaultWriteRefusal? {
             await refusal { _ = try await journal.next(items, session: session).add(requestID: id, label: "Shop admin", value: login) }
         }
-        #expect(await attempt { throw VaultWriteRefusal.setup } == .setup)               // no write token
-        #expect(await attempt { throw VaultFailure.provider } == .provider)              // Bitwarden refused the token
-        #expect(await attempt { (items, "99999999-2222-3333-4444-555555555555") } == .provider)   // the token does not reach the project
+        #expect(await attempt { throw VaultWriteRefusal.setup } == .setup)               // no store
+        #expect(await attempt { throw VaultFailure.store } == .provider)                 // the store does not open
+        #expect(await attempt { (items, "99999999-2222-3333-4444-555555555555") } == .provider)   // the store is not at that place
         let writer = try await journal.next(items)
         let long = try value(password: String(repeating: "é", count: 25_000))
         let noPassword = try JSONSerialization.data(withJSONObject: ["username": "owner", "password": "", "url": "https://shop.example.test"])
@@ -273,7 +276,7 @@ struct VaultWriterTests {
         let expected = VaultHub.fingerprints(try VaultLogin(data: value(totp: seed), label: "Shop admin"), salts: salts)
         #expect(later.items.count == 2 && later.items.map(\.hash) == expected.map { $0["hash"] as? String })
         #expect(later.items.map(\.kind) == ["password", "totp"] && later.items.map(\.len) == [canary.count, seed.count] && later.login.hasPrefix("bws://"))
-        let text = String(decoding: VaultWriterReply(login: later.login, fingerprints: later.items).data(), as: UTF8.self)
+        let text = String(decoding: try JSONEncoder().encode(later.items), as: UTF8.self) + later.login
         #expect(!text.contains(canary) && !text.contains(seed))
         #expect(await refusal { _ = try await writer.fingerprints(requestID: first, salts: ["password": salts["password"]!]) } == .state)
         #expect(await refusal { _ = try await writer.fingerprints(requestID: first, salts: ["password": "x", "totp": "y"]) } == .state)
@@ -322,9 +325,9 @@ struct VaultCreateTests {
         VaultCreateJob(id: 12, creation: VaultCreation(requestID: requestID, db: generation, agent: "studio", task: task, attempt: attempt,
                                                        project: project, label: label, username: username, url: "https://shop.example.test/login"))
     }
-    private func writer(_ items: FakeItems, _ store: FakeKeychainJournal, signedIn: Bool = true) throws -> VaultWriter {
+    private func writer(_ items: FakeItems, _ store: FakeKeychainJournal, opens: Bool = true) throws -> VaultWriter {
         try VaultWriter(store: store, limit: 1_048_576, clock: { 1_000 }) {
-            guard signedIn else { throw VaultWriteRefusal.setup }
+            guard opens else { throw VaultWriteRefusal.setup }
             return (items, FakeItems.project)
         }
     }
@@ -412,9 +415,9 @@ struct VaultCreateTests {
         #expect(String(decoding: try #require(store.data), as: UTF8.self).contains(#""state":"unknown""#))
     }
 
-    @Test func aMachineWithoutTheSetupOrWithoutItsJournalMakesNothing() async throws {
+    @Test func aMachineWithoutItsStoreOrWithoutItsJournalMakesNothing() async throws {
         let items = FakeItems(), store = FakeKeychainJournal(), source = Counter()
-        let closed = try writer(items, store, signedIn: false)
+        let closed = try writer(items, store, opens: false)
         #expect(await refusal { _ = try await self.save(closed, self.job(self.first), source) } == .setup)
         #expect(store.data == nil && source.made == 0)                                  // no record and no password
         store.fails = true

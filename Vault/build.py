@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the standalone Mac vault. Download pinned vendor sources; never read a vault credential."""
+"""Build the standalone Mac vault. Download the pinned age release; never read a vault credential."""
 import hashlib
 import io
 import os
@@ -14,8 +14,6 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE = ROOT / "build/vault-dependencies"
-REV = "0520690b9710af7a8b1e47aad776f002f369688f"  # Bitwarden SDK 2.1.0
-SDK_SHA = "bc605f4a9b2dd1d4dfdfcb558d2c421cf6d74a87e6bb234ffe1a8176e85497bf"
 AGE_SHA = {"arm64": "e2020b073c44f692685a24d6abc378817eb81ffaaf49fd0531ef8565f767f2f5",
            "amd64": "1d1e4bc66e1427edad7739ae7616157de0e79db8b6d2a1497d7d9925fb06a539"}
 # The Developer ID Application identity that signs the vault, as `security find-identity -v -p codesigning` prints
@@ -27,7 +25,7 @@ def fetch(url, digest):
     with urllib.request.urlopen(url, timeout=60) as response:
         payload = response.read()
     if hashlib.sha256(payload).hexdigest() != digest:
-        raise SystemExit("The vendor archive checksum does not match.")
+        raise SystemExit("The age archive checksum does not match.")
     return payload
 
 
@@ -35,9 +33,17 @@ def run(*args, cwd=ROOT):
     subprocess.run(args, cwd=cwd, check=True)
 
 
+def carries_no_library(app):
+    """The vault is one program and the two age programs: no library of its own. A file that an earlier build left in
+    the bundle would ride along into a release, so the bundle is made new each time and this checks it again."""
+    found = [str(path.relative_to(app)) for path in app.rglob("*") if path.suffix == ".dylib" or path.name == "Frameworks"]
+    if found:
+        raise SystemExit("The vault bundle holds a library, which no build may carry: " + ", ".join(found))
+
+
 def main():
-    if platform.system() != "Darwin" or not shutil.which("cargo"):
-        raise SystemExit("Build on macOS with Rust 1.88 or later, Swift and a Developer ID signing identity.")
+    if platform.system() != "Darwin":
+        raise SystemExit("Build on macOS with Swift and a Developer ID signing identity.")
     if not SIGNER:
         raise SystemExit("Set FLEET_SIGN_IDENTITY to the Developer ID Application identity that signs the vault.")
     profile_path = os.environ.get("FLEET_VAULT_PROFILE")
@@ -56,28 +62,24 @@ def main():
             and (identifier in groups or "6EBZ756H9Q.*" in groups)):
         raise SystemExit("The profile does not authorize this helper's private Keychain group for distribution.")
     CACHE.mkdir(parents=True, exist_ok=True)
-    source = CACHE / ("sdk-sm-" + REV)
-    # Extract the pinned source again, so edits in the build cache cannot enter a signed release.
-    with tarfile.open(fileobj=io.BytesIO(fetch("https://codeload.github.com/bitwarden/sdk-sm/tar.gz/" + REV, SDK_SHA))) as archive:
-        archive.extractall(CACHE, filter="data")
-    ffi = source / "crates/bitwarden-c/src/lib.rs"
-    ffi.write_text(ffi.read_text() + (ROOT / "Vault/ffi-memory.rs").read_text())
-    run("cargo", "build", "--locked", "--release", "-p", "bitwarden-c", cwd=source)
     architecture = "arm64" if platform.machine() == "arm64" else "amd64"
+    # Extract the pinned release again, so edits in the build cache cannot enter a signed release.
     with tarfile.open(fileobj=io.BytesIO(fetch(
             f"https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-darwin-{architecture}.tar.gz",
             AGE_SHA[architecture]))) as archive:
         archive.extractall(CACHE, filter="data")
     run("swift", "build", "-c", "release", "--product", "FleetVault")
     app = ROOT / "build/Fleet Vault.app"
-    for directory in ["MacOS", "Frameworks", "Helpers", "Resources"]:
+    # A new bundle each time: nothing of an earlier build stays in it.
+    if app.is_symlink():
+        raise SystemExit(str(app) + " is a symbolic link.")
+    if app.exists():
+        shutil.rmtree(app)
+    for directory in ["MacOS", "Helpers", "Resources"]:
         (app / "Contents" / directory).mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / ".build/release/FleetVault", app / "Contents/MacOS/FleetVault")
     shutil.copy2(ROOT / "Vault/Info.plist", app / "Contents/Info.plist")
     shutil.copy2(profile, app / "Contents/embedded.provisionprofile")
-    library = app / "Contents/Frameworks/libbitwarden_c.dylib"
-    shutil.copy2(source / "target/release/libbitwarden_c.dylib", library)
-    shutil.copy2(source / "LICENSE", app / "Contents/Resources/Bitwarden-LICENSE")
     shutil.copy2(CACHE / "age/LICENSE", app / "Contents/Resources/age-LICENSE")
     # The Mac's root updater replaces itself with the one that a vault it has checked carries (Vault/update.zsh).
     shutil.copy2(ROOT / "Vault/update.zsh", app / "Contents/Resources/update.zsh")
@@ -90,8 +92,8 @@ def main():
         target = app / "Contents/Helpers" / name
         shutil.copy2(CACHE / "age" / name, target)
         run("codesign", "--force", "--options", "runtime", "--timestamp", "--sign", SIGNER, str(target))
+    carries_no_library(app)
     # Library validation remains enabled. All executable code has the same Developer ID.
-    run("codesign", "--force", "--options", "runtime", "--timestamp", "--sign", SIGNER, str(library))
     run("codesign", "--force", "--options", "runtime", "--timestamp", "--sign", SIGNER,
         "--entitlements", str(ROOT / "Vault/Entitlements.plist"), str(app))
     run("codesign", "--verify", "--deep", "--strict", str(app))

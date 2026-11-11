@@ -17,12 +17,19 @@ struct ActivityTests {
     }
 
     private func task(_ id: Int, _ state: String, owner: String = "vps", created: Double = ActivityTests.now - 60, started: Double? = nil,
-                      last: Double? = nil, waitingOn: String? = nil, accepted: Int? = nil) -> [String: Any] {
-        var row: [String: Any] = ["id": id, "title": "Task \(id)", "details": "", "done_when": "Checked", "needs": "none",
+                      last: Double? = nil, waitingOn: String? = nil, accepted: Int? = nil, title: String? = nil,
+                      schedule: Int? = nil, parked: Double? = nil) -> [String: Any] {
+        var row: [String: Any] = ["id": id, "title": title ?? "Task \(id)", "details": "", "done_when": "Checked", "needs": "none",
                                   "goal": "", "owner": owner, "requester": "manager", "state": state, "created": created,
                                   "attempt": 1, "restarts": 0, "nudge_level": 0, "stop_sent": 0]
         row["started"] = started; row["last_activity"] = last; row["waiting_on"] = waitingOn; row["accepted"] = accepted
+        row["trigger_id"] = schedule; row["parked_until"] = parked
         return row
+    }
+
+    private func need(_ id: Int, question: Int? = nil, answered: Double? = nil) -> [String: Any] {
+        ["id": id, "title": "Need \(id)", "why": "", "todo": "", "raised": Self.now - 300, "by": "manager",
+         "answered": answered ?? NSNull(), "question": question ?? NSNull()]
     }
 
     private func hub(_ tasks: [[String: Any]], holds: [[String: Any]] = [], limited: [String] = [], outcomes: [[String: Any]] = [],
@@ -65,7 +72,6 @@ struct ActivityTests {
             task(5, "completed", started: start, last: start), task(6, "failed", started: start, last: start),
             task(7, "rejected", started: start, last: start), task(8, "canceled"),
         ]).activity(agent: nil, period: .all, calendar: Self.utc)
-        #expect(ids(board, .needsYou).isEmpty)
         #expect(ids(board, .inProgress) == [2])
         #expect(Set(ids(board, .waiting)) == [1, 3, 4])          // a queued task waits for its agent
         #expect(Set(ids(board, .done)) == [5, 6, 7, 8])
@@ -88,10 +94,10 @@ struct ActivityTests {
             task(7, "canceled", started: start, last: start),                  // a hold does not reopen an ended task
             task(8, "a-new-state"),                                             // not known to this app
         ], holds: holds, limited: ["studio"]).activity(agent: nil, period: .all, calendar: Self.utc)
-        #expect(Set(ids(board, .waiting)) == [1, 2, 4, 5, 8])
+        #expect(Set(ids(board, .waiting)) == [1, 2, 4, 5, 6, 8])
         #expect(ids(board, .inProgress) == [3])
         #expect(ids(board, .done) == [7])
-        #expect(ids(board, .needsYou) == [6])                    // only the owner can check a stop that was not confirmed
+        #expect(ids(board, .waiting).first == 6)                 // only the owner can check a stop that was not confirmed: first
     }
 
     @Test func anOutcomeThatTheOwnerMustRecordNeedsThemAlsoAfterTheTaskEndedAndBeforeThePeriod() throws {
@@ -105,19 +111,99 @@ struct ActivityTests {
             task(2, "canceled", started: start, last: start),                       // its outcome is recorded
             task(3, "working", created: Self.at(1, 9), started: Self.at(1, 9), last: Self.at(1, 10)),   // older than today
         ], outcomes: outcomes).activity(agent: nil, period: .today, calendar: Self.utc)
-        #expect(Set(ids(board, .needsYou)) == [1, 3])
+        #expect(Set(ids(board, .waiting)) == [1, 3])              // also the one that ended, and the one before the period
         #expect(ids(board, .done) == [2])
     }
 
-    @Test func theManagersOpenRequestsShowInNeedsYouForAllAgentsOrTheirRaiser() throws {
-        let need: (Int, String, Double, Double?) -> [String: Any] = { id, by, raised, answered in
-            ["id": id, "title": "Need \(id)", "why": "", "todo": "", "raised": raised, "by": by, "answered": answered ?? NSNull()]
-        }
-        let state = try hub([], needs: [need(1, "manager", Self.now - 300, nil), need(2, "manager", Self.now - 60, nil),
-                                         need(3, "manager", Self.now - 30, Self.now - 10), need(4, "lead", Self.now - 120, nil)])
-        #expect(state.activityNeeds(agent: nil).map(\.id) == [2, 4, 1])          // newest first, answered ones gone
-        #expect(state.activityNeeds(agent: "manager").map(\.id) == [2, 1])
-        #expect(state.activityNeeds(agent: "vps").isEmpty)
+    @Test func aTaskThatItsAgentParkedWaitsUntilThatTime() throws {
+        let start = Self.now - 600
+        let board = try hub([
+            task(1, "working", started: start, last: start, parked: Self.now + 1800),      // a reminder in half an hour
+            task(2, "working", started: start, last: start),
+        ]).activity(agent: nil, period: .all, calendar: Self.utc)
+        #expect(ids(board, .waiting) == [1])
+        #expect(ids(board, .inProgress) == [2])
+    }
+
+    @Test func aTaskThatWaitsForTheOwnerSaysWhatForAndStandsFirstInWaiting() throws {
+        let start = Self.now - 600
+        let outcomes: [[String: Any]] = [["id": 1, "task": 8, "attempt": 1, "title": "Send", "kind": "send", "state": "unknown"]]
+        let holds: [[String: Any]] = [["id": 1, "task": 9, "kind": "stop", "state": "not_confirmed", "attempt": 1]]
+        let state = try hub([
+            task(1, "input-required", started: start, last: start - 50, waitingOn: "N-53"),     // the request itself
+            task(2, "input-required", started: start, last: start - 40, waitingOn: "Q-68"),     // the question the request carries
+            task(3, "input-required", started: start, last: start - 30, waitingOn: "Q-71"),     // its request is answered
+            task(4, "input-required", started: start, last: start - 20, waitingOn: "Q-5"),      // an agent answers this one
+            task(5, "auth-required", started: start, last: start - 10),
+            task(6, "working", started: start, last: start, waitingOn: "juno"),
+            task(7, "completed", started: start, last: start, waitingOn: "N-53"),              // over: it waits for nothing
+            task(8, "canceled", started: start, last: start - 60),
+            task(9, "submitted", created: start - 70),
+            task(10, "input-required", started: start, last: start, waitingOn: "N-5x"),         // no reference of the hub
+        ], holds: holds, outcomes: outcomes, needs: [need(53), need(63, question: 68), need(70, question: 71, answered: Self.now - 10)])
+        let waits = state.ownerWaits
+        #expect(waits[1] == .request(id: 53, title: "Need 53"))
+        #expect(waits[2] == .request(id: 63, title: "Need 63"))
+        #expect(waits[5] == .signIn)
+        #expect(waits[8] == .outcome)
+        #expect(waits[9] == .stop)
+        #expect(Set(waits.keys) == [1, 2, 5, 8, 9])
+        #expect(OwnerWait.request(id: 53, title: "Need 53").words == "Need 53")
+        #expect(OwnerWait.outcome.words == "Outcome not known: check it")
+        // What waits for him stands first in Waiting, newest first; then the others, newest first.
+        let board = state.activity(agent: nil, period: .all, calendar: Self.utc)
+        #expect(ids(board, .waiting) == [5, 2, 1, 8, 9, 10, 6, 4, 3])
+        #expect(ids(board, .done) == [7])
+    }
+
+    @Test func aTaskThatWaitsForTheOwnerShowsWhateverThePeriod() throws {
+        let old = Self.at(1, 9)          // twelve days before the hub's time
+        let board = try hub([
+            task(1, "input-required", created: old, started: old, last: old, waitingOn: "N-53"),     // waits for his answer
+            task(2, "auth-required", created: old, started: old, last: old),                         // waits for his sign-in
+            task(3, "input-required", created: old, started: old, last: old, waitingOn: "Q-5"),      // waits for an agent
+            task(4, "working", created: old, started: old, last: old),
+        ], needs: [need(53)]).activity(agent: nil, period: .today, calendar: Self.utc)
+        #expect(Set(ids(board, .waiting)) == [1, 2])
+        #expect(ids(board, .inProgress).isEmpty)
+    }
+
+    @Test func endedShowsWhatDidNotSucceedAndFoldsTheRestByDay() throws {
+        let day = Self.at(13, 0), before = Self.at(12, 0)
+        let ended = EndedTasks(try hub([
+            task(1, "completed", started: day, last: day + 9 * 3600, accepted: 1, title: "CRM tickets waiting for iris: TCK-1", schedule: 23),
+            task(2, "failed", started: day, last: day + 8 * 3600, accepted: 1, title: "CRM tickets waiting for iris: TCK-2", schedule: 23),
+            task(3, "completed", started: day, last: day + 7 * 3600, accepted: 1, title: "CRM tickets waiting for iris: TCK-3", schedule: 23),
+            task(4, "completed", started: day, last: day + 6 * 3600, accepted: 1, title: "Put your notes in order"),
+            task(5, "completed", owner: "studio", started: day, last: day + 5 * 3600, accepted: 1, title: "Put your notes in order"),
+            task(6, "completed", started: day, last: day + 4 * 3600, accepted: 1, title: "Put your notes in order"),
+            task(7, "canceled", started: day, last: day + 3 * 3600, title: "Ship the fix"),
+            task(8, "completed", started: day, last: day + 2 * 3600, accepted: 0, title: "Write the note"),
+            task(9, "rejected", started: before, last: before + 3600, title: "Move the repositories"),
+            task(10, "completed", started: before, last: before + 1800, title: "CRM tickets waiting for iris: TCK-9", schedule: 23),
+        ]).activity(agent: nil, period: .all, calendar: Self.utc)[.done] ?? [], calendar: Self.utc)
+        #expect(ended.failed.map(\.id) == [2, 8, 9])            // failed, not accepted, rejected: newest first
+        #expect(ended.rest == 7)
+        #expect(ended.days.map(\.start) == [day, before])
+        // Today: the two other runs of the schedule are one row, and so are one agent's two tasks of one title.
+        #expect(ended.days[0].groups.map { $0.tasks.map(\.id) } == [[1, 3], [4, 6], [5], [7]])
+        #expect(ended.days[0].groups.map(\.title) == ["CRM tickets waiting for iris", "Put your notes in order",
+                                                       "Put your notes in order", "Ship the fix"])
+        #expect(ended.days[0].groups.map(\.owner) == ["vps", "vps", "studio", "vps"])
+        #expect(ended.days[0].groups.map(\.id) == [3, 6, 5, 7])       // a row's oldest task: a new run does not close it
+        #expect(ended.days[1].groups.map { $0.tasks.map(\.id) } == [[10]])
+        #expect(ended.days[1].groups[0].title == "CRM tickets waiting for iris: TCK-9")      // one task keeps its title
+        #expect(EndedTasks([]).failed.isEmpty && EndedTasks([]).days.isEmpty && EndedTasks([]).rest == 0)
+    }
+
+    @Test func aRowOfRunsIsNamedByWhatTheirTitlesBeginWith() throws {
+        let runs = try hub([task(1, "completed", title: "Vulnerabilities: handle new advisory lines"),
+                            task(2, "completed", title: "Vulnerabilities: handle the old ones"),
+                            task(3, "completed", title: "Incident: ABC service check"),
+                            task(4, "completed", title: "Incident found")]).tasks
+        #expect(EndedTasks.title(of: [runs[0], runs[1]]) == "Vulnerabilities: handle")
+        #expect(EndedTasks.title(of: [runs[2], runs[3]]) == "Incident: ABC service check")     // one shared word: the newest title
+        #expect(EndedTasks.title(of: [runs[0], runs[0]]) == "Vulnerabilities: handle new advisory lines")
     }
 
     @Test func theNeedsYouCountIsTheOpenRequestsAndTheTasksOnlyTheOwnerCanMove() throws {
@@ -135,10 +221,9 @@ struct ActivityTests {
             task(3, "submitted"),                                               // a stop that was not confirmed
             task(4, "working", started: start, last: start),                    // ordinary work
         ], holds: holds, outcomes: outcomes, needs: needs)
-        // One open request, and the two tasks of the Needs you column; the answered request and the rest do not count.
+        // One open request, and the two tasks that only he can move; the answered request and the rest do not count.
         #expect(state.needsYouCount == 3)
-        let board = state.activity(agent: nil, period: .all, calendar: Self.utc)
-        #expect(state.needsYouCount == ids(board, .needsYou).count + state.activityNeeds(agent: nil).count)
+        #expect(state.ownerTasks.map(\.id) == [3, 1])
     }
 
     @Test func nothingNeedsTheOwnerWhenNoRequestIsOpenAndEveryOutcomeIsKnown() throws {

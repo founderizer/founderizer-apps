@@ -4,7 +4,7 @@ import Foundation
 import Testing
 @testable import FleetVaultCore
 
-/// The `create` operation on the wire, and the use of a made login. Fake data only: the hub is `FakeHub`, Bitwarden
+/// The `create` operation on the wire, and the use of a made login. Fake data only: the hub is `FakeHub`, the store
 /// is `FakeItems`, and the worker's journal is in memory. These tests are part of the serialized suite of `FakeHub`.
 extension VaultCallerTests {
     private static let key = "STUDIO-KEY_" + String(repeating: "c", count: 32)
@@ -13,7 +13,7 @@ extension VaultCallerTests {
     private static var caller: VaultCaller { VaultCaller(agent: "studio", key: key) }
     private static func hub() throws -> VaultHub {
         VaultHub(configuration: try VaultConfiguration(data: JSONSerialization.data(withJSONObject: [
-            "agent": "studio", "hub": "http://100.64.0.1:9", "region": "eu", "worker_uid": 501,
+            "agent": "studio", "hub": "http://100.64.0.1:9", "store": "fleet", "worker_uid": 501,
             "socket": NSHomeDirectory() + "/Library/Application Support/AgentFleet/vault.sock"])), protocolClasses: [FakeHub.self])
     }
     private static func createRequest(job: Int = 21) throws -> VaultRequest {
@@ -139,7 +139,7 @@ extension VaultCallerTests {
         #expect(NSDictionary(dictionary: try await Self.create(hub, try Self.writer(items, store))) == unknown)
         #expect(NSDictionary(dictionary: try await Self.create(hub, try Self.writer(items, store))) == unknown)     // looked for; not sent again
         items.lookupFails = true
-        #expect(NSDictionary(dictionary: try await Self.create(hub, try Self.writer(items, store))) == unknown)     // Bitwarden does not answer
+        #expect(NSDictionary(dictionary: try await Self.create(hub, try Self.writer(items, store))) == unknown)     // the store does not answer
         #expect(items.creates == 1 && !FakeHub.seen.contains { $0.route.hasSuffix("/created") })
         // The item shows, and the hub does not take the report: the login is saved, the job stays open.
         items.lookupFails = false; items.hidden = false
@@ -181,7 +181,7 @@ extension VaultCallerTests {
         let hub = try Self.hub()
         var replies: [[String: Any]] = []
         FakeHub.reset(answer: Self.answering())
-        let refusing = FakeItems(); refusing.answer = .refused                          // Bitwarden answers that it made nothing
+        let refusing = FakeItems(); refusing.answer = .refused                          // the store answers that it made nothing
         replies.append(try await Self.create(hub, try Self.writer(refusing, FakeKeychainJournal())))
         #expect(replies[0]["error"] as? String == VaultFailure.saveRefused.rawValue && replies[0]["unknown"] == nil)
         let noSetup = try VaultWriter(store: FakeKeychainJournal(), limit: 1_048_576) { throw VaultWriteRefusal.setup }
@@ -262,7 +262,7 @@ extension VaultCallerTests {
     private static var captureCaller: VaultCaller { VaultCaller(agent: "studio", key: captureKey) }
     private static func captureHub() throws -> VaultHub {
         VaultHub(configuration: try VaultConfiguration(data: JSONSerialization.data(withJSONObject: [
-            "agent": "studio", "hub": "http://100.64.0.1:9", "region": "eu", "worker_uid": 501,
+            "agent": "studio", "hub": "http://100.64.0.1:9", "store": "fleet", "worker_uid": 501,
             "socket": NSHomeDirectory() + "/Library/Application Support/AgentFleet/vault.sock"])), protocolClasses: [FakeHub.self])
     }
     private static func request(_ operation: String, job: Int = 41) throws -> VaultRequest {

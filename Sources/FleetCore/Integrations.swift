@@ -136,15 +136,55 @@ public struct RepositoryList: Decodable, Sendable {
         /// As GitHub writes it, such as `AcmeCorp`.
         public let account: String
         public let repos: [String]
+
+        public init(account: String, repos: [String]) { self.account = account; self.repos = repos }
     }
     public let db: String
     public let accounts: [Account]
     public let problem: String?
 
+    public init(db: String, accounts: [Account], problem: String?) {
+        self.db = db; self.accounts = accounts; self.problem = problem
+    }
+
+    /// An owner as GitHub writes it (`AcmeCorp`), from the owner as team.json keeps it (`acmecorp`); nil when no account
+    /// of the list is that owner.
+    public func account(_ owner: String) -> String? {
+        accounts.first { $0.account.lowercased() == owner.lowercased() }?.account
+    }
+
+    /// **A reading that could not read every account keeps the accounts that the one before it had and it lacks**:
+    /// the list does not lose an account that GitHub listed a minute ago because one App did not answer now, and its
+    /// `problem` still says what could not be read. A whole reading replaces the one before.
+    public func keeping(_ older: RepositoryList?) -> RepositoryList {
+        guard problem != nil, let older, older.db == db else { return self }
+        let read = Set(accounts.map { $0.account.lowercased() })
+        return RepositoryList(db: db, accounts: accounts + older.accounts.filter { !read.contains($0.account.lowercased()) },
+                              problem: problem)
+    }
+
     public func validate(database: String) throws {
         guard db == database, accounts.allSatisfy({ account in
             account.repos.allSatisfy { Integrations.repository($0) == $0 && $0.hasPrefix(account.account.lowercased() + "/") }
         }) else { throw HubError.invalidResponse }
+    }
+}
+
+extension RepositoryList.Account {
+    /// The repositories of this account that a search shows: each whose name, without its owner, holds every word of
+    /// the search, in any case; all of them for an empty search.
+    public func shown(by search: String) -> [String] {
+        let words = search.lowercased().split(whereSeparator: \.isWhitespace)
+        guard !words.isEmpty else { return repos }
+        return repos.filter { repo in
+            let name = Integrations.name(repo).lowercased()
+            return words.allSatisfy { name.contains($0) }
+        }
+    }
+
+    /// The "N" of "N of M" beside the account's name: how many of its repositories the agent has or gets.
+    public func chosen(held: Set<String>, picked: Set<String>) -> Int {
+        repos.reduce(0) { $0 + (held.contains($1) || picked.contains($1) ? 1 : 0) }
     }
 }
 
@@ -158,9 +198,9 @@ public enum Integrations {
         repo.split(separator: "/", maxSplits: 1).last.map(String.init) ?? repo
     }
 
-    /// The repositories of one agent, by owner and level, for its GitHub section: an owner's repositories at one level
-    /// are one row with their count once there are more than `few` of them (the owner's yes of 9 November 2026 to the
-    /// list as shown), and their own rows otherwise.
+    /// The repositories of one agent, by owner and level, for its Can use (`AccessSettings`): an owner's repositories at
+    /// one level are one row with their count once there are more than `few` of them (the owner's yes of 9 November 2026
+    /// to the list as shown), and their own rows otherwise.
     public static func groups(_ repos: [String: RepositoryAccess], few: Int = 3) -> [RepositoryGroup] {
         struct Key: Hashable { let owner: String; let access: RepositoryAccess }
         let keyed = Dictionary(grouping: repos.keys) { Key(owner: String($0.prefix { $0 != "/" }), access: repos[$0] ?? .read) }
@@ -201,7 +241,7 @@ public enum Integrations {
     }
 }
 
-/// An owner's repositories at one level, in one agent's GitHub section (`Integrations.groups`).
+/// An owner's repositories at one level, on one agent's Can use (`Integrations.groups`).
 public struct RepositoryGroup: Equatable, Sendable {
     public let owner: String
     public let access: RepositoryAccess

@@ -44,7 +44,7 @@ final class FakeHub: URLProtocol, @unchecked Sendable {
     }
 }
 
-/// Shared broker callers (protocol 2 `callers`). Fake data only: no Keychain, no Bitwarden, no real hub.
+/// Shared broker callers (protocol 2 `callers`). Fake data only: no Keychain, no store and no real hub.
 @Suite(.serialized) struct VaultCallerTests {
     private let seoKey = "SEO-KEY_" + String(repeating: "a", count: 35)
     private let studioKey = "STUDIO-KEY_" + String(repeating: "b", count: 32)
@@ -54,7 +54,7 @@ final class FakeHub: URLProtocol, @unchecked Sendable {
     private var configuration: VaultConfiguration {
         get throws {
             try VaultConfiguration(data: JSONSerialization.data(withJSONObject: [
-                "agent": "studio", "hub": "http://100.64.0.1:9", "region": "eu", "worker_uid": 501,      // no hub listens there
+                "agent": "studio", "hub": "http://100.64.0.1:9", "store": "fleet", "worker_uid": 501,      // no hub listens there
                 "socket": NSHomeDirectory() + "/Library/Application Support/AgentFleet/vault.sock"]))
         }
     }
@@ -174,16 +174,18 @@ final class FakeHub: URLProtocol, @unchecked Sendable {
         let recipient = "age1" + String(repeating: "q", count: 58)
         let reply = VaultBroker.status(agent: "studio", user: "sam", recipient: recipient)
         #expect(NSDictionary(dictionary: reply) == NSDictionary(dictionary: [
-            "ok": true, "v": 2, "agent": "studio", "store": "keychain", "backend": "bitwarden", "user": "sam",
+            "ok": true, "v": 2, "agent": "studio", "store": "keychain", "backend": "store", "user": "sam",
             "recipient": recipient, "callers": true]))
     }
 
-    /// `fleet.py check <agent>` reads this one word to say which store the broker opens, so it is in every answer.
+    /// The hub and `fleet.py check <agent>` read this one word to say which store the broker opens, so it is in every
+    /// answer: always the fleet's own store, in every form of the answer.
     @Test func theStatusNamesTheStoreThatThisBrokerOpens() throws {
         let recipient = "age1" + String(repeating: "q", count: 58)
-        for backend in [VaultBackend.store, .bitwarden] {
-            let reply = VaultBroker.status(agent: "studio", user: "sam", recipient: recipient, backend: backend)
-            #expect(reply["backend"] as? String == backend.rawValue)
+        for reply in [VaultBroker.status(agent: "studio", user: "sam", recipient: recipient),
+                      VaultBroker.status(agent: "studio", user: "sam", recipient: recipient, creates: true, requests: true,
+                                         deposits: true, withdrawals: true)] {
+            #expect(reply["backend"] as? String == "store")
             #expect(reply["store"] as? String == "keychain")
         }
     }

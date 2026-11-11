@@ -16,6 +16,11 @@ import SwiftUI
 /// A step that fails is tried again after 10 minutes, at most 6 times in a row, and then the Secrets page has a row for
 /// it with Retry; the update has no row, and the next release's program starts its tries again.
 ///
+/// At the end of a round it also keeps the hub's TCP window (`HubTCP`, the owner, 10 November 2026: "Yes, every
+/// hub"): once for each hub, it runs `hubsetup.py tcp` from the same clone on the hub's machine, because a hub
+/// installed before release 2026.11.293 gets that value from root only. That run is not a step of the plan and has no
+/// row. The round waits for it, as it waits for the vault's own steps, and its outcome changes none of their tries.
+///
 /// It lives in the store, one for each hub address, so that a step that takes minutes goes on whatever page shows.
 @MainActor @Observable
 final class CentralVaultModel {
@@ -42,6 +47,10 @@ final class CentralVaultModel {
     /// The tries of the update, and the program of the hub's release they were for.
     private var update: VaultTries?
     private var updateFor: String?
+    /// The tries of the hub's TCP step (`HubTCP`), and the hub's release they were for. A done step is kept in this
+    /// Mac's defaults, not here.
+    private var tcpWindow: VaultTries?
+    private var tcpWindowFor: String?
     /// What the vault confirmed in this session, which the hub's reading shows up to a minute later, because the hub
     /// reads the vault's status once a minute. Without them a pin would read as missing for that minute.
     private var confirmedRecovery: String?
@@ -80,7 +89,9 @@ final class CentralVaultModel {
             case .recover: await recover(store)
             case .update: await updateOwn(store)
             case .trust(let machines): for machine in machines { await trust(machine, store) }
-            case .nothing, .takeOver: return
+            case .nothing, .takeOver:
+                await keepTCPWindow(store)
+                return
             }
         }
         _ = await read(store)
@@ -95,7 +106,7 @@ final class CentralVaultModel {
         guard store.hub == hub, store.state?.db == database else { return false }
         if self.database != database {        // another generation starts clean
             install = nil; recovery = nil; servers = [:]; otherOwner = false; takeOverProblem = nil
-            confirmedRecovery = nil; confirmedPins = [:]; update = nil; updateFor = nil
+            confirmedRecovery = nil; confirmedPins = [:]; update = nil; updateFor = nil; tcpWindow = nil; tcpWindowFor = nil
         }
         if fresh?.program != updateFor { update = nil }       // the tries were for another release's program
         self.database = database
@@ -204,6 +215,32 @@ final class CentralVaultModel {
                                        reason: "The central vault on the hub's server holds another Mac's owner key.")
         }
         updateFor = program
+    }
+
+    /// **The hub's TCP window** (`HubTCP.round`), at the end of a round: once for each hub, the step's own run as root
+    /// on the hub's machine, which this Mac reaches as for the install, with the strict check of the host key. The round
+    /// waits for it, as it waits for the vault's own steps, so this app starts no two runs of root's clone at once. The
+    /// run needs a few seconds; its time-out is the install's, 15 minutes, because its `kit-clone` can also make root's
+    /// first clone. Its outcome sets only its own tries, or keeps the hub as done. The hub's release is this launch's
+    /// reading, or the one kept from the last launch (as for the Update row), and the tries start again when the hub
+    /// takes another release, which can bring the step.
+    private func keepTCPWindow(_ store: FleetStore) async {
+        guard store.hub == hub, store.isFresh, let database = store.state?.db, database == self.database else { return }
+        let releases = store.reading("releases") as ReleaseState? ?? store.keptReleases.reading(of: database)
+        let release = releases?.current?.version
+        (tcpWindow, tcpWindowFor) = HubTCP.tries(tcpWindow, for: release, after: tcpWindowFor)
+        let hub = hub, reading = reading
+        tcpWindow = await HubTCP.round(reading, hub: hub, release: release, tries: tcpWindow) { program in
+            let machine: String
+            if let own = reading?.hub?.machine {
+                machine = own
+            } else {
+                machine = CentralVault.hubMachine(in: try await HubClient().machines(hub: hub, database: database).machines)
+            }
+            let target = try await self.target(machine, database: database, record: reading?.hub?.reach)
+            return try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target, program: program),
+                                            timeout: 900).output
+        }
     }
 
     /// The install on the hub's machine, from root's own clone there, the pin of the key it printed, and the hub's

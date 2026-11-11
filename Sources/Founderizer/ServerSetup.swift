@@ -141,42 +141,6 @@ final class ServerSetupSession {
     }
 }
 
-/// How the executor connects to the new machine over SSH.
-struct SetupSSHAccess: View {
-    @Bindable var session: ServerSetupSession
-    /// False under a title that names the choice already.
-    var labelled = true
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // The one look of a choice of three (`FleetSegmented`, T-30): the stock segmented control drew a 24-point
-            // rectangle among the 28-point capsules, with a chosen part that read 1.57:1.
-            let choice = FleetSegmented("SSH access", selection: $session.configuration.auth, options: [
-                FleetOption("agent", "SSH agent"), FleetOption("identity", "Key file"), FleetOption("password", "Password"),
-            ])
-            if labelled {
-                HStack(spacing: FleetSpace.inside) { Text("SSH access").font(FormMetrics.text); choice }
-            } else { choice }
-            if session.configuration.auth == "identity" {
-                HStack {
-                    Image(systemName: "key").foregroundStyle(FleetStyle.muted)
-                    Text(session.configuration.identityFile.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Choose an SSH key")
-                        .font(FormMetrics.detail).lineLimit(1)
-                    Spacer()
-                    Button("Choose key…") { chooseKey() }.buttonStyle(FleetOutlineButtonStyle())
-                }
-            }
-        }.disabled(session.busy)
-    }
-
-    private func chooseKey() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose SSH private key"; panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false; panel.showsHiddenFiles = true
-        if panel.runModal() == .OK { session.configuration.identityFile = panel.url?.path }
-    }
-}
-
 /// The mark of a provider setup that goes on while its form does not show (the local installer, or the preparation by
 /// a joined server): a spinner while it runs, an orange mark while it waits for the owner. The words are in the hover
 /// text.
@@ -202,65 +166,15 @@ struct SetupMark: View {
     }
 }
 
-/// The progress, prompts and steps of one setup run: Add agent, or a provider's setup for an existing agent.
-struct SetupProgressView: View {
-    @Bindable var session: ServerSetupSession
-    @Binding var secret: String
-    @Binding var details: Bool
-    /// The label of a finished run, when it is not a new machine or agent.
-    var success: String?
-    /// The SSH access choice after a stopped run; a provider's setup uses the machine's managed key instead.
-    var access = true
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 15) {
-            if let result = session.timeline.result {
-                Label(result.status == "ok" ? success ?? (result.agent == nil ? "Server connected" : "Agent added") : "Setup needs attention",
-                      systemImage: result.status == "ok" ? "checkmark.circle" : "exclamationmark.circle")
-                Text(result.summary ?? "").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                if let pending = result.machine?.security?.pending_security, pending > 0 {
-                    Label(pending == 1 ? "1 security update pending" : "\(pending) security updates pending", systemImage: "exclamationmark.shield")
-                        .font(FormMetrics.detail).foregroundStyle(.orange)
-                }
-                if result.machine?.security?.reboot_required == true {
-                    Label("Server restart required", systemImage: "arrow.clockwise")
-                        .font(FormMetrics.detail).foregroundStyle(.orange)
-                }
-            } else if let step = session.timeline.steps.last {
-                Text(step.title ?? step.id ?? "Connecting…").fontWeight(.medium)
-                if let detail = step.detail, !detail.isEmpty { Text(detail).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
-            } else { Text("Connecting…").foregroundStyle(FleetStyle.muted) }
-            if session.running, let prompt = session.timeline.prompt ?? session.timeline.signIn {
-                SetupPromptView(session: session, secret: $secret, prompt: prompt)
-            }
-            if access && !session.running && session.timeline.result?.status != "ok" { SetupSSHAccess(session: session) }
-            if !session.timeline.steps.isEmpty {
-                DisclosureGroup("Setup details", isExpanded: $details) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(session.timeline.steps, id: \.id) { step in
-                                Label(step.title ?? step.id ?? "Step", systemImage: step.status == "done" || step.status == "skipped" ? "checkmark.circle" : step.status == "failed" ? "exclamationmark.circle" : "circle.dotted")
-                            }
-                        }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 10)
-                    }.frame(maxHeight: 230)
-                }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-            }
-        }
-    }
-}
-
 /// **The one thing a setup stops to ask**: a server identity to confirm, a key, the provider's own sign-in page, a
-/// command to paste or a choice. It is its own view because two screens show it — the whole progress of an install
-/// (`SetupProgressView`) and, with nothing else around it, the provider and account card of one agent, where the
-/// steps of a setup are not his business and the question is.
+/// command to paste or a choice: the session's own open prompt. It stands with nothing else around it on the provider
+/// and account card of one agent (`ProviderView`), where the steps of a setup are not his business and the question is.
 struct SetupPromptView: View {
     @Bindable var session: ServerSetupSession
     @Binding var secret: String
-    /// The prompt to show; the session's own open prompt when none is given.
-    var prompt: SetupEvent?
 
     var body: some View {
-        if let shown = prompt ?? session.timeline.prompt ?? session.timeline.signIn { ask(shown) }
+        if let shown = session.timeline.prompt ?? session.timeline.signIn { ask(shown) }
     }
 
     @ViewBuilder private func ask(_ prompt: SetupEvent) -> some View {

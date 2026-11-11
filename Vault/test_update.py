@@ -51,21 +51,38 @@ case " $* " in
 esac
 exit 1
 """
+# `print` answers from a fixture of that job, as the real one prints it, and fails for one that is not loaded; every
+# other call is written down, and a kickstart fails while the owner is not logged in (the fixture kickstart-fails).
 LAUNCHCTL = r"""#!/bin/sh
+case "$1" in
+  print) f="$FIXTURES/print-$(echo "$2" | tr '/' '_')"; [ -f "$f" ] || exit 113; cat "$f"; exit 0 ;;
+esac
 echo "$*" >> "$FIXTURES/launchctl.log"
+if [ "$1" = kickstart ] && [ -f "$FIXTURES/kickstart-fails" ]; then exit 1; fi
+exit 0
 """
 CHOWN = r"""#!/bin/sh
 echo "$*" >> "$FIXTURES/chown.log"
 """
+# Root's `sudo -u #<uid>`: written down, and the command runs as this test's own user.
+SUDO = r"""#!/bin/sh
+echo "$*" >> "$FIXTURES/sudo.log"
+[ "$1" = -u ] && shift 2
+exec "$@"
+"""
 
 
-def bundle(path, build, version=None):
-    """A stand-in vault bundle: what update.zsh reads of one, nothing more."""
+def bundle(path, build, version=None, updater=None):
+    """A stand-in vault bundle: what update.zsh reads of one, nothing more. `updater`: the number of the update.zsh
+    that it carries, or none."""
     (path / "Contents/MacOS").mkdir(parents=True)
     (path / "Contents/MacOS/FleetVault").write_text("vault")
     (path / "Contents/embedded.provisionprofile").write_text("profile")
     (path / "Contents/Info.plist").write_bytes(plistlib.dumps(
         {"CFBundleVersion": str(build), "CFBundleShortVersionString": version or f"0.{build}.0"}))
+    if updater is not None:
+        (path / "Contents/Resources").mkdir()
+        (path / "Contents/Resources/update.zsh").write_text(f"#!/bin/zsh\nupdater={updater}\n")
 
 
 @unittest.skipUnless(sys.platform == "darwin", "update.zsh uses the Mac's plutil, PlistBuddy and ditto")
@@ -75,9 +92,10 @@ class Updater(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp)
         self.base, self.fixtures, self.bin = self.tmp / "base", self.tmp / "fixtures", self.tmp / "bin"
         for folder in (self.base, self.fixtures, self.bin, self.tmp / "Applications", self.tmp / "t",
-                       self.tmp / "LaunchDaemons"):
+                       self.tmp / "LaunchDaemons", self.tmp / "LaunchAgents"):
             folder.mkdir()
-        for name, text in (("curl", CURL), ("codesign", CODESIGN), ("launchctl", LAUNCHCTL), ("chown", CHOWN)):
+        for name, text in (("curl", CURL), ("codesign", CODESIGN), ("launchctl", LAUNCHCTL), ("chown", CHOWN),
+                           ("sudo", SUDO)):
             (self.bin / name).write_text(text)
             (self.bin / name).chmod(0o755)
         self.app = self.tmp / "Applications/Fleet Vault.app"
@@ -93,14 +111,14 @@ class Updater(unittest.TestCase):
     def entitlements(self, value):
         (self.fixtures / "entitlements.plist").write_bytes(plistlib.dumps(value))
 
-    def channel(self, build, vault=True, track="approved", **manifest):
+    def channel(self, build, vault=True, track="approved", updater=None, **manifest):
         """The channel's newest build of one track: a zip of Founderizer.app that carries a vault of this build number.
         The early track's build has a name of its own, so a test can tell which track a Mac took."""
         made = self.tmp / "made"
         shutil.rmtree(made, ignore_errors=True)
         (made / "Founderizer.app/Contents/MacOS").mkdir(parents=True)
         if vault:
-            bundle(made / "Founderizer.app/Contents/Library/Fleet Vault.app", build)
+            bundle(made / "Founderizer.app/Contents/Library/Fleet Vault.app", build, updater=updater)
         version = "0.1.38" if track == "approved" else "0.1.39"
         zip_path = self.fixtures / f"Founderizer-{version}.zip"
         zip_path.unlink(missing_ok=True)
@@ -113,6 +131,7 @@ class Updater(unittest.TestCase):
     def run_updater(self):
         env = {"FLEET_VAULT_UPDATE_BASE": str(self.base), "FLEET_VAULT_UPDATE_APP": str(self.app),
                "FLEET_VAULT_UPDATE_DAEMONS": str(self.tmp / "LaunchDaemons"),
+               "FLEET_VAULT_UPDATE_AGENTS": str(self.tmp / "LaunchAgents"),
                "FLEET_VAULT_UPDATE_PATH": f"{self.bin}:/usr/bin:/bin:/usr/sbin:/sbin", "TMPDIR": str(self.tmp / "t"),
                "FIXTURES": str(self.fixtures), "HOME": str(self.tmp)}
         return subprocess.run(["/bin/zsh", HERE / "update.zsh"], env=env, capture_output=True, text=True, timeout=60)
@@ -148,10 +167,79 @@ class Updater(unittest.TestCase):
         self.assertEqual((again.returncode, again.stdout), (0, ""))
         self.assertEqual(len(self.calls("launchctl")), 1)
 
-    def test_on_the_owner_s_mac_the_writer_starts_again(self):
-        (self.base / "config.json").write_text(json.dumps({"role": "owner", "store": "fleet", "owner_uid": 502}))
-        self.assertEqual(self.run_updater().returncode, 0)
-        self.assertEqual(self.calls("launchctl"), ["kickstart -k gui/502/com.agentfleet.vault.writer"])
+    WRITER = "com.agentfleet.vault.writer"
+
+    def owner_s_mac(self, exit_code=0):
+        """The owner's Mac as it is: its configuration of the old writer, and the writer's LaunchAgent. `exit_code`: the
+        last status of the writer's job, as launchctl prints it after a start."""
+        (self.base / "config.json").write_text(json.dumps({"role": "owner", "region": "eu",
+                                                           "fleet_app": "/Applications/Founderizer.app", "owner_uid": 502}))
+        plist = self.tmp / "LaunchAgents" / (self.WRITER + ".plist")
+        plist.write_bytes(plistlib.dumps({"Label": self.WRITER, "ProgramArguments": [str(self.app), "writer"]}))
+        self.writer_ended(exit_code)
+        return plist
+
+    def writer_ended(self, exit_code):
+        (self.fixtures / f"print-gui_502_{self.WRITER}").write_text(
+            f"gui/502/{self.WRITER} = {{\n\tstate = not running\n\truns = 1\n\tlast exit code = {exit_code}\n}}\n")
+
+    def test_on_the_owner_s_mac_the_new_vault_deletes_the_old_writer_s_items_and_its_launch_agent_goes(self):
+        """The owner, 11 November 2026: the fleet's own store is the only vault. The new vault's writer mode deletes the
+        old writer's Keychain items; the updater starts it one time after the update, and takes its LaunchAgent away
+        when it ended with status 0. The next runs do nothing more for it."""
+        plist = self.owner_s_mac()
+        self.channel(3, updater=UPDATER)
+        done = self.run_updater()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.installed(), "3")
+        self.assertEqual(self.calls("launchctl"), [f"kickstart -k gui/502/{self.WRITER}", f"bootout gui/502/{self.WRITER}"])
+        self.assertEqual(self.calls("sudo"), [f"-u #502 /bin/rm -f -- {plist}"])           # as the owner, not as root
+        self.assertFalse(plist.exists())
+        self.assertIn("replaced build 2 on the owner's Mac", done.stdout)
+        self.assertIn("its LaunchAgent is gone", done.stdout)
+        again = self.run_updater()
+        self.assertEqual((again.returncode, again.stdout), (0, ""))
+        self.assertEqual(len(self.calls("launchctl")), 2)
+
+    def test_the_old_writer_s_launch_agent_stays_until_its_cleanup_ended_well(self):
+        plist = self.owner_s_mac(exit_code=1)
+        (self.fixtures / "kickstart-fails").write_text("")                # the owner is not logged in
+        self.channel(3, updater=UPDATER)
+        done = self.run_updater()
+        self.assertEqual((done.returncode, self.installed()), (0, "3"), done.stdout + done.stderr)
+        self.assertEqual(self.calls("launchctl"), [f"kickstart -k gui/502/{self.WRITER}"])
+        self.assertTrue(plist.exists())
+        (self.fixtures / "kickstart-fails").unlink()                      # logged in, and the cleanup did not end well
+        done = self.run_updater()
+        self.assertIn("did not end with status 0 (1); its LaunchAgent stays for the next run", done.stdout)
+        self.assertTrue(plist.exists())
+        self.assertEqual(self.calls("sudo"), [])
+        # A run with no newer vault still takes the LaunchAgent away once the cleanup ended well.
+        self.writer_ended(0)
+        done = self.run_updater()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertFalse(plist.exists())
+        self.assertEqual(self.calls("launchctl")[-2:], [f"kickstart -k gui/502/{self.WRITER}", f"bootout gui/502/{self.WRITER}"])
+
+    def test_a_vault_in_place_that_runs_the_old_writer_is_not_started(self):
+        """A vault older than updater 5 has the old writer, which deletes nothing: nothing starts it, and its LaunchAgent
+        stays until a newer vault is in place."""
+        plist = self.owner_s_mac()
+        for carried in (None, UPDATER - 1):
+            with self.subTest(carried=carried):
+                shutil.rmtree(self.app)
+                bundle(self.app, 2, updater=carried)
+                self.channel(2)                                           # nothing newer on the channel
+                self.assertUnchanged(self.run_updater())
+                self.assertTrue(plist.exists())
+
+    def test_a_worker_s_mac_has_no_writer_to_take_away(self):
+        plist = self.tmp / "LaunchAgents" / (self.WRITER + ".plist")
+        plist.write_text("a file of that name")
+        self.channel(3, updater=UPDATER)
+        done = self.run_updater()
+        self.assertEqual(self.calls("launchctl"), ["kickstart -k gui/501/com.agentfleet.vault"], done.stdout)
+        self.assertTrue(plist.exists())
 
     def test_a_mac_of_an_early_fleet_takes_each_vault_as_it_is_published(self):
         """The owner, 4 November 2026: "ok build your design". His fleet takes each release early, and the Founderizer
@@ -478,7 +566,12 @@ class Install(unittest.TestCase):
                    ["--updater-only", "--fleet", FLEET, "--store"],
                    ["--updater-only", "--fleet", FLEET, "--track", "beta"],
                    ["--updater-only", "--fleet", FLEET, "--track", "Early"],
-                   ["--fleet", FLEET, "--store", "--user", "sam", "--agent", "studio", "--hub", "http://100.64.0.1:8765"]]
+                   ["--fleet", FLEET, "--store", "--user", "sam", "--agent", "studio", "--hub", "http://100.64.0.1:8765"],
+                   ["--fleet", FLEET, "--app", "/tmp/x.app", "--user", "sam", "--hub", "http://100.64.0.1:8765"]]
+        # The options of the store that this vault opened before, and of the owner's old writer, are gone.
+        worker = ["--fleet", FLEET, "--app", "/tmp/x.app", "--user", "sam", "--agent", "studio", "--hub", "http://100.64.0.1:8765"]
+        refused += [worker + ["--region", "eu"], worker + ["--store", "--switch-store"],
+                    ["--fleet", FLEET, "--app", "/tmp/x.app", "--user", "sam", "--owner", "--fleet-app", "/Applications/Founderizer.app"]]
         for argv in refused:
             with self.subTest(argv=argv), mock.patch.object(sys, "argv", ["install.py", *argv]), \
                     mock.patch("sys.stderr"), self.assertRaises(SystemExit) as stop:
@@ -497,6 +590,45 @@ class Install(unittest.TestCase):
                     mock.patch.object(self.install, "install_updater") as updater:
                 self.install.main()
             updater.assert_called_once_with(FLEET, "https://founderizer.com", track)
+        # The owner's Mac keeps its configuration of the old writer: its updater still goes in, because it is what takes
+        # that writer away.
+        self.install.CONFIG.write_text(json.dumps({"role": "owner", "region": "eu", "fleet_app": "/Applications/Founderizer.app",
+                                                   "owner_uid": 502}))
+        with mock.patch.object(sys, "argv", ["install.py", "--updater-only", "--fleet", FLEET]), \
+                mock.patch.object(self.install.os, "geteuid", return_value=0), \
+                mock.patch.object(self.install, "install_updater") as updater:
+            self.install.main()
+        updater.assert_called_once_with(FLEET, "https://founderizer.com", "approved")
+
+    def test_a_worker_s_configuration_names_the_fleet_s_own_store_in_the_bytes_that_the_vault_reads(self):
+        """The Mac vault's test `theConfigurationThatTheInstallerWritesLoadsAsBefore` loads these same bytes."""
+        user = mock.Mock(pw_uid=501, pw_dir="/Users/me")
+        configuration = self.install.worker_configuration(mock.Mock(agent="studio", hub="http://100.96.10.20:8765/"), user)
+        self.assertEqual(json.dumps(configuration),
+                         '{"agent": "studio", "hub": "http://100.96.10.20:8765", "store": "fleet", "worker_uid": 501, '
+                         '"socket": "/Users/me/Library/Application Support/AgentFleet/vault.sock"}')
+        self.install.keep_configuration(configuration)                    # a new Mac: written as it is
+        self.assertEqual(self.install.CONFIG.read_text(), json.dumps(configuration))
+        self.install.keep_configuration(configuration)                    # the same again: kept
+        with self.assertRaises(SystemExit) as stop:
+            self.install.keep_configuration(dict(configuration, agent="other"))
+        self.assertIn("different settings", str(stop.exception))
+
+    def test_a_configuration_that_names_a_region_stops_the_install_and_changes_nothing(self):
+        """The store that this vault opened before the fleet's own store became its only store: a worker's configuration
+        of it, and the owner's, stop an install with words that say what to do."""
+        user = mock.Mock(pw_uid=501, pw_dir="/Users/me")
+        configuration = self.install.worker_configuration(mock.Mock(agent="studio", hub="http://100.96.10.20:8765"), user)
+        for old in ({"agent": "studio", "hub": "http://100.96.10.20:8765", "region": "eu", "worker_uid": 501,
+                     "socket": "/Users/me/Library/Application Support/AgentFleet/vault.sock"},
+                    {"role": "owner", "region": "eu", "fleet_app": "/Applications/Founderizer.app", "owner_uid": 502}):
+            with self.subTest(old=old):
+                self.install.CONFIG.write_text(json.dumps(old))
+                with self.assertRaises(SystemExit) as stop:
+                    self.install.keep_configuration(configuration)
+                self.assertIn("names a region", str(stop.exception))
+                self.assertIn(f"remove {self.install.CONFIG} as root and install again", str(stop.exception))
+                self.assertEqual(json.loads(self.install.CONFIG.read_text()), old)
 
     def test_the_vault_carries_its_installer_beside_its_updater(self):
         """A Mac's join line runs the install.py that a vault it has checked carries, as root, and install_updater

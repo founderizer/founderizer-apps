@@ -11,7 +11,7 @@ fleet_setup="$fleet_app/Contents/XPCServices/com.founderizer.setup.xpc"
 mkdir -p "$fleet_setup/Contents/MacOS" "$fleet_setup/Contents/Resources/FleetKit"
 cp .build/release/FleetSetupService "$fleet_setup/Contents/MacOS/FleetSetupService"
 cp SetupService/Info.plist "$fleet_setup/Contents/Info.plist"
-fleet_kit_source="${FLEET_KIT_SOURCE:-$HOME/fleet-pilot}"
+fleet_kit_source="${FLEET_KIT_SOURCE:-$HOME/dev/founderizer-core}"
 [[ -f "$fleet_kit_source/onboard.py" ]] || { print -u2 "Set FLEET_KIT_SOURCE to the Fleet worker repository, which contains onboard.py."; exit 1; }
 git -C "$fleet_kit_source" show HEAD:onboard.py > "$fleet_setup/Contents/Resources/FleetKit/onboard.py"
 codesign --force --sign - "$fleet_setup"

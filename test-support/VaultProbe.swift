@@ -4,12 +4,8 @@ import Foundation
 @main struct VaultProbe {
     static func main() throws {
         signal(SIGPIPE, SIG_IGN)
+        // The vault's build cache (`build/vault-dependencies`), which holds the bundled `age` and `age-keygen`.
         let root = URL(fileURLWithPath: CommandLine.arguments[1])
-        let sdk = try VaultBitwarden(libraryURL: root.appendingPathComponent("sdk-sm-0520690b9710af7a8b1e47aad776f002f369688f/target/release/libbitwarden_c.dylib"), region: "eu")
-        do {
-            _ = try sdk.login(token: Data("invalid-test-token".utf8), secretID: "12345678-1234-1234-1234-123456789012")
-            fatalError("The SDK accepted an invalid test token")
-        } catch VaultFailure.provider { print("SDK invalid-token refusal: PASS") }
         let programs = VaultPrograms(directory: root.appendingPathComponent("age"))
         let key = try programs.run("age-keygen", arguments: [])
         let recipient = try VaultIdentity.recipient(key)

@@ -265,7 +265,7 @@ public struct InstallPlan: Equatable, Sendable {
 
     /// The published Founderizer repository, which a customer's download page may replace with one of its own. It
     /// has one answer, so the wizard fills it in instead of asking (PRODUCT.md 4.3's `release_upstream`).
-    public static let defaultSource = "https://github.com/miguelpieras/founderizer-fleet.git"
+    public static let defaultSource = "https://github.com/founderizer/founderizer.git"
 
     /// **This app gives the manager a server of its own in its setup** (`AgentSetupFlow.serverFeature`), and says so to
     /// the hub's installer, which then runs no agent on the hub's server. A new hub clones the newest release, which
@@ -302,10 +302,7 @@ public struct InstallPlan: Equatable, Sendable {
                       : "Tailscale, with your key on standard input, and the address it gets.",
                   action: authKey == nil ? .run(onNetwork) : keyedNetwork),
             .init(id: "code", title: "The Founderizer code", says: "A copy of the code on the server, from your own download page.",
-                  action: .run("command -v git >/dev/null 2>&1 || { DEBIAN_FRONTEND=noninteractive apt-get "
-                               + "-o DPkg::Lock::Timeout=\(aptLockWait) -q update && DEBIAN_FRONTEND=noninteractive "
-                               + "apt-get -o DPkg::Lock::Timeout=\(aptLockWait) -y -q install git; }; "
-                               + "if test -d \(kit)/.git; then git -C \(kit) pull -q --ff-only; "
+                  action: .run(gitInstall + "; if test -d \(kit)/.git; then git -C \(kit) pull -q --ff-only; "
                                + "else git clone -q -- \(quote(source)) \(kit); fi; "
                                + "git -C \(kit) rev-parse --short HEAD; ls \(kit)/hub.sh")),
             .init(id: "plan", title: "The plan", says: "Every step the install would take. It changes nothing.",
@@ -333,25 +330,69 @@ public struct InstallPlan: Equatable, Sendable {
     /// `join.sh`, `hubsetup.py` and `onboard.py` wait as long.
     static let aptLockWait = 1200
 
+    /// One `apt-get update`. It tries the lock of the package lists once: apt reads DPkg::Lock::Timeout only for the
+    /// lock of dpkg. So each install below gives it up to 10 tries, 15 seconds apart, as hub.sh's apt_update does:
+    /// 9 in a loop, and the 10th after it, whose words and exit status count.
+    static let updateOnce = "DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=\(aptLockWait) -q update"
+
+    /// git, which the code step needs and which Debian's images do not have: INSTALL-PROMPT.md A3's first line, word
+    /// for word (owner_mcp.py's GIT_STEP). git is installed only after an update that worked.
+    static let gitInstall = "command -v git >/dev/null 2>&1 || { { for try in 1 2 3 4 5 6 7 8 9; do \(updateOnce) "
+        + "&& break; sleep 15; false; done || \(updateOnce); } && DEBIAN_FRONTEND=noninteractive apt-get -o "
+        + "DPkg::Lock::Timeout=\(aptLockWait) -y -q install git; }"
+
     /// Tailscale's own installer, on a machine that has none. It comes over curl, which a bare server may not have
     /// either, and the check lets such a server through (`ServerCheck.script`'s `reach=<host> none`): so curl first.
-    /// Tailscale's installer runs apt-get with no wait for its lock, so each try waits for the lock first, and a try
-    /// that the server's own updates got in the way of is made again, three times at most.
+    /// `apt-get update` does not wait for the lock of the package lists, which the first updates of a new server
+    /// hold while they read the lists, so it gets up to 10 tries, 15 seconds apart, as hub.sh's apt_update does, and
+    /// curl is installed only after an update that worked.
+    /// Tailscale's installer runs apt-get with no wait for its lock, so each try waits for the lock first. A try counts
+    /// only when `tailscale` is there after it, because `sh` ends with 0 when curl gives it no script (since 11
+    /// November 2026, as hub.py's TAILSCALE_INSTALL). A try that fails (the server's own updates got in its way, or
+    /// curl got nothing) is made again, three times at most.
     static let tailscaleInstall = "command -v tailscale >/dev/null 2>&1 || { command -v curl >/dev/null 2>&1 || "
-        + "{ export DEBIAN_FRONTEND=noninteractive; apt-get -o DPkg::Lock::Timeout=\(aptLockWait) -q update >/dev/null && "
+        + "{ export DEBIAN_FRONTEND=noninteractive; { for try in 1 2 3 4 5 6 7 8 9; do \(updateOnce) >/dev/null "
+        + "&& break; sleep 15; false; done || \(updateOnce) >/dev/null; } && "
         + "apt-get -o DPkg::Lock::Timeout=\(aptLockWait) -y -q install curl ca-certificates >/dev/null; }; "
         + "for try in 1 2 3; do apt-get -o DPkg::Lock::Timeout=\(aptLockWait) -q install </dev/null >/dev/null 2>&1; "
-        + "curl -fsSL https://tailscale.com/install.sh | sh && break; sleep 20; done; }; "
+        + "curl -fsSL https://tailscale.com/install.sh | sh && command -v tailscale >/dev/null 2>&1 && break; "
+        + "sleep 20; done; }; "
+
+    /// The seconds that `tailscale up` waits for the private network with the owner's key. With no limit it waits for
+    /// ever on a tailnet that approves each new machine by hand, until the step's own time ends: then the key file
+    /// stays on the machine, and the step says nothing of why (hub.sh's TAILSCALE_UP_WAIT).
+    static let tailscaleUpWait = 300
 
     /// The machine onto the private network with the key on standard input, and the address it gets there.
+    ///
+    /// `tailscale up` has `--reset`. A `tailscale up` before it keeps its settings, also when it never came up: the
+    /// sign-in of this app with the tags of the hub's join line (`NetworkSignIn`), whose tailnet refused the tags or
+    /// whose link nobody approved, is what sends the owner to the key. Tailscale then refuses a `tailscale up` that
+    /// does not name each of those settings again, unless it has `--reset` (Tailscale 1.104.6, 11 November 2026). The
+    /// step runs `tailscale up` only when `tailscale status` fails: Tailscale has no login, it waits for a sign-in or
+    /// for an admin, or somebody stopped it. `--reset` then also removes the settings of a stopped Tailscale, which a
+    /// machine of the fleet does not need.
+    ///
+    /// The step prints the address only when `tailscale status` says that Tailscale runs. A machine that waits for an
+    /// admin's approval can have its address already, and until then nothing reaches it at that address.
     static let keyedNetwork: InstallStep.Action = .sendAuthKey(
         "umask 077; cat > \(authKeyFile); " + tailscaleInstall
-            + "tailscale status >/dev/null 2>&1 || tailscale up --auth-key=file:\(authKeyFile) --accept-dns=false; "
-            + "rm -f \(authKeyFile); tailscale ip -4")
+            + "tailscale status >/dev/null 2>&1 || tailscale up --reset --auth-key=file:\(authKeyFile) "
+            + "--accept-dns=false --timeout=\(tailscaleUpWait)s; rm -f \(authKeyFile); "
+            + "tailscale status >/dev/null 2>&1 && tailscale ip -4")
 
     /// The address of a machine that is on the private network already; on one that is not, the words that ask for the
     /// key (`needsNetworkKey`).
-    static let onNetwork = "tailscale ip -4 2>/dev/null | grep . || { echo '\(NetworkSignIn.notOnNetwork)'; exit 1; }"
+    ///
+    /// The step prints the address only when `tailscale status` succeeds, as the keyed step does. It succeeds while
+    /// Tailscale runs, and also while Tailscale starts. A machine that waits for an admin's approval (NeedsMachineAuth)
+    /// has its address already. Nothing reaches it at that address until the admin approves it. Until 11 November 2026
+    /// the install went on to that address, and the owner got an SSH time-out. Such a machine waits for the approval,
+    /// so the step does not ask for a key. It ends with Tailscale's own line for that state: "Machine is not yet
+    /// approved by tailnet admin."
+    static let onNetwork = "tailscale status >/dev/null 2>&1 && tailscale ip -4 2>/dev/null | grep . || { "
+        + "tailscale status --json 2>/dev/null | grep -q '\"BackendState\": \"NeedsMachineAuth\"' "
+        + "&& { tailscale status; exit 1; }; echo '\(NetworkSignIn.notOnNetwork)'; exit 1; }"
 
     /// The machine's address on the private network, as the network step printed it (`tailscale ip -4`), or nil.
     public static func privateAddress(in lines: [String]) -> String? {
@@ -543,7 +584,7 @@ public struct InstallPlan: Equatable, Sendable {
     enum Runs: Equatable, Sendable {
         /// As the user this Mac logs in as: the check of the server, and the app's own key going onto it.
         case login
-        /// As root, through `sudo -n` for a user that is not root.
+        /// As root, through `sudo -n` for a user that is not root. The program goes in the words of `throughSudo`.
         case root
         /// As root, through a `sudo` that asks for a password: `sudo -S` reads it from the first line of standard input,
         /// where this install puts the password it holds in memory (`PasswordOnce`), and never from an argument. `-k`
@@ -559,12 +600,53 @@ public struct InstallPlan: Equatable, Sendable {
         if let key = target.identityFile { values += ["-o", "IdentitiesOnly=yes", "-i", key] }
         values.append(target.destination)
         switch runs {
-        case .root where target.becomeRoot: values.append("sudo -n -i -- /bin/sh -c \(InstallPlan.quote(program))")
+        case .root where target.becomeRoot:
+            values.append("sudo -n -i -- /bin/sh -c \(InstallPlan.quote(InstallPlan.throughSudo(program)))")
         case .rootWithPassword where target.becomeRoot:
-            values.append("sudo -S -k -p '' -i -- /bin/sh -c \(InstallPlan.quote(program))")
+            values.append("sudo -S -k -p '' -i -- /bin/sh -c \(InstallPlan.quote(InstallPlan.throughSudo(program)))")
         default: values.append(program)
         }
         return values
+    }
+
+    /// **A root program in words that reach `/bin/sh` unchanged through `sudo -i`.** `sudo -i` joins the command and
+    /// its arguments with spaces, puts a backslash before each character except letters, digits, "_", "-" and "$"
+    /// (`man sudo`, `-i`), and gives that text to root's login shell. So that shell expands a "$" before a letter, a
+    /// digit, "_", "-" or "$" ("$f", "$1", "$$", "$-") before `/bin/sh` reads the program, and it removes each new line
+    /// with the backslash before it. A "$" before another character stays as it is ("$(", "${", "$?"). Until 11 November
+    /// 2026 every program went as it is, so "$f" arrived as "" and the owner's access line went into no file.
+    ///
+    /// A program in printable ASCII with no new line and no such "$" (`arrivesThroughSudo`) goes as it is. Each other
+    /// program goes as one `printf` whose format writes the program, with an octal escape for each character that a
+    /// shell or `printf` can read in a different way: `/bin/sh` runs what it prints with `eval`, in the same shell and
+    /// with the same standard input. Only the new lines at the program's end go, as in each command substitution. Those
+    /// words have no "$", no new line and only printable ASCII, so they arrive unchanged too.
+    static func throughSudo(_ program: String) -> String {
+        guard !arrivesThroughSudo(program) else { return program }
+        let special = Array("'\\%`\"$".utf8)          // the format's own quote, escape and conversion, and the shell's
+        let format = program.utf8.enumerated().map { index, byte -> String in
+            // A "-" at the start would be an option of `printf`, which then prints nothing, and `eval ""` ends with 0.
+            (0x20...0x7e).contains(byte) && !special.contains(byte) && !(index == 0 && byte == UInt8(ascii: "-"))
+                ? String(UnicodeScalar(byte)) : "\\" + String(byte >> 6) + String(byte >> 3 & 7) + String(byte & 7)
+        }.joined()
+        return "eval \"`printf '\(format)'`\""
+    }
+
+    /// Whether root's login shell gives `/bin/sh` this program unchanged after `sudo -i` (`throughSudo`): printable
+    /// ASCII only, and no "$" before a character that `sudo -i` puts no backslash before.
+    static func arrivesThroughSudo(_ program: String) -> Bool {
+        let bytes = Array(program.utf8)
+        return bytes.indices.allSatisfy { index in
+            guard (0x20...0x7e).contains(bytes[index]) else { return false }
+            guard bytes[index] == UInt8(ascii: "$"), index + 1 < bytes.count else { return true }
+            return !bareThroughSudo(bytes[index + 1])
+        }
+    }
+
+    /// A character that `sudo -i` puts no backslash before: an ASCII letter or digit, "_", "-" or "$".
+    static func bareThroughSudo(_ byte: UInt8) -> Bool {
+        (0x30...0x39).contains(byte) || (0x41...0x5a).contains(byte) || (0x61...0x7a).contains(byte)
+            || Array("_-$".utf8).contains(byte)
     }
 
     /// The same line with the owner's own secrets taken out of it. Everything this app shows, keeps or reports

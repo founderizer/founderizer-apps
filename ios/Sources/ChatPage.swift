@@ -870,17 +870,8 @@ struct ChatPage: View {
     private static let rowStart: CGFloat = 3
     private static let wordsWithoutPlus: CGFloat = 18
 
-    /// The arrow on an agent's colour: white or near-black, whichever reads stronger on it by the contrast ratio of
-    /// the two. White wins on Leo's blue and on orchid, near-black on lime, coral, rose and the other light hues.
-    static func arrow(on fill: Color) -> Color {
-        // **White where white reads 3:1 on the colour, near-black on the lighter ones** (fix round 3b, as the Mac's
-        // 9ff5432 and D-6's words): white everywhere read 1.73:1 on Manager's lime.
-        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-        guard UIColor(fill).getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return .white }
-        func linear(_ value: CGFloat) -> CGFloat { value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4) }
-        let luminance = 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
-        return 1.05 / (luminance + 0.05) >= 3 ? .white : Brand.ink
-    }
+    /// The arrow on an agent's colour (`SendButton.arrow(on:)`), which the share extension's Send takes too.
+    static func arrow(on fill: Color) -> Color { SendButton.arrow(on: fill) }
 
     /// The owner corrects the last message: the line says so, and Cancel ends it.
     private var correctionBanner: some View {

@@ -8,6 +8,25 @@ import Foundation
 /// when one fails, and an absolute refusal list. **Nothing in it is secret**: the tag is public, the tailnet is
 /// never named (Tailscale's `-` means "the one this credential belongs to"), and the auth key travels on standard
 /// input from a file of the owner's own, whose path is all the agent is ever told.
+///
+/// **Each later step runs whole as root, also for a user who is not root.** For such a user, step 1 has the agent put
+/// `sudo -n -i -- ` in front of the remote command of every later step, and each of those remote commands is one
+/// command: a step of more than one part is one `/bin/sh -c "…"`. The user's own shell splits "a; b", "a && b",
+/// "a || b" and "a | b" before `sudo` runs, so until 11 November 2026 only "a" ran as root: the key file of step 4
+/// was not written, and step 5 could not remove it. No remote command has a "$" or a new line: `sudo -i` gives the
+/// command to root's login shell, which expands each "$" and removes each new line (`NetworkPromptRootTests`).
+///
+/// **Step 3 waits for apt's lock before each try of Tailscale's installer, three tries at most**, as
+/// `InstallPlan.tailscaleInstall` does: the installer runs apt-get with no wait for the lock, which the first updates
+/// of a new machine hold for about nine minutes. A try counts only when `tailscale` is there after it, because `sh`
+/// ends with 0 when curl gives it no script. Until 11 November 2026 step 3 did not wait, so on such a machine the
+/// installer stopped at once.
+///
+/// **Step 5's `tailscale up` has `--reset`, and waits 5 minutes at most.** A `tailscale up` before it keeps its
+/// settings, also when it never came up, and Tailscale then refuses one that does not name each of them again, unless
+/// it has `--reset`. With no `--timeout`, `tailscale up` waits for ever on a tailnet that approves each new machine by
+/// hand. Until 11 November 2026 step 5 had neither (`NetworkPromptRootTests`). As A2 of the install prompt does, it
+/// runs `tailscale up` only when `tailscale status` fails, so `--reset` never changes a machine where Tailscale runs.
 public enum NetworkPrompt {
     /// The whole prompt, as one block to copy.
     public static let text = """
@@ -56,8 +75,8 @@ in their Tailscale console when this is finished, and go on.
 Ask the owner for all of it in one message, and wait for the answer. Do not guess any of it.
 
 1. **The machine**: the address or host name you reach it at, and the user you reach it with. That
-   user must be `root` or must be able to become root. Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or
-   13, and a machine that stays on — never a laptop.
+   user must be `root`, or must be able to become root with `sudo` and no password. Ubuntu 22.04,
+   24.04 or 26.04, or Debian 12 or 13, and a machine that stays on — never a laptop.
 2. **A Tailscale auth key**, from the owner's own Tailscale admin console (Settings, then Keys, then
    Generate auth key), **written by them into a file on this machine** with `chmod 600`, for example
    `~/.founderizer-authkey`. Ask for the **path of that file**, never for the key. The key must be
@@ -72,7 +91,9 @@ Keep these in shell variables of your own session, so that no secret is in a com
     KEYFILE=<the path of the auth key file on this machine>
 
 Every command below runs over SSH from this machine. If you are already on the machine itself,
-leave out the `ssh "$SSHUSER@$HOST"` part and run the rest as root.
+leave out `ssh`, its options, `"$SSHUSER@$HOST"` and the single quotes around the remote command,
+and run each command as yourself: step 1 tells you whether to put `sudo -n -i -- ` at the start of
+each later command.
 
 **A Mac is not this job.** Tailscale on a Mac is an application the owner installs and signs in to
 themselves, as themselves, and a tagged key would take their own identity off their device. If the
@@ -83,17 +104,23 @@ Founderizer app does the rest.
 
     ssh -o BatchMode=yes "$SSHUSER@$HOST" 'id -un; id -u; sed -n "1,2p" /etc/os-release; command -v systemctl'
 
-Check: `id -u` is `0`, the system is Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13, and `systemctl`
-has a path. If `id -u` is not `0` but the user can become root, put `sudo -i -- ` in front of the remote
-command of every later step. If the system is another one, or there is no `systemctl`, stop: a
-Founderizer machine needs one of those systems. Tell the owner, and ask nothing else.
+Check: the system is Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13, and `systemctl` has a path.
+If the system is another one, or there is no `systemctl`, stop: a Founderizer machine needs one of
+those systems. Tell the owner, and ask nothing else.
+
+If `id -u` is not `0`, put `sudo -n -i -- ` in front of the remote command of every later step,
+inside its single quotes: `ssh "$SSHUSER@$HOST" 'sudo -n -i -- /bin/sh -c "…"'`. Each remote command
+is one command, so `sudo` runs all of it as root. Put `sudo` nowhere else, and add no `$` and no new
+line to a remote command: `sudo -i` gives the command to root's login shell, which expands each `$`
+and removes each new line before `/bin/sh` reads it. If `sudo` says that it needs a password, or
+refuses, stop and give the owner its words as they came.
 
 If SSH itself fails, stop and give the owner the error as it came. Do not try another user, another
 port or another key.
 
 ## Step 2. See whether it is already on the network
 
-    ssh "$SSHUSER@$HOST" 'command -v tailscale >/dev/null 2>&1 && tailscale ip -4 || echo none'
+    ssh "$SSHUSER@$HOST" '/bin/sh -c "command -v tailscale >/dev/null 2>&1 && tailscale ip -4 || echo none"'
 
 If it prints an address that starts with `100.`, this machine is already on a private network.
 **Stop and ask the owner** whether it is theirs before you do anything else: a machine on somebody
@@ -101,16 +128,24 @@ else's network must not be moved by you.
 
 ## Step 3. Install Tailscale
 
-    ssh "$SSHUSER@$HOST" 'command -v tailscale >/dev/null 2>&1 || curl -fsSL https://tailscale.com/install.sh | sh'
+    ssh "$SSHUSER@$HOST" '/bin/sh -c "command -v tailscale >/dev/null 2>&1 || for try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install </dev/null >/dev/null 2>&1; curl -fsSL https://tailscale.com/install.sh | sh && command -v tailscale >/dev/null && break; sleep 20; done"'
     ssh "$SSHUSER@$HOST" 'tailscale version'
 
-Check: it prints a version. That script is Tailscale's own, from Tailscale's own host, and it is
-the only thing you download in this job.
+On a new machine the first line can take some minutes: the machine installs its first updates, and
+they hold apt's lock. Tailscale's installer does not wait for that lock, so the line waits up to 20
+minutes for it before each try of the installer, and it tries three times at most. Usually it ends
+in about 10 minutes; in the worst case it takes more than one hour. Give the line that time: if
+your shell stops a command sooner, run the line in the background, and read its output when it
+ends. Then run the second line.
+
+Check: the second line prints a version. If it does not, stop and give the owner the last lines
+that the first line printed, as they came. That script is Tailscale's own, from Tailscale's own
+host, and it is the only thing you download in this job.
 
 ## Step 4. Give the key to the machine, on standard input
 
-    ssh "$SSHUSER@$HOST" 'umask 077; cat > /root/fleet-authkey' < "$KEYFILE"
-    ssh "$SSHUSER@$HOST" 'test -s /root/fleet-authkey && stat -c %a /root/fleet-authkey'
+    ssh "$SSHUSER@$HOST" '/bin/sh -c "umask 077; cat > /root/fleet-authkey"' < "$KEYFILE"
+    ssh "$SSHUSER@$HOST" '/bin/sh -c "test -s /root/fleet-authkey && stat -c %a /root/fleet-authkey"'
 
 Check: it prints `600`. The key is now in one file that only root can read, and it is never in a
 command, a log or your answer. If the file is empty, stop and ask the owner to check their key
@@ -118,19 +153,31 @@ file.
 
 ## Step 5. Bring the machine up on the network
 
-    ssh "$SSHUSER@$HOST" 'tailscale up --auth-key=file:/root/fleet-authkey --accept-dns=false; rm -f /root/fleet-authkey'
-    ssh "$SSHUSER@$HOST" 'tailscale ip -4; tailscale status --json | head -c 400'
+    ssh "$SSHUSER@$HOST" '/bin/sh -c "tailscale status >/dev/null 2>&1 || tailscale up --reset --auth-key=file:/root/fleet-authkey --accept-dns=false --timeout=300s; rm -f /root/fleet-authkey"'
+    ssh "$SSHUSER@$HOST" '/bin/sh -c "tailscale ip -4; tailscale status --json | head -c 400"'
 
-Check: the first command prints an address that starts with `100.`, and the status says
-`"BackendState": "Running"`. The key file is gone either way, because the line removes it whether
-`tailscale up` worked or not.
+Check: the second line prints an address that starts with `100.`, and the status says
+`"BackendState": "Running"`. The key file is gone either way, because the first line removes it
+whether `tailscale up` worked or not.
 
 Do not pass a tag on this command. The key carries its own tags; a tag given here that the owner's
 policy file does not allow is refused, and that refusal is not yours to work around.
 
+The first line of step 5 can wait up to 5 minutes for Tailscale to come up: give it that time, as
+in step 3. Its `--reset` removes the settings that an earlier `tailscale up` left on the machine:
+without it, Tailscale refuses each new try. On a machine where Tailscale runs, the line does not
+run `tailscale up`.
+
 If `tailscale up` refuses the key, stop and give the owner the error as it came. A key is used once
 unless they made it reusable, it expires, and a tag it carries must stand in their own tailnet
 policy file. Ask them for a new key file, and run step 4 and step 5 again.
+
+If `tailscale up` ends with `timeout waiting for Tailscale service to enter a Running state`, stop
+and give the owner that error as it came. Usually their network holds each new machine until an
+admin approves it: tell them to approve this machine in their Tailscale admin console. (A key with
+the option "Pre-approved" removes this step for the next machines.) When they say that they
+approved it, run the second line of step 5. If the status does not say Running, stop and tell the
+owner.
 
 ## Step 6. Report
 

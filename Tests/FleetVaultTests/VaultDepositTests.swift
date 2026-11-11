@@ -68,8 +68,8 @@ extension VaultCallerTests {
     /// The helper reads `deposits` to tell the hub that this machine's vault takes a delivered secret.
     @Test func theStatusSaysDepositsOnlyWhenAsked() {
         let recipient = "age1" + String(repeating: "q", count: 58)
-        #expect(VaultBroker.status(agent: "studio", user: "sam", recipient: recipient, backend: .store, deposits: true)["deposits"] as? Bool == true)
-        #expect(VaultBroker.status(agent: "studio", user: "sam", recipient: recipient, backend: .store)["deposits"] == nil)
+        #expect(VaultBroker.status(agent: "studio", user: "sam", recipient: recipient, deposits: true)["deposits"] as? Bool == true)
+        #expect(VaultBroker.status(agent: "studio", user: "sam", recipient: recipient)["deposits"] == nil)
     }
 
     @Test func anAPIKeyIsOpenedComparedAndSavedUnderItsOwnReference() async throws {

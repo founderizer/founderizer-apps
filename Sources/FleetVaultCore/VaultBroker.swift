@@ -4,16 +4,10 @@ import Foundation
 import Security
 
 public actor VaultBroker {
-    public static func validateToken(_ token: Data, region: String) throws {
-        let sdk = try VaultBitwarden(libraryURL: Bundle.main.bundleURL.appendingPathComponent("Contents/Frameworks/libbitwarden_c.dylib"), region: region)
-        try sdk.authenticate(token: token)
-    }
-
     public let configuration: VaultConfiguration
     private let keychain: VaultKeychain
     private let identity: VaultIdentity
     private let hub: VaultHub
-    private let library: URL
     /// The bundled `age` and `age-keygen`, which lock a handover and the fleet's own store.
     private let helpers: URL
     /// The logins that this machine made (`create`), with their journal in the helper's Keychain group.
@@ -33,40 +27,22 @@ public actor VaultBroker {
         helpers = bundle.bundleURL.appendingPathComponent("Contents/Helpers")
         identity = VaultIdentity(keychain: keychain, programs: helpers)
         hub = VaultHub(configuration: configuration, protocolClasses: protocolClasses)
-        library = bundle.bundleURL.appendingPathComponent("Contents/Frameworks/libbitwarden_c.dylib")
         self.calls = calls ?? VaultCalls(store: VaultJournalKeychain(keychain: keychain, item: "calls"))
     }
 
-    /// What this vault needs before it asks the hub anything: this machine's Bitwarden token, or the fleet's own
-    /// store on this machine. A store Mac needs no owner step, as a Linux machine's `store-init` is part of its
-    /// install: the first request makes the store key, the handover key and an empty store, and a key or a store
-    /// that is there is kept, because a new key would leave every saved value unreadable.
+    /// What this vault needs before it asks the hub anything: the fleet's own store on this machine. It needs no
+    /// owner step, as a Linux machine's `store-init` is part of its install: the first request makes the store key,
+    /// the handover key and an empty store, and a key or a store that is there is kept, because a new key would leave
+    /// every saved value unreadable.
     private func ready() throws {
-        switch configuration.backend {
-        case .bitwarden:
-            guard keychain.hasToken else { throw VaultFailure.keychain }
-        case .store:
-            try identity.createIfMissing()
-            _ = try openedStore()
-        }
+        try identity.createIfMissing()
+        _ = try openedStore()
     }
 
-    /// Whether this vault can make a login (`create`): the fleet's own store always can, and a Bitwarden project
-    /// only after the owner's one-time setup of this machine.
-    private var creates: Bool {
-        configuration.backend == .store ? true : VaultCreateSetup.isOn(agent: configuration.agent)
-    }
-
-    /// What opens this broker's logins, made for one request: the fleet's own store, or the Bitwarden project of
-    /// this machine's token (`vault.py`'s `opened_store`). A store that does not open refuses here, before the hub's
-    /// one-use job is spent.
+    /// What opens this broker's logins, made for one request: the fleet's own store (`vault.py`'s `opened_store`). A
+    /// store that does not open refuses here, before the hub's one-use job is spent.
     private func openedStore() throws -> any VaultStore {
-        switch configuration.backend {
-        case .store: return try VaultLocalStore(keychain: keychain, programs: helpers)
-        case .bitwarden:
-            let sdk = try VaultBitwarden(libraryURL: library, region: try configuration.bitwardenRegion())
-            return VaultBitwardenStore(sdk: sdk, token: try keychain.read("token"))
-        }
+        try VaultLocalStore(keychain: keychain, programs: helpers)
     }
 
     public func handle(_ data: Data, uid: uid_t) async -> Data {
@@ -86,8 +62,7 @@ public actor VaultBroker {
             if request.operation == .status {
                 try ready()
                 response = Self.status(agent: configuration.agent, user: NSUserName(), recipient: try identity.recipient(),
-                                       backend: configuration.backend, creates: creates, requests: VaultCurl.isAvailable,
-                                       deposits: configuration.backend == .store, withdrawals: configuration.backend == .store)
+                                       creates: true, requests: VaultCurl.isAvailable, deposits: true, withdrawals: true)
             } else if request.operation == .request {
                 // Local setup first, as for a sign-in: the hub confirms the job once, and that is not used up for nothing.
                 try ready()
@@ -100,16 +75,13 @@ public actor VaultBroker {
                 }
                 return try JSONSerialization.data(withJSONObject: reply) + Data([10])
             } else if request.operation == .create || request.operation == .capture {
-                // The machine's own setup comes first: without it, nothing is asked and nothing is made.
-                guard (try? ready()) != nil, creates else { throw VaultFailure.creates.said(by: configuration.backend) }
-                let reply = await Self.create(request, as: caller, hub: hub, writer: try saves(), address: configuration.hub.absoluteString,
-                                              backend: configuration.backend) {
+                // The machine's own store comes first: without it, nothing is asked and nothing is made.
+                guard (try? ready()) != nil else { throw VaultFailure.creates }
+                let reply = await Self.create(request, as: caller, hub: hub, writer: try saves(), address: configuration.hub.absoluteString) {
                     page, selector in try await VaultBrowser.capture(page: page, selector: selector)
                 }
                 return try JSONSerialization.data(withJSONObject: reply) + Data([10])
             } else if request.operation == .deposit {
-                // Only into the fleet's own store: a Bitwarden project is the owner's, and a delivery never writes there.
-                guard configuration.backend == .store else { throw VaultFailure.depositBitwarden }
                 // A store or a key that does not open refuses here, before the hub gives the copy.
                 try ready()
                 _ = try identity.recipient()
@@ -119,8 +91,6 @@ public actor VaultBroker {
                 }
                 return try JSONSerialization.data(withJSONObject: reply) + Data([10])
             } else if request.operation == .withdraw {
-                // Only from the fleet's own store: a Bitwarden project is the owner's, and a withdrawal never writes there.
-                guard configuration.backend == .store else { throw VaultFailure.withdrawBitwarden }
                 // A store that does not open refuses here, before the hub's job is used.
                 let store = try VaultLocalStore(keychain: keychain, programs: helpers)
                 let reply = await Self.withdraw(request, as: caller, hub: hub) { try store.remove(id: $0, note: VaultLocalStore.delivered) }
@@ -132,7 +102,8 @@ public actor VaultBroker {
                 let reply = await Self.read(as: caller, hub: hub) { try store.secret(id: $0) }
                 return try JSONSerialization.data(withJSONObject: reply) + Data([10])
             } else if request.operation == .probe {
-                // A vault without its token or its store opens nothing, and says so for each login.
+                // A vault whose store does not open opens nothing, and says so for each login with the fixed code of a
+                // vault that has nothing to open with (`no_token`, the same code as the Linux broker's).
                 let store = try? openedStore()
                 let job = try await hub.confirmProbe(request, as: caller)
                 let results = store.map { $0.probe(job: job) }
@@ -223,19 +194,17 @@ public actor VaultBroker {
         request.caller ?? VaultCaller(agent: configuration.agent, key: nil)
     }
 
-    /// `backend` says which store this broker opens: the fleet's own on this machine, or a Bitwarden project, so
-    /// `fleet.py check <agent>` names it. The store's identity does not change; `callers` says that this broker
-    /// accepts job requests that name a caller.
-    /// `creates` and `captures` are there only when this machine's one-time setup for new logins is done: the vault
-    /// can then make a login (`create`) and save a key that a page shows (`capture`). `requests` says that this broker
-    /// sends requests with a saved value (`request`) and ends them (`cancel`); that needs no setup. `deposits` says that
-    /// it takes a key or a login that the owner delivers from Founderizer (`deposit`), and `withdrawals` that it gives
-    /// such a secret back when no agent of the machine holds it any more (`withdraw`), which only the fleet's own store
-    /// does. The hub asks a machine for a withdrawal only when its broker says `withdrawals`.
-    static func status(agent: String, user: String, recipient: String, backend: VaultBackend = .bitwarden,
-                       creates: Bool = false, requests: Bool = false, deposits: Bool = false,
-                       withdrawals: Bool = false) -> [String: Any] {
-        var status: [String: Any] = ["ok": true, "v": 2, "agent": agent, "store": "keychain", "backend": backend.rawValue,
+    /// `backend` says which store this broker opens: always `store`, the fleet's own on this machine. The hub and
+    /// `fleet.py check <agent>` read this word, so it stays in every answer. The store's identity does not change;
+    /// `callers` says that this broker accepts job requests that name a caller.
+    /// `creates` and `captures` say that the vault can make a login (`create`) and save a key that a page shows
+    /// (`capture`). `requests` says that this broker sends requests with a saved value (`request`) and ends them
+    /// (`cancel`). `deposits` says that it takes a key or a login that the owner delivers from Founderizer (`deposit`),
+    /// and `withdrawals` that it gives such a secret back when no agent of the machine holds it any more (`withdraw`).
+    /// The hub asks a machine for a withdrawal only when its broker says `withdrawals`.
+    static func status(agent: String, user: String, recipient: String, creates: Bool = false, requests: Bool = false,
+                       deposits: Bool = false, withdrawals: Bool = false) -> [String: Any] {
+        var status: [String: Any] = ["ok": true, "v": 2, "agent": agent, "store": "keychain", "backend": VaultBackend.store.rawValue,
                                      "user": user, "recipient": recipient, "callers": true]
         if creates { status["creates"] = true; status["captures"] = true }
         if requests { status["requests"] = true }
@@ -246,24 +215,11 @@ public actor VaultBroker {
 
     private func saves() throws -> VaultWriter {
         if let journal { return journal }
-        let keychain = keychain, library = library, helpers = helpers, region = configuration.region
-        let session: @Sendable () throws -> (items: any VaultItems, project: String)
-        switch configuration.backend {
-        case .store:
-            // The fleet's own store makes a login by itself: no library, no project and no one-time setup.
-            session = {
-                guard let store = try? VaultLocalStore(keychain: keychain, programs: helpers) else { throw VaultWriteRefusal.setup }
-                return (store, VaultLocalStore.place)
-            }
-        case .bitwarden:
-            session = {
-                guard let token = (try? keychain.readIfPresent("token")) ?? nil,
-                      let stored = (try? keychain.readIfPresent(VaultCreateSetup.item)) ?? nil,
-                      let project = String(data: stored, encoding: .utf8), let region else { throw VaultWriteRefusal.setup }
-                let sdk = try VaultBitwarden(libraryURL: library, region: region)
-                try sdk.authenticate(token: token)
-                return (sdk, project)
-            }
+        let keychain = keychain, helpers = helpers
+        // The fleet's own store makes a login by itself: no library, no project and no one-time setup.
+        let session: @Sendable () throws -> (items: any VaultItems, project: String) = {
+            guard let store = try? VaultLocalStore(keychain: keychain, programs: helpers) else { throw VaultWriteRefusal.setup }
+            return (store, VaultLocalStore.place)
         }
         let made = try VaultWriter(store: VaultJournalKeychain(keychain: keychain), limit: 1_048_576, session: session)
         journal = made
@@ -278,10 +234,9 @@ public actor VaultBroker {
     /// The answer is the login's reference, or one fixed sentence. `unknown` says that the item can exist: the same
     /// request again only looks for it, or finishes the hub's steps, and never sends a second create call.
     static func create(_ request: VaultRequest, as caller: VaultCaller, hub: VaultHub, writer: VaultWriter, address: String,
-                       backend: VaultBackend = .bitwarden,
                        read: @Sendable (String, String) async throws -> String = { _, _ in throw VaultFailure.browser }) async -> [String: Any] {
-        func refused(_ failure: VaultFailure) -> [String: Any] { ["ok": false, "v": 2, "error": failure.said(by: backend).rawValue] }
-        func unknown(_ failure: VaultFailure) -> [String: Any] { ["ok": false, "v": 2, "unknown": true, "error": failure.said(by: backend).rawValue] }
+        func refused(_ failure: VaultFailure) -> [String: Any] { ["ok": false, "v": 2, "error": failure.rawValue] }
+        func unknown(_ failure: VaultFailure) -> [String: Any] { ["ok": false, "v": 2, "unknown": true, "error": failure.rawValue] }
         let job: VaultCreateJob
         do { job = try await hub.confirmCreate(request, as: caller) } catch { return refused((error as? VaultFailure) ?? .hub) }
         let made = job.creation
@@ -310,7 +265,7 @@ public actor VaultBroker {
             }
         } catch VaultWriteRefusal.check { return unknown(.saveUnknown) }
         catch VaultWriteRefusal.setup { return refused(.creates) }
-        catch let refusal as VaultWriteRefusal { return ["ok": false, "v": 2, "error": refusal.said(by: backend)] }
+        catch let refusal as VaultWriteRefusal { return ["ok": false, "v": 2, "error": refusal.rawValue] }
         catch { return refused((error as? VaultFailure) ?? .dependency) }
         switch record.state {
         case .failed, .discarded: return refused(.saveRefused)
@@ -475,8 +430,8 @@ public actor VaultBroker {
         return config
     }
 
-    /// The bytes of the one configuration file, after the checks of its whole path. The worker broker and the writer
-    /// of the owner's Mac read it; each takes only its own form.
+    /// The bytes of the one configuration file, after the checks of its whole path. The worker broker reads it, and on
+    /// the owner's Mac it only says that this Mac is the owner's (`VaultOldItems.isOwner`).
     static func protectedConfiguration() throws -> Data {
         let path = "/Library/Application Support/Fleet Vault/config.json"
         // Check the entire path: a root-owned file in an agent-writable folder is not protected.
@@ -624,27 +579,4 @@ public final class VaultSocket: @unchecked Sendable {
             finished.wait()
         }
     }
-}
-
-/// A worker Mac saves a new login only after this one-time setup by the owner: the ID of the Bitwarden project that
-/// gets the new items. The machine's own token must have write access to that project in Bitwarden. Without this
-/// item, `create` is refused and `status` gives no `creates`.
-public enum VaultCreateSetup {
-    static let item = "write-project"
-
-    public static func isOn(agent: String) -> Bool { ((try? VaultKeychain(agent: agent).readIfPresent(item)) ?? nil) != nil }
-
-    /// Checks that the machine's token reaches the project, then keeps the project's ID. Bitwarden shows the write
-    /// permission only at a write. Called only after owner authentication in Fleet Vault's own window.
-    public static func turnOn(agent: String, project: String, region: String, bundle: Bundle = .main) throws {
-        let project = project.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard UUID(uuidString: project) != nil else { throw VaultFailure.provider }
-        let keychain = VaultKeychain(agent: agent)
-        let sdk = try VaultBitwarden(libraryURL: bundle.bundleURL.appendingPathComponent("Contents/Frameworks/libbitwarden_c.dylib"), region: region)
-        try sdk.authenticate(token: keychain.read("token"))
-        _ = try sdk.organization(ofProject: project)
-        try keychain.save(Data(project.utf8), item: item)
-    }
-
-    public static func turnOff(agent: String) throws { try VaultKeychain(agent: agent).remove(item) }
 }

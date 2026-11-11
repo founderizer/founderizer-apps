@@ -379,6 +379,8 @@ public enum Servers {
         // An install or a deleted agent's removal: one job at a time.
         case "busy": return "It works on an agent now."
         case "fix_holder": return "An agent there has full control of it."
+        // The agent there holds servers through the door, which knows it by its server's address.
+        case "door_caller": return "The agent there manages your servers, so it runs alone."
         default: return "It cannot take an agent now."
         }
     }

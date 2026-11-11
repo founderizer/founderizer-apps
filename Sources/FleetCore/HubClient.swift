@@ -653,7 +653,7 @@ public final class HubClient: Sendable {
         return receipt
     }
 
-    /// `POST /ui/team/logins` with `delete`: one login reference leaves the catalog. Its value stays in Bitwarden.
+    /// `POST /ui/team/logins` with `delete`: one login reference leaves the catalog. Its value stays in the vaults.
     public func removeLogin(hub: URL, database: String, client: String, requestID: UUID = UUID(), sha256: String,
                             login: String) async throws -> SecretReceipt {
         let body = try SecretCommand.removal(requestID: requestID, database: database, sha256: sha256, login: login)

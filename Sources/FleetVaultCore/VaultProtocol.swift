@@ -5,11 +5,13 @@ import CryptoKit
 public enum VaultFailure: String, Error, Sendable, CaseIterable {
     case request = "The vault request is not supported."
     case configuration = "The vault configuration is not valid or is not protected."
+    // A configuration of the store that this vault opened before the fleet's own store was its only store: it names a
+    // `region`. The broker does not start on it, and `install.py` says how to replace it.
+    case regionConfiguration = "The vault configuration names a region. This vault opens only the fleet's own store. Install the vault again."
     case keychain = "The vault Keychain item is not available. Open Founderizer Vault to set it up."
     case dependency = "The signed vault programs are not available."
     case hub = "The hub did not confirm this vault job."
     case protection = "The login could not be protected in messages, so it was not used."
-    case provider = "Bitwarden refused this login. Check the token and its access."
     case login = "The vault login is not valid."
     // A model provider's own site (`VaultProviderSites`): this vault uses and makes no login there, whoever saved it.
     case modelProvider = "This login is for a model provider's own site, and Fleet uses and makes none: the owner signs in to their own account in their own session."
@@ -22,21 +24,17 @@ public enum VaultFailure: String, Error, Sendable, CaseIterable {
     // Shared broker callers (protocol 2 `callers`): the exact answers of the contract, the same as the Linux broker's.
     case caller = "the caller fields are not valid"
     case key = "the hub did not accept this agent's key"
-    // `create`: a login that the vault makes for an agent's task. One fixed sentence each, without a value.
-    case creates = "This machine's vault is not set up to save logins."
-    case saveRefused = "Bitwarden refused this save and made nothing."
-    case saveUnknown = "The vault could not confirm that Bitwarden saved the login. It is not sent again."
+    // `create`: a login that the vault makes for an agent's task. One fixed sentence each, without a value, in the
+    // words of the fleet's own store. The two outcomes of a save are the Linux broker's words for its store.
+    case creates = "This machine's vault has no store of its own yet."
+    case saveRefused = "The vault store refused this save and made nothing."
+    case saveUnknown = "The vault could not confirm that its store saved the login. It is not sent again."
     case saveUnregistered = "The login is saved, but the hub did not register it."
     case notMadeHere = "This vault did not make this login for that request, so it does not use it."
-    // The fleet's own store on this Mac, in its own words: a broker opens one store or the other, so no sentence of
-    // one store is ever said about the other (`vault.py`'s `says()`).
+    // The fleet's own store on this Mac.
     case store = "This Mac's vault store could not be opened. Nothing was changed."
     case storeMissing = "This machine's vault store has no such login."
     case storeBusy = "The vault store is in use, so nothing was saved."
-    case storeCreates = "This machine's vault has no store of its own yet."
-    case storeRefused = "The vault store refused this save and made nothing."
-    case storeUnknown = "The vault could not confirm that its store saved the login. It is not sent again."
-    case storeNoWrite = "The vault store could not be opened for a save. Nothing was made."
     // `capture`: a key that the vault reads from one field of a Chrome page.
     case captureTab = "No Chrome tab shows that address."
     case captureTabs = "More than one Chrome tab shows that address. Close all but one."
@@ -54,14 +52,12 @@ public enum VaultFailure: String, Error, Sendable, CaseIterable {
     // `cancel`: the end of a task attempt's requests, with the proof that their processes are gone.
     case cancelUnproved = "The vault cannot prove that its request ended."
     // `deposit`: a key or a login that the owner typed into Founderizer, sealed there to this machine's vault key.
-    case depositBitwarden = "This machine's vault opens a Bitwarden project, so it takes no delivered secret."
     case depositCopy = "The delivered copy cannot be opened with this machine's vault key."
     case depositItem = "The delivered copy holds no valid key or login."
     case depositValue = "The hub did not confirm that this copy holds the value the owner saved, so it was not kept."
     case storeOther = "This machine's vault store holds another value under this reference, so nothing was saved."
     // `withdraw`: a delivered secret leaves this machine's store when no agent of the machine holds it any more. The
     // same sentences as the Linux broker's.
-    case withdrawBitwarden = "This machine's vault opens a Bitwarden project, so it holds no delivered secret."
     case withdrawNotDelivered = "This login was not delivered here, so it is not removed."
 }
 
@@ -255,7 +251,7 @@ struct VaultCreateJob: Equatable, Sendable {
     let id: Int
     let creation: VaultCreation
     /// The note of the item, by which the vault finds it again: `fleet-create:<agent>:<request_id>`. It is the one
-    /// form of a login that a worker's vault makes; the owner's Add secret has its own form.
+    /// form of a login that a worker's vault makes.
     var mark: String { Self.mark(agent: creation.agent, requestID: creation.requestID) }
 
     static func mark(agent: String, requestID: String) -> String { "fleet-create:" + agent + ":" + requestID }
@@ -440,11 +436,10 @@ struct VaultProbeResult: Encodable, Equatable, Sendable {
     }
 }
 
-/// Which store a vault of this Mac opens: the fleet's own encrypted file on this machine, or a Bitwarden Secrets
-/// Manager project. A configuration names one of the two and never both, because then no answer would say which one
-/// holds a login. `status` answers this word, so `fleet.py check <agent>` says which store the broker opens.
+/// Which store a vault of this Mac opens: the fleet's own encrypted file on this machine, its only store. `status`
+/// answers this word as `backend`, so the hub and `fleet.py check <agent>` say which store the broker opens.
 public enum VaultBackend: String, Codable, Sendable {
-    case store, bitwarden
+    case store
     /// The one word that a configuration of the fleet's own store carries: `"store": "fleet"`.
     public static let fleetStore = "fleet"
 }
@@ -452,29 +447,24 @@ public enum VaultBackend: String, Codable, Sendable {
 public struct VaultConfiguration: Codable, Sendable {
     public let agent: String
     public let hub: URL
-    /// A Bitwarden project's region, or nil when this vault opens the fleet's own store.
-    public let region: String?
-    /// `"fleet"` when this vault opens the fleet's own store on this machine, else nil.
-    public let store: String?
+    /// Always `"fleet"`: this vault opens the fleet's own store on this machine. A configuration names one store,
+    /// never two.
+    public let store: String
     public let socket: String
     public let workerUID: UInt32
-    enum CodingKeys: String, CodingKey { case agent, hub, region, store, socket; case workerUID = "worker_uid" }
+    enum CodingKeys: String, CodingKey { case agent, hub, store, socket; case workerUID = "worker_uid" }
 
-    public var backend: VaultBackend { store == nil ? .bitwarden : .store }
-    /// The Bitwarden region of a vault that opens a Bitwarden project. A vault of the fleet's own store has none and
-    /// reaches no Bitwarden, so asking for it is a mistake of the caller and not a refusal of the owner's.
-    public func bitwardenRegion() throws -> String {
-        guard let region else { throw VaultFailure.configuration }
-        return region
-    }
-
+    /// The configuration that `install.py` writes for a worker Mac: its five keys, and no other key.
     public init(data: Data) throws {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              ["region", "store"].contains(where: { Set(object.keys) == ["agent", "hub", $0, "socket", "worker_uid"] }),
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw VaultFailure.configuration }
+        // A worker's configuration of the store that this vault opened before (a `region`, with or without other keys)
+        // has its own refusal, so the owner reads what to do and not only that the file is not valid. The owner's own
+        // Mac (`role`) runs no broker.
+        guard object["region"] == nil || object["role"] != nil else { throw VaultFailure.regionConfiguration }
+        guard Set(object.keys) == ["agent", "hub", "store", "socket", "worker_uid"],
               let config = try? JSONDecoder().decode(Self.self, from: data),
               config.agent.range(of: "^[a-z][a-z0-9-]{1,30}$", options: .regularExpression) != nil,
-              config.region == nil || ["eu", "us"].contains(config.region!),
-              config.store == nil || config.store == VaultBackend.fleetStore,
+              config.store == VaultBackend.fleetStore,
               let parts = URLComponents(url: config.hub, resolvingAgainstBaseURL: false),
               let host = parts.host, !host.isEmpty,
               parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil,

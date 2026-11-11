@@ -7,6 +7,11 @@ struct MessageText: View, Equatable {
     let text: String
     /// An agent's text in a chat or a task thread: the chat's measures (`ChatStyle`). Else the size of a form.
     var chat = false
+    /// Under the title of a step, where everything takes the step's one size (`SetupMetrics.text`): the words of a
+    /// request at hand on Needs you (`NeedStep`).
+    var step = false
+    /// Code in a line of a step's words: a little under the words' 15 points, as the chat's code is under its 14.
+    private static let stepCode = Font.system(size: 13.5, design: .monospaced)
 
     private struct Block {
         let kind: MessageBlock.Kind
@@ -31,31 +36,31 @@ struct MessageText: View, Equatable {
     }()
     private var blocks: [Block] {
         // The inline code of the chat is larger, so the two forms of one text have their own entries.
-        let key = ((chat ? "chat\u{0}" : "form\u{0}") + text) as NSString
+        let key = ((step ? "step\u{0}" : chat ? "chat\u{0}" : "form\u{0}") + text) as NSString
         if let cached = Self.cache.object(forKey: key) { return cached.blocks }
-        let parsed = Self.parse(text, chat: chat)
+        let parsed = Self.parse(text, code: step ? Self.stepCode : chat ? ChatStyle.code : FormMetrics.code)
         Self.cache.setObject(Parsed(parsed), forKey: key, cost: text.utf8.count * 4)
         return parsed
     }
     /// The blocks of a text by the rules both apps share (`MessageBlock`, FleetCore), with their inline marks drawn in
     /// this app's fonts.
-    private static func parse(_ text: String, chat: Bool) -> [Block] {
+    private static func parse(_ text: String, code: Font) -> [Block] {
         MessageBlock.parse(text).map { block in
             var drawn = Block(kind: block.kind, text: block.text, marker: block.marker, level: block.level)
             switch block.kind {
             case .code, .rule: break
-            case .table: drawn.cells = block.cells.map { $0.map { inline($0, chat: chat) } }
-            default: drawn.formatted = inline(block.text, chat: chat)
+            case .table: drawn.cells = block.cells.map { $0.map { inline($0, code: code) } }
+            default: drawn.formatted = inline(block.text, code: code)
             }
             return drawn
         }
     }
 
-    private static func inline(_ value: String, chat: Bool) -> AttributedString {
+    private static func inline(_ value: String, code: Font) -> AttributedString {
         var result = MessageBlock.inline(value)
         for run in result.runs {
             if run.inlinePresentationIntent?.contains(.code) == true {
-                result[run.range].font = chat ? ChatStyle.code : FormMetrics.code
+                result[run.range].font = code
                 result[run.range].backgroundColor = FleetStyle.bubble
             }
         }
@@ -71,7 +76,9 @@ struct MessageText: View, Equatable {
                 case .paragraph:
                     Text(block.formatted).lineSpacing(lines)
                 case .heading:
-                    Text(block.formatted).font(chat ? ChatStyle.heading : FormMetrics.title).padding(.top, chat ? 0 : 3)
+                    Text(block.formatted)
+                        .font(step ? Font.system(size: SetupMetrics.text, weight: .semibold) : chat ? ChatStyle.heading : FormMetrics.title)
+                        .padding(.top, chat ? 0 : 3)
                 case .item:
                     // An item under another starts its mark where that item's words start: the mark's 12 and the 9
                     // after it, for each level.
@@ -103,7 +110,7 @@ struct MessageText: View, Equatable {
                 .padding(.top, !chat || index == 0 ? 0 :
                             block.kind == .item && blocks[index - 1].kind == .item ? ChatStyle.itemSpacing : ChatStyle.blockSpacing)
             }
-        }.font(chat ? ChatStyle.font : FleetStyle.body).textSelection(.enabled)
+        }.font(step ? SetupMetrics.textFont : chat ? ChatStyle.font : FleetStyle.body).textSelection(.enabled)
             // A link's words in the link colour, which reads 4.5:1 and more (fix round 2): the accent drew them 3.4:1.
             .tint(FleetStyle.link)
             .fixedSize(horizontal: false, vertical: true)

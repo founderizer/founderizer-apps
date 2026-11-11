@@ -121,26 +121,27 @@ struct SetupCheck: View {
         + "check, to one of your agents."
 
     /// The reason of a `login` check item as a fact and, where the owner can act, the next step. The reasons are the
-    /// vault's fixed probe codes (UI-API.md, "Login probe"). `no_access` and `not_found` are answers of Bitwarden to the
-    /// vault's own token. A login that the vault did not test is `not probed`: it reads as not tested, never as
-    /// refused. A reason that Fleet does not know gets a neutral sentence. No sentence says who may use the login.
+    /// vault's fixed probe codes (UI-API.md, "Login probe"). `not_found` says that the vault's store has no item with
+    /// this reference, and `no_token` that the vault has no store that opens. `no_access` comes only from an older
+    /// vault, which opened another store. A login that the vault did not test is `not probed`: it reads as not tested,
+    /// never as refused. A reason that Fleet does not know gets a neutral sentence. No sentence says who may use the
+    /// login.
     static func loginProbeWords(state: String, reason: String) -> (fact: String, more: String?) {
         switch (state, reason) {
         case ("ok", _):
             return ("This server's vault opened this login in the check.", nil)
         case ("failed", "no_access"):
-            return ("Bitwarden refused this server's vault token for this login.",
-                    "In Bitwarden, check that the token is valid and can read the login's project. Then check the server again.")
+            return ("This server's vault was not allowed to open this login.", "Check the server again.")
         case ("failed", "not_found"):
-            return ("Bitwarden gave this server's vault no login with this reference.",
-                    "Check the reference in the agent's logins, and that the vault's token can read the login's project.")
+            return ("This server's vault has no login with this reference.",
+                    "Check the reference in the agent's logins. Then check the server again.")
         case ("failed", "bad_format"):
             return ("The item is not a login that Founderizer can use. A login has a user name and a password.",
-                    "Correct the item in Bitwarden, or use another login.")
+                    "Use another login.")
         case ("failed", "no_token"):
-            return ("This server's vault has no token.", "Give the vault of that server its token. Then check the server again.")
+            return ("This server's vault has no store that opens.", "Check the vault of that server. Then check the server again.")
         case ("failed", "timeout"):
-            return ("Bitwarden gave this server's vault no answer in time.", "Check the server again.")
+            return ("This server's vault did not finish the check in time.", "Check the server again.")
         case ("failed", "error"):
             return ("This server's vault could not open this login. It gave no more exact reason.", "Check the server again.")
         case (_, "not probed"):

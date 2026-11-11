@@ -116,6 +116,15 @@ struct PersonAgentsCard: View {
     /// The card's heading, or nil where the page's own title already says it.
     var heading: String? = "Can talk to"
     var retry: () -> Void = {}
+    /// **All access, or only these, on each ticked row where the hub gives one** (feature `person_scope`; the owner's
+    /// yes of 11 November 2026 to its mockup): what the person may use of that agent, by the agent's name. A row
+    /// without one has no select.
+    var access: [String: PersonScope] = [:]
+    /// The save of each row's select, by the agent's name.
+    var accessSaving: [String: SaveState] = [:]
+    /// All access (true) or Only these… (false), chosen on an agent's row.
+    var chooseAccess: (String, Bool) -> Void = { _, _ in }
+    var retryAccess: (String) -> Void = { _ in }
 
     var body: some View {
         let shared = sharedReason
@@ -170,13 +179,30 @@ struct PersonAgentsCard: View {
         // the sidebar and the item cards draw an agent: the names begin 50 points in.
         return FormRow(People.agentWord(agent.name), mark: AgentGlyph(name: agent.name, size: GlyphSize.inline),
                        warning: why == shared ? nil : why) {
-            Toggle("", isOn: Binding(get: { picked }, set: { on in
-                var names = chosen.filter { $0 != agent.name }
-                if on { names.append(agent.name) }
-                chosen = names.sorted()
-            })).labelsHidden().toggleStyle(FleetCheckboxStyle()).disabled(disabled)
-                .accessibilityIdentifier("person-agent-\(agent.name)")
+            HStack(spacing: 8) {
+                if picked, let scope = access[agent.name] { accessSelect(agent.name, scope: scope) }
+                Toggle("", isOn: Binding(get: { picked }, set: { on in
+                    var names = chosen.filter { $0 != agent.name }
+                    if on { names.append(agent.name) }
+                    chosen = names.sorted()
+                })).labelsHidden().toggleStyle(FleetCheckboxStyle()).disabled(disabled)
+                    .accessibilityIdentifier("person-agent-\(agent.name)")
+            }
         }
+    }
+
+    /// **The select before the checkbox**: All access, or Only these…, which shows the list in a few words while one
+    /// is set ("abc-crm"). All access writes at once; Only these… opens the page of the list. It stands also while the
+    /// agent cannot chat, so that he can always set All again.
+    @ViewBuilder private func accessSelect(_ agent: String, scope: PersonScope) -> some View {
+        SaveMark(state: accessSaving[agent], retry: { retryAccess(agent) })
+        FleetSelect("Access with \(People.agentWord(agent))",
+                    options: [FleetOption(true, "All access"), FleetOption(false, "Only these…")],
+                    selection: scope.isAll) { all in chooseAccess(agent, all) } label: {
+            FleetSelectLabel(title: scope.isAll ? "All access" : scope.short ?? "Only these…")
+        }
+        .disabled(disabled)
+        .accessibilityIdentifier("person-access-\(agent)")
     }
 }
 
@@ -246,15 +272,5 @@ private struct DeliveryMark: View {
 
     private var checks: some View {
         HStack(spacing: -5) { Image(systemName: "checkmark"); Image(systemName: "checkmark") }
-    }
-}
-
-/// The back link of a sub-page, as every other sub-page has it.
-struct BackLink: View {
-    let title: String
-    let back: () -> Void
-
-    var body: some View {
-        FleetBack(title, action: back).accessibilityIdentifier("back-\(title.lowercased())")
     }
 }

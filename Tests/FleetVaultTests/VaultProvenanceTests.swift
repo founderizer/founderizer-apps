@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import FleetVaultCore
 
-/// Sealed copies: provenance (owner API 1.10). Fake data only: no Keychain, no Bitwarden, no hub.
+/// Sealed copies: provenance (owner API 1.10). Fake data only: no Keychain, no store and no hub.
 struct VaultProvenanceTests {
     private let salts = ["password": "0123456789abcdef0123456789abcdef", "totp": "fedcba9876543210fedcba9876543210"]
     private let source = "bws://12345678-1234-1234-1234-123456789012"

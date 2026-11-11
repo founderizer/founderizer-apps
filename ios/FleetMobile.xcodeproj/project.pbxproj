@@ -39,6 +39,25 @@
 		AC0000000000000000001A /* MobileKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000001A /* MobileKeyTests.swift */; };
 		AC0000000000000000001B /* MobileReadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000001B /* MobileReadTests.swift */; };
 		AC0000000000000000001C /* MobileAttachmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000001C /* MobileAttachmentTests.swift */; };
+		AC00000000000000000060 /* SharedPlace.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000060 /* SharedPlace.swift */; };
+		AC00000000000000000061 /* HubBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000061 /* HubBanner.swift */; };
+		AC000000000000000000A0 /* SampleFleet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000A0 /* SampleFleet.swift */; };
+		AC000000000000000000A1 /* SampleFleetData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000A1 /* SampleFleetData.swift */; };
+		AC000000000000000000A2 /* SampleFleetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000A2 /* SampleFleetTests.swift */; };
+		AC00000000000000000070 /* Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA00000000000000000070 /* Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AC00000000000000000071 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000070 /* ShareViewController.swift */; };
+		AC00000000000000000072 /* ShareModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000071 /* ShareModel.swift */; };
+		AC00000000000000000073 /* SharePages.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000072 /* SharePages.swift */; };
+		AC00000000000000000074 /* SharedPlace.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000060 /* SharedPlace.swift */; };
+		AC00000000000000000075 /* MobileStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000003 /* MobileStyle.swift */; };
+		AC00000000000000000076 /* AgentMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000010 /* AgentMark.swift */; };
+		AC00000000000000000077 /* MobileAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000C /* MobileAPI.swift */; };
+		AC00000000000000000078 /* MobileClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000D /* MobileClient.swift */; };
+		AC00000000000000000079 /* DeviceKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000004 /* DeviceKey.swift */; };
+		AC0000000000000000007A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000030 /* Assets.xcassets */; };
+		AC0000000000000000007B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000075 /* PrivacyInfo.xcprivacy */; };
+		AA0000000000000000007E /* FleetCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000007C /* FleetCore */; };
+		AA0000000000000000007F /* FleetMark in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000007D /* FleetMark */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -50,6 +69,7 @@
 			files = (
 				AC00000000000000000041 /* NeedActions.appex in Embed Foundation Extensions */,
 				AC00000000000000000051 /* NeedSeal.appex in Embed Foundation Extensions */,
+				AC00000000000000000070 /* Share.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -94,9 +114,30 @@
 		AB0000000000000000001A /* MobileKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileKeyTests.swift; sourceTree = "<group>"; };
 		AB0000000000000000001B /* MobileReadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileReadTests.swift; sourceTree = "<group>"; };
 		AB0000000000000000001C /* MobileAttachmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAttachmentTests.swift; sourceTree = "<group>"; };
+		AB00000000000000000060 /* SharedPlace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPlace.swift; sourceTree = "<group>"; };
+		AB00000000000000000061 /* HubBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HubBanner.swift; sourceTree = "<group>"; };
+		AB000000000000000000A0 /* SampleFleet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleFleet.swift; sourceTree = "<group>"; };
+		AB000000000000000000A1 /* SampleFleetData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleFleetData.swift; sourceTree = "<group>"; };
+		AB000000000000000000A2 /* SampleFleetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleFleetTests.swift; sourceTree = "<group>"; };
+		AA00000000000000000070 /* Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Share.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB00000000000000000070 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		AB00000000000000000071 /* ShareModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareModel.swift; sourceTree = "<group>"; };
+		AB00000000000000000072 /* SharePages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePages.swift; sourceTree = "<group>"; };
+		AB00000000000000000073 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AB00000000000000000074 /* Share.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Share.entitlements; sourceTree = "<group>"; };
+		AB00000000000000000075 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AA00000000000000000078 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000007E /* FleetCore in Frameworks */,
+				AA0000000000000000007F /* FleetMark in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -131,12 +172,26 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		AA00000000000000000071 /* Share */ = {
+			isa = PBXGroup;
+			children = (
+				AB00000000000000000070 /* ShareViewController.swift */,
+				AB00000000000000000071 /* ShareModel.swift */,
+				AB00000000000000000072 /* SharePages.swift */,
+				AB00000000000000000073 /* Info.plist */,
+				AB00000000000000000074 /* Share.entitlements */,
+				AB00000000000000000075 /* PrivacyInfo.xcprivacy */,
+			);
+			path = Share;
+			sourceTree = "<group>";
+		};
 		AA00000000000000000002 = {
 			isa = PBXGroup;
 			children = (
 				AA00000000000000000004 /* Sources */,
 				AA00000000000000000031 /* NeedActions */,
 				AA00000000000000000051 /* NeedSeal */,
+				AA00000000000000000071 /* Share */,
 				AA00000000000000000028 /* Tests */,
 				AB00000000000000000030 /* Assets.xcassets */,
 				AB00000000000000000031 /* PrivacyInfo.xcprivacy */,
@@ -154,6 +209,7 @@
 				AA00000000000000000021 /* FleetMobileTests.xctest */,
 				AA00000000000000000030 /* NeedActions.appex */,
 				AA00000000000000000050 /* NeedSeal.appex */,
+				AA00000000000000000070 /* Share.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -180,6 +236,10 @@
 				AB00000000000000000011 /* PushNotifications.swift */,
 				AB00000000000000000012 /* ChatAppMark.swift */,
 				AB00000000000000000053 /* SealedPing.swift */,
+				AB00000000000000000060 /* SharedPlace.swift */,
+				AB00000000000000000061 /* HubBanner.swift */,
+				AB000000000000000000A0 /* SampleFleet.swift */,
+				AB000000000000000000A1 /* SampleFleetData.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -210,6 +270,7 @@
 				AB0000000000000000001A /* MobileKeyTests.swift */,
 				AB0000000000000000001B /* MobileReadTests.swift */,
 				AB0000000000000000001C /* MobileAttachmentTests.swift */,
+				AB000000000000000000A2 /* SampleFleetTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -217,6 +278,27 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		AA00000000000000000073 /* Share */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA00000000000000000074 /* Build configuration list for PBXNativeTarget "Share" */;
+			buildPhases = (
+				AA00000000000000000077 /* Sources */,
+				AA00000000000000000078 /* Frameworks */,
+				AA00000000000000000079 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Share;
+			packageProductDependencies = (
+				AA0000000000000000007C /* FleetCore */,
+				AA0000000000000000007D /* FleetMark */,
+			);
+			productName = Share;
+			productReference = AA00000000000000000070 /* Share.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		AA00000000000000000005 /* FleetMobile */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = AA00000000000000000007 /* Build configuration list for PBXNativeTarget "FleetMobile" */;
@@ -231,6 +313,7 @@
 			dependencies = (
 				AA00000000000000000036 /* PBXTargetDependency */,
 				AA00000000000000000056 /* PBXTargetDependency */,
+				AA00000000000000000076 /* PBXTargetDependency */,
 			);
 			name = FleetMobile;
 			packageProductDependencies = (
@@ -313,6 +396,9 @@
 					AA00000000000000000053 = {
 						CreatedOnToolsVersion = 27.2;
 					};
+					AA00000000000000000073 = {
+						CreatedOnToolsVersion = 27.2;
+					};
 				};
 			};
 			buildConfigurationList = AA00000000000000000006 /* Build configuration list for PBXProject "FleetMobile" */;
@@ -335,11 +421,21 @@
 				AA00000000000000000020 /* FleetMobileTests */,
 				AA00000000000000000033 /* NeedActions */,
 				AA00000000000000000053 /* NeedSeal */,
+				AA00000000000000000073 /* Share */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		AA00000000000000000079 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC0000000000000000007A /* Assets.xcassets in Resources */,
+				AC0000000000000000007B /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000E /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -352,6 +448,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXContainerItemProxy section */
+		AA00000000000000000075 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA00000000000000000073;
+			remoteInfo = Share;
+		};
 		AA00000000000000000026 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AA00000000000000000001 /* Project object */;
@@ -376,6 +479,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXTargetDependency section */
+		AA00000000000000000076 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA00000000000000000073 /* Share */;
+			targetProxy = AA00000000000000000075 /* PBXContainerItemProxy */;
+		};
 		AA00000000000000000027 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = AA00000000000000000005 /* FleetMobile */;
@@ -394,6 +502,22 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AA00000000000000000077 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC00000000000000000071 /* ShareViewController.swift in Sources */,
+				AC00000000000000000072 /* ShareModel.swift in Sources */,
+				AC00000000000000000073 /* SharePages.swift in Sources */,
+				AC00000000000000000074 /* SharedPlace.swift in Sources */,
+				AC00000000000000000075 /* MobileStyle.swift in Sources */,
+				AC00000000000000000076 /* AgentMark.swift in Sources */,
+				AC00000000000000000077 /* MobileAPI.swift in Sources */,
+				AC00000000000000000078 /* MobileClient.swift in Sources */,
+				AC00000000000000000079 /* DeviceKey.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -417,6 +541,10 @@
 				AC00000000000000000011 /* PushNotifications.swift in Sources */,
 				AC00000000000000000012 /* ChatAppMark.swift in Sources */,
 				AC00000000000000000052 /* SealedPing.swift in Sources */,
+				AC00000000000000000060 /* SharedPlace.swift in Sources */,
+				AC00000000000000000061 /* HubBanner.swift in Sources */,
+				AC000000000000000000A0 /* SampleFleet.swift in Sources */,
+				AC000000000000000000A1 /* SampleFleetData.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -444,12 +572,63 @@
 				AC0000000000000000001A /* MobileKeyTests.swift in Sources */,
 				AC0000000000000000001B /* MobileReadTests.swift in Sources */,
 				AC0000000000000000001C /* MobileAttachmentTests.swift in Sources */,
+				AC000000000000000000A2 /* SampleFleetTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		AA0000000000000000007A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Share/Share.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 19;
+				DEVELOPMENT_TEAM = 6EBZ756H9Q;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Share/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Founderizer;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		AA0000000000000000007B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Share/Share.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 19;
+				DEVELOPMENT_TEAM = 6EBZ756H9Q;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Share/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Founderizer;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 		AA00000000000000000008 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -506,7 +685,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = FleetMobile.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
@@ -514,7 +693,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
@@ -530,7 +709,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = FleetMobile.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
@@ -538,7 +717,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
@@ -552,10 +731,10 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TARGETED_DEVICE_FAMILY = 1;
@@ -568,10 +747,10 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TARGETED_DEVICE_FAMILY = 1;
@@ -583,7 +762,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NeedActions/Info.plist;
@@ -593,7 +772,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.needs;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -606,7 +785,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NeedActions/Info.plist;
@@ -616,7 +795,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.needs;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -630,7 +809,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = NeedSeal/NeedSeal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NeedSeal/Info.plist;
@@ -640,7 +819,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.seal;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -654,7 +833,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = NeedSeal/NeedSeal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NeedSeal/Info.plist;
@@ -664,7 +843,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.seal;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -676,6 +855,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		AA00000000000000000074 /* Build configuration list for PBXNativeTarget "Share" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000007A /* Debug */,
+				AA0000000000000000007B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		AA00000000000000000006 /* Build configuration list for PBXProject "FleetMobile" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -731,6 +919,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AA0000000000000000007C /* FleetCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FleetCore;
+		};
+		AA0000000000000000007D /* FleetMark */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FleetMark;
+		};
 		AA00000000000000000013 /* FleetCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = FleetCore;

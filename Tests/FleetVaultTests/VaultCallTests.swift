@@ -17,7 +17,7 @@ extension VaultCallerTests {
     private static var callConfiguration: VaultConfiguration {
         get throws {
             try VaultConfiguration(data: JSONSerialization.data(withJSONObject: [
-                "agent": "studio", "hub": "http://100.64.0.1:9", "region": "eu", "worker_uid": 501,
+                "agent": "studio", "hub": "http://100.64.0.1:9", "store": "fleet", "worker_uid": 501,
                 "socket": NSHomeDirectory() + "/Library/Application Support/AgentFleet/vault.sock"]))
         }
     }
@@ -520,7 +520,7 @@ extension VaultCallerTests {
         #expect(await VaultBroker.refusal(ofMadeUse: try job(login), operation: .handover, caller: Self.studio, writer: writer) == .notMadeHere)
     }
 
-    /// The two operations together: the vault makes a login (the stand-in for Bitwarden keeps the item), and a request
+    /// The two operations together: the vault makes a login (the stand-in store keeps the item), and a request
     /// of the same task then sends that item's value to the service. The refusals of a made login have their own test
     /// above; this one has the one case that shows the chain sends nothing after a refusal.
     @Test func aLoginThatTheVaultMadeGoesInARequestOfItsTaskWithItsExactValue() async throws {

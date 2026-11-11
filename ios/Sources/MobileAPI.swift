@@ -47,6 +47,28 @@ struct MobileSnapshot: Decodable, Sendable {
     }
 }
 
+extension MobileSnapshot {
+    /// This hub takes a message to this agent: the route is there and the agent is active. The app's chat and the share
+    /// extension ask it alike, with the features of the read they hold.
+    func canChat(with name: String, features: Set<String>) -> Bool {
+        guard let agent = agents.first(where: { $0.name == name }) else { return false }
+        return (name == "manager" || features.contains("direct_chat")) && agent.direct_chat != false && agent.active != false
+    }
+
+    /// Why this chat takes no message, in the owner's words, or nil when it takes one.
+    func chatUnavailableWords(_ name: String, features: Set<String>) -> String? {
+        guard !canChat(with: name, features: features) else { return nil }
+        // The Mac's words, with the place he goes adapted (fix round 3, item 38).
+        if agents.first(where: { $0.name == name })?.active == false {
+            return "This agent is in setup. Activate it in the Mac app before sending work."
+        }
+        if !features.contains("direct_chat") && name != "manager" {
+            return "This hub needs an update before direct chat is available."
+        }
+        return "Direct chat is unavailable for this agent. Send a task to Manager."
+    }
+}
+
 struct MobileCounts: Decodable, Sendable {
     let tasks_open: Int
     let needs_open: Int
@@ -331,4 +353,56 @@ struct MobileDevice: Decodable, Identifiable, Sendable {
     let last_seen: Double?
     let this_device: Bool?
     var id: String { device }
+}
+
+extension MobileTaskHead {
+    /// **Its one state word, the Mac's** (`TaskWords.state` in FleetCore, which the Mac's panel, its thread and the
+    /// phone all use; fix round 2, item 29): a hold's word while a hold stands ("Paused", "Stopping…", "Stop not
+    /// confirmed"), "Usage limit" while its agent's usage limit holds open work, a stall, a lost session, a checked
+    /// result, who it waits for, and its own state. **The hold comes first, also before a result** (review B4i): a stop
+    /// that its helper has not confirmed says "Stopping…" over "Canceled", as the Mac's thread says it. The phone's list
+    /// said "Working" for a paused, a limited and a stalled task that its page and the Mac called otherwise. A hub from
+    /// before the stall fields sends none of them, and the row then says what the head alone knows.
+    func stateWord(holds: [TaskHold], limited: Bool) -> String {
+        let hold = holds.first { $0.task == id && $0.state != "released" }
+        return TaskWords.state(state, accepted: accepted, requester: requester, waitingOn: waiting_on,
+                               stalled: stalled_since != nil || (nudge_level ?? 0) > 0,
+                               reconnecting: missing_since != nil,
+                               hold: hold.map { TaskWords.Hold(kind: $0.kind, state: $0.state) }, limited: limited)
+    }
+
+    /// **The Mac's mark of a task, from its head** (FleetCore's `FleetTask.mark(holds:limited:)`, rule for rule; fix round
+    /// 3, item 27): its symbol, its one state word, whether it needs someone, and whether it is work now — the hold
+    /// first, then a result, the usage limit, a stall, a lost session, a question or a sign-in, a wait, and its state. The
+    /// phone drew a paused, a stalled and a limited task with the green circle of work.
+    func mark(holds: [TaskHold], limited: Bool, outcomeUnknown: Bool = false)
+        -> (symbol: String, words: String, attention: Bool, inWork: Bool) {
+        // An outcome that is not known comes first (fix round 3b, as FleetCore's).
+        if outcomeUnknown { return ("questionmark.circle", "Outcome not known: check it", true, false) }
+        let words = stateWord(holds: holds, limited: limited)
+        if let hold = holds.first(where: { $0.task == id && $0.state != "released" }) {
+            return hold.state == "not_confirmed" ? ("exclamationmark.circle", words, true, false) : ("pause.circle", words, false, false)
+        }
+        if isTerminal {
+            // The board's result look, as FleetCore's (fix round 3b): a filled check, a filled "!" for a result the
+            // board badges red, Canceled included, and a muted circle for one that waits for its check.
+            if accepted == 1 && state == "completed" { return ("checkmark.circle.fill", words, false, false) }
+            if failedResult != nil { return ("exclamationmark.circle.fill", words, state != "canceled", false) }
+            return ("circle", words, false, false)
+        }
+        if limited { return ("hourglass", words, true, false) }
+        if stalled_since != nil || (nudge_level ?? 0) > 0 { return ("exclamationmark.circle", words, true, false) }
+        if missing_since != nil { return ("arrow.triangle.2.circlepath", words, true, false) }
+        switch state {
+        case "input-required": return ("questionmark.circle", words, true, false)
+        case "auth-required": return ("key", words, true, false)
+        default: break
+        }
+        if let waiting = waiting_on, !waiting.isEmpty { return ("hourglass", words, true, false) }
+        switch state {
+        case "working": return ("circle.dotted", words, false, true)
+        case "submitted": return ("clock", words, false, false)
+        default: return ("circle", words, false, false)
+        }
+    }
 }

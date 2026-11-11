@@ -402,10 +402,10 @@ struct FleetView: View {
         }
     }
 
-    /// **Tasks**, the board that was Activity (the iPhone's word for it). It stays selected on the pages its board
-    /// opens (T-32): Goals and a goal, and a task's thread, so every page has one row that says where he is.
+    /// **Tasks**, the board that was Activity (the iPhone's word for it). It stays selected on the page its board
+    /// opens (T-32), a task's thread, so every page has one row that says where he is.
     private var tasksRow: some View {
-        let selected = switch store.destination { case .activity, .goals, .task: true; default: false }
+        let selected = switch store.destination { case .activity, .task: true; default: false }
         return SidebarRow("Tasks", symbol: "rectangle.split.3x1", selected: selected) { store.destination = .activity }
             .accessibilityIdentifier("nav-tasks")
     }
@@ -490,7 +490,6 @@ struct FleetView: View {
             switch store.destination {
             case .needs: needsView
             case .activity: ActivityBoard(store: store)
-            case .goals: goalsView
             case .agents: AgentsPage(store: store) { openAgent($0, .chat) }
             case .addAgent: addAgentPage
             case .settings, .server, .addServer, .app: EmptyView()
@@ -551,7 +550,6 @@ struct FleetView: View {
         let title: String? = switch store.destination {
         case .activity: "Tasks"
         case .needs: "Needs you"
-        case .goals: "Goals"
         case .agents: "Agents"
         default: nil
         }
@@ -620,79 +618,13 @@ struct FleetView: View {
         .chatColumn().padding(.top, 10).padding(.bottom, FleetSpace.under)
     }
 
-    /// **Needs you**: the manager's open requests, then the tasks that only the owner can move, then the requests he
-    /// answered (`NeedsList`, which keeps a request he answers where it folded). The sidebar's row counts the first two,
-    /// so the page shows what its row says (D-4).
-    private var needsView: some View {
-        let ownerTasks = store.state?.ownerTasks ?? []
-        return FleetPage("Needs you") {
-            NeedsList(store: store, hasTasks: !ownerTasks.isEmpty) {
-                FormSection { ForEach(ownerTasks) { ownerTaskRow($0) } }
-            }
-        }
-    }
-
-    /// A task that only the owner can move, on the Needs you page: its mark, its title, its agent and what it waits
-    /// for, and its number, as the Tasks board's Needs you column says it. The whole row opens the task.
-    private func ownerTaskRow(_ task: FleetTask) -> some View {
-        let unknown = store.state?.outcomes?.contains { $0.task == task.id && $0.state == "unknown" } == true
-        let mark = unknown ? (symbol: "questionmark.circle", words: "Outcome not known: check it")
-            : { let held = task.mark(in: store.state); return (symbol: held.symbol, words: held.words) }()
-        return Button { store.destination = .task(task.id) } label: {
-            HStack(spacing: 12) {
-                // **Its title where the title of every row with a mark begins** (the margins of 30 October 2026, row 24:
-                // 3 pt past it): the mark in the one mark column of the app (`RowMark`).
-                HStack(spacing: 0) {
-                    RowMark { Image(systemName: mark.symbol).font(IconMetrics.symbol(15)).foregroundStyle(.orange) }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(task.title).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(1)
-                        // **The agent's 16-pt glyph, with its dot, before its name** (D-8 items 2 and 4), as the same
-                        // task's card on the Tasks board and the requests above it have it.
-                        HStack(spacing: 6) {
-                            AgentGlyph(name: task.owner, size: GlyphSize.inline)
-                            Text("\(task.owner.agentLabel) · \(mark.words)").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                                .lineLimit(1)
-                        }
-                    }
-                }.padding(.vertical, 10).frame(maxWidth: .infinity, alignment: .leading)
-            }.padding(.horizontal, FormMetrics.rowInset).frame(minHeight: FormMetrics.twoLineRow)
-        }
-        .buttonStyle(FleetRowButtonStyle()).help(task.title)
-        .accessibilityIdentifier("needs-task-\(task.id)")
-        .opensTask(task.id, store: store)
-    }
-
-    /// Goals has no sidebar item: the Goals button of Tasks and a task's Goal controls open it. A hub without goals
-    /// shows the task board in its place.
-    @ViewBuilder private var goalsView: some View {
-        if store.state?.ui_features?.contains("goals") == true { GoalsView(store: store) { taskButton($0) } }
-        else { ActivityBoard(store: store) }
-    }
+    /// **Needs you**: the requests that wait as one lane of cards, the tasks that only the owner can move in the same
+    /// lane, and the request at hand beside it (`NeedsBoard`). The sidebar's row counts the lane's cards, so the page
+    /// shows what its row says (D-4).
+    private var needsView: some View { NeedsBoard(store: store) }
 
     /// The task's one state word, the same rule as its panel's and its guidance box's (`FleetTask.stateWord`).
     private func taskStatus(_ task: FleetTask) -> String { task.stateWord(in: store.state) }
-
-    private func taskButton(_ task: FleetTask) -> some View {
-        let failed = ["failed", "rejected"].contains(task.state)
-        return Button { store.destination = .task(task.id) } label: {
-            HStack(spacing: 12) {
-                // Its title where the title of every row with a mark begins (margins row 24: 1 pt short of it).
-                HStack(spacing: 0) {
-                    RowMark {
-                        Image(systemName: failed ? "exclamationmark.circle" : task.accepted == 1 ? "checkmark.circle" : task.isTerminal ? "circle" : "circle.dotted")
-                            .font(IconMetrics.symbol(14)).foregroundStyle(failed ? .orange : task.accepted == 1 ? FleetStyle.muted : !task.isTerminal && task.nudge_level > 0 ? .orange : FleetStyle.text)
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(task.title).lineLimit(1).truncationMode(.tail)
-                        Text("\(task.owner.agentLabel) · \(taskStatus(task))").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                    }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right").font(IconMetrics.symbol(9)).foregroundStyle(FleetStyle.muted)
-            // A form's two-line row (T-27): Goals' Other work stood at a pitch of 56 under goal rows of 57.
-            }.frame(minHeight: FormMetrics.twoLineRow).contentShape(Rectangle())
-        }.buttonStyle(.plain).help(task.title).accessibilityIdentifier("task-\(task.id)")
-            .opensTask(task.id, store: store)
-    }
 
     /// The panel of a task thread: the task's own name at its head, then the facts of that task, which the thread
     /// itself does not say. It shows on a task and nowhere else; the summary it once held on the other pages is the
@@ -730,8 +662,8 @@ struct FleetView: View {
 
     /// The rows of the task panel: the facts of the task that its thread does not say.
     @ViewBuilder private func taskFacts(_ task: FleetTask) -> some View {
-        // A task with no goal drew a "Goal" label over nothing, directly under the task's name.
-        if !task.goal.isEmpty { DetailField(title: "Goal", value: task.goal) }
+        // **No goal line** (the owner, 11 November 2026: "remove the screen and keep as internal tool"): a goal is the
+        // Fleet Manager's own record, and the line showed the hub's code for it ("G-3").
         if let project = task.project { DetailField(title: "Project", value: project) }
         // **His words, not the hub's** (T-12): the agents by their names as the sidebar writes them, the state as the
         // thread and Goals say it, and the provider by the word his Settings use. "Owner: atlas" put the agent under the
@@ -1107,9 +1039,12 @@ struct FleetNotices: View {
     }
 }
 
-/// **A notice in the band over the page**: the icon, its words on one line (all of them on hover) and its one way on,
-/// on the notice's tint with a hairline under it — `FleetNotice`'s look, as tall as the band the window's buttons stand
-/// in (`FleetSpace.lights`), so it covers nothing of the page and moves nothing when it comes or goes.
+/// **A notice in the band over the page**: the icon, its words on one line or two (all of them on hover) and its one
+/// way on, on the notice's tint the whole width with a hairline under it, as tall as the band the window's buttons
+/// stand in (`FleetSpace.lights`), so it covers nothing of the page and moves nothing when it comes or goes. Its words
+/// and its action stand in the page's own column, and over a conversation or a task thread in the narrower one of prose
+/// (`noticeReading`): the owner, 25 October 2026, on a strip over an agent's chat whose words and button stood wider
+/// than the chat under them: "it is not aligned!"
 private struct BandNotice<Actions: View>: View {
     private let text: String
     private let symbol: String
@@ -1247,11 +1182,14 @@ extension ComposerCapsule where Above == EmptyView {
 extension View {
     /// The field of a `ComposerCapsule`: the chat's font, one line at rest that grows to ten and then scrolls (a task's
     /// guidance to five), and its line centred on the 28-point controls beside it. `alone`: no plus at its left, so its
-    /// words keep the room from the capsule's round end that the plus would have given them.
-    func composerField(alone: Bool, lines: ClosedRange<Int> = 1...10) -> some View {
-        textFieldStyle(.plain).font(ChatStyle.font)
-            .growingField(lines)
-            .padding(.vertical, (IconMetrics.side - ChatStyle.line) / 2)
+    /// words keep the room from the capsule's round end that the plus would have given them. `font` and `line`: the
+    /// words and their line's height where the field does not stand in a chat (the answer of a request at hand on
+    /// Needs you, at a step's 15 points).
+    func composerField(alone: Bool, lines: ClosedRange<Int> = 1...10, font: Font = ChatStyle.font,
+                       line: CGFloat = ChatStyle.line) -> some View {
+        textFieldStyle(.plain).font(font)
+            .growingField(lines, line: line)
+            .padding(.vertical, (IconMetrics.side - line) / 2)
             .padding(.leading, alone ? 8 : 0)
     }
 }

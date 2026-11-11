@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<!-- The share extension collects nothing and tracks nobody: it sends what the owner shares to his own hub. It links
+     the app's code, which reads the app's own user defaults (CA92.1), as the app's manifest says. -->
+<key>NSPrivacyTracking</key><false/>
+<key>NSPrivacyTrackingDomains</key><array/>
+<key>NSPrivacyCollectedDataTypes</key><array/>
+<key>NSPrivacyAccessedAPITypes</key><array>
+<dict>
+<key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+<key>NSPrivacyAccessedAPITypeReasons</key><array><string>CA92.1</string></array>
+</dict>
+</array>
+</dict></plist>

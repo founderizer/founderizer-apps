@@ -20,6 +20,16 @@ struct NeedsPage: View {
     @State private var shown: [OwnerNeed]?
     /// The answered items that fold away now.
     @State private var folding: Set<Int> = []
+    /// **His answer to each item on the page, from the frame the hub's request for it began, and when** (the owner's
+    /// yes of 11 November 2026 to its moving picture: "Yes, build it"): the item shows it with a check that draws
+    /// itself, takes no more touch, and folds 0.78 s after it at the earliest, so that he sees his answer taken. The
+    /// store forgets the answer at the reading that folds the item; the page keeps it until the fold ends.
+    @State private var given: [Int: MobileStore.GivenAnswer] = [:]
+    @State private var givenAt: [Int: ContinuousClock.Instant] = [:]
+    /// An answer of his folded the items that went last: the mark of "Nothing needs you" then draws itself.
+    @State private var folded = false
+    /// One more for each answer that he gives while the page shows: its soft tap.
+    @State private var taps = 0
     /// The column of a task's mark, as on a task's row: it grows with the mark.
     @ScaledMetric(relativeTo: .title3) private var markWidth: CGFloat = 22
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -37,12 +47,12 @@ struct NeedsPage: View {
                     // out, its content clipped to what is left of it and fading, and the items under it rise into the
                     // room it frees, never over it.
                     Fold(shown: folds ? 0 : 1) {
-                        NeedCard(store: store, need: need, header: true)
+                        NeedCard(store: store, need: need, header: true, given: given[need.id])
                             .padding(.bottom, NeedCard.gap)
                     }
                     .clipped()
                     .opacity(folds ? 0 : 1)
-                    .allowsHitTesting(!folds)
+                    .allowsHitTesting(!folds && given[need.id] == nil)
                     .accessibilityHidden(folds)
                     .accessibilityIdentifier("need-\(need.id)")
                 }
@@ -73,13 +83,28 @@ struct NeedsPage: View {
         .scrollDismissesKeyboard(.interactively)
         .onAppear { if shown == nil { shown = store.openNeeds } }
         .onChange(of: store.openNeeds.map(\.id)) { _, ids in fold(to: ids) }
+        .onChange(of: goingAnswers, initial: true) { before, going in
+            for (id, answer) in going where given[id] == nil {
+                given[id] = answer
+                givenAt[id] = .now
+                // Not for an answer that was on its way when the page opened: the first pass has no change.
+                if before != going { taps += 1 }
+            }
+            // The hub refused it, and the item waits again: it is his to answer once more.
+            for id in given.keys where going[id] == nil && store.openNeeds.contains(where: { $0.id == id }) {
+                given[id] = nil
+                givenAt[id] = nil
+            }
+        }
+        // One soft tap as his answer is taken.
+        .sensoryFeedback(.success, trigger: taps)
         .background(Brand.canvas)
         .overlay {
             // One title and no second line (D-2); a hub that does not answer says so once, over the page. It comes
             // when the last item has folded, not over it.
             if (shown ?? store.openNeeds).isEmpty && store.ownerTasks.isEmpty && store.snapshot != nil
                 && store.showsCurrent {
-                ContentUnavailableView("Nothing needs you", systemImage: "checkmark.circle")
+                NothingNeedsYou(draws: folded && !reduceMotion)
             }
         }
         .refreshable { await store.refresh() }
@@ -95,10 +120,15 @@ struct NeedsPage: View {
         // The ones that fold keep their place among the open ones, in the hub's order (the newest first).
         shown = (open + gone.filter { need in !open.contains { $0.id == need.id } })
             .sorted { ($0.raised, $0.id) > ($1.raised, $1.id) }
-        guard !gone.isEmpty else { return }
+        guard !gone.isEmpty else { folded = false; return }
         let goneIDs = Set(gone.map(\.id))
-        withAnimation(.easeOut(duration: reduceMotion ? 0.2 : 0.25)) { folding.formUnion(goneIDs) }
+        // An item that he answered a moment ago stays until its answer has stood for 0.78 s.
+        let stood = goneIDs.compactMap { givenAt[$0] }.map { ContinuousClock.now - $0 }.min()
+        let hold = reduceMotion ? nil : stood.map { Duration.milliseconds(780) - $0 }
+        folded = goneIDs.contains { given[$0] != nil }
         Task { @MainActor in
+            if let hold, hold > .zero { try? await Task.sleep(for: hold) }
+            withAnimation(.easeOut(duration: reduceMotion ? 0.2 : 0.25)) { folding.formUnion(goneIDs) }
             try? await Task.sleep(for: .milliseconds(reduceMotion ? 210 : 260))
             var still = Transaction()
             still.disablesAnimations = true
@@ -107,8 +137,17 @@ struct NeedsPage: View {
                 let open = Set(store.openNeeds.map(\.id))
                 shown = shown?.filter { !goneIDs.contains($0.id) || open.contains($0.id) }
                 folding.subtract(goneIDs)
+                for id in goneIDs where !open.contains(id) {
+                    given[id] = nil
+                    givenAt[id] = nil
+                }
             }
         }
+    }
+
+    /// His answers that the store has on their way or taken, for the items on the page.
+    private var goingAnswers: [Int: MobileStore.GivenAnswer] {
+        Dictionary((shown ?? store.openNeeds).compactMap { need in store.givenAnswer(to: need.id).map { (need.id, $0) } }) { first, _ in first }
     }
 
     /// A task that only he can move, as the Mac's Needs you page draws it: its orange mark, its title, and its agent,
@@ -231,6 +270,8 @@ struct NeedCard: View {
     var header = false
     /// The files of the message that answered it, which its answer shows.
     var answerFiles: [MessageAttachment] = []
+    /// His answer as Needs you keeps it until the item folds (`NeedsPage.given`); in a chat, as the store has it.
+    var given: MobileStore.GivenAnswer? = nil
 
     /// The card's shape: 26 on Needs you, as a card of the system's lists, and 18 in a chat, as a bubble.
     static func shape(onPage: Bool) -> RoundedRectangle {
@@ -242,7 +283,7 @@ struct NeedCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if header { NeedHead(store: store, need: need) }
+            if header { NeedHead(store: store, need: need, took: answerGiven != nil) }
             Group {
                 // **An answered card folds to its two lines frame by frame, over 250 ms, easing out** (fix round 3, item
                 // 40): the open rows' height goes as the two lines' comes, so the chat's height and its place change in
@@ -291,6 +332,9 @@ struct NeedCard: View {
         }
     }
 
+    /// His answer to this request, from the hub's request for it until the item folds.
+    private var answerGiven: MobileStore.GivenAnswer? { given ?? store.givenAnswer(to: need.id) }
+
     /// **The answered card while it folds: its question once, and under it the open rows going as the answer's line
     /// comes** (fix round 3d), `share` 0 open and 1 folded. The open card and the two lines stood one over the other,
     /// so the question showed twice for about 130 ms. The height goes from the open card's to the two lines', 16
@@ -338,9 +382,86 @@ struct NeedCard: View {
             if need.asksForSecret {
                 NeedSecretNote(need: need)
             } else {
-                if !need.choices.isEmpty { NeedOptions(store: store, need: need) }
-                NeedAnswerBox(store: store, need: need)
+                if !need.choices.isEmpty {
+                    NeedOptions(store: store, need: need, given: answerGiven)
+                        .opacity(answerGiven?.words != nil ? NeedOptions.dimmed : 1)
+                }
+                NeedAnswerBox(store: store, need: need, sent: answerGiven?.words)
+                    .opacity(answerGiven?.option != nil ? NeedOptions.dimmed : 1)
             }
+        }
+        .animation(.easeOut(duration: 0.2), value: answerGiven)
+    }
+}
+
+extension MobileStore {
+    /// His answer to a request, as an item shows it while it goes: the option that he pressed, or his words.
+    enum GivenAnswer: Equatable, Sendable {
+        case option(Int), words(String)
+
+        var option: Int? { if case .option(let index) = self { index } else { nil } }
+        var words: String? { if case .words(let text) = self { text } else { nil } }
+    }
+
+    /// His answer to `need` that the hub's request carries now, or that the hub took and the reading does not have
+    /// yet. A press that waits for the hub is no answer yet: its item says "Sending…". **An answer that did not go is
+    /// none either** (review of 11 November 2026): its item says "Not sent" with Try again, which he must be able to
+    /// press, so only a request of this hub and generation that goes now, or that no error stopped, counts.
+    func givenAnswer(to need: Int) -> GivenAnswer? {
+        let going = pending.flatMap { request in
+            request.needID == need && request.refusal == nil && request.hub == hub && request.database == snapshot?.db
+                && (sending || sendError == nil) ? request : nil
+        }
+        guard let request = going ?? answersTaken[need]?.request else { return nil }
+        return request.choice.map(GivenAnswer.option) ?? .words(request.text)
+    }
+}
+
+/// **The check of an answer that he gave**: it draws itself, stroke by stroke, where the system can (iOS 26), and
+/// fades in before that. It keeps its place from the first frame, so nothing beside it moves while it draws.
+struct DrawnMark: View {
+    let symbol: String
+    @State private var drawn = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let mark = Image(systemName: symbol)
+        mark.hidden().overlay { if drawn { mark.transition(Self.drawsOn) } }
+            .accessibilityHidden(true)
+            .task {
+                guard !drawn else { return }
+                if reduceMotion { drawn = true; return }
+                try? await Task.sleep(for: .milliseconds(110))
+                withAnimation(.easeOut(duration: 0.26)) { drawn = true }
+            }
+    }
+
+    static var drawsOn: AnyTransition {
+        if #available(iOS 26, *) { AnyTransition(.symbolEffect(.drawOn)) } else { .opacity }
+    }
+}
+
+/// "Nothing needs you", where the items stood. **Its mark draws itself when his answer folded the last item away**,
+/// and its words come after it; on a page that opens with no item it stands at once, as before.
+private struct NothingNeedsYou: View {
+    /// As the page said it when the words first showed: a later change does not cut the drawing short.
+    @State private var draws: Bool
+    @State private var said = false
+
+    init(draws: Bool) { _draws = State(initialValue: draws) }
+
+    var body: some View {
+        ContentUnavailableView {
+            Label {
+                Text("Nothing needs you").opacity(draws && !said ? 0 : 1)
+            } icon: {
+                if draws { DrawnMark(symbol: "checkmark.circle") } else { Image(systemName: "checkmark.circle") }
+            }
+        }
+        .task {
+            guard draws else { return }
+            try? await Task.sleep(for: .milliseconds(640))
+            withAnimation(.easeOut(duration: 0.32)) { said = true }
         }
     }
 }
@@ -450,6 +571,10 @@ private struct NeedAnswered: View {
 private struct NeedHead: View {
     let store: MobileStore
     let need: OwnerNeed
+    /// He gave his answer: 0.3 s later the agent's mark makes one small jump, as the Mac's glyph does.
+    var took = false
+    @State private var jumps = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Half the height of the headline's capitals: the mark's centre stands this far over the first line's baseline.
     @ScaledMetric(relativeTo: .headline) private var capHalf: CGFloat = 6
 
@@ -458,6 +583,12 @@ private struct NeedHead: View {
         // can move: at the largest text sizes the head takes two lines, and the mark stood on their middle.
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             AgentAvatar(name: need.by, state: store.state(of: need.by), base: 20, moves: false)
+                .keyframeAnimator(initialValue: 1.0, trigger: jumps) { view, scale in view.scaleEffect(scale) } keyframes: { _ in
+                    KeyframeTrack {
+                        SpringKeyframe(1.18, duration: 0.14)
+                        SpringKeyframe(1.0, duration: 0.45, spring: .bouncy)
+                    }
+                }
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + capHalf }
             Text(requestHead(by: need.by, raised: need.raised))
             Spacer(minLength: 0)
@@ -469,6 +600,11 @@ private struct NeedHead: View {
         .padding(.horizontal, 16)
         .padding(.top, NeedCard.head).padding(.bottom, NeedCard.head)
         .accessibilityElement(children: .combine)
+        .task(id: took) {
+            guard took, !reduceMotion else { return }
+            try? await Task.sleep(for: .milliseconds(300))
+            if !Task.isCancelled { jumps += 1 }
+        }
     }
 }
 
@@ -483,6 +619,10 @@ private struct NeedHead: View {
 struct NeedOptions: View {
     let store: MobileStore
     let need: OwnerNeed
+    /// His answer, while it goes: the option that he pressed takes a check that draws itself, and the others dim.
+    var given: MobileStore.GivenAnswer? = nil
+    /// What an answer that he did not give looks like beside the one that he gave.
+    static let dimmed = 0.38
 
     /// The agent's "What it wants" stands only for an item without options: with them, what it wants are the rows.
     static func asksInWords(_ need: OwnerNeed) -> Bool {
@@ -495,9 +635,12 @@ struct NeedOptions: View {
                 let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
                 Button { store.press(needID: need.id, choice: index) } label: {
                     // The agent's words, drawn as a plain label: they are data, never markup.
-                    Text(verbatim: option)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 10) {
+                        if given == .option(index) { DrawnMark(symbol: "checkmark").fontWeight(.semibold) }
+                        Text(verbatim: option)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         .padding(.horizontal, 14)
                         .background(Brand.bubble, in: shape)
@@ -505,6 +648,8 @@ struct NeedOptions: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.primary)
+                .opacity(given?.option.map { $0 != index } == true ? Self.dimmed : 1)
+                .accessibilityAddTraits(given?.option == index ? .isSelected : [])
                 .accessibilityIdentifier("need-option-\(need.id)-\(index)")
             }
         }
@@ -518,6 +663,10 @@ struct NeedOptions: View {
 struct NeedAnswerBox: View {
     let store: MobileStore
     let need: OwnerNeed
+    /// His words went: they stay in the field until the item folds, Send becomes a check that draws itself, and the
+    /// check then goes quiet.
+    var sent: String? = nil
+    @State private var quiet = false
     @FocusState private var focused: Bool
     /// One line of the field, so "+" and Send stand on its centre at every text size.
     @ScaledMetric(relativeTo: .body) private var line: CGFloat = 22
@@ -530,7 +679,7 @@ struct NeedAnswerBox: View {
         // wrote nothing in the field, so its field stays as it is.
         let taken = store.answersTaken[need.id]
         let typed = taken.flatMap { $0.request.choice == nil ? $0.request.text : nil }
-        let text = Binding(get: { typed ?? store.answerDraft(for: need.id) },
+        let text = Binding(get: { sent ?? typed ?? store.answerDraft(for: need.id) },
                            set: { store.setAnswerDraft($0, for: need.id) })
         let trimmed = text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let composer = MobileStore.stageKey(need: need.id)
@@ -558,13 +707,29 @@ struct NeedAnswerBox: View {
                 .padding(.trailing, 6)
                 .accessibilityIdentifier("answer-\(need.id)")
                 // The keyboard goes with the answer, before the item folds (item 95): it does not carry the page.
-                SendButton(enabled: canSend, label: "Send answer", side: 36) {
-                    focused = false
-                    await store.send(needID: need.id)
+                Group {
+                    if sent != nil {
+                        DrawnMark(symbol: "checkmark").font(.footnote.weight(.bold))
+                            .foregroundStyle(quiet ? Brand.muted : Brand.surface)
+                            .frame(width: 36, height: 36)
+                            .background(quiet ? AnyShapeStyle(.quaternary) : AnyShapeStyle(Brand.accent), in: Circle())
+                            .accessibilityElement(children: .ignore).accessibilityLabel("Answer sent")
+                            .task {
+                                try? await Task.sleep(for: .milliseconds(520))
+                                withAnimation(.easeOut(duration: 0.5)) { quiet = true }
+                            }
+                    } else {
+                        SendButton(enabled: canSend, label: "Send answer", side: 36) {
+                            focused = false
+                            await store.send(needID: need.id)
+                        }
+                        .accessibilityIdentifier("send-answer-\(need.id)")
+                    }
                 }
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .frame(height: line + 28)
-                .accessibilityIdentifier("send-answer-\(need.id)")
+                // A refused answer gives Send back: the check of his next answer starts violet again.
+                .onChange(of: sent == nil) { _, none in if none { quiet = false } }
             }
             // "+" concentric with the capsule's round end, as Send is and as in a chat (margins pass, fault 6).
             .padding(.leading, 3).padding(.trailing, 7)

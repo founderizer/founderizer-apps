@@ -168,6 +168,42 @@ struct IntegrationsTests {
         #expect(Integrations.pickerFeature == "repo_picker")
     }
 
+    /// The list under the + of an agent's Can use › GitHub: a search shows the repositories whose name, without the
+    /// owner, holds its words in any case, and "N of M" counts what the agent has and what it gets.
+    @Test func theListsSearchReadsTheNameAndItsCountReadsWhatTheAgentHasOrGets() throws {
+        let account = try JSONDecoder().decode(RepositoryList.Account.self, from: JSONSerialization.data(withJSONObject: [
+            "account": "Globex", "repos": ["globex/adminapi", "globex/argocd", "globex/shopapi", "globex/webadmin"]]))
+        #expect(account.shown(by: "") == account.repos && account.shown(by: "  \n") == account.repos)
+        #expect(account.shown(by: " ADMIN ") == ["globex/adminapi", "globex/webadmin"])
+        #expect(account.shown(by: "admin  web") == ["globex/webadmin"])
+        #expect(account.shown(by: "globex").isEmpty)
+        #expect(account.shown(by: "argo") == ["globex/argocd"])
+        #expect(RepositoryList.Account(account: "Acme", repos: ["acme/WebApp"]).shown(by: "webapp") == ["acme/WebApp"])
+        #expect(account.chosen(held: [], picked: []) == 0)
+        #expect(account.chosen(held: ["globex/adminapi"], picked: ["globex/argocd", "other/x"]) == 2)
+        #expect(account.chosen(held: ["globex/adminapi"], picked: ["globex/adminapi"]) == 1)
+    }
+
+    /// A reading of the list that could not read one App keeps the accounts that the reading before it listed and it
+    /// lacks, with its own problem; a whole reading, or one of another hub generation, replaces it.
+    @Test func aListThatCouldNotReadEveryAppKeepsTheAccountsItLacks() {
+        let older = RepositoryList(db: "db", accounts: [.init(account: "Globex", repos: ["globex/web"]),
+                                                       .init(account: "acme", repos: ["acme/lib"])], problem: nil)
+        let partial = RepositoryList(db: "db", accounts: [.init(account: "acme", repos: ["acme/lib", "acme/new"])],
+                                     problem: "The door did not answer.")
+        let kept = partial.keeping(older)
+        #expect(kept.accounts == [.init(account: "acme", repos: ["acme/lib", "acme/new"]),
+                                  .init(account: "Globex", repos: ["globex/web"])])
+        #expect(kept.problem == "The door did not answer." && kept.db == "db")
+        let whole = RepositoryList(db: "db", accounts: [.init(account: "acme", repos: ["acme/lib"])], problem: nil)
+        #expect(whole.keeping(older).accounts == whole.accounts)
+        let other = RepositoryList(db: "other", accounts: [], problem: "The door did not answer.")
+        #expect(other.keeping(older).accounts.isEmpty)
+        #expect(partial.keeping(nil).accounts == partial.accounts)
+        let cased = RepositoryList(db: "db", accounts: [.init(account: "GLOBEX", repos: ["globex/web"])], problem: "x")
+        #expect(cased.keeping(older).accounts.map(\.account) == ["GLOBEX", "acme"])
+    }
+
     /// The owner's yes of 9 November 2026 to the list as shown: an owner's repositories at one level are one row with
     /// their count when there are more than a few, in the order of the levels.
     @Test func manyRepositoriesOfOneOwnerAndLevelAreOneRow() {
@@ -178,6 +214,12 @@ struct IntegrationsTests {
         #expect(groups.map(\.grouped) == [false, true, false])
         #expect(groups[1].repos == ["globex/a", "globex/b", "globex/c", "globex/d"])
         #expect(Integrations.groups([:]).isEmpty)
+        // Three of one owner at one level stay three rows.
+        #expect(Integrations.groups(["globex/a": .read, "globex/b": .read, "globex/c": .read]).map(\.grouped) == [false])
+        // The row names the owner as GitHub writes it, once the list is read.
+        let list = RepositoryList(db: "db", accounts: [.init(account: "GlobexCorp", repos: ["globexcorp/a"])], problem: nil)
+        #expect(list.account("globexcorp") == "GlobexCorp" && list.account("GLOBEXCORP") == "GlobexCorp")
+        #expect(list.account("acme") == nil)
     }
 
     /// Owner feature `repo_picker`: one agent and a level, or null that takes the repositories away from it, so the

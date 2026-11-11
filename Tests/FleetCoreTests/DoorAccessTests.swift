@@ -136,19 +136,22 @@ struct DoorAccessTests {
     }
 
     /// API 1.101: the manager's door_hold. A server held at parts gets no entry, so nobody holds it through the door; one
-    /// held at judged keeps its entry and its Operator, as rule-only, so the door runs no judged call there.
+    /// held at rule-only keeps its entry and its Operator, as rule-only, so only rule calls run there. judged is the old
+    /// name of rule-only, which a hub still gives for a hold that it kept from before, and it reads the same.
     @Test func aHeldServerGetsNoEntryOrIsRuleOnly() {
         var facts = Self.facts()
         var hub = Self.hubDoor()
-        hub.holds = ["web-1": "judged", "web-2": "parts"]
-        facts.hub = hub
-        let file = Self.object(DoorAccess.plan(current: Self.access, facts: facts).file)
-        let hosts = file["hosts"] as? [String: Any] ?? [:]
-        #expect((hosts["web-1"] as? [String: Any])?["mode"] as? String == "rule-only")
-        #expect(hosts["web-2"] == nil)
-        #expect(Self.agent(file, "otto")["servers"] as? [String: String] == ["web-1": "fix", "shared-1": "fix", "fleet-1": "fix"])
-        #expect((Self.agent(file, "ops-two")["servers"] as? [String: String])?["web-2"] == nil)
-        #expect(hub.heldOut == ["web-2"])
+        for name in ["rule-only", "judged"] {
+            hub.holds = ["web-1": name, "web-2": "parts"]
+            facts.hub = hub
+            let file = Self.object(DoorAccess.plan(current: Self.access, facts: facts).file)
+            let hosts = file["hosts"] as? [String: Any] ?? [:]
+            #expect((hosts["web-1"] as? [String: Any])?["mode"] as? String == "rule-only", "\(name)")
+            #expect(hosts["web-2"] == nil)
+            #expect(Self.agent(file, "otto")["servers"] as? [String: String] == ["web-1": "fix", "shared-1": "fix", "fleet-1": "fix"])
+            #expect((Self.agent(file, "ops-two")["servers"] as? [String: String])?["web-2"] == nil)
+            #expect(hub.heldOut == ["web-2"] && hub.ruleOnly == ["web-1"], "\(name)")
+        }
         hub.holds = nil
         #expect(hub.heldOut.isEmpty && hub.digest != { var held = hub; held.holds = ["web-2": "parts"]; return held.digest }())
     }
@@ -178,7 +181,8 @@ struct DoorAccessTests {
         let written = file["credentials"] as? [String: Any] ?? [:]
         #expect(written["cloudflare:one"] as? [String: String]
                 == ["secret": "bws://00000002-0000-4000-8000-000000000000", "account_id": "b"])
-        #expect(written["model"] != nil && written["aws:one"] != nil && written["hetzner:old"] == nil)
+        // the door calls no model since 11 November 2026: model is a name that it does not know, so it never reaches it
+        #expect(written["model"] == nil && written["aws:one"] != nil && written["hetzner:old"] == nil)
         // new-projects plan N4: an app's setting is app:<app>:<NAME>, and a name of another shape never reaches the door
         #expect(written["app:shop:STRIPE_SECRET_KEY"] as? [String: String]
                 == ["secret": "bws://00000005-0000-4000-8000-000000000000"])
@@ -266,7 +270,7 @@ struct DoorAccessTests {
         let otto = Self.agent(file, "otto")
         #expect(otto["providers"] as? [String] == ["aws:one", "github:One-Org"])
         let targets = otto["repos"] as? [String: [String: String]] ?? [:]
-        #expect(targets["one-org/records"] == ["kind": "app"])                  // its records commits are judged now
+        #expect(targets["one-org/records"] == ["kind": "app"])                  // its records commits: checked forms or own calls
         #expect(targets["one-org/new"] == ["kind": "app"])
         #expect(targets["other/x"] == ["kind": "app"])
         #expect(targets["one-org/shop"] == ["kind": "app", "deploy": "deploy.yml"])    // mia writes it: kept as written

@@ -12,7 +12,8 @@
 #   - the vault in it is signed by our Developer ID team with the vault's identifier, with the hardened runtime, its
 #     provisioning profile and the one keychain group, as install.py checks a build that it installs;
 #   - its build number is higher than the installed one's, so no channel can ever put an older vault back.
-# Then launchd starts the vault again for the user it runs as: the worker's broker, or the owner's writer.
+# Then launchd starts the worker's broker again for the user it runs as. The owner's Mac runs no broker: there the
+# updater takes away the LaunchAgent of the old writer of Add secret, as `writer_gone` below says.
 #
 # The track (PRODUCT.md 4.3, "the two tracks") is the one that update.json names. The owner, 4 November 2026: "ok
 # build your design". A fleet whose setting releases.early is on takes each build as it is published, as the
@@ -27,7 +28,7 @@
 # Contents/Resources, sealed by the vault's signature, and one with a higher `updater=` number than this file's
 # replaces this file for the next run. It puts the starter in place the same way (starter.zsh, with its `starter=`
 # number, and its daemon), on a Mac whose vault runs as the agents' user.
-updater=4
+updater=5
 set -eu
 umask 022
 
@@ -56,10 +57,11 @@ track=$(json track "$base/update.json" || true)
 if [[ ! "$channel" =~ '^https://[a-z0-9.-]+$' || ! "$fleet" =~ '^[0-9a-f]{16}$' ]]; then
     say "update.json names no channel and fleet; nothing changed"; exit 1
 fi
+label=com.agentfleet.vault
 if [[ "$(json role "$base/config.json" || true)" == owner ]]; then
-    uid=$(json owner_uid "$base/config.json" || true); label=com.agentfleet.vault.writer
+    role=owner; uid=$(json owner_uid "$base/config.json" || true)
 else
-    uid=$(json worker_uid "$base/config.json" || true); label=com.agentfleet.vault
+    role=worker; uid=$(json worker_uid "$base/config.json" || true)
 fi
 [[ "$uid" =~ '^[0-9]+$' ]] || { say "config.json names no user that runs the vault; nothing changed"; exit 1; }
 [[ ! -L "$app" ]] || { say "$app is a symbolic link; nothing changed"; exit 1; }
@@ -127,7 +129,7 @@ EOF
 # it is for. Only where the vault runs as the agents' user (the owner's own Mac runs no agent), and a starter that
 # cannot be put in place stops no update of the vault.
 carried="$app/Contents/Resources/starter.zsh"
-if [[ "$label" == com.agentfleet.vault && -f "$carried" && ! -L "$carried" ]]; then
+if [[ "$role" == worker && -f "$carried" && ! -L "$carried" ]]; then
     theirs=$(sed -n 's/^starter=\([0-9][0-9]*\)$/\1/p' "$carried" | head -1)
     ours=$(sed -n 's/^starter=\([0-9][0-9]*\)$/\1/p' "$base/starter.zsh" 2>/dev/null | head -1)
     if [[ "$theirs" =~ '^[0-9]+$' ]] && (( theirs > ${ours:-0} )) && signed "$app"; then
@@ -139,6 +141,45 @@ if [[ "$label" == com.agentfleet.vault && -f "$carried" && ! -L "$carried" ]]; t
         fi
     fi
 fi
+
+# The owner's Mac. Fleet Vault was the writer of the app's Add secret there: the owner's LaunchAgent
+# com.agentfleet.vault.writer started it for its Mach service. The app seals each value into the hub's central vault
+# now, and the writer mode of a vault that carries updater 5 or a newer one only deletes the old writer's Keychain
+# items, prints one line and ends. So this starts it one time and waits for its end. When it ended with status 0, the
+# LaunchAgent goes, and the file is removed as the owner, because root never writes into a home that its user controls.
+# The next runs find no file and do nothing more for it. A vault in place that is older runs the old writer, so nothing
+# starts it; a start that fails (the owner is not logged in) or a status that is not 0 leaves all for the next run.
+writer=com.agentfleet.vault.writer
+writer_gone() {
+    [[ "$role" == owner ]] || return 0
+    local agents="${FLEET_VAULT_UPDATE_AGENTS:-}" name home plist job code ours tries=0
+    if [[ -z "$agents" ]]; then
+        name=$(id -nu "$uid" 2>/dev/null) || return 0
+        home=$(dscl . -read "/Users/$name" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: //p')
+        [[ "$home" == /?* && -d "$home" ]] || return 0
+        agents="$home/Library/LaunchAgents"
+    fi
+    plist="$agents/$writer.plist"
+    [[ -f "$plist" || -L "$plist" ]] || return 0
+    ours=$(sed -n 's/^updater=\([0-9][0-9]*\)$/\1/p' "$app/Contents/Resources/update.zsh" 2>/dev/null | head -1)
+    [[ "$ours" =~ '^[0-9]+$' ]] && (( ours >= 5 )) && signed "$app" || return 0
+    launchctl kickstart -k "gui/$uid/$writer" >/dev/null 2>&1 || return 0
+    while job=$(launchctl print "gui/$uid/$writer" 2>/dev/null) && [[ "$job" == *"state = running"* ]] && (( ++tries < 30 )); do
+        sleep 1
+    done
+    code=$(print -r -- "$job" | sed -n 's/^[[:space:]]*last exit code = //p' | head -1)
+    if [[ "$code" != 0 ]]; then
+        say "the old writer of Add secret did not end with status 0 (${code:-no status}); its LaunchAgent stays for the next run"
+        return 0
+    fi
+    launchctl bootout "gui/$uid/$writer" >/dev/null 2>&1 || true
+    if sudo -u "#$uid" /bin/rm -f -- "$plist"; then
+        say "the old writer of Add secret has no Keychain items any more, and its LaunchAgent is gone"
+    else
+        say "the old writer of Add secret has no Keychain items any more; $plist could not be removed, and the next run tries again"
+    fi
+}
+writer_gone
 
 manifest="$channel/releases/app"
 [[ "$track" != early ]] || manifest="${manifest}?track=early"
@@ -173,7 +214,10 @@ signed "$stage/new.app" || { rm -rf "$stage"; say "the staged Fleet Vault did no
 [[ -e "$app" ]] && mv "$app" "$stage/old.app"
 mv "$stage/new.app" "$app"
 rm -rf "$stage"
-if launchctl kickstart -k "gui/$uid/$label" >/dev/null 2>&1; then
+if [[ "$role" == owner ]]; then
+    say "Fleet Vault $version (build $new) of the $track track replaced build $old on the owner's Mac"
+    writer_gone
+elif launchctl kickstart -k "gui/$uid/$label" >/dev/null 2>&1; then
     say "Fleet Vault $version (build $new) of the $track track replaced build $old, and $label started again" \
         "for user $uid"
 else

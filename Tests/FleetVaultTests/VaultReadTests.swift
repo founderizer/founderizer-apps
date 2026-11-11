@@ -13,7 +13,7 @@ extension VaultCallerTests {
 
     private static func readHub() throws -> VaultHub {
         VaultHub(configuration: try VaultConfiguration(data: JSONSerialization.data(withJSONObject: [
-            "agent": "studio", "hub": "http://100.64.0.1:9", "region": "eu", "worker_uid": 501,
+            "agent": "studio", "hub": "http://100.64.0.1:9", "store": "fleet", "worker_uid": 501,
             "socket": NSHomeDirectory() + "/Library/Application Support/AgentFleet/vault.sock"])), protocolClasses: [FakeHub.self])
     }
     private static func named(_ secrets: [(String, String)]) -> [String: Any] {
@@ -32,7 +32,7 @@ extension VaultCallerTests {
     }
     private static func read(_ values: [String: String]) async throws -> NSDictionary {
         let reply = await VaultBroker.read(as: VaultCaller(agent: "studio", key: readKey), hub: try readHub()) { id in
-            guard let value = values["bws://" + id] else { throw VaultFailure.provider }
+            guard let value = values["bws://" + id] else { throw VaultFailure.storeMissing }
             return VaultSecret(password: value, totp: nil)
         }
         return NSDictionary(dictionary: reply)

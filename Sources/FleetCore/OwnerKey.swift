@@ -97,6 +97,15 @@ public enum OwnerStatement {
                    "call": .text(call), "at": .number(at)])
     }
 
+    /// The owner's mode of one server (owner feature `door_modes`, the door-modes proposal, step 4): `full` is the door
+    /// card's second answer, Full access on that server, which lets every later root script there through. The door
+    /// keeps the newest statement of each server and checks it against the owner keys of its own access file, so the
+    /// hub that carries it can hold it back and forge none.
+    public static func doorMode(fleet: String, host: String, mode: String, at: Int = now()) -> String {
+        canonical(["v": .number(1), "kind": .text("door-mode"), "fleet": .text(fleet), "host": .text(host),
+                   "mode": .text(mode), "at": .number(at)])
+    }
+
     /// The owner key's certificate of one phone's own signing key (owner feature `door_calls`): the door accepts that
     /// phone's yes to a door call only through it. The Mac signs it once the phone's binding matched its QR.
     public static func ownerDevice(fleet: String, device: String, key: String, at: Int = now()) -> String {

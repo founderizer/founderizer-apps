@@ -28,15 +28,6 @@ public final class VaultKeychain: @unchecked Sendable {
         return data
     }
 
-    // Called only after owner authentication in the helper's local settings window.
-    public func save(token: String) throws {
-        let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty, token.utf8.count <= 4096, !token.contains("\n"), !token.contains("\0") else {
-            throw VaultFailure.keychain
-        }
-        try save(Data(token.utf8), item: "token")
-    }
-
     func save(_ data: Data, item: String) throws {
         // No legacy ACL or approval dialog. The OS checks the provisioned access-group entitlement.
         let key: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
@@ -53,8 +44,8 @@ public final class VaultKeychain: @unchecked Sendable {
         }
     }
 
-    public var hasToken: Bool { (try? read("token")) != nil }
-
+    /// Deletes one item, and an item that is not there counts as deleted. The query asks for no value, so nothing of
+    /// the item is read. The vault's items have no access control of their own, so a delete shows no dialog.
     func remove(_ item: String) throws {
         let key: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
             kSecUseDataProtectionKeychain as String: true, kSecAttrAccessGroup as String: group,

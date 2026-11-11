@@ -56,6 +56,13 @@ struct CentralVaultTests {
                 == #"{"at":1761300007,"call":"\#(call)","fleet":"0f1e2d3c4b5a6978","kind":"door-call","need":7,"v":1}"#)
     }
 
+    /// The owner's Full access on one server (owner feature `door_modes`), byte for byte as the door's check reads it
+    /// (`door.mode_statement`, with the central vault's `canonical`): exactly these six fields.
+    @Test func aDoorModeStatementIsTheJSONThatTheDoorChecks() {
+        #expect(OwnerStatement.doorMode(fleet: Self.fleet, host: "web-1", mode: "full", at: 1_761_300_008)
+                == #"{"at":1761300008,"fleet":"0f1e2d3c4b5a6978","host":"web-1","kind":"door-mode","mode":"full","v":1}"#)
+    }
+
     /// The vault keeps a grant statement only when it is newer than the one it holds, so two changes in one second
     /// are two seconds apart here, for each fleet on its own.
     @Test func eachGrantStatementOfAFleetIsLaterThanTheLast() throws {

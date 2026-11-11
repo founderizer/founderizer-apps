@@ -4,7 +4,7 @@ import Foundation
 import os
 
 /// The browser's own signed-in session can access its page and cookies. This boundary protects
-/// vault tokens and handover identities; it does not turn a shared browser into an isolated OS user.
+/// the vault's keys and handover identities; it does not turn a shared browser into an isolated OS user.
 public enum VaultBrowser {
     /// AppleScript runs on the main thread, and AppKit gives the main thread only when this app's launch ends. The
     /// worker's socket opens before that launch (`FleetVaultMain`), because macOS can hold it for hours: after a macOS

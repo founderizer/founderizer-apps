@@ -2,18 +2,16 @@ import AppKit
 import FleetCore
 import SwiftUI
 
-/// What an agent asks the owner, read as blocks: lines run together into a paragraph, and a line that begins
-/// with a number or a dash becomes a row of its own, so a list of steps reads as a list and not as a wall.
+/// What an agent asks the owner, on the request's card in a chat (`NeedRequestCard`), read as blocks: lines run
+/// together into a paragraph, and a line that begins with a number or a dash becomes a row of its own, so a list of
+/// steps reads as a list and not as a wall. Its words are a message's 14 points. The request at hand on Needs you
+/// draws the same words as a message does (`NeedStep`, `MessageText`).
 struct NeedBody: View {
     let text: String
     /// How many blocks to show; nil shows every one.
     var limit: Int?
     /// The most lines of each block, for a folded card whose one paragraph is long; nil shows every line.
     var lines: Int?
-    /// The window where the owner reads the whole request: larger text, with more space between its lines.
-    var reading = false
-    /// Its words on a card (`NeedRequestCard`) in a chat, at a message's 14; on Needs you a row's 13.
-    var chat = false
 
     struct Block: Identifiable { let id: Int; let marker: String?; let text: String }
 
@@ -47,15 +45,14 @@ struct NeedBody: View {
 
     var body: some View {
         let shown = limit.map { Array(Self.blocks(of: text).prefix($0)) } ?? Self.blocks(of: text)
-        let spacing: CGFloat = reading ? 6 : 3
-        // **Its words in the size of the place it stands in** (fix round 2): the request window's 14, a message's 14 in
-        // a chat, a row's 13 on Needs you; they took the page's 12.5, a size of their own beside the chat's 14.
-        let chat = reading || self.chat
-        VStack(alignment: .leading, spacing: reading ? 12 : 8) {
+        let spacing: CGFloat = 3
+        // **Its words in the size of the place it stands in** (fix round 2): a message's 14 in a chat; they took the
+        // page's 12.5, a size of their own beside the chat's 14.
+        VStack(alignment: .leading, spacing: 8) {
             ForEach(shown) { block in
                 if let marker = block.marker {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(marker).font(chat ? ChatStyle.title : FormMetrics.title)
+                        Text(marker).font(ChatStyle.title)
                             .foregroundStyle(FleetStyle.muted).frame(minWidth: 18, alignment: .trailing)
                         Text(block.text).lineSpacing(spacing).textSelection(.enabled).lineLimit(lines)
                             .fixedSize(horizontal: false, vertical: true)
@@ -65,7 +62,7 @@ struct NeedBody: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-        }.font(chat ? ChatStyle.font : FormMetrics.text)
+        }.font(ChatStyle.font)
     }
 }
 
@@ -73,22 +70,29 @@ struct NeedBody: View {
 /// owner's yes of 28 October 2026, D-8): it was violet, the colour that now has one job — a link, the focus, the
 /// selected tab and the brand's mark — and the rows of a request read as a list of choices without it.
 struct NeedOptionButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View { OptionRow(configuration: configuration) }
+    /// A number key marked this option, on the request at hand (`NeedAnswerBox`): it is lit as under the pointer, **with
+    /// the violet edge of the keyboard's focus**, as a field that has the cursor, and Return presses it. Lit alone, it
+    /// looked the same as the row under the pointer, and two rows were lit when the pointer stood on another one.
+    var marked = false
+
+    func makeBody(configuration: Configuration) -> some View { OptionRow(configuration: configuration, marked: marked) }
 
     private struct OptionRow: View {
         let configuration: ButtonStyleConfiguration
+        let marked: Bool
         @Environment(\.isEnabled) private var isEnabled
         @Environment(\.colorSchemeContrast) private var contrast
         @State private var hovered = false
 
-        private var lit: Bool { hovered && isEnabled }
+        private var lit: Bool { (hovered || marked) && isEnabled }
 
         var body: some View {
             configuration.label
                 .background(RoundedRectangle(cornerRadius: FormMetrics.inner)
                     .fill(Color.white.opacity(lit ? 0.09 : 0.05))
                     .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner)
-                        .strokeBorder(FleetStyle.hairline(lit ? 0.18 : 0.10), lineWidth: FleetStyle.edgeWidth(contrast))))
+                        .strokeBorder(marked && isEnabled ? FleetStyle.accent : FleetStyle.hairline(lit ? 0.18 : 0.10),
+                                      lineWidth: marked && isEnabled ? 1 : FleetStyle.edgeWidth(contrast))))
                 .opacity(configuration.isPressed ? 0.8 : isEnabled ? 1 : 0.55)
                 .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                 .onHover { hovered = $0 }
@@ -108,6 +112,27 @@ struct NeedAnswerBox: View {
     @State private var keyAllowed = false
     /// Owner feature `need_talk` (API 1.106): the options he ticked, on an item whose options combine.
     @State private var ticked: Set<Int> = []
+    /// **Under the request at hand on Needs you** (`NeedStep`; the owner's yes of 11 November 2026 to its picture), the
+    /// box takes the step's one size: its words at 15 points, its rows and its field 44 high. In a chat it keeps the
+    /// card's 13.
+    @Environment(\.stepText) private var stepText
+    private var onStep: Bool { stepText != nil }
+    private var words: Font { FormMetrics.onStep(stepText) ?? FormMetrics.text }
+    /// The height of a line of the step's words, for the field that grows by lines.
+    private static let stepLine: CGFloat = 18
+    /// The option that a number key marked, on a step: Return presses it (`key`).
+    @State private var marked: Int?
+    /// The page's keys, on a step (`StepKeys`): the box gives it its own (`key`). Nil in a chat, whose card has no keys.
+    var keys: StepKeys? = nil
+    /// He writes (`NeedsBoard.writes`): the field takes the cursor as the request comes to hand.
+    var takesCursor = false
+    /// An answer went, on a step: true when it went from the field, false for an option or the ticked ones.
+    /// Also where the answer that he gave stands under the box's top (`tops`), for the step's move of it.
+    var answered: ((Bool, CGFloat) -> Void)? = nil
+    /// Where each option stands under the box's top, by its number, and the field of Your answer under -1: on a step,
+    /// the answer that he gave moves from there to the top as the others go (`NeedStep`).
+    @State private var tops: [Int: CGFloat] = [:]
+    private static let space = "need-answer-box"
 
     /// Three answers that fit almost every request. They fill the box, and the owner sends or edits first. They
     /// are the fallback: an item that offers its own options (API 1.18) shows those instead, and pressing one of
@@ -140,12 +165,13 @@ struct NeedAnswerBox: View {
     /// away; a press on another option moves the words to it.
     private func row(_ words: String, sendingSince: ContinuousClock.Instant? = nil) -> some View {
         HStack(spacing: 8) {
-            Text(words).font(FormMetrics.text).foregroundStyle(FleetStyle.text)
+            Text(words).font(self.words).foregroundStyle(FleetStyle.text)
                 .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let since = sendingSince { Held(since: since) { SendingWords() } }
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
+        .padding(.horizontal, onStep ? 14 : 12).padding(.vertical, onStep ? 11 : 10)
+        .frame(minHeight: onStep ? FormMetrics.row : nil)
     }
 
     var body: some View {
@@ -154,9 +180,12 @@ struct NeedAnswerBox: View {
                 // **One look for an answer option** (T-22): the app's own three replies are rows like the ones an
                 // agent offers, though they only fill the box below and the owner sends or edits first. A page showed
                 // 24-pt dark chips under one request and 36-pt violet rows under the next.
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: onStep ? 8 : 7) {
                     ForEach(Self.quickReplies, id: \.self) { reply in
                         Button {
+                            // Not from the second click of a double-click: it would fill the next request's box with
+                            // words that one Return sends (`SecondClick`).
+                            guard !(onStep && SecondClick.isNow) else { return }
                             if trimmed.isEmpty { text.wrappedValue = reply }
                             focused = true
                         } label: { row(reply) }
@@ -166,17 +195,18 @@ struct NeedAnswerBox: View {
             } else if need.combines {
                 // **Options that combine** (the owner's yes of 9 November 2026): a tick at the right of each row, and one
                 // Send with how many he ticked; it stays off while none is ticked.
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: onStep ? 8 : 7) {
                     ForEach(Array(need.choices.enumerated()), id: \.offset) { index, option in
                         HStack(spacing: 8) {
-                            Text(option).font(FormMetrics.text).foregroundStyle(FleetStyle.text)
+                            Text(option).font(words).foregroundStyle(FleetStyle.text)
                                 .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Toggle("", isOn: Binding(get: { ticked.contains(index) }, set: { on in
                                 if on { ticked.insert(index) } else { ticked.remove(index) }
                             })).labelsHidden().toggleStyle(FleetCheckboxStyle()).accessibilityLabel(option)
                         }
-                        .padding(.leading, 12).padding(.trailing, 6).padding(.vertical, 4)
+                        .padding(.leading, onStep ? 14 : 12).padding(.trailing, onStep ? 10 : 6).padding(.vertical, 4)
+                        .frame(minHeight: onStep ? FormMetrics.row : nil)
                         .background(RoundedRectangle(cornerRadius: FormMetrics.inner).fill(Color.white.opacity(0.05)))
                         .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                         .onTapGesture { if ticked.contains(index) { ticked.remove(index) } else { ticked.insert(index) } }
@@ -185,23 +215,33 @@ struct NeedAnswerBox: View {
                     HStack {
                         Spacer()
                         Button("Send \(ticked.count)") {
+                            guard !(onStep && SecondClick.isNow) else { return }
                             let chosen = Array(ticked)
+                            answered?(false, 0)
                             Task { await store.answer(need, choices: chosen) }
                         }.buttonStyle(FleetPrimaryButtonStyle()).disabled(ticked.isEmpty || !store.canWrite)
                             .accessibilityIdentifier("need-send-ticked-\(need.id)")
+                        // On a step it stands in the middle, as a step's one button does.
+                        if onStep { Spacer() }
                     }
                 }
             } else {
                 let waiting = AnswerWaits.shared.press(of: need)
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: onStep ? 8 : 7) {
                     ForEach(Array(need.choices.enumerated()), id: \.offset) { index, option in
                         // **Never drawn grey** (fix round 2): a press that comes while the hub cannot take it waits, and
                         // goes when it can, its option saying "Sending…" meanwhile (`AnswerWaits`).
                         let sending = waiting?.choice == index
-                        Button { AnswerWaits.shared.press(need, choice: index, store: store) } label: {
+                        Button {
+                            guard !(onStep && SecondClick.isNow) else { return }
+                            marked = nil
+                            answered?(false, tops[index] ?? 0)
+                            AnswerWaits.shared.press(need, choice: index, store: store)
+                        } label: {
                             row(option, sendingSince: sending ? waiting?.since : nil)
                         }
-                            .buttonStyle(NeedOptionButtonStyle())
+                            .buttonStyle(NeedOptionButtonStyle(marked: marked == index))
+                            .stands(in: Self.space, on: onStep) { tops[index] = $0 }
                             .accessibilityValue(sending ? "Sending" : "")
                             .accessibilityIdentifier("need-option-\(need.id)-\(index)")
                     }
@@ -230,7 +270,9 @@ struct NeedAnswerBox: View {
                         // to eight, as the chat's composer is (`composerField`; the owner, 10 November 2026: "this
                         // should initially be one row only, and expanded if user enters a new line while typuing").
                         // It stood two lines high, its words at the top over a plus at the bottom.
-                        .composerField(alone: !(store.supportsAttachments && composer != nil), lines: 1...8)
+                        .composerField(alone: !(store.supportsAttachments && composer != nil), lines: 1...8,
+                                       font: onStep ? SetupMetrics.textFont : ChatStyle.font,
+                                       line: onStep ? Self.stepLine : ChatStyle.line)
                         .onChange(of: text.wrappedValue) { _, now in
                             guard guards else { return }
                             if !KeyInText.contains(now) {
@@ -252,8 +294,9 @@ struct NeedAnswerBox: View {
                     Text(words).font(FormMetrics.detail).foregroundStyle(.orange).help(store.fileCause(for: composer) ?? "")
                 }
             }
-                // The composer's room around its 28-point controls, so the box at rest is the composer's 40 points.
-                .padding(ComposerCapsule<EmptyView, EmptyView>.inset)
+                // The composer's room around its 28-point controls, so the box at rest is the composer's 40 points; on a
+                // step, a row's 44, as the options over it.
+                .padding(onStep ? (FormMetrics.row - IconMetrics.side) / 2 : ComposerCapsule<EmptyView, EmptyView>.inset)
                 // The radius of what stands in a card (`FormMetrics.inner`), not more than its card's 13 (T-21, fix
                 // round): it was the chat composer's 20 inside a card of 13.
                 .background(FleetStyle.composer, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
@@ -262,6 +305,7 @@ struct NeedAnswerBox: View {
                 .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner)
                     .strokeBorder(FleetStyle.hairline(0.32), lineWidth: FleetStyle.edgeWidth(contrast)))
                 .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
+                .stands(in: Self.space, on: onStep) { tops[-1] = $0 }
                 .onTapGesture { focused = true }
                 // The clipboard reaches the box that the owner writes in: a page can show several open requests.
                 .pasteAttachments(store: store, composer: focused ? composer : nil)
@@ -269,6 +313,62 @@ struct NeedAnswerBox: View {
                 .stageDroppedFiles(store: store, composer: composer)
             // No "Connection required" under it (D-2): the notice over the page is the one sign of an outage, as in
             // the chat's composer.
+        }
+        .coordinateSpace(.named(Self.space))
+        // The keys of the request at hand, through the page's one watch; a card in a chat has none.
+        .background { if let keys { StepKeysBox(keys: keys, need: need.id, take: key) } }
+        .task { if takesCursor { focused = true } }
+    }
+
+    /// **The keys of the request at hand**, while no field has the cursor (`PageKeys`): a number marks that option, and
+    /// Return presses the marked one (**the owner's choice of 11 November 2026: "Keep mark + Return"**, when he was
+    /// asked whether a number alone should send, as the page's picture had said: "keys 1 to 9 press an option"). **One
+    /// key alone sends nothing**: an answer cannot be taken back, so a number that he pressed by mistake only lights a
+    /// row.
+    /// **A mark holds only until the next key**: Return presses it, Escape and every other key take it away, so words
+    /// that he types with no cursor in a field ("2 hours", Return) send nothing. On options that combine, a number ticks
+    /// its option, and Return sends the ticked ones. With nothing marked or ticked, Return puts the cursor in Your
+    /// answer.
+    private func key(_ event: NSEvent) -> Bool {
+        let choices = need.choices
+        if let digit = event.charactersIgnoringModifiers.flatMap({ Int($0) }), (1...9).contains(digit) {
+            // A number with no option is a key as any other: the mark goes.
+            guard digit <= choices.count else { marked = nil; return false }
+            // A key that he holds marks once: its repeats would take the mark away and put it back.
+            guard !event.isARepeat else { return true }
+            if need.combines {
+                if ticked.contains(digit - 1) { ticked.remove(digit - 1) } else { ticked.insert(digit - 1) }
+            } else {
+                marked = marked == digit - 1 ? nil : digit - 1
+            }
+            return true
+        }
+        switch event.keyCode {
+        case 36, 76:        // Return and Enter
+            // A Return that he holds presses once: its repeats would reach the request that comes to hand next.
+            guard !event.isARepeat else { return true }
+            if need.combines {
+                guard !ticked.isEmpty else { focused = true; return true }
+                guard store.canWrite else { return true }
+                let chosen = Array(ticked)
+                answered?(false, 0)
+                Task { await store.answer(need, choices: chosen) }
+            } else if let option = marked, choices.indices.contains(option) {
+                marked = nil
+                answered?(false, tops[option] ?? 0)
+                AnswerWaits.shared.press(need, choice: option, store: store)
+            } else {
+                focused = true
+            }
+            return true
+        case 53:            // Escape
+            guard marked != nil else { return false }
+            marked = nil
+            return true
+        default:
+            // Any other key: he does not answer with the number that he pressed before it.
+            marked = nil
+            return false
         }
     }
 }
@@ -309,6 +409,20 @@ struct NeedAnswerBox: View {
     }
 }
 
+/// **The second click of a double-click sends no answer, on Needs you** (review of 11 November 2026). His answer brings
+/// the next request to hand in the same frame, with its options where the options that he pressed stood: the second
+/// click of a double-click fell on the next request, and answered it too, or pressed its Decline. Every control that
+/// sends an answer there asks this first. Two clicks that are no double-click are his own two answers.
+@MainActor enum SecondClick {
+    static var isNow: Bool {
+        // A click of this moment: a press that VoiceOver makes is no event, and the app's last event then is an older
+        // one, which must not count.
+        guard let event = NSApp.currentEvent, event.type == .leftMouseUp,
+              ProcessInfo.processInfo.systemUptime - event.timestamp < NSEvent.doubleClickInterval else { return false }
+        return event.clickCount > 1
+    }
+}
+
 /// "Sending…" on the option of a request whose answer waits: the moving words of a wait, as the chat's "Thinking" moves,
 /// and still under Reduce Motion.
 private struct SendingWords: View {
@@ -327,10 +441,12 @@ private struct SendingWords: View {
 extension NeedAnswerBox {
     /// Sends the answer, unless it holds what looks like a key that the owner did not choose to keep.
     private func sendAnswer() {
+        guard !(onStep && SecondClick.isNow) else { return }
         if guards && !keyAllowed && KeyInText.contains(text.wrappedValue) {
             store.heldKey = HeldKey(composer: guardKey, hold: .text)
             return
         }
+        answered?(true, tops[-1] ?? 0)
         Task { await store.send(needID: need.id) }
     }
 
@@ -377,26 +493,24 @@ struct NeedAnswerGiven: View {
     }
 }
 
-/// One request in the Needs you page, and in the chat of the agent that asked it: the title, the first lines of it,
-/// and its answer where it is read. The rest opens with one click, so a long request does not fill the column.
+/// One request in the chat of the agent that asked it (D-7): the title, the first lines of it, and its answer where it
+/// is read. The rest opens with one click, so a long request does not fill the column. On Needs you the same request
+/// is a card of the lane and the request at hand (`NeedsBoard`), which share its answers (`NeedAnswerBox`), its secure
+/// form and its discussion (`NeedDiscussion`).
 ///
 /// **An answered request folds to two lines** (the owner's yes of 28 October 2026, D-7): its title and "✓ Correos",
-/// the rest on a click, as Grok Bot folds a question card it answered. Needs you keeps every request, and an answered
-/// one took as much room as an open one.
+/// the rest on a click, as Grok Bot folds a question card it answered. An answered one took as much room as an open
+/// one.
 struct NeedRequestCard: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
-    /// In the chat of the agent that asked it (D-7), where no request is the selected one of Needs you.
-    var inChat = false
     @State private var expanded = false
     /// Owner feature `need_talk` (API 1.106): Discuss is open, and the words of his next message in it.
     @State private var discussing = false
-    @State private var message = ""
-    @State private var talking = false
     /// His answer as the outbox saved it, kept from the frame it went until the reading says the request is answered
     /// (`WordsOnTheirWay`): the store lets the request go with its receipt, a round trip before that reading.
     @State private var sent: PendingRequest?
-    /// On Needs you, a form page, the card takes the form's width as every card there does (D-8); in a chat, the column's.
+    /// The width of a form page's cards, where the card stands on one; in a chat, nil, and the card takes the column's.
     @Environment(\.formMeasure) private var measure
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -422,11 +536,11 @@ struct NeedRequestCard: View {
     /// The request's title, folded or whole, **without its number** (D-2, the owner's yes of 28 October 2026): "N-3" is
     /// the hub's bookkeeping, and the agents' own words name a request by what it asks.
     private var heading: String { need.title }
-    /// **The card's words in the sizes of the place it stands in** (fix round 2): in a chat its title and its body
-    /// (`NeedBody`) take the chat's 14 points, on Needs you a row's 13, the title medium; its small lines are 12 in both,
-    /// where they were 11 and 11.5, and its body took the page's 12.5: sizes of their own in the chat's column. Its
-    /// option rows keep 13 in both, the size of a button's words (D-8 item 10).
-    private var titleFont: Font { inChat ? ChatStyle.title : FormMetrics.title }
+    /// **The card's words in the sizes of the chat it stands in** (fix round 2): its title and its body (`NeedBody`) take
+    /// the chat's 14 points, the title medium; its small lines are 12, where they were 11 and 11.5, and its body took
+    /// the page's 12.5: sizes of their own in the chat's column. Its option rows keep 13, the size of a button's words
+    /// (D-8 item 10).
+    private var titleFont: Font { ChatStyle.title }
     /// What he answered, in the folded card's second line: his words or the option he pressed.
     private var answerWords: String {
         let answer = (onItsWay?.text ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -451,11 +565,9 @@ struct NeedRequestCard: View {
         }
         .background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.radius))
         // **The edge of every card of a form** (fix round 3, item 58; T-41): with Increase Contrast a one-point edge that
-        // reads 4:1, where the request card had none (1.11:1); the selected request's violet over it.
+        // reads 4:1, where the request card had none (1.11:1).
         .overlay(RoundedRectangle(cornerRadius: FormMetrics.radius)
             .strokeBorder(FleetStyle.hairline(0.08), lineWidth: FleetStyle.edgeWidth(contrast)))
-        .overlay(RoundedRectangle(cornerRadius: FormMetrics.radius)
-            .stroke(!inChat && store.selectedNeed == need.id ? FleetStyle.accent.opacity(0.4) : .clear))
         // Owner feature attachments: a file dropped anywhere on an open request is staged in its answer, as a
         // file dropped anywhere in a conversation is staged in that chat's composer.
         .stageDroppedFiles(store: store,
@@ -486,22 +598,22 @@ struct NeedRequestCard: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(heading).font(titleFont).multilineTextAlignment(.leading)
                     Spacer(minLength: 8)
-                    // No orange "Needs you" on a request that waits (D-2): on Needs you and in the chat every open
-                    // request needs him. "Answered" stays, on one opened again.
+                    // No orange "Needs you" on a request that waits (D-2): every open request needs him. "Answered" stays,
+                    // on one opened again.
                     if !need.isOpen { Text("Answered").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
                 }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
             }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach)
 
             // **An older long card folds to three lines** (the owner, 9 November 2026: "MUCH better so they are shorter"):
             // its one long paragraph showed whole under the two-block fold. Show all opens the rest.
-            NeedBody(text: need.why, limit: expanded || short ? nil : 1, lines: expanded || short ? nil : 3, chat: inChat)
+            NeedBody(text: need.why, limit: expanded || short ? nil : 1, lines: expanded || short ? nil : 3)
             if expanded, let details = need.details {
-                NeedBody(text: details, chat: inChat)
+                NeedBody(text: details)
             }
             if expanded, !todo.isEmpty {
                 Text("What it needs from you").font(FormMetrics.detailTitle)
                     .foregroundStyle(FleetStyle.muted).padding(.top, 2)
-                NeedBody(text: todo, chat: inChat)
+                NeedBody(text: todo)
             }
             if hasMore || discussable {
                 HStack(spacing: 10) {
@@ -510,7 +622,9 @@ struct NeedRequestCard: View {
                             withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
                         } label: {
                             HStack(spacing: 3) {
-                                Text(need.details != nil ? "Details" : expanded ? "Show less" : "Show all")
+                                // the door's card shows its script there, as the owner approved it ("Yes, as shown")
+                                Text(need.details != nil ? (need.door_host != nil ? "Script" : "Details")
+                                     : expanded ? "Show less" : "Show all")
                                 if need.details != nil {
                                     Image(systemName: expanded ? "chevron.down" : "chevron.right").font(IconMetrics.symbol(9, weight: .semibold))
                                 }
@@ -525,7 +639,7 @@ struct NeedRequestCard: View {
                     }
                 }
             }
-            if discussable && (discussing || !talk.isEmpty) { discussion }
+            if discussable && (discussing || !talk.isEmpty) { NeedDiscussion(store: store, need: need) }
             NeedAnswerGiven(store: store, need: need)
             // Who asks, by the name the sidebar gives it and its glyph before it (D-8), and when: a clock time today
             // (T-12).
@@ -539,28 +653,47 @@ struct NeedRequestCard: View {
         }
     }
 
-    /// **His discussion of the item** (the owner's yes of 9 November 2026, "a button to clarify or to discuss"): his
-    /// messages in the chat's bubble, the replies as the chat draws an agent's words, and a field of its own. It is no
-    /// answer: the options and Your answer stay below it until he decides.
-    private var discussion: some View {
+}
+
+/// **His discussion of one open request** (the owner's yes of 9 November 2026, "a button to clarify or to discuss"): his
+/// messages in the chat's bubble, the replies as the chat draws an agent's words, and a field of its own. It is no
+/// answer: the options and Your answer stay with it until he decides. It stands in the request's card in a chat, and
+/// under the request at hand on Needs you (`NeedStep`), where its words take the step's size.
+struct NeedDiscussion: View {
+    @Bindable var store: FleetStore
+    let need: OwnerNeed
+    /// The words of his next message where the page keeps them (`StepMemory`), so a look at another request does not
+    /// lose them; nil in a chat's card, which keeps its own.
+    var draft: Binding<String>? = nil
+    @State private var own = ""
+    @State private var talking = false
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.stepText) private var stepText
+
+    private var talk: [NeedMessage] { need.talk ?? [] }
+    private var words: Font { FormMetrics.onStep(stepText) ?? FormMetrics.text }
+    private var message: Binding<String> { draft ?? $own }
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(talk.enumerated()), id: \.offset) { _, line in
                 if line.fromOwner {
-                    Text(line.text).font(FormMetrics.text).foregroundStyle(FleetStyle.text).textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(line.text).font(words).foregroundStyle(FleetStyle.text).textSelection(.enabled)
+                        .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 12).padding(.vertical, 7)
                         .background(ChatStyle.bubble, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 } else {
-                    Text(line.text).font(FormMetrics.text).foregroundStyle(FleetStyle.text).textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(line.text).font(words).foregroundStyle(FleetStyle.text).textSelection(.enabled)
+                        .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel("\(line.who.agentLabel): \(line.text)")
                 }
             }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("Message \(manager.agentLabel)", text: $message, axis: .vertical)
-                    .textFieldStyle(.plain).font(FormMetrics.text).growingField(1...6)
+                TextField("Message \(manager.agentLabel)", text: message, axis: .vertical)
+                    .textFieldStyle(.plain).font(words).multilineTextAlignment(.leading)
+                    .growingField(1...6, line: stepText == nil ? ChatStyle.line : 18)
                     .onSubmit { sendMessage() }
                     .accessibilityIdentifier("need-talk-field-\(need.id)")
                 SendSlot(shows: canTalk) {
@@ -582,155 +715,29 @@ struct NeedRequestCard: View {
     /// The agent that answers his discussion: the manager, which holds every Needs-you item.
     private var manager: String { store.state?.agents.first { $0.role == "manager" }?.name ?? "manager" }
     private var canTalk: Bool {
-        let words = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = message.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
         return store.canWrite && !talking && !words.isEmpty && words.count <= NeedTalk.most
     }
 
     private func sendMessage() {
         guard canTalk else { return }
-        let words = message
+        let words = message.wrappedValue
         talking = true
         Task {
-            if await store.talk(need, text: words) { message = "" }
+            if await store.talk(need, text: words) { message.wrappedValue = "" }
             talking = false
         }
     }
 }
 
-/// **The list of Needs you** (D-4): the manager's open requests, then the tasks that only the owner can move (`tasks`),
-/// then the requests he answered. **A request he answers while he looks keeps its place, and so does every other card**
-/// (fix round 3b; D-7 item 2, B-MOT-12): it folds where it stands in the frame he answers (`WordsOnTheirWay`), and the
-/// reading that confirms the answer moves nothing (`NeedsOrder`); "Nothing needs you" waits for his next visit while a
-/// request he answered on this one stands at the top. That reading sorted the list again, a round trip after the fold.
-struct NeedsList<Tasks: View>: View {
-    @Bindable var store: FleetStore
-    /// The owner has tasks to move: `tasks` draws them between the two groups.
-    let hasTasks: Bool
-    let tasks: Tasks
-    /// What this visit drew, and where.
-    @State private var order = NeedsOrder()
 
-    init(store: FleetStore, hasTasks: Bool, @ViewBuilder tasks: () -> Tasks) {
-        self.store = store; self.hasTasks = hasTasks; self.tasks = tasks()
-    }
-
-    var body: some View {
-        let needs = store.state?.needs ?? []
-        let groups = order.groups(of: needs)
-        // **The blocks of a page, 22 points apart** (margins row 18): the requests and the card of his tasks stood 12
-        // apart, where every other page puts its blocks `FleetSpace.block` apart.
-        LazyVStack(alignment: .leading, spacing: FleetSpace.block) {
-            if groups.top.isEmpty && !hasTasks {
-                FormSection { FormEmpty("Nothing needs you", symbol: "checkmark.circle") }
-            }
-            ForEach(groups.top) { need in NeedRequestCard(store: store, need: need) }
-            if hasTasks { tasks }
-            ForEach(groups.bottom) { need in NeedRequestCard(store: store, need: need) }
+private extension View {
+    /// Tells where this view stands under the top of the space `name`, while `on`: the answer box on a step.
+    @ViewBuilder func stands(in name: String, on: Bool, top: @escaping (CGFloat) -> Void) -> some View {
+        if on {
+            onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(name)).minY } action: { top($0) }
+        } else {
+            self
         }
-        .onChange(of: needs.map { [$0.id, $0.isOpen ? 1 : 0] }, initial: true) { _, _ in
-            order.keep(store.state?.needs ?? [])
-        }
-    }
-}
-
-/// The same request as a window over the Dashboard, so that the owner answers it where he saw it.
-struct NeedSheet: View {
-    @Bindable var store: FleetStore
-    let need: OwnerNeed
-    let close: () -> Void
-
-    /// What the request itself takes, so a short one is a short window and a long one is as tall as the screen
-    /// allows before it scrolls.
-    @State private var read: CGFloat = 0
-    /// What its answer takes. An item that offers its own answers has a row for each, which wraps, so this is no
-    /// longer a constant: a short request with four offered answers needs the room for them.
-    @State private var answer: CGFloat = 0
-
-    private var window: CGSize { (NSApp.mainWindow ?? NSApp.keyWindow)?.frame.size ?? CGSize(width: 1280, height: 900) }
-    static func width(of window: CGSize) -> CGFloat { min(max(660, window.width * 0.58), 1020) }
-    /// The room the window takes beside the two it measures: its title, the dividers, the paddings and the two
-    /// buttons under the answer.
-    private static let chrome: CGFloat = 138
-    static func height(of window: CGSize, content: CGFloat, answer: CGFloat) -> CGFloat {
-        min(max(380, content + answer + chrome), min(window.height * 0.82, 920))
-    }
-
-    private struct ReadHeight: PreferenceKey {
-        static let defaultValue: CGFloat = 0
-        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
-    }
-
-    private struct AnswerHeight: PreferenceKey {
-        static let defaultValue: CGFloat = 0
-        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                // Its title without the hub's number, and "Answered" only once it is (D-2), as on the card.
-                Text(need.title).font(ChatStyle.title)
-                    .multilineTextAlignment(.leading)
-                Spacer(minLength: 8)
-                if !need.isOpen { Text("Answered").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
-            }.padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 14)
-            Divider().overlay(FleetStyle.line)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    NeedBody(text: need.why, reading: true)
-                    if let details = need.details { NeedBody(text: details, reading: true) }
-                    if !need.todo.isEmpty, !need.asksForSecret {        // a secret's form is the answer below
-                        Text("What it needs from you").font(FormMetrics.detailTitle)
-                            .foregroundStyle(FleetStyle.muted)
-                        NeedBody(text: need.todo, reading: true)
-                    }
-                    NeedAnswerGiven(store: store, need: need)
-                    AgentNamed(agent: need.by) {
-                        Text("From \(need.by.agentLabel) · \(messageTime(need.raised))")
-                    }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                }
-                .frame(maxWidth: 720, alignment: .leading)        // a line nobody has to track back across
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24).padding(.vertical, 22)
-                .background(GeometryReader { shown in
-                    Color.clear.preference(key: ReadHeight.self, value: shown.size.height)
-                })
-            }
-            Divider().overlay(FleetStyle.line)
-            VStack(alignment: .leading, spacing: 10) {
-                if need.isOpen {
-                    Group {
-                        if need.asksForSecret { SecretRequestForm(store: store, need: need) }
-                        else { NeedAnswerBox(store: store, need: need) }
-                    }
-                        .background(GeometryReader { shown in
-                            Color.clear.preference(key: AnswerHeight.self, value: shown.size.height)
-                        })
-                }
-                HStack {
-                    Button("Open in Needs you") {
-                        store.selectedNeed = need.id
-                        store.destination = .needs
-                        close()
-                    }.buttonStyle(FleetOutlineButtonStyle())
-                    Spacer()
-                    Button("Close", action: close).buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.escape, modifiers: [])
-                }
-            }.padding(.horizontal, 24).padding(.vertical, 20)
-        }
-        // A sheet takes the size of its content, so it is measured against the window it opens over: large enough
-        // to read a long request without scrolling it through a small pane, and never wider than a line can be
-        // followed across.
-        .frame(width: Self.width(of: window), height: Self.height(of: window, content: read, answer: answer))
-        .onPreferenceChange(ReadHeight.self) { read = $0 }
-        .onPreferenceChange(AnswerHeight.self) { answer = $0 }
-        .background(FleetStyle.rail)
-        // A card over the window is a window of its own, which the window's team does not reach: the glyph before the
-        // asker's name and Send's colour take it from here.
-        .environment(\.glyphTeam, store.state?.agents.map(\.name) ?? [])
-            // A file dropped anywhere in the window is staged in the answer below it, as on the request's card.
-            .stageDroppedFiles(store: store,
-                               composer: need.isOpen && need.takesFiles ? FleetStore.stageKey(need: need.id) : nil,
-                               mark: true)
     }
 }
