@@ -97,7 +97,7 @@ struct SecretTests {
         #expect(!((LoginSecret() as Any) is any Encodable))                             // no general encoder can save a value
     }
 
-    private let reference = "bws://18eaf23b-f5d2-4623-a4fb-b4de012c53fb"
+    private let reference = "bws://11111111-2222-4333-8444-55555555555b"
     private let hex = String(repeating: "a", count: 64)
 
     @Test func theHubStepsOfANewLoginCarryNoValue() throws {

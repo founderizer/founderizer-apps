@@ -6,7 +6,7 @@ import Testing
 /// Synthetic data only.
 struct LoginCreateTests {
     private let hash = String(repeating: "a", count: 64)
-    private let reference = "bws://18eaf23b-f5d2-4623-a4fb-b4de012c53fb"
+    private let reference = "bws://11111111-2222-4333-8444-55555555555b"
     private func request(_ command: OwnerCommand, text: String = "") -> PendingRequest {
         PendingRequest(hub: URL(string: "http://localhost:8765")!, database: "db", client: "local", command: command, text: text)
     }
@@ -72,12 +72,12 @@ struct LoginCreateTests {
         let waiting = made.merging(["login": NSNull(), "state": "unknown", "project": NSNull()]) { _, b in b }
         // A key that an agent saved from a page: on another address than its use address, and on the same address.
         let page = "https://dashboard.shop.example.test/settings/keys"
-        let captured = made.merging(["login": "bws://28eaf23b-f5d2-4623-a4fb-b4de012c53fb", "label": "Shop API key", "kind": "capture",
+        let captured = made.merging(["login": "bws://21111111-2222-4333-8444-55555555555b", "label": "Shop API key", "kind": "capture",
                                      "url": "https://api.shop.example.test/v1", "source_url": page]) { _, b in b }
-        let onItsPage = made.merging(["login": "bws://38eaf23b-f5d2-4623-a4fb-b4de012c53fb", "kind": "capture", "source_url": NSNull()]) { _, b in b }
+        let onItsPage = made.merging(["login": "bws://31111111-2222-4333-8444-55555555555b", "kind": "capture", "source_url": NSNull()]) { _, b in b }
         let value = try team(["ignored": ["shop": ["title": "Shop", "manager": "pm-shop", "members": ["seo"], "create_logins": true],
                                            "blog": ["title": "Blog", "manager": "pm-shop", "members": ["seo"]]],
-                              "created_logins": [made, waiting, captured, onItsPage, made.merging(["login": "bws://48eaf23b-f5d2-4623-a4fb-b4de012c53fb", "kind": "create"]) { _, b in b }]])
+                              "created_logins": [made, waiting, captured, onItsPage, made.merging(["login": "bws://41111111-2222-4333-8444-55555555555b", "kind": "create"]) { _, b in b }]])
         let seo = try #require(value.lines.first { $0.agent == "seo" }), studio = try #require(value.lines.first { $0.agent == "studio" })
         #expect(seo.vault_create == false && seo.vault_create_grant == VaultGrant(ready: false, missing: ["broker_without_creates"]))
         #expect(studio.vault_create == true && studio.vault_create_grant == nil && value.lines[0].vault_create == nil)

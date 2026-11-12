@@ -1,5 +1,6 @@
 import FleetCore
 import Foundation
+import Network
 import Testing
 @testable import FleetMobile
 
@@ -158,6 +159,42 @@ struct SampleFleetTests {
         }
     }
 
+    /// **The Mac's code link joins with no line about the phone's key** (`MobileStore.openLink`). A recording on an
+    /// iPhone 18 Pro (11 November 2026) showed "The hub wants this phone's key and the phone sent none" over Chats for
+    /// the quarter second of the enrolment: the phone read the hub with no key before it had one.
+    @MainActor @Test("the Mac's code link joins a phone with no hub, and no line about its key shows at any moment",
+                     .timeLimit(.minutes(1)))
+    func linkJoins() async throws {
+        try await Self.withoutHub {
+            try await Self.keepingReadings {
+                let hub = LinkHub()
+                defer { hub.stop() }
+                let address = try await hub.start()
+                // A key of the check's own: the key of an enrolled phone is never touched.
+                let holder = DeviceKey(account: "device-key-link-check")
+                try holder.remove()
+                defer { try? holder.remove() }
+                let store = MobileStore(deviceKey: holder)
+                #expect(store.hasNoHub && store.keyState == .none)
+                store.chatRoute = [.settings, .enroll]
+                let link = try #require(URL(string: "fleet://enroll?hub=\(address)&code=ABCD-2345"))
+                let join = Task { await store.openLink(link) }
+                // The enrolment is on its way, and the hub holds its answer: the phone is at the hub and says nothing
+                // about its key.
+                for await request in hub.requests where request == "POST /ui/owner/enroll" { break }
+                #expect(store.hub.absoluteString == address + "/" && !store.hasNoHub)
+                #expect(store.unavailableWords == nil && store.authProblem == nil && store.readError == nil)
+                hub.answerEnrolment()
+                await join.value
+                // No read went before the key, so the hub had no read to refuse.
+                #expect(hub.log == ["POST /ui/owner/enroll", "GET /ui/mobile with the key"])
+                #expect(store.keyState == .ready && store.lastRead != nil && store.snapshot?.db == "gen-link")
+                #expect(store.unavailableWords == nil && store.authProblem == nil && store.readError == nil)
+                #expect(store.tab == .chats && store.chatRoute.isEmpty)
+            }
+        }
+    }
+
     /// Where the store keeps its files on this phone.
     private static let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("FleetMobile")
@@ -183,5 +220,168 @@ struct SampleFleetTests {
             else { UserDefaults.standard.removeObject(forKey: "hubAddress") }
         }
         try await body()
+    }
+
+    /// Runs `body` and puts back what a read of a hub writes to this phone: the fleet and the chats that it keeps, and
+    /// the replies that it saw.
+    @MainActor private static func keepingReadings(_ body: () async throws -> Void) async throws {
+        let files = ["snapshot.json", "chats.json"].map { support.appendingPathComponent($0) }
+        let kept = files.map { try? Data(contentsOf: $0) }
+        let seen = UserDefaults.standard.object(forKey: "mobileRepliesSeen")
+        defer {
+            for (file, data) in zip(files, kept) {
+                if let data { try? data.write(to: file, options: .atomic) }
+                else { try? FileManager.default.removeItem(at: file) }
+            }
+            if let seen { UserDefaults.standard.set(seen, forKey: "mobileRepliesSeen") }
+            else { UserDefaults.standard.removeObject(forKey: "mobileRepliesSeen") }
+        }
+        try await body()
+    }
+}
+
+/// **A hub on this Mac's loopback for the Mac's code link** (`MobileStore.openLink`): it refuses a read with no key in
+/// the hub's words for an owner device, gives a key for the code, and answers a read that carries that key. It holds
+/// its answer to the enrolment until the check has looked at the phone, and it keeps every request, in order.
+private final class LinkHub: @unchecked Sendable {
+    static let key = "a-key-that-the-check-hub-gave"
+    /// Each request as it comes: its method, its route and, for a read, whether it carried the key.
+    let requests: AsyncStream<String>
+    private let arrived: AsyncStream<String>.Continuation
+    private let queue = DispatchQueue(label: "founderizer.check.link-hub")
+    private let lock = NSLock()
+    private var listener: NWListener?
+    private var seen: [String] = []
+    /// The enrolment's connection and its answer, until the check lets the answer go.
+    private var held: (connection: NWConnection, reply: Data)?
+    private var letGo = false
+
+    init() {
+        let made = AsyncStream.makeStream(of: String.self)
+        requests = made.stream
+        arrived = made.continuation
+    }
+
+    /// Every request so far, in order.
+    var log: [String] { lock.withLock { seen } }
+
+    /// Starts listening on the loopback alone, and gives the hub's address.
+    func start() async throws -> String {
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
+        let listener = try NWListener(using: parameters)
+        listener.newConnectionHandler = { [weak self] connection in self?.take(connection) }
+        listener.start(queue: queue)
+        lock.withLock { self.listener = listener }
+        var tries = 0
+        while (listener.port?.rawValue ?? 0) == 0, tries < 150 {
+            tries += 1
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        guard let port = listener.port?.rawValue, port != 0 else { throw URLError(.cannotConnectToHost) }
+        return "http://127.0.0.1:\(port)"
+    }
+
+    func stop() {
+        let (listener, held) = lock.withLock { () -> (NWListener?, NWConnection?) in
+            defer { self.listener = nil; self.held = nil }
+            return (self.listener, self.held?.connection)
+        }
+        listener?.cancel()
+        held?.cancel()
+        arrived.finish()
+    }
+
+    /// The answer to the enrolment goes.
+    func answerEnrolment() {
+        let held = lock.withLock { () -> (connection: NWConnection, reply: Data)? in
+            letGo = true
+            defer { self.held = nil }
+            return self.held
+        }
+        if let held { send(held.reply, on: held.connection) }
+    }
+
+    private func take(_ connection: NWConnection) {
+        connection.start(queue: queue)
+        read(connection, bytes: Data())
+    }
+
+    private func read(_ connection: NWConnection, bytes: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] piece, _, done, error in
+            guard let self, error == nil else { return connection.cancel() }
+            let all = bytes + (piece ?? Data())
+            if let request = Request(all) { return self.answer(request, on: connection) }
+            if done || all.count > 1_000_000 { return connection.cancel() }
+            self.read(connection, bytes: all)
+        }
+    }
+
+    private func answer(_ request: Request, on connection: NWConnection) {
+        let route = "\(request.method) \(request.path)"
+        switch route {
+        case "GET /ui/mobile":
+            let keyed = request.headers["authorization"] == "Bearer \(Self.key)"
+            note(route + (keyed ? " with the key" : " with no key"))
+            send(keyed ? Self.reply(200, Self.fleet)
+                       : Self.reply(403, #"{"error": "device key required", "auth": "device_key_required"}"#),
+                 on: connection)
+        case "POST /ui/owner/enroll":
+            note(route)
+            let reply = Self.reply(200, #"{"device": "phone-check", "label": "iPhone", "key": "\#(Self.key)"}"#)
+            let now = lock.withLock { () -> Bool in
+                if letGo { return true }
+                held = (connection, reply)
+                return false
+            }
+            if now { send(reply, on: connection) }
+        default:
+            note(route)
+            send(Self.reply(404, #"{"error": "not found"}"#), on: connection)
+        }
+    }
+
+    private func note(_ request: String) {
+        lock.withLock { seen.append(request) }
+        arrived.yield(request)
+    }
+
+    private func send(_ reply: Data, on connection: NWConnection) {
+        connection.send(content: reply, completion: .contentProcessed { _ in connection.cancel() })
+    }
+
+    private static func reply(_ status: Int, _ body: String) -> Data {
+        let bytes = Data(body.utf8)
+        let head = "HTTP/1.1 \(status) \(status == 200 ? "OK" : "Refused")\r\nContent-Type: application/json\r\n"
+            + "Content-Length: \(bytes.count)\r\nConnection: close\r\n\r\n"
+        return Data(head.utf8) + bytes
+    }
+
+    /// The hub's compact read of a fleet with nothing in it.
+    private static let fleet = #"{"schema_version": 1, "db": "gen-link", "time": 1800000000, "ui_features": ["mobile"], "#
+        + #""agents": [], "needs": [], "tasks": [], "recent": [], "holds": [], "outcomes": []}"#
+
+    /// One request, once its head and its whole body are here.
+    private struct Request {
+        let method: String
+        let path: String
+        let headers: [String: String]
+
+        init?(_ bytes: Data) {
+            guard let end = bytes.range(of: Data("\r\n\r\n".utf8)) else { return nil }
+            let lines = String(decoding: bytes[..<end.lowerBound], as: UTF8.self).components(separatedBy: "\r\n")
+            let first = lines.first?.split(separator: " ") ?? []
+            guard first.count >= 2 else { return nil }
+            var headers: [String: String] = [:]
+            for line in lines.dropFirst() {
+                guard let colon = line.firstIndex(of: ":") else { continue }
+                headers[line[..<colon].lowercased()] = line[line.index(after: colon)...]
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            guard bytes.count - end.upperBound >= Int(headers["content-length"] ?? "0") ?? 0 else { return nil }
+            method = String(first[0])
+            path = String(first[1].split(separator: "?").first ?? "")
+            self.headers = headers
+        }
     }
 }

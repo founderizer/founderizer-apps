@@ -3,7 +3,7 @@ import Testing
 @testable import FleetCore
 
 private let sha = String(repeating: "a", count: 64)
-private let key = "bws://28eaf23b-f5d2-4623-a4fb-b4de012c53fb"
+private let key = "bws://21111111-2222-4333-8444-55555555555b"
 
 /// One reading of `GET /ui/resources`, in the hub's own shape.
 private func list(db: String = "db", standing: [String: Any]? = ["max": "write", "to": "workers"],

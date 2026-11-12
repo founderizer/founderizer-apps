@@ -19,7 +19,7 @@ struct TeamProfileTests {
          ProfileSection(key: "other", title: "How you work", text: "Small steps.\n\n- Check first\n- Then act"),
          ProfileSection(key: "may_do", title: "What you may decide without the owner", text: "Read files."),
          ProfileSection(key: "must_ask", title: "What goes to the owner (Needs you)", text: "Anything that costs money."),
-         ProfileSection(key: "logins", title: "Logins", text: "`pilot-site-a` (`bws://18eaf23b-f5d2-4623-a4fb-b4de012c53fb`)"),
+         ProfileSection(key: "logins", title: "Logins", text: "`pilot-site-a` (`bws://11111111-2222-4333-8444-55555555555b`)"),
          ProfileSection(key: "other", title: "Proof", text: "A screenshot for each browser task."),
          ProfileSection(key: "knowledge_files", title: "Knowledge files", text: "- knowledge/services.md")]
     }

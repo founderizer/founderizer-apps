@@ -241,11 +241,11 @@ struct PersonInputTests {
     /// A person whose role this app does not know keeps it: a change of their name sends their name and nothing
     /// else. The app used to refuse every change of such a person with "Choose a role."
     @Test func aPersonWithARoleOfTheHubsOwnCanBeChanged() throws {
-        let fabrice = try person(["name": "Fabrice", "role": "peer"])
-        var input = PersonInput(fabrice)
-        input.name = "Fabrice M."
+        let bruno = try person(["name": "Bruno", "role": "peer"])
+        var input = PersonInput(bruno)
+        input.name = "Bruno M."
         #expect(input.problem(adding: false) == nil)
-        #expect(input.changeFields(from: fabrice).keys.sorted() == ["name"])
+        #expect(input.changeFields(from: bruno).keys.sorted() == ["name"])
     }
 
     @Test func theOwnerWritesAPhoneNumberAndTheAppMakesTheWhatsAppId() {

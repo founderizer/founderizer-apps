@@ -128,8 +128,9 @@ final class MobileStore {
     private static let noHub = try! MobileClient.address(defaultAddress)
     /// The client label of every write of this installation, as the plan asks (MOBILE-APP.md 6.3).
     let installation: String
-    /// The keychain holder of this phone's own key.
-    let deviceKey = DeviceKey()
+    /// The keychain holder of this phone's own key. A check gives a holder of its own (`DeviceKey(account:)`), so that
+    /// it never touches the key of an enrolled phone.
+    let deviceKey: DeviceKey
     private(set) var keyState: KeyState = .locked
     /// The key while the app is in front. The keychain gives it once, behind the owner's presence; it is dropped when
     /// the app leaves the front and it is written nowhere else.
@@ -219,7 +220,8 @@ final class MobileStore {
     private var seenReplies: [String: Double] = [:]
     @ObservationIgnored private var seenContext = ""
 
-    init() {
+    init(deviceKey: DeviceKey = DeviceKey()) {
+        self.deviceKey = deviceKey
         let address = UserDefaults.standard.string(forKey: "hubAddress") ?? MobileStore.defaultAddress
         // A phone with no hub shows an empty field with its example: the built-in address names no hub.
         addressText = UserDefaults.standard.string(forKey: "hubAddress") ?? ""
@@ -358,8 +360,9 @@ final class MobileStore {
 
     /// Takes the one-time code that the owner read in the Mac app and keeps the key that the hub gives for it. The
     /// hub gives that key once: if this phone cannot keep it, the code is spent and the owner makes a new one.
-    /// Gives nil when the phone is enrolled, else what went wrong in the owner's words.
-    func enroll(code: String, bind: String? = nil) async -> String? {
+    /// Gives nil when the phone is enrolled, else what went wrong in the owner's words. With `read` false, the hub is
+    /// not read after it: the Mac's code link reads when its join has ended (`openLink`).
+    func enroll(code: String, bind: String? = nil, read: Bool = true) async -> String? {
         enrollDetail = nil
         guard MobileClient.normalizedCode(code) != nil else {
             return "A code is eight characters, as the Mac app shows it (XXXX-XXXX)."
@@ -391,7 +394,7 @@ final class MobileStore {
             keyState = .ready
             authProblem = nil
             readError = nil
-            await refresh()
+            if read { await refresh() }
             return nil
         } catch let error as MobileError {
             return MobileError.enrollWords(error)
@@ -407,6 +410,12 @@ final class MobileStore {
     /// `otherHub`: the link names another hub, which this phone, holding a key, does not follow.
     private(set) var linkedCode: (code: String, problem: String, otherHub: Bool)?
 
+    /// **The Mac's code link is joining this phone to its hub, so nothing reads the hub until the enrolment has
+    /// answered** (`openLink`). A read before it goes with no key, and the hub refuses it: a recording on an iPhone 18
+    /// Pro (11 November 2026) showed "The hub wants this phone's key and the phone sent none" over Chats for the
+    /// quarter second of the enrolment. The first read goes after it, with the key that it gave.
+    @ObservationIgnored private var joining = false
+
     /// The Mac draws a code as the link `fleet://enroll?hub=…&code=…` (`OwnerDevices.enrollPayload`), and the
     /// phone's camera opens it here: the phone joins its fleet with nothing typed, and Chats opens. It did not open
     /// anything: the app registered no address of its own, and the eight characters were typed by hand.
@@ -418,6 +427,9 @@ final class MobileStore {
               let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return }
         let code = query.first { $0.name == "code" }?.value ?? ""
         let bind = query.first { $0.name == "bind" }?.value
+        // No read of the hub until the enrolment has answered (`joining`): the move to the hub reads nothing.
+        joining = true
+        defer { joining = false }
         if let text = query.first(where: { $0.name == "hub" })?.value, let address = try? MobileClient.address(text),
            address != hub {
             guard !deviceKey.has else {
@@ -428,7 +440,12 @@ final class MobileStore {
             addressText = text
             await connect()
         }
-        if let problem = await enroll(code: code, bind: bind) {
+        let problem = await enroll(code: code, bind: bind, read: false)
+        // The enrolment answered: the first read goes now, with the key that it gave, or after a refused code with
+        // none, as it went before the enrolment.
+        joining = false
+        await refresh()
+        if let problem {
             showEnrollment(code, problem: problem)
         } else {
             chatRoute = []
@@ -578,6 +595,8 @@ final class MobileStore {
         defer { lastReadUptime = ProcessInfo.processInfo.systemUptime; firstReadWaits = false }
         // A phone with no hub reads nothing: no hub can answer the built-in address, and no line may say one did not.
         guard !hasNoHub else { return }
+        // The Mac's code link is joining this phone: its first read goes with the key that the enrolment gives.
+        guard !joining else { return }
         if snapshot == nil, fleetSince == nil { fleetSince = .now }
         refreshing = true
         guard !keyIsHeldBack else { refreshing = false; clock = Date(); return }

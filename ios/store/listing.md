@@ -77,10 +77,39 @@ An agent's own page is not among them: in the sample it shows little, and a prov
 
 ## Notes for App Review (not public)
 
-Founderizer for iPhone works with Founderizer on the owner's own Mac and hub: the phone reaches the hub over the
-owner's private network (Tailscale), and the Mac makes the one-time code that adds a phone. A reviewer has neither,
-so the first screen offers **See a sample fleet**: every page with made-up data, inside the app, and every write
-answers "Not sent: This is a sample." We ask for your prior approval of this demo mode (guideline 2.1). The app
-creates no account (5.1.1(v)). It sends the owner's messages only to the owner's own hub, whose agents use the
-owner's own AI accounts: the app itself sends nothing to an AI company (5.1.2(i)). The plain-HTTP exception is for
-the owner's hub, at an address that the build cannot know.
+Rewritten on 11 November 2026 after Apple's question under guideline 2.1 ("Information Needed"), which asked for a
+screen recording made on a physical device and for these six answers; the owner approved them that day ("Yes, as
+drafted"), and the first point was then made to match the recording as it was made. The recording is the App Review
+attachment, not a file here.
+
+1. Screen recording: attached. Made on an iPhone 18 Pro with iOS 27.2 and this version, 1.0 (19). It starts with the
+launch of the app on a phone with no hub and shows See a sample fleet (Chats, a chat, Needs you, Tasks, Settings,
+Leave). Then it adds the phone to a real hub with a one-time code from the owner's Mac and sends a message to an
+agent, whose answer then shows in Chats. The Home Screen and the text of the owner's own decisions are blurred, and
+two still moments are cut. The app has no account registration, no login, no purchases and no content that other users
+see.
+
+2. Purpose and audience: Founderizer runs a small team of AI agents for a founder, on the founder's own computers and
+with the founder's own AI accounts. The agents do the founder's tasks: code, support mail, operations. The iPhone app
+is the founder's remote for that team: the chat with each agent, the decisions that wait for the founder (Needs you)
+and the tasks in progress. It is for founders and owners of small companies who run Founderizer on a Mac. Anyone can
+download Founderizer free at founderizer.com/download; it is not made for one company (3.2).
+
+3. Setup and access: no login is needed for review. On the first screen, tap See a sample fleet: every page works with
+made-up data, inside the app, and every write answers "Not sent: This is a sample." Tap Leave on the Sample fleet line
+to go back. Real use needs Founderizer on the owner's Mac and hub: in the Mac app, Settings, Servers, Add device makes
+a one-time code, and Add this phone on the iPhone takes it. The phone reaches the hub over the owner's private network
+(Tailscale). A reviewer has neither, so we ask for your prior approval of the sample fleet as the demo mode (2.1).
+
+4. External services: the owner's own Founderizer hub, on the owner's own machine (the app reads and writes only
+there); Tailscale, the private network between the phone and the hub (its own app, not part of this one); Apple Push
+Notification service, through our relay at founderizer.com, which carries only a sealed ping and stores nothing. The
+hub's agents use the owner's own AI accounts (for example Claude or ChatGPT); the app itself sends nothing to an AI
+service. No sign-in service, no payment processor, no analytics, no ads.
+
+5. Regions: the app works the same in every region, with no regional differences in features or content.
+
+6. Regulated industry or protected material: not applicable. The app shows no third-party content.
+
+Also: the app creates no account (5.1.1(v)). The plain-HTTP exception is for the owner's hub, at an address that the
+build cannot know.

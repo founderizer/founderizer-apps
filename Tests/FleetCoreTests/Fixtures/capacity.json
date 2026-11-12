@@ -296,8 +296,8 @@
    "knowledge_files": [],
    "logins": {
     "eligible": [
-     "bws://18eaf23b-f5d2-4623-a4fb-b4de012c53fb",
-     "bws://f5bd54d3-434b-42c3-aedb-b4de012c72f5"
+     "bws://11111111-2222-4333-8444-55555555555b",
+     "bws://22222222-3333-4444-8555-666666666666"
     ],
     "probe": null
    },
@@ -348,7 +348,7 @@
    "knowledge_files": [],
    "logins": {
     "eligible": [
-     "bws://18eaf23b-f5d2-4623-a4fb-b4de012c53fb"
+     "bws://11111111-2222-4333-8444-55555555555b"
     ],
     "probe": null
    },
