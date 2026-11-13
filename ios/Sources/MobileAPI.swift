@@ -7,6 +7,17 @@ import Foundation
 // `RuntimeLimit`, `ManagerWarning`) and name their own where the hub sends less.
 
 /// `GET /ui/mobile`: the heads of the whole fleet, with an `ETag`.
+extension MobileSnapshot {
+    /// **What an agent does now, in plain words** (`MobileTaskHead.doing`, hub 1.148; the Mac's
+    /// `AgentActivity.actionNow`): the words of its task whose session works now, the one that moved last when several
+    /// do. Nil when none of its tasks has a running turn that says something.
+    func action(of agent: String) -> String? {
+        tasks.filter { $0.owner == agent && $0.state == "working" && $0.works == true
+                       && !($0.doing ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
+            .max { $0.activityTime < $1.activityTime }?.doing
+    }
+}
+
 struct MobileSnapshot: Decodable, Sendable {
     let schema_version: Int
     let db: String
@@ -102,6 +113,15 @@ struct MobileAgent: Decodable, Identifiable, Sendable {
     /// (`FleetAgent.turn_ended_after`): its turn that took a message sent up to then is over. nil for every agent but
     /// the manager, before the first such message, and from an older hub.
     let turn_ended_after: Double?
+    /// **Since when its chat waits for an answer** (owner feature `chat_waits`, hub 1.142): when he sent his newest chat
+    /// message to it, while no report of the agent names that message and the agent has written none without a name
+    /// since, which is the rule of the chat's "Thinking". nil: nothing waits, or an older hub (`MobileStore.thinks`
+    /// reads the feature's name to tell the two apart).
+    let waits_since: Double?
+    /// His newest chat message to it is late (hub 1.144), as on the Mac (`FleetAgent.chat_undelivered`): its server
+    /// answers, and no session read the message, or wrote its reply, in two minutes. The chat then says "Not
+    /// answering". false or nil: it is not late, or the hub is older than this field.
+    let chat_undelivered: Bool?
 
     var id: String { name }
 
@@ -190,6 +210,12 @@ struct MobileTaskHead: Decodable, Identifiable, Sendable {
     let stalled_since: Double?
     let nudge_level: Int?
     let missing_since: Double?
+    /// **Whether its session works on it now** (hub 1.147, as `FleetTask.works` on the Mac): false when its last turn
+    /// ended and nothing of it runs, which is also so for a task that its agent parked on a reminder. nil: nothing is
+    /// known, or an older hub, and the task's state says it.
+    let works: Bool?
+    /// **What its running turn does now, in plain words** (hub 1.148, as `FleetTask.doing` on the Mac), or nil.
+    let doing: String?
 
     var isTerminal: Bool { ["completed", "failed", "rejected", "canceled"].contains(state) }
     /// The time of the task's last activity, or its created time while it has not started.
@@ -400,7 +426,8 @@ extension MobileTaskHead {
         }
         if let waiting = waiting_on, !waiting.isEmpty { return ("hourglass", words, true, false) }
         switch state {
-        case "working": return ("circle.dotted", words, false, true)
+        // No work now where its session's last turn ended and nothing of it runs (FleetCore's rule of 13 November 2026).
+        case "working": return ("circle.dotted", words, false, works != false)
         case "submitted": return ("clock", words, false, false)
         default: return ("circle", words, false, false)
         }

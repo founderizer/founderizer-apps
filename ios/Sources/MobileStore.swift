@@ -2,6 +2,7 @@ import CoreGraphics
 import FleetCore
 import Foundation
 import Observation
+import UserNotifications
 
 /// The three items of the bottom bar.
 enum MobileTab: String, Hashable, CaseIterable { case chats, needs, tasks }
@@ -423,8 +424,7 @@ final class MobileStore {
     /// A phone that holds a key keeps its hub: a link to another hub would take the phone there and its key with it.
     /// That link opens Add this phone with its code and the reason, as a refusal of the hub does.
     func openLink(_ url: URL) async {
-        guard url.scheme?.lowercased() == "fleet", url.host()?.lowercased() == "enroll",
-              let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return }
+        guard let query = Self.enrollItems(url) else { return }
         let code = query.first { $0.name == "code" }?.value ?? ""
         let bind = query.first { $0.name == "bind" }?.value
         // No read of the hub until the enrolment has answered (`joining`): the move to the hub reads nothing.
@@ -453,6 +453,24 @@ final class MobileStore {
         }
     }
 
+    /// **The two forms of the Mac's code link** (the owner's choice of 13 November 2026: one picture that opens this app
+    /// on a phone that has it, and the App Store on a phone that does not). `fleet://enroll?hub=…&code=…` is the form
+    /// of every Mac until then, and stays. `https://founderizer.com/enroll#hub=…&code=…` is the new one: the phone's
+    /// camera opens it here through the app's associated domain, and on a phone without the app in Safari, where the
+    /// website's `/enroll` sends it to the App Store. Its values ride in the fragment, which a browser never sends, so
+    /// a phone without the app gives the website no code and no hub address. nil for any other link.
+    nonisolated static func enrollItems(_ url: URL) -> [URLQueryItem]? {
+        let scheme = url.scheme?.lowercased(), host = url.host()?.lowercased()
+        if scheme == "fleet", host == "enroll" {
+            return URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+        }
+        guard scheme == "https", host == "founderizer.com", url.path() == "/enroll",
+              let fragment = url.fragment(percentEncoded: true), !fragment.isEmpty else { return nil }
+        // The fragment carries what the query carries in the first form; `URLComponents(string:)` refuses a bad
+        // one with nil, where its `percentEncodedQuery` setter would stop the app.
+        return URLComponents(string: "fleet://enroll?" + fragment)?.queryItems
+    }
+
     private func showEnrollment(_ code: String, problem: String, otherHub: Bool = false) {
         linkedCode = (code, problem, otherHub)
         tab = .chats
@@ -475,6 +493,7 @@ final class MobileStore {
             key = nil
             keyState = .none
             device = nil
+            Self.setIconCount(0)
             return nil
         } catch { return ("Cannot take the key off this phone.", error.localizedDescription) }
     }
@@ -619,6 +638,7 @@ final class MobileStore {
             }
             try await holding(requested) { try await readSnapshot(requested) }
             guard requested == hub, let database = snapshot?.db else { return }
+            showCountOnIcon()
             follow()
             if early != database {
                 if let agent = openChat {
@@ -652,6 +672,8 @@ final class MobileStore {
             readError = error.localizedDescription
             readWasRefused = (error as? MobileError)?.isDefinitive == true
             authProblem = (error as? MobileError)?.auth
+            // The hub took this phone off, or its key is not taken: nothing of that hub is this phone's to count.
+            if authProblem != nil { Self.setIconCount(0) }
         }
     }
 
@@ -932,6 +954,7 @@ final class MobileStore {
     /// The phone moves to another hub, or to or from the sample fleet: nothing of one shows under another.
     private func use(_ next: URL) {
         hub = next
+        Self.setIconCount(0)        // the next read of that hub sets its own count (showCountOnIcon)
         forgetGeneration()
         shareRoster()
         device = nil
@@ -1238,7 +1261,22 @@ final class MobileStore {
     /// **The Needs you tab's count is the Mac's Needs you row's** (the owner's yes of 28 October 2026 to D-4: "the same
     /// count as the iPhone tab"): the open requests, and each task that only he can move, once, as
     /// `HubState.ownerTasks` counts them. The page lists both, so the count is what it opens (fix round 1).
+    /// The number on the app's icon is this count too (`showCountOnIcon`), and the hub's twin of the rule is
+    /// `owner_count` in hub.py, which puts it in each ping.
     var needsYouCount: Int { openNeeds.count + ownerTasks.count }
+
+    /// **The number on the Home Screen icon is the tab's count** (the owner's yes of 12 November 2026, "Yes, all
+    /// four", point 1), and no number when nothing needs him. After each read of the hub that worked, also one that
+    /// found the fleet unchanged; the hub's pings carry the same number while the app is closed. The sample fleet puts
+    /// no number there. A phone that did not allow badges shows nothing, and the call does nothing.
+    func showCountOnIcon() {
+        Self.setIconCount(sample ? 0 : needsYouCount)
+    }
+
+    static func setIconCount(_ count: Int) {
+        guard !hostsTests else { return }
+        Task { try? await UNUserNotificationCenter.current().setBadgeCount(count) }
+    }
 
     /// A task that only the owner can move, as the Mac's Needs you page lists it.
     struct OwnerTask: Identifiable {
@@ -1280,6 +1318,32 @@ final class MobileStore {
     func items(for agent: String) -> [MobileChatItem] { chatItems[agent] ?? [] }
     /// This chat was read at least once on this hub generation: before that, it is not empty, it is not read yet.
     func hasRead(chat agent: String) -> Bool { chatItems[agent] != nil }
+
+    /// **Whether an agent works on his newest chat message now**, as the "Thinking" of its chat says it: its mark then
+    /// moves and the line of its row on Chats moves, as for a task in work (`MobileAgent.mobileState`). Not while its
+    /// usage limit holds it or its server does not answer, and not from a reading that is not current.
+    ///
+    /// **The hub says since when each chat waits** (owner feature `chat_waits`, hub 1.142; the owner, 13 November
+    /// 2026: "Yes, fix it"), so every row of Chats knows it, also for a message that he wrote on his Mac. With a hub
+    /// from before that, only a conversation that this phone has read up to its newest line says it: the compact read
+    /// gives a conversation's last line and not what it answers, so the rule reads the chat's own items
+    /// (`ChatPage.pending`), and a line that came since (a reply) is not in them.
+    func thinks(_ name: String) -> Bool {
+        guard showsCurrent, let entry = agent(name), let snapshot else { return false }
+        return Self.thinks(entry, items: items(for: name), time: snapshot.time, hubSays: features.contains("chat_waits"))
+    }
+
+    static func thinks(_ entry: MobileAgent, items: [MobileChatItem], time: Double, hubSays: Bool) -> Bool {
+        // nor while his message does not arrive, which the hub says of a server that answers (`chat_undelivered`)
+        guard entry.active != false, entry.limit == nil, entry.helperIsRecent(serverTime: time),
+              entry.chat_undelivered != true else { return false }
+        if hubSays {
+            guard let sent = entry.waits_since else { return false }
+            return !ChatWaiting.turnIsOver(sent: sent, turnEndedAfter: entry.turn_ended_after)
+        }
+        guard let last = entry.last, let newest = items.map(\.ts).max(), newest >= last.ts - 0.001 else { return false }
+        return ChatPage.pending(in: items, turnEndedAfter: entry.turn_ended_after) == .waiting
+    }
 
     /// A reply came in this agent's chat after the owner last had that chat open.
     func hasNewReply(from name: String) -> Bool {

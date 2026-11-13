@@ -19,6 +19,15 @@ public enum AgentActivity {
         return open.count == 1 ? last.title : "\(last.title) · +\(open.count - 1)"
     }
 
+    /// **What the agent does now, in plain words** (`FleetTask.doing`, hub 1.148): the words of its task whose session
+    /// works now (`works`), the one that moved last when several do. Nil when none of its tasks has a running turn
+    /// that says something: its row then keeps the line that it had (`ChatList.preview`).
+    public static func actionNow(_ agent: String, tasks: [FleetTask]) -> String? {
+        tasks.filter { $0.owner == agent && !$0.isTerminal && $0.state == "working" && $0.works == true
+                       && !($0.doing ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
+            .max { moved($0) < moved($1) }?.doing
+    }
+
     /// When a task last moved: its last activity, else its start, else its creation.
     private static func moved(_ task: FleetTask) -> Double { task.last_activity ?? task.started ?? task.created }
 }

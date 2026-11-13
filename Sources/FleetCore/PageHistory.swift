@@ -36,6 +36,15 @@ public struct PageHistory<Page: Equatable>: Equatable {
         return nil
     }
 
+    /// The page under `page` that `goBack` would open, but `page` goes on no list: a wizard that closes is no page to
+    /// come forward to (the × of a wizard that fills the window).
+    public mutating func leave(from page: Page, canOpen: (Page) -> Bool = { _ in true }) -> Page? {
+        while let previous = back.popLast() {
+            if canOpen(previous), previous != page { return previous }
+        }
+        return nil
+    }
+
     /// The page one step forward from `page`, the newest one that can open, or nil.
     public mutating func goForward(from page: Page, canOpen: (Page) -> Bool = { _ in true }) -> Page? {
         while let next = forward.popLast() {

@@ -22,9 +22,8 @@ public enum ChatList {
     /// says "typing…". A question the agent asks in its chat while it works is newer than its task, so it is not
     /// hidden behind the task. Nil before the first message, and the row then shows the name alone.
     public static func preview(_ agent: String, last: ChatEntry?, tasks: [FleetTask]) -> String? {
-        let moved = tasks.filter { $0.owner == agent && !$0.isTerminal }
-            .map { $0.last_activity ?? $0.started ?? $0.created }.max()
-        if let doing = AgentActivity.doingNow(agent, tasks: tasks), let moved, moved >= last?.created ?? 0 {
+        if let doing = AgentActivity.doingNow(agent, tasks: tasks), let moved = moved(agent, tasks: tasks),
+           moved >= last?.created ?? 0 {
             return doing
         }
         switch last {
@@ -35,6 +34,39 @@ public enum ChatList {
             return (plain(message.text) ?? plain(files)).map { "You: \($0)" }
         case nil: return nil
         }
+    }
+
+    /// When an agent's open tasks last moved, or nil with none.
+    private static func moved(_ agent: String, tasks: [FleetTask]) -> Double? {
+        tasks.filter { $0.owner == agent && !$0.isTerminal }.map { $0.last_activity ?? $0.started ?? $0.created }.max()
+    }
+
+    /// **When the line under an agent's name is from**: the time of what `preview` shows, which is the last move of
+    /// its open tasks where the line says what it is doing, else the time of its last message. Nil with no line.
+    public static func previewTime(_ agent: String, last: ChatEntry?, tasks: [FleetTask]) -> Double? {
+        if AgentActivity.doingNow(agent, tasks: tasks) != nil, let moved = moved(agent, tasks: tasks),
+           moved >= last?.created ?? 0 {
+            return moved
+        }
+        return preview(agent, last: last, tasks: []) == nil ? nil : last?.created
+    }
+
+    /// **That time as a chat app writes it at the end of a conversation's row** (the owner, 13 November 2026, with
+    /// the rows of a chat app beside his sidebar: "maybe I would like this relative time label on the side menu
+    /// too"): the time of day for today, "Yesterday", the weekday within the last week, else the date in numbers.
+    /// A time ahead of the clock (the hub's clock and this device's differ by seconds) reads as today's.
+    public static func time(_ timestamp: Double, now: Double, calendar: Calendar = .current,
+                            locale: Locale = .current) -> String {
+        let date = Date(timeIntervalSince1970: timestamp)
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date),
+                                           to: calendar.startOfDay(for: Date(timeIntervalSince1970: now))).day ?? 0
+        func style(date: Date.FormatStyle.DateStyle? = nil, time: Date.FormatStyle.TimeStyle? = nil) -> Date.FormatStyle {
+            Date.FormatStyle(date: date, time: time, locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+        }
+        if days <= 0 { return date.formatted(style(time: .shortened)) }
+        if days == 1 { return "Yesterday" }
+        if days < 7 { return date.formatted(style().weekday(.wide)) }
+        return date.formatted(style(date: .numeric))
     }
 
     /// The most a preview reads of a message. One line shows a few dozen characters of it; the rest is never

@@ -59,6 +59,73 @@ struct ChatWaitingTests {
         #expect(waiting?.symbol == "clock")
     }
 
+    /// **Its server answers, and his message does not arrive** (hub 1.144, `agents[].chat_undelivered`). On 13
+    /// November 2026 a message of his stood under "Thinking" for seven minutes: the agent's server polled the hub,
+    /// and it could hand the message to no session. The hub now says when his newest message is late, and the chat
+    /// says of it what it says of a silent server, and nothing moves for it.
+    @Test func aMessageThatDoesNotArriveSaysNotAnsweringAlthoughItsServerAnswers() throws {
+        func state(late: Any?) throws -> HubState {
+            var agent: [String: Any] = ["name": "studio", "role": "worker", "runtime": "claude", "active": true,
+                                        "can": [], "last_seen": 4_990]
+            if let late { agent["chat_undelivered"] = late }
+            let message: [String: Any] = ["request_id": "s-1", "recipient": "studio", "kind": "message",
+                                          "need_id": NSNull(), "text": "Is it live?", "event_id": 7, "created": 4_800,
+                                          "read_at": NSNull(), "client": "founderizer-mac/1/x"]
+            return try HubState.decode(JSONSerialization.data(withJSONObject: [
+                "schema_version": 1, "db": "db", "time": 5_000, "agents": [agent], "tasks": [], "notes": [],
+                "needs": [], "permissions": [], "messages": [message], "reports": [],
+            ] as [String: Any]))
+        }
+        func line(late: Any?) throws -> ChatWaiting? {
+            let state = try state(late: late)
+            return try #require(state.agents.first).chatWaiting(in: state, sending: false, fresh: true, until: { _ in "" })
+        }
+        // An older hub says nothing, and a newer one says false while the message is not late: its server answered
+        // ten seconds ago, so the agent works on it.
+        for late in [nil, NSNull(), false] as [Any?] {
+            #expect(try line(late: late)?.says == "Thinking")
+        }
+        #expect(try state(late: nil).agents.first?.chat_undelivered == nil)
+        let waiting = try line(late: true)
+        #expect(waiting?.says == "Not answering")
+        #expect(waiting?.detail == "Studio is not answering. Your message is kept and reaches it when it is back.")
+        #expect(waiting?.moving == false)
+        let late = try state(late: true)
+        #expect(try #require(late.agents.first).thinks(in: late, sending: false, fresh: true) == false)
+    }
+
+    /// **A first sentence with no task behind it.** The agent can write a word that names no message: the chat then
+    /// claims nothing and shows no line (`spokenSince`). When that word was the first sentence of a request for work
+    /// and the task never opened, his message has no reply, and nothing on the screen said so. The hub calls that
+    /// message late two minutes after its read, and then the word ends nothing: the line says "Not answering". A
+    /// reply that names his message ends it as before, whatever the hub's field says.
+    @Test func aWordWithNoLinkDoesNotEndTheWaitOfAMessageThatTheHubCallsLate() throws {
+        func line(late: Bool, reply: String?) throws -> ChatWaiting? {
+            let agent: [String: Any] = ["name": "studio", "role": "worker", "runtime": "claude", "active": true,
+                                        "can": [], "last_seen": 4_990, "chat_undelivered": late]
+            let message: [String: Any] = ["request_id": "s-1", "recipient": "studio", "kind": "message",
+                                          "need_id": NSNull(), "text": "Fix the sign-in page.", "event_id": 7,
+                                          "created": 4_800, "read_at": 4_803, "client": "founderizer-mac/1/x"]
+            let word: [String: Any] = ["id": 1, "text": "I open a task for it.", "about": "", "created": 4_806,
+                                       "agent": "studio", "in_reply_to": reply.map { $0 as Any } ?? NSNull(),
+                                       "pushed": false]
+            let state = try HubState.decode(JSONSerialization.data(withJSONObject: [
+                "schema_version": 1, "db": "db", "time": 5_000, "agents": [agent], "tasks": [], "notes": [],
+                "needs": [], "permissions": [], "messages": [message], "reports": [word],
+            ] as [String: Any]))
+            return try #require(state.agents.first).chatWaiting(in: state, sending: false, fresh: true, until: { _ in "" })
+        }
+        #expect(try line(late: false, reply: nil) == nil)           // a word with no link: the chat claims nothing
+        #expect(try line(late: true, reply: nil)?.says == "Not answering")
+        #expect(try line(late: true, reply: nil)?.moving == false)
+        #expect(try line(late: true, reply: "s-1") == nil)          // his message has its reply
+        // Only that one state changes: nothing to wait for stays nothing, and a turn that is over stays over.
+        #expect(ChatWaiting.Pending.none.late(true) == ChatWaiting.Pending.none)
+        #expect(ChatWaiting.Pending.turnOver.late(true) == .turnOver)
+        #expect(ChatWaiting.Pending.spokenSince.late(nil) == .spokenSince)
+        #expect(ChatWaiting.Pending.spokenSince.late(true) == .waiting)
+    }
+
     /// A line that moves while nothing is happening is the lie this exists to avoid: four minutes of pulsing is
     /// indistinguishable from a hang. So only the agent's own work moves, and it is the only thing that does.
     @Test func onlyWhatIsHappeningMoves() throws {
@@ -150,5 +217,27 @@ struct ChatWaitingTests {
         #expect(waits(try state(turnEndedAfter: 3_000, reports: [unlinked])) == .spokenSince)
         // Another agent's chat reports no turns: the manager's turn says nothing of it.
         #expect(waits(try state(turnEndedAfter: 3_000), "leo") == .waiting)
+    }
+
+    /// **The agent's row of the sidebar moves exactly while its chat says "Thinking"** (the owner, 13 November 2026:
+    /// "The subtitle text on the sidebar task item should animate like the Thinking label, while the agent is
+    /// Thinking"): one rule for the chat's line and for the row, from the hub's state.
+    @Test func anAgentThinksExactlyWhileItsChatSaysThinking() throws {
+        func agent(_ name: String, in state: HubState) throws -> FleetAgent {
+            try #require(state.agents.first { $0.name == name })
+        }
+        // His newest message is read in a turn that still runs: the manager thinks, and its chat says so.
+        let runs = try state(turnEndedAfter: 2_000)
+        #expect(try agent("manager", in: runs).thinks(in: runs, sending: false, fresh: false))
+        #expect(try agent("manager", in: runs).chatWaiting(in: runs, sending: false, fresh: false, until: { _ in "" })?.says
+                == ChatWaiting.working)
+        // The turn that took it has ended: nothing moves, until his next message is on its way.
+        let over = try state(turnEndedAfter: 3_000)
+        #expect(try !agent("manager", in: over).thinks(in: over, sending: false, fresh: false))
+        #expect(try agent("manager", in: over).thinks(in: over, sending: true, fresh: false))
+        // A wait that is not the agent's work does not move: by a current reading these agents' servers are quiet
+        // (the state has no `last_seen`), and the chat says "Not answering".
+        #expect(try !agent("leo", in: runs).thinks(in: runs, sending: false, fresh: true))
+        #expect(try agent("leo", in: runs).thinks(in: runs, sending: false, fresh: false))
     }
 }

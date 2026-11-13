@@ -4,8 +4,8 @@ import SwiftUI
 
 // An agent's own mark: a shape and a color that come from its name and from its place in the hub's list of agents,
 // so an agent looks the same on every page, on every Mac and in every run. The provider's icon is for the provider
-// and its account, not for the agent. The glyph moves a little while its agent works, and once when the pointer
-// comes to it. Core Animation moves it: the app does no work for a frame. See UI-PATTERNS.md.
+// and its account, not for the agent. The glyph moves while its agent works, plainly enough to be the one sign of
+// work (an agent at work has no dot), and once when the pointer comes to it. Core Animation moves it: the app does no work for a frame. See UI-PATTERNS.md.
 //
 // The mark itself — `GlyphKind`, `GlyphLook` and the two shapes — is `FleetMark`, which this app and the owner's
 // iPhone app both link, so one agent wears one face on his two screens. Everything below is this app's own: the
@@ -271,22 +271,30 @@ private final class GlyphLayerView: NSView {
     /// (`tween`). Each glyph keeps its own pace, within 10% of its kind's (`GlyphLook.phase`), so two glyphs at work do
     /// not move in step. It used to start each glyph at its own point of the loop, which was a jump of up to a whole
     /// turn in the first frame.
+    ///
+    /// **Work is plain to see at the sidebar's 28 points** (the owner, 13 November 2026: "the agent icon should
+    /// animate more to make it more obvious that is working"), and the motion is the one sign of work now that work has
+    /// no dot (`StatusDot.shows`). Every kind breathes, so every glyph at work has one common beat, and each kind's own
+    /// motion is two to three times as fast and as wide as it was: a turn took 18 seconds and a breath took a tenth
+    /// of the glyph, which read as a glyph at rest from an arm's length.
     private func move(_ look: GlyphLook) {
         rested = nil
         for part in [figure, orbit, core] as [CALayer] { part.removeAllAnimations() }
         let pace = 0.9 + 0.2 * look.phase / (2 * .pi), now = CACurrentMediaTime()
         switch look.kind.motion {
         case .turn:
-            turn(figure, to: 2 * .pi, seconds: 18 * pace, now)
-            turn(orbit, to: -2 * .pi, seconds: 7.2 * pace, now)
-            swing(core, "transform.scale", 0.88, 1.12, rest: 1, seconds: 1.3 * pace, now)
+            turn(figure, to: 2 * .pi, seconds: 6 * pace, now)
+            swing(figure, "transform.scale", 0.86, 1, rest: 1, seconds: 0.95 * pace, now)
+            turn(orbit, to: -2 * .pi, seconds: 3 * pace, now)
+            swing(core, "transform.scale", 0.75, 1.25, rest: 1, seconds: 0.8 * pace, now)
         case .breathe:
-            swing(figure, "transform.scale", 0.9, 1, rest: 1, seconds: 1.3 * pace, now)
-            if look.kind == .drop { swing(core, "transform.scale", 0.75, 1.25, rest: 1, seconds: 1.05 * pace, now) }
-            else { turn(orbit, to: 2 * .pi, seconds: 4.5 * pace, now) }
+            swing(figure, "transform.scale", 0.8, 1, rest: 1, seconds: 0.85 * pace, now)
+            if look.kind == .drop { swing(core, "transform.scale", 0.6, 1.4, rest: 1, seconds: 0.7 * pace, now) }
+            else { turn(orbit, to: 2 * .pi, seconds: 2.2 * pace, now) }
         case .rock:
-            swing(figure, "transform.rotation.z", -0.14, 0.14, rest: 0, seconds: 1.43 * pace, now)
-            swing(core, "transform.scale", 0.8, 1.2, rest: 1, seconds: 1.05 * pace, now)
+            swing(figure, "transform.rotation.z", -0.3, 0.3, rest: 0, seconds: 0.95 * pace, now)
+            swing(figure, "transform.scale", 0.88, 1, rest: 1, seconds: 0.95 * pace, now)
+            swing(core, "transform.scale", 0.7, 1.3, rest: 1, seconds: 0.7 * pace, now)
         }
     }
 

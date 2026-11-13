@@ -58,7 +58,7 @@ struct AgentStatusPanel: View {
         let state = store.state
         let presence = agent.presence(isFresh: store.isFresh, serverTime: time,
                                       openTasks: state?.tasks.filter { $0.owner == agent.name && !$0.isTerminal } ?? [],
-                                      holds: state?.holds ?? [])
+                                      holds: state?.holds ?? [], thinking: store.thinks(agent.name))
         let bar = UsageBar.bars(for: state?.agents ?? [], time: time, isFresh: store.isFresh)[agent.name]
         FormSection { agentRow(agent, presence: presence) }
         // A local model has no account limits: the account's own row says Local model, and a card that could only say

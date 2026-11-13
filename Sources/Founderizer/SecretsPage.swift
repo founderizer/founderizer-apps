@@ -450,7 +450,9 @@ struct SecretsPage: View {
 
     /// Add secret, in the list's place, with Back: the form, with the agents that get the new secret under its
     /// fields. The form shows a save that is not finished when it opens. Its Cancel and Close, and a finished save,
-    /// come back here; the list then reads the catalog again, and a saved secret opens its detail.
+    /// come back here; the list then reads the catalog again and shows the saved secret as a row. Nothing opens by
+    /// itself: the form gave each agent its access and showed what came of each grant, so the detail with the same
+    /// agents was a second list of them (the owner, 13 November 2026: "IT looks duplicated! why?").
     private var addPage: some View {
         FleetPage("Add secret", back: FleetBack("Secrets") { adding = false; Task { await read() } }) {
             SecretEntryView(store: store) { finishAdd($0) }
@@ -470,14 +472,11 @@ struct SecretsPage: View {
         Task { await read() }
     }
 
-    /// After the form: the list reads the catalog again, and the secret that the form saved opens its detail with each
-    /// agent's access and each vault. Cancel saves nothing.
+    /// After the form: back to the list, which reads the catalog again. It opens no detail: a click on a row does.
+    /// Cancel saves nothing.
     private func finishAdd(_ reference: String?) {
         adding = false
-        Task {
-            guard await read(), let reference, reading?.catalog[reference] != nil else { return }
-            shown = ShownSecret(id: reference)
-        }
+        Task { await read() }
     }
 
     // MARK: changes

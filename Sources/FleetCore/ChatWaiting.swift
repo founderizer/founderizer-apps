@@ -56,6 +56,13 @@ public struct ChatWaiting: Equatable, Sendable {
         /// on his Mac sent the manager three messages that asked for no answer, and "Thinking" turned under them for
         /// more than an hour after turns of 20 seconds (10 November 2026, his own screen).
         case turnOver
+
+        /// **The wait when the hub says that his newest message is late** (hub 1.144, `chat_undelivered`). A word of
+        /// the agent that names no message ends the wait by itself (`spokenSince`), and so does a first sentence
+        /// before a task that the agent then did not open. The hub knows that no reply names his message two minutes
+        /// after the agent read it, so for a message that it calls late such a word ends nothing: the chat says "Not
+        /// answering" under it. Every other state stays as it is.
+        public func late(_ late: Bool?) -> Pending { late == true && self == .spokenSince ? .waiting : self }
     }
 
     /// **Whether the turn that took his message is over** (hub 1.110, `agents[].turn_ended_after`): the hub says when
@@ -111,6 +118,24 @@ extension FleetAgent {
         if reports.contains(where: { $0.in_reply_to == nil && $0.created >= message.created }) { return PendingChat(state: .unlinked, sent: message.created) }
         if ChatWaiting.turnIsOver(sent: message.created, turnEndedAfter: turn_ended_after) { return PendingChat(state: .turnOver, sent: message.created) }
         return PendingChat(state: message.read_at == nil ? .unread : .read, sent: message.created)
+    }
+
+    /// **What this agent's chat waits for** (`ChatWaiting.of`), from the hub's state alone, so the chat's line and
+    /// every other sign of the same wait read one rule: the agent's row of the sidebar moves while this says
+    /// "Thinking" (`thinks`). `sending`: this device has the owner's message to this agent on its way. `fresh`: the
+    /// state is a current reading; an old one cannot say that the agent's server is quiet.
+    public func chatWaiting(in state: HubState, sending: Bool, fresh: Bool, until: (Double) -> String) -> ChatWaiting? {
+        ChatWaiting.of(agent: name, pending: (pendingChat(in: state)?.waits ?? .none).late(chat_undelivered),
+                       sending: sending, limit: limit,
+                       // also when its server answers and his message does not arrive (hub 1.144, `chat_undelivered`)
+                       offline: fresh && (!helperIsRecent(serverTime: state.time) || chat_undelivered == true),
+                       until: until)
+    }
+
+    /// **Whether the agent works on the owner's newest chat message now**: its chat's line says "Thinking" and moves.
+    /// A wait that is not the agent's work (a usage limit, a server that does not answer) is not thinking.
+    public func thinks(in state: HubState, sending: Bool, fresh: Bool) -> Bool {
+        chatWaiting(in: state, sending: sending, fresh: fresh, until: { _ in "" })?.moving == true
     }
 }
 

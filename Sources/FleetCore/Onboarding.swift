@@ -54,6 +54,8 @@ public struct ServerConfiguration: Codable, Sendable {
     public var arguments: [String] {
         let hubURL = try! HubClient.address(hub)
         var gitURL = URLComponents()
+        // The repository of a hub made before the name founderizer. The executor clones the one that the hub names
+        // itself (onboard.py `Onboarding.repo`), and this one only from a hub that names none.
         gitURL.scheme = "git"; gitURL.host = hubURL.host; gitURL.path = "/fleet-pilot.git"
         var values = ["run", "--json", "--auth", auth, "--hub", hubURL.absoluteString, "--repo", gitURL.url!.absoluteString]
         if let prepareRuntime, let generation, let machine {

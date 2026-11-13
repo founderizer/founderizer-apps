@@ -24,7 +24,7 @@ struct SecretImportTests {
         let url = try file(Data(Fixtures.bitwardenPlain.utf8), named: "bitwarden.json", in: directory)
         let reading = try SecretImport.read(url, vendor: .bitwarden)
         #expect(reading.rows.map(\.secret.title) == ["shop.example.test · owner@example.test", "STRIPE_LIVE_KEY"])
-        #expect(reading.rows.allSatisfy { $0.problem == nil })
+        #expect(reading.rows.allSatisfy { $0.problem == nil && $0.vault == nil })
         #expect(reading.rows[0].secret.kind == .login && reading.rows[1].secret.kind == .apiKey)
         #expect(reading.skippedLine == "Not imported: 1 note, 1 card and 1 item with no password.")
         // The value that a save seals is the one that every vault reads.
@@ -75,6 +75,18 @@ struct SecretImportTests {
         let table = try SecretImport.read(csv, vendor: .onePassword)
         #expect(table.rows.map(\.secret.title) == ["bank.example.test · me@example.test", "API_TOKEN"])
         #expect(table.skippedLine == "Not imported: 1 archived item.")
+        // The vault of each item, where the file names one: a .1pux does, a .csv and a Bitwarden file do not.
+        #expect(archive.rows.map(\.vault) == ["Private", "Private", "Private"])
+        #expect(table.rows.map(\.vault) == [nil, nil])
+    }
+
+    @Test func aRowIsChangedOnlyWhenNoSecretOfItsTitleHoldsItsValue() {
+        #expect(SecretImport.isChanged([false]))
+        #expect(SecretImport.isChanged([false, nil]))
+        #expect(!SecretImport.isChanged([false, true]))         // one secret of that title holds this value
+        #expect(!SecretImport.isChanged([nil]))                 // the hub cannot tell: nothing shows
+        #expect(!SecretImport.isChanged([]))
+        #expect(SecretImport.compareFeature == "secret_compare")
     }
 
     @Test func theWrongVendorsFileIsNamedAsSuch() throws {

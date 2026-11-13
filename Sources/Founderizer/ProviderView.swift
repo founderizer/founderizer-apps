@@ -75,6 +75,8 @@ struct ProviderView: View {
     /// The hub refused the server's preparation, or did not answer. It stays until the next request.
     @State private var prepareError: String?
     @State private var preparing = false
+    /// This view asked this Mac's installer if it can run (`askInstaller`).
+    @State private var installerAsked = false
     @State private var busy = false
     /// The provider that this view switched to, until its helper has loaded it.
     @State private var asked: String?
@@ -145,13 +147,15 @@ struct ProviderView: View {
         // a progress mark, and Stop is its stop control. A refused switch leaves the outbox with this view.
         .onDisappear { secret = ""; discardRefused() }
         .task {
-            // A run keeps its text: a new availability reading would remove the text of a run that failed while this
-            // view did not show.
-            if setup.timeline.run == nil || !setup.available { await setup.check() }
-            await setup.checkExecutor()
+            // **The agent's server first, and this Mac's installer only for a machine that this Mac set up.** A server
+            // that joined with a join line prepares a provider itself, so this form asks nothing of the installer for
+            // it. It asked each time it showed, and on a Mac with no developer tools that call opened macOS's dialog
+            // about them (the onboarding test of 13 November 2026).
+            await refresh()
+            await askInstaller()
             // A setup that finished while this view did not show still gets its machine check.
             if setup.timeline.result?.status == "ok" { await afterSetup() }
-            await poll()
+            await poll(readsFirst: false)
         }
     }
 
@@ -330,9 +334,27 @@ struct ProviderView: View {
 
     /// Reads again every 3 seconds while a switch waits for its helper or the server prepares a provider, else every 15
     /// seconds.
-    private func poll() async {
+    /// **This Mac's installer, asked one time by this view, and only for a machine that this Mac set up.** It is
+    /// asked again after each read until then, because the kept reading of the agent's server can be old: an agent
+    /// that moved from a joined server to such a machine would else stay with no Set up button while this view shows.
+    private func askInstaller() async {
+        guard !held.joined, !installerAsked else { return }
+        installerAsked = true
+        // A run keeps its text: a new availability reading would remove the text of a run that failed while this view
+        // did not show.
+        if setup.timeline.run == nil || !setup.available { await setup.check() }
+        await setup.checkExecutor()
+    }
+
+    /// - `readsFirst`: false when the caller read a moment ago.
+    private func poll(readsFirst: Bool = true) async {
+        var reads = readsFirst
         while !Task.isCancelled {
-            await refresh()
+            if reads {
+                await refresh()
+                await askInstaller()
+            }
+            reads = true
             let state = provider
             // After a finished setup, only its own reasons (install, sign-in) keep the fast reads; another blocker, such
             // as an unlinked chat, waits at the usual interval.

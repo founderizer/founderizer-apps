@@ -14,12 +14,23 @@ import Foundation
 /// by hand!". That step has no row: when its tries are used up it waits, without a word, for the next release.
 ///
 /// Three rules bound it. A step that fails waits 10 minutes and is tried again, at most 6 times in a row, and then
-/// waits for the owner. The install runs only while the hub reads no central vault and the fleet has an SSH
+/// waits for the owner (a re-sign of a kept pin shows its row then, and goes on each hour). The install runs only while the hub reads no central vault and the fleet has an SSH
 /// connection on record for the hub's own machine. And **a second Mac never takes the vault over by itself**: when
 /// the vault answers but this Mac holds no owner key or no pin of the vault's key, or its pin is not the key the hub
 /// names, nothing runs and only the owner's own Set up can act, because that install takes the vault's owner key from
 /// whichever Mac holds it now.
 public struct VaultPlan: Equatable, Sendable {
+    /// This Mac signs the pin of each trusted machine again when the one that the hub keeps is 7 days old, or when the
+    /// hub keeps none (a machine pinned before the hub kept pins), so that the hub always holds a fresh pin of each
+    /// trusted machine for its handovers (`hub.py` `handover_key`).
+    public static let pinRefresh: Double = 7 * 86400
+    /// After a re-sign that succeeded, the next one of that machine waits a day, also when the hub's reading does not
+    /// show it yet: a hub that never shows `kept_pin_at` gets one signature a day, not one every ten minutes.
+    public static let resignWait: Double = 86400
+    /// A re-sign never gives up: after its sixth failure in a row its server row shows, and it is tried again each hour.
+    /// The first trust of a server keeps its own rule: six tries, then the owner's Retry.
+    public static let retryEvery: Double = 3600
+
     public let step: VaultStep
     /// The Founderizer Vault row, when the vault itself needs the owner.
     public let vault: VaultNeed?
@@ -51,10 +62,25 @@ public struct VaultPlan: Equatable, Sendable {
         // Each server whose vault key is not pinned as it reports it now, unless this session's own pin of that very
         // key is still on its way into the hub's next reading (the hub reads the vault's status once a minute).
         let open = reading.machines.filter { $0.canBeTrusted && !$0.isTrusted && facts.confirmedPins[$0.machine] != $0.broker_recipient }
-        let gaveUp = open.compactMap { machine in
+        // Each trusted server whose kept pin is missing or `pinRefresh` old, from a hub that says when its kept pin was
+        // signed: its key is read and signed again, by the same step, at most once a day after a success.
+        let stale = reading.machines.filter { machine in
+            machine.isTrusted && machine.keptPinKnown
+                && (machine.kept_pin_at.map { facts.now - Double($0) > Self.pinRefresh } ?? true)
+                && facts.now - (facts.signedAt[machine.machine] ?? 0) >= Self.resignWait
+        }
+        let opened = Set(open.map(\.machine)), resigned = Set(stale.map(\.machine))
+        // Both kinds in the hub's order, as `servers` says.
+        let listed = reading.machines.filter { opened.contains($0.machine) || resigned.contains($0.machine) }
+        let gaveUp = listed.compactMap { machine in
             facts.servers[machine.machine].flatMap { $0.givenUp ? VaultServerNeed(machine: machine.machine, reason: $0.reason) : nil }
         }
-        let due = open.filter { facts.servers[$0.machine]?.isDue(at: facts.now) ?? true }.map(\.machine)
+        let due = listed.filter { machine in
+            guard let tries = facts.servers[machine.machine] else { return true }
+            return tries.isDue(at: facts.now)
+                || (resigned.contains(machine.machine) && !opened.contains(machine.machine) && tries.givenUp
+                    && facts.now - tries.last >= Self.retryEvery)
+        }.map(\.machine)
         var vault: VaultNeed?
         if central.recovery == nil && facts.confirmedRecovery == nil {
             if let tries = facts.recovery, tries.givenUp { vault = .retry(.recover, tries.reason) }
@@ -79,7 +105,8 @@ public enum VaultStep: Equatable, Sendable {
     /// The install's root step again, with `--keep-owner`, because the vault runs another program than the hub's
     /// release: it keeps the vault's keys, its store and the owner's statements, and it has no row.
     case update
-    /// These servers' vault keys read over SSH, and each one pinned when it is the key the hub reports.
+    /// These servers' vault keys read over SSH, and each one pinned when it is the key the hub reports: a server not
+    /// pinned yet, or one whose pin the hub keeps no more or keeps from `pinRefresh` ago.
     case trust([String])
     /// Nothing runs: the vault is not this Mac's to act on, and only the owner's Set up takes it over.
     case takeOver
@@ -138,6 +165,8 @@ public struct VaultFacts: Equatable, Sendable {
     /// What the vault confirmed in this session, which the hub's reading can show up to a minute later.
     public var confirmedRecovery: String?
     public var confirmedPins: [String: String]
+    /// When this session last signed a pin of each machine: the hub's reading of it can come up to a minute later.
+    public var signedAt: [String: Double]
     public var install: VaultTries?
     public var recovery: VaultTries?
     public var servers: [String: VaultTries]
@@ -146,10 +175,10 @@ public struct VaultFacts: Equatable, Sendable {
     public var now: Double
 
     public init(keyHeld: Bool, pin: String?, hubOnRecord: Bool, otherOwner: Bool = false, confirmedRecovery: String? = nil,
-                confirmedPins: [String: String] = [:], install: VaultTries? = nil, recovery: VaultTries? = nil,
-                servers: [String: VaultTries] = [:], update: VaultTries? = nil, now: Double) {
+                confirmedPins: [String: String] = [:], signedAt: [String: Double] = [:], install: VaultTries? = nil,
+                recovery: VaultTries? = nil, servers: [String: VaultTries] = [:], update: VaultTries? = nil, now: Double) {
         self.keyHeld = keyHeld; self.pin = pin; self.hubOnRecord = hubOnRecord; self.otherOwner = otherOwner
-        self.confirmedRecovery = confirmedRecovery; self.confirmedPins = confirmedPins
+        self.confirmedRecovery = confirmedRecovery; self.confirmedPins = confirmedPins; self.signedAt = signedAt
         self.install = install; self.recovery = recovery; self.servers = servers; self.update = update; self.now = now
     }
 }

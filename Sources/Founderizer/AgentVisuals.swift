@@ -29,12 +29,14 @@ struct ProviderIcon: View {
 }
 
 /// What an agent does now, as one dot. A ring, not a filled dot, marks an agent that takes no work now, so color
-/// is not the only cue. **Work is green, and online has no dot** (the owner's yes of 28 October 2026, D-8, as Grok Bot
-/// draws one green dot on the avatar of a bot at work): violet is what he can press and the brand's mark, and a state
-/// is never violet; a dot shows only what is not as usual.
+/// is not the only cue. **A dot is a problem, and neither online nor work has one** (the owner, 13 November 2026:
+/// "remove all green status dots. if agent is available, just dont show it (that should be the default). only show
+/// red/other colors if there is some kind of problem"): an agent at work shows it by its glyph's motion and by the
+/// moving line of its sidebar row (`StatusDot.shows`). Until that day work was one green dot (his yes of 28 October
+/// 2026, D-8). Violet is what he can press and the brand's mark, and a state is never violet.
 enum AgentPresence: Equatable {
-    /// `workingAtLastRead`: at work by a reading that is old now — its colour and its green dot as last read, and its
-    /// glyph at rest, because motion would claim work that goes on now (the lead's call of 29 October 2026, fix round 2).
+    /// `workingAtLastRead`: at work by a reading that is old now — its colour as last read, and its glyph at rest,
+    /// because motion would claim work that goes on now (the lead's call of 29 October 2026, fix round 2).
     case unknown, setup, offline, attention(String), limited, working, workingAtLastRead, online
 
     var label: String {
@@ -61,23 +63,25 @@ enum AgentPresence: Equatable {
 
 extension FleetAgent {
     /// The agent's status: in setup, offline, a machine problem, limited, working, a task that needs the owner, online.
-    /// Working means that the hub reports a task in work now: a paused, queued or waiting task is not work. Online says
-    /// only that the helper answers; the hub reports no other activity, so it is not "idle".
+    /// Working means that the hub reports a task in work now, or that the agent works on the owner's newest chat
+    /// message (`thinking`: its chat says "Thinking", `FleetAgent.thinks`): a paused, queued or waiting task is not
+    /// work. Online says only that the helper answers; the hub reports no other activity, so it is not "idle".
     ///
     /// **An old reading keeps the agents' look** (fix round 2 of 29 October 2026; T-14, one cause and one sign): the status
     /// is the one the last reading says, whether or not that reading is current (`isFresh`), so a glyph turns grey only
     /// for a reading that says its agent is offline. While the hub's answer was late, every glyph went grey at the
     /// reading's first second, in two steps 250 ms apart, and came back in colour with the answer; the notice over the
     /// page is the one sign of an old reading, and the words that name a state say "Last reading" where they need to.
-    /// **Only its motion rests**: an agent at work by an old reading is `workingAtLastRead`, its colour and its dot as
-    /// last read and its glyph still, because a moving glyph says that the work goes on now.
-    func presence(isFresh: Bool, serverTime: Double, openTasks: [FleetTask], holds: [TaskHold], problem: AgentAttention? = nil) -> AgentPresence {
+    /// **Only its motion rests**: an agent at work by an old reading is `workingAtLastRead`, its colour as last read
+    /// and its glyph still, because a moving glyph says that the work goes on now.
+    func presence(isFresh: Bool, serverTime: Double, openTasks: [FleetTask], holds: [TaskHold], problem: AgentAttention? = nil,
+                  thinking: Bool = false) -> AgentPresence {
         if active == false { return .setup }
         if !helperIsRecent(serverTime: serverTime) { return .offline }
         if let problem { return .attention(problem.short) }
         if limit != nil { return .limited }
         let marks = openTasks.filter { $0.owner == name }.map { $0.mark(holds: holds) }
-        if marks.contains(where: \.inWork) { return isFresh ? .working : .workingAtLastRead }
+        if thinking || marks.contains(where: \.inWork) { return isFresh ? .working : .workingAtLastRead }
         if let waiting = marks.first(where: \.attention) { return .attention(waiting.words) }
         return .online
     }
@@ -92,10 +96,22 @@ struct StatusDot: View {
     let presence: AgentPresence
     var size: CGFloat = StatusDot.side
     var ring: Color?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// **Whether a status has a dot: only what is not as usual** (the owner, 13 November 2026: "remove all green status
+    /// dots. if agent is available, just dont show it ... only show red/other colors if there is some kind of
+    /// problem"). Online is how an agent is, and work shows as motion: its glyph moves and the line of its sidebar row
+    /// moves. With Reduce Motion nothing moves, so there work keeps its green dot, the one sign of it that is left.
+    static func shows(_ presence: AgentPresence, reduceMotion: Bool) -> Bool {
+        switch presence {
+        case .online: false
+        case .working, .workingAtLastRead: reduceMotion
+        case .unknown, .setup, .offline, .attention, .limited: true
+        }
+    }
 
     var body: some View {
-        // Online is how an agent is: no dot (D-8).
-        if presence != .online {
+        if Self.shows(presence, reduceMotion: reduceMotion) {
             // **The dot keeps its own 6 points inside the ring** (T-04): without a frame of its own the circle took the
             // stack's 9 points and covered the ring, so every dot on a glyph measured 9 beside the sidebar's 6.
             ZStack {

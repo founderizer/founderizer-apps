@@ -19,28 +19,41 @@ import SwiftUI
 ///
 /// A wait that is **not** the agent's work keeps its mark and stays still, as before: motion means something is
 /// happening, and his own file settled that half.
+///
+/// **The agent's own glyph stands before "Thinking" and moves as it does at work** (the owner, 13 November 2026: "On
+/// the conversation itself, the Thinking label should have the agent icon animating too"): at the size of a glyph in
+/// a line of words, with no dot, and at rest with Reduce Motion. It is no spinner: it is the agent that thinks.
 struct ChatWaitingLine: View {
     let waiting: ChatWaiting
+    /// The agent whose answer the chat waits for, or nil for the words alone.
+    var agent: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// The room between the glyph and the words, as where a glyph stands before a name (`AgentNamed`).
+    static let glyphGap: CGFloat = 6
+
     var body: some View {
-        HStack(spacing: 8) {
-            if waiting.moving && !reduceMotion {
-                // No mark: the words themselves carry the motion, as they do in his own project.
-                ShimmeringWords(text: waiting.says)
-            } else {
-                if !waiting.moving {
-                    Image(systemName: waiting.symbol).font(IconMetrics.symbol(11)).foregroundStyle(.orange)
+        HStack(spacing: Self.glyphGap) {
+            // The agent's glyph before the words of its own work; it rests with Reduce Motion (`AgentGlyph`).
+            if waiting.moving, let agent { Self.glyph(agent, moves: true) }
+            HStack(spacing: 8) {
+                if waiting.moving && !reduceMotion {
+                    // The words themselves carry the motion, as they do in his own project.
+                    ShimmeringWords(text: waiting.says)
+                } else {
+                    if !waiting.moving {
+                        Image(systemName: waiting.symbol).font(IconMetrics.symbol(11)).foregroundStyle(.orange)
+                    }
+                    Text(waiting.says).font(ChatStyle.detail)
+                        .foregroundStyle(waiting.moving ? FleetStyle.muted : .orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        // The swap of his own component: the new words slide up out of a blur, the old ones leave
+                        // upward. SwiftUI has no blur in a transition, so this is the slide alone.
+                        .id(waiting.says)
+                        .transition(swap)
                 }
-                Text(waiting.says).font(ChatStyle.detail)
-                    .foregroundStyle(waiting.moving ? FleetStyle.muted : .orange)
-                    .fixedSize(horizontal: false, vertical: true)
-                    // The swap of his own component: the new words slide up out of a blur, the old ones leave
-                    // upward. SwiftUI has no blur in a transition, so this is the slide alone.
-                    .id(waiting.says)
-                    .transition(swap)
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: waiting.says)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: waiting.moving)
@@ -56,6 +69,12 @@ struct ChatWaitingLine: View {
         guard !reduceMotion else { return .opacity }
         return .asymmetric(insertion: .offset(y: 8).combined(with: .opacity),
                            removal: .offset(y: -8).combined(with: .opacity))
+    }
+
+    /// The glyph of the agent that thinks: it moves whenever the line's words move, whatever the hub's tasks say of
+    /// the agent, so the line never shows moving words beside a glyph at rest.
+    static func glyph(_ agent: String, moves: Bool) -> some View {
+        AgentGlyph(name: agent, presence: moves ? .working : .online, size: GlyphSize.inline, moves: moves, dot: false)
     }
 }
 
@@ -81,17 +100,26 @@ struct ShimmeringWords: NSViewRepresentable {
     let text: String
     /// The chat's line is 12 points; a setup step's moving title is larger (`SetupTitle`).
     var font: NSFont = .systemFont(ofSize: 12)
+    /// Words right after the text that are never cut: the " · +2" of a sidebar row's line (`ChatRow.previewLine`).
+    var tail: String?
+    /// **The line takes the width it is given, and words that are longer end in "…"**, as a `Text` of one line does:
+    /// the line under an agent's name in the sidebar, whose width is the sidebar's. False for a word or two that
+    /// always fit, which keep their own width whatever they are offered.
+    var fits = false
 
     func makeNSView(context: Context) -> ShimmerView { ShimmerView() }
     func updateNSView(_ view: ShimmerView, context: Context) {
-        view.show(text, font: font, base: NSColor(FleetStyle.muted), light: NSColor(FleetStyle.text))
+        view.show(text, tail: tail, fits: fits, font: font, base: NSColor(FleetStyle.muted), light: NSColor(FleetStyle.text))
     }
     /// **SwiftUI has to be told, or it hands a representable the whole width it is offered.** The first build of
     /// this built the sweep out of `bounds.width`, got a view far wider than the word, and swept most of each
     /// pass across empty space — which is exactly the gap the owner saw. The view now measures the word, and the
-    /// sweep below is built from the word too, so neither depends on what it is offered.
+    /// sweep below is built from the word too, so neither depends on what it is offered. A line that fits its room
+    /// (`fits`) takes at most its words' own width, so its sweep still crosses the words and not the room.
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: ShimmerView, context: Context) -> CGSize? {
-        nsView.intrinsicContentSize
+        let words = nsView.intrinsicContentSize
+        guard fits, let width = proposal.width, width.isFinite else { return words }
+        return CGSize(width: min(words.width, max(0, width)), height: words.height)
     }
 }
 
@@ -116,7 +144,7 @@ final class ShimmerView: NSView {
     private let lit = CALayer()             // holds the band and carries the fixed mask
     private let band = CAGradientLayer()
     private let glyphs = CALayer()          // the mask: the same word, not moving
-    private var look: (text: String, font: NSFont, base: NSColor, light: NSColor)?
+    private var look: (text: String, tail: String?, fits: Bool, font: NSFont, base: NSColor, light: NSColor)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -146,15 +174,32 @@ final class ShimmerView: NSView {
     /// that is handed more room than it asked for still shimmers across the word and not across the room.
     private var wordSize: NSSize {
         guard let look else { return NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric) }
-        let size = (look.text as NSString).size(withAttributes: [.font: look.font])
+        let size = ((look.text + (look.tail ?? "")) as NSString).size(withAttributes: [.font: look.font])
         return NSSize(width: ceil(size.width), height: ceil(size.height))
     }
 
-    func show(_ text: String, font: NSFont, base: NSColor, light: NSColor) {
-        if let look, look.text == text, look.font == font, look.base == base, look.light == light { return }
-        look = (text, font, base, light)
+    /// **What the view draws: its words whole, or cut to the room of a line that fits its room** (`fits`). A line is
+    /// cut only where its room is more than a point short of its words: SwiftUI and AppKit measure one line within a
+    /// fraction of a point of each other, and a line that fits must not end in "…" for that fraction.
+    private var shownSize: NSSize {
+        let words = wordSize
+        guard let look, look.fits, bounds.width > 0, bounds.width + 1 < words.width else { return words }
+        return NSSize(width: bounds.width, height: words.height)
+    }
+
+    func show(_ text: String, tail: String? = nil, fits: Bool = false, font: NSFont, base: NSColor, light: NSColor) {
+        if let look, look.text == text, look.tail == tail, look.fits == fits, look.font == font, look.base == base,
+           look.light == light { return }
+        look = (text, tail, fits, font, base, light)
         invalidateIntrinsicContentSize()
         needsLayout = true
+    }
+
+    /// A line that fits its room is drawn again for a new room: the owner drags the sidebar's edge.
+    override func setFrameSize(_ newSize: NSSize) {
+        let changed = newSize.width != frame.width
+        super.setFrameSize(newSize)
+        if changed, look?.fits == true { needsLayout = true }
     }
 
     override func layout() {
@@ -162,31 +207,62 @@ final class ShimmerView: NSView {
         guard let look, wordSize.width > 0, wordSize.height > 0 else { return }
         let scale = window?.backingScaleFactor ?? 2
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        let word_ = NSRect(origin: .zero, size: wordSize)
+        let word_ = NSRect(origin: .zero, size: shownSize)
+        let cut = word_.width < wordSize.width
         word.frame = word_
         word.contentsScale = scale
-        word.contents = Self.drawn(look.text, font: look.font, color: look.base, size: word_.size, scale: scale)
+        word.contents = Self.drawn(look.text, tail: look.tail, cut: cut, font: look.font, color: look.base,
+                                   size: word_.size, scale: scale)
         lit.frame = word_
         glyphs.frame = NSRect(origin: .zero, size: word_.size)
         glyphs.contentsScale = scale
         // The mask reads alpha, so the colour only has to be opaque where the glyphs are.
-        glyphs.contents = Self.drawn(look.text, font: look.font, color: .white, size: word_.size, scale: scale)
+        glyphs.contents = Self.drawn(look.text, tail: look.tail, cut: cut, font: look.font, color: .white,
+                                     size: word_.size, scale: scale)
         band.frame = CGRect(x: 0, y: 0, width: word_.width * Self.box, height: word_.height)
         let clear = look.light.withAlphaComponent(0).cgColor     // the same colour, so the fade has no grey in it
         band.colors = [clear, clear, look.light.cgColor, clear, clear]
         CATransaction.commit()
-        sweep()
+        sweep(across: word_.width)
     }
 
-    /// One copy of the word, as layer contents. `flipped: true` so the text sits where AppKit would draw it.
-    private static func drawn(_ text: String, font: NSFont, color: NSColor,
+    /// One copy of the words, as layer contents. `flipped: true` so the text sits where AppKit would draw it. **A
+    /// line that is cut ends in "…" in the room that its tail leaves, and its tail stands whole at its end**, as the
+    /// sidebar's still line draws them: a row with two tasks never reads as one (`ChatRow.previewLine`).
+    private static func drawn(_ text: String, tail: String?, cut: Bool, font: NSFont, color: NSColor,
                               size: NSSize, scale: CGFloat) -> Any? {
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         let image = NSImage(size: size, flipped: true) { _ in
-            (text as NSString).draw(at: .zero, withAttributes: attributes)
+            guard cut else {
+                ((text + (tail ?? "")) as NSString).draw(at: .zero, withAttributes: attributes)
+                return true
+            }
+            let tailWidth = tail.map { ceil(($0 as NSString).size(withAttributes: attributes).width) } ?? 0
+            let shown = Self.cut(text, to: size.width - tailWidth, attributes: attributes)
+            (shown as NSString).draw(at: .zero, withAttributes: attributes)
+            // The tail stands right after the "…", as it does after a `Text` that is cut: AppKit's own truncation
+            // leaves up to a letter's width of room after the "…", and the count stood apart from its line.
+            if let tail {
+                let at = min(size.width - tailWidth, ceil((shown as NSString).size(withAttributes: attributes).width))
+                (tail as NSString).draw(at: NSPoint(x: at, y: 0), withAttributes: attributes)
+            }
             return true
         }
         return image.layerContents(forContentsScale: scale)
+    }
+
+    /// The longest beginning of the text that fits the room with "…" after it, with no space before the "…".
+    private static func cut(_ text: String, to room: CGFloat, attributes: [NSAttributedString.Key: Any]) -> String {
+        let letters = Array(text)
+        func line(_ count: Int) -> String {
+            String(letters.prefix(count)).trimmingCharacters(in: .whitespaces) + "…"
+        }
+        var low = 0, high = letters.count
+        while low < high {
+            let middle = (low + high + 1) / 2
+            if (line(middle) as NSString).size(withAttributes: attributes).width <= room { low = middle } else { high = middle - 1 }
+        }
+        return line(low)
     }
 
     /// A layer that left the window lost its motion; the same guard `TurningSymbolView` keeps.
@@ -203,11 +279,11 @@ final class ShimmerView: NSView {
     ///
     /// The bright centre sits at half the box, so a translation of `-(0.5 · box ± …)` word-widths puts it where
     /// this wants it: from `+(1 + half)` to `-half`, with `half` the band's own half-width in word-widths.
-    private func sweep() {
+    private func sweep(across width: CGFloat) {
         let half = (Self.lightEnds - Self.lightBegins) * Self.box / 2      // the band's half-width, in words
         let centre = Self.box / 2                                          // where the light sits in the box
-        let from = (1 + half - centre) * wordSize.width
-        let travel = (-half - centre) * wordSize.width
+        let from = (1 + half - centre) * width
+        let travel = (-half - centre) * width
         if let running = band.animation(forKey: "sweep") as? CABasicAnimation,
            (running.toValue as? CGFloat) == travel { return }
         band.removeAnimation(forKey: "sweep")

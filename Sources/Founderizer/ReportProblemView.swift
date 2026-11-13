@@ -220,15 +220,24 @@ final class ReportProblemModel {
         revision = releases?.revision ?? health?.revision
         // Each server's checks, under the server's own name, by the rule of its own page: a closer look of this launch.
         let checklists = FleetTrouble.checklists(of: machines, servers: servers) { store.look(machine: $0) }
+        // A stop of Turn on or Turn off of the connected apps, which its row's Report a problem opened this window for.
+        let connectStop: (stop: ConnectStop, turn: ConnectTurn)? = {
+            if case .stopped(let stop, let turn) = store.connectSwitch().run { return (stop, turn) }
+            return nil
+        }()
         let found = FleetTrouble.read(connectionError: store.connectionError, storageError: store.storageError,
                                       isFresh: store.isFresh, state: store.state, health: health,
                                       machines: machines, servers: servers, checklists: checklists,
-                                      at: health?.time ?? store.state?.time ?? Date().timeIntervalSince1970)
+                                      at: health?.time ?? store.state?.time ?? Date().timeIntervalSince1970,
+                                      connectStop: connectStop)
         trouble = found
         facts = ProblemReport.facts(app: ProblemReport.appVersion(), system: ProblemReport.systemVersion(),
-                                    fleet: fleet, hub: revision, screen: screen,
+                                    fleet: fleet, hub: ProblemReport.hubRelease(releases, revision: revision),
+                                    screen: screen,
                                     trouble: store.connectionError
-                                        ?? store.storageError.map { [$0, store.storageCause].compactMap { $0 }.joined(separator: " ") })
+                                        ?? store.storageError.map { [$0, store.storageCause].compactMap { $0 }.joined(separator: " ") }
+                                        // the hub's own words of the stop, which no row of the page shows
+                                        ?? connectStop.map { [$0.stop.words, $0.stop.said].filter { !$0.isEmpty }.joined(separator: " ") })
             + [ProblemReport.Fact(name: "Checks", value: found.reportLine)]
     }
 

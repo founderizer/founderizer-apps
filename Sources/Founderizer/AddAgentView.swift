@@ -192,6 +192,8 @@ struct AddAgentView: View {
                 step
             }
         }
+        // Its first page, the servers (or the hub's line that it cannot add agents): Esc closes the wizard there.
+        .preference(key: SetupFirstPage.self, value: model.receipt == nil && !model.picked && !model.busy && !handingOff)
         .task(id: "\(store.hub)/\(store.state?.db ?? "")") {
             while !Task.isCancelled {
                 if model.receipt == nil { await model.read(store: store) }
@@ -331,6 +333,10 @@ struct AddAgentView: View {
             guard let agent = model.receipt?.agent, let configure,
                   AgentSetupFlow.shows(store.state?.agents.first { $0.name == agent }, features: store.state?.ui_features ?? [])
             else { handingOff = false; return }
+            // Add agent that he closed meanwhile does not open again: the agent's row opens its setup, which fills the
+            // window as adding it does.
+            store.noteAdding(agent)
+            guard store.destination == .addAgent else { handingOff = false; return }
             store.addedAgent = agent
             configure(agent)
         }

@@ -36,7 +36,11 @@ final class VaultHub: @unchecked Sendable {
     // Every hub call of a job names the job's own caller: its agent in the route and its key in the header.
     func confirm(_ request: VaultRequest, as caller: VaultCaller) async throws -> VaultJob {
         let data = try await send(path: "/helper/vault/\(caller.agent)", method: "POST", body: Self.confirmBody(request), as: caller)
-        return try VaultJob(data: data, request: request)
+        let job = try VaultJob(data: data, request: request)
+        // DevOps plan 0.3: a handover's confirmation is a job only once the owner's pin of its recipient passes, so the
+        // broker never reads, protects or seals a login for a key that the owner did not pin (VaultOwnerPin).
+        if request.operation == .handover { try VaultOwnerPin.check(job, configuration: configuration) }
+        return job
     }
 
     /// The hub's confirmation of a save job (`create` or `capture`). It can be asked again while the job is open and

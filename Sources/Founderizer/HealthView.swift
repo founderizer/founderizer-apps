@@ -133,7 +133,10 @@ struct HealthView: View {
 
     /// What the hub row holds: where this Mac is connected, and when it last heard back. A hub that does not
     /// answer carries the hub's own words instead, which is the only thing that says why.
-    private var hubDetail: String {
+    private var hubDetail: String? {
+        // A Mac that was never given a hub has no address to show and no failure of a hub to tell: the address of no
+        // hub stood here with "This Mac cannot find your hub" (`FleetStore.hubIsUnset`).
+        if store.hubIsUnset { return nil }
         let where_ = store.hub.absoluteString
         if let trouble = store.connectionError { return "\(where_) — \(trouble)" }
         guard let last = store.lastSuccess else { return where_ }

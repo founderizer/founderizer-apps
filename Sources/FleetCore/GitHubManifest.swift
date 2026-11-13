@@ -27,12 +27,12 @@ public enum GitHubManifest {
     }
 
     /// What the door's forms and the hub's tokens need of an App: the tokens of each level (`GITHUB_ACCESS` of the
-    /// hub and the door), the door's reads of runs, runners and alerts, and the secrets that it sets to a key it
-    /// rotated. Webhooks stay off. Administration and Repository creation at write are the upper limit that the
-    /// new-projects plan gives the door (N2, D2): only the door's own token for one call uses them, to make a
-    /// repository or to register a runner.
+    /// hub and the door, and the issues that a token of each level reads and, from write, opens and comments on), the
+    /// door's reads of runs, runners and alerts, and the secrets that it sets to a key it rotated. Webhooks stay off.
+    /// Administration and Repository creation at write are the upper limit that the new-projects plan gives the door
+    /// (N2, D2): only the door's own token for one call uses them, to make a repository or to register a runner.
     public static let permissions: [String: String] = [
-        "actions": "write", "administration": "write", "contents": "write", "metadata": "read",
+        "actions": "write", "administration": "write", "contents": "write", "issues": "write", "metadata": "read",
         "pull_requests": "write", "repository_creation": "write", "secret_scanning_alerts": "read", "secrets": "write",
         "security_events": "read", "vulnerability_alerts": "read", "workflows": "write"]
 

@@ -271,8 +271,8 @@ public struct TailscaleFleetKey: Sendable {
 
     // MARK: - The pieces
 
-    private func request(_ path: String, token: String, method: String = "GET", accept: String = "application/json",
-                         json body: [String: Any]? = nil) -> URLRequest {
+    func request(_ path: String, token: String, method: String = "GET", accept: String = "application/json",
+                 json body: [String: Any]? = nil) -> URLRequest {
         var request = URLRequest(url: Self.api.appendingPathComponent(path))
         request.httpMethod = method
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
@@ -285,11 +285,11 @@ public struct TailscaleFleetKey: Sendable {
     }
 
     /// One exchange, with a connection that does not come up said as one. Every caller reads the status itself.
-    private func reach(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    func reach(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         do { return try await exchange(request) } catch { throw FleetKeyError.unreachable }
     }
 
-    private func send(_ request: URLRequest, token: String) async throws -> Data {
+    func send(_ request: URLRequest, token: String) async throws -> Data {
         let (data, http) = try await reach(request)
         guard (200...299).contains(http.statusCode) else { throw Self.failure(data, http, hiding: token) }
         return data

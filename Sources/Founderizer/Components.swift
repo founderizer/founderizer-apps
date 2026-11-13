@@ -220,14 +220,26 @@ struct ChatRow<Mark: View, Trailing: View>: View {
     private let selected: Bool
     /// The name in semibold: a new reply in the agent's chat.
     private let emphasized: Bool
+    /// **The agent works now, and its line moves as the chat's "Thinking" does** (the owner, 13 November 2026: "The
+    /// subtitle text on the sidebar task item should animate like the Thinking label, while the agent is Thinking"):
+    /// the same band of light over the same words in the same place (`ShimmeringWords`). Still with Reduce Motion.
+    private let working: Bool
+    /// **When the row's line is from, at the end of the name's line**, as a chat app writes it (`ChatList.time`; the
+    /// owner, 13 November 2026: "maybe I would like this relative time label on the side menu too"): muted, in the
+    /// line's own size. The row's marks (a setup that runs, the unread dot) then stand under it, at the end of the
+    /// line. A row with no line has no time, and its marks stay in the row's middle.
+    private let time: String?
     private let action: () -> Void
     private let mark: Mark
     private let trailing: Trailing
     @State private var hovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(_ title: String, preview: String?, selected: Bool, emphasized: Bool, action: @escaping () -> Void,
-         @ViewBuilder mark: () -> Mark, @ViewBuilder trailing: () -> Trailing) {
+    init(_ title: String, preview: String?, selected: Bool, emphasized: Bool, working: Bool = false,
+         time: String? = nil, action: @escaping () -> Void, @ViewBuilder mark: () -> Mark,
+         @ViewBuilder trailing: () -> Trailing) {
         self.title = title; self.preview = preview; self.selected = selected; self.emphasized = emphasized
+        self.working = working; self.time = preview == nil ? nil : time
         self.action = action; self.mark = mark(); self.trailing = trailing()
     }
 
@@ -238,11 +250,28 @@ struct ChatRow<Mark: View, Trailing: View>: View {
             HStack(spacing: FormMetrics.markColumn + FormMetrics.markGap - Self.glyph) {
                 mark.frame(width: Self.glyph, height: Self.glyph)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).fontWeight(emphasized ? .semibold : .regular).lineLimit(1)
-                    if let preview { previewLine(preview) }
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(title).fontWeight(emphasized ? .semibold : .regular).lineLimit(1)
+                        if let time {
+                            Spacer(minLength: 0)
+                            Text(time).font(FormMetrics.detail).monospacedDigit().foregroundStyle(FleetStyle.muted)
+                                .lineLimit(1).fixedSize()
+                        }
+                    }
+                    if let preview {
+                        HStack(spacing: 6) {
+                            previewLine(preview)
+                            if time != nil {
+                                Spacer(minLength: 0)
+                                trailing
+                            }
+                        }
+                    }
                 }
-                Spacer(minLength: 0)
-                trailing
+                if time == nil {
+                    Spacer(minLength: 0)
+                    trailing
+                }
             }
             .font(FormMetrics.text).foregroundStyle(FleetStyle.text)
             .padding(.horizontal, 10).frame(height: 50)
@@ -719,13 +748,24 @@ extension FleetTask {
 extension ChatRow {
     /// **The preview line, whose count of more tasks is never cut** (T-25): "Compare our prices with the three main
     /// competitors · +1" ends in "…" before the count, never inside it, so a row with two tasks never reads as one.
+    ///
+    /// **While the agent works, the same line moves** (`working`): the still line keeps its place and its words for
+    /// VoiceOver, clear, and the moving words stand over it in its own room, cut where it is cut. So a row neither
+    /// moves nor changes its height when its agent's work starts or ends.
     @ViewBuilder func previewLine(_ preview: String) -> some View {
         let parts = Self.splitCount(preview)
-        HStack(spacing: 0) {
+        let still = HStack(spacing: 0) {
             Text(parts.text).lineLimit(1).truncationMode(.tail)
             if let count = parts.count { Text(count).lineLimit(1).fixedSize() }
         }
         .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+        if working && !reduceMotion {
+            still.opacity(0).overlay(alignment: .leading) {
+                ShimmeringWords(text: parts.text, tail: parts.count, fits: true).accessibilityHidden(true)
+            }
+        } else {
+            still
+        }
     }
 
     /// The line's own words and its trailing " · +n", when it has one.

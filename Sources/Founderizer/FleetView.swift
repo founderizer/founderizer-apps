@@ -20,6 +20,10 @@ struct FleetView: View {
     @AppStorage("panelWidth") private var panelWidth = Double(FleetStyle.panelWidth)
     /// The search card over the window, while it shows (`SearchPalette`).
     @State private var searching: SearchRequest?
+    /// The page of a wizard that fills the window shows its Back (`SetupBackShows`): Esc is Back's, not ×'s.
+    @State private var wizardBack = false
+    /// The page of a wizard that fills the window is its first page (`SetupFirstPage`): Esc closes it there.
+    @State private var wizardFirst = false
     /// The agents whose rows the sidebar drew last: a row that comes into a list that had rows fades in (`sidebar`).
     @State private var listedAgents: Set<String> = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -50,6 +54,8 @@ struct FleetView: View {
             } else if firstRun {
                 FirstRunView(store: store, window: true).frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.top, FleetSpace.lights)
+            } else if store.fillsWindow(store.destination) {
+                addingWizard
             } else {
             // **No bar.** Every pane below runs to the top edge of the window and the traffic lights float over
             // its own background; `FleetSpace.lights` is the room each one leaves for them. Every screen names
@@ -147,9 +153,48 @@ struct FleetView: View {
         }
     }
 
+    /// **Adding a server or an agent fills the window** (`FleetStore.fillsWindow`): the wizard alone, as the first run
+    /// is, with no sidebar, no Settings column and no panel. The notices keep their band, clear of the window's buttons,
+    /// and the request line its place under the page. × stands at the top right of the page's column, on Back's line,
+    /// and closes the wizard from any page. Esc is Back's where a Back stands, and ×'s on a first page (`SetupFirstPage`).
+    private var addingWizard: some View {
+        VStack(spacing: 0) {
+            addingPage
+                .environment(\.fillsWindow, true)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.top, FleetSpace.lights)
+                .overlay(alignment: .top) {
+                    SetupClose { store.closeWizard() }
+                        .keyboardShortcut(wizardFirst && !wizardBack ? .cancelAction : nil)
+                        .frame(height: SetupMetrics.backLine)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.top, FleetSpace.lights + FleetSpace.top)
+                        .fleetColumn()
+                }
+                .overlay(alignment: .top) {
+                    FleetNotices(store: store).environment(\.noticeInset, Self.lightsEnd / zoom)
+                }
+            if pendingBarShows { pendingBar }
+        }
+        .onPreferenceChange(SetupBackShows.self) { shows in wizardBack = shows }
+        .onPreferenceChange(SetupFirstPage.self) { first in wizardFirst = first }
+    }
+
+    /// The page of the wizard: Add server alone, without the Settings column it is a page of, Add agent, or the setup
+    /// of the agent being added, which `content` draws in place of its chat.
+    @ViewBuilder private var addingPage: some View {
+        switch store.destination {
+        case .addServer: AddServerView(store: store, addAgent: { openAddAgent($0) }, addFirstAgent: addFirstAgent)
+        case .addAgent: addAgentPage
+        default: content
+        }
+    }
+
     /// After an install: the agent's own page, which is its setup until it is active (`AgentSetupWizard`).
     private var configureAgent: ((String) -> Void)? {
         store.state?.ui_features?.contains("agent_setup") == true ? { name in
+            // Its setup and its "Setting up" go on filling the window, as Add agent did (`FleetStore.fillsWindow`).
+            store.noteAdding(name)
             openAgent(name, .chat)
             Task { await store.refresh() }
         } : nil
@@ -171,7 +216,7 @@ struct FleetView: View {
         for agent in state.agents {
             presences[agent.name] = agent.presence(isFresh: store.isFresh, serverTime: state.time,
                                                    openTasks: state.tasks.filter { $0.owner == agent.name && !$0.isTerminal },
-                                                   holds: state.holds ?? [])
+                                                   holds: state.holds ?? [], thinking: store.thinks(agent.name))
         }
         return presences
     }
@@ -188,6 +233,8 @@ struct FleetView: View {
     /// and no panel either, until the hub reports its session ready.
     private var startingAgent: String? {
         guard let name = chatAgent, setupAgent == nil, let state = store.state else { return nil }
+        // An agent being added keeps it while a reading is old, as it keeps the window (`AgentSetupFlow.fillsWindow`).
+        if store.isAdding(name), !store.isFresh { return name }
         return AgentSetupFlow.chatStarts(state.agents.first { $0.name == name }, serverTime: state.time,
                                          fresh: store.isFresh) ? name : nil
     }
@@ -212,6 +259,10 @@ struct FleetView: View {
         guard let agent = addAgent.receipt?.agent, let configureAgent,
               AgentSetupFlow.shows(store.state?.agents.first { $0.name == agent }, features: store.state?.ui_features ?? [])
         else { return false }
+        // Add server that he closed meanwhile does not open again: the agent's row opens its setup, which fills the
+        // window as adding it does.
+        store.noteAdding(agent)
+        guard store.destination == .addServer else { return true }
         store.addedAgent = agent
         configureAgent(agent)
         return true
@@ -421,11 +472,14 @@ struct FleetView: View {
     /// the name the newest thing it did — its last message, or what it is doing on an open task (`ChatList.preview`) —
     /// then at its right a provider setup that goes on and a new reply in its chat (and its name in semibold). A click
     /// opens its chat, also from its details; the right-click has the extras he chose (`agentMenu`).
+    ///
+    /// **An agent at work shows it by motion alone** (the owner, 13 November 2026): its glyph moves and its line moves
+    /// as the chat's "Thinking" does, and it has no dot. A dot is a problem.
     private func agentRow(_ agent: FleetAgent) -> some View {
         let providerSetup = store.providerSetup(hub: store.hub, database: store.state?.db, agent: agent.name)
         let presence = agent.presence(isFresh: store.isFresh, serverTime: store.state?.time ?? 0,
                                       openTasks: store.state?.tasks.filter { $0.owner == agent.name && !$0.isTerminal } ?? [],
-                                      holds: store.state?.holds ?? [])
+                                      holds: store.state?.holds ?? [], thinking: store.thinks(agent.name))
         let reply = store.hasNewReply(from: agent.name)
         let selected = store.destination.agentName == agent.name
         // An old reading keeps the agent's look (fix round 2, item 2): VoiceOver hears that it is the last reading.
@@ -433,12 +487,21 @@ struct FleetView: View {
                      presence.label, store.isFresh ? nil : "Last reading"].compactMap { $0 }
         let preview = ChatList.preview(agent.name, last: store.chatTimeline.entries(for: agent.name, limit: 1).last,
                                        tasks: store.state?.tasks ?? [])
-        return ChatRow(agent.name.agentLabel, preview: preview, selected: selected, emphasized: reply) {
+        // **While the agent works, its line says what it does now** (`AgentActivity.actionNow`, hub 1.148; the owner, 13
+        // November 2026, to the picture of this line: "Yes, build it"): the agent's own words for its command, or the
+        // hub's plain words for a tool, in place of the task's title. It moves as every line of an agent at work.
+        let action = presence == .working ? AgentActivity.actionNow(agent.name, tasks: store.state?.tasks ?? []) : nil
+        // When the line is from, as a chat app writes it at the row's end (`ChatList.time`).
+        let time = ChatList.previewTime(agent.name, last: store.chatTimeline.entries(for: agent.name, limit: 1).last,
+                                        tasks: store.state?.tasks ?? [])
+            .map { ChatList.time($0, now: store.state?.time ?? Date().timeIntervalSince1970) }
+        return ChatRow(agent.name.agentLabel, preview: action ?? preview, selected: selected, emphasized: reply,
+                       working: presence == .working, time: time) {
             openAgent(agent.name, .chat)
         } mark: {
             // **Its status dot stands on its glyph's lower right corner, as everywhere else** (the owner's yes of 28
-            // October 2026, D-8): green while it works, none while it is simply online. The ring under the dot is the
-            // row's own colour, so it parts the dot from the glyph on the selected row too.
+            // October 2026, D-8): none while it works or is simply online. The ring under the dot is the row's own
+            // colour, so it parts the dot from the glyph on the selected row too.
             AgentAvatar(name: agent.name, presence: presence, size: ChatRow<EmptyView, EmptyView>.glyph,
                         surface: selected ? FleetStyle.bubble : FleetStyle.rail, moves: true)
         } trailing: {
@@ -492,7 +555,7 @@ struct FleetView: View {
             case .activity: ActivityBoard(store: store)
             case .agents: AgentsPage(store: store) { openAgent($0, .chat) }
             case .addAgent: addAgentPage
-            case .settings, .server, .addServer, .app: EmptyView()
+            case .settings, .server, .addServer, .app, .connectKey: EmptyView()
             case .task: if let task = store.currentTask {
                 TaskView(store: store, task: task, state: store.state!, hub: store.hub, isFresh: store.isFresh)
                     .id("\(store.hub)/\(task.id)")
@@ -539,6 +602,7 @@ struct FleetView: View {
             }.id("\(store.hub)/\(name)"))
         case .addServer: AnyView(AddServerView(store: store, addAgent: { openAddAgent($0) }, addFirstAgent: addFirstAgent))
         case .app(let group): AnyView(AppsSettings(store: store, only: group).id("\(store.hub)/app/\(group.rawValue)"))
+        case .connectKey: AnyView(ConnectAppKeyPage(store: store, model: store.connectSwitch()).id("\(store.hub)/connect-key"))
         default: nil
         }
     }
@@ -965,7 +1029,8 @@ struct FleetNotices: View {
     private var reading: Bool {
         switch store.destination {
         case .agent(let name):
-            !store.setupShows(name)
+            // "Setting up" of an agent being added stands while a reading is old, as `startingAgent` keeps it.
+            !store.setupShows(name) && !(store.isAdding(name) && !store.isFresh)
                 && !AgentSetupFlow.chatStarts(store.state?.agents.first { $0.name == name },
                                               serverTime: store.state?.time ?? 0, fresh: store.isFresh)
         case .task: true
@@ -995,7 +1060,10 @@ struct FleetNotices: View {
     /// refuses has its own notice, and "This reading of your fleet is old" is only for a read that is slow, never for
     /// reads that fail (they said one outage twice in six seconds).
     @ViewBuilder private var notices: some View {
-        if let error = store.connectionError {
+        // **No notice about a hub that this Mac never had** (the onboarding test of 13 November 2026): Settings opens
+        // before there is a fleet, and its window said "This Mac cannot find your hub at fleet.invalid:8765" to a new
+        // customer, about the address that stands for no hub (`FleetStore.quietAboutNoHub`).
+        if let error = store.connectionError, !store.quietAboutNoHub {
             // **One way on** (T-35): Try again. Settings › System status, where the hub's address opens by itself
             // while the hub does not answer, is in the sidebar as always; a second button beside it made two ways on.
             BandNotice(error, symbol: "antenna.radiowaves.left.and.right.slash") {
@@ -1051,6 +1119,9 @@ private struct BandNotice<Actions: View>: View {
     private let color: Color
     private let actions: Actions
     @Environment(\.noticeReading) private var reading
+    @Environment(\.noticeInset) private var inset
+    /// The band's width, for its words' clearance of the window's buttons.
+    @State private var width: CGFloat = 0
 
     init(_ text: String, symbol: String = "exclamationmark.triangle.fill", color: Color = .orange,
          @ViewBuilder actions: () -> Actions) {
@@ -1067,12 +1138,29 @@ private struct BandNotice<Actions: View>: View {
             Spacer(minLength: 12)
             HStack(spacing: FleetSpace.actions) { actions }
         }
+        .padding(.leading, clearance)
         .frame(height: FleetSpace.lights)
         .fleetColumn(reading: reading)
         .background(color.opacity(0.1))
         .overlay(alignment: .bottom) { Rule() }
         .accessibilityElement(children: .contain)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
+
+    /// How far the words move right to clear the window's buttons (`noticeInset`): what the column leaves at its left,
+    /// short of the inset. Nothing on a window wide enough, where the words stand in the page's own column.
+    private var clearance: CGFloat {
+        guard inset > 0, width > 0 else { return 0 }
+        let column = reading ? FleetStyle.readingWidth : FleetStyle.pageWidth
+        let left = width >= column + 2 * FleetSpace.margin ? (width - column) / 2 : FleetSpace.margin
+        return max(0, inset - left)
+    }
+}
+
+extension EnvironmentValues {
+    /// Where the window's buttons end, which the words of a notice clear while its tint runs the whole width: in a
+    /// wizard that fills the window, where the band begins at the window's left edge.
+    @Entry var noticeInset: CGFloat = 0
 }
 
 extension View {

@@ -92,16 +92,10 @@ struct ManagerView: View {
     /// owner's last message (`pendingChat`), this Mac's own request on its way, and the two things that stop the
     /// agent running at all — its usage limit and its machine going quiet.
     private var waiting: ChatWaiting? {
-        guard let state = store.state, let entry = state.agents.first(where: { $0.name == agent }) else { return nil }
         // A reply the hub cannot link to his message is not proof that the agent is still working: see
         // ChatWaiting.Pending.spokenSince, which the manager's every reply is. Nor is a message that it read in a
         // turn that has ended with no reply (ChatWaiting.Pending.turnOver).
-        let pending = entry.pendingChat(in: state)?.waits ?? .none
-        return ChatWaiting.of(agent: agent, pending: pending,
-                              sending: store.sending && requestOnItsWay != nil,
-                              limit: entry.limit,
-                              offline: store.isFresh && !entry.helperIsRecent(serverTime: state.time),
-                              until: { fleetComingTime($0, now: state.time) })
+        store.chatWaiting(for: agent, onItsWay: requestOnItsWay != nil)
     }
 
     var body: some View {
@@ -137,7 +131,8 @@ struct ManagerView: View {
                         // the earlier messages he asks for.
                         case .report(let report): reportRow(report).id(entry.id)
                             .transition(shownUpTo.map { report.id > $0 } == true
-                                        ? ReplyArrival.transition(taking: lineShowing && places.atEnd.isEmpty ? lastWaiting : nil)
+                                        ? ReplyArrival.transition(taking: lineShowing && places.atEnd.isEmpty ? lastWaiting : nil,
+                                                                  agent: agent)
                                         : .identity)
                         }
                         // The requests this message told him about, in the order they were raised.
@@ -150,7 +145,7 @@ struct ManagerView: View {
                     }
                     // What the owner is waiting for, under his last message and above nothing: one muted line,
                     // in the place the answer will take.
-                    if let waiting { ChatWaitingLine(waiting: waiting).padding(.bottom, Self.footer) }
+                    if let waiting { ChatWaitingLine(waiting: waiting, agent: agent).padding(.bottom, Self.footer) }
                     Color.clear.frame(height: 1).id("latest")
                 }.threadRows(top: Self.topInset)
             }
@@ -175,6 +170,8 @@ struct ManagerView: View {
             .onChange(of: store.pending?.requestID, initial: true) { _, _ in
                 if let request = store.messageOnItsWay(to: agent) { sent = request }
             }
+            // A match of the search card: the chat draws back to it and shows it in its middle.
+            .onChange(of: store.chatFocus, initial: true) { _, focus in reveal(focus, proxy) }
             .onChange(of: requests.map(\.id)) { _, _ in
                 if followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
             }
@@ -216,6 +213,28 @@ struct ManagerView: View {
         }
     }
 
+    /// **The chat at one message** (`FleetStore.chatFocus`, from the search card's "In messages"): the chat holds every
+    /// message of the state read, so it draws back as far as the entry's time, with some entries over it
+    /// (`MessageSearch.drawn`), and scrolls to it. An entry that it does not hold (the reading has not brought it yet)
+    /// leaves the chat at its end.
+    private func reveal(_ focus: ChatFocus?, _ proxy: ScrollViewProxy) {
+        guard let focus, focus.agent == agent else { return }
+        store.chatFocus = nil
+        let all = store.chatTimeline.entries(for: agent, limit: .max)
+        guard let from = all.firstIndex(where: { $0.created >= focus.at }) else { return }
+        visibleCount = max(visibleCount, MessageSearch.drawn(count: all.count, index: from))
+        followsLatest = false
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            proxy.scrollTo(focus.entry, anchor: .center)
+            // A chat that opens stands at its end, and the scroll view's first idle phase there sets `followsLatest`
+            // to true again within those 50 ms. This scroll starts no phase that would correct it, so the next entry
+            // pulled the chat to its end, away from the match, and Latest did not show (a real window, 13 November
+            // 2026). So the chat stops following here, after the scroll, until he scrolls or presses Latest.
+            followsLatest = false
+        }
+    }
+
     private func messageRow(_ message: OwnerMessage) -> some View {
         SentMessageView(store: store, message: message).id("message-\(message.id)")
     }
@@ -241,6 +260,22 @@ extension FleetStore {
     func messageOnItsWay(to agent: String, kept: PendingRequest? = nil) -> PendingRequest? {
         WordsOnTheirWay.message(to: agent, pending: pending, kept: kept, receipt: lastReceipt, hub: hub,
                                 database: state?.db, messages: state?.messages ?? [])
+    }
+
+    /// **What an agent's chat waits for, or nil**: one rule for the chat's own line and for the agent's row of the
+    /// sidebar (`FleetAgent.chatWaiting`). Every part of it is already read: the hub's own answer about his last
+    /// message, this Mac's own request on its way (`onItsWay`), and the two things that stop the agent running at all,
+    /// its usage limit and its server going quiet.
+    func chatWaiting(for agent: String, onItsWay: Bool) -> ChatWaiting? {
+        guard let state, let entry = state.agents.first(where: { $0.name == agent }) else { return nil }
+        return entry.chatWaiting(in: state, sending: sending && onItsWay, fresh: isFresh,
+                                 until: { fleetComingTime($0, now: state.time) })
+    }
+
+    /// **Whether an agent works on his newest chat message now**: its chat says "Thinking". Its glyph then moves and
+    /// its sidebar line moves, as for a task in work (`FleetAgent.presence`).
+    func thinks(_ agent: String) -> Bool {
+        chatWaiting(for: agent, onItsWay: sending && messageOnItsWay(to: agent) != nil)?.moving == true
     }
 
     /// His answer to `need` on its way, or `kept`, the one a card saw go, once the hub confirmed it.
@@ -590,12 +625,14 @@ struct ChatStamp: View {
 private struct ReplyArrival: ViewModifier {
     /// The line the reply takes the place of, or nil.
     let line: ChatWaiting?
+    /// The agent of the chat, whose glyph stands before the line's moving words (`ChatWaitingLine`).
+    let agent: String
     /// The first frame of the arrival: the reply clear, the line whole.
     let arriving: Bool
 
-    static func transition(taking line: ChatWaiting?) -> AnyTransition {
-        .asymmetric(insertion: .modifier(active: ReplyArrival(line: line, arriving: true),
-                                         identity: ReplyArrival(line: line, arriving: false))
+    static func transition(taking line: ChatWaiting?, agent: String) -> AnyTransition {
+        .asymmetric(insertion: .modifier(active: ReplyArrival(line: line, agent: agent, arriving: true),
+                                         identity: ReplyArrival(line: line, agent: agent, arriving: false))
                         .animation(.easeOut(duration: 0.2)),
                     removal: .identity)
     }
@@ -603,11 +640,15 @@ private struct ReplyArrival: ViewModifier {
     func body(content: Content) -> some View {
         content.opacity(arriving ? 0 : 1)
             .overlay(alignment: .topLeading) {
-                // The line's still words: its shimmer is a moving layer, and this is the last fifth of a second of it.
+                // The line's still words: its shimmer is a moving layer, and this is the last fifth of a second of it,
+                // with the agent's glyph at rest where it moved, so the words go from where they stood.
                 if let line {
-                    HStack(spacing: 8) {
-                        if !line.moving { Image(systemName: line.symbol).font(IconMetrics.symbol(11)).foregroundStyle(.orange) }
-                        Text(line.says).font(ChatStyle.detail).foregroundStyle(line.moving ? FleetStyle.muted : .orange)
+                    HStack(spacing: ChatWaitingLine.glyphGap) {
+                        if line.moving { ChatWaitingLine.glyph(agent, moves: false) }
+                        HStack(spacing: 8) {
+                            if !line.moving { Image(systemName: line.symbol).font(IconMetrics.symbol(11)).foregroundStyle(.orange) }
+                            Text(line.says).font(ChatStyle.detail).foregroundStyle(line.moving ? FleetStyle.muted : .orange)
+                        }
                     }
                     .opacity(arriving ? 1 : 0)
                     .allowsHitTesting(false).accessibilityHidden(true)

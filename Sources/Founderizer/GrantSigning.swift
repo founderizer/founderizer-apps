@@ -60,6 +60,16 @@ enum GrantSigning {
                                           signature: key.sign(statement))
     }
 
+    /// The owner's signed replace of one secret's value (owner feature `secret_replace`): the statement about this
+    /// very sealed copy and its signature, for the intake that carries the copy. The central vault puts a new value
+    /// under a reference that it holds only with them, so a Mac that cannot sign sends no replace.
+    static func replace(login: String, sealed: String, hub: URL, database: String) async throws -> (statement: String, signature: String) {
+        let (fleet, key) = try await owner(hub: hub, database: database)
+        let statement = OwnerStatement.replace(fleet: fleet, login: login, sha256: OwnerStatement.checksum(sealed),
+                                               at: GrantClock.next(fleet: fleet))
+        return (statement, try key.sign(statement))
+    }
+
     /// This fleet's id, as the hub names it, and the owner key this Mac holds for it.
     private static func owner(hub: URL, database: String) async throws -> (String, any OwnerKey) {
         guard let fleet = try await VaultClient().reading(hub: hub, database: database)?.fleetID else {

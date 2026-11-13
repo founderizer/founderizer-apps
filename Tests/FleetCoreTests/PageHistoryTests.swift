@@ -37,6 +37,20 @@ struct PageHistoryTests {
         #expect(history.forward == ["tasks"])
     }
 
+    /// The × of a wizard that fills the window: Add agent, then the new agent's setup, closes to the page he left
+    /// before them, and neither wizard page stays on a list.
+    @Test func aWizardThatClosesGoesOnNoList() {
+        var history = PageHistory<String>()
+        history.went(from: "tasks", to: "chat")
+        history.went(from: "chat", to: "add-agent")
+        history.went(from: "add-agent", to: "setup.juno")
+        #expect(history.leave(from: "setup.juno") { $0 != "add-agent" } == "chat")
+        #expect(history.back == ["tasks"])
+        #expect(history.forward.isEmpty)
+        #expect(history.leave(from: "chat") { _ in false } == nil)
+        #expect(history.back.isEmpty)
+    }
+
     @Test func aRenamedPageKeepsItsPlace() {
         var history = PageHistory<String>()
         history.went(from: "server.worker-1", to: "tasks")

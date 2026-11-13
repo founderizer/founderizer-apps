@@ -15,6 +15,7 @@ import SwiftUI
 struct ChatsPage: View {
     let store: MobileStore
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// What the owner typed in the search field.
     @State private var search = ""
     /// The search field has the cursor: a tap anywhere on its capsule gives it.
@@ -146,9 +147,25 @@ struct ChatsPage: View {
         .background { Capsule().fill(Brand.bubble).onTapGesture { searching = true } }
     }
 
+    /// The agent's state as its row shows it: at work also while its chat says "Thinking" (`MobileStore.thinks`).
+    private func state(of agent: MobileAgent) -> AgentState {
+        store.snapshot.map {
+            agent.mobileState(in: $0, isFresh: store.showsCurrent, thinking: store.thinks(agent.name))
+        } ?? .unknown
+    }
+
+    /// **The line under an agent's name: what it does now while it works** (hub 1.148; the owner, 13 November 2026, to
+    /// the picture of this line in the Mac's sidebar: "Yes, build it"), in the agent's own words for its command or the
+    /// hub's plain words for a tool; else the last line of its conversation, as before.
+    private func line(of agent: MobileAgent, _ state: AgentState) -> String {
+        if state == .working, let action = store.snapshot?.action(of: agent.name) { return action }
+        return lastLine(agent.last)
+    }
+
     private func row(_ agent: MobileAgent) -> some View {
         let unread = store.hasNewReply(from: agent.name)
-        let state = store.snapshot.map { agent.mobileState(in: $0, isFresh: store.showsCurrent) } ?? .unknown
+        let state = state(of: agent)
+        let line = line(of: agent, state)
         // **At the accessibility text sizes the mark stands beside the name** (margins pass, fault 13): centred on the
         // row, it stood beside the preview's lines, about 100 points under the name.
         return HStack(alignment: typeSize.isAccessibilitySize ? .top : .center, spacing: 12) {
@@ -179,11 +196,24 @@ struct ChatsPage: View {
                 }
                 // One line, as a list of conversations gives: the row is the name and the mark, and the words
                 // under them are only enough to know which conversation this is.
-                Text(lastLine(agent.last))
+                // **While the agent works, the same line moves as the chat's "Thinking" does** (the owner, 13 November
+                // 2026, of the Mac's sidebar: "The subtitle text on the sidebar task item should animate like the
+                // Thinking label, while the agent is Thinking", and of the phone: "Yes, iPhone too"): the still line
+                // keeps its place and its height, clear, and the moving words stand over it, cut where it is cut.
+                // Still with Reduce Motion and at the accessibility text sizes, where the line wraps.
+                let moves = state == .working && !reduceMotion && !typeSize.isAccessibilitySize
+                Text(line)
                     .font(.subheadline).foregroundStyle(Brand.muted)
                     .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
+                    .opacity(moves ? 0 : 1)
+                    .overlay(alignment: .leading) {
+                        if moves {
+                            ShimmeringWords(text: line, style: .subheadline, fits: true)
+                                .accessibilityHidden(true)
+                        }
+                    }
             }
         }
         .padding(.vertical, 4)
@@ -195,16 +225,20 @@ struct ChatsPage: View {
     /// The row as VoiceOver reads it, each fact once: "Manager, Online, 15:29, Passed on to Nova…". It read the name
     /// twice, once for the mark and once for the words.
     private func spoken(_ agent: MobileAgent) -> String {
-        let state = store.snapshot.map { agent.mobileState(in: $0, isFresh: store.showsCurrent) } ?? .unknown
+        let state = state(of: agent)
         var parts = [agentName(agent.name), state.words]
-        if let last = agent.last { parts.append(fleetTime(last.ts)) }
+        if let last = agent.last { parts.append(ChatList.time(last.ts, now: store.hubNow)) }
         if store.hasNewReply(from: agent.name) { parts.append("Unread reply") }
-        parts.append(lastLine(agent.last))
+        parts.append(line(of: agent, state))
         return parts.joined(separator: ", ")
     }
 
+    /// **When the conversation's last line is from, as a chat app writes it** (`ChatList.time`, the Mac sidebar's own
+    /// rule since 13 November 2026, when the owner asked for "this relative time label on the side menu too"): the time
+    /// of day for today, "Yesterday", the weekday within the last week, else the date in numbers. It was the time of
+    /// day alone, so a line of yesterday evening read "20:51" beside one of this morning.
     private func time(_ last: MobilePreview) -> some View {
-        Text(fleetTime(last.ts)).font(.subheadline).foregroundStyle(Brand.muted)
+        Text(ChatList.time(last.ts, now: store.hubNow)).font(.subheadline).foregroundStyle(Brand.muted)
     }
 
     /// A reply he has not read: the one violet dot.

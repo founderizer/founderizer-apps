@@ -134,6 +134,11 @@ public struct FleetAgent: Decodable, Identifiable, Sendable {
     /// before the first such message, while a usage limit holds it (a turn that the limit cut ends too, and the chat
     /// then says "Usage limit" as before), and from an older hub.
     public let turn_ended_after: Double?
+    /// **His newest chat message to it is late** (hub 1.144): no session read it in two minutes, or a session read
+    /// it and wrote no reply for as long. Its server can answer all that time, so nothing else says that the agent
+    /// does not: the chat then says "Not answering" under his message, as it does for a server that is silent
+    /// (`chatWaiting`). false or nil: it is not late, or the hub is older than this field.
+    public let chat_undelivered: Bool?
     public var id: String { name }
     public var accountLimits: AccountLimits? { local_model == true ? nil : usage?.limits }
     /// The email of the provider account of the agent's own (primary) route, from a current reading of its configured
@@ -143,7 +148,7 @@ public struct FleetAgent: Decodable, Identifiable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case name, role, title, runtime, active, direct_chat, local_model, reports_to, can, last_seen, alive_ts, client_seen, alive, client, usage, limit,
-             signed_in, chat_ready, placed, turn_ended_after
+             signed_in, chat_ready, placed, turn_ended_after, chat_undelivered
     }
 
     public init(from decoder: Decoder) throws {
@@ -169,6 +174,7 @@ public struct FleetAgent: Decodable, Identifiable, Sendable {
         chat_ready = try data.decodeIfPresent(Bool.self, forKey: .chat_ready)
         placed = try data.decodeIfPresent(Bool.self, forKey: .placed) ?? true
         turn_ended_after = try data.decodeIfPresent(Double.self, forKey: .turn_ended_after)
+        chat_undelivered = try data.decodeIfPresent(Bool.self, forKey: .chat_undelivered)
         // Bad telemetry must not block chat or hide the rest of the fleet state.
         do {
             let reading = try data.decodeIfPresent(AgentUsage.self, forKey: .usage)
@@ -232,6 +238,17 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     /// board shows it in Waiting with "Until 10:00". nil on a hub that does not send it, where a parked task still
     /// shows as work.
     public let parked_until: Double?
+    /// **Whether its session works on it now** (hub 1.147): true while a turn of its session runs or a call that it
+    /// started in the background is open, false when its last turn ended and nothing of it runs. nil: the hub knows no
+    /// turn of its attempt yet, or it is an older hub; the task's state then says it, as before. On the first fleet, on
+    /// 13 November 2026, 19 tasks were in state working, 12 of them parked on a reminder, and one had work that ran:
+    /// each of their agents moved in the sidebar (the owner: "the agent replied but the sidebar is still animating!").
+    public let works: Bool?
+    /// **What its running turn does now, in plain words** (hub 1.148), or nil: no turn of it runs, its turn has made no
+    /// call yet that says something, or an older hub. The words are the agent's own line of a command ("Read live API
+    /// health and public status") or the hub's fixed words for a tool ("Reading its messages"); no model writes them
+    /// for the app (the owner, 13 November 2026, to their picture in his sidebar: "Yes, build it").
+    public let doing: String?
     public let stalled_since: Double?
     public let stalled_reason: String?
 
@@ -264,7 +281,10 @@ extension FleetTask {
     /// limit (the board's hourglass, never the green of work), a stall, a lost session, a question or a sign-in, what it
     /// waits on, and its own state. A limited task was drawn as green work in the search card while its thread said
     /// "Usage limit", and a result that was not accepted was a muted circle there and a red badge on the board.
-    /// `inWork` is true only for a task in work now with nothing that holds it.
+    /// `inWork` is true only for a task in work now with nothing that holds it: **a task in state working that its
+    /// agent parked until a time (`parked_until`), or whose session's last turn ended with nothing of it running
+    /// (`works` false), is no work now** (13 November 2026). It keeps the mark and the word of its state, at rest and
+    /// without the green of work, because motion and that green say that something happens now.
     ///
     /// **An outcome that is not known comes before all of it** (`outcomeUnknown`; fix round 3b, item 7): the orange "?"
     /// with "Outcome not known: check it", as the Tasks board and the lane of Needs you draw it, over the owner's hold and
@@ -297,7 +317,7 @@ extension FleetTask {
         // A working or queued task that waits on something is the board's hourglass: "Waiting for Manager", "Waiting on Juno".
         if let waiting = waiting_on, !waiting.isEmpty { return ("hourglass", words, true, false) }
         switch state {
-        case "working": return ("circle.dotted", words, false, true)
+        case "working": return ("circle.dotted", words, false, parked_until == nil && works != false)
         case "submitted": return ("clock", words, false, false)
         default: return ("circle", words, false, false)
         }

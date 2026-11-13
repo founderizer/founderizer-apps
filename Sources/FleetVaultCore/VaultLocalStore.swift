@@ -156,20 +156,28 @@ final class VaultLocalStore: VaultItems, VaultStore, @unchecked Sendable {
     /// store holds that value under that id already. Another value under that id is refused, because one reference
     /// names one value in every vault of the fleet: a delivery never changes what a name already means here
     /// (`vault.py`'s `put`).
-    func put(id: String, name: String, value: String, note: String) throws -> String {
+    ///
+    /// `replace`: the owner replaced the value of this reference (the central vault's signed replace, and the hub's
+    /// word with a delivery of it). Then another value goes into the place of the stored one, "replaced", but only
+    /// over an item with this same note: a delivery replaces what a delivery saved, never a login that this vault made
+    /// or that the owner saved here himself. The store is one file that is written whole and then takes the place of
+    /// the old one (`keep`), so a replace that fails leaves the old value whole.
+    func put(id: String, name: String, value: String, note: String, replace: Bool = false) throws -> String {
         guard let id = Self.canonical(id), Self.isPlainLine(name, 200), Self.isPlainLine(note, 200) || note.isEmpty else {
             throw VaultFailure.store
         }
         let lock = try locked()
         defer { Darwin.close(lock) }
         var items = try opened()
-        if let held = items[id] {
-            guard Self.same(held.value, value) else { throw VaultFailure.storeOther }
-            return "same"
+        let held = items[id]
+        if let held {
+            if Self.same(held.value, value) { return "same" }
+            guard replace else { throw VaultFailure.storeOther }
+            guard held.note == note else { throw VaultFailure.storeNotDelivered }
         }
         items[id] = Item(id: id, key: name, value: value, note: note, made_at: Date().timeIntervalSince1970)
         try keep(items)
-        return "new"
+        return held == nil ? "new" : "replaced"
     }
 
     /// Removes the item with this id when its note is exactly `note` (`withdraw`): "removed", or "absent" when the store

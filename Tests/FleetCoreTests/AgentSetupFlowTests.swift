@@ -217,6 +217,47 @@ struct AgentSetupFlowTests {
         #expect(!AgentSetupFlow.shows(try agent(false, runtime: "grok"), features: all))
     }
 
+    /// The agent being added fills the window through its setup and its "Setting up", until its chat opens; an agent
+    /// that ran before, deactivated or signed out, keeps its setup in its own page (the owner's yes of 12 November 2026).
+    @Test func onlyTheAgentBeingAddedFillsTheWindow() throws {
+        func leo(active: Bool, signedIn: Bool?, ready: Bool? = nil) throws -> FleetAgent {
+            try JSONDecoder().decode(FleetAgent.self, from: json([
+                "name": "leo", "role": "worker", "runtime": "claude", "active": active, "can": ["shell"],
+                "signed_in": signedIn.map { $0 as Any } ?? NSNull(), "last_seen": 995,
+                "chat_ready": ready.map { $0 as Any } ?? NSNull(),
+            ] as [String: Any]))
+        }
+        func fills(_ agent: FleetAgent?, adding: Bool) -> Bool {
+            AgentSetupFlow.fillsWindow(agent, adding: adding, features: AgentSetupFlow.features, serverTime: 1_000, fresh: true)
+        }
+        #expect(fills(try leo(active: false, signedIn: false), adding: true))                // its setup
+        #expect(fills(try leo(active: true, signedIn: true, ready: false), adding: true))    // its "Setting up"
+        #expect(!fills(try leo(active: true, signedIn: true, ready: true), adding: true))    // its chat
+        #expect(!fills(try leo(active: false, signedIn: true), adding: false))               // deactivated
+        #expect(!fills(try leo(active: true, signedIn: false), adding: false))               // signed out
+        #expect(!fills(nil, adding: true))
+        // An old reading holds the window for the agent being added, and only for it.
+        let old = try leo(active: true, signedIn: true, ready: false)
+        #expect(AgentSetupFlow.fillsWindow(old, adding: true, features: AgentSetupFlow.features, serverTime: 1_000, fresh: false))
+        #expect(!AgentSetupFlow.fillsWindow(old, adding: false, features: AgentSetupFlow.features, serverTime: 1_000, fresh: false))
+    }
+
+    /// Adding ends once its setup is over and its chat can answer, or once the hub no longer lists it.
+    @Test func addingEndsWhenItsChatCanAnswer() throws {
+        func leo(active: Bool, ready: Bool?) throws -> FleetAgent {
+            try JSONDecoder().decode(FleetAgent.self, from: json([
+                "name": "leo", "role": "worker", "runtime": "claude", "active": active, "can": ["shell"],
+                "signed_in": true, "chat_ready": ready.map { $0 as Any } ?? NSNull(),
+            ] as [String: Any]))
+        }
+        let all = AgentSetupFlow.features
+        #expect(!AgentSetupFlow.addingEnds(try leo(active: false, ready: nil), features: all))     // its setup shows
+        #expect(!AgentSetupFlow.addingEnds(try leo(active: true, ready: false), features: all))    // "Setting up"
+        #expect(AgentSetupFlow.addingEnds(try leo(active: true, ready: true), features: all))      // its chat
+        #expect(AgentSetupFlow.addingEnds(try leo(active: true, ready: nil), features: all))       // an older hub
+        #expect(AgentSetupFlow.addingEnds(nil, features: all))                                     // deleted
+    }
+
     /// Leo, 26 October 2026: activated, then "Hi", and 27 seconds of "Thinking" while its chat session started.
     @Test func settingUpTakesThePlaceOfAChatThatCannotAnswerYet() throws {
         func leo(_ ready: Bool?, seen: Double = 995, limited: Bool = false) throws -> FleetAgent {
@@ -284,6 +325,18 @@ struct ManagerServerTests {
         #expect(!shows(try manager(placed: true, signedIn: true, alive: "owner-chat,manager")))
         #expect(AgentSetupFlow.runs(try manager(placed: true, signedIn: true, alive: "manager")))
         #expect(!AgentSetupFlow.runs(try manager(placed: false, signedIn: true, alive: "manager")))
+    }
+
+    /// Its setup fills the window while it gets its first server, until it runs; once it had one, a sign-out keeps its
+    /// page.
+    @Test func itsSetupFillsTheWindowUntilItRuns() throws {
+        func fills(_ agent: FleetAgent, features: [String], placing: Bool = false) -> Bool {
+            AgentSetupFlow.fillsWindow(agent, adding: false, features: features, placing: placing, serverTime: 1_000, fresh: true)
+        }
+        #expect(fills(try manager(), features: all))
+        #expect(fills(try manager(placed: true, signedIn: true), features: all, placing: true))
+        #expect(!fills(try manager(placed: true, signedIn: false), features: all))
+        #expect(!fills(try manager(), features: AgentSetupFlow.features))
     }
 
     /// A manager that this Mac never saw without a server is any fleet's manager: a session that starts again, or a

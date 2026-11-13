@@ -55,6 +55,8 @@ final class CentralVaultModel {
     /// reads the vault's status once a minute. Without them a pin would read as missing for that minute.
     private var confirmedRecovery: String?
     private var confirmedPins: [String: String] = [:]
+    /// When this session last signed each machine's pin (`VaultFacts.signedAt`).
+    private var signedAt: [String: Double] = [:]
 
     init(hub: URL) { self.hub = hub }
 
@@ -107,6 +109,7 @@ final class CentralVaultModel {
         if self.database != database {        // another generation starts clean
             install = nil; recovery = nil; servers = [:]; otherOwner = false; takeOverProblem = nil
             confirmedRecovery = nil; confirmedPins = [:]; update = nil; updateFor = nil; tcpWindow = nil; tcpWindowFor = nil
+            // signedAt stays: a new generation of the hub does not shorten the day of wait after a signature.
         }
         if fresh?.program != updateFor { update = nil }       // the tries were for another release's program
         self.database = database
@@ -130,7 +133,7 @@ final class CentralVaultModel {
         let fleet = reading?.fleetID
         return VaultFacts(keyHeld: fleet.map(OwnerKeychain.isHeld) ?? false,
                           pin: fleet.flatMap { CentralVaultPins.recipient(hub: hub, fleet: $0) }, hubOnRecord: hubOnRecord,
-                          otherOwner: otherOwner, confirmedRecovery: confirmedRecovery, confirmedPins: confirmedPins,
+                          otherOwner: otherOwner, confirmedRecovery: confirmedRecovery, confirmedPins: confirmedPins, signedAt: signedAt,
                           install: install, recovery: recovery, servers: servers, update: update,
                           now: Date().timeIntervalSince1970)
     }
@@ -243,6 +246,27 @@ final class CentralVaultModel {
         }
     }
 
+    /// **One root step of root's own clone on the hub's machine, for another part of this app** (the connected apps'
+    /// `connect on|off`, `ConnectGate.program`): the hub's machine reached as for the install and the TCP step, with the
+    /// strict check of the host key. It waits while a round of this model runs, and no round starts while it runs, so
+    /// this app starts no two runs of root's clone at once. The time-out is the install's, because its `kit-clone` can
+    /// also make root's first clone.
+    func rootRun(_ program: String, store: FleetStore) async throws -> LocalShell.Answer {
+        while working { _ = try await store.nap(2) }
+        working = true
+        defer { working = false }
+        guard store.hub == hub, let database = store.state?.db else { throw Stop("Founderizer has no current status of the hub.") }
+        let machine: String
+        if let own = reading?.hub?.machine {
+            machine = own
+        } else {
+            machine = CentralVault.hubMachine(in: try await HubClient().machines(hub: hub, database: database).machines)
+        }
+        let target = try await self.target(machine, database: database, record: reading?.hub?.reach)
+        return try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target, program: program),
+                                        timeout: 900)
+    }
+
     /// The install on the hub's machine, from root's own clone there, the pin of the key it printed, and the hub's
     /// reading of that same key. `own`: the app's own install, which leaves a vault that another Mac's key holds as it
     /// is (`--keep-owner`). `program`: the update to that program of the hub's release, which is done only when the
@@ -343,6 +367,7 @@ final class CentralVaultModel {
             _ = try await VaultClient().pin(hub: hub, database: database, client: store.installation, statement: statement,
                                             signature: key.sign(statement))
             confirmedPins[name] = found
+            signedAt[name] = Date().timeIntervalSince1970
             servers[name] = nil
         } catch {
             servers[name] = VaultTries.failed(after: servers[name], at: Date().timeIntervalSince1970, reason: Self.words(error))

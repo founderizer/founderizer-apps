@@ -47,6 +47,7 @@ struct GitHubManifestTests {
         #expect(permissions["contents"] == "write" && permissions["workflows"] == "write" && permissions["secrets"] == "write")
         #expect(permissions["metadata"] == "read" && permissions["vulnerability_alerts"] == "read")
         #expect(permissions["administration"] == "write" && permissions["repository_creation"] == "write")   // N2
+        #expect(permissions["issues"] == "write")       // 12 November 2026: a token reads issues and, from write, comments
         #expect(GitHubManifest.name(owner: String(repeating: "a", count: 39), suffix: "ffff").count == 34)
     }
 

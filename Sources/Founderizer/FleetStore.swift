@@ -21,10 +21,11 @@ enum Destination: Hashable {
     /// rows of the sidebar are the one list of the agents, and the app opens on Needs you while a request waits, else on
     /// the manager's chat (`FleetStore.home`). `agents` is every agent with its role, server, account and usage, from the
     /// sidebar's row under Tasks (`AgentsPage`). `app` is one app's own page of Settings › Apps (the owner's yes of 10
-    /// November 2026 to its split), as `server` is one server's page of Settings › Servers.
+    /// November 2026 to its split), as `server` is one server's page of Settings › Servers. `connectKey` is his Tailscale
+    /// key page of Turn on for the connected apps (`ConnectAppKeyStep`), a page of Settings › Servers too.
     case needs, activity, agents, addAgent, server(String), addServer, task(Int), agent(String),
          agentDetail(String, AgentTab), signIn(String), agentRule(String, ProfileSectionID?), settings(SettingsTab),
-         app(AppsGroup)
+         app(AppsGroup), connectKey
 
     /// The agent whose page shows, or nil on every other page.
     var agentName: String? {
@@ -38,7 +39,7 @@ enum Destination: Hashable {
     var settingsTab: SettingsTab? {
         switch self {
         case .settings(let tab): tab
-        case .server, .addServer: .servers
+        case .server, .addServer, .connectKey: .servers
         case .app: .apps
         default: nil
         }
@@ -48,7 +49,7 @@ enum Destination: Hashable {
     /// over it (`pageNotices`).
     var ownsSidebar: Bool {
         switch self {
-        case .agentDetail, .agentRule, .settings, .server, .addServer, .app: true
+        case .agentDetail, .agentRule, .settings, .server, .addServer, .app, .connectKey: true
         default: false
         }
     }
@@ -62,6 +63,14 @@ enum Destination: Hashable {
         default: nil
         }
     }
+}
+
+/// One entry of an agent's chat to show: its `ChatEntry.id`, or `need-<n>` for a request's card, and its time, which
+/// says how far back the chat must draw to hold it.
+struct ChatFocus: Equatable {
+    let agent: String
+    let entry: String
+    let at: Double
 }
 
 /// The state of a control that saves itself, for the small mark beside it.
@@ -123,6 +132,17 @@ final class FleetStore {
     /// hub never shows the first-run wizard while it waits for it (`FleetView.firstRun`): "Set up your fleet" filled
     /// the window at 8 of 8 launches until the first read answered.
     private(set) var hubAnsweredBefore = false
+    /// **This Mac was never given a hub address**: the store reads the address of no hub (`HubClient.defaultAddress`),
+    /// which never answers. A read of it fails as every read of a lost hub does, and the window says nothing about
+    /// that failure (`FleetView.notices`): there is no hub to find yet.
+    var hubIsUnset: Bool { HubClient.isUnset(hub) }
+    /// The window's notice has nothing to say: the read that failed was a read of the address of no hub. An address
+    /// that the owner typed in Settings and that is no hub address still gets its line.
+    var quietAboutNoHub: Bool {
+        guard hubIsUnset else { return false }
+        if case .invalidAddress? = lastReadError as? HubError { return false }
+        return true
+    }
     /// The provider setups of the agents, by hub address, hub generation and agent name. A setup stays with its agent
     /// while other pages of that hub generation show. An agent of the same name on another hub has its own setup.
     @ObservationIgnored private var providerSetups: [AgentKey: ProviderSetup] = [:]
@@ -207,6 +227,16 @@ final class FleetStore {
         if let model = vaultModels[hub] { return model }
         let model = CentralVaultModel(hub: hub)
         vaultModels[hub] = model
+        return model
+    }
+
+    /// Turn on and Turn off of the connected apps (`ConnectSwitchModel`), one for each hub address: its steps take
+    /// minutes and go on whatever page shows, and a second Turn on cannot start beside the first.
+    @ObservationIgnored private var connectSwitches: [URL: ConnectSwitchModel] = [:]
+    func connectSwitch() -> ConnectSwitchModel {
+        if let model = connectSwitches[hub] { return model }
+        let model = ConnectSwitchModel(hub: hub)
+        connectSwitches[hub] = model
         return model
     }
 
@@ -330,11 +360,70 @@ final class FleetStore {
         stepping = true; destination = page; stepping = false
     }
 
+    /// **Adding a server or an agent fills the window** (the owner, 12 November 2026: "while we're adding a server or an
+    /// agent, it should be like a full screen modal for the wizard? instead of showing the agents, the settings etc?",
+    /// and the owner's yes to its two pictures): Add server, Add agent, the setup and "Setting up" of an agent that Add
+    /// agent added on this Mac (`isAdding`) until its chat opens, and the setup of the manager of a new fleet, drawn
+    /// alone, as the first run is (`AgentSetupFlow.fillsWindow`). An agent that ran before keeps its setup in its page.
+    func fillsWindow(_ page: Destination) -> Bool {
+        guard let state else { return false }
+        switch page {
+        case .addServer, .addAgent: return true
+        case .agent(let name):
+            return AgentSetupFlow.fillsWindow(state.agents.first { $0.name == name }, adding: isAdding(name),
+                                              features: state.ui_features ?? [], placing: placing(name),
+                                              serverTime: state.time, fresh: isFresh)
+        default: return false
+        }
+    }
+
+    /// **The agents that Add agent added on this Mac, until their chat opens** (hub address, generation and name, as
+    /// `unplaced`): their setup, then their "Setting up", fill the window, also after × and after the app starts again.
+    /// A fresh reading ends them (`noteAdded`); a deactivated or signed-out agent that ran before is never on it.
+    private var adding = Set(UserDefaults.standard.stringArray(forKey: "addingAgents") ?? []) {
+        didSet { UserDefaults.standard.set(adding.sorted(), forKey: "addingAgents") }
+    }
+    func isAdding(_ agent: String) -> Bool { state.map { adding.contains(placingKey(agent, database: $0.db)) } ?? false }
+    /// Add agent handed this agent to its setup.
+    func noteAdding(_ agent: String) {
+        guard let database = state?.db else { return }
+        adding.insert(placingKey(agent, database: database))
+    }
+    /// An agent whose setup ended and whose chat can answer, or that the hub no longer lists, leaves the list, and so
+    /// does this hub's other generations'. Only on a reading that answered: an old one proves nothing.
+    private func noteAdded(_ fresh: HubState) {
+        let prefix = "\(hub.absoluteString)|"
+        let here = "\(prefix)\(fresh.db)|"
+        let ended = adding.filter { key in
+            guard key.hasPrefix(prefix) else { return false }
+            guard key.hasPrefix(here) else { return true }
+            return AgentSetupFlow.addingEnds(fresh.agents.first { $0.name == String(key.dropFirst(here.count)) },
+                                             features: fresh.ui_features ?? [], placing: unplaced.contains(key))
+        }
+        if !ended.isEmpty { adding.subtract(ended) }
+    }
+
+    /// **The × of a wizard that fills the window**: back to the newest page left before it that does not fill the
+    /// window, and the wizard goes on no list (`PageHistory.leave`); Settings › Servers from Add server, or the home
+    /// page, when there is none. What runs goes on: a server being made or installed (Add server opens on it again), and
+    /// the install of an agent being added, whose row opens its setup again.
+    func closeWizard() {
+        let wizard = destination
+        let page = history.leave(from: wizard) { self.canOpen($0) && !self.fillsWindow($0) }
+        let home = FleetStore.home(state)
+        stepping = true
+        destination = page ?? (wizard == .addServer ? .settings(.servers) : fillsWindow(home) ? .agents : home)
+        stepping = false
+    }
+
     /// A page of an agent the hub no longer lists, or of a task it no longer has, cannot open again: Back passes over it.
     private func canOpen(_ page: Destination) -> Bool {
         guard let state else { return true }
         if let agent = page.agentName { return state.agents.contains { $0.name == agent } }
         if case .task(let id) = page { return state.tasks.contains { $0.id == id } }
+        // His Tailscale key page of Turn on is a page only while that turn waits for the key: Back and Forward pass
+        // over it afterwards, so that no token is pasted into a page that would drop it.
+        if page == .connectKey { return connectSwitch().run == .keyPage }
         return true
     }
 
@@ -369,6 +458,9 @@ final class FleetStore {
     var taskModels: [RuntimeModelUse] { taskActivity?.timeline.models ?? [] }
     var childThreadRequest: RuntimeToolKey?
     var selectedNeed: Int?
+    /// A message of one agent's chat that the chat scrolls to as it shows, then forgets: a match of the search card
+    /// (`SearchPalette`, "In messages").
+    var chatFocus: ChatFocus?
     private(set) var secretRefusals = 0
     /// Add secret over the window, from a chat's key button or from the guard of a pasted key: memory only, because a
     /// pasted key is in it until the form takes it.
@@ -885,8 +977,11 @@ final class FleetStore {
            (try? HubClient.address(asked)) == nil {
             fatalError("-hubAddress \(asked) is not a hub address. Founderizer stops here rather than read another hub.")
         }
-        let address = UserDefaults.standard.string(forKey: "hubAddress") ?? HubClient.defaultAddress
-        addressText = address
+        let kept = UserDefaults.standard.string(forKey: "hubAddress")
+        let address = kept ?? HubClient.defaultAddress
+        // The field of the hub's address is empty on a Mac that was never given one: the address of no hub is not a
+        // thing to show or to correct (the onboarding test of 13 November 2026, Settings › System status).
+        addressText = kept ?? ""
         let installationID = UserDefaults.standard.string(forKey: "installationID") ?? UUID().uuidString.lowercased()
         UserDefaults.standard.set(installationID, forKey: "installationID")
         installation = "founderizer-swift/1/\(installationID)"
@@ -1088,12 +1183,13 @@ final class FleetStore {
             if !firstReadEnded { firstReadEnded = true }
         }
         do {
-            let (fresh, data) = try await client.stateReading(at: requestedHub)
+            let (fresh, data) = try await client.stateReading(at: requestedHub, present: OwnerPresenceProbe.now())
             guard requestedHub == hub else { return }
             if let state, state.db != fresh.db { childThreadRequest = nil; cancelEdit(); endProviderSetups() }
             var timeline = chatTimeline
             if timeline.update(messages: fresh.messages, reports: fresh.reports) { chatTimeline = timeline }
             notePlacing(fresh)
+            noteAdded(fresh)
             state = fresh
             chooseHome()
             follow(fresh)
@@ -1119,6 +1215,9 @@ final class FleetStore {
             await notifications.update(hub: requestedHub, state: fresh)
         } catch {
             guard requestedHub == hub else { return }
+            // A read of the address of no hub always fails, and that is no news: it does not take away the line about
+            // an address that the owner typed in Settings and that was refused (`quietAboutNoHub`).
+            if hubIsUnset, case .invalidAddress? = lastReadError as? HubError { return }
             lastReadError = error
             failedReads += 1
             if !readsFail { readsFail = true }

@@ -30,6 +30,9 @@ struct ServersPage: View {
     /// The hub's own line about the read it refused, when it wrote one. The row that says the servers cannot be
     /// read says it, instead of leaving the owner with nothing about why.
     @State private var reason: String?
+    /// The connected apps' readings and the one-time code of this visit: the page's own state, which goes with it.
+    @State private var connect = ConnectedAppsModel()
+    @Environment(\.openWindow) private var openWindow
     private var time: Double { store.state?.time ?? 0 }
     private var offered: Bool { store.state?.ui_features?.contains(Servers.feature) == true }
     private var older: Bool { !offered && store.state?.ui_features?.contains("machines") == true }
@@ -89,9 +92,52 @@ struct ServersPage: View {
                     .frame(height: holdsDevices ? 0 : nil, alignment: .top).clipped()
                     .opacity(holdsDevices ? 0 : 1).accessibilityHidden(holdsDevices)
             }
+            // The connected apps under his devices (hub feature `connected_apps`): only while one of their two groups
+            // has something to show, so that the page gets no empty block; and with the devices, after the servers.
+            if connectedApps, !holdsDevices, connect.draws(now: connectNow) {
+                let running = switchModel.running
+                ConnectedAppsGroups(model: connect, now: connectNow, canAct: store.canWrite && connect.isFor(store),
+                                    choose: { level in Task { await connect.choose(level, store: store) } },
+                                    revoke: { connection in Task { await connect.revoke(connection, store: store) } },
+                                    turnOff: running ? nil : { switchModel.turnOff(store: store) },
+                                    offStop: switchModel.offStop,
+                                    report: { openWindow(id: FounderizerApp.reportWindow) })
+            }
+            // Turn on, its wait and its failure row (the owner's yes of 13 November 2026 to the pictures 2a to 2d): only
+            // while the hub names `connect_offer`, and never while it serves `connected_apps`.
+            if !holdsDevices, offerShows != .nothing {
+                ConnectAppOffer(show: offerShows, canAct: store.canWrite && connect.isFor(store),
+                                turnOn: { switchModel.turnOn(store: store) },
+                                tryAgain: { switchModel.tryAgain(store: store) },
+                                report: { openWindow(id: FounderizerApp.reportWindow) })
+            }
         }
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(offered)") { await poll() }
+        .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(connectedApps)/\(connectOffer)/\(switchModel.ended)") {
+            await connect.run(store: store)
+        }
+        // A stop that only work on the server repairs goes when he leaves the page, so that Turn on is there again.
+        .onDisappear { switchModel.left() }
+        // The hub serves them: a Turn on that stopped has nothing left to do.
+        .onChange(of: connectedApps, initial: true) { _, serves in if serves { switchModel.served() } }
+        // A code that ended while the app was in the background is replaced when it comes to the front.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if connectedApps { Task { await connect.activated(store: store) } }
+        }
     }
+
+    /// The hub serves the connected apps of its remote MCP address. No hub names the feature yet.
+    private var connectedApps: Bool { store.state?.ui_features?.contains(ConnectedApps.feature) == true }
+    /// The hub lets this Mac turn them on, or waits for them to be ready (UI-API.md, version 1.151). No hub names it yet.
+    private var connectOffer: Bool { store.state?.ui_features?.contains(ConnectedApps.offer) == true }
+    /// Turn on and Turn off: the run is the store's, so that it goes on whatever page shows.
+    private var switchModel: ConnectSwitchModel { store.connectSwitch() }
+    /// What the group of Turn on shows, from the hub's answer and the store's run.
+    private var offerShows: ConnectGate.Show {
+        ConnectGate.show(features: store.state?.ui_features, state: connect.isFor(store) ? connect.state : nil,
+                         run: switchModel.run, canAct: store.canWrite && connect.isFor(store))
+    }
+    private var connectNow: Double { store.state?.time ?? Date().timeIntervalSince1970 }
 
     /// The hub serves the owner's own devices (`mobile`).
     private var devices: Bool { store.state?.ui_features?.contains(OwnerDevices.feature) == true }

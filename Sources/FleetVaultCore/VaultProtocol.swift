@@ -21,6 +21,10 @@ public enum VaultFailure: String, Error, Sendable, CaseIterable {
     case unscopedCopy = "This sealed copy does not say where it comes from, so it is not used in a project."
     case relabelledCopy = "This sealed copy was made for another handover, so it is not used."
     case sourceMismatch = "The hub and the copy name different source logins, so the login is not handed over."
+    // The owner's pin of a handover's recipient (VaultOwnerPin), checked only where root gave the vault the owner's keys.
+    case ownerPinMissing = "The owner has signed no pin of the receiving machine's key, so the login is not handed over."
+    case ownerPinInvalid = "The owner's pin of the receiving machine's key is not valid, so the login is not handed over."
+    case ownerPinOther = "The owner's pin names another key than the one the login would be locked for, so it is not handed over."
     // Shared broker callers (protocol 2 `callers`): the exact answers of the contract, the same as the Linux broker's.
     case caller = "the caller fields are not valid"
     case key = "the hub did not accept this agent's key"
@@ -56,6 +60,7 @@ public enum VaultFailure: String, Error, Sendable, CaseIterable {
     case depositItem = "The delivered copy holds no valid key or login."
     case depositValue = "The hub did not confirm that this copy holds the value the owner saved, so it was not kept."
     case storeOther = "This machine's vault store holds another value under this reference, so nothing was saved."
+    case storeNotDelivered = "The value under this reference did not come here from the owner's vault, so it is not replaced."
     // `withdraw`: a delivered secret leaves this machine's store when no agent of the machine holds it any more. The
     // same sentences as the Linux broker's.
     case withdrawNotDelivered = "This login was not delivered here, so it is not removed."
@@ -452,17 +457,32 @@ public struct VaultConfiguration: Codable, Sendable {
     public let store: String
     public let socket: String
     public let workerUID: UInt32
-    enum CodingKeys: String, CodingKey { case agent, hub, store, socket; case workerUID = "worker_uid" }
+    /// The owner's public keys and the fleet's id, both or neither (`VaultOwnerPin`): with them, a handover goes only to a
+    /// key that the owner signed a pin of. Root writes them with `install.py --owner-keys-only`, as a Linux broker gets
+    /// its own from `hubsetup.py vault --owner-key`.
+    public let ownerKeys: [String]?
+    public let fleet: String?
+    enum CodingKeys: String, CodingKey {
+        case agent, hub, store, socket, fleet; case workerUID = "worker_uid"; case ownerKeys = "owner_keys"
+    }
 
-    /// The configuration that `install.py` writes for a worker Mac: its five keys, and no other key.
+    /// The configuration that `install.py` writes for a worker Mac: its five keys, with the owner's keys and the fleet's
+    /// id or without both, and no other key.
     public init(data: Data) throws {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw VaultFailure.configuration }
         // A worker's configuration of the store that this vault opened before (a `region`, with or without other keys)
         // has its own refusal, so the owner reads what to do and not only that the file is not valid. The owner's own
         // Mac (`role`) runs no broker.
         guard object["region"] == nil || object["role"] != nil else { throw VaultFailure.regionConfiguration }
-        guard Set(object.keys) == ["agent", "hub", "store", "socket", "worker_uid"],
+        let five: Set<String> = ["agent", "hub", "store", "socket", "worker_uid"]
+        // The owner's keys come with the fleet's id or not at all, and a null in place of either is not valid: a
+        // configuration that names them and holds none would check nothing.
+        let owned = Set(object.keys) == five.union(["owner_keys", "fleet"])
+        guard Set(object.keys) == five || owned,
               let config = try? JSONDecoder().decode(Self.self, from: data),
+              owned == (config.ownerKeys != nil), owned == (config.fleet != nil),
+              config.ownerKeys.map(VaultOwnerPin.validKeys) ?? true,
+              config.fleet.map({ VaultOwnerPin.whole($0, "[0-9a-f]{16}") }) ?? true,
               config.agent.range(of: "^[a-z][a-z0-9-]{1,30}$", options: .regularExpression) != nil,
               config.store == VaultBackend.fleetStore,
               let parts = URLComponents(url: config.hub, resolvingAgainstBaseURL: false),
@@ -516,6 +536,9 @@ public struct VaultJob: Sendable {
     /// or for a copy made before 1.10).
     public let project: String?
     public let source: String?
+    /// The owner's signed pin of the recipient, which the hub carries beside a handover job; nil for any other job, and
+    /// when the hub has none (`VaultOwnerPin.check` decides what that means).
+    public let pin: VaultOwnerPin.Signed?
     let fingerprintSalts: [String: String]
     /// Set when the hub allows this sign-in only because a `create` job of the same task made the login. The vault
     /// then uses the login only when its own journal has that creation with this reference.
@@ -546,6 +569,7 @@ public struct VaultJob: Sendable {
         }
         self.id = id; self.login = login; self.task = task; self.target = target; self.recipient = recipient
         self.project = project; self.source = source
+        pin = request.operation == .handover ? VaultOwnerPin.Signed(object["pin"]) : nil
         fingerprintSalts = salts
         if let made = object["created_by"], !(made is NSNull) {
             // Only a sign-in or a request of the maker itself: the agent comes with the fields and must be the job's caller.
@@ -721,6 +745,9 @@ struct VaultDeposit: Sendable {
     let item: String
     let ciphertext: Data
     let salts: [String: String]
+    /// The hub's word, in its answer for this delivery, that the owner replaced the value of this reference: the
+    /// store then puts this value in the place of the one that an earlier delivery saved (`vault.py`'s `deposit`).
+    let replaces: Bool
 
     init(data: Data, request: VaultRequest) throws {
         guard request.operation == .deposit, let job = request.job,
@@ -735,6 +762,7 @@ struct VaultDeposit: Sendable {
         else { throw VaultFailure.hub }
         id = job; self.login = login.lowercased(); self.title = title; self.item = item
         ciphertext = Data(text.utf8); self.salts = salts
+        replaces = object["replaces"] as? Bool == true
     }
 
     /// The id of the reference in this machine's store.

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Unit tests, the shared vectors of app/vectors, and the decode twin (FLEET_E2E_HUB). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Founderizer.Core.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.11.0]" />
+    <PackageReference Include="MSTest.TestAdapter" Version="[4.5.1]" />
+    <PackageReference Include="MSTest.TestFramework" Version="[4.5.1]" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Founderizer.Core/Founderizer.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../vectors/*.json" Link="vectors/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The credit of FleetCore, which CreditTests holds the library's credit equal to. -->
+    <None Include="../../Sources/FleetCore/Credit.swift" Link="sources/Credit.swift" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

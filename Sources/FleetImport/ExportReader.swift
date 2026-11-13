@@ -19,6 +19,8 @@ struct Found: Equatable, Sendable {
     let name: String
     let candidate: Candidate?
     let skipped: Skip?
+    /// The name of the vault that holds the item, where the file names one (a 1Password `.1pux`).
+    var vault: String? = nil
 }
 
 /// Why an item is not imported. Each kind has one line on the screen, with its count.
@@ -144,8 +146,11 @@ enum ExportReader {
         var found: [Found] = []
         for account in accounts {
             for vault in account["vaults"] as? [[String: Any]] ?? [] {
+                let name = text((vault["attrs"] as? [String: Any])?["name"]).trimmingCharacters(in: .whitespacesAndNewlines)
                 for item in vault["items"] as? [[String: Any]] ?? [] {
-                    found.append(onePasswordItem(item))
+                    var one = onePasswordItem(item)
+                    one.vault = name.isEmpty ? nil : name
+                    found.append(one)
                     guard found.count <= itemLimit else { throw Failure.tooLarge }
                 }
             }

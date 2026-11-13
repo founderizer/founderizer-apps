@@ -11,6 +11,13 @@ struct SearchRequest: Identifiable { let id = UUID() }
 ///
 /// The field has the keyboard as the card opens. Return opens the highlighted row, which is the first one until the
 /// arrow keys move it; a click opens any row. An agent opens its chat, a task its thread.
+///
+/// **In messages** (the owner's yes of 12 November 2026 to one picture, "Yes, all four"): under those groups, the
+/// records whose words hold what he typed, from the hub (`MessageSearch`): the agent's glyph, the matching line on one
+/// line with the typed words in medium weight, and the day at the right in muted text. The card asks after 3 characters
+/// and 200 ms with no key, and a newer question takes the place of the one before it. A match opens the agent's chat
+/// at that message, or the task's thread. With fewer characters, on a hub without the feature, while the hub does not
+/// answer and when nothing matches, the group is not there.
 struct SearchPalette: View {
     @Bindable var store: FleetStore
     let close: () -> Void
@@ -18,6 +25,9 @@ struct SearchPalette: View {
     /// The row Return opens, counted over the agents and then the tasks.
     @State private var highlighted = 0
     @FocusState private var focused: Bool
+    /// The hub's message matches, and the words they were asked for: they stay until the answer for newer words comes.
+    @State private var matches: [MessageMatch] = []
+    @State private var matched = ""
 
     /// The card's size, the mockup's.
     static let size = CGSize(width: 460, height: 370)
@@ -25,10 +35,12 @@ struct SearchPalette: View {
     private enum Found: Identifiable {
         case agent(FleetAgent)
         case task(FleetTask)
+        case message(MessageMatch)
         var id: String {
             switch self {
             case .agent(let agent): "agent \(agent.name)"
             case .task(let task): "task \(task.id)"
+            case .message(let match): "message \(match.id)"
             }
         }
     }
@@ -36,7 +48,8 @@ struct SearchPalette: View {
     var body: some View {
         let agents = matchingAgents
         let tasks = matchingTasks
-        let found = agents.map(Found.agent) + tasks.map(Found.task)
+        let messages = shownMatches
+        let found = agents.map(Found.agent) + tasks.map(Found.task) + messages.map(Found.message)
         VStack(spacing: 0) {
             // **One mark column and one words column down the card** (margins row 13): the magnifier where the rows'
             // marks and "Agents" stand, 22 points in, and the words 34 after it (`RowMark`), where the names and the
@@ -74,6 +87,13 @@ struct SearchPalette: View {
                                 taskRow(task, highlighted: highlighted == agents.count + index).id(agents.count + index)
                             }
                         }
+                        if !messages.isEmpty {
+                            let before = agents.count + tasks.count
+                            label("In messages").padding(.top, before == 0 ? 4 : 12).padding(.bottom, 4)
+                            ForEach(Array(messages.enumerated()), id: \.element.id) { index, match in
+                                messageRow(match, highlighted: highlighted == before + index).id(before + index)
+                            }
+                        }
                     }.padding(.bottom, 8)
                 }
                 .scrollIndicators(.hidden)
@@ -85,6 +105,9 @@ struct SearchPalette: View {
         .font(FleetStyle.body).foregroundStyle(FleetStyle.text)
         .onChange(of: query) { _, _ in highlighted = 0 }
         .task { focused = true }
+        // The hub's matches: 200 ms after the last key, and only for the words that stand in the field then. A newer
+        // question cancels this one, and an answer for words that are no longer there is dropped.
+        .task(id: MessageSearch.asks(query)) { await askHub(MessageSearch.asks(query)) }
         .accessibilityIdentifier("search-card")
     }
 
@@ -108,6 +131,28 @@ struct SearchPalette: View {
         guard !words.isEmpty else { return Array(tasks.prefix(20)) }
         let number = words.uppercased().hasPrefix("T-") ? String(words.dropFirst(2)) : words
         return Array(tasks.filter { $0.title.localizedStandardContains(words) || String($0.id) == number }.prefix(50))
+    }
+
+    /// The matches while the field holds words enough for them, on a hub that has the search.
+    private var shownMatches: [MessageMatch] {
+        guard MessageSearch.asks(query) != nil, store.state?.ui_features?.contains(MessageSearch.feature) == true else { return [] }
+        return matches
+    }
+
+    private func askHub(_ words: String?) async {
+        guard let words else { matches = []; matched = ""; return }
+        guard let database = store.state?.db, store.state?.ui_features?.contains(MessageSearch.feature) == true else { return }
+        let hub = store.hub
+        do {
+            try await Task.sleep(for: MessageSearch.wait)
+            let found = try await HubClient().messageMatches(hub: hub, database: database, words: words)
+            guard !Task.isCancelled, MessageSearch.asks(query) == words, store.hub == hub else { return }
+            matches = found; matched = words
+        } catch {
+            // Cancelled by a newer key: what shows stays. The hub did not answer: nothing shows for it.
+            guard !Task.isCancelled else { return }
+            matches = []; matched = ""
+        }
     }
 
     // MARK: rows
@@ -156,10 +201,58 @@ struct SearchPalette: View {
         .accessibilityIdentifier("search-task-\(task.id)")
     }
 
+    /// A message that matches: the agent's glyph, its line with the typed words in medium weight, cut at its end, and
+    /// its day at the right in muted text.
+    private func messageRow(_ match: MessageMatch, highlighted: Bool) -> some View {
+        SearchRow(highlighted: highlighted, height: 40) { open(.message(match)) } content: {
+            RowMark { AgentGlyph(name: match.agent, size: GlyphSize.row, ground: highlighted ? FleetStyle.bubble : FleetStyle.canvas) }
+            Text(Self.marked(match.snippet, words: matched)).font(FormMetrics.text).lineLimit(1).truncationMode(.tail)
+            Spacer(minLength: 12)
+            Text(Self.day(match.at)).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1).fixedSize()
+        }
+        .help(match.snippet)
+        .accessibilityLabel("\(match.agent.agentLabel), \(Self.day(match.at)): \(match.snippet)")
+        .accessibilityIdentifier("search-message-\(match.id)")
+    }
+
+    /// The line with the words that matched in medium weight.
+    static func marked(_ line: String, words: String) -> AttributedString {
+        var text = AttributedString(line)
+        for range in MessageSearch.highlights(in: line, words: words) {
+            guard let low = AttributedString.Index(range.lowerBound, within: text),
+                  let high = AttributedString.Index(range.upperBound, within: text) else { continue }
+            text[low..<high].font = FormMetrics.text.weight(.medium)
+        }
+        return text
+    }
+
+    /// The day of a match: the time today, the weekday in the last week ("Tue"), else the date ("2 Nov"), with the
+    /// year when it is another year.
+    static func day(_ timestamp: Double, now: Date = .now) -> String {
+        let date = Date(timeIntervalSince1970: timestamp), calendar = Calendar.current
+        if calendar.isDate(date, inSameDayAs: now) { return date.formatted(date: .omitted, time: .shortened) }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
+        if days > 0 && days < 7 { return date.formatted(.dateTime.weekday(.abbreviated)) }
+        if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
+            return date.formatted(.dateTime.day().month(.abbreviated))
+        }
+        return date.formatted(.dateTime.day().month(.abbreviated).year())
+    }
+
     private func open(_ found: Found) {
         switch found {
         case .agent(let agent): store.destination = .agent(agent.name)
         case .task(let task): store.destination = .task(task.id)
+        case .message(let match):
+            // His chat with the agent at that message; else the task that the record is part of; else the agent's chat.
+            if let entry = match.chatEntry {
+                store.chatFocus = ChatFocus(agent: match.agent, entry: entry, at: match.at)
+                store.destination = .agent(match.agent)
+            } else if let task = match.taskNumber, store.state?.tasks.contains(where: { $0.id == task }) == true {
+                store.destination = .task(task)
+            } else {
+                store.destination = .agent(match.agent)
+            }
         }
         close()
     }

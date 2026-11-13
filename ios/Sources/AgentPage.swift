@@ -17,7 +17,7 @@ struct AgentPage: View {
     private var entry: MobileAgent? { store.agent(agent) }
     private var state: AgentState {
         guard let entry, let snapshot = store.snapshot else { return .unknown }
-        return entry.mobileState(in: snapshot, isFresh: store.showsCurrent)
+        return entry.mobileState(in: snapshot, isFresh: store.showsCurrent, thinking: store.thinks(agent))
     }
     /// The windows of the newest usage reading that carry a share, by the Mac's rule (`AccountLimits.ownWindows`): a
     /// window the provider scoped to one model ("7 days (Fable)") only once something is spent in it. An untouched one

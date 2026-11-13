@@ -175,8 +175,18 @@ indirect enum AgentState: Equatable {
         case .unknown, .setup, .old: Brand.muted
         }
     }
-    /// **Online shows no dot** (D-8): it is the usual state, and a mark shows only what is not as usual.
-    var hasDot: Bool { base != .online }
+    /// **A dot is a problem: neither online nor work has one** (the owner, 13 November 2026, of the Mac's sidebar: "remove
+    /// all green status dots. if agent is available, just dont show it (that should be the default). only show
+    /// red/other colors if there is some kind of problem", and of the phone: "Yes, iPhone too"). Online is the usual
+    /// state (D-8), and work shows as motion: the agent's mark moves and the line of its row on Chats moves. With Reduce
+    /// Motion nothing moves, so there work keeps its green dot, the one sign of it that is left.
+    func hasDot(reduceMotion: Bool) -> Bool {
+        switch base {
+        case .online: false
+        case .working: reduceMotion
+        case .unknown, .setup, .offline, .limited, .attention, .old: true
+        }
+    }
     /// A ring, not a filled dot: the agent takes no work now, so colour is not the only cue.
     var isRing: Bool { base == .unknown || base == .setup || base == .offline }
 }
@@ -188,17 +198,19 @@ extension MobileAgent {
     /// needs a sign-in say their own word, in orange — and else online. **An old reading keeps the look it read**: only
     /// the motion rests (`old`), because a moving mark says that the work goes on now. The phone greyed
     /// every mark for an old reading, called a paused or a stalled task work, and said "Waiting" for every wait.
-    func mobileState(in snapshot: MobileSnapshot, isFresh: Bool) -> AgentState {
-        let state = readState(in: snapshot)
+    /// **An agent that works on his newest chat message works too** (`thinking`: its chat says "Thinking",
+    /// `MobileStore.thinks`), as on the Mac since 13 November 2026.
+    func mobileState(in snapshot: MobileSnapshot, isFresh: Bool, thinking: Bool = false) -> AgentState {
+        let state = readState(in: snapshot, thinking: thinking)
         return isFresh ? state : .old(state)
     }
 
-    private func readState(in snapshot: MobileSnapshot) -> AgentState {
+    private func readState(in snapshot: MobileSnapshot, thinking: Bool) -> AgentState {
         if active == false { return .setup }
         if !helperIsRecent(serverTime: snapshot.time) { return .offline }
         if limit != nil { return .limited }
         let marks = snapshot.tasks.filter { $0.owner == name }.map { $0.mark(holds: snapshot.holds, limited: false) }
-        if marks.contains(where: { $0.inWork }) { return .working }
+        if thinking || marks.contains(where: { $0.inWork }) { return .working }
         if let waiting = marks.first(where: { $0.attention }) { return .attention(waiting.words) }
         return .online
     }
@@ -542,12 +554,19 @@ struct ShimmeringWords: UIViewRepresentable {
     let text: String
     /// The loading line's words are a footnote; the chat's waiting line is a line of its own size (`ChatWaitingLine`).
     var style: UIFont.TextStyle = .footnote
+    /// **The line takes the width it is given, and words that are longer end in "…"**, as a `Text` of one line does:
+    /// the last line of a conversation on Chats, whose width is the row's (the Mac's `ShimmeringWords.fits`). False for
+    /// a word or two that always fit, which keep their own width whatever they are offered.
+    var fits = false
 
     func makeUIView(context: Context) -> ShimmerView { ShimmerView() }
-    func updateUIView(_ view: ShimmerView, context: Context) { view.show(text, style: style) }
-    /// The words' own size, so the line is laid out as a `Text` would be, and not across the room it is offered.
+    func updateUIView(_ view: ShimmerView, context: Context) { view.show(text, style: style, fits: fits) }
+    /// The words' own size, so the line is laid out as a `Text` would be, and not across the room it is offered. A line
+    /// that fits its room takes at most its words' own width, so its band still crosses the words and not the room.
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: ShimmerView, context: Context) -> CGSize? {
-        uiView.intrinsicContentSize
+        let words = uiView.intrinsicContentSize
+        guard fits, let width = proposal.width, width.isFinite else { return words }
+        return CGSize(width: min(words.width, max(0, width)), height: words.height)
     }
 }
 
@@ -598,12 +617,40 @@ final class ShimmerView: UIView {
         return CGSize(width: ceil(size.width), height: ceil(size.height))
     }
 
-    func show(_ text: String, style: UIFont.TextStyle = .footnote) {
-        guard text != self.text || style != self.style else { return }
+    /// The line is cut to its room (`ShimmeringWords.fits`).
+    private var fits = false
+
+    func show(_ text: String, style: UIFont.TextStyle = .footnote, fits: Bool = false) {
+        guard text != self.text || style != self.style || fits != self.fits else { return }
         self.text = text
         self.style = style
+        self.fits = fits
         invalidateIntrinsicContentSize()
         setNeedsLayout()
+    }
+
+    /// **What the view draws: its words whole, or cut to the room of a line that fits its room.** A line is cut only
+    /// where its room is more than a point short of its words: SwiftUI and UIKit measure one line within a fraction of
+    /// a point of each other, and a line that fits must not end in "…" for that fraction (the Mac's own rule).
+    private var shownSize: CGSize {
+        let words = intrinsicContentSize
+        guard fits, bounds.width > 0, bounds.width + 1 < words.width else { return words }
+        return CGSize(width: bounds.width, height: words.height)
+    }
+
+    /// The words as they are drawn: whole, or the longest beginning that fits the room with "…" after it, with no
+    /// space before the "…".
+    private func shownWords(in width: CGFloat) -> String {
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
+        guard width < intrinsicContentSize.width else { return text }
+        let letters = Array(text)
+        func line(_ count: Int) -> String { String(letters.prefix(count)).trimmingCharacters(in: .whitespaces) + "…" }
+        var low = 0, high = letters.count
+        while low < high {
+            let middle = (low + high + 1) / 2
+            if (line(middle) as NSString).size(withAttributes: attributes).width <= width { low = middle } else { high = middle - 1 }
+        }
+        return line(low)
     }
 
     override func didMoveToWindow() {
@@ -614,8 +661,9 @@ final class ShimmerView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let size = intrinsicContentSize
-        guard size.width > 0, size.height > 0 else { return }
+        guard intrinsicContentSize.width > 0, intrinsicContentSize.height > 0 else { return }
+        let size = shownSize
+        let words = shownWords(in: size.width)
         let scale = max(traitCollection.displayScale, 1)
         let frame = CGRect(origin: .zero, size: size)
         let light = UIColor.label.resolvedColor(with: traitCollection)
@@ -624,12 +672,12 @@ final class ShimmerView: UIView {
         word.frame = frame
         word.contentsScale = scale
         let muted = UIColor(named: "BrandMuted") ?? .secondaryLabel
-        word.contents = drawn(muted.resolvedColor(with: traitCollection), size: size, scale: scale)
+        word.contents = drawn(words, muted.resolvedColor(with: traitCollection), size: size, scale: scale)
         lit.frame = frame
         glyphs.frame = frame
         glyphs.contentsScale = scale
         // The mask reads alpha, so the colour only has to be opaque where the glyphs are.
-        glyphs.contents = drawn(.white, size: size, scale: scale)
+        glyphs.contents = drawn(words, .white, size: size, scale: scale)
         band.frame = CGRect(x: 0, y: 0, width: size.width * Self.box, height: size.height)
         let clear = light.withAlphaComponent(0).cgColor       // the same colour, so the fade has no grey in it
         band.colors = [clear, clear, light.cgColor, clear, clear]
@@ -637,7 +685,7 @@ final class ShimmerView: UIView {
         sweep(width: size.width)
     }
 
-    private func drawn(_ color: UIColor, size: CGSize, scale: CGFloat) -> CGImage? {
+    private func drawn(_ text: String, _ color: UIColor, size: CGSize, scale: CGFloat) -> CGImage? {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = false

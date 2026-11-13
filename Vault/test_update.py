@@ -5,6 +5,7 @@ update.zsh runs as itself, with the Mac's own plutil, PlistBuddy, ditto and shas
 launchd that are stand-ins: curl serves the fixtures, codesign answers as told, launchctl writes down what it was asked.
 Run: python3 -m unittest Vault/test_update.py
 """
+import base64
 import hashlib
 import importlib.util
 import json
@@ -13,9 +14,12 @@ from pathlib import Path
 import plistlib
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -629,6 +633,176 @@ class Install(unittest.TestCase):
                 self.assertIn("names a region", str(stop.exception))
                 self.assertIn(f"remove {self.install.CONFIG} as root and install again", str(stop.exception))
                 self.assertEqual(json.loads(self.install.CONFIG.read_text()), old)
+
+    # Two public keys that are points of P-256: its generator, and the generator's negation.
+    G = (0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296,
+         0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5)
+
+    @staticmethod
+    def owner_key(x, y):
+        return base64.b64encode(b"\x04" + x.to_bytes(32, "big") + y.to_bytes(32, "big")).decode()
+
+    def test_the_owner_s_keys_take_their_own_command_line(self):
+        one = self.owner_key(*self.G)
+        for argv in (["--owner-keys-only", "--fleet", FLEET], ["--fleet", FLEET, "--owner-key", one],
+                     ["--owner-keys-only", "--fleet", FLEET, "--owner-key", one, "--app", "/tmp/x.app"],
+                     ["--owner-keys-only", "--fleet", FLEET, "--owner-key", one, "--updater-only"],
+                     ["--owner-keys-only", "--fleet", FLEET, "--owner-key", one, "--hub", "http://100.64.0.1:8765"],
+                     ["--owner-keys-only", "--fleet", "0123", "--owner-key", one],
+                     ["--owner-keys-only", "--fleet", FLEET, "--owner-key", one, "--track", "early"],
+                     ["--owner-keys-only", "--fleet", FLEET, "--owner-key", one, "--channel", "https://channel.test"],
+                     ["--owner-keys-only", "--fleet", FLEET] + ["--owner-key", one] * 9):
+            with self.subTest(argv=argv), mock.patch.object(sys, "argv", ["install.py", *argv]), \
+                    mock.patch("sys.stderr"), self.assertRaises(SystemExit) as stop:
+                self.install.main()
+            self.assertEqual(stop.exception.code, 2)
+
+    def test_the_owner_s_keys_go_into_a_worker_s_configuration_and_nothing_else_changes(self):
+        """--owner-keys-only (Sources/FleetVaultCore/VaultOwnerPin.swift): root adds the owner's public keys and the
+        fleet's id to a worker Mac's configuration, keeps every other setting, and starts the vault again to read them."""
+        one, two = self.owner_key(*self.G), self.owner_key(self.G[0], self.install.P256_P - self.G[1])
+        worker = {"agent": "studio", "hub": "http://100.96.10.20:8765", "store": "fleet", "worker_uid": 501,
+                  "socket": "/Users/me/Library/Application Support/AgentFleet/vault.sock"}
+        self.install.CONFIG.write_text(json.dumps(worker))
+        self.install.UPDATE_SETTINGS.write_text(json.dumps({"channel": CHANNEL, "fleet": FLEET, "track": "early"}))
+        app = self.tmp / "Fleet Vault.app"
+        (app / "Contents").mkdir(parents=True)
+        patcher = mock.patch.object(self.install, "APP", app)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        def build(number):
+            (app / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleVersion": str(number)}))
+
+        def run(*keys, fleet=FLEET, root=True, answers=True):
+            argv = ["install.py", "--owner-keys-only", "--fleet", fleet] + [part for key in keys for part in ("--owner-key", key)]
+            with mock.patch.object(sys, "argv", argv), \
+                    mock.patch.object(self.install.os, "geteuid", return_value=0 if root else 501), \
+                    mock.patch.object(self.install.subprocess, "run", return_value=mock.Mock(returncode=0)) as started, \
+                    mock.patch.object(self.install, "vault_answers", return_value=answers) as asked, \
+                    mock.patch("sys.stdout"):
+                self.install.main()
+            if asked.called:
+                asked.assert_called_once_with(501, worker["socket"])
+            return started
+
+        build(11)                                   # a vault that reads no owner key: nothing is written
+        with self.assertRaises(SystemExit) as stop:
+            run(one)
+        self.assertIn("from build 12 on", str(stop.exception))
+        self.assertEqual(json.loads(self.install.CONFIG.read_text()), worker)
+
+        build(12)
+        started = run(one)
+        self.assertEqual(json.loads(self.install.CONFIG.read_text()), dict(worker, owner_keys=[one], fleet=FLEET))
+        started.assert_called_once_with(["/bin/launchctl", "kickstart", "-k", "gui/501/com.agentfleet.vault"], capture_output=True)
+        run(two, one, two)                          # a new owner Mac: the keys given replace the ones there, each once
+        self.assertEqual(json.loads(self.install.CONFIG.read_text()), dict(worker, owner_keys=[two, one], fleet=FLEET))
+        self.assertEqual(self.install.CONFIG.stat().st_mode & 0o777, 0o644)
+        self.assertEqual(sorted(p.name for p in self.install.CONFIG.parent.iterdir()), ["config.json", "update.json"])
+
+        kept = self.install.CONFIG.read_text()
+        for bad in (one[:-1], one + "\n", self.owner_key(self.G[0], self.G[1] + 1),
+                    base64.b64encode(b"\x04" + bytes(64)).decode(),
+                    base64.b64encode(b"\x02" + self.G[0].to_bytes(32, "big")).decode(), "not base64"):
+            with self.subTest(bad=bad), self.assertRaises(SystemExit) as stop:
+                run(bad)
+            self.assertIn("65-byte P-256 public key", str(stop.exception))
+        with self.assertRaises(SystemExit) as stop:
+            run(one, fleet="fedcba9876543210")      # another fleet than the one that its updater names
+        self.assertIn("does not name the fleet id", str(stop.exception))
+        with self.assertRaises(SystemExit) as stop:
+            run(one, root=False)
+        self.assertIn("sudo", str(stop.exception))
+        self.assertEqual(self.install.CONFIG.read_text(), kept)
+        # A vault that does not answer with the new file gets its old file back, and starts again with it.
+        with self.assertRaises(SystemExit) as stop:
+            run(one, answers=False)
+        self.assertIn("old configuration is back", str(stop.exception))
+        self.assertEqual(self.install.CONFIG.read_text(), kept)
+        # An interrupt or a failure after the write puts the old file back too.
+        argv = ["install.py", "--owner-keys-only", "--fleet", FLEET, "--owner-key", one]
+        with mock.patch.object(sys, "argv", argv), mock.patch.object(self.install.os, "geteuid", return_value=0), \
+                mock.patch.object(self.install.subprocess, "run", return_value=mock.Mock(returncode=0)), \
+                mock.patch.object(self.install, "vault_answers", side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt):
+            self.install.main()
+        self.assertEqual(self.install.CONFIG.read_text(), kept)
+        # A worker_uid that names no user of this Mac: refused before anything is written.
+        self.install.CONFIG.write_text(json.dumps(dict(worker, worker_uid=4_000_000)))
+        with self.assertRaises(SystemExit) as stop:
+            run(one)
+        self.assertIn("no user with the vault's worker_uid", str(stop.exception))
+        self.install.CONFIG.write_text(kept)
+        # The fleet id must be the one that the updater's settings name: none, or no settings, is no proof.
+        for settings in ("", "[]", json.dumps({"channel": CHANNEL}), json.dumps({"fleet": "fedcba9876543210"})):
+            with self.subTest(settings=settings):
+                self.install.UPDATE_SETTINGS.write_text(settings)
+                with self.assertRaises(SystemExit) as stop:
+                    run(one)
+                self.assertIn("does not name the fleet id", str(stop.exception))
+        self.install.UPDATE_SETTINGS.unlink()
+        with self.assertRaises(SystemExit):
+            run(one)
+        self.assertEqual(self.install.CONFIG.read_text(), kept)
+        self.install.UPDATE_SETTINGS.write_text(json.dumps({"channel": CHANNEL, "fleet": FLEET, "track": "early"}))
+        # A second install keeps the keys: they are no setting of the install, and they stay in the file.
+        user = mock.Mock(pw_uid=501, pw_dir="/Users/me")
+        self.install.keep_configuration(self.install.worker_configuration(mock.Mock(agent="studio", hub="http://100.96.10.20:8765"), user))
+        self.assertEqual(self.install.CONFIG.read_text(), kept)
+        with self.assertRaises(SystemExit) as stop:
+            self.install.keep_configuration(self.install.worker_configuration(mock.Mock(agent="other", hub="http://100.96.10.20:8765"), user))
+        self.assertIn("different settings", str(stop.exception))
+        for other in ({"role": "owner", "owner_uid": 502}, dict(worker, extra=1), dict(worker, region="eu")):
+            with self.subTest(other=other):
+                self.install.CONFIG.write_text(json.dumps(other))
+                with self.assertRaises(SystemExit):
+                    run(one)
+                self.assertEqual(json.loads(self.install.CONFIG.read_text()), other)
+
+    def test_an_install_under_the_owner_s_keys_takes_no_vault_that_cannot_read_them(self):
+        """A file with `owner_keys` and a build older than OWNER_KEYS_BUILD: that vault would refuse the file and not
+        start, so a later install stops before it changes anything."""
+        app = self.tmp / "New.app"
+        (app / "Contents").mkdir(parents=True)
+        worker = {"agent": "studio", "hub": "http://100.96.10.20:8765", "store": "fleet", "worker_uid": 501,
+                  "socket": "/Users/me/Library/Application Support/AgentFleet/vault.sock"}
+        for build, keys, refused in ((11, True, True), (12, True, False), (11, False, False), (None, True, True)):
+            with self.subTest(build=build, keys=keys):
+                plist = {"CFBundleVersion": str(build)} if build else {}
+                (app / "Contents/Info.plist").write_bytes(plistlib.dumps(plist))
+                self.install.CONFIG.write_text(json.dumps(dict(worker, owner_keys=[self.owner_key(*self.G)], fleet=FLEET)
+                                                          if keys else worker))
+                self.assertEqual(self.install.keys_need_build(app), refused)
+        self.install.CONFIG.unlink()
+        self.assertFalse(self.install.keys_need_build(app))           # a new Mac: nothing to keep
+
+    def test_the_status_probe_counts_any_answer_of_the_vault_and_none_without_one(self):
+        """STATUS_PROBE, as the worker's child runs it: any answer proves the file, because the vault opens its socket only
+        after it loaded its configuration; no socket is no answer, after the wait and not before."""
+        path = str(self.tmp / "v.sock")
+        server = socket.socket(socket.AF_UNIX)
+        server.bind(path)
+        server.listen(1)
+        self.addCleanup(server.close)
+        heard = []
+
+        def serve():
+            connection, _ = server.accept()
+            with connection:
+                heard.append(json.loads(connection.makefile().readline()))
+                connection.sendall(b'{"ok": false, "v": 2, "error": "This Mac\'s vault store could not be opened."}\n')
+        thread = threading.Thread(target=serve, daemon=True)
+        thread.start()
+        done = subprocess.run([sys.executable, "-I", "-c", self.install.STATUS_PROBE, path, "10"], capture_output=True, timeout=30)
+        thread.join(10)
+        self.assertEqual((done.returncode, heard), (0, [{"v": 2, "op": "status"}]))
+        server.close()
+        os.unlink(path)
+        started = time.monotonic()
+        done = subprocess.run([sys.executable, "-I", "-c", self.install.STATUS_PROBE, path, "2"], capture_output=True, timeout=30)
+        self.assertEqual(done.returncode, 1)
+        self.assertGreaterEqual(time.monotonic() - started, 1.5)
 
     def test_the_vault_carries_its_installer_beside_its_updater(self):
         """A Mac's join line runs the install.py that a vault it has checked carries, as root, and install_updater

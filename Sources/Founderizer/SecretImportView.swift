@@ -37,6 +37,15 @@ struct SecretImportView: View {
     /// The titles that the fleet's list had when the file was read: such a row starts unchecked. And how many secrets it
     /// had, for the room that is left in it.
     @State private var known: Set<String> = []
+    /// The variable names of the list's API keys. The list takes no second key of one name (the owner, 13 November
+    /// 2026), so such a row of the file cannot be ticked: Add secret replaces the value of the key that is there.
+    @State private var knownKeys: Set<String> = []
+    /// The references of each title that the fleet's list has, for the comparison of a value.
+    @State private var references: [String: [String]] = [:]
+    /// The rows of a 1Password file whose title the list has already, and whose value is not the one that the fleet
+    /// holds under it ("Changed in 1Password"), as the hub's salted fingerprints say. No value leaves the Mac.
+    @State private var changed: Set<Int> = []
+    @State private var comparing: Task<Void, Never>?
     @State private var catalogCount = 0
     @State private var message: String?
     @State private var busy = false
@@ -142,18 +151,27 @@ struct SecretImportView: View {
     }
 
     /// One item, as a row of the Secrets list draws a secret (its kind's tile, its name, its kind), with a checkbox at its
-    /// right. A row that the vaults cannot read as it is says why, in Add secret's words, and cannot be ticked.
+    /// right. A row that the vaults cannot read as it is says why, in Add secret's words, and cannot be ticked. A row
+    /// that the list has says "In Founderizer already", or "Changed in 1Password" when its value differs, after its
+    /// kind; the vault's name stands at the right. An API key whose variable name a key of the list has cannot be
+    /// ticked (`isHeldKey`): the list takes no second key of one name.
     private func pickRow(_ row: SecretImport.Row) -> some View {
         let secret = row.secret
         let kind = secret.kind == .login ? "Login" : "API key"
-        let detail = row.problem ?? (known.contains(secret.title) ? "\(kind) · In Founderizer already" : kind)
+        let isChanged = row.problem == nil && changed.contains(row.id)
+        let detail = row.problem ?? (isChanged ? kind : known.contains(secret.title) ? "\(kind) · In Founderizer already" : kind)
         return ImportRow(title: secret.title, monospaced: secret.kind == .apiKey, detail: detail, problem: row.problem != nil,
+                         changed: isChanged, vault: row.vault,
                          symbol: secret.kind == .login ? "person.badge.key" : "key.horizontal",
                          on: Binding(get: { chosen.contains(row.id) },
                                      set: { on in if on { chosen.insert(row.id) } else { chosen.remove(row.id) } }),
-                         locked: busy)
+                         locked: busy || isHeldKey(secret))
             .accessibilityIdentifier("import-row-\(row.id)")
     }
+
+    /// An API key of the file whose variable name a key of the list has: the list takes no second one, so its row
+    /// keeps its words ("In Founderizer already", or the mark of a changed value) and cannot be ticked.
+    private func isHeldKey(_ secret: LoginSecret) -> Bool { secret.kind == .apiKey && knownKeys.contains(secret.title) }
 
     private var doneStep: some View {
         SetupStep(title: failed.isEmpty ? "\(Self.words(saved.count)) imported" : "\(saved.count) of \(chosen.count) imported") {
@@ -208,7 +226,7 @@ struct SecretImportView: View {
         case .source: clear(); onDone([])
         case .export: page = .source
         case .password: password = ""; page = .export
-        case .choose: reading = nil; chosen = []; page = .export
+        case .choose: comparing?.cancel(); reading = nil; chosen = []; changed = []; page = .export
         case .importing, .done: break
         }
     }
@@ -250,13 +268,44 @@ struct SecretImportView: View {
             password = ""
             if let context, let team = try? await HubClient().team(hub: context.hub, database: context.db), let catalog = team.logins {
                 known = Set(catalog.values.map(\.name)); catalogCount = catalog.count
+                knownKeys = Set(catalog.values.filter(\.isAPIKey).map(\.name))
+                references = Dictionary(grouping: catalog.keys.sorted()) { catalog[$0]?.name ?? "" }
             } else {
-                known = []; catalogCount = 0
+                known = []; knownKeys = []; catalogCount = 0; references = [:]
             }
             reading = made
             chosen = Set(made.rows.filter { $0.problem == nil && !known.contains($0.secret.title) }.map(\.id))
             message = nil
+            changed = []
             page = .choose
+            comparing?.cancel()
+            comparing = Task { await compare(made) }
+        }
+    }
+
+    /// **Changed in 1Password**: for each row of a 1Password file whose title the fleet's list has already, the
+    /// fingerprints of its value with the salts of each secret of that title (`GET /ui/secrets/salts`), and the hub's
+    /// answer whether it holds that value (`GET /ui/secrets/same`). Only salted fingerprints go to the hub, as Add
+    /// secret sends them. A row whose value has no fingerprint (shorter than 8 characters), a hub without the feature
+    /// and a hub that does not answer show nothing new. The row stays unticked as every row that the list has.
+    private func compare(_ made: SecretImport) async {
+        guard made.vendor == .onePassword, let context,
+              store.state?.ui_features?.contains(SecretImport.compareFeature) == true else { return }
+        let client = HubClient()
+        for row in made.rows where row.problem == nil && known.contains(row.secret.title) {
+            var answers: [Bool?] = []
+            for reference in references[row.secret.title] ?? [] {
+                guard !Task.isCancelled else { return }
+                guard let salts = try? await client.secretSalts(hub: context.hub, database: context.db, login: reference),
+                      let value = try? row.secret.value(),
+                      let prints = try? SecretFingerprint.of(value, salts: salts), SecretFingerprint.areValid(prints),
+                      let same = try? await client.secretSame(hub: context.hub, database: context.db, login: reference,
+                                                               fingerprints: prints)
+                else { answers.append(nil); continue }
+                answers.append(same)
+            }
+            guard !Task.isCancelled, reading == made else { return }
+            if SecretImport.isChanged(answers) { changed.insert(row.id) }
         }
     }
 
@@ -333,7 +382,7 @@ struct SecretImportView: View {
     }
 
     /// No value stays when the import ends or goes: the rows, the password and the sealed copies.
-    private func clear() { reading = nil; password = ""; chosen = []; pending = [:] }
+    private func clear() { comparing?.cancel(); reading = nil; password = ""; chosen = []; pending = [:]; changed = [] }
 }
 
 /// One item of the file: the Secrets list's row (its kind's tile, its name, its kind) with a checkbox at its right.
@@ -342,6 +391,11 @@ private struct ImportRow: View {
     let monospaced: Bool
     let detail: String
     let problem: Bool
+    /// "Changed in 1Password" in the detail line, after the kind and in the text's own colour (the owner's yes of 12
+    /// November 2026 to its picture): "Login · Changed in 1Password".
+    let changed: Bool
+    /// The name of the 1Password vault that holds the item, at the right in muted text; nil for a file that names none.
+    let vault: String?
     let symbol: String
     @Binding var on: Bool
     let locked: Bool
@@ -349,14 +403,25 @@ private struct ImportRow: View {
 
     var body: some View {
         let titleFont = FormMetrics.onStep(stepText, weight: .medium) ?? FormMetrics.title
+        let detailFont = FormMetrics.onStep(stepText) ?? FormMetrics.detail
         HStack(spacing: 12) {
             IconTile(symbol: symbol)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(monospaced ? titleFont.monospaced() : titleFont).foregroundStyle(FleetStyle.text).lineLimit(1)
-                Text(detail).font(FormMetrics.onStep(stepText) ?? FormMetrics.detail)
-                    .foregroundStyle(problem ? Color.orange : FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
+                if changed {
+                    Text("\(Text("\(detail) · ").foregroundStyle(FleetStyle.muted))\(Text("Changed in 1Password").foregroundStyle(FleetStyle.text))")
+                        .font(detailFont).lineLimit(1)
+                } else {
+                    Text(detail).font(detailFont)
+                        .foregroundStyle(problem ? Color.orange : FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
+                }
             }.padding(.vertical, 10).multilineTextAlignment(.leading)
+            // The name and its kind take the room first, so that the vault's name at the right does not fold them.
+            .layoutPriority(1)
             Spacer(minLength: 12)
+            if let vault {
+                Text(vault).font(detailFont).foregroundStyle(FleetStyle.muted).lineLimit(1).fixedSize()
+            }
             Toggle("", isOn: $on).labelsHidden().toggleStyle(FleetCheckboxStyle()).disabled(problem || locked)
                 .accessibilityLabel(title)
         }

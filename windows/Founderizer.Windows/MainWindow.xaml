@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The frame of the approved pictures (windows-app-pictures.md, "The frame"): the title bar, the pane of 320 and the
+  content area. Each element and word here is one of that list; an element that no picture shows is not here.
+-->
+<Window
+    x:Class="Founderizer.Windows.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Founderizer.Windows"
+    xmlns:marks="using:Founderizer.Windows.Marks"
+    Title="Founderizer">
+    <Grid x:Name="Root" Background="{StaticResource RailBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="320" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- The title bar: Back and Forward, the product's mark and name (W1), Search over the pane's end. Windows draws
+             Minimize, Restore and Close (W2) at the tall height of 48. -->
+        <Canvas x:Name="TitleBar" Grid.ColumnSpan="2" Background="Transparent">
+            <Button x:Name="BackButton" Canvas.Left="4" Canvas.Top="6" Width="40" Height="36"
+                    Style="{StaticResource QuietButtonStyle}" IsEnabled="False" Click="Back_Click"
+                    ToolTipService.ToolTip="Back" AutomationProperties.Name="Back">
+                <FontIcon Glyph="&#xE72B;" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Button>
+            <Button x:Name="ForwardButton" Canvas.Left="44" Canvas.Top="6" Width="40" Height="36"
+                    Style="{StaticResource QuietButtonStyle}" IsEnabled="False" Click="Forward_Click"
+                    ToolTipService.ToolTip="Forward" AutomationProperties.Name="Forward">
+                <FontIcon Glyph="&#xE72A;" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Button>
+            <marks:ProductMark Canvas.Left="96" Canvas.Top="16" Width="16" Height="16" />
+            <TextBlock Canvas.Left="124" Canvas.Top="16" Text="Founderizer" FontSize="12" LineHeight="16"
+                       LineStackingStrategy="BlockLineHeight" Foreground="{StaticResource TextBrush}" IsHitTestVisible="False" />
+            <Button x:Name="SearchButton" Canvas.Left="272" Canvas.Top="6" Width="40" Height="36"
+                    Style="{StaticResource QuietButtonStyle}"
+                    ToolTipService.ToolTip="Search" AutomationProperties.Name="Search">
+                <FontIcon Glyph="&#xE721;" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Button>
+        </Canvas>
+
+        <!-- The pane: Needs you with its count, only while something waits; Tasks; one row for each agent; the line;
+             Settings at its foot. -->
+        <Grid x:Name="Pane" Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Padding="4,4,4,0" Spacing="4">
+                <Button x:Name="NeedsButton" Height="36" Style="{StaticResource QuietButtonStyle}" Click="Needs_Click"
+                        AutomationProperties.Name="Needs you">
+                    <Grid>
+                        <Border x:Name="NeedsFill" Background="{StaticResource SelectedFillBrush}" CornerRadius="4" Visibility="Collapsed" />
+                        <Rectangle x:Name="NeedsBar" Width="3" Height="16" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource BarBrush}"
+                                   HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,10,0,0" Visibility="Collapsed" />
+                        <ContentControl x:Name="NeedsIcon" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12,10,0,0" IsTabStop="False" />
+                        <TextBlock Text="Needs you" Margin="48,0,0,0" VerticalAlignment="Center" FontSize="14" Foreground="{StaticResource TextBrush}" />
+                        <Border Background="{StaticResource BadgeBrush}" CornerRadius="8" MinWidth="18" Height="16" Padding="6,0"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,12,0">
+                            <TextBlock x:Name="NeedsCount" FontSize="12" LineHeight="16" LineStackingStrategy="BlockLineHeight"
+                                       FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}" />
+                        </Border>
+                    </Grid>
+                </Button>
+                <Button x:Name="TasksButton" Height="36" Style="{StaticResource QuietButtonStyle}" Click="Tasks_Click"
+                        AutomationProperties.Name="Tasks">
+                    <Grid>
+                        <Border x:Name="TasksFill" Background="{StaticResource SelectedFillBrush}" CornerRadius="4" Visibility="Collapsed" />
+                        <Rectangle x:Name="TasksBar" Width="3" Height="16" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource BarBrush}"
+                                   HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,10,0,0" Visibility="Collapsed" />
+                        <ContentControl x:Name="TasksIcon" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12,10,0,0" IsTabStop="False" />
+                        <TextBlock Text="Tasks" Margin="48,0,0,0" VerticalAlignment="Center" FontSize="14" Foreground="{StaticResource TextBrush}" />
+                    </Grid>
+                </Button>
+            </StackPanel>
+
+            <ScrollViewer Grid.Row="1" Padding="4,12,4,0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ItemsRepeater x:Name="AgentRows">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Spacing="2" />
+                    </ItemsRepeater.Layout>
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="local:AgentRowView">
+                            <Button Height="52" Style="{StaticResource QuietButtonStyle}" Click="Agent_Click" Tag="{x:Bind Name}"
+                                    AutomationProperties.Name="{x:Bind Label, Mode=OneWay}">
+                                <Grid>
+                                    <Border Background="{StaticResource SelectedFillBrush}" CornerRadius="4" Visibility="{x:Bind SelectedVisibility, Mode=OneWay}" />
+                                    <Rectangle Width="3" Height="16" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource BarBrush}"
+                                               HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,18,0,0"
+                                               Visibility="{x:Bind SelectedVisibility, Mode=OneWay}" />
+                                    <marks:AgentGlyph Side="28" Mark="{x:Bind Mark, Mode=OneWay}"
+                                                      HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6,12,0,0" />
+                                    <Grid Margin="48,7,12,0" VerticalAlignment="Top" ColumnSpacing="6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{x:Bind Label, Mode=OneWay}" FontSize="14" LineHeight="20" LineStackingStrategy="BlockLineHeight"
+                                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Foreground="{StaticResource TextBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Time, Mode=OneWay}" FontSize="12" LineHeight="20"
+                                                   LineStackingStrategy="BlockLineHeight" Margin="0,1,0,0" Foreground="{StaticResource MutedBrush}" />
+                                    </Grid>
+                                    <marks:ShimmerText Margin="48,27,12,0" VerticalAlignment="Top"
+                                                       Text="{x:Bind Line, Mode=OneWay}" Shimmer="{x:Bind LineMoves, Mode=OneWay}" />
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+            </ScrollViewer>
+
+            <Grid Grid.Row="2" Height="49">
+                <Rectangle Height="1" Margin="16,0" VerticalAlignment="Top" Fill="{StaticResource LineBrush}" />
+                <Button x:Name="SettingsButton" Height="36" Margin="4,7,4,6" VerticalAlignment="Top" Style="{StaticResource QuietButtonStyle}"
+                        Click="Settings_Click" AutomationProperties.Name="Settings">
+                    <Grid>
+                        <Border x:Name="SettingsFill" Background="{StaticResource SelectedFillBrush}" CornerRadius="4" Visibility="Collapsed" />
+                        <Rectangle x:Name="SettingsBar" Width="3" Height="16" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource BarBrush}"
+                                   HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,10,0,0" Visibility="Collapsed" />
+                        <FontIcon Glyph="&#xE713;" FontSize="16" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12,10,0,0" />
+                        <TextBlock Text="Settings" Margin="48,0,0,0" VerticalAlignment="Center" FontSize="14" Foreground="{StaticResource TextBrush}" />
+                    </Grid>
+                </Button>
+            </Grid>
+        </Grid>
+
+        <!-- The content area: its own corner and edge (W4). The pages come in later slices: until then a page's area is
+             empty, and only its name for assistive apps says which page is open. -->
+        <Border x:Name="ContentArea" Grid.Row="1" Grid.Column="1" Background="{StaticResource CanvasBrush}"
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="1,1,0,0" CornerRadius="8,0,0,0">
+            <ContentControl x:Name="PageHost" AutomationProperties.AutomationId="Page" IsTabStop="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+        </Border>
+    </Grid>
+</Window>

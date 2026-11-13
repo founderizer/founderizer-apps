@@ -17,7 +17,8 @@ import Network
 /// log line and nothing this app keeps.
 /// Which machine of a fleet is being checked, which says where its checkout is and as whom `verify` runs there.
 public enum MachineCheckout: String, Codable, Equatable, Sendable, CaseIterable {
-    /// The hub's own machine: `fleet-pilot`, owned by the service user.
+    /// The hub's own machine: the checkout that its service runs in, owned by the service user (`founderizer`, or
+    /// `fleet-pilot` on a hub made before that name).
     case hub
     /// A Linux machine that joined: `fleet-server`, owned by the service user.
     case linuxWorker
@@ -285,9 +286,15 @@ public struct InstallPlan: Equatable, Sendable {
     static let hubKit = "/root/fleet-kit"
     /// The file the Tailscale auth key is written into, and which the install removes.
     static let authKeyFile = "/root/fleet-authkey"
-    /// The checkout each kind of machine ends up with, and the user that owns it (`hub.sh`, `join.sh`).
+    /// The checkout each kind of machine ends up with, and the user that owns it (`hub.sh`, `join.sh`). This app holds
+    /// no name of a hub's checkout: a hub's own service says where it runs (`hubCheckoutOfItsService`), and `hub.sh`
+    /// gives the checkout its name. `hubCheckout` is the checkout of every hub made before the name `founderizer`, for
+    /// a hub whose service says nothing.
     static let hubCheckout = "/home/fleet/fleet-pilot"
     static let joinCheckout = "/home/fleet/fleet-server"
+    /// The folder that the hub's service runs in (`fleet.py service hub` writes it), as a shell word for the user of
+    /// the services: empty when that user has no such service.
+    static let hubCheckoutOfItsService = "$(systemctl --user show -p WorkingDirectory --value fleet-hub 2>/dev/null)"
     static let serviceUser = "fleet"
 
     /// The install of a new hub: the one machine that has no hub to ask for a line (INSTALL-PROMPT.md job A).
@@ -571,11 +578,17 @@ public struct InstallPlan: Equatable, Sendable {
             return "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; cd \"$HOME/fleet-server\" "
                 + "&& python3 fleet.py verify --json"
         }
-        let checkout = machine == .hub ? hubCheckout : joinCheckout
-        let inner = "cd \(checkout) && python3 fleet.py verify --json"
+        let inner = verifyProgram(machine)
         return "runuser -u \(serviceUser) -- env HOME=/home/\(serviceUser) "
             + "XDG_RUNTIME_DIR=/run/user/$(id -u \(serviceUser)) "
             + "PATH=/home/\(serviceUser)/.local/bin:/usr/local/bin:/usr/bin:/bin sh -c \(quote(inner))"
+    }
+
+    /// What `verifyCommand` runs as the user of a Linux machine's services: `verify --json` in that machine's checkout.
+    /// On a hub, the checkout is the folder that the hub's own service runs in, and `hubCheckout` when it names none.
+    static func verifyProgram(_ machine: MachineCheckout) -> String {
+        guard machine == .hub else { return "cd \(joinCheckout) && python3 fleet.py verify --json" }
+        return "kit=\(hubCheckoutOfItsService); cd \"${kit:-\(hubCheckout)}\" && python3 fleet.py verify --json"
     }
 
     /// The arguments of `ssh` for one remote program: the owner's own connection, nothing interactive, and no

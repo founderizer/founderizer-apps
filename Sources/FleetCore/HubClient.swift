@@ -117,7 +117,10 @@ final class HubReads: @unchecked Sendable {
     static func key(_ request: URLRequest, in session: URLSessionConfiguration) -> String? {
         guard (request.httpMethod ?? "GET") == "GET", let url = request.url else { return nil }
         let limits = [request.timeoutInterval, session.timeoutIntervalForRequest, session.timeoutIntervalForResource]
-        return "GET \(url.absoluteString) " + limits.map { String(format: "%g", $0) }.joined(separator: "/")
+        // A read that says the owner is present is not the same read as one that does not (`OwnerPresence`): either
+        // would carry the other's header, or lose it
+        let present = request.value(forHTTPHeaderField: OwnerPresence.header) == nil ? "" : " present"
+        return "GET \(url.absoluteString) " + limits.map { String(format: "%g", $0) }.joined(separator: "/") + present
     }
 
     /// The answer of the read `key`: the one on its way, or a new one that `read` makes.
@@ -234,6 +237,12 @@ public final class HubClient: Sendable {
     /// in `hubAddress`, so his own Mac and phone do not change (the onboarding of 4 November 2026).
     public static let defaultAddress = "http://fleet.invalid:8765"
 
+    /// Whether an address is the address of no hub, in any spelling of it that `address(_:)` gives back.
+    public static func isUnset(_ hub: URL) -> Bool {
+        guard let none = URL(string: defaultAddress) else { return false }
+        return hub.host?.lowercased() == none.host && hub.port == none.port
+    }
+
     /// **One session for every `HubClient`.** The app makes a client wherever it talks to the hub, more than seventy
     /// places, and each one used to make a session of its own with a delegate. A session with a delegate lives until
     /// it is invalidated, and none of them ever was, so every client stayed in memory for as long as the app ran. The
@@ -276,10 +285,12 @@ public final class HubClient: Sendable {
     }
 
     /// The state and the bytes it was read from, so the Mac can keep its last reading on disk and draw it at the
-    /// next launch, before the hub answers.
-    public func stateReading(at hub: URL) async throws -> (state: HubState, data: Data) {
+    /// next launch, before the hub answers. `present`: the owner is at the Mac app now (`OwnerPresence`), so the read
+    /// says so, and the hub holds his phone's Needs-you pings while such reads come.
+    public func stateReading(at hub: URL, present: Bool = false) async throws -> (state: HubState, data: Data) {
         var request = URLRequest(url: hub.appendingPathComponent("ui/state"))
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if present { request.setValue(OwnerPresence.value, forHTTPHeaderField: OwnerPresence.header) }
         let data = try await perform(request)
         return (try HubState.decode(data), data)
     }
@@ -429,6 +440,59 @@ public final class HubClient: Sendable {
         let list = try JSONDecoder().decode(OwnerDeviceList.self, from: await perform(request))
         try list.validate(database: database)
         return list
+    }
+
+    // ---- the connected apps (hub feature `connected_apps`, UI-API.md version 1.133): the owner's Mac only
+
+    /// `GET /ui/connect`: whether connected apps are on, the hub's public MCP address and the open connections. A hub
+    /// without the route, or one that answers 409, throws: the app then shows nothing of it.
+    public func connectState(hub: URL, database: String) async throws -> ConnectState {
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/connect"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database)]
+        var request = URLRequest(url: parts.url!)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let state = try JSONDecoder().decode(ConnectState.self, from: await perform(request))
+        try state.validate(database: database)
+        return state
+    }
+
+    /// `POST /ui/connect/code`: the owner's one-time code for one sign-in of a connected app at `level`. A new code
+    /// replaces the open one on the hub. The code is in the answer only: the caller keeps it in its page, never in a
+    /// file, a note, a log or the pasteboard.
+    public func connectCode(hub: URL, database: String, client: String, requestID: UUID = UUID(),
+                            level: String) async throws -> ConnectCode {
+        guard ConnectedApps.levels.contains(level) else { throw HubError.invalidResponse }
+        let answer = try JSONDecoder().decode(ConnectCode.self, from: await ownerCommand(
+            "ui/connect/code", hub: hub, database: database, client: client, requestID: requestID,
+            fields: ["level": level]))
+        guard answer.ok, answer.request_id.lowercased() == requestID.uuidString.lowercased(), answer.client == client,
+              answer.level == level, answer.expires.isFinite,
+              answer.code.map(ConnectedApps.isCode) ?? true else { throw HubError.invalidResponse }
+        return answer
+    }
+
+    /// `POST /ui/connect/settings`: turns connected apps on or off in the hub's team.json (UI-API.md, version 1.133). Off
+    /// also ends every connection on the hub.
+    public func connectSettings(hub: URL, database: String, client: String, requestID: UUID = UUID(),
+                                on: Bool) async throws -> ConnectSettings {
+        let answer = try JSONDecoder().decode(ConnectSettings.self, from: await ownerCommand(
+            "ui/connect/settings", hub: hub, database: database, client: client, requestID: requestID,
+            fields: ["on": on]))
+        guard answer.ok, answer.on == on, answer.client == client,
+              answer.request_id.lowercased() == requestID.uuidString.lowercased() else { throw HubError.invalidResponse }
+        return answer
+    }
+
+    /// `POST /ui/connect/<id>/revoke`: the owner ends one connection. Its tokens go on the hub, and a new sign-in
+    /// needs a new code.
+    public func connectRevoke(hub: URL, database: String, client: String, requestID: UUID = UUID(),
+                              id: Int) async throws -> ConnectRevoke {
+        guard id > 0 else { throw HubError.invalidResponse }
+        let answer = try JSONDecoder().decode(ConnectRevoke.self, from: await ownerCommand(
+            "ui/connect/\(id)/revoke", hub: hub, database: database, client: client, requestID: requestID, fields: [:]))
+        guard answer.ok, answer.revoked, answer.id == id, answer.client == client,
+              answer.request_id.lowercased() == requestID.uuidString.lowercased() else { throw HubError.invalidResponse }
+        return answer
     }
 
     /// `GET /ui/servers` (owner feature `servers`): the servers, their readings, availability and newest jobs.
@@ -620,6 +684,20 @@ public final class HubClient: Sendable {
         return try await perform(request)
     }
 
+    /// `GET /ui/history?mode=messages` (owner feature `history_messages`): the records that hold every typed word, the
+    /// newest first, for the search card (`MessageSearch`).
+    public func messageMatches(hub: URL, database: String, words: String, limit: Int = MessageSearch.limit) async throws -> [MessageMatch] {
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/history"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database), .init(name: "mode", value: "messages"),
+                            .init(name: "query", value: words), .init(name: "limit", value: String(limit))]
+        guard let url = parts.url else { throw HubError.invalidResponse }
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let page = try JSONDecoder().decode(MessageMatches.self, from: await perform(request))
+        try page.validate(database: database)
+        return page.results
+    }
+
     /// `GET /ui/secrets/salts` (owner feature `secrets`): the salts for the fingerprints of one login reference.
     public func secretSalts(hub: URL, database: String, login: String) async throws -> SecretSalts {
         guard LoginSecret.isReference(login) else { throw HubError.invalidResponse }
@@ -631,6 +709,23 @@ public final class HubClient: Sendable {
         guard salts.isValid, salts.login == login else { throw HubError.invalidResponse }
         return salts
     }
+
+    /// `GET /ui/secrets/same` (owner feature `secret_compare`): whether the value of these fingerprints, made with the
+    /// salts of `login`, is the value that the hub holds under that reference; nil when the hub cannot tell. No value
+    /// leaves the Mac.
+    public func secretSame(hub: URL, database: String, login: String, fingerprints: [SecretFingerprint]) async throws -> Bool? {
+        guard LoginSecret.isReference(login), SecretFingerprint.areValid(fingerprints) else { throw HubError.invalidResponse }
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/secrets/same"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database), .init(name: "login", value: login),
+                            .init(name: "fingerprints", value: fingerprints.map { "\($0.kind):\($0.hash):\($0.len)" }.joined(separator: ","))]
+        var request = URLRequest(url: parts.url!)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let answer = try JSONDecoder().decode(SecretSame.self, from: await perform(request))
+        guard answer.login == login else { throw HubError.invalidResponse }
+        return answer.same
+    }
+
+    private struct SecretSame: Decodable { let login: String; let same: Bool? }
 
     /// `POST /ui/secrets/fingerprints`: the hub then blocks and masks the login's values in texts. It answers how many
     /// fingerprints are new and how many it had; the two cover every item that was sent.

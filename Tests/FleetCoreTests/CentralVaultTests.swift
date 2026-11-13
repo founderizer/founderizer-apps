@@ -337,6 +337,43 @@ struct CentralVaultTests {
         #expect(throws: HubError.self) { try VaultCommand.intake(requestID: id, database: "gen-1", login: "bws://nope", ciphertext: sealed) }
     }
 
+    /// The owner's replace of a value (owner feature `secret_replace`): the statement, byte for byte as the central
+    /// vault's own `canonical` writes it (`vault.py` STATEMENTS "replace"), about the checksum of the sealed copy, and
+    /// the intake that carries the copy with it. A software owner key signs it, and that signature verifies.
+    @Test func aReplaceStatementIsAboutItsOwnSealedCopyAndGoesWithIt() throws {
+        var key = LoginSecret()
+        key.kind = .apiKey; key.env = "EXAMPLE_API_KEY"; key.password = "synthetic-KEY-0123456789"
+        let sealed = try AgeSeal.seal(try key.value(), to: Self.recipient)
+        #expect(!sealed.contains("\r"))                         // the hub takes LF line ends, and the checksum is of this text
+        let sum = OwnerStatement.checksum(sealed)
+        #expect(sum.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil)
+        #expect(OwnerStatement.checksum("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        #expect(OwnerStatement.checksum(sealed) != OwnerStatement.checksum(try AgeSeal.seal(try key.value(), to: Self.recipient)))
+        let upper = "bws://12345678-1234-4234-8234-12345678ABCD"
+        let statement = OwnerStatement.replace(fleet: Self.fleet, login: upper, sha256: sum, at: 1_761_300_007)
+        #expect(statement == #"{"at":1761300007,"fleet":"0f1e2d3c4b5a6978","kind":"replace","login":"bws://12345678-1234-4234-8234-12345678abcd","sha256":"\#(sum)","v":1}"#)
+        let owner = SoftwareOwnerKey()
+        let signature = try owner.sign(statement)
+        let id = UUID()
+        let body = try VaultCommand.intake(requestID: id, database: "gen-1", login: Self.reference, ciphertext: sealed,
+                                           statement: statement, signature: signature)
+        let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
+        #expect(object == ["request_id": id.uuidString.lowercased(), "db": "gen-1", "login": Self.reference, "ciphertext": sealed,
+                           "statement": statement, "signature": signature])
+        #expect(!String(decoding: body, as: UTF8.self).contains("synthetic-KEY-0123456789"))
+        // both or neither, and each in the form of a signed statement
+        #expect(throws: HubError.self) {
+            try VaultCommand.intake(requestID: id, database: "gen-1", login: Self.reference, ciphertext: sealed, statement: statement)
+        }
+        #expect(throws: HubError.self) {
+            try VaultCommand.intake(requestID: id, database: "gen-1", login: Self.reference, ciphertext: sealed, signature: signature)
+        }
+        #expect(throws: HubError.self) {
+            try VaultCommand.intake(requestID: id, database: "gen-1", login: Self.reference, ciphertext: sealed,
+                                    statement: statement, signature: "not base64")
+        }
+    }
+
     @Test func aSignedStatementGoesAsItIs() throws {
         let key = SoftwareOwnerKey(), id = UUID()
         let statement = OwnerStatement.recovery(fleet: Self.fleet, recipient: Self.recipient, at: 1_761_300_002)
@@ -368,6 +405,7 @@ struct CentralVaultTests {
         #expect(arguments.contains("StrictHostKeyChecking=yes") && !arguments.contains(where: { $0.contains("accept-new") }))
         #expect(arguments.contains("BatchMode=yes") && arguments.contains("2222") && arguments.contains("/Users/owner/.ssh/id_ed25519"))
         #expect(arguments.suffix(2) == ["sam@100.80.1.2", #"sudo -n -i -- /bin/sh -c 'echo '\''hi'\'''"#])
+        #expect(Array(arguments.prefix(6)) == ["-a", "-x", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no"])
         let root = InstallTarget(host: "100.80.1.2")
         #expect(CentralVaultRemote.arguments(target: root, program: "echo hi").suffix(2) == ["root@100.80.1.2", "echo hi"])
     }

@@ -17,11 +17,10 @@ final class SetupService: NSObject, FleetSetupServiceProtocol, @unchecked Sendab
     private var running = false
     private let screenSharing = ScreenSharingTunnels()
     private let kit = Bundle.main.resourceURL!.appendingPathComponent("FleetKit")
-    private var python: String? {
-        ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"].first {
-            FileManager.default.isExecutableFile(atPath: $0)
-        }
-    }
+    /// The Python of this Mac for the bundled installer. The system's counts only with the developer tools: without
+    /// them it is Apple's placeholder, and a run of it opens macOS's dialog about the developer tools (`SetupPython`).
+    /// It is looked for at each use, which is rare, so tools that the owner installs later count without a restart.
+    private var python: String? { SetupPython.find() }
 
     func availability(reply: @escaping (Bool, String) -> Void) {
         let available = python != nil && FileManager.default.fileExists(atPath: kit.appendingPathComponent("onboard.py").path)

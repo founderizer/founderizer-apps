@@ -44,6 +44,27 @@ public enum AgentSetupFlow {
         return agent.active == false || agent.signed_in == false || places(agent, features: features, placing: placing)
     }
 
+    /// **The pages of adding an agent fill the window** (the owner's yes of 12 November 2026): the setup and then
+    /// "Setting up" of the agent that Add agent is adding (`adding`), until its chat opens, and the setup of the manager
+    /// of a new fleet while it gets its first server (`places`). An agent that ran before, signed out or deactivated,
+    /// keeps its setup in its own page: `active` is false for a new agent and for a deactivated one alike.
+    /// A reading that is old holds the window for the agent being added: it proves neither that its setup ended nor
+    /// that its chat answers, and the page would flash to the chat and back.
+    public static func fillsWindow(_ agent: FleetAgent?, adding: Bool, features: [String], placing: Bool = false,
+                                   serverTime: Double, fresh: Bool) -> Bool {
+        guard let agent else { return false }
+        let setup = shows(agent, features: features, placing: placing)
+        if adding { return !fresh || setup || chatStarts(agent, serverTime: serverTime, fresh: fresh) }
+        return setup && places(agent, features: features, placing: placing)
+    }
+
+    /// **Adding an agent ends** on a reading that answered: its setup no longer shows and its chat can answer (or its
+    /// hub says nothing of that), or the hub no longer lists it.
+    public static func addingEnds(_ agent: FleetAgent?, features: [String], placing: Bool = false) -> Bool {
+        guard let agent else { return true }
+        return !shows(agent, features: features, placing: placing) && agent.chat_ready != false
+    }
+
     /// **The manager of a new fleet gets its server in its own setup** (hub feature `manager_server`): while it has
     /// none, and after the press that gives it one, through the install and the sign-in, until it runs (`runs`). It is
     /// active from the start and its machine reports nothing until its server has installed it, so neither of the

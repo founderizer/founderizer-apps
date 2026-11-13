@@ -65,6 +65,10 @@ struct MobileReadTests {
         #expect(agent.turn_ended_after == nil)
         #expect(try snapshot(agents: [agentFields(["turn_ended_after": NSNull()])]).agents.first?.turn_ended_after == nil)
         #expect(try snapshot(agents: [agentFields(["turn_ended_after": 970.5])]).agents.first?.turn_ended_after == 970.5)
+        // An older hub says nothing of a message that does not arrive (hub 1.144); a newer one says true or false.
+        #expect(agent.chat_undelivered == nil)
+        #expect(try snapshot(agents: [agentFields(["chat_undelivered": true])]).agents.first?.chat_undelivered == true)
+        #expect(try snapshot(agents: [agentFields(["chat_undelivered": false])]).agents.first?.chat_undelivered == false)
     }
 
     @Test("A reading without a window is unknown, never nought percent")
@@ -185,9 +189,27 @@ struct MobileReadTests {
         #expect(try state([headFields(["stalled_since": 500.0])]) == .attention("Stalled"))
         #expect(try state([headFields(["state": "auth-required"])]) == .attention("Sign-in needed"))
         #expect(try state([headFields(["state": "submitted"])]) == .online)
+        // What an agent does now is the words of its task whose session works (hub 1.148); none from a task that waits.
+        let acting = try snapshot(agents: [agentFields(["name": "vps"])],
+                                  ["tasks": [headFields(["works": true, "doing": "Read live API health and public status"]),
+                                             headFields(["id": 8, "works": false, "doing": "Words that a turn's end left",
+                                                         "last_activity": 90.0])]])
+        #expect(acting.action(of: "vps") == "Read live API health and public status")
+        #expect(acting.action(of: "studio") == nil)
+        // A task between its turns, or parked on a reminder, is no work: its agent's mark rests.
+        #expect(try state([headFields(["works": false])]) == .online)
+        #expect(try state([headFields(["works": true])]) == .working)
         // An old reading says so in words, with the look it read (fix round 3, COPY): its mark keeps its colour and rests.
         #expect(AgentState.old(.working).words == "Last reading" && AgentState.attention("Stalled").words == "Stalled")
-        #expect(AgentState.old(.working).hasDot && !AgentState.old(.online).hasDot)
+        // A dot is a problem: neither online nor work has one. With Reduce Motion nothing moves, and work keeps its dot.
+        #expect(!AgentState.working.hasDot(reduceMotion: false) && !AgentState.old(.working).hasDot(reduceMotion: false))
+        #expect(AgentState.working.hasDot(reduceMotion: true) && !AgentState.old(.online).hasDot(reduceMotion: true))
+        #expect(AgentState.limited.hasDot(reduceMotion: false) && AgentState.attention("Stalled").hasDot(reduceMotion: false))
+        #expect(AgentState.offline.hasDot(reduceMotion: false) && AgentState.setup.hasDot(reduceMotion: false))
+        // An agent that works on his newest chat message works too, by a current reading or an old one.
+        let idle = try snapshot(agents: [agentFields(["name": "vps"])], ["tasks": [], "holds": []])
+        #expect(try #require(idle.agents.first).mobileState(in: idle, isFresh: true, thinking: true) == .working)
+        #expect(try #require(idle.agents.first).mobileState(in: idle, isFresh: false, thinking: true) == .old(.working))
     }
 
     @Test("A task's mark is the Mac's: a paused, a stalled and a limited task are not the green circle of work")
@@ -206,6 +228,12 @@ struct MobileReadTests {
         #expect(try head().mark(holds: [hold("pause", "held")], limited: false, outcomeUnknown: true).symbol
                 == "questionmark.circle")
         #expect(try !head().mark(holds: [hold("pause", "held")], limited: false).inWork)
+        // A task in state working is work only while its session works on it (hub 1.147): no work where its last turn
+        // ended and nothing of it runs; its state says it where the hub says nothing of its turns.
+        #expect(try head().mark(holds: [], limited: false).inWork)
+        #expect(try head(["works": true]).mark(holds: [], limited: false).inWork)
+        #expect(try !head(["works": false]).mark(holds: [], limited: false).inWork)
+        #expect(try head(["works": false]).mark(holds: [], limited: false).symbol == "circle.dotted")
     }
 
     @Test("In the app that hosts the checks no request leaves this Mac: the owner's hub is never reached")
@@ -495,6 +523,53 @@ struct MobileChatTests {
         // A reply still comes first.
         #expect(ChatPage.pending(in: [message, reply], turnEndedAfter: 10) == .none)
         #expect(ChatPage.pending(in: [message, unlinked], turnEndedAfter: 10) == .spokenSince)
+        // The hub calls his message late (hub 1.144): a word with no link then ends nothing, and the chat's line says
+        // "Not answering". A reply that names his message ends the wait whatever the hub's field says.
+        #expect(ChatPage.pending(in: [message, unlinked]).late(true) == .waiting)
+        #expect(ChatPage.pending(in: [message, unlinked]).late(false) == .spokenSince)
+        #expect(ChatPage.pending(in: [message, reply]).late(true) == .none)
+    }
+
+    @Test("An agent's row moves for its chat's Thinking: by the hub's word, or with an older hub by the chat the phone read")
+    func anAgentThinks() throws {
+        func agent(last ts: Double, side: String, seen: Double = 995, limited: Bool = false,
+                   ended: Double? = nil, waits: Double? = nil, late: Bool = false) throws -> MobileAgent {
+            var fields: [String: Any] = ["name": "studio", "role": "worker", "runtime": "claude", "active": true,
+                                         "open_tasks": 0, "usage": [[String: Any]](), "last_seen": seen,
+                                         "last": ["ts": ts, "side": side, "preview": "Is it live?"]]
+            if limited { fields["limit"] = ["since": 900.0, "until": 2000.0, "reset_known": true] }
+            if let ended { fields["turn_ended_after"] = ended }
+            if let waits { fields["waits_since"] = waits }
+            if late { fields["chat_undelivered"] = true }
+            return try JSONDecoder().decode(MobileAgent.self, from: JSONSerialization.data(withJSONObject: fields))
+        }
+        let message = try item(#"{"kind": "message", "ts": 10, "id": "ABC-1", "text": "Is it live?", "client": "founderizer-ios/1/x"}"#)
+        let reply = try item(#"{"kind": "report", "ts": 11, "id": 5, "text": "Yes.", "in_reply_to": "abc-1"}"#)
+
+        // The hub says since when the chat waits (owner feature chat_waits): a chat that the phone never read moves too.
+        #expect(MobileStore.thinks(try agent(last: 10, side: "owner", waits: 10), items: [], time: 1000, hubSays: true))
+        // Nothing waits by the hub's word, whatever the phone holds of the chat.
+        #expect(!MobileStore.thinks(try agent(last: 10, side: "owner"), items: [message], time: 1000, hubSays: true))
+        // The turn that took the message has ended; a message after that turn end waits again.
+        #expect(!MobileStore.thinks(try agent(last: 10, side: "owner", ended: 10, waits: 10), items: [], time: 1000, hubSays: true))
+        #expect(MobileStore.thinks(try agent(last: 12, side: "owner", ended: 10, waits: 12), items: [], time: 1000, hubSays: true))
+        // Not the agent's work: its usage limit, and a server that does not answer.
+        #expect(!MobileStore.thinks(try agent(last: 10, side: "owner", limited: true, waits: 10), items: [], time: 1000, hubSays: true))
+        #expect(!MobileStore.thinks(try agent(last: 10, side: "owner", seen: 100, waits: 10), items: [], time: 1000, hubSays: true))
+        // Nor a message that does not arrive although the server answers (hub 1.144): the chat says "Not answering".
+        #expect(!MobileStore.thinks(try agent(last: 10, side: "owner", waits: 10, late: true), items: [], time: 1000, hubSays: true))
+
+        // A hub from before the feature: his message is the conversation's newest line, and the phone holds it.
+        #expect(MobileStore.thinks(try agent(last: 10, side: "owner"), items: [message], time: 1000, hubSays: false))
+        // A line came since that the phone has not read (a reply): nothing says that the agent still thinks.
+        #expect(!MobileStore.thinks(try agent(last: 11, side: "agent"), items: [message], time: 1000, hubSays: false))
+        // The phone read the reply: it answers his message.
+        #expect(!MobileStore.thinks(try agent(last: 11, side: "agent"), items: [message, reply], time: 1000, hubSays: false))
+        // A chat that the phone never read says nothing.
+        #expect(!MobileStore.thinks(try agent(last: 10, side: "owner"), items: [], time: 1000, hubSays: false))
+        #expect(!MobileStore.thinks(try agent(last: 10, side: "owner", limited: true), items: [message], time: 1000, hubSays: false))
+        #expect(!MobileStore.thinks(try agent(last: 10, side: "owner", seen: 100), items: [message], time: 1000, hubSays: false))
+        #expect(!MobileStore.thinks(try agent(last: 10, side: "owner", ended: 10), items: [message], time: 1000, hubSays: false))
     }
 
     @Test("A reply that came while the chat was open fades in, and at the end it takes the waiting line's place")

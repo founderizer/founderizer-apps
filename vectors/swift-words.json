@@ -1,0 +1,877 @@
+{
+  "about" : "Words that FleetCore makes: AgentNames.label and under with the roles of team.json, String.capitalized, MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and activityAge in UTC with two locales.",
+  "ages" : [
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794582720,
+      "words" : "Just now"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794582661,
+      "words" : "Just now"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794582660,
+      "words" : "1 min ago"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794582659,
+      "words" : "1 min ago"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794579121,
+      "words" : "59 min ago"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794579120,
+      "words" : "1 h ago"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794575520,
+      "words" : "2 h ago"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794496321,
+      "words" : "23 h ago"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794496320,
+      "words" : "1 day ago"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794409920,
+      "words" : "2 days ago"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1793977921,
+      "words" : "6 days ago"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1793977920,
+      "words" : "6 Nov"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1791126720,
+      "words" : "4 Oct"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1760022720,
+      "words" : "9 Oct 2025"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794582750,
+      "words" : "Just now"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794582720,
+      "words" : "Just now"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794582661,
+      "words" : "Just now"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794582660,
+      "words" : "1 min ago"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794582659,
+      "words" : "1 min ago"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794579121,
+      "words" : "59 min ago"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794579120,
+      "words" : "1 h ago"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794575520,
+      "words" : "2 h ago"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794496321,
+      "words" : "23 h ago"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794496320,
+      "words" : "1 day ago"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794409920,
+      "words" : "2 days ago"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1793977921,
+      "words" : "6 days ago"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1793977920,
+      "words" : "Nov 6"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1791126720,
+      "words" : "Oct 4"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1760022720,
+      "words" : "Oct 9, 2025"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794582750,
+      "words" : "Just now"
+    }
+  ],
+  "made_by" : "app/Tests/FleetCoreTests/WordsVectorsTests.swift",
+  "names" : [
+    {
+      "capitalized" : "Manager",
+      "label" : "Fleet Manager",
+      "name" : "manager",
+      "title" : "Fleet Manager"
+    },
+    {
+      "capitalized" : "Wren",
+      "label" : "Customer Support",
+      "name" : "wren",
+      "title" : "Customer Support",
+      "under" : "Wren"
+    },
+    {
+      "capitalized" : "Theo",
+      "label" : "Developer",
+      "name" : "theo",
+      "title" : "Developer",
+      "under" : "Theo"
+    },
+    {
+      "capitalized" : "Pax",
+      "label" : "DevOps",
+      "name" : "pax",
+      "title" : "DevOps",
+      "under" : "Pax"
+    },
+    {
+      "capitalized" : "Orla",
+      "label" : "Marketing",
+      "name" : "orla",
+      "title" : "Marketing",
+      "under" : "Orla"
+    },
+    {
+      "capitalized" : "Nova",
+      "label" : "Nova",
+      "name" : "nova"
+    },
+    {
+      "capitalized" : "Dev-Lead",
+      "label" : "Dev-Lead",
+      "name" : "dev-lead"
+    },
+    {
+      "capitalized" : "Web_Dev",
+      "label" : "Web_Dev",
+      "name" : "web_dev"
+    },
+    {
+      "capitalized" : "Worker-1",
+      "label" : "Worker-1",
+      "name" : "worker-1"
+    },
+    {
+      "capitalized" : "A1B2",
+      "label" : "A1B2",
+      "name" : "a1b2"
+    },
+    {
+      "capitalized" : "Qa",
+      "label" : "Quality assurance",
+      "name" : "qa",
+      "title" : "  Quality   assurance ",
+      "under" : "Qa"
+    },
+    {
+      "capitalized" : "Ops",
+      "label" : "Ops",
+      "name" : "ops",
+      "title" : ""
+    },
+    {
+      "capitalized" : "Scout",
+      "label" : "Scout",
+      "name" : "scout",
+      "title" : "Scout"
+    },
+    {
+      "capitalized" : "Iris",
+      "label" : "Iris's helper",
+      "name" : "iris",
+      "title" : "Iris's helper"
+    },
+    {
+      "capitalized" : "Sales-Bot",
+      "label" : "Sales bot",
+      "name" : "sales-bot",
+      "title" : "Sales bot",
+      "under" : "Sales-Bot"
+    },
+    {
+      "capitalized" : "X",
+      "label" : "X",
+      "name" : "x"
+    }
+  ],
+  "texts" : [
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "Here is the draft:"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "heading",
+          "level" : 0,
+          "marker" : "",
+          "text" : "Simpler prices for November"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "From **1 November**, three plans: *Starter*, *Team* and *Scale*."
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "quote",
+          "level" : 0,
+          "marker" : "",
+          "text" : "We moved our whole support team in an afternoon."
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 0,
+          "marker" : "•",
+          "text" : "one"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 0,
+          "marker" : "2.",
+          "text" : "two"
+        },
+        {
+          "cells" : [
+            [
+              "Day",
+              "Signups"
+            ],
+            [
+              "Mon",
+              "12"
+            ]
+          ],
+          "kind" : "table",
+          "level" : 0,
+          "marker" : "",
+          "text" : ""
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "code",
+          "level" : 0,
+          "marker" : "",
+          "text" : "$ curl -sI https://example.com | head -1"
+        }
+      ],
+      "plain" : "Here is the draft: Simpler prices for November From 1 November, three plans: Starter, Team and Scale. We moved our whole support team in an afternoon. one two Day Signups Mon 12 $ curl -sI https://example.com | head -1",
+      "preview" : "Here is the draft: Simpler prices for November From 1 November, three plans: Starter, Team and Scale. We moved our whole support team in an afternoon. one two Day Signups Mon 12 $ curl -sI https://example.com | head -1",
+      "text" : "Here is the draft:\n\n# Simpler prices for November\n\nFrom **1 November**, three plans: *Starter*, *Team* and *Scale*.\n\n> We moved our whole support team in an afternoon.\n\n- one\n2. two\n\n| Day | Signups |\n|---|---|\n| Mon | 12 |\n\n```\n$ curl -sI https://example.com | head -1\n```"
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "Steps:"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 0,
+          "marker" : "•",
+          "text" : "Pull the branch"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 1,
+          "marker" : "•",
+          "text" : "run the tests"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 2,
+          "marker" : "•",
+          "text" : "all of them\ncontinued line"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 0,
+          "marker" : "•",
+          "text" : "Push"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 0,
+          "marker" : "1)",
+          "text" : "first"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 0,
+          "marker" : "2)",
+          "text" : "second"
+        }
+      ],
+      "plain" : "Steps: Pull the branch run the tests all of them continued line Push first second",
+      "preview" : "Steps: Pull the branch run the tests all of them continued line Push first second",
+      "text" : "Steps:\n- Pull the branch\n  - run the tests\n    - all of them\n  continued line\n- Push\n\n1) first\n2) second"
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 0,
+          "marker" : "•",
+          "text" : "item"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "code",
+          "level" : 0,
+          "marker" : "",
+          "text" : "code in a list"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 0,
+          "marker" : "•",
+          "text" : "next"
+        }
+      ],
+      "plain" : "item code in a list next",
+      "preview" : "item code in a list next",
+      "text" : "- item\n  ```\n  code in a list\n  ```\n- next"
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "Plain words\non two lines"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "and a second paragraph"
+        }
+      ],
+      "plain" : "Plain words on two lines and a second paragraph",
+      "preview" : "Plain words on two lines and a second paragraph",
+      "text" : "Plain words\non two lines\n\nand a second paragraph"
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "rule",
+          "level" : 0,
+          "marker" : "",
+          "text" : ""
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "rule",
+          "level" : 0,
+          "marker" : "",
+          "text" : ""
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "#Not a heading"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "heading",
+          "level" : 0,
+          "marker" : "",
+          "text" : "A heading"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "####### seven"
+        }
+      ],
+      "plain" : "#Not a heading A heading ####### seven",
+      "preview" : "*** #Not a heading A heading ####### seven",
+      "text" : "***\n---\n#Not a heading\n## A heading\n####### seven"
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "Use `npm test` and see [the docs](https://example.com/docs) or **bold _mixed_** text."
+        }
+      ],
+      "plain" : "Use npm test and see the docs or bold mixed text.",
+      "preview" : "Use npm test and see the docs or bold mixed text.",
+      "text" : "Use `npm test` and see [the docs](https://example.com/docs) or **bold _mixed_** text."
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+            [
+              "a | b",
+              "c"
+            ],
+            [
+              "1",
+              "2"
+            ]
+          ],
+          "kind" : "table",
+          "level" : 0,
+          "marker" : "",
+          "text" : ""
+        }
+      ],
+      "plain" : "a | b c 1 2",
+      "preview" : "a \\ b c 1 2",
+      "text" : "| a \\| b | c |\n|:--|--:|\n| 1 | 2 |"
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "    indented code-like line\n\tand a tab"
+        }
+      ],
+      "plain" : "indented code-like line \tand a tab",
+      "preview" : "indented code-like line and a tab",
+      "text" : "    indented code-like line\n\tand a tab"
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "quote",
+          "level" : 0,
+          "marker" : "",
+          "text" : "quote one"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "quote",
+          "level" : 0,
+          "marker" : "",
+          "text" : "quote two"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "after"
+        }
+      ],
+      "plain" : "quote one quote two after",
+      "preview" : "quote one quote two after",
+      "text" : "> quote one\n> quote two\nafter"
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "code",
+          "level" : 0,
+          "marker" : "",
+          "text" : "let a = 1"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "code",
+          "level" : 0,
+          "marker" : "",
+          "text" : "unclosed fence"
+        }
+      ],
+      "plain" : "let a = 1 unclosed fence",
+      "preview" : "let a = 1 unclosed fence",
+      "text" : "```swift\nlet a = 1\n```\n\n```\nunclosed fence"
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "You asked for *three* things: ~~one~~, __two__ and three."
+        }
+      ],
+      "plain" : "You asked for three things: one, two and three.",
+      "preview" : "You asked for three things: one, two and three.",
+      "text" : "You asked for *three* things: ~~one~~, __two__ and three."
+    },
+    {
+      "blocks" : [
+
+      ],
+      "plain" : "",
+      "text" : ""
+    },
+    {
+      "blocks" : [
+
+      ],
+      "plain" : "",
+      "text" : "   "
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "A line with **unclosed bold"
+        }
+      ],
+      "plain" : "A line with unclosed bold",
+      "preview" : "A line with **unclosed bold",
+      "text" : "A line with **unclosed bold"
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 0,
+          "marker" : "1.",
+          "text" : "first\nmore of first"
+        },
+        {
+          "cells" : [
+
+          ],
+          "kind" : "item",
+          "level" : 0,
+          "marker" : "10.",
+          "text" : "tenth"
+        }
+      ],
+      "plain" : "first more of first tenth",
+      "preview" : "first more of first tenth",
+      "text" : "1. first\n   more of first\n10. tenth"
+    },
+    {
+      "blocks" : [
+        {
+          "cells" : [
+
+          ],
+          "kind" : "paragraph",
+          "level" : 0,
+          "marker" : "",
+          "text" : "Café naïve: \"quotes\" and 'single' & <tags>"
+        }
+      ],
+      "plain" : "Café naïve: \"quotes\" and 'single' & <tags>",
+      "preview" : "Café naïve: \"quotes\" and 'single' & <tags>",
+      "text" : "Café naïve: \"quotes\" and 'single' & <tags>"
+    }
+  ],
+  "time_zone" : "UTC",
+  "times" : [
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794582240,
+      "words" : "15:04"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794528720,
+      "words" : "0:12"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794525120,
+      "words" : "Yesterday"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794492720,
+      "words" : "Yesterday"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794323520,
+      "words" : "Tuesday"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794064320,
+      "words" : "Saturday"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1793977920,
+      "words" : "06/11/2026"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1791126720,
+      "words" : "04/10/2026"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1760022720,
+      "words" : "09/10/2025"
+    },
+    {
+      "locale" : "en_GB",
+      "now" : 1794582720,
+      "time" : 1794582750,
+      "words" : "15:12"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794582240,
+      "words" : "3:04 PM"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794528720,
+      "words" : "12:12 AM"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794525120,
+      "words" : "Yesterday"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794492720,
+      "words" : "Yesterday"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794323520,
+      "words" : "Tuesday"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794064320,
+      "words" : "Saturday"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1793977920,
+      "words" : "11/6/2026"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1791126720,
+      "words" : "10/4/2026"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1760022720,
+      "words" : "10/9/2025"
+    },
+    {
+      "locale" : "en_US",
+      "now" : 1794582720,
+      "time" : 1794582750,
+      "words" : "3:12 PM"
+    }
+  ]
+}

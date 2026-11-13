@@ -1,7 +1,29 @@
 import AppKit
+import FleetCore
 import SwiftUI
 
+/// **The first lines of a start.** An app that was opened on its disk image puts itself in Applications, and that
+/// copy opens in its place (`AppHome`): this happens before the app makes its store or a window, so the copy on the
+/// disk image reads nothing and shows nothing. Every other start goes on at once.
 @main
+enum FounderizerStart {
+    @MainActor static func main() {
+        if AppHome.settle(runsThere: { runs(at: $0) }) { exit(0) }
+        FounderizerApp.main()
+    }
+
+    /// Whether an instance of this app runs from the bundle at this place: the app in Applications, asked by the
+    /// copy on the disk image, which is another process with the same identifier.
+    private static func runs(at place: URL) -> Bool {
+        guard let identifier = Bundle.main.bundleIdentifier else { return false }
+        let path = place.resolvingSymlinksInPath().path
+        return NSRunningApplication.runningApplications(withBundleIdentifier: identifier).contains {
+            $0.processIdentifier != ProcessInfo.processInfo.processIdentifier
+                && $0.bundleURL?.resolvingSymlinksInPath().path == path
+        }
+    }
+}
+
 struct FounderizerApp: App {
     @NSApplicationDelegateAdaptor(FleetAppDelegate.self) private var delegate
     @State private var store = FleetStore()

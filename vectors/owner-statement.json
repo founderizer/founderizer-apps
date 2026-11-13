@@ -1,0 +1,61 @@
+{
+  "about": "The owner key's certificate of a phone's signing key (hub.certify_device, OwnerStatement.ownerDevice): the canonical statement, and its ECDSA P-256 signature over SHA-256 of the UTF-8 bytes, DER, standard base64, which vault.owner_signed checks. The nonce is RFC 6979's.",
+  "made_by": "app/vectors/make_vectors.py",
+  "private_scalar_hex": "c9465957e722255399442a838b64a5940c15b708ab13ca97ab7a1f6538c4c71f",
+  "public_key": "BPPKvE7UEoCSaPCciMG/FVQYpHgSdcb4f0cd78oDMD/xThTDJYTuBvz3BdaUuA8h/82Q9DhSeWYvvA/ig492DSc=",
+  "fields": {
+    "v": 1,
+    "kind": "owner-device",
+    "fleet": "0123456789abcdef",
+    "device": "pc",
+    "key": "BEAV6h5hDOg1Ty3Sck12vXv7/OAjn/6mQ9iUW3Fpj3jjL/9a3GGe6G2KGPfpzgkcvZcf9qppaHs6mxy7PBCGTH8=",
+    "at": 1790000000
+  },
+  "statement": "{\"at\":1790000000,\"device\":\"pc\",\"fleet\":\"0123456789abcdef\",\"key\":\"BEAV6h5hDOg1Ty3Sck12vXv7/OAjn/6mQ9iUW3Fpj3jjL/9a3GGe6G2KGPfpzgkcvZcf9qppaHs6mxy7PBCGTH8=\",\"kind\":\"owner-device\",\"v\":1}",
+  "statement_sha256_hex": "7d3e90373680c06391c06be59741537ca9a6d37354ff55a6c22c071813d70ee5",
+  "signature": "MEUCIC1DrMF2dfoCWiUA6WeclXEFW8rsdeD9X2rGsIUfa49FAiEApQeZsXgAa/NRJW6jayn6P3MHYvJLv+mr1d6lChEFX5Q=",
+  "accepted": [
+    {
+      "name": "the same signature with the other s (the vault has no low-s rule)",
+      "signature": "MEQCIC1DrMF2dfoCWiUA6WeclXEFW8rsdeD9X2rGsIUfa49FAiBa+GZNh/+UDa7akVyU1gXASd+Xu1tXtNkd2yW4613FvQ=="
+    }
+  ],
+  "refused": [
+    {
+      "name": "a signature of another statement",
+      "signature": "MEUCIQDyWt3OAa9OZ3FK+/aQwa0bcn1z2KgAwtM7gWpc53nqCAIgSJgdvSj+HL+SIQJCFETY5uNm2mbzbMlBaP4TIADD8JE="
+    },
+    {
+      "name": "r with a zero byte in front that it does not need",
+      "signature": "MEYCIQAtQ6zBdnX6AlolAOlnnJVxBVvK7HXg/V9qxrCFH2uPRQIhAKUHmbF4AGvzUSVuo2sp+j9zB2LyS7/pq9XepQoRBV+U"
+    },
+    {
+      "name": "a byte after the sequence",
+      "signature": "MEUCIC1DrMF2dfoCWiUA6WeclXEFW8rsdeD9X2rGsIUfa49FAiEApQeZsXgAa/NRJW6jayn6P3MHYvJLv+mr1d6lChEFX5QA"
+    },
+    {
+      "name": "r of zero",
+      "signature": "MCYCAQACIQClB5mxeABr81ElbqNrKfo/cwdi8ku/6avV3qUKEQVflA=="
+    },
+    {
+      "name": "r as a negative number",
+      "signature": "MEUCIK1DrMF2dfoCWiUA6WeclXEFW8rsdeD9X2rGsIUfa49FAiEApQeZsXgAa/NRJW6jayn6P3MHYvJLv+mr1d6lChEFX5Q="
+    },
+    {
+      "name": "the long form of the sequence's length",
+      "signature": "MIFFAiAtQ6zBdnX6AlolAOlnnJVxBVvK7HXg/V9qxrCFH2uPRQIhAKUHmbF4AGvzUSVuo2sp+j9zB2LyS7/pq9XepQoRBV+U"
+    },
+    {
+      "name": "base64 without its padding",
+      "signature": "MEUCIC1DrMF2dfoCWiUA6WeclXEFW8rsdeD9X2rGsIUfa49FAiEApQeZsXgAa/NRJW6jayn6P3MHYvJLv+mr1d6lChEFX5Q"
+    },
+    {
+      "name": "r and s side by side, not DER",
+      "signature": "LUOswXZ1+gJaJQDpZ5yVcQVbyux14P1fasawhR9rj0WlB5mxeABr81ElbqNrKfo/cwdi8ku/6avV3qUKEQVflA=="
+    },
+    {
+      "name": "s of n",
+      "signature": "MEUCIC1DrMF2dfoCWiUA6WeclXEFW8rsdeD9X2rGsIUfa49FAiEA/////wAAAAD//////////7zm+q2nF56E87nKwvxjJVE="
+    }
+  ]
+}

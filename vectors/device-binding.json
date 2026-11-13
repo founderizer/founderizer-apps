@@ -1,0 +1,9 @@
+{
+  "about": "A phone's signing key bound to the one-time value of the Mac's QR (DeviceBinding): HMAC-SHA256 with the 32 bytes of bind (base64url, no padding) as its key, over the 65 bytes of the uncompressed P-256 point, in standard base64. hub.device_signing takes both pairs.",
+  "made_by": "app/vectors/make_vectors.py",
+  "bind": "FzMkDWj3WjvSIgsW1RvO8X-jLfmcbpXScEWEzo1-ZAg",
+  "key": "BEAV6h5hDOg1Ty3Sck12vXv7/OAjn/6mQ9iUW3Fpj3jjL/9a3GGe6G2KGPfpzgkcvZcf9qppaHs6mxy7PBCGTH8=",
+  "binding": "26gkkAuwCNj0gSBTTb0N923vdbjTqXIOgnN5SfVXHuE=",
+  "recovery_key": "BNNBKdRTbagUk31OFEMPZS+AkJRKKRLmi+0pL5wB6UDKNQF9Y+R1Y4R2vygoV/NfbjW32JPokxCx1nOZP792OHQ=",
+  "recovery_binding": "4QWuUbofzWZfQaPhhrOFWIynxnp0GTb7REDCbkOysxw="
+}

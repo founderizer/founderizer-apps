@@ -12,6 +12,172 @@ private func login(_ change: (inout LoginSecret) -> Void = { _ in }) -> LoginSec
 }
 
 struct SecretTests {
+    /// "Who can use it" in a replace: the rows show each agent's level of now, a level that the owner does not touch
+    /// stays, and a row that he sets to no access takes the key back.
+    @Test func aReplaceShowsEachAgentsLevelOfNowAndOnlyARowThatHeSetMakesAStep() {
+        let holders = ["dev-lead", "builder", "writer", "tester"]
+        // the manager also holds the key: it has no row, and nothing here touches its grant
+        let now = ["dev-lead": "read", "builder": "use", "manager": "read"]
+
+        // the Save that shows the line: nothing set by hand, so each row is the agent's level of now
+        var shown = SecretReplaceAccess.rows(now: now, holders: holders, set: [:], touched: [])
+        #expect(shown.rows == ["dev-lead": .read, "builder": .use] && shown.touched.isEmpty)
+        #expect(SecretReplaceAccess.changes(now: now, holders: holders, rows: shown.rows, set: []).isEmpty)
+
+        // A row that he set to a level before that Save stays his. A row that he set to no access before it does not
+        // count: each row said "No access" then, also for an agent that had the key, so it was no choice to take the
+        // key back. It shows the level of now, and it makes no step.
+        shown = SecretReplaceAccess.rows(now: now, holders: holders, set: ["writer": .use], touched: ["writer", "builder", "tester"])
+        #expect(shown.rows == ["dev-lead": .read, "builder": .use, "writer": .use])
+        #expect(shown.touched == ["writer"])
+        var steps = SecretReplaceAccess.changes(now: now, holders: holders, rows: shown.rows, set: shown.touched)
+        #expect(steps.map(\.agent) == ["writer"] && steps.map(\.grant) == [.use])
+        // A level that he picked before that Save takes no level down either: he picked "Uses it" for an agent whose
+        // row said "No access", and the agent reads the key. The row shows "Reads it", and nothing changes for it.
+        shown = SecretReplaceAccess.rows(now: now, holders: holders, set: ["dev-lead": .use, "builder": .read], touched: ["dev-lead", "builder"])
+        #expect(shown.rows == ["dev-lead": .read, "builder": .read] && shown.touched == ["dev-lead", "builder"])
+        steps = SecretReplaceAccess.changes(now: now, holders: holders, rows: shown.rows, set: shown.touched)
+        #expect(steps.map(\.agent) == ["builder"] && steps.map(\.grant) == [.read])     // more of it: his pick stands
+        // After the rows show the levels, a level that he takes down is his choice.
+        steps = SecretReplaceAccess.changes(now: now, holders: holders, rows: ["dev-lead": .use, "builder": .use], set: ["dev-lead"])
+        #expect(steps.map(\.agent) == ["dev-lead"] && steps.map(\.grant) == [.use])
+
+        // After the rows show the levels, a row that he sets to no access takes the key back from an agent that has it.
+        var rows: [String: SecretGrant] = ["dev-lead": .read, "builder": .use, "writer": .use]
+        rows["builder"] = nil
+        steps = SecretReplaceAccess.changes(now: now, holders: holders, rows: rows, set: ["writer", "builder"])
+        #expect(steps.map(\.agent) == ["builder", "writer"])        // in the order of the agents
+        #expect(steps.map(\.grant) == [nil, .use])                  // nil takes the key back
+
+        // each kind of change of a row that he set: a new level, the same level (no step), a first grant, a take-back
+        let set: [String: SecretGrant] = ["dev-lead": .use, "builder": .use, "writer": .read]
+        let all = SecretReplaceAccess.changes(now: now, holders: holders, rows: set, set: Set(holders))
+        #expect(all.map(\.agent) == ["dev-lead", "writer"])
+        #expect(all.map(\.grant) == [.use, .read])
+        #expect(SecretReplaceAccess.changes(now: now, holders: holders, rows: [:], set: ["tester"]).isEmpty)   // had none, gets none
+        #expect(SecretReplaceAccess.changes(now: now, holders: holders, rows: [:], set: ["dev-lead"]).map(\.grant) == [nil])
+
+        // A row that is not set makes no step, also when the level changed somewhere else since the rows were shown:
+        // here the rows still show "read" for dev-lead, and the list says "use" now.
+        #expect(SecretReplaceAccess.changes(now: ["dev-lead": "use"], holders: holders, rows: ["dev-lead": .read], set: []).isEmpty)
+
+        // a key that no agent holds, and a level that the app does not know, show no access
+        #expect(SecretReplaceAccess.rows(now: nil, holders: holders, set: [:], touched: []).rows.isEmpty)
+        #expect(SecretReplaceAccess.rows(now: ["builder": "owns"], holders: holders, set: [:], touched: []).rows.isEmpty)
+        // the levels of a key that the rows showed before leave a row that he did not set
+        #expect(SecretReplaceAccess.rows(now: [:], holders: holders, set: ["dev-lead": .read, "writer": .use], touched: ["writer"]).rows
+                == ["writer": .use])
+    }
+
+    /// A level that the form raised in a row of his is this key's level, and no pick of his. When the name names
+    /// that key no more, his own pick comes back, so that a new key never gets a level that the form put into a row.
+    @Test func aRaisedLevelLeavesWithTheKeyThatItCameFrom() {
+        let holders = ["dev-lead", "builder", "writer", "tester"]
+        let now = ["dev-lead": "read", "builder": "use", "tester": "read"]
+        // he picked "Uses it" for dev-lead and for builder, and "Reads it" for writer; the request proposes tester
+        let set: [String: SecretGrant] = ["dev-lead": .use, "builder": .use, "writer": .read, "tester": .use, "door": .use]
+        let shown = SecretReplaceAccess.rows(now: now, holders: holders, set: set, touched: ["dev-lead", "builder", "writer"],
+                                             proposed: ["tester", "door"])
+        #expect(shown.rows == ["dev-lead": .read, "builder": .use, "writer": .read, "tester": .read, "door": .use])
+        #expect(shown.raised == ["dev-lead": .use])         // only his own row that shows more than he picked
+        // The name changes to a key that the list does not have: each row is as he and the request set it.
+        var own = SecretReplaceAccess.own(rows: shown.rows, holders: holders, touched: shown.touched, raised: shown.raised,
+                                          proposal: ["tester": .use, "door": .use], proposed: ["tester", "door"])
+        #expect(own == set)
+        // a row that showed only a level of now is empty again, and a row that he set after the levels showed stays
+        let after = SecretReplaceAccess.rows(now: now, holders: holders, set: [:], touched: [])
+        #expect(after.raised.isEmpty)
+        own = SecretReplaceAccess.own(rows: after.rows, holders: holders, touched: [], raised: [:], proposal: [:], proposed: [])
+        #expect(own.isEmpty)
+        own = SecretReplaceAccess.own(rows: ["dev-lead": .use, "builder": .use, "tester": .read], holders: holders, touched: ["dev-lead"],
+                                      raised: [:], proposal: [:], proposed: [])
+        #expect(own == ["dev-lead": .use])
+        // a pick of his that he took back in the row after the levels showed stays taken back
+        own = SecretReplaceAccess.own(rows: ["builder": .use], holders: holders, touched: ["dev-lead"], raised: [:], proposal: [:], proposed: [])
+        #expect(own.isEmpty)
+        // a raised pick of a row that is no longer his (he set it to no access before the next key) does not come back
+        own = SecretReplaceAccess.own(rows: [:], holders: holders, touched: [], raised: ["dev-lead": .use], proposal: [:], proposed: [])
+        #expect(own.isEmpty)
+        // The Save that acts reads the levels again. A row that the form raised gives the agent at most his own pick:
+        // dev-lead read the key when the row was raised to "Reads it", and he picked "Uses it".
+        let touched: Set<String> = ["dev-lead", "builder", "writer"]
+        func steps(_ now: [String: String]) -> [String] {
+            SecretReplaceAccess.changes(now: now, holders: holders, rows: shown.rows, set: touched, proposed: ["tester"], raised: shown.raised)
+                .map { "\($0.agent): \($0.grant?.rawValue ?? "none")" }
+        }
+        #expect(steps(now) == ["writer: read"])                                              // dev-lead keeps "read": no step
+        #expect(steps(["dev-lead": "use", "builder": "use", "tester": "read"]) == ["writer: read"])   // it went down elsewhere: his pick
+        #expect(steps(["builder": "use", "tester": "read"]) == ["dev-lead: use", "writer: read"])     // it lost the key: his pick, not "read"
+        // without the record of his pick, the row's level would go to the agent
+        #expect(SecretReplaceAccess.changes(now: ["builder": "use"], holders: holders, rows: shown.rows, set: touched).first?.grant == .read)
+        // a proposed row that he set to no access is his "no": the proposal does not come back for it
+        own = SecretReplaceAccess.own(rows: [:], holders: holders, touched: [], raised: [:], proposal: ["tester": .use], proposed: [])
+        #expect(own.isEmpty)
+        // The levels of a second key: computed from his own rows, never from the first key's levels.
+        let second = SecretReplaceAccess.rows(now: ["writer": "use"], holders: holders, set: set, touched: ["dev-lead", "builder", "writer"],
+                                              proposed: ["tester", "door"])
+        #expect(second.rows == ["dev-lead": .use, "builder": .use, "writer": .read, "tester": .use, "door": .use])
+        #expect(second.raised.isEmpty)
+    }
+
+    /// A request's card proposes who gets the key. In a replace, a proposal gives an agent the key, or more of it, and
+    /// never takes a level down: an agent that reads the key keeps reading it when the request says "use".
+    @Test func aRequestsProposalNeverTakesALevelDownInAReplace() {
+        let holders = ["dev-lead", "builder", "writer"]
+        let now = ["dev-lead": "read", "builder": "use"]
+        // each agent asks for "use": the one that reads it stays, the one that uses it stays, the one with none gets it
+        let asked: [String: SecretGrant] = ["dev-lead": .use, "builder": .use, "writer": .use, "door": .use]
+        let proposed: Set<String> = ["dev-lead", "builder", "writer", "door"]
+        var shown = SecretReplaceAccess.rows(now: now, holders: holders, set: asked, touched: [], proposed: proposed)
+        #expect(shown.rows == ["dev-lead": .read, "builder": .use, "writer": .use, "door": .use])    // the door's row is no agent's
+        var steps = SecretReplaceAccess.changes(now: now, holders: holders, rows: shown.rows, set: shown.touched, proposed: proposed)
+        #expect(steps.map(\.agent) == ["writer"] && steps.map(\.grant) == [.use])
+        // a proposal of more than the agent has is the request's point: it goes up
+        shown = SecretReplaceAccess.rows(now: now, holders: holders, set: ["builder": .read], touched: [], proposed: ["builder"])
+        steps = SecretReplaceAccess.changes(now: now, holders: holders, rows: shown.rows, set: [], proposed: ["builder"])
+        #expect(shown.rows["builder"] == .read && steps.map(\.grant) == [.read])
+        // The levels are read again at the Save that replaces. An agent whose level went up somewhere else since the
+        // rows were shown keeps it: the proposal's row still says "use", and it takes nothing down.
+        steps = SecretReplaceAccess.changes(now: ["builder": "read"], holders: holders, rows: ["builder": .use], set: [], proposed: ["builder"])
+        #expect(steps.isEmpty)
+        // and a proposal never takes a key back: a proposed row always has a level
+        #expect(SecretReplaceAccess.changes(now: now, holders: holders, rows: [:], set: [], proposed: ["dev-lead"]).isEmpty)
+        // a row of the proposal that the owner changes himself after the levels are shown is his: also down
+        steps = SecretReplaceAccess.changes(now: now, holders: holders, rows: ["dev-lead": .use, "builder": .use], set: ["dev-lead"],
+                                            proposed: ["builder"])
+        #expect(steps.map(\.agent) == ["dev-lead"] && steps.map(\.grant) == [.use])
+        #expect(SecretReplaceAccess.higher(nil, nil) == nil && SecretReplaceAccess.higher(.use, nil) == .use
+                && SecretReplaceAccess.higher(nil, .read) == .read && SecretReplaceAccess.higher(.read, .use) == .read
+                && SecretReplaceAccess.higher(.use, .use) == .use)
+    }
+
+    /// The list takes no second API key of one variable name: Add secret replaces the value of the one that is there,
+    /// cannot choose between two from before, and adds a second login as before.
+    @Test func aNameThatTheListHasIsAKeyToReplaceOrALoginToAddAgain() {
+        let first = "bws://11111111-2222-4333-8444-555555555551", second = "bws://11111111-2222-4333-8444-555555555552"
+        let other = "bws://11111111-2222-4333-8444-555555555553", login = "bws://11111111-2222-4333-8444-555555555554"
+        let key = TeamLogin(title: "EXAMPLE_API_KEY", protected: true, kind: "api_key", env: "EXAMPLE_API_KEY", grants: ["dev-lead": "read"])
+        // a key whose title the owner changed is still known by its variable name
+        let renamed = TeamLogin(title: "Example, the old one", protected: true, kind: "api_key", env: "EXAMPLE_API_KEY")
+        let another = TeamLogin(title: "OTHER_API_KEY", protected: true, kind: "api_key", env: "OTHER_API_KEY")
+        let shop = TeamLogin(title: "shop.example.test · owner", protected: true, kind: "login")
+        let one = [first: key, other: another, login: shop]
+        #expect(SecretNameHeld.of("EXAMPLE_API_KEY", kind: .apiKey, in: one) == .key(first, key))
+        #expect(SecretNameHeld.of("NEW_API_KEY", kind: .apiKey, in: one) == SecretNameHeld.none)
+        #expect(SecretNameHeld.of("EXAMPLE_API_KEY", kind: .apiKey, in: [second: renamed]) == .key(second, renamed))
+        // two of one name, from before the list refused a second one: the form cannot know which
+        #expect(SecretNameHeld.of("EXAMPLE_API_KEY", kind: .apiKey, in: [first: key, second: renamed, other: another]) == .twice)
+        // this form's own save that the hub did not confirm is no other secret
+        #expect(SecretNameHeld.of("EXAMPLE_API_KEY", kind: .apiKey, in: one, but: first) == SecretNameHeld.none)
+        #expect(SecretNameHeld.of("EXAMPLE_API_KEY", kind: .apiKey, in: [first: key, second: renamed], but: first) == .key(second, renamed))
+        // a login with the title of a key is no key, and a key with the title of a login is no second key
+        #expect(SecretNameHeld.of("shop.example.test · owner", kind: .apiKey, in: one) == SecretNameHeld.none)
+        #expect(SecretNameHeld.of("shop.example.test · owner", kind: .login, in: one) == .second)
+        #expect(SecretNameHeld.of("EXAMPLE_API_KEY", kind: .login, in: one) == .second)
+        #expect(SecretNameHeld.of("shop.example.test · owner", kind: .login, in: one, but: login) == SecretNameHeld.none)
+        #expect(SecretNameHeld.of("other.example.test · owner", kind: .login, in: one) == SecretNameHeld.none)
+    }
+
     @Test func aLoginBecomesTheItemValueThatTheVaultsRead() throws {
         let line = try login { $0.totp = " JBSW Y3DP EHPK 3PXP " }.value()
         let item = try #require(try JSONSerialization.jsonObject(with: line) as? [String: String])

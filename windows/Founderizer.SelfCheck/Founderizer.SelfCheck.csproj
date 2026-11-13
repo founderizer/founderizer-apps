@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A small program that runs the shared vectors, published with Native AOT: the proof that the logic library and
+       BouncyCastle work with no JIT and no reflection. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RootNamespace>Founderizer.SelfCheck</RootNamespace>
+    <!-- A proof tool: its one package is the library's, which Founderizer.Core pins with its lock file. A lock file
+         here would change with each machine's AOT compiler package. -->
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+    <!-- The AOT compiler package of a .NET 10 SDK before 10.0.14 carries GHSA-p3jp-9v83-76w9 (a Brotli decoder
+         out-of-bounds write in the runtime). This proof tool is never shipped, so the audit stays a warning here;
+         a build that ships takes a runtime of 10.0.14 or later (README.md, "Before the first release"). -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1903</WarningsNotAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Founderizer.Core/Founderizer.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../vectors/*.json" Link="vectors/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -111,10 +111,11 @@ enum PushRegistration {
     #endif
 
     /// The first time, iOS asks the owner; after that it answers at once. A phone that may not show notifications
-    /// asks Apple for no token, so the hub sends it nothing.
+    /// asks Apple for no token, so the hub sends it nothing. The badge is the number on the app's icon: the Needs you
+    /// tab's count (`MobileStore.showCountOnIcon`), which the hub's pings carry too.
     @MainActor static func ask() async {
         let center = UNUserNotificationCenter.current()
-        guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
+        guard (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) == true else { return }
         UIApplication.shared.registerForRemoteNotifications()
     }
 }

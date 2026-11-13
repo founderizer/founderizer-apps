@@ -525,14 +525,14 @@ private struct CopySettings: View {
                 }
             }
             if keeper.schedule.on {
-                FormRow("Where", symbol: "folder", detail: keeper.folderName) {
+                FormRow("Where", symbol: "folder", detail: keeper.shownFolderName) {
                     HStack(spacing: FleetSpace.actions) {
                         if FleetCopyKeeper.iCloudDrive != nil, !keeper.holdsICloud {
                             Button("Use iCloud Drive") { keeper.useICloud() }
                                 .buttonStyle(FleetOutlineButtonStyle())
                                 .accessibilityIdentifier("copy-icloud")
                         }
-                        Button(keeper.folderName == nil ? "Choose a folder" : "Change\u{2026}") { keeper.choose() }
+                        Button(keeper.shownFolderName == nil ? "Choose a folder" : "Change\u{2026}") { keeper.choose() }
                             .buttonStyle(FleetOutlineButtonStyle())
                             .accessibilityIdentifier("copy-folder")
                     }.fixedSize()

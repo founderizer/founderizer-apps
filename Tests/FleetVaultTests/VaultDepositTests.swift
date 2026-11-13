@@ -37,7 +37,7 @@ extension VaultCallerTests {
         }
     }
 
-    private static func depositReply(payload: String?, put: @escaping (String, String, String) throws -> String = { _, _, _ in "new" })
+    private static func depositReply(payload: String?, put: @escaping (String, String, String, Bool) throws -> String = { _, _, _, _ in "new" })
         async throws -> NSDictionary {
         let request = try VaultRequest(data: JSONSerialization.data(withJSONObject: [
             "v": 2, "op": "deposit", "job": 4, "agent": "studio", "agent_key": depositKey]))
@@ -76,7 +76,8 @@ extension VaultCallerTests {
         let seen = DepositBodies()
         FakeHub.reset(answer: Self.depositAnswers(Self.depositFields(), seen: seen))
         let saved = SavedDeposits()
-        let reply = try await Self.depositReply(payload: #"{"password":"\#(Self.depositValue)","username":""}"#) { id, name, value in
+        let reply = try await Self.depositReply(payload: #"{"password":"\#(Self.depositValue)","username":""}"#) { id, name, value, replace in
+            #expect(!replace)           // the hub's answer said nothing of a replace
             saved.add((id, name, value)); return "new"
         }
         #expect(reply == ["ok": true, "v": 2, "deposit": 4, "login": Self.depositReference.lowercased(), "saved": "new"])
@@ -113,7 +114,7 @@ extension VaultCallerTests {
 
     @Test func aValueThatTheHubDoesNotConfirmIsNeverSaved() async throws {
         let seen = DepositBodies(), saved = SavedDeposits()
-        let put: (String, String, String) throws -> String = { id, name, value in saved.add((id, name, value)); return "new" }
+        let put: (String, String, String, Bool) throws -> String = { id, name, value, _ in saved.add((id, name, value)); return "new" }
         FakeHub.reset(answer: Self.depositAnswers(Self.depositFields(), compares: false, seen: seen))
         #expect(try await Self.depositReply(payload: #"{"password":"\#(Self.depositValue)"}"#, put: put) == Self.depositRefusal(.depositValue))
         // A copy that this vault's key does not open, and one that holds no key, go no further than the vault.
@@ -133,9 +134,31 @@ extension VaultCallerTests {
         #expect(saved.all.isEmpty)
         // The store refuses another value under this reference: the answer says so and nothing changed.
         FakeHub.reset(answer: Self.depositAnswers(Self.depositFields(), seen: seen))
-        #expect(try await Self.depositReply(payload: #"{"password":"\#(Self.depositValue)"}"#) { _, _, _ in throw VaultFailure.storeOther }
+        #expect(try await Self.depositReply(payload: #"{"password":"\#(Self.depositValue)"}"#) { _, _, _, _ in throw VaultFailure.storeOther }
                 == Self.depositRefusal(.storeOther))
-        #expect(try await Self.depositReply(payload: #"{"password":"\#(Self.depositValue)"}"#) { _, _, _ in "same" }["saved"] as? String == "same")
+        #expect(try await Self.depositReply(payload: #"{"password":"\#(Self.depositValue)"}"#) { _, _, _, _ in "same" }["saved"] as? String == "same")
+    }
+
+    /// The owner replaced the value of the reference: the hub says so in its answer for the delivery, never the
+    /// helper in its request, and the store gets that word with the value.
+    @Test func aDeliveryThatTheHubMarksSoReplacesTheDeliveredValue() async throws {
+        let seen = DepositBodies()
+        for (given, expected) in [(Self.depositFields(["replaces": true]), true), (Self.depositFields(), false),
+                                  (Self.depositFields(["replaces": "yes"]), false), (Self.depositFields(["replaces": false]), false)] {
+            FakeHub.reset(answer: Self.depositAnswers(given, seen: seen))
+            let reply = try await Self.depositReply(payload: #"{"password":"\#(Self.depositValue)"}"#) { _, _, _, replace in
+                #expect(replace == expected)
+                return replace ? "replaced" : "new"
+            }
+            #expect(reply["saved"] as? String == (expected ? "replaced" : "new"))
+        }
+        // a value that did not come here by a delivery is not replaced, and the answer says so
+        FakeHub.reset(answer: Self.depositAnswers(Self.depositFields(["replaces": true]), seen: seen))
+        #expect(try await Self.depositReply(payload: #"{"password":"\#(Self.depositValue)"}"#) { _, _, _, _ in throw VaultFailure.storeNotDelivered }
+                == Self.depositRefusal(.storeNotDelivered))
+        let recipient = "age1" + String(repeating: "q", count: 58)
+        #expect(VaultBroker.status(agent: "studio", user: "sam", recipient: recipient, replaces: true)["replaces"] as? Bool == true)
+        #expect(VaultBroker.status(agent: "studio", user: "sam", recipient: recipient)["replaces"] == nil)
     }
 }
 

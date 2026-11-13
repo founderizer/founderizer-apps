@@ -113,6 +113,19 @@ public enum OwnerStatement {
                    "key": .text(key), "at": .number(at)])
     }
 
+    /// The owner puts a new value under a reference that the central vault holds (owner feature `secret_replace`).
+    /// `sha256` is of the sealed copy that this app made (`checksum`), so the statement is about that one copy and no
+    /// other: the vault takes the new value only with it, and the hub that carries both can forge neither.
+    public static func replace(fleet: String, login: String, sha256: String, at: Int) -> String {
+        canonical(["v": .number(1), "kind": .text("replace"), "fleet": .text(fleet), "login": .text(login.lowercased()),
+                   "sha256": .text(sha256), "at": .number(at)])
+    }
+
+    /// The SHA-256 of a sealed copy's text, in lower-case hex: what a replace statement says of its copy.
+    public static func checksum(_ sealed: String) -> String {
+        SHA256.hash(data: Data(sealed.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
     /// The secret is out of the grantable pool again.
     public static func unpool(fleet: String, login: String, at: Int) -> String {
         canonical(["v": .number(1), "kind": .text("unpool"), "fleet": .text(fleet), "login": .text(login.lowercased()),

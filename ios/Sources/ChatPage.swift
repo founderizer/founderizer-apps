@@ -22,6 +22,7 @@ struct ChatPage: View {
     let store: MobileStore
     let agent: String
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.markTeam) private var team
     /// One line of the composer's text, so "+" and Send stand on that line's centre at every text size.
     @ScaledMetric(relativeTo: .body) private var line: CGFloat = 22
@@ -129,7 +130,7 @@ struct ChatPage: View {
                     // frame, and a reply that takes its place draws its last words at the top of the reply's own
                     // place, where the two cross-fade** (`ArrivalFade`; fix round 3d), so no frame shows neither.
                     if let line = waitingLine {
-                        ChatWaitingLine(waiting: line.waiting)
+                        ChatWaitingLine(waiting: line.waiting, agent: agent)
                             // Only its opacity moves: its place follows the conversation in the same frame.
                             .animation(.easeOut(duration: 0.15)) { $0.opacity(line.shows ? 1 : 0) }
                             .accessibilityHidden(!line.shows)
@@ -309,7 +310,9 @@ struct ChatPage: View {
             // the green of work pale mint and the orange yellow in dark, with a grey halo and the glyph's line across
             // it. Over it, the dot is Chats' colour in every mode. Its place is the mark's corner, as on Chats.
             .overlay(alignment: .leading) {
-                if state.hasDot { StatusDot(state: state, size: 8).offset(x: 24, y: 6).allowsHitTesting(false) }
+                if state.hasDot(reduceMotion: reduceMotion) {
+                    StatusDot(state: state, size: 8).offset(x: 24, y: 6).allowsHitTesting(false)
+                }
             }
             .padding(.vertical, 4)
             .contentShape(Rectangle())
@@ -320,10 +323,11 @@ struct ChatPage: View {
         .accessibilityIdentifier("open-agent")
     }
 
-    /// This agent's state, as its row on Chats shows it.
+    /// This agent's state, as its row on Chats shows it: at work also while the line under his last message says
+    /// "Thinking" and moves, so the mark over the chat moves with the line's own.
     private var state: AgentState {
         guard let entry = store.agent(agent), let snapshot = store.snapshot else { return .unknown }
-        return entry.mobileState(in: snapshot, isFresh: store.showsCurrent)
+        return entry.mobileState(in: snapshot, isFresh: store.showsCurrent, thinking: shownLine?.moving == true)
     }
 
     /// **What the answer waits for, as the Mac's chat says it** (`ChatWaiting`, FleetCore; the owner's yes of 28
@@ -352,10 +356,13 @@ struct ChatPage: View {
                 return nil
             }
         } else {
-            pending = Self.pending(in: items, turnEndedAfter: entry.turn_ended_after)
+            // a word of the agent with no link does not end the wait of a message that the hub calls late
+            pending = Self.pending(in: items, turnEndedAfter: entry.turn_ended_after).late(entry.chat_undelivered)
         }
         guard let line = ChatWaiting.of(agent: agent, pending: pending, sending: false, limit: entry.limit,
-                                        offline: !entry.helperIsRecent(serverTime: snapshot.time),
+                                        // also when its server answers and his message does not arrive
+                                        offline: !entry.helperIsRecent(serverTime: snapshot.time)
+                                            || entry.chat_undelivered == true,
                                         until: { comingTime($0, now: store.hubNow) }) else { return nil }
         return (line, shows)
     }
@@ -642,7 +649,7 @@ struct ChatPage: View {
             // second.
             if let line, let first = run.items.first, let since = arrived[first.id] {
                 ArrivalFade(since: since) { shown in
-                    ChatWaitingLine(waiting: line, still: true).opacity(1 - shown)
+                    ChatWaitingLine(waiting: line, agent: agent, still: true).opacity(1 - shown)
                 }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
@@ -964,15 +971,28 @@ struct ArrivalFade<Content: View>: View {
 /// across it, the motion his own projects use for a wait ("remove that circle, I liked the Thinking text animation");
 /// while something that is not the agent's work holds it, the two words stand still in orange beside a clock. Under
 /// Reduce Motion and at the accessibility text sizes the words stand still. A change of words slides for 150 ms.
+///
+/// **The agent's own mark stands before "Thinking" and moves as it does at work** (the owner, 13 November 2026, of the
+/// Mac's chat: "On the conversation itself, the Thinking label should have the agent icon animating too", and of the
+/// phone: "Yes, iPhone too"): with no dot, at rest with Reduce Motion and in the line's last frames under a reply. A
+/// wait that is not the agent's work keeps its orange mark and no agent's mark.
 struct ChatWaitingLine: View {
     let waiting: ChatWaiting
+    /// The agent whose answer the chat waits for, or nil for the words alone.
+    var agent: String?
     /// The words without their band of light, as the line's last frames under a reply that takes its place.
     var still = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// The mark's side beside the line's words: 18 points at the ordinary text size, and it grows with them by half.
+    @ScaledMetric(relativeTo: .subheadline) private var scale: CGFloat = 1
+    private var markSide: CGFloat { 18 * min(scale, 1.5) }
 
     var body: some View {
         HStack(spacing: 6) {
+            if waiting.moving, let agent {
+                AgentMark(name: agent, state: still ? .online : .working, size: markSide, moves: !still)
+            }
             if waiting.moving && !still && !reduceMotion && !typeSize.isAccessibilitySize {
                 ShimmeringWords(text: waiting.says, style: .subheadline)
             } else {

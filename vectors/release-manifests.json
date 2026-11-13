@@ -1,0 +1,346 @@
+{
+  "about": "Ed25519 release manifests: a fleet release (releases.signed_text, founderizer-release-1) and a build of the app (autopublish.app_text = AppUpdate.signedText, founderizer-app-1), signed by releases.sign with a test key. The keys file is read as releases.parse_keys reads it.",
+  "made_by": "app/vectors/make_vectors.py",
+  "public_key": "xueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCSM=",
+  "other_public_key": "x80/CXCjOrUmvKNkig/FnDRM0ou+8MVFCDaVubgYF5w=",
+  "keys_text": "# the release key of the vectors\nxueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCSM=\n",
+  "keys_text_refused": [
+    "# no key\n",
+    "xueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCSM=\nxueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCQ==\n",
+    "xueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCSM=\nxueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCSM=\nxueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCSM=\nxueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCSM=\nxueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCSM=\n",
+    "xueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCSM\n"
+  ],
+  "fleet": {
+    "manifest": {
+      "revision": "06eab98a6a1f7da3cf40c361dee877b2548135cd",
+      "version": "2026.11.400",
+      "notes": "https://example.com/releases/2026.11.400",
+      "minimum": null,
+      "hold": false,
+      "signature": "mZp+esL0FW/SlWh9VRaE7PwC8fbJMk3u55gY59DlU/j3J3tyHpgPVB7rjbD6j1q2lierlG0qzKGfkQhc+ES0BA=="
+    },
+    "signed_text": "founderizer-release-1\n06eab98a6a1f7da3cf40c361dee877b2548135cd\n2026.11.400\nhttps://example.com/releases/2026.11.400\n\nfalse\n",
+    "refused": [
+      {
+        "name": "a later version under the same signature",
+        "manifest": {
+          "revision": "06eab98a6a1f7da3cf40c361dee877b2548135cd",
+          "version": "2026.11.401",
+          "notes": "https://example.com/releases/2026.11.400",
+          "minimum": null,
+          "hold": false,
+          "signature": "mZp+esL0FW/SlWh9VRaE7PwC8fbJMk3u55gY59DlU/j3J3tyHpgPVB7rjbD6j1q2lierlG0qzKGfkQhc+ES0BA=="
+        }
+      },
+      {
+        "name": "the hold taken out",
+        "manifest": {
+          "revision": "06eab98a6a1f7da3cf40c361dee877b2548135cd",
+          "version": "2026.11.400",
+          "notes": "https://example.com/releases/2026.11.400",
+          "minimum": null,
+          "hold": true,
+          "signature": "mZp+esL0FW/SlWh9VRaE7PwC8fbJMk3u55gY59DlU/j3J3tyHpgPVB7rjbD6j1q2lierlG0qzKGfkQhc+ES0BA=="
+        }
+      },
+      {
+        "name": "a short revision",
+        "manifest": {
+          "revision": "06eab98a6a1f",
+          "version": "2026.11.400",
+          "notes": "https://example.com/releases/2026.11.400",
+          "minimum": null,
+          "hold": false,
+          "signature": "mZp+esL0FW/SlWh9VRaE7PwC8fbJMk3u55gY59DlU/j3J3tyHpgPVB7rjbD6j1q2lierlG0qzKGfkQhc+ES0BA=="
+        }
+      }
+    ]
+  },
+  "app": {
+    "channel": "https://releases.example.com",
+    "manifest": {
+      "version": "0.1.200",
+      "build": 201,
+      "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+      "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+      "size": 12345678,
+      "minimum": "15.0",
+      "notes": "https://releases.example.com/notes/0.1.200",
+      "hold": false,
+      "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+    },
+    "signed_text": "founderizer-app-1\n0.1.200\n201\nhttps://releases.example.com/app/Founderizer-0.1.200.zip\n274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a\n12345678\n15.0\nhttps://releases.example.com/notes/0.1.200\nfalse\n",
+    "refused": [
+      {
+        "name": "a later build under the same signature",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 202,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "the hold taken out",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": true,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "another download under the same signature",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "no notes under a signature of the notes",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "the fleet release's signature",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "mZp+esL0FW/SlWh9VRaE7PwC8fbJMk3u55gY59DlU/j3J3tyHpgPVB7rjbD6j1q2lierlG0qzKGfkQhc+ES0BA=="
+        }
+      },
+      {
+        "name": "a signature by a key that the app does not trust",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "DwhrQ5BCRBADQlgfO4KcudrkoNc9JCDZXeziORmVERcpqcKb2fs3k0u8YThN0eSzvrtGNnY63T++VypIKeeLAg=="
+        }
+      },
+      {
+        "name": "a download on another host",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://example.net/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "a download over HTTP",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "http://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "a download that is no zip",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.dmg",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "a build number as text",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.1.200",
+          "build": "201",
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "a build number with a fraction",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201.5,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "a version with a newline",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.1.200\n201",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "a checksum in capitals",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274DAB015B71009D71BF99C47220499526A3974988B74CDBAAD56F110ED5B00A",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "a hold that is not true or false",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": "false",
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "no signature",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false
+        }
+      },
+      {
+        "name": "notes on another host",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 12345678,
+          "minimum": "15.0",
+          "notes": "https://example.net/notes",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "a size of zero",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.1.200",
+          "build": 201,
+          "url": "https://releases.example.com/app/Founderizer-0.1.200.zip",
+          "sha256": "274dab015b71009d71bf99c47220499526a3974988b74cdbaad56f110ed5b00a",
+          "size": 0,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/0.1.200",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      }
+    ]
+  },
+  "message_hex": "666f756e646572697a657220766563746f72733a20616e79206d657373616765",
+  "message_signature": "8wCaLgTMvGAUU0g5bigLptkwQrSFO6/f8xDmTIlUZONBsrrxZC/M3QNkhr7cYByJ452r91ZQcQeD9htky1MFAQ==",
+  "loose": [
+    {
+      "name": "the identity as the key",
+      "public_key": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "signature": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "message_hex": "666f756e646572697a657220766563746f72733a20616e79206d657373616765"
+    },
+    {
+      "name": "S + L",
+      "public_key": "xueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCSM=",
+      "signature": "8wCaLgTMvGAUU0g5bigLptkwQrSFO6/f8xDmTIlUZOMuhrBOf5LeNdoAfmG7Wvud452r91ZQcQeD9htky1MFEQ==",
+      "message_hex": "666f756e646572697a657220766563746f72733a20616e79206d657373616765"
+    }
+  ]
+}

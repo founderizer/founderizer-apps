@@ -138,6 +138,108 @@ public struct TeamLogin: Decodable, Equatable, Sendable {
     public var name: String { isAPIKey ? env ?? title : title }
 }
 
+/// **What the hub's catalog has under the name of a secret that Add secret saves.** An API key is known by its
+/// variable name, among the API keys only: the list takes no second key of one name (the owner, 13 November 2026:
+/// "having 2 keys named the same should not be possible"), so the one that is there is the key whose value the save
+/// replaces. A login is known by its title, among all entries, and can stand two times, as before.
+public enum SecretNameHeld: Equatable, Sendable {
+    /// Nothing of that name: a new secret.
+    case none
+    /// One API key of that variable name: the save replaces its value, under its own reference.
+    case key(String, TeamLogin)
+    /// Two or more API keys of that name, from before the list refused a second one: the form cannot know which.
+    case twice
+    /// A login, and the list has that title: a second one, as before.
+    case second
+
+    /// `but`: the reference of the form's own save that the hub did not confirm, which is no other secret.
+    public static func of(_ title: String, kind: LoginSecret.Kind, in catalog: [String: TeamLogin], but: String? = nil) -> SecretNameHeld {
+        if kind == .apiKey {
+            let keys = catalog.filter { $0.value.isAPIKey && $0.value.name == title && $0.key != but }.sorted { $0.key < $1.key }
+            return keys.isEmpty ? .none : keys.count == 1 ? .key(keys[0].key, keys[0].value) : .twice
+        }
+        return catalog.contains { $0.value.name == title && $0.key != but } ? .second : .none
+    }
+}
+
+/// **"Who can use it" when Add secret replaces the value of a key.** The key has its agents already, so the rows show
+/// each agent's level of now, and a level that the owner does not touch stays as it is: only a row that he set himself,
+/// or that a request proposes, makes a step. A row that he sets to no access takes the key back from that agent, as on
+/// the key's own page. (The coordinator's follow-up of 13 November 2026: the rows said "No access" for an agent that
+/// had the key.)
+public enum SecretReplaceAccess {
+    /// A level of the catalog's grants (`"use"`, `"read"`), or nil for none and for a word that the app does not know.
+    static func level(_ text: String?) -> SecretGrant? { text.flatMap(SecretGrant.init(rawValue:)) }
+
+    /// The higher of two levels: reads it is more than uses it, and each is more than none.
+    static func higher(_ one: SecretGrant?, _ other: SecretGrant?) -> SecretGrant? {
+        one == .read || other == .read ? .read : one ?? other
+    }
+
+    /// The rows of the form at the Save that shows the orange line, and the agents whose row counts as set by the
+    /// owner from then on.
+    ///
+    /// - What was set before the levels were shown never takes a level down: each row said "No access" then, also
+    ///   for an agent that had the key, so nothing that was set then was a choice against a level of now. A row that
+    ///   he set himself to a level (`touched`), and a row that a request proposes (`proposed`), show the higher of
+    ///   that level and the level of now. A row that he set to no access then does not count as set.
+    /// - He takes a key back, or a level down, in a row that shows the level of now: such a change stays as he made
+    ///   it (`changes`).
+    /// - Each other agent of `holders` shows its level of now (`now`: the catalog entry's grants), or none.
+    /// - A row of `set` that is no holder's (the door's, in a request) stays as it is.
+    ///
+    /// `raised` has his own pick for each row of his that shows a higher level than he picked. That higher level is
+    /// this key's, and no pick of his: when the name names this key no more, his pick comes back (`own`), so that a
+    /// new key never gets a level that the form put into a row.
+    public static func rows(now: [String: String]?, holders: [String], set: [String: SecretGrant], touched: Set<String>,
+                            proposed: Set<String> = [])
+        -> (rows: [String: SecretGrant], touched: Set<String>, raised: [String: SecretGrant]) {
+        var rows = set, raised: [String: SecretGrant] = [:]
+        let kept = touched.filter { set[$0] != nil }
+        for agent in holders {
+            let held = level(now?[agent])
+            rows[agent] = kept.contains(agent) || proposed.contains(agent) ? higher(set[agent], held) : held
+            if kept.contains(agent), let pick = set[agent], rows[agent] != pick { raised[agent] = pick }
+        }
+        return (rows, kept, raised)
+    }
+
+    /// The rows as the owner and the request set them, when the name is no longer the key's whose levels the rows
+    /// show: a row that he set is his pick again where the form had raised it (`raised`) and stays as it is
+    /// otherwise, a row that the request proposes is its proposal again (`proposal`), and each other agent's row is
+    /// empty. A row that is no holder's stays as it is.
+    public static func own(rows: [String: SecretGrant], holders: [String], touched: Set<String>, raised: [String: SecretGrant],
+                           proposal: [String: SecretGrant], proposed: Set<String>) -> [String: SecretGrant] {
+        var own = rows
+        for agent in holders {
+            if touched.contains(agent) {
+                if let pick = raised[agent] { own[agent] = pick }
+            } else {
+                own[agent] = proposed.contains(agent) ? proposal[agent] : nil
+            }
+        }
+        return own
+    }
+
+    /// The steps of the Save that replaces: one for each agent of `holders` whose row is set (by the owner, `set`, or
+    /// by a request's proposal, `proposed`) to another level than its level of now, in the order of `holders`.
+    /// `grant` nil takes the key back. A row that is not set makes no step, also when the agent's level changed
+    /// somewhere else since the rows were shown. A proposal still takes no level down here: `now` is read again at
+    /// this Save, and an agent whose level went up meanwhile keeps it. A row of his that the form raised (`raised`:
+    /// his own pick) gives the agent at most what he picked: the higher level in the row was the agent's own, and
+    /// when the agent has it no more at this Save, the row's level is nobody's choice.
+    public static func changes(now: [String: String]?, holders: [String], rows: [String: SecretGrant], set: Set<String>,
+                               proposed: Set<String> = [], raised: [String: SecretGrant] = [:]) -> [(agent: String, grant: SecretGrant?)] {
+        holders.compactMap { agent in
+            let held = level(now?[agent])
+            if set.contains(agent), raised[agent] == nil { return rows[agent] == held ? nil : (agent, rows[agent]) }
+            guard set.contains(agent) || proposed.contains(agent) else { return nil }
+            let wanted = higher(raised[agent] ?? rows[agent], held)
+            return wanted == held ? nil : (agent, wanted)
+        }
+    }
+}
+
 extension LoginSecret {
     /// The most titles that the hub's catalog holds.
     public static let maxCatalog = 256

@@ -67,6 +67,8 @@ struct AddServerView: View {
     @State private var copied = false
     /// The hub did not offer the new server for its first agent, so the row with Add agent stands.
     @State private var firstAgentWaits = false
+    /// Add server fills the window (`FleetStore.fillsWindow`): its × closes it, so its first page has no Back.
+    @Environment(\.fillsWindow) private var fillsWindow
     private var time: Double { store.state?.time ?? Date().timeIntervalSince1970 }
     private var taken: [String] { list?.servers.map(\.name) ?? [] }
     private var join: JoinState? { code?.state(in: list) }
@@ -100,6 +102,8 @@ struct AddServerView: View {
             }
         }
         .onAppear { opened() }
+        // Its first page, also of the manager's setup: where it has no Back, Esc closes the wizard that fills the window.
+        .preference(key: SetupFirstPage.self, value: page == .ways)
         .task(id: "\(store.hub)/\(store.state?.db ?? "")") { await poll() }
         // The install of a VPS that its provider made starts by itself once the server joined: also on this page opened
         // again during the build, which was not the page that pressed.
@@ -221,14 +225,19 @@ struct AddServerView: View {
         }
     }
 
-    /// One step back, as the first run's wizard has it, and out of the wizard from its first page: at the page's top
-    /// left, where every setup page has it, and Esc too. An install that runs has no way back: it is the page, and
-    /// it keeps going whether this screen shows or not. So has a VPS that its provider makes, which is the install's
-    /// first steps: a Back there would leave the server at the provider and not in the fleet.
+    /// One step back, as the first run's wizard has it, and out of the wizard from its first page where the wizard does
+    /// not fill the window (there its × closes it): at the page's top left, where every setup page has it, and Esc too.
+    /// An install that runs has no way back: it is the page, and it keeps going whether this screen shows or not. So
+    /// has a VPS that its provider makes, which is the install's first steps: a Back there would leave the server at the
+    /// provider and not in the fleet.
     @ViewBuilder private var back: some View {
         if page == .ways {
-            // An agent's setup starts here, so its first page has nothing to go back to.
-            if placing == nil {
+            // An agent's setup starts here, so its first page has nothing to go back to; nor has Add server when it
+            // fills the window, whose × closes it (`SetupClose`), unless Add agent's New server opened it.
+            if placing == nil, store.history.back.last == .addAgent {
+                SetupBack { store.destination = .addAgent }.keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("add-server-back")
+            } else if placing == nil, !fillsWindow {
                 SetupBack { store.destination = .settings(.servers) }.keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("add-server-back")
             }
@@ -568,16 +577,28 @@ struct AddServerView: View {
     /// Add agent pressed for the owner, as soon as the hub offers the new server: its first reading comes some seconds
     /// after its join. A count ends the wait, and the row with Add agent is the way on then.
     private func addFirstAgent() async {
-        guard let ai = model.ai, let server = installed, let database = store.state?.db else { return firstAgentWaits = true }
+        guard let ai = model.ai, let server = installed, let database = store.state?.db else { return firstAgentGivenUp() }
         for _ in 0..<40 where !Task.isCancelled {
             if let read = try? await HubClient().servers(hub: store.hub, database: database),
                read.servers.first(where: { $0.name == server })?.available == true {
-                if !(await addFirstAgent(server, ai.runtime)) { firstAgentWaits = true }
+                if await addFirstAgent(server, ai.runtime) {
+                    // Its first agent is added: the next Add server is a new server, not this one's page again
+                    // (`opened`), where this task would add one more agent to it.
+                    model.ai = nil
+                } else if !Task.isCancelled { firstAgentGivenUp() }
                 return
             }
             try? await Task.sleep(for: .seconds(3))
         }
-        if !Task.isCancelled { firstAgentWaits = true }
+        if !Task.isCancelled { firstAgentGivenUp() }
+    }
+
+    /// The row with Add agent is the way on, and the AI choice goes with this server: the next Add server is a new
+    /// server, not this one's page again, where its task would add one more agent once the owner added one himself. A
+    /// wait that he only left (its task cancelled) keeps the choice, and goes on when Add server opens again.
+    private func firstAgentGivenUp() {
+        firstAgentWaits = true
+        model.ai = nil
     }
 
     /// **The server that joined goes on to the agent's setup by itself**, as soon as the hub offers it: its first

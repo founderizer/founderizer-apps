@@ -163,6 +163,65 @@ struct CentralVaultPlanTests {
         #expect(VaultPlan.of(behind, facts: Self.mine(pin: Self.serverKey)).step == .takeOver)
     }
 
+    /// The hub keeps a fresh pin of each trusted server (`hub.py` `handover_key` needs one), so its pin is signed again
+    /// once the hub's kept one is `pinRefresh` old or missing, from a hub that says when it was signed; an older hub's
+    /// silence starts nothing, and after a success the next re-sign of that server waits a day.
+    @Test func aTrustedServersPinIsSignedAgainWhenTheHubsKeptPinIsOld() throws {
+        func reading(_ kept: String?) throws -> VaultReading {
+            let field = kept.map { ", \"kept_pin_at\": " + $0 } ?? ""
+            let json = """
+                {"db": "gen-1", "fleet": "0f1e2d3c4b5a6978", "central": {"ok": true, "recipient": "\(Self.vaultKey)",
+                 "fleet": "0f1e2d3c4b5a6978", "owner_keys": 1, "pins": {}, "recovery": "\(Self.vaultKey)", "items": 0,
+                 "source": null}, "program": null, "read_at": null, "error": null, "held": {}, "machines": [
+                  {"machine": "vps", "carrier": "vps", "broker_recipient": "\(Self.serverKey)", "pinned": "\(Self.serverKey)",
+                   "matches": true, "missing": []\(field)}]}
+                """
+            return try JSONDecoder().decode(VaultReading.self, from: Data(json.utf8))
+        }
+        let day = 86400.0, fresh = Int(Self.now - 6 * day), old = Int(Self.now - 8 * day)
+        #expect(VaultPlan.of(try reading(nil), facts: Self.mine()).step == .nothing)            // an older hub says nothing
+        #expect(VaultPlan.of(try reading(String(fresh)), facts: Self.mine()).step == .nothing)
+        #expect(VaultPlan.of(try reading(String(old)), facts: Self.mine()).step == .trust(["vps"]))
+        #expect(VaultPlan.of(try reading("null"), facts: Self.mine()).step == .trust(["vps"]))  // the hub keeps none
+        var signed = Self.mine()
+        signed.signedAt = ["vps": Self.now - 60]                                                // on its way to the hub
+        #expect(VaultPlan.of(try reading("null"), facts: signed).step == .nothing)
+        signed.signedAt = ["vps": Self.now - VaultTries.wait - 1]                                // a day, not ten minutes
+        #expect(VaultPlan.of(try reading("null"), facts: signed).step == .nothing)
+        signed.signedAt = ["vps": Self.now - VaultPlan.resignWait - 1]
+        #expect(VaultPlan.of(try reading("null"), facts: signed).step == .trust(["vps"]))
+        #expect(try reading(String(old)).machines[0].kept_pin_at == old)
+        #expect(try reading(nil).machines[0].keptPinKnown == false)
+        #expect(try reading("null").machines[0].keptPinKnown && reading("null").machines[0].kept_pin_at == nil)
+        #expect(VaultPlan.pinRefresh == 7 * day)
+    }
+
+    /// A re-sign never gives up: after its sixth failure in a row its server row shows (the row that exists for a server
+    /// the automatic trust gave up on), and it is tried again each hour. A server's first trust keeps today's rule.
+    @Test func aReSignThatGaveUpShowsItsRowAndGoesOnEachHour() throws {
+        let reason = "Founderizer could not read its vault key on vps."
+        let kept = try JSONDecoder().decode(VaultReading.self, from: Data("""
+            {"db": "gen-1", "fleet": "0f1e2d3c4b5a6978", "central": {"ok": true, "recipient": "\(Self.vaultKey)",
+             "fleet": "0f1e2d3c4b5a6978", "owner_keys": 1, "pins": {}, "recovery": "\(Self.vaultKey)", "items": 0,
+             "source": null}, "program": null, "read_at": null, "error": null, "held": {}, "machines": [
+              {"machine": "vps", "carrier": "vps", "broker_recipient": "\(Self.serverKey)", "pinned": "\(Self.serverKey)",
+               "matches": true, "missing": [], "kept_pin_at": null}]}
+            """.utf8))
+        var facts = Self.mine()
+        facts.servers = ["vps": Self.gaveUp(reason)]                                            // its sixth failure, a minute ago
+        let now = VaultPlan.of(kept, facts: facts)
+        #expect(now.step == .nothing && now.servers == [VaultServerNeed(machine: "vps", reason: reason)])
+        facts.servers = ["vps": Self.gaveUp(reason, since: VaultPlan.retryEvery + 60)]          // an hour later
+        let later = VaultPlan.of(kept, facts: facts)
+        #expect(later.step == .trust(["vps"]) && later.servers.map(\.machine) == ["vps"])
+        // The first trust of a server that is not pinned yet keeps its rule of today: six tries, then the owner's Retry.
+        var first = Self.mine()
+        first.servers = ["newbox": Self.gaveUp(reason, since: VaultPlan.retryEvery + 60)]
+        let plan = VaultPlan.of(try Self.reading(central: Self.vaultKey, recovery: true), facts: first)
+        #expect(plan.step == .trust(["worker4"]))
+        #expect(plan.servers.map(\.machine) == ["newbox"])
+    }
+
     @Test func triesCountInARow() {
         let first = VaultTries.failed(after: nil, at: 100, reason: "a")
         #expect(first.failures == 1 && !first.givenUp && !first.isDue(at: 699) && first.isDue(at: 700))

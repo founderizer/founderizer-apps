@@ -1,0 +1,1735 @@
+{
+  "about" : "An agent's mark as FleetMark gives it (Sources/FleetMark/AgentMark.swift): GlyphLook of each name and of each team, and each shape's motion, inner-mark anchor, outline and inner mark as SVG path data in a square of 100. Colours are sRGB from 0 to 1. The gradient runs from light at the top left to deep at the bottom right; the inner mark is white at core_opacity, and the moon's is its light colour.",
+  "core_opacity" : 0.38,
+  "kinds" : [
+    "sparkle",
+    "clover",
+    "flower",
+    "burst",
+    "squircle",
+    "hexagon",
+    "diamond",
+    "triangle",
+    "circle",
+    "moon",
+    "drop"
+  ],
+  "made_by" : "app/Tests/FleetMarkTests/MarkVectorsTests.swift",
+  "names" : [
+    {
+      "deep" : [
+        0.5,
+        0.74,
+        0.17
+      ],
+      "kind" : "sparkle",
+      "light" : [
+        0.79,
+        0.92,
+        0.44
+      ],
+      "name" : "manager",
+      "next" : [
+        {
+          "kind" : "clover",
+          "name" : "manager",
+          "phase" : 1.293,
+          "tone" : 3
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "manager",
+          "phase" : 2.858,
+          "tone" : 8
+        },
+        {
+          "kind" : "moon",
+          "name" : "manager",
+          "phase" : 4.423,
+          "tone" : 4
+        }
+      ],
+      "phase" : 4.715,
+      "tone" : 2
+    },
+    {
+      "deep" : [
+        0.94,
+        0.34,
+        0.28
+      ],
+      "kind" : "flower",
+      "light" : [
+        1,
+        0.62,
+        0.54
+      ],
+      "name" : "wren",
+      "next" : [
+        {
+          "kind" : "circle",
+          "name" : "wren",
+          "phase" : 1.72,
+          "tone" : 2
+        },
+        {
+          "kind" : "moon",
+          "name" : "wren",
+          "phase" : 0.132,
+          "tone" : 8
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "wren",
+          "phase" : 4.85,
+          "tone" : 3
+        }
+      ],
+      "phase" : 0.017,
+      "tone" : 0
+    },
+    {
+      "deep" : [
+        0.12,
+        0.71,
+        0.53
+      ],
+      "kind" : "drop",
+      "light" : [
+        0.47,
+        0.92,
+        0.76
+      ],
+      "name" : "theo",
+      "next" : [
+        {
+          "kind" : "moon",
+          "name" : "theo",
+          "phase" : 3.448,
+          "tone" : 7
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "theo",
+          "phase" : 1.883,
+          "tone" : 2
+        },
+        {
+          "kind" : "clover",
+          "name" : "theo",
+          "phase" : 0.318,
+          "tone" : 6
+        }
+      ],
+      "phase" : 4.364,
+      "tone" : 3
+    },
+    {
+      "deep" : [
+        0.11,
+        0.62,
+        0.83
+      ],
+      "kind" : "circle",
+      "light" : [
+        0.49,
+        0.86,
+        0.97
+      ],
+      "name" : "pax",
+      "next" : [
+        {
+          "kind" : "burst",
+          "name" : "pax",
+          "phase" : 5.139,
+          "tone" : 7
+        },
+        {
+          "kind" : "flower",
+          "name" : "pax",
+          "phase" : 0.444,
+          "tone" : 1
+        },
+        {
+          "kind" : "diamond",
+          "name" : "pax",
+          "phase" : 2.009,
+          "tone" : 6
+        }
+      ],
+      "phase" : 3.189,
+      "tone" : 4
+    },
+    {
+      "deep" : [
+        0.94,
+        0.34,
+        0.28
+      ],
+      "kind" : "sparkle",
+      "light" : [
+        1,
+        0.62,
+        0.54
+      ],
+      "name" : "orla",
+      "next" : [
+        {
+          "kind" : "sparkle",
+          "name" : "orla",
+          "phase" : 3.735,
+          "tone" : 5
+        },
+        {
+          "kind" : "clover",
+          "name" : "orla",
+          "phase" : 2.147,
+          "tone" : 2
+        },
+        {
+          "kind" : "circle",
+          "name" : "orla",
+          "phase" : 0.582,
+          "tone" : 6
+        }
+      ],
+      "phase" : 4.388,
+      "tone" : 0
+    },
+    {
+      "deep" : [
+        0.94,
+        0.34,
+        0.28
+      ],
+      "kind" : "clover",
+      "light" : [
+        1,
+        0.62,
+        0.54
+      ],
+      "name" : "vps",
+      "next" : [
+        {
+          "kind" : "clover",
+          "name" : "vps",
+          "phase" : 0.107,
+          "tone" : 0
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "vps",
+          "phase" : 1.672,
+          "tone" : 5
+        },
+        {
+          "kind" : "moon",
+          "name" : "vps",
+          "phase" : 3.237,
+          "tone" : 1
+        }
+      ],
+      "phase" : 5.776,
+      "tone" : 0
+    },
+    {
+      "deep" : [
+        0.08,
+        0.44,
+        0.72
+      ],
+      "kind" : "moon",
+      "light" : [
+        0.56,
+        0.71,
+        0.99
+      ],
+      "name" : "studio",
+      "next" : [
+        {
+          "kind" : "hexagon",
+          "name" : "studio",
+          "phase" : 4.766,
+          "tone" : 6
+        },
+        {
+          "kind" : "diamond",
+          "name" : "studio",
+          "phase" : 3.178,
+          "tone" : 3
+        },
+        {
+          "kind" : "flower",
+          "name" : "studio",
+          "phase" : 1.613,
+          "tone" : 7
+        }
+      ],
+      "phase" : 6.249,
+      "tone" : 5
+    },
+    {
+      "deep" : [
+        0.88,
+        0.27,
+        0.6
+      ],
+      "kind" : "diamond",
+      "light" : [
+        0.98,
+        0.6,
+        0.81
+      ],
+      "name" : "mini",
+      "next" : [
+        {
+          "kind" : "triangle",
+          "name" : "mini",
+          "phase" : 5.87,
+          "tone" : 0
+        },
+        {
+          "kind" : "diamond",
+          "name" : "mini",
+          "phase" : 1.175,
+          "tone" : 3
+        },
+        {
+          "kind" : "drop",
+          "name" : "mini",
+          "phase" : 2.74,
+          "tone" : 8
+        }
+      ],
+      "phase" : 0.45,
+      "tone" : 8
+    },
+    {
+      "deep" : [
+        0.88,
+        0.27,
+        0.6
+      ],
+      "kind" : "diamond",
+      "light" : [
+        0.98,
+        0.6,
+        0.81
+      ],
+      "name" : "scout",
+      "next" : [
+        {
+          "kind" : "sparkle",
+          "name" : "scout",
+          "phase" : 4.648,
+          "tone" : 2
+        },
+        {
+          "kind" : "triangle",
+          "name" : "scout",
+          "phase" : 3.083,
+          "tone" : 6
+        },
+        {
+          "kind" : "burst",
+          "name" : "scout",
+          "phase" : 1.518,
+          "tone" : 1
+        }
+      ],
+      "phase" : 1.067,
+      "tone" : 8
+    },
+    {
+      "deep" : [
+        0.68,
+        0.45,
+        0.22
+      ],
+      "kind" : "sparkle",
+      "light" : [
+        0.9,
+        0.76,
+        0.58
+      ],
+      "name" : "dev-lead",
+      "next" : [
+        {
+          "kind" : "squircle",
+          "name" : "dev-lead",
+          "phase" : 3.771,
+          "tone" : 1
+        },
+        {
+          "kind" : "sparkle",
+          "name" : "dev-lead",
+          "phase" : 2.206,
+          "tone" : 5
+        },
+        {
+          "kind" : "triangle",
+          "name" : "dev-lead",
+          "phase" : 0.641,
+          "tone" : 0
+        }
+      ],
+      "phase" : 2.531,
+      "tone" : 6
+    },
+    {
+      "deep" : [
+        0.88,
+        0.27,
+        0.6
+      ],
+      "kind" : "squircle",
+      "light" : [
+        0.98,
+        0.6,
+        0.81
+      ],
+      "name" : "web_dev",
+      "next" : [
+        {
+          "kind" : "triangle",
+          "name" : "web_dev",
+          "phase" : 4.07,
+          "tone" : 2
+        },
+        {
+          "kind" : "burst",
+          "name" : "web_dev",
+          "phase" : 2.505,
+          "tone" : 6
+        },
+        {
+          "kind" : "drop",
+          "name" : "web_dev",
+          "phase" : 0.94,
+          "tone" : 1
+        }
+      ],
+      "phase" : 3.901,
+      "tone" : 8
+    },
+    {
+      "deep" : [
+        0.08,
+        0.44,
+        0.72
+      ],
+      "kind" : "burst",
+      "light" : [
+        0.56,
+        0.71,
+        0.99
+      ],
+      "name" : "worker-1",
+      "next" : [
+        {
+          "kind" : "drop",
+          "name" : "worker-1",
+          "phase" : 1.173,
+          "tone" : 5
+        },
+        {
+          "kind" : "diamond",
+          "name" : "worker-1",
+          "phase" : 5.891,
+          "tone" : 0
+        },
+        {
+          "kind" : "flower",
+          "name" : "worker-1",
+          "phase" : 4.326,
+          "tone" : 4
+        }
+      ],
+      "phase" : 0.403,
+      "tone" : 5
+    },
+    {
+      "deep" : [
+        0.94,
+        0.34,
+        0.28
+      ],
+      "kind" : "drop",
+      "light" : [
+        1,
+        0.62,
+        0.54
+      ],
+      "name" : "worker-2",
+      "next" : [
+        {
+          "kind" : "circle",
+          "name" : "worker-2",
+          "phase" : 2.997,
+          "tone" : 4
+        },
+        {
+          "kind" : "clover",
+          "name" : "worker-2",
+          "phase" : 4.562,
+          "tone" : 0
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "worker-2",
+          "phase" : 6.127,
+          "tone" : 5
+        }
+      ],
+      "phase" : 5.121,
+      "tone" : 0
+    },
+    {
+      "deep" : [
+        0.5,
+        0.74,
+        0.17
+      ],
+      "kind" : "circle",
+      "light" : [
+        0.79,
+        0.92,
+        0.44
+      ],
+      "name" : "support",
+      "next" : [
+        {
+          "kind" : "hexagon",
+          "name" : "support",
+          "phase" : 5.464,
+          "tone" : 0
+        },
+        {
+          "kind" : "moon",
+          "name" : "support",
+          "phase" : 0.746,
+          "tone" : 5
+        },
+        {
+          "kind" : "flower",
+          "name" : "support",
+          "phase" : 2.311,
+          "tone" : 1
+        }
+      ],
+      "phase" : 1.517,
+      "tone" : 2
+    },
+    {
+      "deep" : [
+        0.94,
+        0.34,
+        0.28
+      ],
+      "kind" : "hexagon",
+      "light" : [
+        1,
+        0.62,
+        0.54
+      ],
+      "name" : "ops",
+      "next" : [
+        {
+          "kind" : "circle",
+          "name" : "ops",
+          "phase" : 1.748,
+          "tone" : 0
+        },
+        {
+          "kind" : "moon",
+          "name" : "ops",
+          "phase" : 0.16,
+          "tone" : 6
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "ops",
+          "phase" : 4.878,
+          "tone" : 1
+        }
+      ],
+      "phase" : 2.459,
+      "tone" : 0
+    },
+    {
+      "deep" : [
+        0.11,
+        0.62,
+        0.83
+      ],
+      "kind" : "squircle",
+      "light" : [
+        0.49,
+        0.86,
+        0.97
+      ],
+      "name" : "qa",
+      "next" : [
+        {
+          "kind" : "diamond",
+          "name" : "qa",
+          "phase" : 5.38,
+          "tone" : 0
+        },
+        {
+          "kind" : "triangle",
+          "name" : "qa",
+          "phase" : 3.792,
+          "tone" : 6
+        },
+        {
+          "kind" : "burst",
+          "name" : "qa",
+          "phase" : 2.227,
+          "tone" : 1
+        }
+      ],
+      "phase" : 4.474,
+      "tone" : 4
+    },
+    {
+      "deep" : [
+        0.95,
+        0.6,
+        0.09
+      ],
+      "kind" : "moon",
+      "light" : [
+        1,
+        0.81,
+        0.4
+      ],
+      "name" : "x",
+      "next" : [
+        {
+          "kind" : "drop",
+          "name" : "x",
+          "phase" : 3.783,
+          "tone" : 5
+        },
+        {
+          "kind" : "sparkle",
+          "name" : "x",
+          "phase" : 2.195,
+          "tone" : 2
+        },
+        {
+          "kind" : "triangle",
+          "name" : "x",
+          "phase" : 0.63,
+          "tone" : 6
+        }
+      ],
+      "phase" : 0.339,
+      "tone" : 1
+    },
+    {
+      "deep" : [
+        0.68,
+        0.45,
+        0.22
+      ],
+      "kind" : "circle",
+      "light" : [
+        0.9,
+        0.76,
+        0.58
+      ],
+      "name" : "alpha",
+      "next" : [
+        {
+          "kind" : "triangle",
+          "name" : "alpha",
+          "phase" : 3.55,
+          "tone" : 4
+        },
+        {
+          "kind" : "circle",
+          "name" : "alpha",
+          "phase" : 1.962,
+          "tone" : 1
+        },
+        {
+          "kind" : "squircle",
+          "name" : "alpha",
+          "phase" : 0.397,
+          "tone" : 5
+        }
+      ],
+      "phase" : 0.875,
+      "tone" : 6
+    },
+    {
+      "deep" : [
+        0.08,
+        0.44,
+        0.72
+      ],
+      "kind" : "triangle",
+      "light" : [
+        0.56,
+        0.71,
+        0.99
+      ],
+      "name" : "beta",
+      "next" : [
+        {
+          "kind" : "clover",
+          "name" : "beta",
+          "phase" : 1.73,
+          "tone" : 5
+        },
+        {
+          "kind" : "flower",
+          "name" : "beta",
+          "phase" : 0.142,
+          "tone" : 2
+        },
+        {
+          "kind" : "moon",
+          "name" : "beta",
+          "phase" : 4.86,
+          "tone" : 6
+        }
+      ],
+      "phase" : 0.641,
+      "tone" : 5
+    },
+    {
+      "deep" : [
+        0.12,
+        0.71,
+        0.53
+      ],
+      "kind" : "drop",
+      "light" : [
+        0.47,
+        0.92,
+        0.76
+      ],
+      "name" : "gamma",
+      "next" : [
+        {
+          "kind" : "drop",
+          "name" : "gamma",
+          "phase" : 3.611,
+          "tone" : 8
+        },
+        {
+          "kind" : "moon",
+          "name" : "gamma",
+          "phase" : 5.199,
+          "tone" : 2
+        },
+        {
+          "kind" : "flower",
+          "name" : "gamma",
+          "phase" : 0.481,
+          "tone" : 7
+        }
+      ],
+      "phase" : 3.872,
+      "tone" : 3
+    },
+    {
+      "deep" : [
+        0.5,
+        0.74,
+        0.17
+      ],
+      "kind" : "hexagon",
+      "light" : [
+        0.79,
+        0.92,
+        0.44
+      ],
+      "name" : "delta",
+      "next" : [
+        {
+          "kind" : "diamond",
+          "name" : "delta",
+          "phase" : 0.835,
+          "tone" : 7
+        },
+        {
+          "kind" : "flower",
+          "name" : "delta",
+          "phase" : 5.553,
+          "tone" : 2
+        },
+        {
+          "kind" : "moon",
+          "name" : "delta",
+          "phase" : 3.988,
+          "tone" : 6
+        }
+      ],
+      "phase" : 0.359,
+      "tone" : 2
+    },
+    {
+      "deep" : [
+        0.08,
+        0.44,
+        0.72
+      ],
+      "kind" : "circle",
+      "light" : [
+        0.56,
+        0.71,
+        0.99
+      ],
+      "name" : "nova",
+      "next" : [
+        {
+          "kind" : "drop",
+          "name" : "nova",
+          "phase" : 0.191,
+          "tone" : 6
+        },
+        {
+          "kind" : "sparkle",
+          "name" : "nova",
+          "phase" : 4.886,
+          "tone" : 3
+        },
+        {
+          "kind" : "triangle",
+          "name" : "nova",
+          "phase" : 3.321,
+          "tone" : 7
+        }
+      ],
+      "phase" : 1.184,
+      "tone" : 5
+    },
+    {
+      "deep" : [
+        0.95,
+        0.6,
+        0.09
+      ],
+      "kind" : "burst",
+      "light" : [
+        1,
+        0.81,
+        0.4
+      ],
+      "name" : "iris",
+      "next" : [
+        {
+          "kind" : "diamond",
+          "name" : "iris",
+          "phase" : 1.174,
+          "tone" : 8
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "iris",
+          "phase" : 2.762,
+          "tone" : 2
+        },
+        {
+          "kind" : "moon",
+          "name" : "iris",
+          "phase" : 4.327,
+          "tone" : 7
+        }
+      ],
+      "phase" : 1.826,
+      "tone" : 1
+    },
+    {
+      "deep" : [
+        0.94,
+        0.34,
+        0.28
+      ],
+      "kind" : "circle",
+      "light" : [
+        1,
+        0.62,
+        0.54
+      ],
+      "name" : "juno",
+      "next" : [
+        {
+          "kind" : "clover",
+          "name" : "juno",
+          "phase" : 4.343,
+          "tone" : 3
+        },
+        {
+          "kind" : "flower",
+          "name" : "juno",
+          "phase" : 2.755,
+          "tone" : 0
+        },
+        {
+          "kind" : "moon",
+          "name" : "juno",
+          "phase" : 1.19,
+          "tone" : 4
+        }
+      ],
+      "phase" : 0.182,
+      "tone" : 0
+    },
+    {
+      "deep" : [
+        0.5,
+        0.74,
+        0.17
+      ],
+      "kind" : "burst",
+      "light" : [
+        0.79,
+        0.92,
+        0.44
+      ],
+      "name" : "atlas",
+      "next" : [
+        {
+          "kind" : "clover",
+          "name" : "atlas",
+          "phase" : 4.539,
+          "tone" : 4
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "atlas",
+          "phase" : 6.104,
+          "tone" : 0
+        },
+        {
+          "kind" : "moon",
+          "name" : "atlas",
+          "phase" : 1.386,
+          "tone" : 5
+        }
+      ],
+      "phase" : 5.945,
+      "tone" : 2
+    },
+    {
+      "deep" : [
+        0.12,
+        0.71,
+        0.53
+      ],
+      "kind" : "diamond",
+      "light" : [
+        0.47,
+        0.92,
+        0.76
+      ],
+      "name" : "ada",
+      "next" : [
+        {
+          "kind" : "sparkle",
+          "name" : "ada",
+          "phase" : 1.328,
+          "tone" : 7
+        },
+        {
+          "kind" : "clover",
+          "name" : "ada",
+          "phase" : 6.023,
+          "tone" : 4
+        },
+        {
+          "kind" : "circle",
+          "name" : "ada",
+          "phase" : 4.458,
+          "tone" : 8
+        }
+      ],
+      "phase" : 2.43,
+      "tone" : 3
+    },
+    {
+      "deep" : [
+        0.08,
+        0.44,
+        0.72
+      ],
+      "kind" : "diamond",
+      "light" : [
+        0.56,
+        0.71,
+        0.99
+      ],
+      "name" : "leo",
+      "next" : [
+        {
+          "kind" : "flower",
+          "name" : "leo",
+          "phase" : 2.485,
+          "tone" : 8
+        },
+        {
+          "kind" : "burst",
+          "name" : "leo",
+          "phase" : 0.897,
+          "tone" : 5
+        },
+        {
+          "kind" : "drop",
+          "name" : "leo",
+          "phase" : 5.615,
+          "tone" : 0
+        }
+      ],
+      "phase" : 4.256,
+      "tone" : 5
+    },
+    {
+      "deep" : [
+        0.94,
+        0.34,
+        0.28
+      ],
+      "kind" : "drop",
+      "light" : [
+        1,
+        0.62,
+        0.54
+      ],
+      "name" : "mia",
+      "next" : [
+        {
+          "kind" : "circle",
+          "name" : "mia",
+          "phase" : 3.989,
+          "tone" : 8
+        },
+        {
+          "kind" : "triangle",
+          "name" : "mia",
+          "phase" : 5.577,
+          "tone" : 2
+        },
+        {
+          "kind" : "sparkle",
+          "name" : "mia",
+          "phase" : 0.859,
+          "tone" : 7
+        }
+      ],
+      "phase" : 4.629,
+      "tone" : 0
+    },
+    {
+      "deep" : [
+        0.08,
+        0.44,
+        0.72
+      ],
+      "kind" : "triangle",
+      "light" : [
+        0.56,
+        0.71,
+        0.99
+      ],
+      "name" : "ivy",
+      "next" : [
+        {
+          "kind" : "circle",
+          "name" : "ivy",
+          "phase" : 3.153,
+          "tone" : 8
+        },
+        {
+          "kind" : "squircle",
+          "name" : "ivy",
+          "phase" : 1.588,
+          "tone" : 3
+        },
+        {
+          "kind" : "sparkle",
+          "name" : "ivy",
+          "phase" : 0.023,
+          "tone" : 7
+        }
+      ],
+      "phase" : 0.169,
+      "tone" : 5
+    },
+    {
+      "deep" : [
+        0.94,
+        0.34,
+        0.28
+      ],
+      "kind" : "flower",
+      "light" : [
+        1,
+        0.62,
+        0.54
+      ],
+      "name" : "sales-bot",
+      "next" : [
+        {
+          "kind" : "hexagon",
+          "name" : "sales-bot",
+          "phase" : 6.004,
+          "tone" : 2
+        },
+        {
+          "kind" : "diamond",
+          "name" : "sales-bot",
+          "phase" : 4.416,
+          "tone" : 8
+        },
+        {
+          "kind" : "flower",
+          "name" : "sales-bot",
+          "phase" : 2.851,
+          "tone" : 3
+        }
+      ],
+      "phase" : 4.528,
+      "tone" : 0
+    },
+    {
+      "deep" : [
+        0.95,
+        0.6,
+        0.09
+      ],
+      "kind" : "diamond",
+      "light" : [
+        1,
+        0.81,
+        0.4
+      ],
+      "name" : "a1b2c3",
+      "next" : [
+        {
+          "kind" : "clover",
+          "name" : "a1b2c3",
+          "phase" : 4.358,
+          "tone" : 4
+        },
+        {
+          "kind" : "circle",
+          "name" : "a1b2c3",
+          "phase" : 2.793,
+          "tone" : 8
+        },
+        {
+          "kind" : "squircle",
+          "name" : "a1b2c3",
+          "phase" : 1.228,
+          "tone" : 3
+        }
+      ],
+      "phase" : 3.594,
+      "tone" : 1
+    },
+    {
+      "deep" : [
+        0.95,
+        0.6,
+        0.09
+      ],
+      "kind" : "flower",
+      "light" : [
+        1,
+        0.81,
+        0.4
+      ],
+      "name" : "research",
+      "next" : [
+        {
+          "kind" : "squircle",
+          "name" : "research",
+          "phase" : 2.255,
+          "tone" : 1
+        },
+        {
+          "kind" : "circle",
+          "name" : "research",
+          "phase" : 3.82,
+          "tone" : 6
+        },
+        {
+          "kind" : "clover",
+          "name" : "research",
+          "phase" : 5.385,
+          "tone" : 2
+        }
+      ],
+      "phase" : 2.973,
+      "tone" : 1
+    },
+    {
+      "deep" : [
+        0.95,
+        0.6,
+        0.09
+      ],
+      "kind" : "triangle",
+      "light" : [
+        1,
+        0.81,
+        0.4
+      ],
+      "name" : "billing",
+      "next" : [
+        {
+          "kind" : "moon",
+          "name" : "billing",
+          "phase" : 0.099,
+          "tone" : 4
+        },
+        {
+          "kind" : "flower",
+          "name" : "billing",
+          "phase" : 1.664,
+          "tone" : 0
+        },
+        {
+          "kind" : "diamond",
+          "name" : "billing",
+          "phase" : 3.229,
+          "tone" : 5
+        }
+      ],
+      "phase" : 4.774,
+      "tone" : 1
+    },
+    {
+      "deep" : [
+        0.12,
+        0.71,
+        0.53
+      ],
+      "kind" : "burst",
+      "light" : [
+        0.47,
+        0.92,
+        0.76
+      ],
+      "name" : "design",
+      "next" : [
+        {
+          "kind" : "clover",
+          "name" : "design",
+          "phase" : 1.738,
+          "tone" : 0
+        },
+        {
+          "kind" : "flower",
+          "name" : "design",
+          "phase" : 0.15,
+          "tone" : 6
+        },
+        {
+          "kind" : "moon",
+          "name" : "design",
+          "phase" : 4.868,
+          "tone" : 1
+        }
+      ],
+      "phase" : 3.651,
+      "tone" : 3
+    },
+    {
+      "deep" : [
+        0.68,
+        0.16,
+        0.78
+      ],
+      "kind" : "squircle",
+      "light" : [
+        0.83,
+        0.61,
+        0.98
+      ],
+      "name" : "growth",
+      "next" : [
+        {
+          "kind" : "burst",
+          "name" : "growth",
+          "phase" : 4.656,
+          "tone" : 5
+        },
+        {
+          "kind" : "flower",
+          "name" : "growth",
+          "phase" : 6.244,
+          "tone" : 8
+        },
+        {
+          "kind" : "diamond",
+          "name" : "growth",
+          "phase" : 1.526,
+          "tone" : 4
+        }
+      ],
+      "phase" : 0.35,
+      "tone" : 7
+    },
+    {
+      "deep" : [
+        0.5,
+        0.74,
+        0.17
+      ],
+      "kind" : "sparkle",
+      "light" : [
+        0.79,
+        0.92,
+        0.44
+      ],
+      "name" : "Manager",
+      "next" : [
+        {
+          "kind" : "clover",
+          "name" : "Manager",
+          "phase" : 1.293,
+          "tone" : 3
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "Manager",
+          "phase" : 2.858,
+          "tone" : 8
+        },
+        {
+          "kind" : "moon",
+          "name" : "Manager",
+          "phase" : 4.423,
+          "tone" : 4
+        }
+      ],
+      "phase" : 4.715,
+      "tone" : 2
+    }
+  ],
+  "shapes" : [
+    {
+      "core" : "M64.85 35.15 Q52.5 50 64.85 64.85 Q50 52.5 35.15 64.85 Q47.5 50 35.15 35.15 Q50 47.5 64.85 35.15 Z",
+      "core_anchor" : [
+        0.5,
+        0.5
+      ],
+      "kind" : "sparkle",
+      "motion" : "turn",
+      "outline" : "M50 0 Q54.24 45.76 100 50 Q54.24 54.24 50 100 Q45.76 54.24 0 50 Q45.76 45.76 50 0 Z"
+    },
+    {
+      "core" : "M62 50 C62 56.63 56.63 62 50 62 C43.37 62 38 56.63 38 50 C38 43.37 43.37 38 50 38 C56.63 38 62 43.37 62 50 Z",
+      "core_anchor" : [
+        0.5,
+        0.5
+      ],
+      "kind" : "clover",
+      "motion" : "turn",
+      "outline" : "M90.68 32.32 C90.68 39.43 87.45 45.78 82.39 50 C87.45 54.22 90.68 60.57 90.68 67.68 C90.68 80.38 80.38 90.68 67.68 90.68 C60.57 90.68 54.22 87.45 50 82.39 C45.78 87.45 39.43 90.68 32.32 90.68 C19.62 90.68 9.32 80.38 9.32 67.68 C9.32 60.57 12.55 54.22 17.61 50 C12.55 45.78 9.32 39.43 9.32 32.32 C9.32 19.62 19.62 9.32 32.32 9.32 C39.43 9.32 45.78 12.55 50 17.61 C54.22 12.55 60.57 9.32 67.68 9.32 C80.38 9.32 90.68 19.62 90.68 32.32 Z"
+    },
+    {
+      "core" : "M65 50 C65 58.28 58.28 65 50 65 C41.72 65 35 58.28 35 50 C35 41.72 41.72 35 50 35 C58.28 35 65 41.72 65 50 Z",
+      "core_anchor" : [
+        0.5,
+        0.5
+      ],
+      "kind" : "flower",
+      "motion" : "turn",
+      "outline" : "M67.94 18.91 C70.36 17.68 73.09 17 75.98 17 C85.92 17 93.98 25.06 93.98 35 C93.98 41.27 90.78 46.79 85.91 49.99 C90.77 53.21 93.98 58.73 93.98 65 C93.98 74.94 85.92 83 75.98 83 C73.09 83 70.36 82.32 67.94 81.1 C67.39 90.53 59.57 98 50 98 C40.43 98 32.6 90.53 32.06 81.09 C29.64 82.32 26.91 83 24.02 83 C14.08 83 6.02 74.94 6.02 65 C6.02 58.73 9.22 53.21 14.09 50.01 C9.23 46.79 6.02 41.27 6.02 35 C6.02 25.06 14.08 17 24.02 17 C26.91 17 29.64 17.68 32.06 18.91 C32.6 9.47 40.43 2 50 2 C59.57 2 67.4 9.47 67.94 18.91 Z"
+    },
+    {
+      "core" : "M64.25 50 C64.25 57.87 57.87 64.25 50 64.25 C42.13 64.25 35.75 57.87 35.75 50 C35.75 42.13 42.13 35.75 50 35.75 C57.87 35.75 64.25 42.13 64.25 50 Z M71.75 50 C71.75 37.99 62.01 28.25 50 28.25 C37.99 28.25 28.25 37.99 28.25 50 C28.25 62.01 37.99 71.75 50 71.75 C62.01 71.75 71.75 62.01 71.75 50 Z",
+      "core_anchor" : [
+        0.5,
+        0.5
+      ],
+      "kind" : "burst",
+      "motion" : "turn",
+      "outline" : "M50 0 L63.39 17.66 L85.36 14.64 L82.34 36.61 L100 50 L82.34 63.39 L85.36 85.36 L63.39 82.34 L50 100 L36.61 82.34 L14.64 85.36 L17.66 63.39 L0 50 L17.66 36.61 L14.64 14.64 L36.61 17.66 L50 0 Z"
+    },
+    {
+      "core" : "M71.73 37.27 C71.73 42.24 67.7 46.27 62.73 46.27 C57.76 46.27 53.73 42.24 53.73 37.27 C53.73 32.3 57.76 28.27 62.73 28.27 C67.7 28.27 71.73 32.3 71.73 37.27 Z",
+      "core_anchor" : [
+        0.5,
+        0.5
+      ],
+      "kind" : "squircle",
+      "motion" : "breathe",
+      "outline" : "M94 50 L94 52.73 C94 64.61 94 70.55 91.98 76.95 C89.44 83.93 83.93 89.44 76.95 91.98 C70.55 94 64.61 94 52.73 94 L47.27 94 C35.39 94 29.45 94 23.05 91.98 C16.07 89.44 10.56 83.93 8.02 76.95 C6 70.55 6 64.61 6 52.73 L6 47.27 C6 35.39 6 29.45 8.02 23.05 C10.56 16.07 16.07 10.56 23.05 8.02 C29.45 6 35.39 6 47.27 6 L52.73 6 C64.61 6 70.55 6 76.95 8.02 C83.93 10.56 89.44 16.07 91.98 23.05 C94 29.45 94 35.39 94 47.27 Z"
+    },
+    {
+      "core" : "M50 29.65 L59.73 29.65 C60.98 29.65 62.14 30.32 62.76 31.4 L72.49 48.25 C73.11 49.33 73.11 50.67 72.49 51.75 L62.76 68.6 C62.14 69.68 60.98 70.35 59.73 70.35 L40.27 70.35 C39.02 70.35 37.86 69.68 37.24 68.6 L27.51 51.75 C26.89 50.67 26.89 49.33 27.51 48.25 L37.24 31.4 C37.86 30.32 39.02 29.65 40.27 29.65 Z",
+      "core_anchor" : [
+        0.5,
+        0.5
+      ],
+      "kind" : "hexagon",
+      "motion" : "breathe",
+      "outline" : "M28.57 12.88 L46 2.81 C48.48 1.38 51.52 1.38 54 2.81 L88.87 22.94 C91.34 24.37 92.87 27.01 92.87 29.87 L92.87 70.13 C92.87 72.99 91.34 75.63 88.87 77.06 L54 97.19 C51.52 98.62 48.48 98.62 46 97.19 L11.13 77.06 C8.66 75.63 7.13 72.99 7.13 70.13 L7.13 29.87 C7.13 27.01 8.66 24.37 11.13 22.94 Z"
+    },
+    {
+      "core" : "M39.5 39.5 L47.53 31.47 C48.89 30.11 51.11 30.11 52.47 31.47 L68.53 47.53 C69.89 48.89 69.89 51.11 68.53 52.47 L52.47 68.53 C51.11 69.89 48.89 69.89 47.53 68.53 L31.47 52.47 C30.11 51.11 30.11 48.89 31.47 47.53 Z",
+      "core_anchor" : [
+        0.5,
+        0.5
+      ],
+      "kind" : "diamond",
+      "motion" : "rock",
+      "outline" : "M25 25 L43.64 6.36 C47.15 2.85 52.85 2.85 56.36 6.36 L93.64 43.64 C97.15 47.15 97.15 52.85 93.64 56.36 L56.36 93.64 C52.85 97.15 47.15 97.15 43.64 93.64 L6.36 56.36 C2.85 52.85 2.85 47.15 6.36 43.64 Z"
+    },
+    {
+      "core" : "M60 57 C60 62.52 55.52 67 50 67 C44.48 67 40 62.52 40 57 C40 51.48 44.48 47 50 47 C55.52 47 60 51.48 60 57 Z",
+      "core_anchor" : [
+        0.5,
+        0.57
+      ],
+      "kind" : "triangle",
+      "motion" : "rock",
+      "outline" : "M27.92 44.25 L41.34 21 C44.1 16.22 50.22 14.58 55 17.34 C56.52 18.22 57.78 19.48 58.66 21 L85.51 67.5 C88.27 72.28 86.63 78.4 81.85 81.16 C80.33 82.04 78.6 82.5 76.85 82.5 L23.15 82.5 C17.63 82.5 13.15 78.02 13.15 72.5 C13.15 70.74 13.62 69.02 14.49 67.5 Z"
+    },
+    {
+      "core" : "M72.25 50 C72.25 62.29 62.29 72.25 50 72.25 C37.71 72.25 27.75 62.29 27.75 50 C27.75 37.71 37.71 27.75 50 27.75 C62.29 27.75 72.25 37.71 72.25 50 Z M77.75 50 C77.75 34.67 65.33 22.25 50 22.25 C34.67 22.25 22.25 34.67 22.25 50 C22.25 65.33 34.67 77.75 50 77.75 C65.33 77.75 77.75 65.33 77.75 50 Z M76.65 33.93 C76.65 38.07 73.29 41.43 69.15 41.43 C65.01 41.43 61.65 38.07 61.65 33.93 C61.65 29.79 65.01 26.43 69.15 26.43 C73.29 26.43 76.65 29.79 76.65 33.93 Z",
+      "core_anchor" : [
+        0.5,
+        0.5
+      ],
+      "kind" : "circle",
+      "motion" : "breathe",
+      "outline" : "M96 50 C96 75.41 75.41 96 50 96 C24.59 96 4 75.41 4 50 C4 24.59 24.59 4 50 4 C75.41 4 96 24.59 96 50 Z"
+    },
+    {
+      "core" : "M71 18.5 Q72.41 30.59 84.5 32 Q72.41 33.41 71 45.5 Q69.59 33.41 57.5 32 Q69.59 30.59 71 18.5 Z",
+      "core_anchor" : [
+        0.71,
+        0.32
+      ],
+      "kind" : "moon",
+      "motion" : "rock",
+      "outline" : "M52.12 5.21 C40.74 11.25 33 23.22 33 37 C33 56.88 49.12 73 69 73 C78.11 73 86.43 69.62 92.75 64.01 C87.33 83.62 69.34 98 48 98 C22.32 98 1.5 77.18 1.5 51.5 C1.5 25.82 22.32 5 48 5 C49.39 5 50.77 5.06 52.12 5.21 Z"
+    },
+    {
+      "core" : "M46.5 68 C46.5 72.14 43.14 75.5 39 75.5 C34.86 75.5 31.5 72.14 31.5 68 C31.5 63.86 34.86 60.5 39 60.5 C43.14 60.5 46.5 63.86 46.5 68 Z",
+      "core_anchor" : [
+        0.39,
+        0.68
+      ],
+      "kind" : "drop",
+      "motion" : "breathe",
+      "outline" : "M50 1 C58 20 85 38.5 85 63.5 L85 63.5 C85 82.83 69.33 98.5 50 98.5 C30.67 98.5 15 82.83 15 63.5 C15 38.5 42 20 50 1 Z"
+    }
+  ],
+  "teams" : [
+    {
+      "looks" : [
+        {
+          "kind" : "sparkle",
+          "name" : "manager",
+          "phase" : 4.715,
+          "tone" : 2
+        },
+        {
+          "kind" : "flower",
+          "name" : "wren",
+          "phase" : 0.017,
+          "tone" : 0
+        },
+        {
+          "kind" : "drop",
+          "name" : "theo",
+          "phase" : 4.364,
+          "tone" : 3
+        },
+        {
+          "kind" : "circle",
+          "name" : "pax",
+          "phase" : 3.189,
+          "tone" : 4
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "orla",
+          "phase" : 3.712,
+          "tone" : 7
+        }
+      ],
+      "names" : [
+        "manager",
+        "wren",
+        "theo",
+        "pax",
+        "orla"
+      ]
+    },
+    {
+      "looks" : [
+        {
+          "kind" : "sparkle",
+          "name" : "manager",
+          "phase" : 4.715,
+          "tone" : 2
+        },
+        {
+          "kind" : "clover",
+          "name" : "vps",
+          "phase" : 5.776,
+          "tone" : 0
+        },
+        {
+          "kind" : "moon",
+          "name" : "studio",
+          "phase" : 6.249,
+          "tone" : 5
+        },
+        {
+          "kind" : "diamond",
+          "name" : "mini",
+          "phase" : 0.45,
+          "tone" : 8
+        },
+        {
+          "kind" : "triangle",
+          "name" : "scout",
+          "phase" : 3.083,
+          "tone" : 6
+        }
+      ],
+      "names" : [
+        "manager",
+        "vps",
+        "studio",
+        "mini",
+        "scout"
+      ]
+    },
+    {
+      "looks" : [
+        {
+          "kind" : "sparkle",
+          "name" : "manager",
+          "phase" : 4.715,
+          "tone" : 2
+        },
+        {
+          "kind" : "circle",
+          "name" : "nova",
+          "phase" : 1.184,
+          "tone" : 5
+        },
+        {
+          "kind" : "burst",
+          "name" : "iris",
+          "phase" : 1.826,
+          "tone" : 1
+        },
+        {
+          "kind" : "clover",
+          "name" : "juno",
+          "phase" : 4.343,
+          "tone" : 3
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "atlas",
+          "phase" : 6.104,
+          "tone" : 0
+        },
+        {
+          "kind" : "drop",
+          "name" : "ada",
+          "phase" : 1.916,
+          "tone" : 4
+        },
+        {
+          "kind" : "flower",
+          "name" : "leo",
+          "phase" : 2.485,
+          "tone" : 8
+        },
+        {
+          "kind" : "triangle",
+          "name" : "mia",
+          "phase" : 2.93,
+          "tone" : 7
+        },
+        {
+          "kind" : "squircle",
+          "name" : "ivy",
+          "phase" : 0.08,
+          "tone" : 6
+        },
+        {
+          "kind" : "diamond",
+          "name" : "alpha",
+          "phase" : 5.138,
+          "tone" : 7
+        },
+        {
+          "kind" : "moon",
+          "name" : "beta",
+          "phase" : 4.86,
+          "tone" : 6
+        },
+        {
+          "kind" : "drop",
+          "name" : "gamma",
+          "phase" : 3.872,
+          "tone" : 3
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "delta",
+          "phase" : 0.359,
+          "tone" : 2
+        }
+      ],
+      "names" : [
+        "manager",
+        "nova",
+        "iris",
+        "juno",
+        "atlas",
+        "ada",
+        "leo",
+        "mia",
+        "ivy",
+        "alpha",
+        "beta",
+        "gamma",
+        "delta"
+      ]
+    },
+    {
+      "looks" : [
+        {
+          "kind" : "circle",
+          "name" : "support",
+          "phase" : 1.517,
+          "tone" : 2
+        },
+        {
+          "kind" : "hexagon",
+          "name" : "ops",
+          "phase" : 2.459,
+          "tone" : 0
+        },
+        {
+          "kind" : "squircle",
+          "name" : "qa",
+          "phase" : 4.474,
+          "tone" : 4
+        },
+        {
+          "kind" : "moon",
+          "name" : "x",
+          "phase" : 0.339,
+          "tone" : 1
+        },
+        {
+          "kind" : "diamond",
+          "name" : "sales-bot",
+          "phase" : 4.416,
+          "tone" : 8
+        },
+        {
+          "kind" : "burst",
+          "name" : "research",
+          "phase" : 2.209,
+          "tone" : 5
+        },
+        {
+          "kind" : "sparkle",
+          "name" : "billing",
+          "phase" : 4.84,
+          "tone" : 6
+        },
+        {
+          "kind" : "drop",
+          "name" : "design",
+          "phase" : 3.28,
+          "tone" : 7
+        },
+        {
+          "kind" : "flower",
+          "name" : "growth",
+          "phase" : 0.895,
+          "tone" : 3
+        },
+        {
+          "kind" : "triangle",
+          "name" : "worker-1",
+          "phase" : 4.303,
+          "tone" : 6
+        },
+        {
+          "kind" : "clover",
+          "name" : "worker-2",
+          "phase" : 4.562,
+          "tone" : 0
+        },
+        {
+          "kind" : "squircle",
+          "name" : "dev-lead",
+          "phase" : 3.771,
+          "tone" : 1
+        },
+        {
+          "kind" : "triangle",
+          "name" : "web_dev",
+          "phase" : 4.07,
+          "tone" : 2
+        },
+        {
+          "kind" : "clover",
+          "name" : "a1b2c3",
+          "phase" : 4.358,
+          "tone" : 4
+        }
+      ],
+      "names" : [
+        "support",
+        "ops",
+        "qa",
+        "x",
+        "sales-bot",
+        "research",
+        "billing",
+        "design",
+        "growth",
+        "worker-1",
+        "worker-2",
+        "dev-lead",
+        "web_dev",
+        "a1b2c3"
+      ]
+    },
+    {
+      "looks" : [
+        {
+          "kind" : "sparkle",
+          "name" : "manager",
+          "phase" : 4.715,
+          "tone" : 2
+        },
+        {
+          "kind" : "flower",
+          "name" : "wren",
+          "phase" : 0.017,
+          "tone" : 0
+        }
+      ],
+      "names" : [
+        "manager",
+        "manager",
+        "wren"
+      ]
+    }
+  ],
+  "tone_count" : 9
+}

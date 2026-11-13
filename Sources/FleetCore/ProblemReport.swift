@@ -91,19 +91,31 @@ public struct ProblemReport: Equatable, Sendable {
 
 extension ProblemReport {
     /// The facts, built from what this Mac already knows. Each one is a short value or "Not reported" — never a
-    /// guess, and never a value the app did not actually read. A hub's revision is cut to twelve characters,
-    /// because that is what the row can show and what goes must be what he read.
+    /// guess, and never a value the app did not actually read. A hub's bare revision is cut to twelve characters,
+    /// because that is what the row can show and what goes must be what he read; a release (`hubRelease`) goes whole.
     public static func facts(app: String, system: String, fleet: String?, hub: String?,
                              screen: String, trouble: String?) -> [Fact] {
+        let bare = { (value: String) in value.range(of: "^[0-9a-f]{13,64}$", options: .regularExpression) != nil }
         var facts = [
             Fact(name: "Founderizer", value: app),
             Fact(name: "macOS", value: system),
             Fact(name: "Fleet", value: fleet.flatMap { $0.isEmpty ? nil : $0 } ?? "Not reported"),
-            Fact(name: "Hub", value: hub.flatMap { $0.isEmpty ? nil : String($0.prefix(12)) } ?? "Not reported"),
+            Fact(name: "Hub", value: hub.flatMap { $0.isEmpty ? nil : bare($0) ? String($0.prefix(12)) : $0 }
+                ?? "Not reported"),
             Fact(name: "Screen", value: screen)
         ]
         if let trouble, !trouble.isEmpty { facts.append(Fact(name: "Last error", value: trouble)) }
         return facts
+    }
+
+    /// **The "Hub" fact: the release that the hub runs**, as support finds it: its version and its commit in the
+    /// published repository, "2026.11.362 (1f43dab42994)" (`ReleaseState.current`, from `GET /ui/releases`). The hub's
+    /// own revision is the head of its configuration branch, a commit that only that fleet has, so it is the fact only
+    /// where the hub names no release that it took (a fleet that has taken none, or a hub that does not answer the
+    /// releases read).
+    public static func hubRelease(_ releases: ReleaseState?, revision: String?) -> String? {
+        if let run = releases?.current { return "\(run.version) (\(run.revision.prefix(12)))" }
+        return revision
     }
 
     /// The app's own version, as the bundle carries it.

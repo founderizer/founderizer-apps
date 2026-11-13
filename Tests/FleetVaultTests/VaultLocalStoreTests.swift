@@ -118,6 +118,36 @@ import Testing
         #expect(!(try String(contentsOf: made.file, encoding: .utf8)).contains(Self.password))
     }
 
+    /// The owner replaced the value of a reference: a delivery that the hub marks so puts the new value in the place
+    /// of the one that an earlier delivery saved, and of nothing else (`vault.py`'s `put`).
+    @Test func aReplaceGoesOnlyOverAValueThatADeliverySaved() throws {
+        let made = try Self.store()
+        let id = "ABCDEF12-1234-1234-1234-123456789012", value = #"{"password":"\#(Self.password)"}"#
+        let new = #"{"password":"THE-NEW-SYNTHETIC-VALUE-01"}"#
+        #expect(try made.store.put(id: id, name: "OPENAI_API_KEY", value: value, note: VaultLocalStore.delivered) == "new")
+        #expect(try made.store.put(id: id, name: "OPENAI_API_KEY", value: new, note: VaultLocalStore.delivered, replace: true) == "replaced")
+        #expect(try made.store.secret(id: id).password == "THE-NEW-SYNTHETIC-VALUE-01")
+        #expect(try made.store.opened().count == 1)
+        #expect(try made.store.item(id: id).note == VaultLocalStore.delivered)
+        #expect(!String(describing: try made.store.opened()).contains(Self.password))       // the old value left the store
+        #expect(try made.store.put(id: id, name: "OPENAI_API_KEY", value: new, note: VaultLocalStore.delivered, replace: true) == "same")
+        // with the word of a replace, a reference that the store does not hold is a new save
+        #expect(try made.store.put(id: UUID().uuidString, name: "OTHER_API_KEY", value: #"{"password":"A-THIRD-SYNTHETIC-VALUE-01"}"#,
+                                   note: VaultLocalStore.delivered, replace: true) == "new")
+        // the owner's own item, and one that this vault made, are not a delivery's to change
+        let own = try made.store.add(name: "Shop admin", value: Self.login(), note: "owner's own")
+        let mine = try made.store.add(name: "Made here", value: Self.login(user: "agent@example.test"), note: "fleet-create:studio:1")
+        for kept in [own, mine] {
+            #expect(throws: VaultFailure.storeNotDelivered) {
+                try made.store.put(id: kept, name: "Shop admin", value: new, note: VaultLocalStore.delivered, replace: true)
+            }
+        }
+        #expect(try made.store.item(id: own).note == "owner's own")
+        // another store of the same key reads the new value: the replace was saved
+        let again = try VaultLocalStore(identity: made.key, programs: made.programs, file: made.file)
+        #expect(try again.secret(id: id).password == "THE-NEW-SYNTHETIC-VALUE-01")
+    }
+
     /// A withdrawal takes out only what a delivery saved: the owner's own item, and one that this vault made, stay.
     /// The same withdrawal again finds nothing and changes nothing (`vault.py`'s `remove`).
     @Test func aWithdrawalRemovesOnlyADeliveredItemAndOnlyOnce() throws {

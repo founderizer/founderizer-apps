@@ -132,6 +132,19 @@ struct CopyDefaultTests {
         #expect(CopyDefault.folder(iCloud: nil, documents: documents).path
                 == documents.appendingPathComponent("Founderizer").path)
     }
+
+    /// The default folder is made at the first copy of a fleet that keeps copies and was given no folder.
+    @Test func theDefaultFolderWaitsForTheFirstCopy() {
+        #expect(CopyDefault.waits(on: true, chosen: false, tried: false))
+    }
+
+    /// A folder of his, copies that he turned off, and a try that this start already made: none of them makes it.
+    @Test func nothingMakesTheDefaultFolderASecondTimeOrAgainstHim() {
+        #expect(!CopyDefault.waits(on: true, chosen: true, tried: false))
+        #expect(!CopyDefault.waits(on: false, chosen: false, tried: false))
+        #expect(!CopyDefault.waits(on: true, chosen: false, tried: true))
+        #expect(!CopyDefault.waits(on: false, chosen: true, tried: true))
+    }
 }
 
 /// A copy that iCloud has taken back off this Mac is still one of his copies.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Install the signed Mac vault. Never read or migrate a credential."""
 import argparse
+import base64
 import ipaddress
 import json
 import os
@@ -27,6 +28,34 @@ UPDATE_LABEL = "com.agentfleet.vault.update"
 UPDATE_DAEMON = Path("/Library/LaunchDaemons") / (UPDATE_LABEL + ".plist")
 UPDATE_LOG = CONFIG.parent / "update.log"           # in the protected folder: /Library/Logs is the admin group's
 CHANNEL = "https://founderizer.com"
+# The owner's public keys in a worker Mac's configuration (--owner-keys-only): with them, the vault hands a login over
+# only to a key that the owner signed a pin of (Sources/FleetVaultCore/VaultOwnerPin.swift), as a Linux broker does with
+# the keys that `hubsetup.py vault --owner-key` gives it. The hub never writes them: a hub that is broken into could
+# name a key of its own.
+WORKER_KEYS = {"agent", "hub", "store", "socket", "worker_uid"}
+OWNER_KEYS = 8                          # the most owner keys that may sign (vault.py OWNER_KEYS)
+OWNER_KEYS_BUILD = 12                   # the first Fleet Vault build that reads owner_keys and fleet
+P256_P = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff
+P256_B = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b
+LAUNCHCTL = "/bin/launchctl"            # by its path: as root, never a program that a PATH of the agents' user names
+# What a child of the worker's user runs to ask the vault for its status after the owner's keys went in: the vault serves
+# its worker's user alone, and closes a connection of root's. Any answer counts: the vault opens its socket only after it
+# loaded its configuration, so an answer of `"ok": false` (a store that does not open) still proves the file.
+STATUS_PROBE = r"""
+import json, socket, sys, time
+end = time.time() + float(sys.argv[2])
+while time.time() < end:
+    try:
+        with socket.socket(socket.AF_UNIX) as connection:
+            connection.settimeout(3)
+            connection.connect(sys.argv[1])
+            connection.sendall(json.dumps({"v": 2, "op": "status"}).encode() + b"\n")
+            answer = json.loads(connection.makefile().readline())
+        sys.exit(0 if isinstance(answer, dict) and answer.get("v") == 2 else 1)
+    except (OSError, ValueError):
+        time.sleep(1)
+sys.exit(1)
+"""
 
 
 def worker_configuration(args, user):
@@ -64,8 +93,111 @@ def keep_configuration(configuration):
     stop = old_store(current)
     if stop:
         raise SystemExit(stop)
+    # The owner's keys and the fleet's id that root gave this Mac (--owner-keys-only) are no setting of an install: they
+    # stay in the file, so a second install keeps the owner's pin check.
+    if isinstance(current, dict):
+        current = {key: value for key, value in current.items() if key not in ("owner_keys", "fleet")}
     if current != configuration:
         raise SystemExit("An existing vault has different settings. No change was made.")
+
+
+def owner_key(text):
+    """One public key of the owner, as their app gives it: the standard base64, padded, of 65 bytes 04 || X || Y that is a
+    point of P-256 (vault.py owner_key). SystemExit for anything else, before anything is written."""
+    try:
+        raw = base64.b64decode(text, validate=True)
+    except ValueError:
+        raw = b""
+    x, y = int.from_bytes(raw[1:33], "big"), int.from_bytes(raw[33:], "big")
+    if base64.b64encode(raw).decode() != text or len(raw) != 65 or raw[0] != 4 or not (
+            x < P256_P and y < P256_P and (y * y - x * x * x + 3 * x - P256_B) % P256_P == 0):
+        raise SystemExit("Each --owner-key is the base64 of the owner's 65-byte P-256 public key, as their app gives it.")
+    return text
+
+
+def build_of(app):
+    """The CFBundleVersion of an app bundle as a number, or 0."""
+    try:
+        with (app / "Contents/Info.plist").open("rb") as handle:
+            return int(plistlib.load(handle)["CFBundleVersion"])
+    except (OSError, KeyError, TypeError, ValueError, plistlib.InvalidFileException):
+        return 0
+
+
+def keys_need_build(source):
+    """True when this Mac's configuration holds the owner's keys and `source` is a vault build that does not read them."""
+    try:
+        current = json.loads(CONFIG.read_text())
+    except (OSError, ValueError):
+        return False
+    return isinstance(current, dict) and "owner_keys" in current and build_of(source) < OWNER_KEYS_BUILD
+
+
+def give_owner_keys(keys, fleet):
+    """--owner-keys-only, as root on a worker Mac whose vault is installed: the owner's public keys and the fleet's id go
+    into its configuration, every other setting stays as it is, and the vault starts again to read them. From then on it
+    hands a login over only to a key that the owner signed a pin of. The keys given replace the ones there, so for a new
+    owner Mac give its key and the old one together until the pins are signed again: a kept pin carries the old key's
+    signature. It reads and writes no credential."""
+    protected(CONFIG)
+    current = json.loads(CONFIG.read_text())
+    stop = old_store(current)
+    if stop:
+        raise SystemExit(stop)
+    if not isinstance(current, dict) or set(current) - {"owner_keys", "fleet"} != WORKER_KEYS:
+        raise SystemExit("This Mac's vault configuration is not a worker's, so it takes no owner key. No change was made.")
+    try:
+        settings = json.loads(UPDATE_SETTINGS.read_text())
+    except (OSError, ValueError):
+        settings = None
+    if not isinstance(settings, dict) or settings.get("fleet") != fleet:
+        raise SystemExit(f"{UPDATE_SETTINGS} does not name the fleet id {fleet}: give the id that this Mac's vault updater "
+                         f"names. No change was made.")
+    build = build_of(APP)
+    if build < OWNER_KEYS_BUILD:
+        raise SystemExit(f"The Fleet Vault on this Mac reads the owner's keys from build {OWNER_KEYS_BUILD} on, and this one "
+                         f"is build {build or 'unknown'}: run this again once its updater has put a newer one in place. No "
+                         f"change was made.")
+    configuration = {key: value for key, value in current.items() if key not in ("owner_keys", "fleet")}
+    configuration.update(owner_keys=keys, fleet=fleet)
+    old = CONFIG.read_bytes()
+    uid = current["worker_uid"]
+    try:
+        pwd.getpwuid(uid)                   # the worker's user must exist before anything is written
+    except KeyError:
+        raise SystemExit("This Mac has no user with the vault's worker_uid. No change was made.") from None
+    written(CONFIG, json.dumps(configuration).encode(), 0o644)
+    try:
+        subprocess.run([LAUNCHCTL, "kickstart", "-k", f"gui/{uid}/{LABEL}"], capture_output=True)
+        up = vault_answers(uid, current["socket"])
+    except BaseException:                   # an interrupt or a failure after the write: the old file goes back
+        written(CONFIG, old, 0o644)
+        subprocess.run([LAUNCHCTL, "kickstart", "-k", f"gui/{uid}/{LABEL}"], capture_output=True)   # and the vault reads it
+        raise
+    if not up:
+        # A vault that does not come up with the new file serves nothing: the old file goes back, and so does the vault.
+        written(CONFIG, old, 0o644)
+        subprocess.run([LAUNCHCTL, "kickstart", "-k", f"gui/{uid}/{LABEL}"], capture_output=True)
+        raise SystemExit("Fleet Vault did not answer after its restart, so its old configuration is back in place and no "
+                         "key was added. The worker's user must be logged in, because the vault runs in its session.")
+    print(f"Fleet Vault holds {len(keys)} key(s) of the owner for fleet {fleet}: it hands a login over only to a key that "
+          f"the owner signed a pin of.")
+
+
+def vault_answers(uid, socket_path, wait=30):
+    """True when the vault of the worker's user `uid` answers `status` on its socket within `wait` seconds. A child of
+    that user asks, in Python's isolated mode, because the vault closes a connection that is not its worker's."""
+    try:
+        user = pwd.getpwuid(uid)
+
+        def worker_identity():
+            os.setgroups([])
+            os.setgid(user.pw_gid)
+            os.setuid(user.pw_uid)
+        return subprocess.run([sys.executable, "-I", "-c", STATUS_PROBE, socket_path, str(wait)],
+                              preexec_fn=worker_identity, capture_output=True, timeout=wait + 10).returncode == 0
+    except Exception:                       # no user, no child, or no answer in time: the vault did not come up
+        return False
 
 
 def protected(path):
@@ -142,6 +274,13 @@ def main():
                         help="The fleet's release track, which the updater reads: early only for a fleet whose setting "
                              "releases.early is on (the hub's GET /ui/releases, early), which takes each vault build as "
                              "it is published; approved, the default, takes only the builds that the owner approved.")
+    parser.add_argument("--owner-key", action="append",
+                        help="With --owner-keys-only: one public key of the owner, the base64 of 65 bytes as their app "
+                             "gives it. Give it once for each key, at most 8.")
+    parser.add_argument("--owner-keys-only", action="store_true",
+                        help="Only the owner's keys, on a Mac whose vault is installed: they go into its configuration "
+                             "with --fleet, and the vault then hands a login over only to a key that the owner signed a "
+                             "pin of. No app and no other setting changes.")
     parser.add_argument("--updater-only", action="store_true",
                         help="Only the vault's updater, on a Mac whose vault is installed already: no app and no "
                              "configuration change. The updater then puts the newest vault in place within the hour.")
@@ -150,6 +289,19 @@ def main():
         parser.error("--fleet takes the fleet's id: 16 lowercase hex characters")
     if not re.fullmatch(r"https://[a-z0-9.-]+", args.channel):
         parser.error("--channel takes https://<host> and nothing after it")
+    if args.owner_keys_only:
+        if any([args.app, args.user, args.agent, args.hub, args.store, args.updater_only]) or not args.owner_key \
+                or len(args.owner_key) > OWNER_KEYS or args.channel != CHANNEL or args.track != "approved":
+            parser.error("--owner-keys-only takes --fleet and one to eight --owner-key, and nothing else")
+        keys = list(dict.fromkeys(owner_key(key) for key in args.owner_key))
+        if os.geteuid() != 0:
+            raise SystemExit("Run this installer with sudo.")
+        if not CONFIG.is_file():
+            raise SystemExit("This Mac has no Fleet Vault configuration: install the vault first.")
+        give_owner_keys(keys, args.fleet)
+        return
+    if args.owner_key:
+        parser.error("--owner-key goes with --owner-keys-only")
     if args.updater_only:
         if any([args.app, args.user, args.agent, args.hub, args.store]):
             parser.error("--updater-only takes --fleet, --channel and --track, and nothing else")
@@ -179,6 +331,9 @@ def main():
     if source == APP or source.suffix != ".app":
         raise SystemExit("Select the signed build to install.")
     verify(source)
+    if keys_need_build(source):
+        raise SystemExit(f"This Mac's vault configuration holds the owner's keys, which a Fleet Vault reads from build "
+                         f"{OWNER_KEYS_BUILD} on, and the build to install is older. No change was made.")
     keep_configuration(worker_configuration(args, user))
     if APP.is_symlink():
         raise SystemExit("The installed app path must not be a symbolic link.")

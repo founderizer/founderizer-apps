@@ -1,0 +1,262 @@
+{
+  "about": "Python's json.dumps(obj, sort_keys=True, separators=(',', ':'), ensure_ascii=False), as vault.canonical writes it: the text that the owner's key signs. utf8_hex is the exact bytes.",
+  "made_by": "app/vectors/make_vectors.py",
+  "cases": [
+    {
+      "name": "ascii",
+      "flat": true,
+      "object": {
+        "a": "plain words",
+        "n": 7
+      },
+      "canonical": "{\"a\":\"plain words\",\"n\":7}",
+      "utf8_hex": "7b2261223a22706c61696e20776f726473222c226e223a377d"
+    },
+    {
+      "name": "e-acute and other Latin letters",
+      "flat": true,
+      "object": {
+        "text": "caf\u00e9 na\u00efve \u00c5ngstr\u00f6m"
+      },
+      "canonical": "{\"text\":\"caf\u00e9 na\u00efve \u00c5ngstr\u00f6m\"}",
+      "utf8_hex": "7b2274657874223a22636166c3a9206e61c3af766520c3856e67737472c3b66d227d"
+    },
+    {
+      "name": "the characters a web encoder escapes",
+      "flat": true,
+      "object": {
+        "text": "<a&b> 'x' + `y` = /z/"
+      },
+      "canonical": "{\"text\":\"<a&b> 'x' + `y` = /z/\"}",
+      "utf8_hex": "7b2274657874223a223c6126623e20277827202b20607960203d202f7a2f227d"
+    },
+    {
+      "name": "the line and paragraph separators",
+      "flat": true,
+      "object": {
+        "text": "one\u2028two\u2029three"
+      },
+      "canonical": "{\"text\":\"one\u2028two\u2029three\"}",
+      "utf8_hex": "7b2274657874223a226f6e65e280a874776fe280a97468726565227d"
+    },
+    {
+      "name": "delete and the C1 controls",
+      "flat": true,
+      "object": {
+        "text": "\u007f \u0080 \u0085 \u009f"
+      },
+      "canonical": "{\"text\":\"\u007f \u0080 \u0085 \u009f\"}",
+      "utf8_hex": "7b2274657874223a227f20c28020c28520c29f227d"
+    },
+    {
+      "name": "the controls below U+0020",
+      "flat": true,
+      "object": {
+        "text": "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f"
+      },
+      "canonical": "{\"text\":\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000b\\f\\r\\u000e\\u000f\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f\"}",
+      "utf8_hex": "7b2274657874223a225c75303030305c75303030315c75303030325c75303030335c75303030345c75303030355c75303030365c75303030375c625c745c6e5c75303030625c665c725c75303030655c75303030665c75303031305c75303031315c75303031325c75303031335c75303031345c75303031355c75303031365c75303031375c75303031385c75303031395c75303031615c75303031625c75303031635c75303031645c75303031655c7530303166227d"
+    },
+    {
+      "name": "quote and backslash",
+      "flat": true,
+      "object": {
+        "text": "say \"hi\" \\ there"
+      },
+      "canonical": "{\"text\":\"say \\\"hi\\\" \\\\ there\"}",
+      "utf8_hex": "7b2274657874223a22736179205c2268695c22205c5c207468657265227d"
+    },
+    {
+      "name": "characters outside the BMP",
+      "flat": true,
+      "object": {
+        "text": "\ud83d\ude00 \ud800\udc00 \udbff\udfff"
+      },
+      "canonical": "{\"text\":\"\ud83d\ude00 \ud800\udc00 \udbff\udfff\"}",
+      "utf8_hex": "7b2274657874223a22f09f988020f090808020f48fbfbf227d"
+    },
+    {
+      "name": "invisible and combining characters",
+      "flat": true,
+      "object": {
+        "text": "e\u0301 \u200b \u200d \ufeff \u00a0"
+      },
+      "canonical": "{\"text\":\"e\u0301 \u200b \u200d \ufeff \u00a0\"}",
+      "utf8_hex": "7b2274657874223a2265cc8120e2808b20e2808d20efbbbf20c2a0227d"
+    },
+    {
+      "name": "scripts of other directions",
+      "flat": true,
+      "object": {
+        "text": "\u4e2d\u6587 \u0639\u0631\u0628\u064a \u05e2\u05d1\u05e8\u05d9\u05ea"
+      },
+      "canonical": "{\"text\":\"\u4e2d\u6587 \u0639\u0631\u0628\u064a \u05e2\u05d1\u05e8\u05d9\u05ea\"}",
+      "utf8_hex": "7b2274657874223a22e4b8ade6968720d8b9d8b1d8a8d98a20d7a2d791d7a8d799d7aa227d"
+    },
+    {
+      "name": "the edges of the surrogate range",
+      "flat": true,
+      "object": {
+        "text": "\ud7ff \ue000 \uffff \ufffd"
+      },
+      "canonical": "{\"text\":\"\ud7ff \ue000 \uffff \ufffd\"}",
+      "utf8_hex": "7b2274657874223a22ed9fbf20ee808020efbfbf20efbfbd227d"
+    },
+    {
+      "name": "keys in code point order",
+      "flat": true,
+      "object": {
+        "\uffff": 1,
+        "\ud800\udc00": 2,
+        "a": 3,
+        "B": 4,
+        "\u00e9": 5,
+        "": 6,
+        "aa": 7,
+        "a\u0000": 8
+      },
+      "canonical": "{\"\":6,\"B\":4,\"a\":3,\"a\\u0000\":8,\"aa\":7,\"\u00e9\":5,\"\uffff\":1,\"\ud800\udc00\":2}",
+      "utf8_hex": "7b22223a362c2242223a342c2261223a332c22615c7530303030223a382c226161223a372c22c3a9223a352c22efbfbf223a312c22f0908080223a327d"
+    },
+    {
+      "name": "whole numbers",
+      "flat": true,
+      "object": {
+        "zero": 0,
+        "negative": -42,
+        "largest": 9223372036854775807,
+        "smallest": -9223372036854775808
+      },
+      "canonical": "{\"largest\":9223372036854775807,\"negative\":-42,\"smallest\":-9223372036854775808,\"zero\":0}",
+      "utf8_hex": "7b226c617267657374223a393232333337323033363835343737353830372c226e65676174697665223a2d34322c22736d616c6c657374223a2d393232333337323033363835343737353830382c227a65726f223a307d"
+    },
+    {
+      "name": "an owner statement",
+      "flat": true,
+      "object": {
+        "v": 1,
+        "kind": "owner-device",
+        "fleet": "0123456789abcdef",
+        "device": "pc",
+        "key": "BAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=",
+        "at": 1790000000
+      },
+      "canonical": "{\"at\":1790000000,\"device\":\"pc\",\"fleet\":\"0123456789abcdef\",\"key\":\"BAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=\",\"kind\":\"owner-device\",\"v\":1}",
+      "utf8_hex": "7b226174223a313739303030303030302c22646576696365223a227063222c22666c656574223a2230313233343536373839616263646566222c226b6579223a224241414241674d454251594843416b4b4377774e4467385145524954464255574678675a4768736348523466494345694979516c4a69636f4b536f724c4330754c7a41784d6a4d304e5459334f446b364f7a7739506a383d222c226b696e64223a226f776e65722d646576696365222c2276223a317d"
+    },
+    {
+      "name": "an empty object",
+      "flat": false,
+      "object": {},
+      "canonical": "{}",
+      "utf8_hex": "7b7d"
+    },
+    {
+      "name": "a number past 64 bits",
+      "flat": false,
+      "object": {
+        "n": 123456789012345678901234567890,
+        "m": -18446744073709551616
+      },
+      "canonical": "{\"m\":-18446744073709551616,\"n\":123456789012345678901234567890}",
+      "utf8_hex": "7b226d223a2d31383434363734343037333730393535313631362c226e223a3132333435363738393031323334353637383930313233343536373839307d"
+    },
+    {
+      "name": "numbers with a fraction, as Python's repr writes them",
+      "flat": false,
+      "object": {
+        "half": 0.5,
+        "third": 0.3333333333333333,
+        "one": 1.0,
+        "minus zero": -0.0,
+        "e15": 1000000000000000.0,
+        "e16": 1e+16,
+        "e17": 1.2345678901234568e+17,
+        "ten thousandth": 0.0001,
+        "hundred thousandth": 1e-05,
+        "tiny": 5e-324,
+        "largest": 1.7976931348623157e+308,
+        "negative": -2.5e-07,
+        "pi": 3.141592653589793,
+        "point one": 0.1
+      },
+      "canonical": "{\"e15\":1000000000000000.0,\"e16\":1e+16,\"e17\":1.2345678901234568e+17,\"half\":0.5,\"hundred thousandth\":1e-05,\"largest\":1.7976931348623157e+308,\"minus zero\":-0.0,\"negative\":-2.5e-07,\"one\":1.0,\"pi\":3.141592653589793,\"point one\":0.1,\"ten thousandth\":0.0001,\"third\":0.3333333333333333,\"tiny\":5e-324}",
+      "utf8_hex": "7b22653135223a313030303030303030303030303030302e302c22653136223a31652b31362c22653137223a312e32333435363738393031323334353638652b31372c2268616c66223a302e352c2268756e647265642074686f7573616e647468223a31652d30352c226c617267657374223a312e37393736393331333438363233313537652b3330382c226d696e7573207a65726f223a2d302e302c226e65676174697665223a2d322e35652d30372c226f6e65223a312e302c227069223a332e3134313539323635333538393739332c22706f696e74206f6e65223a302e312c2274656e2074686f7573616e647468223a302e303030312c227468697264223a302e333333333333333333333333333333332c2274696e79223a35652d3332347d"
+    },
+    {
+      "name": "true, false and null",
+      "flat": false,
+      "object": {
+        "yes": true,
+        "no": false,
+        "none": null
+      },
+      "canonical": "{\"no\":false,\"none\":null,\"yes\":true}",
+      "utf8_hex": "7b226e6f223a66616c73652c226e6f6e65223a6e756c6c2c22796573223a747275657d"
+    },
+    {
+      "name": "nested values",
+      "flat": false,
+      "object": {
+        "list": [
+          1,
+          "two",
+          true,
+          false,
+          null,
+          {
+            "b": [],
+            "a": {}
+          },
+          [
+            []
+          ]
+        ],
+        "object": {
+          "z": null,
+          "y": {
+            "\u00e9": "\u2028"
+          }
+        }
+      },
+      "canonical": "{\"list\":[1,\"two\",true,false,null,{\"a\":{},\"b\":[]},[[]]],\"object\":{\"y\":{\"\u00e9\":\"\u2028\"},\"z\":null}}",
+      "utf8_hex": "7b226c697374223a5b312c2274776f222c747275652c66616c73652c6e756c6c2c7b2261223a7b7d2c2262223a5b5d7d2c5b5b5d5d5d2c226f626a656374223a7b2279223a7b22c3a9223a22e280a8227d2c227a223a6e756c6c7d7d"
+    }
+  ],
+  "not_canonical": [
+    "{\"b\":1,\"a\":2}",
+    "{\"a\": 1}",
+    "{\"a\":1,\"a\":1}",
+    "{\"a\":\"caf\\u00e9\"}",
+    "{\"a\":\"\\u2028\"}",
+    "{\"a\":1.00}",
+    "{\"a\":1e2}",
+    "{\"a\":-0}",
+    "{\"a\":1E+16}",
+    "{\"a\":\"\\/\"}",
+    " {\"a\":1}",
+    "{\"a\":1}\n",
+    "{\"a\":\"\\u001F\"}"
+  ],
+  "canonical_objects": [
+    "{\"a\":\"plain words\",\"n\":7}",
+    "{\"text\":\"caf\u00e9 na\u00efve \u00c5ngstr\u00f6m\"}",
+    "{\"text\":\"<a&b> 'x' + `y` = /z/\"}",
+    "{\"text\":\"one\u2028two\u2029three\"}",
+    "{\"text\":\"\u007f \u0080 \u0085 \u009f\"}",
+    "{\"text\":\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000b\\f\\r\\u000e\\u000f\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f\"}",
+    "{\"text\":\"say \\\"hi\\\" \\\\ there\"}",
+    "{\"text\":\"\ud83d\ude00 \ud800\udc00 \udbff\udfff\"}",
+    "{\"text\":\"e\u0301 \u200b \u200d \ufeff \u00a0\"}",
+    "{\"text\":\"\u4e2d\u6587 \u0639\u0631\u0628\u064a \u05e2\u05d1\u05e8\u05d9\u05ea\"}",
+    "{\"text\":\"\ud7ff \ue000 \uffff \ufffd\"}",
+    "{\"\":6,\"B\":4,\"a\":3,\"a\\u0000\":8,\"aa\":7,\"\u00e9\":5,\"\uffff\":1,\"\ud800\udc00\":2}",
+    "{\"largest\":9223372036854775807,\"negative\":-42,\"smallest\":-9223372036854775808,\"zero\":0}",
+    "{\"at\":1790000000,\"device\":\"pc\",\"fleet\":\"0123456789abcdef\",\"key\":\"BAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=\",\"kind\":\"owner-device\",\"v\":1}",
+    "{}",
+    "{\"m\":-18446744073709551616,\"n\":123456789012345678901234567890}",
+    "{\"e15\":1000000000000000.0,\"e16\":1e+16,\"e17\":1.2345678901234568e+17,\"half\":0.5,\"hundred thousandth\":1e-05,\"largest\":1.7976931348623157e+308,\"minus zero\":-0.0,\"negative\":-2.5e-07,\"one\":1.0,\"pi\":3.141592653589793,\"point one\":0.1,\"ten thousandth\":0.0001,\"third\":0.3333333333333333,\"tiny\":5e-324}",
+    "{\"no\":false,\"none\":null,\"yes\":true}",
+    "{\"list\":[1,\"two\",true,false,null,{\"a\":{},\"b\":[]},[[]]],\"object\":{\"y\":{\"\u00e9\":\"\u2028\"},\"z\":null}}"
+  ]
+}

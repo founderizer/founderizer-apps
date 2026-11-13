@@ -33,7 +33,8 @@ struct SecretPreset: Identifiable {
 struct SecretProgress: Equatable {
     struct Grant: Equatable {
         let agent: String
-        let grant: SecretGrant
+        /// The level that the agent gets; nil takes the secret back from it (a replace, where an agent had it).
+        let grant: SecretGrant?
         var done = false
         /// What the owner must know about this agent's access, or why it is not given.
         var note: String?
@@ -57,6 +58,11 @@ struct SecretProgress: Equatable {
     /// and nothing after it runs before it is there.
     var sealed: String?
     var sealedProblem: String?
+    /// A replace of the value of a key that the list has (owner feature `secret_replace`): the owner's signed
+    /// statement about the sealed copy, which goes to the vault with it. Neither is a value.
+    var statement: String?
+    var signature: String?
+    var replaces: Bool { statement != nil }
 
     var isDone: Bool {
         sealed == nil && grants.allSatisfy(\.done) && (need == nil || answered) && (tell == nil || told)
@@ -79,6 +85,14 @@ struct SecretProgress: Equatable {
 /// owner's that names the secret and who holds it. A step that fails is shown with its words and Try again; the steps
 /// before it stay done.
 ///
+/// **The list takes no second API key of one variable name** (the owner, 13 November 2026: "having 2 keys named the
+/// same should not be possible"). When the list has one key of that name, Save puts the new value under that key's
+/// own reference (owner feature `secret_replace`): the form registers the new fingerprints under it, and sends the
+/// sealed copy with the owner's signed statement about that copy, which is what lets the central vault put a new value
+/// in the place of the old one. The same agents keep the key, and its site stays. The orange line says so before the
+/// Save that does it (`SameName`). When the list has two keys of that name from before, or the vault cannot replace a
+/// value yet, the line says that and Save sends nothing. A login with a title that the list has is as before.
+///
 /// **If the central vault does not answer, nothing is sent** (DevOps plan V4), also as no fallback: the form shows the
 /// row "Founderizer Vault does not answer" and its Try again in place of the fields, and the hub refuses a new
 /// secret then too (503). The fields keep what was typed until the form goes.
@@ -98,6 +112,32 @@ struct SecretEntryView: View {
     }
 
     private enum Phase: Equatable { case form, noVault, saved(SecretProgress) }
+
+    /// **The words of Add secret for a name that the list has**, each one once and in this one place. The owner said
+    /// yes to `replaces`, and then to `twice`, `notYet`, `notInVault` and `told` in these exact forms ("Yes, all
+    /// four", 13 November 2026). They are new words in elements that he has. `second` is the line from before.
+    enum SameName {
+        /// The orange line: one API key of that variable name. The next Save puts the new value under it.
+        static func replaces(_ name: String) -> String { "The list has “\(name)” already. Save replaces its key: the same agents keep it." }
+        /// The orange line: two keys of that name, from before the list refused a second one. Save sends nothing.
+        static func twice(_ name: String) -> String { "The list has “\(name)” two times. Remove one first." }
+        /// The orange line: the central vault's program does not replace a value yet. Save sends nothing.
+        static func notYet(_ name: String) -> String { "Founderizer Vault cannot replace “\(name)” yet. Try again in a few minutes." }
+        /// The orange line: a login of that title. A second one, as before.
+        static func second(_ name: String) -> String { "The list has “\(name)” already. Save again to add a second one." }
+        /// The first row of what came of a save, while the new value of a replace is not in the vault.
+        static func notInVault(_ name: String) -> String { "The new key of “\(name)” is not in the vault yet" }
+        /// The rows of what came of a save, for an agent that the owner took the key back from in a replace: after
+        /// the step, while it is not done, and the note of a step that failed.
+        static func tookBack(_ agent: String) -> String { "\(agent) has no access" }
+        static func notTakenBack(_ agent: String) -> String { "\(agent) still has it" }
+        static let takeBackFailed = "Not taken back."
+        /// The owner's message to the chat's agent after a replace: never "No agent holds it yet." It names no
+        /// reference: the key keeps the one that its holders know, and the owner reads this bubble.
+        static func told(_ name: String) -> String {
+            "I replaced the value of the API key \(name) in the vault. The agents that hold it keep it."
+        }
+    }
     /// The detail of the row "Founderizer Vault does not answer" while the central vault does not answer: new words
     /// in an existing row, which wait for the owner's yes (AGENTS.md).
     static let noVaultDetail: String? = "Nothing was sent. Try again in a moment."
@@ -105,12 +145,24 @@ struct SecretEntryView: View {
     @State private var login: LoginSecret
     /// The access that each agent gets, by name. An agent that is not in it gets none.
     @State private var access: [String: SecretGrant]
+    /// The agents whose row the owner set himself in this form. A replace shows each other agent's level of now, and
+    /// only a row that he set, or that a request proposes, makes a step (`SecretReplaceAccess`).
+    @State private var touched: Set<String> = []
+    /// The agents whose row is the request's proposal, until the owner changes it himself.
+    @State private var proposed: Set<String>
+    /// The reference of the key whose levels of now the rows show, from the Save that found it; nil while they show
+    /// none. A change of the name takes those levels out of the rows again.
+    @State private var levelsOf: String?
+    /// That key's entry as the Save read it, and his own pick for each row of his that shows a higher level than he
+    /// picked (`SecretReplaceAccess.rows`): the pick comes back when the name names that key no more.
+    @State private var levelsEntry: TeamLogin?
+    @State private var raised: [String: SecretGrant] = [:]
     /// The authenticator seed field shows.
     @State private var withSeed = false
     /// The last problem or the next step, in orange.
     @State private var message: String?
     @State private var busy = false
-    /// The owner saw that the catalog has this title and pressed Save again.
+    /// The owner saw that the catalog has this name (the orange line of `SameName`) and pressed Save again.
     @State private var sameName: String?
     /// One secret of the catalog that fits the request: an earlier save can answer it.
     private struct Fit: Identifiable {
@@ -144,6 +196,7 @@ struct SecretEntryView: View {
         if let key = preset.key { login.password = key }
         _login = State(initialValue: login)
         _access = State(initialValue: preset.give)
+        _proposed = State(initialValue: Set(preset.give.keys))
     }
 
     /// The hub and the generation of this view, while the store still shows them and its reading is current.
@@ -313,8 +366,9 @@ struct SecretEntryView: View {
                 // The other kind's fields go: a password never becomes a key, and the reverse.
                 var fresh = LoginSecret(); fresh.kind = kind
                 login = fresh; withSeed = false; sameName = nil; message = nil
+                dropLevels()
             }
-            .onChange(of: login.title) { _, _ in sameName = nil }
+            .onChange(of: login.title) { _, _ in sameName = nil; dropLevels() }
             .onChange(of: login) { _, _ in centralLogin = nil }
     }
 
@@ -419,11 +473,30 @@ struct SecretEntryView: View {
             FleetSelect("Access of \(name)", options: rows, selection: level) { chosen in
                 let grant: SecretGrant? = chosen == Level.read ? .read : chosen == Level.use ? .use : nil
                 access[agent] = grant
+                touched.insert(agent); proposed.remove(agent); raised[agent] = nil
             } label: {
                 FleetSelectLabel(title: title, mark: .symbol(mark))
             }.accessibilityIdentifier("secret-give-\(agent)")
         }
         .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 8).frame(minHeight: 44)
+    }
+
+    /// A replace: each agent's level of now goes into the rows that the owner did not set, so the form says who has
+    /// the key, and not "No access" for an agent that has it.
+    private func showLevels(of reference: String, _ entry: TeamLogin) {
+        dropLevels()        // first his own rows again: the levels of a key that the rows showed before are no pick of his
+        let shown = SecretReplaceAccess.rows(now: entry.grants, holders: holders, set: access, touched: touched, proposed: proposed)
+        access = shown.rows; touched = shown.touched; raised = shown.raised
+        levelsOf = reference; levelsEntry = entry
+    }
+
+    /// The name is no longer the key's whose levels the rows show: those levels leave the rows. A row that he set is
+    /// his own pick again, a request's row is its proposal again, and each other row is empty.
+    private func dropLevels() {
+        guard levelsOf != nil else { return }
+        access = SecretReplaceAccess.own(rows: access, holders: holders, touched: touched, raised: raised, proposal: preset.give,
+                                         proposed: proposed)
+        raised = [:]; levelsOf = nil; levelsEntry = nil
     }
 
     // MARK: a request
@@ -450,13 +523,13 @@ struct SecretEntryView: View {
     @ViewBuilder private func saved(_ progress: SecretProgress) -> some View {
         FormSection(compact ? nil : "Saved") {
             if progress.sealed != nil {
-                FormRow("“\(progress.title)” is not in the vault yet", symbol: "exclamationmark.circle", detail: progress.login,
-                        warning: progress.sealedProblem)
+                FormRow(progress.replaces ? SameName.notInVault(progress.title) : "“\(progress.title)” is not in the vault yet",
+                        symbol: "exclamationmark.circle", detail: progress.login, warning: progress.sealedProblem)
             } else {
                 FormRow("“\(progress.title)” is in the vault", symbol: "checkmark.circle", detail: progress.login)
             }
             ForEach(progress.grants, id: \.agent) { grant in
-                FormRow(grant.done ? Self.holds(grant) : "\(grant.agent.agentLabel) does not have it yet",
+                FormRow(grant.done ? Self.holds(grant) : Self.waits(grant),
                         symbol: grant.done && !grant.warning ? "checkmark.circle" : "exclamationmark.circle",
                         detail: grant.warning ? nil : grant.note, warning: grant.warning ? grant.note : nil)
             }
@@ -474,7 +547,16 @@ struct SecretEntryView: View {
     }
 
     private static func holds(_ grant: SecretProgress.Grant) -> String {
-        grant.grant == .read ? "\(grant.agent.agentLabel) reads it in its sessions" : "\(grant.agent.agentLabel) can use it"
+        switch grant.grant {
+        case .read: "\(grant.agent.agentLabel) reads it in its sessions"
+        case .use: "\(grant.agent.agentLabel) can use it"
+        case nil: SameName.tookBack(grant.agent.agentLabel)
+        }
+    }
+
+    /// The row of a step that is not done: the agent does not have the secret yet, or still has the one to take back.
+    private static func waits(_ grant: SecretProgress.Grant) -> String {
+        grant.grant == nil ? SameName.notTakenBack(grant.agent.agentLabel) : "\(grant.agent.agentLabel) does not have it yet"
     }
 
     // MARK: steps
@@ -520,37 +602,75 @@ struct SecretEntryView: View {
         guard let central else { phase = .noVault; return }
         busy = true
         defer { busy = false }
-        let title = login.title, kind = login.kind, variable = login.variable, grants = chosen
+        let title = login.title, kind = login.kind, variable = login.variable
+        var grants = chosen
+        // The key of the list whose value this save replaces: the one API key with this variable name.
+        var replacing: (reference: String, entry: TeamLogin)?
         // Before anything is sent: the hub answers for this generation, and its catalog has room.
         do {
             let team = try await client.team(hub: context.hub, database: context.db)
             guard let catalog = team.logins else { message = "This hub has no list of secrets. Nothing was sent."; return }
-            guard catalog.count < LoginSecret.maxCatalog else {
+            // The entry of a central save that the hub did not confirm is this very save, not a second secret.
+            switch SecretNameHeld.of(title, kind: kind, in: catalog, but: centralLogin) {
+            case .none:
+                // No key of this name (any more): rows that the form filled with a key's levels are not his choice
+                // for a new key, so they give nothing.
+                if levelsOf != nil { dropLevels(); grants = chosen }
+            case .twice: dropLevels(); message = SameName.twice(title); return
+            case .second:
+                if sameName != title { sameName = title; message = SameName.second(title); return }
+            case .key(let reference, let entry):
+                guard features.contains(CentralVault.replaceFeature), GrantSigning.offered(store) else {
+                    message = SameName.notYet(title); return
+                }
+                if sameName != title || levelsOf != reference {
+                    // The first Save: the line says what the next one does, and the rows show who has the key now.
+                    sameName = title; message = SameName.replaces(title)
+                    showLevels(of: reference, entry)
+                    return
+                }
+                replacing = (reference, entry)
+                // The same agents keep the key: only a row that he set himself makes a step, and no access takes
+                // the key back from an agent that has it.
+                grants = SecretReplaceAccess.changes(now: entry.grants, holders: holders, rows: access, set: touched, proposed: proposed,
+                                                     raised: raised)
+                    .map { SecretProgress.Grant(agent: $0.agent, grant: $0.grant) } + doorGrant
+            }
+            guard replacing != nil || catalog.count < LoginSecret.maxCatalog else {
                 message = "The list has \(LoginSecret.maxCatalog) secrets and takes no more. Nothing was sent."; return
             }
-            // The entry of a central save that the hub did not confirm is this very save, not a second secret.
-            if catalog.contains(where: { $0.value.name == title && $0.key != centralLogin }) && sameName != title {
-                sameName = title
-                message = "The list has “\(title)” already. Save again to add a second one."
-                return
-            }
         } catch { message = "The hub did not answer for this save. Nothing was sent. \(text(error))"; return }
-        await saveCentral(to: central, context: context, title: title, kind: kind, variable: variable, grants: grants)
+        await saveCentral(to: central, context: context, title: title, kind: kind, variable: variable, grants: grants,
+                          replacing: replacing)
     }
+
 
     /// A save into the central vault. The value is sealed to the vault's key first, so it leaves the form as soon as
     /// the hub has the reference: then the sealed value, which only that vault opens, is all that is left of it here.
     /// A hub that does not confirm the reference leaves the fields as typed, and Save again goes under the same one.
+    ///
+    /// `replacing`: the key of the list whose value this save replaces. The save goes under that key's own reference,
+    /// with the owner's signed statement about the sealed copy, which is made before anything is sent: a Mac that
+    /// cannot sign sends nothing. The hub's step registers the fingerprints of the new value and gets the entry's own
+    /// title and variable name back, so the entry, its site and its grants are not touched.
     private func saveCentral(to recipient: String, context: (hub: URL, db: String), title: String, kind: LoginSecret.Kind,
-                             variable: String?, grants: [SecretProgress.Grant]) async {
+                             variable: String?, grants: [SecretProgress.Grant],
+                             replacing: (reference: String, entry: TeamLogin)? = nil) async {
         guard let value = try? login.value() else { message = "This secret cannot be sent. Nothing was sent."; return }
         let sealed: String
         do { sealed = try AgeSeal.seal(value, to: recipient) }
         catch { message = "Founderizer could not seal it for the vault. Nothing was sent."; return }
-        let reference = centralLogin ?? "bws://\(UUID().uuidString.lowercased())"
-        centralLogin = reference
+        let reference = replacing?.reference ?? centralLogin ?? "bws://\(UUID().uuidString.lowercased())"
+        var signed: (statement: String, signature: String)?
+        if replacing != nil {
+            do { signed = try await GrantSigning.replace(login: reference, sealed: sealed, hub: context.hub, database: context.db) }
+            catch { message = "\(text(error)) Nothing was sent."; return }
+        } else {
+            centralLogin = reference
+        }
         do {
-            try await Self.register(reference, title: title, kind: kind, variable: variable, value: value, hub: context.hub,
+            try await Self.register(reference, title: replacing?.entry.title ?? title, kind: kind,
+                                    variable: replacing != nil ? replacing?.entry.env : variable, value: value, hub: context.hub,
                                     database: context.db, installation: store.installation)
         } catch {
             // The hub takes no new secret while the central vault does not answer: nothing was sent.
@@ -559,16 +679,37 @@ struct SecretEntryView: View {
         }
         clear(); centralLogin = nil
         let progress = SecretProgress(login: reference, title: title, kind: kind, grants: grants, need: preset.need, tell: preset.tell,
-                                      sealed: sealed)
+                                      sealed: sealed, statement: signed?.statement, signature: signed?.signature)
         phase = .saved(progress)
         await proceed(progress)
     }
 
     /// A secret of the catalog answers the request: the agents that the owner chose get it, then the request its answer.
     private func answerWith(_ reference: String, entry: TeamLogin) async {
+        guard !busy else { return }
+        busy = true         // the rows do not change while the levels are read again
+        defer { busy = false }
         let kind: LoginSecret.Kind = entry.isAPIKey ? .apiKey : .login
-        let grants = holders.compactMap { agent in access[agent].map { SecretProgress.Grant(agent: agent, grant: kind == .login ? .use : $0) } }
-            + doorGrant
+        // While the rows show the levels of now of this very key (after a Save that found the name), the answer is
+        // what the rows say against those levels, as for the Save that replaces: a row that he set to no access takes
+        // the key back, and a row that he did not set changes nothing.
+        let grants: [SecretProgress.Grant]
+        if levelsOf == reference {
+            // The levels of now, read again: `entry` is from when the request's form opened, and the rows show the
+            // levels of a later Save. When the hub does not answer, the entry of that Save.
+            var now = levelsEntry ?? entry
+            if let context, let fresh = (try? await client.team(hub: context.hub, database: context.db))?.logins?[reference] { now = fresh }
+            grants = SecretReplaceAccess.changes(now: now.grants, holders: holders, rows: access, set: touched, proposed: proposed,
+                                                 raised: raised)
+                .map { SecretProgress.Grant(agent: $0.agent, grant: $0.grant) } + doorGrant
+        } else {
+            // The rows show no levels, or the levels of another key: then the answer gives what he set himself and
+            // what the request proposes, and nothing of a level that the form put into a row for that other key.
+            let rows = levelsOf == nil ? access : SecretReplaceAccess.own(rows: access, holders: holders, touched: touched, raised: raised,
+                                                                          proposal: preset.give, proposed: proposed)
+            grants = holders.compactMap { agent in rows[agent].map { SecretProgress.Grant(agent: agent, grant: kind == .login ? .use : $0) } }
+                + doorGrant
+        }
         clear()
         let progress = SecretProgress(login: reference, title: entry.name, kind: kind, grants: grants, need: preset.need, tell: nil)
         phase = .saved(progress)
@@ -590,7 +731,7 @@ struct SecretEntryView: View {
         if let sealed = progress.sealed {
             do {
                 _ = try await VaultClient().intake(hub: context.hub, database: context.db, client: installation, login: progress.login,
-                                                   ciphertext: sealed)
+                                                   ciphertext: sealed, statement: progress.statement, signature: progress.signature)
                 progress.sealed = nil; progress.sealedProblem = nil
                 phase = .saved(progress)
             } catch {
@@ -602,15 +743,24 @@ struct SecretEntryView: View {
         for index in progress.grants.indices where !progress.grants[index].done {
             let wanted = progress.grants[index]
             do {
-                try await GrantSigning.grant(wanted.grant, login: progress.login, agent: wanted.agent, store: store, hub: context.hub,
-                                             database: context.db)
+                // A grant is signed for the central vault before the hub has it, and its end after (`GrantSigning`),
+                // as on the key's own page: the vault's signed grants always include the hub's.
+                if wanted.grant != nil {
+                    try await GrantSigning.grant(wanted.grant, login: progress.login, agent: wanted.agent, store: store,
+                                                 hub: context.hub, database: context.db)
+                }
                 let receipt = try await secrets.grant(hub: context.hub, database: context.db, client: installation, login: progress.login,
                                                       agent: wanted.agent, grant: wanted.grant)
+                if wanted.grant == nil {
+                    try await GrantSigning.grant(nil, login: progress.login, agent: wanted.agent, store: store, hub: context.hub,
+                                                 database: context.db)
+                }
                 let note = Self.note(receipt, title: progress.title)
                 progress.grants[index].done = true
                 progress.grants[index].note = note?.text; progress.grants[index].warning = note?.warning ?? false
             } catch {
-                progress.grants[index].note = "Not given. \(text(error))"; progress.grants[index].warning = true
+                progress.grants[index].note = "\(wanted.grant == nil ? SameName.takeBackFailed : "Not given.") \(text(error))"
+                progress.grants[index].warning = true
             }
             phase = .saved(progress)
         }
@@ -642,9 +792,13 @@ struct SecretEntryView: View {
     /// The owner's message in the chat that Add secret was opened from: the secret's name and reference, who holds it
     /// and where it is. It names no value, because the app has none to name.
     static func telling(_ progress: SecretProgress) -> String {
-        var words = ["I saved \(progress.kind == .apiKey ? "the API key" : "the login") \(progress.title) in the vault, as \(progress.login)."]
-        let given = progress.given.map { "\($0.agent) \($0.grant == .read ? "reads it as $\(progress.title)" : "uses it through its vault")" }
-        if given.isEmpty { words.append("No agent holds it yet.") }
+        var words = [progress.replaces ? SameName.told(progress.title)
+                     : "I saved \(progress.kind == .apiKey ? "the API key" : "the login") \(progress.title) in the vault, as \(progress.login)."]
+        // an agent that the owner took the key back from is no holder: the message names who got it
+        let given = progress.given.filter { $0.grant != nil }
+            .map { "\($0.agent) \($0.grant == .read ? "reads it as $\(progress.title)" : "uses it through its vault")" }
+        // After a replace, the agents that held the key keep it: only a new secret can have no holder yet.
+        if given.isEmpty { if !progress.replaces { words.append("No agent holds it yet.") } }
         else { words.append((given.count == 1 ? given[0] : given.dropLast().joined(separator: ", ") + " and " + given[given.count - 1]) + ".") }
         return words.joined(separator: " ")
     }

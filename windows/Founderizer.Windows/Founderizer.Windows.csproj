@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The screens of the Windows app (app/windows/README.md, plan decision D3): WinUI 3, not packaged, self-contained,
+    for ARM64 and x64, Windows 11 only. Only Windows builds it. It draws only the elements of the owner's approved
+    pictures (windows-app-pictures.md); each other element waits for his yes (AGENTS.md).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+    <RootNamespace>Founderizer.Windows</RootNamespace>
+    <AssemblyName>Founderizer</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>ARM64;x64</Platforms>
+    <RuntimeIdentifiers>win-arm64;win-x64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Only the WinUI part of the Windows App SDK, not its AI, ML, search and widget parts. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Founderizer.Core/Founderizer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The sample fleet of the Mac and iPhone apps (Sample/make_sample_json.py copies it from app/ios). -->
+    <EmbeddedResource Include="Sample/SampleFleet.json" LogicalName="Founderizer.Windows.Sample.SampleFleet.json" />
+    <None Remove="Sample/make_sample_json.py" />
+  </ItemGroup>
+</Project>

@@ -62,7 +62,8 @@ public actor VaultBroker {
             if request.operation == .status {
                 try ready()
                 response = Self.status(agent: configuration.agent, user: NSUserName(), recipient: try identity.recipient(),
-                                       creates: true, requests: VaultCurl.isAvailable, deposits: true, withdrawals: true)
+                                       creates: true, requests: VaultCurl.isAvailable, deposits: true, withdrawals: true,
+                                       replaces: true)
             } else if request.operation == .request {
                 // Local setup first, as for a sign-in: the hub confirms the job once, and that is not used up for nothing.
                 try ready()
@@ -87,7 +88,7 @@ public actor VaultBroker {
                 _ = try identity.recipient()
                 let store = try VaultLocalStore(keychain: keychain, programs: helpers), opener = identity
                 let reply = await Self.deposit(request, as: caller, hub: hub, unseal: { try opener.open($0) }) {
-                    try store.put(id: $0, name: $1, value: $2, note: VaultLocalStore.delivered)
+                    try store.put(id: $0, name: $1, value: $2, note: VaultLocalStore.delivered, replace: $3)
                 }
                 return try JSONSerialization.data(withJSONObject: reply) + Data([10])
             } else if request.operation == .withdraw {
@@ -115,7 +116,7 @@ public actor VaultBroker {
                 try ready()
                 _ = try identity.recipient()
                 let store = try openedStore()
-                let job = try await hub.confirm(request, as: caller)
+                let job = try await hub.confirm(request, as: caller)       // a handover's: checked for the owner's pin
                 let (login, source) = try await savedLogin(for: job, operation: request.operation, caller: caller, store: store)
                 if request.operation == .handover, let expected = job.source, source != expected { throw VaultFailure.sourceMismatch }
                 try await hub.protect(login, job: job, as: caller)
@@ -201,15 +202,18 @@ public actor VaultBroker {
     /// (`capture`). `requests` says that this broker sends requests with a saved value (`request`) and ends them
     /// (`cancel`). `deposits` says that it takes a key or a login that the owner delivers from Founderizer (`deposit`),
     /// and `withdrawals` that it gives such a secret back when no agent of the machine holds it any more (`withdraw`).
-    /// The hub asks a machine for a withdrawal only when its broker says `withdrawals`.
+    /// The hub asks a machine for a withdrawal only when its broker says `withdrawals`. `replaces` says that a
+    /// delivery which the hub marks so puts its value in the place of the one that an earlier delivery saved: the
+    /// hub sends the new value of a secret that the owner replaced only to a vault that says this word.
     static func status(agent: String, user: String, recipient: String, creates: Bool = false, requests: Bool = false,
-                       deposits: Bool = false, withdrawals: Bool = false) -> [String: Any] {
+                       deposits: Bool = false, withdrawals: Bool = false, replaces: Bool = false) -> [String: Any] {
         var status: [String: Any] = ["ok": true, "v": 2, "agent": agent, "store": "keychain", "backend": VaultBackend.store.rawValue,
                                      "user": user, "recipient": recipient, "callers": true]
         if creates { status["creates"] = true; status["captures"] = true }
         if requests { status["requests"] = true }
         if deposits { status["deposits"] = true }
         if withdrawals { status["withdrawals"] = true }
+        if replaces { status["replaces"] = true }
         return status
     }
 
@@ -354,10 +358,11 @@ public actor VaultBroker {
     /// Founderizer, sealed by the central vault to this machine's pinned vault key, goes into this machine's own store under the
     /// reference that it has in the owner's vault. The helper names only the delivery. The hub gives the copy, which is
     /// opened here (`unseal`); the hub compares the fingerprints of what it holds with the owner's before anything is
-    /// saved (`put`: the store's id, the name and the value), and the store refuses another value under that reference.
-    /// The answer holds no part of the value: `saved` is `new`, or `same` when this vault had it already.
+    /// saved (`put`: the store's id, the name, the value, and whether the hub says that the owner replaced the value),
+    /// and the store refuses another value under that reference unless the hub says so. The answer holds no part of
+    /// the value: `saved` is `new`, `same` when this vault had it already, or `replaced`.
     static func deposit(_ request: VaultRequest, as caller: VaultCaller, hub: VaultHub, unseal: (Data) throws -> Data,
-                        put: (String, String, String) throws -> String) async -> [String: Any] {
+                        put: (String, String, String, Bool) throws -> String) async -> [String: Any] {
         func refused(_ failure: VaultFailure) -> [String: Any] { ["ok": false, "v": 2, "error": failure.rawValue] }
         let delivery: VaultDeposit
         do { delivery = try await hub.confirmDeposit(request, as: caller) } catch { return refused((error as? VaultFailure) ?? .hub) }
@@ -370,7 +375,9 @@ public actor VaultBroker {
             return refused((error as? VaultFailure) ?? .depositValue)
         }
         let saved: String
-        do { saved = try put(delivery.storeID, delivery.title, value.stored) } catch { return refused((error as? VaultFailure) ?? .store) }
+        do { saved = try put(delivery.storeID, delivery.title, value.stored, delivery.replaces) } catch {
+            return refused((error as? VaultFailure) ?? .store)
+        }
         return ["ok": true, "v": 2, "deposit": delivery.id, "login": delivery.login, "saved": saved]
     }
 

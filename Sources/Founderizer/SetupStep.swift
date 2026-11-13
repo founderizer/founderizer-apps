@@ -32,6 +32,8 @@ enum SetupMetrics {
     /// A mark and a one-line title, with the gap between them: what stands in the middle of a setup page.
     @MainActor static let head: CGFloat = mark + gap
         + NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: title, weight: .semibold))
+    /// The line of Back at a page's top left, on which the × of a wizard that fills the window stands (`SetupClose`).
+    @MainActor static let backLine: CGFloat = NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: text))
 }
 
 /// **A setup page: its step in the middle of the window, and its Back at the top left.** The owner, 26 October 2026,
@@ -150,6 +152,9 @@ private struct SetupColumn: Layout {
 extension EnvironmentValues {
     /// The height a setup page has for its step, which `SetupColumn` keeps a tall step inside.
     @Entry var setupRoom: CGFloat? = nil
+    /// The page is a wizard that fills the window (`FleetStore.fillsWindow`): its × closes it, so its first page needs
+    /// no Back.
+    @Entry var fillsWindow = false
 }
 
 extension SetupStep where Content == EmptyView {
@@ -281,6 +286,38 @@ struct SetupBack: View {
                 .padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
         }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach)
             .accessibilityLabel("Back")
+            .preference(key: SetupBackShows.self, value: true)
+    }
+}
+
+/// A page shows its Back: Esc is Back's then, and the × of a wizard that fills the window takes Esc only on a first
+/// page where no Back stands (`SetupFirstPage`).
+struct SetupBackShows: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
+/// The page is the first page of Add server (also as the manager's server) or of Add agent: where no Back stands there,
+/// Esc closes the wizard, as × does (the owner's yes of 12 November 2026: "Esc does what Back does. On the first page,
+/// it closes the wizard.").
+struct SetupFirstPage: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
+/// **× at the top right of a wizard that fills the window** (the owner's yes of 12 November 2026 to its two pictures):
+/// it closes the wizard from any page, and what runs goes on. A muted xmark on Back's line, with no circle at rest.
+struct SetupClose: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark").font(IconMetrics.symbol(14, weight: .medium)).foregroundStyle(FleetStyle.muted)
+        }
+        .buttonStyle(FleetIconButtonStyle(side: IconMetrics.side))
+        .help("Close")
+        .accessibilityLabel("Close")
+        .accessibilityIdentifier("wizard-close")
     }
 }
 

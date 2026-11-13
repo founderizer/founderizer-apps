@@ -40,8 +40,11 @@ public struct SecretImport: Sendable, Equatable {
     public struct Row: Identifiable, Sendable, Equatable {
         public let id: Int
         public let secret: LoginSecret
+        /// The vault of the password manager that holds the item, where the file names one (a 1Password `.1pux`;
+        /// a `.csv` and a Bitwarden file name none).
+        public let vault: String?
         public var problem: String? { secret.problem }
-        public init(id: Int, secret: LoginSecret) { self.id = id; self.secret = secret }
+        public init(id: Int, secret: LoginSecret, vault: String? = nil) { self.id = id; self.secret = secret; self.vault = vault }
     }
 
     /// The kinds of items that are not imported, and how many of each.
@@ -120,10 +123,21 @@ public struct SecretImport: Sendable, Equatable {
             secret.password = candidate.password
             secret.totp = candidate.totp
             secret.env = candidate.env
-            rows.append(Row(id: rows.count, secret: secret))
+            rows.append(Row(id: rows.count, secret: secret, vault: found.vault))
         }
         self.rows = rows
         self.skipped = skipped
+    }
+
+    /// The owner feature of `GET /ui/secrets/same`, which says whether an item's value is the one that the fleet holds
+    /// under a title that it has already (the owner's yes of 12 November 2026: "Changed in 1Password").
+    public static let compareFeature = "secret_compare"
+
+    /// Whether an item whose title the fleet's list has already holds another value: the hub's answers for each
+    /// secret of that title (`true` the same value, `false` another one, `nil` the hub cannot tell). Changed only when
+    /// no secret of the title holds this value and the hub could tell for at least one.
+    public static func isChanged(_ answers: [Bool?]) -> Bool {
+        !answers.contains(true) && answers.contains(false)
     }
 
     /// One line for the items that are not imported, or nil: "Not imported: 2 notes and 1 card."

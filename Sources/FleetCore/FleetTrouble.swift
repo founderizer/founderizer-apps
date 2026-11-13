@@ -158,7 +158,8 @@ extension FleetTrouble {
     /// no agent is only in `servers`.
     public static func read(connectionError: String?, storageError: String?, isFresh: Bool, state: HubState?,
                             health: FleetHealth?, machines: [MachineStatus], servers: [ServerEntry],
-                            checklists: [String: VerifyChecklist], at time: Double) -> FleetTrouble {
+                            checklists: [String: VerifyChecklist], at time: Double,
+                            connectStop: (stop: ConnectStop, turn: ConnectTurn)? = nil) -> FleetTrouble {
         var findings: [Trouble] = []
 
         // ---- this Mac and the hub
@@ -177,6 +178,14 @@ extension FleetTrouble {
         if let storageError, !storageError.isEmpty {
             findings.append(Trouble(id: "app/storage", title: "This Mac could not write",
                                     says: storageError, kind: .hub))
+        }
+        // A Turn on or a Turn off of the connected apps that stopped (Settings › Servers, `ConnectGate`): its row's own
+        // title and sentence, which its Report a problem carries here.
+        if let connectStop {
+            findings.append(Trouble(id: "hub/connect",
+                                    title: connectStop.turn == .on ? "Connected apps did not turn on"
+                                                                   : "Connected apps did not turn off",
+                                    says: connectStop.stop.words, kind: .hub))
         }
         // The hub writes a `fix` line for every warning it raises (owner API 1.5), so this window says the same
         // thing System status says, in the same words, and neither invents one. The manager's own warning is one of

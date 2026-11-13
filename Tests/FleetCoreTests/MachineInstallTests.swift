@@ -458,6 +458,40 @@ struct MachineInstallTests {
         #expect(program?.contains("fleet-server && python3 fleet.py verify --json") == true)
     }
 
+    /// A hub is checked in the folder that its own service runs in, whatever `hub.sh` named it, and in the checkout of
+    /// a hub made before the name `founderizer` when its service names none. The program runs here in `sh`, with a stand-in
+    /// `systemctl` and a `fleet.py` that says where it ran.
+    @Test func theHubIsCheckedInTheFolderThatItsOwnServiceRuns() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("hub-verify-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let bin = folder.appendingPathComponent("bin"), kit = folder.appendingPathComponent("kit named by the hub")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: kit, withIntermediateDirectories: true)
+        try "import os, sys\nprint(os.getcwd(), sys.argv[1:])\n".write(to: kit.appendingPathComponent("fleet.py"),
+                                                                     atomically: true, encoding: .utf8)
+        func run(_ named: String) throws -> (Int32, String) {
+            let systemctl = bin.appendingPathComponent("systemctl")
+            try "#!/bin/sh\n[ \"$*\" = '--user show -p WorkingDirectory --value fleet-hub' ] && printf '%s\\n' '\(named)'\n"
+                .write(to: systemctl, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: systemctl.path)
+            let child = Process(), out = Pipe()
+            child.executableURL = URL(fileURLWithPath: "/bin/sh")
+            child.arguments = ["-c", InstallPlan.verifyProgram(.hub)]
+            child.environment = ["PATH": bin.path + ":/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin"]
+            child.standardOutput = out; child.standardError = out
+            try child.run(); child.waitUntilExit()
+            return (child.terminationStatus, String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+        }
+        let (status, said) = try run(kit.path)
+        #expect(status == 0, "\(said)")
+        #expect(said.contains("kit named by the hub ['verify', '--json']"))
+        let (before, saidBefore) = try run("")        // a hub whose service names no folder: the checkout of before
+        #expect(before != 0)
+        #expect(saidBefore.contains("/home/fleet/fleet-pilot"))
+        #expect(!InstallPlan.verifyCommand(.hub).contains("founderizer"))
+        #expect(InstallPlan.verifyCommand(.hub).contains("runuser -u fleet"))
+    }
+
     @Test func whatTheOwnerGivesIsCheckedBeforeAnythingIsReached() {
         #expect(InstallTarget(host: "198.51.100.7").isValid)
         #expect(InstallTarget(host: "box.example.com", user: "deploy", port: 2222).isValid)

@@ -142,6 +142,11 @@ public enum CopyDefault {
 
     /// The folder this app makes for itself inside whichever of the two it is given.
     public static let name = "Founderizer"
+
+    /// Whether that folder is still to be made: the copies are on, he has chosen no folder, and this start of the app
+    /// has not tried yet. It is made when the first copy is due, never when the app starts: macOS guards iCloud Drive
+    /// and Documents, and can ask its own question at the first touch.
+    public static func waits(on: Bool, chosen: Bool, tried: Bool) -> Bool { on && !chosen && !tried }
 }
 
 /// **Which copies go when a new one is kept.** It is the one thing in this feature that deletes a file of his, so

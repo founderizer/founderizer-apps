@@ -83,6 +83,30 @@ struct TaskWordsTests {
         #expect(task.stateWord(holds: [], limited: false) == "Working")
     }
 
+    /// **A task in state working is work only while its session works on it** (hub 1.147; the owner, 13 November 2026:
+    /// "the agent replied but the sidebar is still animating!"): a task that its agent parked until a time, and one whose
+    /// last turn ended with nothing of it running, keep their mark and their word, with no motion and no green of work.
+    @Test func aTaskThatWaitsBetweenTurnsIsNoWorkNow() throws {
+        func task(_ more: String = "") throws -> FleetTask {
+            try JSONDecoder().decode(FleetTask.self, from: Data("""
+            {"id": 5, "title": "T", "details": "", "done_when": "", "needs": "", "goal": "", "owner": "remy",
+             "requester": "manager", "state": "working", "created": 1, "attempt": 1, "restarts": 0,
+             "nudge_level": 0, "stop_sent": 0\(more)}
+            """.utf8))
+        }
+        // Nothing is known of its turns (a session that starts, an older hub): its state says it, as before.
+        #expect(try task().mark(holds: []) == ("circle.dotted", "Working", false, true))
+        #expect(try task().tint(holds: []) == .work)
+        // A turn runs, or a command of it runs in the background.
+        #expect(try task(#", "works": true"#).mark(holds: []).inWork)
+        // Its last turn ended and nothing of it runs.
+        #expect(try task(#", "works": false"#).mark(holds: []) == ("circle.dotted", "Working", false, false))
+        #expect(try task(#", "works": false"#).tint(holds: []) == .quiet)
+        // Parked on a reminder, also by a hub that says nothing of its turns.
+        #expect(try !task(#", "parked_until": 9000"#).mark(holds: []).inWork)
+        #expect(try !task(#", "parked_until": 9000, "works": true"#).mark(holds: []).inWork)
+    }
+
     /// **A task's mark comes from its state word's order** (review B5), so the search card, the Tasks board and the
     /// thread agree: a hold first, a result for a task that is over, a usage limit as the board's hourglass (never the
     /// green of work), and a working task that waits on something as the hourglass too.

@@ -8,6 +8,9 @@ import Foundation
 public enum CentralVault {
     /// The hub serves this feature only while its last reading of the central vault was good and recent.
     public static let feature = "central_vault"
+    /// The hub serves it while the central vault takes the owner's signed replace of a value: Add secret puts a new
+    /// value under the reference of a key that the list has, and sends a replace to no hub without it.
+    public static let replaceFeature = "secret_replace"
     /// The hub's own machine, by the name the fleet gives it in `GET /ui/machines`: the manager's machine. A server's
     /// name is its name in Tailscale (the hub's `server_names`), so it is "hub" only on a fleet that never renamed it.
     public static func hubMachine(in machines: [MachineStatus]) -> String {
@@ -106,6 +109,11 @@ public struct VaultMachine: Decodable, Equatable, Identifiable, Sendable {
     public let pinned: String?
     public let matches: Bool
     public let missing: [String]
+    /// When the owner's app signed the pin that the hub keeps of this machine (`owner_pin`), or nil when it keeps none.
+    public let kept_pin_at: Int?
+    /// The hub said when its kept pin was signed (its feature `kept_pins`): an older hub that says nothing has not lost
+    /// a pin.
+    public let keptPinKnown: Bool
     public var id: String { machine }
 
     /// The central vault seals for this machine now: its vault reports a key, and the owner pinned that very key.
@@ -141,7 +149,7 @@ public struct VaultMachine: Decodable, Equatable, Identifiable, Sendable {
         }
     }
 
-    private enum Keys: String, CodingKey { case machine, carrier, broker_recipient, pinned, matches, missing }
+    private enum Keys: String, CodingKey { case machine, carrier, broker_recipient, pinned, matches, missing, kept_pin_at }
 
     public init(from decoder: Decoder) throws {
         let data = try decoder.container(keyedBy: Keys.self)
@@ -151,6 +159,8 @@ public struct VaultMachine: Decodable, Equatable, Identifiable, Sendable {
         pinned = CentralVault.recipient(try? data.decodeIfPresent(String.self, forKey: .pinned))
         matches = (try? data.decodeIfPresent(Bool.self, forKey: .matches)) == true
         missing = (try? data.decodeIfPresent([String].self, forKey: .missing)) ?? []
+        kept_pin_at = (try? data.decodeIfPresent(Int.self, forKey: .kept_pin_at)) ?? nil
+        keptPinKnown = data.contains(.kept_pin_at)
     }
 }
 
@@ -216,14 +226,23 @@ private struct Lossy<Value: Decodable>: Decodable {
 /// The three owner commands of the central vault (owner commands with a `request_id`), sent at once and never kept in
 /// the outbox, as the other commands of Add secret: the hub's receipt is the record. None of them carries a value.
 public enum VaultCommand {
-    /// `POST /ui/vault/intake`: the value of a secret of the catalog, sealed to the central vault's key.
-    public static func intake(requestID: UUID, database: String, login: String, ciphertext: String) throws -> Data {
-        guard LoginSecret.isReference(login), AgeSeal.isSealed(ciphertext), ciphertext.count <= AgeSeal.maxCopy else {
+    /// `POST /ui/vault/intake`: the value of a secret of the catalog, sealed to the central vault's key. With
+    /// `statement` and `signature`, both or neither: the owner's signed replace of the value under a reference that
+    /// the vault holds (`OwnerStatement.replace`), which the hub passes on to the vault as they are.
+    public static func intake(requestID: UUID, database: String, login: String, ciphertext: String,
+                              statement: String? = nil, signature: String? = nil) throws -> Data {
+        guard LoginSecret.isReference(login), AgeSeal.isSealed(ciphertext), ciphertext.count <= AgeSeal.maxCopy,
+              (statement == nil) == (signature == nil) else {
             throw HubError.invalidResponse
         }
-        return try JSONSerialization.data(withJSONObject: ["request_id": requestID.uuidString.lowercased(), "db": database,
-                                                           "login": login, "ciphertext": ciphertext],
-                                          options: [.sortedKeys, .withoutEscapingSlashes])
+        var body: [String: Any] = ["request_id": requestID.uuidString.lowercased(), "db": database, "login": login,
+                                   "ciphertext": ciphertext]
+        if let statement, let signature {
+            guard !statement.isEmpty, statement.utf8.count <= 1024, !statement.contains(where: \.isNewline),
+                  let der = Data(base64Encoded: signature), (8...80).contains(der.count) else { throw HubError.invalidResponse }
+            body["statement"] = statement; body["signature"] = signature
+        }
+        return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys, .withoutEscapingSlashes])
     }
 
     /// `POST /ui/vault/pin`, `/recovery` and `/grant`: one statement and the owner's signature of it, which the hub
@@ -237,7 +256,8 @@ public enum VaultCommand {
     }
 }
 
-/// The receipt of `POST /ui/vault/intake`: `saved` is `new`, or `same` for the value that was there already.
+/// The receipt of `POST /ui/vault/intake`: `saved` is `new`, `same` for the value that was there already, or
+/// `replaced` for a new value that the owner's signed replace put in the place of the old one.
 public struct VaultIntakeReceipt: Decodable, Sendable {
     public let ok: Bool
     public let request_id: String
@@ -296,8 +316,10 @@ public final class VaultClient: Sendable {
     /// The sealed value of one secret that the catalog has, for the central vault. It keeps the value only when its
     /// fingerprints are the ones registered for that reference.
     public func intake(hub: URL, database: String, client: String, login: String, ciphertext: String,
+                       statement: String? = nil, signature: String? = nil,
                        requestID: UUID = UUID()) async throws -> VaultIntakeReceipt {
-        let body = try VaultCommand.intake(requestID: requestID, database: database, login: login, ciphertext: ciphertext)
+        let body = try VaultCommand.intake(requestID: requestID, database: database, login: login, ciphertext: ciphertext,
+                                           statement: statement, signature: signature)
         let receipt = try JSONDecoder().decode(VaultIntakeReceipt.self, from: await command("ui/vault/intake", hub: hub, client: client, body: body))
         guard receipt.ok, receipt.request_id == requestID.uuidString.lowercased(), receipt.client == client, receipt.login == login else {
             throw HubError.invalidResponse
@@ -434,7 +456,10 @@ public enum CentralVaultRemote {
 
     /// The arguments of `ssh` for one program on `target`: the installer's, with the host key checked strictly.
     public static func arguments(target: InstallTarget, program: String) -> [String] {
-        InstallPlan(job: .join, target: target, steps: [], redactions: []).arguments(for: program)
+        // No forwarding of any kind: the trust step runs on a schedule, also into the account of a Mac's agents, and
+        // an SSH agent, an X display or a port of this Mac is nothing that a vault step needs there.
+        ["-a", "-x", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no"]
+            + InstallPlan(job: .join, target: target, steps: [], redactions: []).arguments(for: program)
             .map { $0 == "StrictHostKeyChecking=accept-new" ? "StrictHostKeyChecking=yes" : $0 }
     }
 
