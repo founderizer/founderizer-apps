@@ -27,6 +27,13 @@ import Foundation
 /// it has `--reset`. With no `--timeout`, `tailscale up` waits for ever on a tailnet that approves each new machine by
 /// hand. Until 11 November 2026 step 5 had neither (`NetworkPromptRootTests`). As A2 of the install prompt does, it
 /// runs `tailscale up` only when `tailscale status` fails, so `--reset` never changes a machine where Tailscale runs.
+///
+/// **Step 1 keeps the key of a machine that SSH on the agent's machine has never seen**
+/// (`StrictHostKeyChecking=accept-new`), as `InstallPlan.arguments` does on each SSH and as A1 of the install prompt
+/// does. SSH in BatchMode, and SSH that cannot ask on a terminal, refuses a key that it does not know. So until
+/// 12 November 2026 step 1 stopped on each new machine with "Host key verification failed.", and the agent could give
+/// the owner only that error. SSH still refuses a key that changed, and the words of step 1 say what the owner does
+/// then (`NetworkPromptRootTests`).
 public enum NetworkPrompt {
     /// The whole prompt, as one block to copy.
     public static let text = """
@@ -102,7 +109,14 @@ Founderizer app does the rest.
 
 ## Step 1. Read the machine
 
-    ssh -o BatchMode=yes "$SSHUSER@$HOST" 'id -un; id -u; sed -n "1,2p" /etc/os-release; command -v systemctl'
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$SSHUSER@$HOST" 'id -un; id -u; sed -n "1,2p" /etc/os-release; command -v systemctl'
+
+The machine has a key of its own. When the machine is new, SSH on this machine does not know that
+key yet. In BatchMode, and when it cannot ask on a terminal, SSH refuses a machine whose key it does
+not know. So this first SSH keeps the key that the machine gives, in the `known_hosts` file of this
+machine, and the steps after this one find it. This is what SSH does when a person answers `yes` at
+a first connection. SSH can say that it added the address to the list of known hosts: that is
+correct. SSH still refuses a key that is not the key that it keeps for this address.
 
 Check: the system is Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13, and `systemctl` has a path.
 If the system is another one, or there is no `systemctl`, stop: a Founderizer machine needs one of
@@ -116,7 +130,11 @@ and removes each new line before `/bin/sh` reads it. If `sudo` says that it need
 refuses, stop and give the owner its words as they came.
 
 If SSH itself fails, stop and give the owner the error as it came. Do not try another user, another
-port or another key.
+port or another key. If its words are `REMOTE HOST IDENTIFICATION HAS CHANGED` or `Host key
+verification failed.`, SSH on this machine keeps another key for this address, usually the key of
+an earlier machine that had the same address. Tell the owner so. The owner removes that key, with
+`ssh-keygen -R <the address>`, when they know that this machine is the one that they mean. Do not
+remove it yourself. When they say that they removed it, run step 1 again.
 
 ## Step 2. See whether it is already on the network
 

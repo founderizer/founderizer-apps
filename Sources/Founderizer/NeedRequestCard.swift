@@ -402,7 +402,8 @@ struct NeedAnswerBox: View {
                 do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             }
             guard let press = presses.press(of: need.id), store.hub == hub, store.state?.db == database,
-                  let current = store.openNeeds.first(where: { $0.id == need.id }), current.choices == need.choices
+                  let current = store.openNeeds.first(where: { $0.id == need.id }), current.choices == need.choices,
+                  current.signsTheSame(as: need)      // the card that he pressed on, not one that a later read brought
             else { return }
             await store.answer(current, choice: press.choice)
         }
@@ -608,7 +609,11 @@ struct NeedRequestCard: View {
             // its one long paragraph showed whole under the two-block fold. Show all opens the rest.
             NeedBody(text: need.why, limit: expanded || short ? nil : 1, lines: expanded || short ? nil : 3)
             if expanded, let details = need.details {
-                NeedBody(text: details)
+                // **The door's card shows its script line for line** (API 1.125, review point 5.6): one code block, as
+                // the request at hand on Needs you draws it, which this Mac hashes before it signs Run it once
+                // (`DoorCall.checked`). NeedBody joins lines into one paragraph, and two lines of a script are two
+                // commands.
+                if need.door_script != nil { MessageText(text: details, chat: true, script: true) } else { NeedBody(text: details) }
             }
             if expanded, !todo.isEmpty {
                 Text("What it needs from you").font(FormMetrics.detailTitle)

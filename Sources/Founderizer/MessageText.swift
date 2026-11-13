@@ -10,6 +10,9 @@ struct MessageText: View, Equatable {
     /// Under the title of a step, where everything takes the step's one size (`SetupMetrics.text`): the words of a
     /// request at hand on Needs you (`NeedStep`).
     var step = false
+    /// The script of the door's card (API 1.125, `DoorCall.checked`): its code block wraps and does not scroll
+    /// sideways, so that the end of a long line is on screen before he signs Run it once.
+    var script = false
     /// Code in a line of a step's words: a little under the words' 15 points, as the chat's code is under its 14.
     private static let stepCode = Font.system(size: 13.5, design: .monospaced)
 
@@ -91,7 +94,7 @@ struct MessageText: View, Equatable {
                         Rectangle().fill(FleetStyle.muted.opacity(0.4)).frame(width: 2)
                         Text(block.formatted).foregroundStyle(FleetStyle.muted).lineSpacing(lines)
                     }
-                case .code: CodeBlock(text: block.text, chat: chat)
+                case .code: CodeBlock(text: block.text, chat: chat, wraps: script)
                 case .rule: Rule().padding(.vertical, 4)
                 case .table:
                     Grid(alignment: .topLeading, horizontalSpacing: 18, verticalSpacing: 7) {
@@ -126,19 +129,28 @@ struct MessageText: View, Equatable {
 private struct CodeBlock: View {
     let text: String
     let chat: Bool
+    /// The script of the door's card: a long line wraps, so its end is on screen (`MessageText.script`).
+    var wraps = false
     @State private var hovered = false
     @State private var copied = false
 
     var body: some View {
-        ScrollView(.horizontal) {
-            Text(verbatim: text).font(chat ? ChatStyle.code : FormMetrics.code).lineSpacing(chat ? 5 : 4)
-                .fixedSize(horizontal: true, vertical: false).padding(12)
+        Group {
+            if wraps {
+                Text(verbatim: text).font(chat ? ChatStyle.code : FormMetrics.code).lineSpacing(chat ? 5 : 4)
+                    .fixedSize(horizontal: false, vertical: true).padding(12)
+            } else {
+                ScrollView(.horizontal) {
+                    Text(verbatim: text).font(chat ? ChatStyle.code : FormMetrics.code).lineSpacing(chat ? 5 : 4)
+                        .fixedSize(horizontal: true, vertical: false).padding(12)
+                }
+                .sidewaysFade()
+            }
         }
-        .sidewaysFade()
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
         .overlay(alignment: .topTrailing) {
-            if chat {
+            if chat && !wraps {     // over a wrapped script, the icon would cover the end of its first row
                 // A one-line block is 41 points high, so the 28-point icon 6 points in from its corner stands in its
                 // middle; a longer block keeps it at its top.
                 IconButton(symbol: copied ? "checkmark" : "square.on.square", words: "Copy code", size: 12) {

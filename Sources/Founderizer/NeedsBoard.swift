@@ -657,7 +657,10 @@ private struct NeedStep: View {
     /// The long part of the request and what it needs from him: read from their leading edge, as a text is.
     private var more: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let details = need.details { MessageText(text: details, step: true).foregroundStyle(FleetStyle.text) }
+            // The door's card wraps its script (API 1.125): no end of a line is off the screen when Script is open.
+            if let details = need.details {
+                MessageText(text: details, step: true, script: need.door_script != nil).foregroundStyle(FleetStyle.text)
+            }
             if !todo.isEmpty {
                 Text("What it needs from you").font(.system(size: SetupMetrics.text, weight: .medium)).foregroundStyle(FleetStyle.muted)
                 MessageText(text: todo, step: true).foregroundStyle(FleetStyle.text)

@@ -350,6 +350,25 @@ public final class VaultClient: Sendable {
         }
     }
 
+    /// `POST /ui/door/mode` (owner feature `door_mode_set`, API 1.125): the owner's signed mode of one server, Auto or
+    /// Full access, which the hub carries to the door. Throws `DoorModeCommand.Newer` when the hub carries a statement
+    /// of that server that is as new or newer.
+    public func doorMode(hub: URL, database: String, client: String, host: String, mode: DoorMode, at: Int,
+                         statement: String, signature: String, requestID: UUID = UUID()) async throws -> DoorModeReceipt {
+        var request = URLRequest(url: hub.appendingPathComponent("ui/door/mode"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(client, forHTTPHeaderField: "X-Fleet-Client")
+        request.httpBody = try DoorModeCommand.body(requestID: requestID, database: database, host: host,
+                                                    statement: statement, signature: signature)
+        let (data, response) = try await session.data(for: request)
+        HubWrites.note(request)
+        guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
+        if let newer = DoorModeCommand.newer(status: response.statusCode, body: data) { throw newer }
+        guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
+        return try DoorModeCommand.receipt(data, requestID: requestID, client: client, host: host, mode: mode, at: at)
+    }
+
     private func signed(_ route: String, hub: URL, database: String, client: String, statement: String, signature: String,
                         requestID: UUID) async throws -> VaultStatementReceipt {
         let body = try VaultCommand.signed(requestID: requestID, database: database, statement: statement, signature: signature)

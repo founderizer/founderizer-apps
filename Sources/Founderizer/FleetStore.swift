@@ -1239,7 +1239,20 @@ final class FleetStore {
         guard canWrite, let state, openNeeds.contains(where: { $0.id == need.id }) else { return }
         let options = need.choices
         guard options.indices.contains(choice) else { return }
-        let approval = await DoorCallSigning.approval(for: need, choice: choice, store: self, hub: hub, database: state.db)
+        var approval: (statement: String, signature: String)?
+        switch await DoorCallSigning.approval(for: need, choice: choice, store: self, hub: hub, database: state.db) {
+        case .none: break
+        case .signed(let statement, let signature): approval = (statement, signature)
+        case .refused(let line):
+            // Review point 5.6: this Mac signs Run it once only for the script that its card shows. Nothing was
+            // signed and nothing is sent: the line stands where a write that the hub refused stands, with Discard.
+            var refused = PendingRequest(hub: hub, database: state.db, client: installation, needID: need.id,
+                                         choice: choice, approval: nil, text: options[choice])
+            refused.refusal = line
+            do { try outbox.save(refused); pending = refused; sendError = line }
+            catch { storageFailed("Cannot save this answer. Nothing was sent.", cause: error) }
+            return
+        }
         // API 1.94: the first option of an item that names an account makes a GitHub App there (GitHubManifestFlow)
         if choice == 0, let owner = need.github_app {
             Task { await GitHubManifestFlow.start(owner: owner, store: self) }

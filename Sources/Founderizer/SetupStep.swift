@@ -287,8 +287,9 @@ struct SetupBack: View {
 /// **What he does before he pastes, as short numbered steps over the field** (the owner, 10 November 2026: "instead of
 /// just a link to Open XXX, show simple steps ABOVE the input because thye should be done BEFORE pastign the key ...
 /// this applies to everything!"). One line of the step's own words for each step, its number muted; the first names
-/// the page to open as a link (Markdown, in the link's violet, as a message's link is). The steps stand at the field's
-/// width and read from their own leading edge, as the field's words do. No "Open …" link stands under the field.
+/// the page to open as a link (Markdown, in the link's violet, underlined, with an arrow after it: `words`). The steps
+/// stand at the field's width and read from their own leading edge, as the field's words do. No "Open …" link stands
+/// under the field.
 struct SetupSteps: View {
     let steps: [String]
     /// The field's width on a setup step; nil in a form's block, where the steps take the block's width.
@@ -313,10 +314,24 @@ struct SetupSteps: View {
         .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
     }
 
-    /// A step's words with its link, if it has one.
+    /// A step's words with its link, if it has one. **A link reads as a link** (the owner, 12 November 2026, of "Open
+    /// Keys in Tailscale": "make it obvious that Keys is a link, add an icon after it and underline the word too"): its
+    /// words underlined, then a no-break space and the arrow ↗, all in the link's violet. The arrow is a character of
+    /// the link, so a click on it opens the page too: an SF Symbol in a line of words cannot be part of a link (SwiftUI
+    /// opens nothing on its click), and the text-style selector keeps the arrow from turning into an emoji.
     static func words(_ step: String) -> AttributedString {
-        (try? AttributedString(markdown: step, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(step)
+        let markdown = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        let parsed = (try? AttributedString(markdown: step, options: markdown)) ?? AttributedString(step)
+        var words = AttributedString()
+        for run in parsed.runs {
+            var part = AttributedString(parsed[run.range])
+            guard let link = run.link else { words += part; continue }
+            part.underlineStyle = Text.LineStyle(pattern: .solid, color: FleetStyle.link)
+            var arrow = AttributedString("\u{00A0}\u{2197}\u{FE0E}")
+            arrow.link = link
+            words += part + arrow
+        }
+        return words
     }
 }
 

@@ -347,8 +347,8 @@ struct MachineInstallTests {
         #expect(await installer.reached.host == "100.64.0.9")
         #expect(standIn.programs.contains { $0.contains("hub.sh < /dev/null") })
         // The app gives the manager a server of its own, and says so to the plan and to the install.
-        #expect(standIn.programs.contains { $0.contains("FLEET_MANAGER_SERVER=later sh /root/fleet-kit/hub.sh --check") })
-        #expect(standIn.programs.contains { $0.contains("'FLEET_MANAGER_SERVER=later sh /root/fleet-kit/hub.sh < /dev/null") })
+        #expect(standIn.programs.contains { $0.contains("FLEET_MANAGER_SERVER=later FLEET_VERIFY=caller sh /root/fleet-kit/hub.sh --check") })
+        #expect(standIn.programs.contains { $0.contains("'FLEET_MANAGER_SERVER=later FLEET_VERIFY=caller sh /root/fleet-kit/hub.sh < /dev/null") })
         #expect(standIn.inputs.contains("tskey-auth-secret-00"), "the key went on standard input to the network step")
     }
 

@@ -274,6 +274,11 @@ public struct InstallPlan: Equatable, Sendable {
     /// ignores it, and its manager is then signed in on the hub, as before.
     static let managerServer = "FLEET_MANAGER_SERVER=later"
 
+    /// **This app's own last step is `verify`**, and it says so to the hub's installer, which then ends with no verify
+    /// of its own: the self-test in it takes about a minute, and the install ran it one time for the installer and
+    /// one time for this app. An installer from before ignores the word and ends with verify, as before.
+    static let callerVerifies = "FLEET_VERIFY=caller"
+
     /// The log the detached hub install writes, and the two steps that read it.
     static let hubLog = "/root/fleet-install.log"
     /// Where the installer's own copy of the Founderizer code goes on a new hub.
@@ -306,9 +311,9 @@ public struct InstallPlan: Equatable, Sendable {
                                + "else git clone -q -- \(quote(source)) \(kit); fi; "
                                + "git -C \(kit) rev-parse --short HEAD; ls \(kit)/hub.sh")),
             .init(id: "plan", title: "The plan", says: "Every step the install would take. It changes nothing.",
-                  action: .run("\(managerServer) sh \(kit)/hub.sh --check")),
+                  action: .run("\(managerServer) \(callerVerifies) sh \(kit)/hub.sh --check")),
             .init(id: "start", title: "Install the hub", says: "The installer runs on the server and writes what it does to a log.",
-                  action: .detach("setsid sh -c '\(managerServer) sh \(kit)/hub.sh < /dev/null > \(log) 2>&1' "
+                  action: .detach("setsid sh -c '\(managerServer) \(callerVerifies) sh \(kit)/hub.sh < /dev/null > \(log) 2>&1' "
                                   + "> /dev/null 2>&1 < /dev/null &")),
             .init(id: "wait_claim", title: "Wait for the link code", says: "The installer makes a one-time code for this Mac.",
                   action: .waitFor("tail -n 60 \(log)", mark: ClaimCode.logMark, every: 10, within: 1200)),

@@ -473,6 +473,10 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// Owner feature `door_modes` (API 1.121): the server of a run that the door refused, on the door's card only. Its
     /// second option, Full access on that server, is the server's mode, which the Mac signs (`OwnerStatement.doorMode`).
     public let door_host: String?
+    /// API 1.125 (review point 5.6): the script of that run, byte for byte, on a door card that carries it, and nil on
+    /// every other item. The card shows it under Script, and the Mac computes the call's hash from it before it signs
+    /// Run it once (`DoorCall.checked`).
+    public let door_script: String?
     /// Owner feature `door_setup` (API 1.94): the GitHub account that the item's first option makes a private App in,
     /// with GitHub's manifest flow (`GitHubManifestFlow`), and nil on every other item. The option's words are the
     /// answer, as for any other item.
@@ -490,6 +494,18 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// answer. nil on a hub without the feature.
     public let talk: [NeedMessage]?
     public var isOpen: Bool { answered == nil && answer == nil }
+    /// The same card to sign, byte for byte: its words, its answers, its door call, server and script, and what its
+    /// first option starts on this Mac (a GitHub App, the Add device picture). A press
+    /// that waited for the store is dropped when the item changed under it (review of 12 November 2026: the Mac
+    /// signed the script that a later read brought, not the one that he pressed on).
+    public func signsTheSame(as other: OwnerNeed) -> Bool {
+        func same(_ a: String?, _ b: String?) -> Bool { (a == nil) == (b == nil) && (a ?? "").utf8.elementsEqual((b ?? "").utf8) }
+        return id == other.id && same(title, other.title) && same(why, other.why) && same(todo, other.todo)
+            && same(details, other.details) && same(door_call, other.door_call) && same(door_host, other.door_host)
+            && same(door_script, other.door_script) && same(github_app, other.github_app)
+            && add_device == other.add_device && (options ?? []).count == (other.options ?? []).count
+            && zip(options ?? [], other.options ?? []).allSatisfy { same($0, $1) }
+    }
     /// The options combine: he ticks any of them and sends them together (`NeedRequestCard`).
     public var combines: Bool { multi == true && choices.count >= 2 }
 

@@ -277,6 +277,116 @@ struct NetworkPromptRootTests {
             }
         }
     }
+
+    /// **Step 1 reads a new machine, whose key SSH on the agent's machine has never seen, and a key that changed
+    /// still stops it.** SSH in BatchMode, and SSH that cannot ask on a terminal, refuses a key that it does not know:
+    /// "Host key verification failed.", with status 255 (OpenSSH 10.3p1 on this Mac). Until 12 November 2026 step 1
+    /// gave SSH no value of StrictHostKeyChecking, so it stopped on each new machine. `hostKeySSH` plays SSH's check
+    /// of the key as `test_hub_install.StandInServer` plays it, from OpenSSH's own: a key that SSH keeps for the
+    /// address goes on, another key stops it, and an unknown key goes on only with "accept-new", "no" or "off", which
+    /// keep it. The words of step 1 say what the owner does when the key changed.
+    @Test func stepOneKeepsTheKeyOfANewMachineAndAKeyThatChangedStopsIt() throws {
+        let line = try #require(Self.steps()[1]?.first)
+        let words = (NetworkPrompt.text.components(separatedBy: "## Step 1.").dropFirst().first ?? "")
+            .components(separatedBy: "## Step 2.")[0].replacingOccurrences(of: "\n", with: " ")
+        for wanted in ["REMOTE HOST IDENTIFICATION HAS CHANGED", "`ssh-keygen -R <the address>`",
+                       "Do not remove it yourself"] {
+            #expect(words.contains(wanted), "the words of step 1 do not say: \(wanted)")
+        }
+        for option in ["StrictHostKeyChecking=no", "StrictHostKeyChecking=off", "UserKnownHostsFile=/dev/null"] {
+            #expect(!NetworkPrompt.text.contains(option), "a line of the prompt stops SSH's key check: \(option)")
+        }
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fleet-step-one-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let known = folder.appendingPathComponent("known_hosts"), log = folder.appendingPathComponent("log")
+        let key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEZvdW5kZXJpemVyU3RhbmRJbkhvc3RLZXkwMTIzNDU2Nzg5"
+        let earlier = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEFuRWFybGllck1hY2hpbmVBdFRoaXNBZGRyZXNzMDE"
+        for (kept, goes) in [("", true), ("203.0.113.9 \(key)\n", true), ("203.0.113.9 \(earlier)\n", false)] {
+            try Data(kept.utf8).write(to: known)
+            try Data().write(to: log)
+            let ran = try Self.shell(Self.hostKeySSH + line, in: folder,
+                                     environment: ["HOST": "203.0.113.9", "SSHUSER": "root", "KNOWN": known.path,
+                                                   "HOSTKEY": key, "LOG": log.path])
+            let sent = try String(contentsOf: log, encoding: .utf8)
+            let now = try String(contentsOf: known, encoding: .utf8)
+            let who = kept.isEmpty ? "no key" : kept.contains(key) ? "its key" : "the key of an earlier machine"
+            if goes {
+                #expect(ran.status == 0 && sent.components(separatedBy: "ssh sends [").count == 2
+                            && now == "203.0.113.9 \(key)\n",
+                        "where SSH keeps \(who): step 1 ended with \(ran.status) (\(ran.err)), SSH keeps \(now)")
+            } else {
+                #expect(ran.status == 255 && ran.err.contains("REMOTE HOST IDENTIFICATION HAS CHANGED") && sent.isEmpty
+                            && now == kept,
+                        "where SSH keeps \(who): step 1 ended with \(ran.status) (\(ran.err)), SSH keeps \(now)")
+            }
+        }
+    }
+
+    /// The agent's `ssh` for the test of step 1, as far as it checks the key of the machine: it takes the first value
+    /// of StrictHostKeyChecking that it gets, and checks the key that the machine gives
+    /// (HOSTKEY) against the agent's known_hosts (KNOWN, one "<host> <type> <key>" a line). With "ask", the value when
+    /// nothing gives one, SSH asks on a terminal, and it stops in BatchMode and with no terminal. When it goes on, it
+    /// writes the remote command to LOG.
+    static let hostKeySSH = #"""
+        ssh() {
+            _strict=
+            while [ "$#" -gt 0 ]; do
+                case $1 in
+                -o) _option=$2; shift 2 ;;
+                -o?*) _option=${1#-o}; shift ;;
+                -*) shift; continue ;;
+                *) break ;;
+                esac
+                _word=$(printf '%s' "${_option%%[= ]*}" | /usr/bin/tr '[:upper:]' '[:lower:]')
+                _value=$(printf '%s' "${_option#*[= ]}" | /usr/bin/tr '[:upper:]' '[:lower:]')
+                case $_word in stricthostkeychecking) [ -n "$_strict" ] || _strict=$_value ;; esac
+            done
+            _host=${1#*@}
+            shift
+            _known=new
+            while read -r _name _kind _key _rest; do
+                [ "$_name" = "$_host" ] || continue
+                if [ "$_kind $_key" = "$HOSTKEY" ]; then _known=yes; break; fi
+                _known=changed
+            done < "$KNOWN"
+            case $_known/${_strict:-ask} in
+            yes/* | changed/no | changed/off) ;;
+            changed/*)
+                printf '%s\n' '@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @' \
+                    'Host key verification failed.' >&2
+                return 255 ;;
+            new/accept-new | new/no | new/off)
+                printf '%s %s\n' "$_host" "$HOSTKEY" >> "$KNOWN"
+                printf "Warning: Permanently added '%s' (ED25519) to the list of known hosts.\n" "$_host" >&2 ;;
+            *) echo 'Host key verification failed.' >&2; return 255 ;;
+            esac
+            printf 'ssh sends [%s]\n' "$*" >> "$LOG"
+        }
+
+        """#
+
+    /// `text` in `/bin/sh -c`, in `folder`, with `environment` and nothing else but PATH: its status and its output.
+    static func shell(_ text: String, in folder: URL,
+                      environment: [String: String]) throws -> (status: Int32, out: String, err: String) {
+        let out = folder.appendingPathComponent("out"), err = folder.appendingPathComponent("err")
+        for file in [out, err] { try Data().write(to: file) }
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/bin/sh")
+        child.arguments = ["-c", text]
+        child.environment = environment.merging(["PATH": "/usr/bin:/bin", "LC_ALL": "C"]) { kept, _ in kept }
+        child.currentDirectoryURL = folder
+        let outHandle = try FileHandle(forWritingTo: out), errHandle = try FileHandle(forWritingTo: err)
+        defer { try? outHandle.close(); try? errHandle.close() }
+        child.standardOutput = outHandle
+        child.standardError = errHandle
+        child.standardInput = FileHandle.nullDevice
+        try child.run()
+        child.waitUntilExit()
+        return (child.terminationStatus, try String(contentsOf: out, encoding: .utf8),
+                try String(contentsOf: err, encoding: .utf8))
+    }
 }
 
 extension NetworkPromptRootTests {
