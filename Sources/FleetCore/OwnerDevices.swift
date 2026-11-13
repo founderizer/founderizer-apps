@@ -41,7 +41,19 @@ public struct OwnerDevice: Decodable, Identifiable, Equatable, Sendable {
     public let recovery_key: String?
     public let recovery_binding: String?
     public let recovery: RecoveryCopyState?
+    /// Owner API 1.149: the kind of app that took the device's key. nil for a device with no key, for a hub from before
+    /// the kind, and for a kind that this app does not know: each of them stays a phone, as every device was before.
+    public let kind: Kind?
     public var id: String { device }
+
+    /// The apps that take a device's key: the iPhone app and Founderizer for Windows (`hub.py` `OWNER_DEVICE_KINDS`).
+    public enum Kind: String, Equatable, Sendable {
+        case iphone, windows
+    }
+
+    /// The SF Symbol of the device's tile in Your devices: a PC's for a device of Founderizer for Windows, and the
+    /// phone's for every other device.
+    public var symbol: String { kind == .windows ? "pc" : "iphone" }
 
     /// Where a phone's copy of the recovery code stands on the hub: a box waits for it, or it said that it holds it.
     public struct RecoveryCopyState: Decodable, Equatable, Sendable {
@@ -54,7 +66,7 @@ public struct OwnerDevice: Decodable, Identifiable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case device, label, address, key, since, last_seen, last_contact, last_answer, code_expires, this_device
-        case signing_key, binding, certified, recovery_key, recovery_binding, recovery
+        case signing_key, binding, certified, recovery_key, recovery_binding, recovery, kind
     }
 
     public init(from decoder: Decoder) throws {
@@ -76,6 +88,9 @@ public struct OwnerDevice: Decodable, Identifiable, Equatable, Sendable {
         recovery_key = try values.decodeIfPresent(String.self, forKey: .recovery_key)
         recovery_binding = try values.decodeIfPresent(String.self, forKey: .recovery_binding)
         recovery = try values.decodeIfPresent(RecoveryCopyState.self, forKey: .recovery)
+        // The kind chooses a symbol and nothing else, so a value of any other shape is no kind, never a list that
+        // cannot be read.
+        kind = (try? values.decodeIfPresent(String.self, forKey: .kind)).flatMap(Kind.init(rawValue:))
     }
 
     public var isValid: Bool {

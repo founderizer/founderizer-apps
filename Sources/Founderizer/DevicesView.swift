@@ -138,7 +138,7 @@ struct DevicesSection: View {
     private func row(_ device: OwnerDevice) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             HStack(spacing: 12) {
-                IconTile(symbol: "iphone")
+                IconTile(symbol: device.symbol)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(device.label).font(FormMetrics.title).foregroundStyle(FleetStyle.text)
                     Text(device.address).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).textSelection(.enabled)

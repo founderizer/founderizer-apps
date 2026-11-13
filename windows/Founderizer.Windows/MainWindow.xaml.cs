@@ -6,6 +6,7 @@ using Founderizer.Core;
 using Founderizer.Windows.Fleet;
 using Founderizer.Windows.Marks;
 using Founderizer.Windows.Navigation;
+using Founderizer.Windows.Pages;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
@@ -22,7 +23,8 @@ using Page = Founderizer.Core.Page;
 namespace Founderizer.Windows;
 
 /// <summary>The window: the frame of the approved pictures, the pane as the library's Screens.Pane gives it, and the
-/// content area, where the page of the history opens. It draws; every rule, word and order is the library's.</summary>
+/// content area, where the page of the history opens (a chat, Needs you, the board or a task). It draws; every rule,
+/// word and order is the library's.</summary>
 public sealed partial class MainWindow : Window
 {
     private readonly IFleetSource source;
@@ -33,13 +35,20 @@ public sealed partial class MainWindow : Window
     private PaneModel pane = new();
     /// <summary>The first page is settled: it was asked for, a reading chose it, or he went to a page.</summary>
     private bool homeChosen;
+    /// <summary>Ages that move with the clock alone ("25 min ago") raise no change of the store: while the window is
+    /// in front, the pane and the open page are drawn again every 30 seconds, and only what changed is drawn.</summary>
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? clock;
+    /// <summary>The page that the content area shows now, or null for a page of a later slice.</summary>
+    private IPageView? page;
+    /// <summary>The request that Needs you brings to hand when it opens from a task's orange line.</summary>
+    private long? needToOpen;
 
     public MainWindow(IFleetSource source, Page? asked)
     {
         this.source = source;
         InitializeComponent();
-        NeedsIcon.Content = PaneIcons.Icon(PaneIcons.NeedsYou);
-        TasksIcon.Content = PaneIcons.Icon(PaneIcons.Tasks);
+        NeedsIcon.Content = Icons.Of(Icons.NeedsYou);
+        TasksIcon.Content = Icons.Of(Icons.Tasks);
         AgentRows.ItemsSource = rows;
 
         // The title bar is the window's own (W1, W2): tall, as it carries Back, with Windows' caption buttons in the
@@ -68,7 +77,11 @@ public sealed partial class MainWindow : Window
         ShowPane();
         ShowPage();
         source.Changed += (_, change) => DispatcherQueue.TryEnqueue(() => Apply(change.State, change.ArrivedTicks));
-        settings.AnimationsEnabledChanged += (_, _) => DispatcherQueue.TryEnqueue(ShowPane);
+        settings.AnimationsEnabledChanged += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        {
+            ShowPane();
+            page?.Show(state, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
+        });
 
         // The store reads only while the window is in front (StoreSettings): shown and not minimized.
         VisibilityChanged += (_, _) => Front();
@@ -76,7 +89,9 @@ public sealed partial class MainWindow : Window
         Closed += async (_, _) => await source.DisposeAsync();
         Front();
 
-        // Back and Forward from the keyboard and the mouse's side buttons, as Windows' apps take them.
+        // Back and Forward from the keyboard and the mouse's side buttons, as Windows' apps take them. WinUI would show
+        // the keys in a tooltip wherever the pointer rests over the window ("Alt+Left"): no picture has that tooltip.
+        Root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
         Root.KeyboardAccelerators.Add(Accelerator(VirtualKey.Left, (_, e) => { GoBack(); e.Handled = true; }));
         Root.KeyboardAccelerators.Add(Accelerator(VirtualKey.Right, (_, e) => { GoForward(); e.Handled = true; }));
         Root.PointerPressed += (_, e) =>
@@ -93,7 +108,21 @@ public sealed partial class MainWindow : Window
     private void Front()
     {
         bool minimized = AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
-        source.SetFront(Visible && !minimized);
+        bool front = Visible && !minimized;
+        source.SetFront(front);
+        if (clock is null)
+        {
+            clock = DispatcherQueue.CreateTimer();
+            clock.Interval = TimeSpan.FromSeconds(30);
+            clock.IsRepeating = true;
+            clock.Tick += (_, _) =>
+            {
+                ShowPane();
+                page?.Show(state, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
+            };
+        }
+        if (front) clock.Start();
+        else clock.Stop();
     }
 
     private static KeyboardAccelerator Accelerator(VirtualKey key,
@@ -124,7 +153,16 @@ public sealed partial class MainWindow : Window
     /// then the pane draws what changed.</summary>
     private void Apply(StoreState next, long arrived)
     {
+        var before = state;
         state = next;
+        // A PC that took its key and read its fleet leaves Add this PC for its first page, as the iPhone's EnrollPage
+        // closes: the launch's first page, with no way back to the code.
+        if (history.Current.Kind == PageKind.AddThisPc && next.Key == KeyState.InHand && next.Fleet is not null &&
+            (before.Key != KeyState.InHand || before.Fleet is null))
+        {
+            homeChosen = true;
+            history.Start(Screens.FirstPage(next));
+        }
         if (!homeChosen && next.Fleet is not null)
         {
             homeChosen = true;
@@ -138,6 +176,7 @@ public sealed partial class MainWindow : Window
         }
         var was = pane;
         ShowPane();
+        page?.Show(next, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
         var now = pane;
         Readings.ChangeShown(arrived, () => Shown(was, now));
     }
@@ -187,23 +226,39 @@ public sealed partial class MainWindow : Window
         return -1;
     }
 
-    /// <summary>The page of the history opens in the content area, and the pane and the title bar follow. The pages come
-    /// in the later slices: until then the area is empty, with the page's name for assistive apps.</summary>
+    /// <summary>The page of the history opens in the content area, and the pane and the title bar follow; the store reads
+    /// the chat or the task that shows.</summary>
     private void ShowPage()
     {
         BackButton.IsEnabled = history.CanGoBack;
         ForwardButton.IsEnabled = history.CanGoForward;
-        var page = history.Current;
-        string name = page.Kind switch
+        var current = history.Current;
+        source.OpenChat(current.Kind == PageKind.Chat ? current.Agent : null);
+        source.OpenTask(current.Kind == PageKind.Task ? current.Task : null);
+        long? chosen = needToOpen;
+        needToOpen = null;
+        page = current.Kind switch
+        {
+            PageKind.Chat => new ChatPage(current.Agent!, source),
+            PageKind.Needs => new NeedsPage(source, Go, chosen),
+            PageKind.Tasks => new BoardPage(Go, OpenNeed),
+            PageKind.Task => new TaskPage(current.Task!.Value, source),
+            PageKind.Settings => new SettingsPage(source, Go, () => history.Start(Page.AddThisPc)),
+            PageKind.AddThisPc => new AddThisPcPage(source),
+            _ => null,
+        };
+        PageHost.Content = page?.View ?? new Grid();
+        page?.Show(state, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
+        if (page is ChatPage chat) Readings.ScrollWhenAsked(chat.Scroll);
+        string name = current.Kind switch
         {
             PageKind.Needs => "Needs you",
             PageKind.Tasks => "Tasks",
             PageKind.Settings => "Settings",
             PageKind.AddThisPc => "Add this PC",
-            PageKind.Task => state.Fleet?.Tasks.FirstOrDefault(t => t.Id == page.Task)?.Title ?? "Tasks",
-            _ => state.Names.Label(page.Agent ?? ""),
+            PageKind.Task => state.Fleet?.Tasks.FirstOrDefault(t => t.Id == current.Task)?.Title ?? "Tasks",
+            _ => state.Names.Label(current.Agent ?? ""),
         };
-        PageHost.Content = new Grid();
         AutomationProperties.SetName(PageHost, name);
         ShowPane();
     }
@@ -215,6 +270,13 @@ public sealed partial class MainWindow : Window
     {
         homeChosen = true;
         history.Go(page);
+    }
+
+    /// <summary>A task's orange line: Needs you opens with that request at hand.</summary>
+    private void OpenNeed(long need)
+    {
+        needToOpen = need;
+        Go(Page.Needs);
     }
 
     private void GoBack() => history.GoBack();

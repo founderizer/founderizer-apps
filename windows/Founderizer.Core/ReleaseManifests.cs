@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using Org.BouncyCastle.Math.EC.Rfc8032;
@@ -169,12 +170,103 @@ public sealed record AppManifest(string Version, long Build, string Url, string 
 
     /// <summary>A JSON whole number, and nothing that merely looks like one: a text, a fraction or an exponent is
     /// refused, because the signed text writes the number itself.</summary>
-    private static long? Whole(JsonElement raw, string name)
+    internal static long? Whole(JsonElement raw, string name)
     {
         if (!raw.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Number) return null;
         var text = value.GetRawText();
         if (text.AsSpan().IndexOfAny('.', 'e', 'E') >= 0) return null;
         return value.TryGetInt64(out var whole) ? whole : null;
+    }
+}
+
+/// <summary>What the channel says the newest build of Founderizer for Windows is for one arch (`GET
+/// /releases/windows?arch=…`), after its signature was checked: the Mac's build manifest with the arch, in a third kind
+/// of signed text (windows-app-release-design.md, section 2). Its first line and its ten lines make other bytes than a
+/// Mac build's and a fleet release's, so a signature of one verifies as none of the others.</summary>
+public sealed record WindowsManifest(string Version, long Build, string Arch, string Url, string Sha256, long Size,
+                                     string? MinimumSystem, string? Notes, bool Hold, string Signature)
+{
+    public const string SignedPrefix = "founderizer-windows-1";
+    /// <summary>The two kinds of PC (D6). A PC asks for its own, and takes no other.</summary>
+    public static readonly IReadOnlyList<string> Arches = ["x64", "arm64"];
+
+    /// <summary>The exact bytes that a build's signature covers.</summary>
+    public byte[] SignedText() => Encoding.UTF8.GetBytes(string.Join('\n', [
+        SignedPrefix, Version, Build.ToString(CultureInfo.InvariantCulture), Arch, Url, Sha256,
+        Size.ToString(CultureInfo.InvariantCulture), MinimumSystem ?? "", Notes ?? "", Hold ? "true" : "false",
+    ]) + "\n");
+
+    /// <summary>The manifest of the channel's answer, field by field, with the Mac's rules and words
+    /// (<see cref="AppManifest.Read"/>), and the arch that this PC asked for.</summary>
+    public static WindowsManifest Read(ReadOnlySpan<byte> data, string channel, string arch)
+    {
+        if (data.Length > AppManifest.AnswerLimit) throw new ReleaseUntrusted("The channel did not answer with a build this app could read.");
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(data.ToArray());
+        }
+        catch (JsonException)
+        {
+            throw new ReleaseUntrusted("The channel did not answer with a build this app could read.");
+        }
+        using (document)
+        {
+            var raw = document.RootElement;
+            if (raw.ValueKind != JsonValueKind.Object)
+                throw new ReleaseUntrusted("The channel did not answer with a build this app could read.");
+            var version = AppManifest.Text(raw, "version");
+            if (version is null || !Patterns.Version().IsMatch(version))
+                throw new ReleaseUntrusted("The channel's answer has no version name.");
+            if (AppManifest.Whole(raw, "build") is not { } build || build is < 1 or > 2_000_000_000)
+                throw new ReleaseUntrusted("The channel's answer has no build number.");
+            var kind = AppManifest.Text(raw, "arch");
+            if (kind is null || !Arches.Contains(kind) || kind != arch)
+                throw new ReleaseUntrusted("The channel's answer is a build for another kind of PC.");
+            var url = AppManifest.Text(raw, "url");
+            if (url is null || Encoding.UTF8.GetByteCount(url) > 400 || !AppManifest.IsOurs(url, channel) ||
+                !Path.GetExtension(new Uri(url).AbsolutePath).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                throw new ReleaseUntrusted("The channel's answer points the download somewhere that is not ours.");
+            var sha256 = AppManifest.Text(raw, "sha256");
+            if (sha256 is null || !Patterns.Sha256Hex().IsMatch(sha256))
+                throw new ReleaseUntrusted("The channel's answer carries no checksum for the download.");
+            if (AppManifest.Whole(raw, "size") is not { } size || size is < 1 or > AppManifest.MaximumDownload)
+                throw new ReleaseUntrusted("The channel's answer gives the download no believable size.");
+            var minimum = AppManifest.Text(raw, "minimum");
+            if (!string.IsNullOrEmpty(minimum) && !Patterns.WindowsVersion().IsMatch(minimum))
+                throw new ReleaseUntrusted("The channel's answer names a Windows version this app cannot read.");
+            var notes = AppManifest.Text(raw, "notes");
+            if (!string.IsNullOrEmpty(notes) && !AppManifest.IsOurs(notes, channel))
+                throw new ReleaseUntrusted("The channel's answer points its notes somewhere that is not ours.");
+            var hold = false;
+            if (raw.TryGetProperty("hold", out var held))
+            {
+                if (held.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                    throw new ReleaseUntrusted("The channel's answer does not say whether this build is held.");
+                hold = held.GetBoolean();
+            }
+            var signature = AppManifest.Text(raw, "signature");
+            if (signature is null || Encoding.UTF8.GetByteCount(signature) is < 1 or > 200)
+                throw new ReleaseUntrusted("The channel's answer carries no signature.");
+            return new WindowsManifest(version, build, kind, url, sha256, size, string.IsNullOrEmpty(minimum) ? null : minimum,
+                                       string.IsNullOrEmpty(notes) ? null : notes, hold, signature);
+        }
+    }
+
+    /// <summary>The manifest that this PC may act on, or <see cref="ReleaseUntrusted"/>. Nothing else reads an unchecked
+    /// one.</summary>
+    public static WindowsManifest Check(ReadOnlySpan<byte> data, IReadOnlyList<byte[]> keys, string channel, string arch)
+    {
+        var manifest = Read(data, channel, arch);
+        if (keys.Count == 0)
+            throw new ReleaseUntrusted("This build of Founderizer carries no release key, so it refuses every update. " +
+                                       "That is the safe state: an app that cannot check an update takes none.");
+        if (!Base64Strict.TryDecode(manifest.Signature, out var signature) || signature.Length != 64)
+            throw new ReleaseUntrusted("The channel's signature is not a signature.");
+        if (!Ed25519Check.SignedByAny(keys, manifest.SignedText(), signature))
+            throw new ReleaseUntrusted("This build is not signed by the release key Founderizer ships with. " +
+                                       "Nothing was downloaded.");
+        return manifest;
     }
 }
 

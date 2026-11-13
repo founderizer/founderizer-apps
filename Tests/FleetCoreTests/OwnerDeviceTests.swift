@@ -63,6 +63,37 @@ struct OwnerDeviceTests {
         }
     }
 
+    /// Owner API 1.149: the kind of app that took the key chooses the row's tile. A hub from before the kind, a device
+    /// with no key (null) and a kind that this app does not know all decode, and each stays a phone, as before.
+    @Test func aPCHasAComputersTileAndEveryOtherDeviceStaysAPhone() throws {
+        func device(_ kind: Any?, key: Bool = true) throws -> OwnerDevice {
+            var fields = key ? row() : row(key: false, since: NSNull(), lastSeen: NSNull(), contact: NSNull())
+            if let kind { fields["kind"] = kind }
+            let reading = try decode(OwnerDeviceList.self, list([fields]))
+            try reading.validate(database: "db")
+            return try #require(reading.devices.first)
+        }
+        let older = try device(nil)                 // a hub from before 1.149 sends no kind
+        #expect(older.kind == nil && older.symbol == "iphone")
+        let noKey = try device(NSNull(), key: false)
+        #expect(noKey.kind == nil && noKey.symbol == "iphone")
+        for unknown: Any in ["android", "Windows", "", 7] {
+            let other = try device(unknown)
+            #expect(other.kind == nil && other.symbol == "iphone")
+        }
+        let pc = try device("windows")
+        #expect(pc.kind == .windows && pc.symbol == "pc")
+        let phone = try device("iphone")
+        #expect(phone.kind == .iphone && phone.symbol == "iphone")
+        // A phone and a PC in one list, as the hub sends them: each keeps its own kind.
+        let both = try decode(OwnerDeviceList.self, list([
+            row().merging(["kind": "iphone"]) { $1 },
+            row(device: "pc", label: "PC", address: "100.84.1.21").merging(["kind": "windows"]) { $1 },
+        ]))
+        try both.validate(database: "db")
+        #expect(both.devices.map(\.symbol) == ["iphone", "pc"])
+    }
+
     @Test func oneLineSaysWhatTheDeviceIsAndWhatTheOwnerMustDo() throws {
         func words(key: Bool = false, seen: Any = NSNull(), contact: Any = NSNull(), answer: Any = NSNull(),
                    code: Any = NSNull(), contacts: Bool = true) throws -> (words: String, attention: Bool) {

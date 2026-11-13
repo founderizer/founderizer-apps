@@ -1,5 +1,5 @@
 {
-  "about": "Ed25519 release manifests: a fleet release (releases.signed_text, founderizer-release-1) and a build of the app (autopublish.app_text = AppUpdate.signedText, founderizer-app-1), signed by releases.sign with a test key. The keys file is read as releases.parse_keys reads it.",
+  "about": "Ed25519 release manifests: a fleet release (releases.signed_text, founderizer-release-1), a build of the app (autopublish.app_text = AppUpdate.signedText, founderizer-app-1) and a build of the Windows app (windows_text here, founderizer-windows-1), signed by releases.sign with a test key. The keys file is read as releases.parse_keys reads it.",
   "made_by": "app/vectors/make_vectors.py",
   "public_key": "xueXmVP76BzU8jb+8yRE9+T+/A5kl4OKdutOHMZQCSM=",
   "other_public_key": "x80/CXCjOrUmvKNkig/FnDRM0ou+8MVFCDaVubgYF5w=",
@@ -323,6 +323,296 @@
           "notes": "https://releases.example.com/notes/0.1.200",
           "hold": false,
           "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      }
+    ]
+  },
+  "windows": {
+    "channel": "https://releases.example.com",
+    "arch": "arm64",
+    "manifest": {
+      "version": "0.2.3",
+      "build": 23,
+      "arch": "arm64",
+      "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+      "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+      "size": 98765432,
+      "minimum": "10.0.22621",
+      "notes": "https://releases.example.com/notes/windows-0.2.3",
+      "hold": false,
+      "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+    },
+    "signed_text": "founderizer-windows-1\n0.2.3\n23\narm64\nhttps://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip\ne0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193\n98765432\n10.0.22621\nhttps://releases.example.com/notes/windows-0.2.3\nfalse\n",
+    "mac_text_of_its_fields": "founderizer-app-1\n0.2.3\n23\nhttps://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip\ne0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193\n98765432\n10.0.22621\nhttps://releases.example.com/notes/windows-0.2.3\nfalse\n",
+    "refused": [
+      {
+        "name": "a later build under the same signature",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 24,
+          "arch": "arm64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "the other arch under the same signature",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "x64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "the hold taken out",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": true,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "another download under the same signature",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "no minimum under a signature of the minimum",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "the Mac build's signature",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "OdzRk4GSjU8o/vsz4g5w1pMm1WUGSJnFmG+Ar1EoRTbpCRfLiIVhRJmQcOu2CLFM0l5bREvkaurFG3FM+pYQCA=="
+        }
+      },
+      {
+        "name": "a signature by a key that the app does not trust",
+        "refused_by": "signature",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "eMmU5lIB1TjcllKOFz49q3N4AYaPw9GCDY91iEO3/lNSiSV02O8vgip5tzfIvWXa45FAMI0GZkUBkA/6qVQxAA=="
+        }
+      },
+      {
+        "name": "a build for another arch",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "x86",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "no arch",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "a download on another host",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64",
+          "url": "https://example.net/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "a download over HTTP",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64",
+          "url": "http://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "a download that is no zip",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64",
+          "url": "https://releases.example.com/downloads/Founderizer-Setup-0.2.3-arm64.exe",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "a build number as text",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.2.3",
+          "build": "23",
+          "arch": "arm64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "a minimum that is a macOS version",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "15.0",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "an arch with a newline",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64\nx64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "a size above 600 MB",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 629145601,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false,
+          "signature": "0WP5yiuVkVjTD6CVtQUHYCDKEh5nSxaphKOt1qQyYQo0gcDcYmZl//lWcK+sV7gE2M0+sQpQF272ihx+HoWPDg=="
+        }
+      },
+      {
+        "name": "no signature",
+        "refused_by": "shape",
+        "manifest": {
+          "version": "0.2.3",
+          "build": 23,
+          "arch": "arm64",
+          "url": "https://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+          "sha256": "e0092faf4cf948f01068e741c91049904a427999987299368bfb433405f31193",
+          "size": 98765432,
+          "minimum": "10.0.22621",
+          "notes": "https://releases.example.com/notes/windows-0.2.3",
+          "hold": false
         }
       }
     ]

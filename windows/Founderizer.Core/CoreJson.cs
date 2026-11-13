@@ -65,6 +65,10 @@ internal static partial class Patterns
     [GeneratedRegex(@"\A[0-9a-f]{40}\z", RegexOptions.CultureInvariant)]
     internal static partial Regex Revision();
 
+    /// <summary>A Windows version as a build names its lowest: major.minor.build ("10.0.22621").</summary>
+    [GeneratedRegex(@"\A[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,6}\z", RegexOptions.CultureInvariant)]
+    internal static partial Regex WindowsVersion();
+
     [GeneratedRegex(@"\Ahttps://[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]{1,400}\z", RegexOptions.CultureInvariant)]
     internal static partial Regex NotesAddress();
 }

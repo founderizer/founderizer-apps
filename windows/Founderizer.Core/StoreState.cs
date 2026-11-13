@@ -261,6 +261,30 @@ public sealed record StoreState
 
     public bool CanWrite(DateTimeOffset now) => AnswersWrites(now) && !Sending && Pending is null && StorageError is null;
 
+    /// <summary>Why a write of the owner cannot go now, or null when it can. <c>Waits</c> when the cause ends by itself:
+    /// another write is on its way, or the reading is not answered yet while a read of the hub can come in front. Such
+    /// a write waits and goes then, because the window draws a change after the store made it, and a press can come
+    /// between them. Otherwise the owner's words, and nothing goes: the words of the line that already shows the same
+    /// cause (a request that waits in Settings, the connection line, the storage line).</summary>
+    public WriteHold? HoldsWrites(DateTimeOffset now)
+    {
+        if (CanWrite(now)) return null;
+        if (StorageError is { } storage) return new WriteHold(false, storage);
+        if (Sending) return new WriteHold(true, null);
+        if (Pending is not null) return new WriteHold(false, SavedRequestWaits);
+        if (!HasNoHub && Front && ReadCanCome) return new WriteHold(true, null);
+        return new WriteHold(false, UnavailableWords(now) ?? KeyWords ?? NoAnswer);
+    }
+
+    /// <summary>A write that cannot go while a request waits in the outbox (the Mac's "A saved request waits. Check it
+    /// below.", with the place where the PC shows that request, as the iPhone does).</summary>
+    public const string SavedRequestWaits = "A saved request waits. Check it in Settings.";
+    /// <summary>The iPhone's line for a hub that does not answer.</summary>
+    public const string NoAnswer = "Your hub did not answer. Check that its server is on.";
+    /// <summary>A write that waited while the hub or its generation changed (the Mac's "Not saved. The hub connection
+    /// changed.").</summary>
+    public const string ConnectionChanged = "Not sent. The hub connection changed.";
+
     public bool CanRetry(DateTimeOffset now) =>
         Pending is { } p && AnswersWrites(now) && !Sending && StorageError is null && p.Refusal is null &&
         p.Hub == Hub && p.Database == Fleet?.Db;
@@ -294,7 +318,7 @@ public sealed record StoreState
         if (KeyWords is { } key) return key;
         if (AuthProblem is { } auth) return PcWords(HubException.AuthWords(auth));
         if (ReadWasRefused && ReadError is not null) return PcWords(ReadError.Message);
-        if (ReadError is not null) return "Your hub did not answer. Check that its server is on.";
+        if (ReadError is not null) return NoAnswer;
         return null;
     }
 
@@ -392,6 +416,10 @@ public sealed record StoreState
 }
 
 /// <summary>Where the search for a hub on this PC's Tailscale stands (the Mac's FleetOnTailscale.findHub).</summary>
+/// <summary>Why a write cannot go now: it waits, and goes when the store can write, or it does not go, with the owner's
+/// words.</summary>
+public readonly record struct WriteHold(bool Waits, string? Words);
+
 public enum HubSearch
 {
     /// <summary>No search: the PC has a hub address, or it has not looked yet.</summary>

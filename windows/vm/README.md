@@ -45,10 +45,11 @@ In this folder:
 | `make-setup-iso.sh` | makes the setup disc |
 | `launcher/` | the launcher's source, its build script and its one entitlement |
 | `setup/install-dotnet.ps1` | installs the .NET 10 SDK in the VM |
-| `setup/build-window.ps1` | builds and signs the window of `../Founderizer.Windows` in the VM |
+| `setup/build-window.ps1` | builds and signs the window of `../Founderizer.Windows` in the VM (`-Proofs`: the proofs' build) |
 | `readings/` | the readings: keys in the TPM, start time with memory at rest, the processor at rest (`cpu-at-rest.ps1`) |
-| `pictures/` | the proofs with pictures: a scripted run (`ui.ps1`), frames of motion (`frames.ps1`, `motion.py`), comparisons with the approved pictures (`compare.py`, `glyphs.py`, `sheet.py`) |
+| `pictures/` | the proofs with pictures: a scripted run and the writes (`ui.ps1`), frames of motion (`frames.ps1`, `motion.py`, `changes.py`), comparisons with the approved pictures (`compare.py`, `glyphs.py`, `sheet.py`), the desktop for pictures (`look.ps1`) |
 | `scratch_hub.py` | a scratch hub on the Mac that the VM's app reads, and the changes for the proofs |
+| `tailnet/find-hub.cs` | the library's own search for the hub on the owner's private network, run in the VM |
 
 ## The downloads
 
@@ -59,6 +60,7 @@ Each one was downloaded once, on 13 November 2026, and checked:
 | `UTM.dmg` (UTM 5.0.8) | `github.com/utmapp/UTM/releases/download/v5.0.8/UTM.dmg` | 304,304,581 | `7b2d7b2e2a02b3de1757ef19a8f36573e6d9cceae8c8cca0abcbcaa4a852019a` | the Homebrew cask `utm` and GitHub's digest; notarized, Developer ID of Turing Software, LLC (`WDNLXAD4W8`) |
 | `Windows11_Client_arm64_en-us_26300_9457.iso` | `microsoft.com/software-download/windows11arm64`, "Windows 11 (multi-edition ISO for Arm64)", English | 8,528,523,264 | `8992f2d2cfd2fa647e579e9eb31fc21f34da8333c29b6170fde17d2ed6623e9c` | the table "Verify your download" on that page ("English 64-bit") |
 | `utm-guest-tools-0.1.271.iso` | `getutm.app/downloads/utm-guest-tools-latest.iso`, which is `github.com/utmapp/qemu/releases/download/v10.0.2-utm/` | 127,084,544 | `65b6a69b392ee01dd314c10f3dad9ebbf9c4160be43f5f0dd6bb715944d9095b` | GitHub's digest |
+| `tailscale-setup-1.104.7-arm64.msi` (in the VM, `C:\fz\downloads\`) | `pkgs.tailscale.com/stable/tailscale-setup-1.104.7-arm64.msi` | 36,453,888 | `904c4d877e306d601ac6dc1216091064769be9c942a2a1acc0cd98ffc6ee9191` | Windows' Authenticode check in the VM: Valid, signer `CN=Tailscale Inc., O=Tailscale Inc., L=Toronto, S=Ontario, C=CA` (DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1, with a timestamp) |
 
 Microsoft's download page refuses a scripted request ("Sentinel"), so the ISO's link comes from the page in a
 browser. The link is valid for 24 hours. The guest tools give the ARM64 virtio drivers; Microsoft signed them
@@ -161,18 +163,26 @@ who wants the VM in UTM can make a Windows VM there (Arm64, UEFI, TPM, NVMe, the
 
 ## The window in the VM
 
-The window of slice 1.2 takes these settings from its environment. They are for the proofs in this VM only; nothing
-sets them on a real PC.
+A normal start of the window keeps the library's store in `%LOCALAPPDATA%\Founderizer\store`, the device key in
+`%LOCALAPPDATA%\Founderizer\device-key` (see "The device key"), and reads this PC's Tailscale to find the hub; with no
+hub it opens on Add this PC. It reads no variable.
+
+**The proofs' build** (`build-window.ps1 -Proofs`, `-p:FounderizerProofs=true`, into `C:\fz\out\arm64-proofs`) reads
+the variables below, for the proofs in this VM only; the release build (`C:\fz\out\arm64`) has no such switch, and its
+`Founderizer.dll` does not refer to `GetEnvironmentVariable` at all.
 
 | Variable | What |
 | --- | --- |
-| `FOUNDERIZER_HUB`, `FOUNDERIZER_DEVICE_CODE`, `FOUNDERIZER_STORE` | the library's store reads this hub, enrolls with the code, and keeps its files in the folder (default `%LOCALAPPDATA%\Founderizer\store`). The key stays in memory, so each start needs a new code. Without `FOUNDERIZER_HUB` the window shows the sample fleet of the Mac and iPhone apps. Add this PC (slice 1.5) replaces these |
+| `FOUNDERIZER_SAMPLE` | `1`: the sample fleet of the Mac and iPhone apps, with the example hub address and this PC's line of picture 6 |
+| `FOUNDERIZER_HUB`, `FOUNDERIZER_DEVICE_CODE`, `FOUNDERIZER_STORE` | the library's store reads this hub, enrolls with the code, and keeps its files in the folder; the key stays in memory, so each start needs a new code |
 | `FOUNDERIZER_SAMPLE_CLOCK` | `HH:mm`: the sample fleet's times as at that clock (`15:12` gives the times of picture 1) |
-| `FOUNDERIZER_TIMING_LOG` | a file for the app's timing lines (see "Readings") |
-| `FOUNDERIZER_READING` | `changes`: the sample changes one line every 3 seconds; `block-ui`: the UI thread sleeps 4 seconds, 5 seconds after the start |
+| `FOUNDERIZER_SAMPLE_ASK` | his one message in Customer Support's chat, a minute before the clock, which the agent works on: "Which order is it?" gives picture 2 and its "Thinking" line. The sample sends nothing: its writes do nothing |
+| `FOUNDERIZER_TIMING_LOG` | a file for the app's timing lines (see "Readings"), and the answer of each Connect and each code (`connect: …`, `enroll: …`), whose lines on the screen wait for their pictures |
+| `FOUNDERIZER_READING` | `changes`: the sample changes one line every 3 seconds; `block-ui`: the UI thread sleeps 4 seconds, 5 seconds after the start; `long-chat`: Customer Support's chat has 2,000 messages and replies, and 5 seconds after it opens, the scroll reading runs (see "Readings") |
 | `FOUNDERIZER_DEBUG_LOG` | a file for an exception that nothing caught |
 
-The argument `-openPage needs|tasks|activity|settings|agent.<name>` opens that page first, as the Mac app's does.
+The argument `-openPage needs|tasks|activity|settings|agent.<name>|task.<id>` opens that page first, as the Mac app's
+does.
 
 ### Pictures
 
@@ -182,22 +192,30 @@ taskbar hidden (`look.ps1`); the frames of motion with the animation effects on.
 ```
 app/windows/vm/vm.sh desktop '& C:\fz\setup\look.ps1'
 app/windows/vm/vm.sh desktop '$env:FOUNDERIZER_SAMPLE_CLOCK = "15:12"; Start-Process C:\fz\out\arm64\Founderizer.exe -ArgumentList "-openPage", "agent.manager"'
+app/windows/vm/vm.sh desktop '& C:\fz\setup\ui.ps1 -Click "Tasks"'       # one step of a scripted run, as a mouse click
 app/windows/vm/vm.sh picture built.png
-python3 -I app/windows/vm/pictures/compare.py approved.png built.png side.png 0 0 2880 96 0 96 640 1800
+python3 -I app/windows/vm/pictures/compare.py approved.png built.png side.png 0 0 2880 96 0 96 640 1800 642 98 2120 1800 2120 96 2880 1800
 python3 -I app/windows/vm/pictures/glyphs.py approved.png built.png glyphs.png
-app/windows/vm/vm.sh desktop '& C:\fz\setup\ui.ps1 -Invoke "Tasks"'      # one step of a scripted run
 app/windows/vm/vm.sh desktop '& C:\fz\setup\look.ps1 -AnimationsOn'
-app/windows/vm/vm.sh desktop '& C:\fz\setup\frames.ps1 -Out C:\fz\frames -Count 16 -IntervalMs 150'
+app/windows/vm/vm.sh desktop '& C:\fz\setup\frames.ps1 -Out C:\fz\frames -Count 16 -IntervalMs 150 -X 642 -Y 98 -Width 2238 -Height 1702'
 app/windows/vm/vm.sh copy 'vm:C:/fz/frames' frames
-python3 -I app/windows/vm/pictures/motion.py frames motion.png
+python3 -I app/windows/vm/pictures/changes.py frames                 # in how many frames the part changed
+python3 -I app/windows/vm/pictures/motion.py frames motion.png       # with the default part: the pane's agents
 ```
 
 - `compare.py` prints the mean difference of each region (x0 y0 x1 y1, in the screen's own pixels) and the share of
   pixels that are far apart, and writes the two pictures side by side. `glyphs.py` does the same for each agent's
   mark in the pane. `sheet.py` puts the title bar and the pane of several pictures side by side.
-- `ui.ps1` presses a button of the window through UI Automation (a row's name, `Back`, `Forward`) and prints the
-  open page's name and whether Back and Forward can be pressed. No person is needed.
-- `motion.py` counts, for each agent of the sample, the frames in which its mark and its line changed.
+- `ui.ps1` presses a button of the window through UI Automation (a row's name, a card's title, an option, `Back`,
+  `Pause`) and prints the open page's name and whether Back and Forward can be pressed. No person is needed.
+  `-Invoke` presses it through UI Automation, which leaves Windows' keyboard focus frame on it; `-Click` presses it
+  with the mouse, as a person does, and then moves the pointer to the empty middle of the title bar, so a picture
+  shows the window at rest (no focus frame, no hover fill, no tooltip). `-Field <placeholder> -Type <words>` writes
+  into a field and presses Enter; `-Read <automation id>` prints an element's words (`TaskState`, `NeedsCount`);
+  `-Has <words>` says whether an element with those words shows. `-NoEnter` leaves out the Enter after the words: a
+  whole code sends itself, and an Enter would press what holds the focus on the next page.
+- `motion.py` counts, for each agent of the sample, the frames in which its mark and its line changed; `changes.py`
+  counts the frames in which any part of the screen changed.
 
 ### The store against a scratch hub
 
@@ -211,7 +229,18 @@ nothing of the machine's), makes the VM a PC owner device, and prints the hub's 
 python3 -I app/windows/vm/scratch_hub.py > hub.out &
 app/windows/vm/vm.sh desktop '$env:FOUNDERIZER_HUB = "http://10.0.2.2:<port>"; $env:FOUNDERIZER_DEVICE_CODE = "<code>"; $env:FOUNDERIZER_STORE = "C:\fz\store-test"; Start-Process C:\fz\out\arm64\Founderizer.exe'
 echo need > <folder>/commands
+app/windows/vm/vm.sh desktop '& C:\fz\setup\ui.ps1 -Field "Message Manager" -Type "A message from the PC."'
 ```
+
+An enrollment is logged with the kind of app that it sends (`answered enroll, kind windows`), which the hub names "PC"
+(`OWNER_DEVICE_KINDS`). The PC enrolls as the scratch fleet's own device `pc`: the hub's route for a new device commits
+`team.json`, and the scratch kit has no remote to commit to. Slice 1.5's flows run on the release build: a clean start
+(its folder removed) opens Add this PC; Settings, the scratch hub's address and Enter connect; Add this PC and the word
+`code`'s code enroll; a restart reads with the kept key; Forget the key opens Add this PC again.
+
+The writes of the PC show in the hub's database (`pilot.db` in the folder), each with the client
+`founderizer-windows/1`: a message and a typed answer in `ui_requests`, a pressed option in `needs` (`answer`,
+`answered`, `chosen`), Pause and Stop in `holds` and `ui_controls`, guidance in `steers`.
 
 ### Readings
 
@@ -219,10 +248,56 @@ echo need > <folder>/commands
 first page) and, for each change of the store's state, `change-to-frame <ms> <what the pane shows differently>`
 (from the store's change to the next frame). `readings/start-time.exe` (from `start-time.cs`) starts the app several
 times and reads the window's events and its memory at rest. `readings/cpu-at-rest.ps1` reads the processor time of
-the app and of the compositor over a minute.
+the app and of the compositor over a minute. With `FOUNDERIZER_READING=long-chat`, the log gets `scroll-start` (the
+window's frame interval at rest, the median of 120 frames), then the chat goes from its end to its start, 64 pixels a
+frame, and the log gets `scroll-end` (the frames, their median, 99th percentile and longest interval), a `scroll-long`
+line for each frame longer than twice the interval at rest (with the rows that came into view in it, the views made
+and the garbage collections), and every interval (`scroll-intervals`).
+
+## The device key
+
+The key that the hub gives this PC at enrollment stays in `%LOCALAPPDATA%\Founderizer\device-key`, outside the store's
+folder, written by the library's `FileKeyStore` through the window's `UserKeyProtection`: Windows' protection of the
+signed-in user's data (DPAPI, `CryptProtectData` for the current user, with the app's own purpose as entropy). The file
+is DPAPI's blob, with no text of the key in it; only this Windows user on this PC opens it, and only with the app's
+purpose; its access list is the one of the user's LocalAppData (the user, SYSTEM, Administrators). Forget the key
+removes the file.
+
+The TPM is a later choice. It would add a key that no program can copy off this PC (a TPM key is used where it is and
+never exported), so a copy of the user's files with his Windows password would not carry the key away. It costs: the
+hub's key is a bearer key that each request sends, so the TPM could only seal it (the same reach as DPAPI, bound to the
+chip), and the real gain needs a TPM signing key that the hub checks instead (the enrollment's `signing_key`, which the
+hub already takes); a TPM operation takes tens of milliseconds, some PCs and VMs have no usable TPM, and
+a cleared TPM (a firmware update, a new motherboard) loses the key, so the PC needs a new code. The readings of slice
+1.0 show that the TPM's P-256 signing works in this VM.
+
+## The owner's private network
+
+The VM can join the owner's Tailscale network as one machine of his, as a customer's PC does (slices 1.5 and 1.7
+need it; the owner's yes of 13 November 2026, "Yes, join it"). The download is above, checked before it runs. Tailscale's
+service is the one new service in the VM; nothing new starts on the Mac.
+
+```
+app/windows/vm/vm.sh run 'Start-Process msiexec.exe -Wait -ArgumentList "/i", "C:\fz\downloads\tailscale-setup-1.104.7-arm64.msi", "/qn", "/norestart", "TS_NOLAUNCH=true"'
+app/windows/vm/vm.sh run '& "C:\Program Files\Tailscale\tailscale.exe" up --unattended --shields-up --ssh=false --accept-routes=false --exit-node= --advertise-routes= --hostname=<name> --timeout=20s'
+```
+
+- `up` prints a sign-in link for one use and waits. Nobody here opens it: it goes to the owner, who signs the
+  machine in on Tailscale's own page. No key, token or login of his is used for the join.
+- The settings: unattended (it stays connected with nobody signed in at its window), shields up (no connection from
+  the network reaches the VM), no Tailscale SSH, no routes accepted or advertised, no exit node; `tailscale debug
+  prefs` shows them. The VM's name on the network says what it is (for example `founderizer-windows-vm`).
+- The installer puts Tailscale's tray app into the common Startup folder; the VM's join moves that shortcut to
+  `C:\fz\downloads\Tailscale-startup.lnk`, so nothing but the service starts by itself, and the desktop of the
+  pictures stays as it was.
+- `tailnet/find-hub.cs` runs the library's own search for the hub (`Tailnet.FindAsync`, `GET /health` on port 8765
+  of each device of the network) and prints the hub's address; no address is written into a file of this folder.
+  Copy it to `C:\fz\src\windows\vm\tailnet\` beside the copied `Founderizer.Core` and run `dotnet run find-hub.cs`.
 
 ## Limits
 
+- **Windows is not activated** in the VM, so after a while Windows draws "Activate Windows" in the screen's bottom
+  right corner; a picture that compares the whole screen counts it (0.1 of 255).
 - **No graphics card.** Windows and WinUI draw with the software renderer (WARP). Pictures are correct; speed
   numbers are not the reference numbers of the plan's rule 6. Those come from the real PC.
 - **The TPM is swtpm**, a TPM 2.0 in software on the Mac. A reading with it proves the Windows and .NET side, not a
@@ -275,3 +350,25 @@ reference numbers; those come from the real PC.
   store's new request and its way back), and the frame came 7.2 to 15.1 ms (median 9.5 ms) after the store's change
   (the VM's clock). The part between, the mobile answer's way back and the store's decoding, has no common clock and
   is not measured. Before the wait's answer, the hub gathers changes for 0.25 s (`WAIT_GATHER`).
+
+## The readings of slices 1.3 and 1.4, 13 November 2026
+
+The signed ARM64 Release build, in the desktop session of `builder`. **The VM has no graphics card**: WinUI and the
+compositor draw with WARP, in software, and the Mac ran other threads' work beside it (load 8 to 10 during these
+runs). These are not the plan's reference numbers; those come from the real PC.
+
+- **A chat of 2,000 messages scrolls from its end to its start** (`FOUNDERIZER_READING=long-chat`, 64 pixels a
+  frame, 2,657 frames in 44.7 s): the window's frame interval at rest is 17.9 ms; during the scroll the median frame
+  is 16.5 ms, the 99th percentile 30.6 ms and the longest 62.6 ms; 12 frames are longer than twice the interval at
+  rest (35.9 ms), and 11 of them are frames in which a row came into view, whose words are then laid out and drawn
+  for the first time. 2,029 rows came into view, and 33 row views were made for them: the list reuses its views. A
+  new state of that chat reaches its frame in 19 to 32 ms. Its first page came 569 ms after the start.
+- **Memory and processor at rest on the chat page**, over 60 seconds: Fleet Manager's chat, with the pane's two
+  agents at work, 8.79 % of one core for the app and 4.99 % for dwm, 243 MB working set and 61 MB private bytes;
+  with the animation effects off, 0.21 % and 0.00 %. Customer Support's chat while it works (the "Thinking" line,
+  the pill's and the panel's marks move as well): 29.15 % and 7.67 %. Each moving mark is drawn in software at
+  each frame: about 10 % of a core each for the pill's and the panel's marks.
+- **The content area's rounded corner** (W4) is drawn over the page, not as a clip of it. As a clip it made the
+  software renderer draw the whole page again at each frame of a mark that moved in it: 46.8 % against 27.1 % of a
+  core on a chat while its agent works (a Debug build, 20 seconds each), and a scroll frame of 28 ms at the median
+  against 16.5 ms.

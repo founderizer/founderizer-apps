@@ -254,6 +254,15 @@ def device_binding(hub, vault):
 
 # ---------------------------------------------------------------- the release manifests
 
+def windows_text(build):
+    """The bytes that a Windows build's signature covers (windows-app-release-design.md, section 2): ten lines, each
+    ended by a newline. It is here until the release job has its own copy in the hub's code; then the vectors take that
+    one."""
+    return "\n".join(["founderizer-windows-1", build["version"], str(build["build"]), build["arch"], build["url"],
+                      build["sha256"], str(build["size"]), build.get("minimum") or "", build.get("notes") or "",
+                      "true" if build["hold"] else "false"]) + "\n"
+
+
 def release_manifests(releases, autopublish):
     seed = label_bytes("release key")
     public = releases.public_key(seed)
@@ -325,6 +334,55 @@ def release_manifests(releases, autopublish):
     ]
     app_refused += [{"name": name, "refused_by": "shape", "manifest": manifest} for name, manifest in shape_refused]
 
+    # A build of Founderizer for Windows (windows-app-release-design.md, section 2): the third kind of signed text,
+    # with the arch. Its signature verifies as no Mac build (autopublish.app_text of the same fields) and as no fleet
+    # release (releases.check), with the hub's own code.
+    windows_build = {"version": "0.2.3", "build": 23, "arch": "arm64",
+                     "url": channel + "/downloads/Founderizer-Windows-0.2.3-arm64.zip",
+                     "sha256": hashlib.sha256(b"founderizer vectors: windows build").hexdigest(), "size": 98765432,
+                     "minimum": "10.0.22621", "notes": channel + "/notes/windows-0.2.3", "hold": False}
+    win_text = windows_text(windows_build)
+    windows_manifest = dict(windows_build, signature=b64(releases.sign(seed, win_text.encode())))
+    if not releases.verify_signature(public, win_text.encode(), base64.b64decode(windows_manifest["signature"])):
+        raise SystemExit("releases.verify_signature refuses the Windows build's signature")
+    as_mac = autopublish.app_text({k: v for k, v in windows_build.items() if k != "arch"})
+    if releases.verify_signature(public, as_mac.encode(), base64.b64decode(windows_manifest["signature"])):
+        raise SystemExit("a Windows build's signature verifies as a Mac build's")
+    try:
+        releases.check(windows_manifest, (public,))
+        raise SystemExit("releases.check takes a Windows build as a fleet release")
+    except releases.Untrusted:
+        pass
+    windows_signature_refused = [
+        ("a later build under the same signature", dict(windows_manifest, build=24)),
+        ("the other arch under the same signature", dict(windows_manifest, arch="x64")),
+        ("the hold taken out", dict(windows_manifest, hold=True)),
+        ("another download under the same signature", dict(windows_manifest, sha256="0" * 64)),
+        ("no minimum under a signature of the minimum", dict(windows_manifest, minimum="")),
+        ("the Mac build's signature", dict(windows_manifest, signature=app_manifest["signature"])),
+        ("a signature by a key that the app does not trust",
+         dict(windows_manifest, signature=b64(releases.sign(label_bytes("another release key"), win_text.encode())))),
+    ]
+    windows_refused = []
+    for name, manifest in windows_signature_refused:
+        if releases.verify_signature(public, windows_text(manifest).encode(), base64.b64decode(manifest["signature"])):
+            raise SystemExit(f"releases.verify_signature takes {name}")
+        windows_refused.append({"name": name, "refused_by": "signature", "manifest": manifest})
+    windows_shape_refused = [
+        ("a build for another arch", dict(windows_manifest, arch="x86")),
+        ("no arch", {k: v for k, v in windows_manifest.items() if k != "arch"}),
+        ("a download on another host", dict(windows_manifest, url="https://example.net/downloads/Founderizer-Windows-0.2.3-arm64.zip")),
+        ("a download over HTTP", dict(windows_manifest, url="http://releases.example.com/downloads/Founderizer-Windows-0.2.3-arm64.zip")),
+        ("a download that is no zip", dict(windows_manifest, url=channel + "/downloads/Founderizer-Setup-0.2.3-arm64.exe")),
+        ("a build number as text", dict(windows_manifest, build="23")),
+        ("a minimum that is a macOS version", dict(windows_manifest, minimum="15.0")),
+        ("an arch with a newline", dict(windows_manifest, arch="arm64\nx64")),
+        ("a size above 600 MB", dict(windows_manifest, size=600 * 1024 * 1024 + 1)),
+        ("no signature", {k: v for k, v in windows_manifest.items() if k != "signature"}),
+    ]
+    windows_refused += [{"name": name, "refused_by": "shape", "manifest": manifest}
+                        for name, manifest in windows_shape_refused]
+
     # The two shapes of an Ed25519 signature that verify only where a check is loose, which releases.verify_signature
     # refuses: the identity as the public key (with R the identity and S zero it signs every message), and S + L.
     identity = b"\x01" + bytes(31)
@@ -342,13 +400,16 @@ def release_manifests(releases, autopublish):
             raise SystemExit(f"releases.verify_signature takes {case['name']}")
     if not releases.verify_signature(public, message, good):
         raise SystemExit("releases.verify_signature refuses a good signature")
-    return {"about": "Ed25519 release manifests: a fleet release (releases.signed_text, founderizer-release-1) and a "
-                     "build of the app (autopublish.app_text = AppUpdate.signedText, founderizer-app-1), signed by "
-                     "releases.sign with a test key. The keys file is read as releases.parse_keys reads it.",
+    return {"about": "Ed25519 release manifests: a fleet release (releases.signed_text, founderizer-release-1), a "
+                     "build of the app (autopublish.app_text = AppUpdate.signedText, founderizer-app-1) and a build of "
+                     "the Windows app (windows_text here, founderizer-windows-1), signed by releases.sign with a test "
+                     "key. The keys file is read as releases.parse_keys reads it.",
             "made_by": MADE_BY, "public_key": b64(public), "other_public_key": b64(other),
             "keys_text": keys_text, "keys_text_refused": bad_keys,
             "fleet": {"manifest": fleet_manifest, "signed_text": fleet_text.decode(), "refused": fleet_refused},
             "app": {"channel": channel, "manifest": app_manifest, "signed_text": app_text, "refused": app_refused},
+            "windows": {"channel": channel, "arch": "arm64", "manifest": windows_manifest, "signed_text": win_text,
+                        "mac_text_of_its_fields": as_mac, "refused": windows_refused},
             "message_hex": message.hex(), "message_signature": b64(good), "loose": loose}
 
 

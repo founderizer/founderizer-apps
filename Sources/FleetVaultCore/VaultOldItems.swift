@@ -19,12 +19,17 @@ public enum VaultOldItems {
     /// `FleetVault writer`, which launchd starts in the owner's login session: deletes the old writer's items. True
     /// when each one is gone, also when it was gone already.
     public static func removeWriterItems() -> Bool {
-        remove(writerItems, with: VaultKeychain(agent: writerAccount).remove)
+        remove(writerItems, with: firstGeneration(writerAccount).rawRemove)
     }
 
     /// A worker vault at its start: deletes its old machine token and its old setup item. True when both are gone.
     public static func removeWorkerItems(agent: String) -> Bool {
-        remove(workerItems, with: VaultKeychain(agent: agent).remove)
+        remove(workerItems, with: firstGeneration(agent).rawRemove)
+    }
+
+    /// These items are of the service of builds 1 to 14 (key generation 1), and the cleanup waits for no move.
+    static func firstGeneration(_ agent: String) -> VaultKeychain {
+        VaultKeychain(agent: agent, generation: 1, backend: VaultSystemKeychain(), guarded: false)
     }
 
     /// Each item once, in this order, with `delete` and nothing else: this code has no way to read an item.

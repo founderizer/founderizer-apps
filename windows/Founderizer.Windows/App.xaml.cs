@@ -8,7 +8,7 @@ namespace Founderizer.Windows;
 
 public partial class App : Application
 {
-    private static readonly string? DebugLog = Environment.GetEnvironmentVariable("FOUNDERIZER_DEBUG_LOG");
+    private static readonly string? DebugLog = Proofs.Variable("FOUNDERIZER_DEBUG_LOG");
     private Window? window;
 
     public App()
@@ -20,12 +20,14 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
-        // The library's store against the hub of FOUNDERIZER_HUB, for the proofs until Add this PC comes (slice 1.5);
-        // else the sample fleet of the Mac and iPhone apps.
+        // The library's store, kept in the user's LocalAppData: with no hub it opens on Add this PC. A build with the
+        // proofs' switch can show the sample fleet of the Mac and iPhone apps (FOUNDERIZER_SAMPLE=1) or take a hub
+        // from the environment (app/windows/vm/README.md); a release build has neither.
         IFleetSource source;
-        var store = StoreSource.FromEnvironment();
-        if (store is not null) source = store;
-        else source = new SampleSource();
+        var store = StoreSource.FromProofs();
+        if (Proofs.Variable("FOUNDERIZER_SAMPLE") == "1") source = new SampleSource();
+        else if (store is not null) source = store;
+        else source = store = StoreSource.Create();
         window = new MainWindow(source, History.Asked(Environment.GetCommandLineArgs()));
         window.Activate();
         if (store is not null && await store.StartAsync() is { } refused) Note("the store did not start: " + refused);

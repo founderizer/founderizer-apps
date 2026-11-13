@@ -136,12 +136,16 @@ struct VaultOwnerPinTests {
         }
     }
 
-    @Test func withoutTheOwnersKeysAHandoverIsCheckedAsBefore() throws {
-        // No Mac's configuration held the keys on 12 November 2026: such a vault refuses no handover for its pin.
+    @Test func withoutTheOwnersKeysEachHandoverIsRefused() throws {
+        // As a Linux broker without them (vault.py owner_pinned): no pin, any pin, even a valid pin of the right key.
         let config = try configuration()
-        try VaultOwnerPin.check(try job(pin: nil), configuration: config)
-        try VaultOwnerPin.check(try job(pin: ["statement": "not json", "signature": ""]), configuration: config)
-        try VaultOwnerPin.check(try job(pin: try signedPin(), recipient: other), configuration: config)
+        for pin in [nil, ["statement": "not json", "signature": ""], try signedPin()] as [Any?] {
+            #expect(throws: VaultFailure.ownerKeysMissing) { try VaultOwnerPin.check(try job(pin: pin), configuration: config) }
+        }
+        #expect(throws: VaultFailure.ownerKeysMissing) {
+            try VaultOwnerPin.check(try job(pin: try signedPin(), recipient: other), configuration: config)
+        }
+        #expect(VaultFailure.ownerKeysMissing.rawValue == "This machine's vault holds no key of the owner, so it hands no login over.")
     }
 
     @Test func theHubsPinIsReadOnlyWithAHandoverAndNeverStopsTheJobItself() throws {
@@ -182,5 +186,28 @@ extension VaultCallerTests {
         answering(withPin: true, to: "age1" + String(repeating: "p", count: 58))
         await #expect(throws: VaultFailure.ownerPinOther) { try await hub.confirm(request, as: VaultCaller(agent: "studio", key: nil)) }
         #expect(FakeHub.seen.map(\.route) == ["/helper/vault/studio"])
+    }
+
+    /// The confirmation refuses a handover of a Mac without the owner's keys too, even with a valid pin of the right key,
+    /// so a job never comes back to read, protect or seal a login (`VaultBroker` refuses before it asks:
+    /// `aHandoverWithoutTheOwnersKeysIsRefusedBeforeAnyHubCall`). A sign-in goes through `confirm` as before.
+    @Test func theConfirmationAlsoRefusesAHandoverWithoutTheOwnersKeys() async throws {
+        let owner = P256.Signing.PrivateKey(), fleet = "0123456789abcdef", recipient = "age1" + String(repeating: "q", count: 58)
+        let statement = #"{"at":1700000000,"fleet":"\#(fleet)","kind":"pin","machine":"worker-1","recipient":"\#(recipient)","v":1}"#
+        let signature = try owner.signature(for: Data(statement.utf8)).derRepresentation.base64EncodedString()
+        let salts = ["password": "0123456789abcdef0123456789abcdef", "totp": "fedcba9876543210fedcba9876543210"]
+        let hub = VaultHub(configuration: try VaultConfiguration(data: JSONSerialization.data(withJSONObject: [
+            "agent": "studio", "hub": "http://100.64.0.1:9", "store": "fleet", "worker_uid": 501,      // no hub listens there
+            "socket": NSHomeDirectory() + "/Library/Application Support/AgentFleet/vault.sock"])), protocolClasses: [FakeHub.self])
+        FakeHub.reset { _, _ in
+            (200, ["ok": true, "kind": "handover", "job": 12, "task": "T-1", "login": "sealed:7", "target": "seo", "recipient": recipient,
+                   "fingerprint_salts": salts, "pin": ["statement": statement, "signature": signature]])
+        }
+        let handover = try VaultRequest(data: Data(#"{"v":2,"op":"handover","job":12}"#.utf8))
+        await #expect(throws: VaultFailure.ownerKeysMissing) { try await hub.confirm(handover, as: VaultCaller(agent: "studio", key: nil)) }
+        #expect(FakeHub.seen.map(\.route) == ["/helper/vault/studio"])          // its one confirmation: no protect, no seal
+        FakeHub.reset { _, _ in (200, ["ok": true, "kind": "signin", "job": 13, "task": "T-1", "login": "sealed:7", "fingerprint_salts": salts]) }
+        let signin = try VaultRequest(data: Data(#"{"v":2,"op":"signin","job":13}"#.utf8))
+        #expect(try await hub.confirm(signin, as: VaultCaller(agent: "studio", key: nil)).id == 13)
     }
 }

@@ -63,9 +63,16 @@ import SwiftUI
     /// Turn on: his Tailscale key page. Not while a step runs.
     func turnOn(store: FleetStore) {
         guard store.hub == hub, !running else { return }
+        openKeyPage(store: store)
+    }
+
+    /// One opening of the key page, from Turn on and from a Try again that needs the token again. The calls of a token
+    /// that he pasted on an opening before may still run: this opening is not busy with them, and their answer is not
+    /// its answer (`send` compares `opening`).
+    private func openKeyPage(store: FleetStore) {
         run = .keyPage
         opening += 1
-        linesToAdd = nil; copied = false; failure = nil
+        linesToAdd = nil; copied = false; failure = nil; preparing = false
         store.destination = .connectKey
     }
 
@@ -104,7 +111,8 @@ import SwiftUI
         failure = nil
         linesToAdd = nil; copied = false
         let opened = opening
-        defer { preparing = false }
+        // Only its own opening: after Back and Turn on again, a paste on the new opening is busy by itself.
+        defer { if opened == opening { preparing = false } }
         do {
             let answer = try await prepareNetwork(token)
             // He pressed Back meanwhile (also when he then pressed Turn on again), or the store moved to another hub:
@@ -144,9 +152,7 @@ import SwiftUI
         }
         cutOff = false
         if turn == .on, stop.keyAgain {
-            run = .keyPage
-            linesToAdd = nil; copied = false; failure = nil
-            store.destination = .connectKey
+            openKeyPage(store: store)
         } else {
             start(turn, store: store)
         }

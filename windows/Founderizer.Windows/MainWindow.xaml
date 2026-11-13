@@ -11,6 +11,12 @@
     xmlns:marks="using:Founderizer.Windows.Marks"
     Title="Founderizer">
     <Grid x:Name="Root" Background="{StaticResource RailBrush}">
+        <Grid.Resources>
+            <!-- The pictures' type: Segoe UI Variable's Text instance at every size, so that small words keep its form. -->
+            <Style TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Text" />
+            </Style>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
@@ -62,7 +68,7 @@
                         <TextBlock Text="Needs you" Margin="48,0,0,0" VerticalAlignment="Center" FontSize="14" Foreground="{StaticResource TextBrush}" />
                         <Border Background="{StaticResource BadgeBrush}" CornerRadius="8" MinWidth="18" Height="16" Padding="6,0"
                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,12,0">
-                            <TextBlock x:Name="NeedsCount" FontSize="12" LineHeight="16" LineStackingStrategy="BlockLineHeight"
+                            <TextBlock x:Name="NeedsCount" AutomationProperties.AutomationId="NeedsCount" FontSize="12" LineHeight="16" LineStackingStrategy="BlockLineHeight"
                                        FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}" />
                         </Border>
                     </Grid>
@@ -129,11 +135,17 @@
             </Grid>
         </Grid>
 
-        <!-- The content area: its own corner and edge (W4). The pages come in later slices: until then a page's area is
-             empty, and only its name for assistive apps says which page is open. -->
-        <Border x:Name="ContentArea" Grid.Row="1" Grid.Column="1" Background="{StaticResource CanvasBrush}"
-                BorderBrush="{StaticResource LineBrush}" BorderThickness="1,1,0,0" CornerRadius="8,0,0,0">
+        <!-- The content area, where the page of the history opens; the pages of a later slice leave it empty, and only
+             its name for assistive apps says which page is open. -->
+        <Border x:Name="ContentArea" Grid.Row="1" Grid.Column="1" Background="{StaticResource CanvasBrush}" Padding="1,1,0,0">
             <ContentControl x:Name="PageHost" AutomationProperties.AutomationId="Page" IsTabStop="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
         </Border>
+        <!-- Its rounded corner and its edge (W4), drawn over the page. A border with a rounded corner clips what it
+             holds, and with Windows drawing in software, a clipped page is drawn whole again at each frame of a mark
+             that moves in it (19 % of a core in the build VM). -->
+        <Grid Grid.Row="1" Grid.Column="1" IsHitTestVisible="False">
+            <Path Data="M0,0 L8,0 A8,8 0 0 0 0,8 Z" Fill="{StaticResource RailBrush}" HorizontalAlignment="Left" VerticalAlignment="Top" />
+            <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="1,1,0,0" CornerRadius="8,0,0,0" />
+        </Grid>
     </Grid>
 </Window>

@@ -44,7 +44,8 @@ renamed or removed without a word to the screens lane.
   `change.After` is the new immutable `StoreState`; `change.Agents` names the pane rows that came, went or changed, and
   `Fleet`, `Chats`, `Needs`, `Tasks`, `TaskPages`, `Connection` and `Pending` what changed in the data. An age that moves
   with the clock alone ("just now", "5 min ago") raises no change: a screen that shows one draws it again on its own
-  timer, once a minute.
+  timer, once a minute. The one rule of time that the store raises itself is the reading that turns old (45 seconds
+  after the last read with no read since): at that moment a write cannot go, and the change says so.
 - **The models**, pure functions of one state, the clock (`DateTimeOffset.UtcNow`) and `ScreenContext.Local` (Windows'
   time zone and culture): `Screens.FirstPage`, `Screens.Line` (the connection line), `Screens.Pane`, `Screens.Chat`,
   `Screens.Needs`, `Screens.Board`, `Screens.Task`, `Screens.Settings` (with Founderizer's credit, `Credit.Founderizer`,
@@ -60,7 +61,16 @@ renamed or removed without a word to the screens lane.
   `AddFileAsync(composer, name, bytes)`, `UploadAsync(composer, requestId)` (a file that did not go goes again) and
   `RemoveFile(composer, requestId)` (composers `agent:<name>` and `need:<id>`); `FileAsync(file)`; `EnrollAsync(code)`;
   `ConnectAsync(address)`; `ForgetKey()`; `ReadDeviceAsync()`; `Unlock()`; `FindHubAsync()`. A write that returns
-  words returns the owner's words of what failed.
+  words returns the owner's words of what failed. **A press is never lost with no word**: `SendMessageAsync`, `AnswerAsync`,
+  `TickAsync`, `DiscussAsync`, `ControlAsync` and `GuideAsync` give `Task<string?>`, null when the write went, else the
+  owner's words. A press that comes while another write is on its way, or while the reading waits for a read that
+  comes in front, waits and goes then, in the order of the presses (the window draws a change after the store made it,
+  so a button can still show on). A lasting reason gives its words at once, and nothing goes: a request that waits
+  ("A saved request waits. Check it in Settings."), the hub that does not answer (the connection line's words), the
+  storage line, or "Not sent. The hub connection changed." for a press whose hub changed while it waited
+  (`StoreState.HoldsWrites(now)` says which). A screen shows those words where the press was only where an approved
+  element has a place for them (a composer's note); a Pause or a Stop has none, and its line over the page already
+  says the same cause.
 - **The picked files** (the iPhone's StagedFile): `state.Staged[composer]` holds each `StagedFile` (`RequestId`, `Name`,
   `Mime`, `Size`, `File` once the hub holds it, `Failure`, `IsOnHub`), in the order he picked them, between starts;
   `state.Uploading` the ones that go up now. While a file of a composer waits, its Send is off (`ComposerModel.CanSend`,
@@ -74,6 +84,15 @@ renamed or removed without a word to the screens lane.
   the hub names it "PC". Settings' address field starts with `state.Hub` (found or typed), and Connect is
   `ConnectAsync(text)`, whose refusal `state.AddressError` keeps. The key stays between starts in its file, so a start
   needs no new code; Forget the key takes the file away.
+- **The app's own update (slice 1.6, the library's part)**: `WindowsManifest.Check(data, keys, channel, arch)` (the
+  release keys that the app ships, and the early keys too while its fleet takes releases early),
+  `WindowsUpdate.ReadAsync(http, channel, arch, early, keys, installed, system, fleet)` and `WindowsUpdate.Reading`
+  (offered only when the build is higher, not held, and this Windows meets its minimum; the Mac's words with "PC"),
+  and `BuildDownload.FetchAsync(http, manifest, root)`, which gives the path of a file whose size and SHA-256 are the
+  manifest's, in a new folder of its own under `root`, or `UpdateFailure` with the owner's words and no folder left.
+  `BuildDownload.NewClient()` is the client of both. The screens give the rest (`~/dev/founderizer-plans/
+  windows-app-release-design.md`, sections 4 and 5): the publisher check, the unpack, the launcher and the swap. No
+  element shows an update before the owner's yes to it.
 - An element that needs a hub feature asks the model, which reads `ui_features` (`state.Offers(...)`): Discuss
   (`need_talk`), the task's controls (`task_controls`) and its guidance (`task_steering`), the plus of the files
   (`attachments`), the chat of an agent other than the manager (`direct_chat`).

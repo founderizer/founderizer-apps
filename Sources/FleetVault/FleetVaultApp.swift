@@ -19,6 +19,7 @@ import SwiftUI
             let configuration = try VaultBroker.loadConfiguration()
             config = configuration
             configured = true
+            VaultKeyMove.atStart(agent: configuration.agent)      // package 7: the keys of this build's generation
             let broker = VaultBroker(configuration: configuration)
             let socket = VaultSocket(configuration: configuration, broker: broker)
             try socket.start(); self.socket = socket

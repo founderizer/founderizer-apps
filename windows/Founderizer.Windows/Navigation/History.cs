@@ -80,6 +80,9 @@ public sealed class History
                 "tasks" or "activity" => Page.Tasks,
                 "settings" => Page.Settings,
                 _ when page.StartsWith("agent.", StringComparison.Ordinal) && page.Length > 6 => Page.Chat(page[6..]),
+                _ when page.StartsWith("task.", StringComparison.Ordinal)
+                       && long.TryParse(page[5..], System.Globalization.NumberStyles.None,
+                                        System.Globalization.CultureInfo.InvariantCulture, out var id) && id > 0 => Page.OfTask(id),
                 _ => null,
             };
         }

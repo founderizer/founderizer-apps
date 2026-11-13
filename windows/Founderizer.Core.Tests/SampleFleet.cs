@@ -118,6 +118,10 @@ internal sealed class FakeHub : IDisposable
     public (int Status, string Body)? Refuse;
     /// <summary>The writes go unanswered (the hub holds the connection).</summary>
     public bool Silent;
+    /// <summary>While it is set and not open, each write waits for it before its answer: its receipt is on its way.</summary>
+    public ManualResetEventSlim? Hold;
+    /// <summary>While it is set and not open, each read of the fleet waits for it: a read that has no answer yet.</summary>
+    public ManualResetEventSlim? HoldReads;
     /// <summary>The refusal of each upload while it is set: its status and body.</summary>
     public (int Status, string Body)? RefuseUpload;
     public int MobileReads;
@@ -141,6 +145,7 @@ internal sealed class FakeHub : IDisposable
         if (path == "/ui/mobile")
         {
             Interlocked.Increment(ref MobileReads);
+            HoldReads?.Wait(TimeSpan.FromSeconds(20));
             if (seen.Header("If-None-Match") == ETag) return LoopbackHub.Raw(304, [], ("ETag", ETag));
             return LoopbackHub.Json(200, Snapshot.ToJsonString(), ("ETag", ETag));
         }
@@ -172,6 +177,7 @@ internal sealed class FakeHub : IDisposable
         {
             var body = JsonDocument.Parse(seen.Body).RootElement.Clone();
             Writes.Enqueue((path, body, seen));
+            Hold?.Wait(TimeSpan.FromSeconds(20));
             if (Silent) return null;
             if (Refuse is { } refusal) return LoopbackHub.Json(refusal.Status, refusal.Body);
             var id = body.GetProperty("request_id").GetString()!;
@@ -187,6 +193,17 @@ internal sealed class FakeHub : IDisposable
                     {
                         ["id"] = 1, ["task"] = long.Parse(path.Split('/')[3]), ["kind"] = body.GetProperty("action").GetString(),
                         ["state"] = "requested", ["attempt"] = 1,
+                    },
+                }.ToJsonString());
+            if (path.EndsWith("/steer", StringComparison.Ordinal))
+                return LoopbackHub.Json(200, new JsonObject
+                {
+                    ["ok"] = true, ["request_id"] = id, ["client"] = seen.Header("X-Fleet-Client"), ["replayed"] = replayed,
+                    ["steer"] = new JsonObject
+                    {
+                        ["id"] = Interlocked.Increment(ref NextEvent), ["task"] = long.Parse(path.Split('/')[3]),
+                        ["attempt"] = body.GetProperty("expected_attempt").GetInt64(), ["text"] = body.GetProperty("text").GetString(),
+                        ["created"] = SampleFleet.Now, ["request_id"] = id, ["client"] = seen.Header("X-Fleet-Client"),
                     },
                 }.ToJsonString());
             return LoopbackHub.Json(200, $$"""{"ok":true,"request_id":"{{id}}","event_id":{{Interlocked.Increment(ref NextEvent)}},"created":{{SampleFleet.Now}},"replayed":{{(replayed ? "true" : "false")}},"client":"{{seen.Header("X-Fleet-Client")}}","recipient":{{recipient}},"attachments":{{files}},"read_at":null}""");

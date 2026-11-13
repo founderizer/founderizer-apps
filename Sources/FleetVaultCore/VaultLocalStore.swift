@@ -74,13 +74,15 @@ final class VaultLocalStore: VaultItems, VaultStore, @unchecked Sendable {
         _ = try opened()
     }
 
-    /// The store key, made once. A key that is there is kept: a new one would leave every saved value unreadable.
+    /// The store key, made once. A key that is there is kept: a new one would leave every saved value unreadable. So
+    /// only "item not found" makes one, never another answer of the Keychain, and a new key is only added, never saved
+    /// in the place of one (package 7).
     private static func key(keychain: VaultKeychain, programs: VaultPrograms) throws -> Data {
-        if let kept = (try? keychain.readIfPresent(keyItem)) ?? nil { return kept }
+        if let kept = try keychain.readIfPresent(keyItem) { return kept }
         guard let made = try? programs.run("age-keygen", arguments: []), (try? VaultIdentity.recipient(made)) != nil else {
             throw VaultFailure.store
         }
-        try keychain.save(made, item: keyItem)
+        try keychain.create(made, item: keyItem)
         return try keychain.read(keyItem)
     }
 

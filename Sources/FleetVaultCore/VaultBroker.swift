@@ -112,7 +112,9 @@ public actor VaultBroker {
                 struct Reply: Encodable { let ok = true; let v = 2; let job: Int; let results: [VaultProbeResult] }
                 return try JSONEncoder().encode(Reply(job: job.id, results: results)) + Data([10])
             } else {
-                // Check local setup before consuming a one-use job, then ask the hub before reading a login.
+                // Check local setup before consuming a one-use job, then ask the hub before reading a login. A vault
+                // without the owner's keys hands nothing over, so it asks the hub nothing for a handover.
+                if request.operation == .handover { try VaultOwnerPin.ready(configuration) }
                 try ready()
                 _ = try identity.recipient()
                 let store = try openedStore()
@@ -207,8 +209,10 @@ public actor VaultBroker {
     /// hub sends the new value of a secret that the owner replaced only to a vault that says this word.
     static func status(agent: String, user: String, recipient: String, creates: Bool = false, requests: Bool = false,
                        deposits: Bool = false, withdrawals: Bool = false, replaces: Bool = false) -> [String: Any] {
+        // key_generation: the service of this build's keys (package 7). A status answers only once the move is done,
+        // so the hub's reading says that this Mac's keys are of this generation.
         var status: [String: Any] = ["ok": true, "v": 2, "agent": agent, "store": "keychain", "backend": VaultBackend.store.rawValue,
-                                     "user": user, "recipient": recipient, "callers": true]
+                                     "user": user, "recipient": recipient, "callers": true, "key_generation": VaultKeychain.generation]
         if creates { status["creates"] = true; status["captures"] = true }
         if requests { status["requests"] = true }
         if deposits { status["deposits"] = true }

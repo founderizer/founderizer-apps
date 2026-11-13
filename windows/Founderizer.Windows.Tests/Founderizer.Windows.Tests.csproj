@@ -2,10 +2,13 @@
   <!-- The tests of the screens' own parts that call no WinUI: the sample fleet as the store's state, read by the
        library's models, and the window's history. They need no window; the plan runs them on Windows. -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- Windows' target: the Windows parts of the key and of Tailscale are tested on Windows. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Founderizer.Windows.Tests</RootNamespace>
+    <!-- The tests read the sample fleet, which only a build with the proofs' switch shows (Proofs.cs). -->
+    <DefineConstants>$(DefineConstants);PROOFS</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.11.0]" />
@@ -18,6 +21,8 @@
   <ItemGroup>
     <Compile Include="../Founderizer.Windows/Fleet/IFleetSource.cs" Link="Linked/IFleetSource.cs" />
     <Compile Include="../Founderizer.Windows/Fleet/SampleSource.cs" Link="Linked/SampleSource.cs" />
+    <Compile Include="../Founderizer.Windows/Proofs.cs" Link="Linked/Proofs.cs" />
+    <Compile Include="../Founderizer.Windows/Fleet/WindowsParts.cs" Link="Linked/WindowsParts.cs" />
     <Compile Include="../Founderizer.Windows/Navigation/History.cs" Link="Linked/History.cs" />
     <EmbeddedResource Include="../Founderizer.Windows/Sample/SampleFleet.json" LogicalName="Founderizer.Windows.Sample.SampleFleet.json" />
   </ItemGroup>

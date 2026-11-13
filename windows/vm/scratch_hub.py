@@ -51,7 +51,9 @@ def stamped(name, handler):
     to the next reading of GET /ui/mobile, on this Mac's one clock."""
     def answer(self, *args):
         result = handler(self, *args)
-        note(f"answered {name}")
+        # An enrollment also names the kind of app that it sends (owner API 1.149): "windows" is a PC.
+        kind = f", kind {self.form().get('kind')}" if name == "enroll" else ""
+        note(f"answered {name}{kind}")
         return result
     return answer
 

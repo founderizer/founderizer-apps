@@ -9,9 +9,8 @@ import Foundation
 /// `owner_statement`, `owner_signed`).
 ///
 /// Only root writes the protected configuration (`install.py --owner-keys-only`), and nothing that the hub sends changes
-/// it. A configuration without the owner's keys checks nothing yet, and such a Mac hands over as it did before: on
-/// 12 November 2026 no Mac's configuration held the keys, and this check must not stop a handover there. A Linux broker
-/// without the keys refuses every handover instead.
+/// it. A configuration without the owner's keys hands no login over, as a Linux broker without them does (the owner's
+/// choice of 13 November 2026): the root step that gives the keys turns handovers on for a Mac.
 public enum VaultOwnerPin {
     /// The most owner keys that may sign, as `vault.py` OWNER_KEYS.
     static let mostKeys = 8
@@ -25,8 +24,8 @@ public enum VaultOwnerPin {
             self.statement = statement; self.signature = signature
         }
 
-        /// The hub's `pin`: an object with the two texts. JSON null, a missing field or any other shape is no pin, so a
-        /// vault without the owner's keys reads such a job as it did before.
+        /// The hub's `pin`: an object with the two texts. JSON null, a missing field or any other shape is no pin, and a
+        /// job without one is refused as a handover (`check`), never as a job that the hub did not confirm.
         init?(_ value: Any?) {
             guard let fields = value as? [String: Any], let statement = fields["statement"] as? String,
                   let signature = fields["signature"] as? String else { return nil }
@@ -47,10 +46,16 @@ public enum VaultOwnerPin {
         (1...mostKeys).contains(keys.count) && keys.allSatisfy { key($0) != nil }
     }
 
-    /// Refuses a handover unless the owner signed a pin of the recipient that the hub named for it, when this vault's
-    /// configuration holds the owner's keys. Without them it refuses nothing.
+    /// Refuses each handover of a vault whose configuration has no owner keys. The broker asks this before it asks the
+    /// hub for the one-use job, as `vault.py` `handover` does, so such a vault uses up no job.
+    public static func ready(_ configuration: VaultConfiguration) throws {
+        guard configuration.ownerKeys != nil, configuration.fleet != nil else { throw VaultFailure.ownerKeysMissing }
+    }
+
+    /// Refuses a handover unless the owner signed a pin of the recipient that the hub named for it, checked with the
+    /// owner's keys of this vault's configuration. Without them it refuses every handover.
     public static func check(_ job: VaultJob, configuration: VaultConfiguration) throws {
-        guard let keys = configuration.ownerKeys, let fleet = configuration.fleet else { return }
+        guard let keys = configuration.ownerKeys, let fleet = configuration.fleet else { throw VaultFailure.ownerKeysMissing }
         guard let pin = job.pin else { throw VaultFailure.ownerPinMissing }
         guard try recipient(of: pin, keys: keys, fleet: fleet) == job.recipient else { throw VaultFailure.ownerPinOther }
     }

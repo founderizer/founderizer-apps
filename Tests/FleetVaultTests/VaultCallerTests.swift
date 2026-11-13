@@ -175,7 +175,7 @@ final class FakeHub: URLProtocol, @unchecked Sendable {
         let reply = VaultBroker.status(agent: "studio", user: "sam", recipient: recipient)
         #expect(NSDictionary(dictionary: reply) == NSDictionary(dictionary: [
             "ok": true, "v": 2, "agent": "studio", "store": "keychain", "backend": "store", "user": "sam",
-            "recipient": recipient, "callers": true]))
+            "recipient": recipient, "callers": true, "key_generation": VaultKeychain.generation]))
     }
 
     /// The hub and `fleet.py check <agent>` read this one word to say which store the broker opens, so it is in every
@@ -200,6 +200,18 @@ final class FakeHub: URLProtocol, @unchecked Sendable {
             #expect(NSDictionary(dictionary: object) == NSDictionary(dictionary: ["ok": false, "v": 2, "error": "the caller fields are not valid"]))
             #expect(!String(decoding: reply, as: UTF8.self).contains(seoKey))
         }
+        #expect(FakeHub.seen.isEmpty)
+    }
+
+    /// A Mac without the owner's keys refuses a handover as its first step, in the Linux broker's words: it asks the
+    /// hub for no job, so it uses up none, and it opens no store and reads no login.
+    @Test func aHandoverWithoutTheOwnersKeysIsRefusedBeforeAnyHubCall() async throws {
+        FakeHub.reset(answer: answer)
+        let broker = VaultBroker(configuration: try configuration, bundle: .main, protocolClasses: [FakeHub.self])
+        let reply = await broker.handle(Data((#"{"v":2,"op":"handover","job":12}"# + "\n").utf8), uid: 501)
+        let object = try #require(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+        #expect(NSDictionary(dictionary: object) == NSDictionary(dictionary: [
+            "ok": false, "v": 2, "error": "This machine's vault holds no key of the owner, so it hands no login over."]))
         #expect(FakeHub.seen.isEmpty)
     }
 }

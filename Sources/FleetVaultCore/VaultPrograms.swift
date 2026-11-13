@@ -90,7 +90,7 @@ public final class VaultIdentity: @unchecked Sendable {
         if try keychain.readIfPresent("age") != nil { return }
         let identity = try programs.run("age-keygen", arguments: [])
         _ = try Self.recipient(identity)
-        try keychain.save(identity, item: "age")
+        try keychain.create(identity, item: "age")       // a new key never takes the place of one (package 7)
     }
 
     public func recipient() throws -> String { try Self.recipient(keychain.read("age")) }
@@ -112,7 +112,7 @@ public final class VaultIdentity: @unchecked Sendable {
             guard try Self.recipient(existing) == recipient else { throw VaultFailure.handover }
             return
         }
-        try keychain.save(normalized, item: "age")
+        try keychain.create(normalized, item: "age")     // a new key never takes the place of one (package 7)
     }
 
     static func recipient(_ identity: Data) throws -> String {

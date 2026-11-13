@@ -50,6 +50,13 @@ import SwiftUI
     /// The code of this visit ended or was used, or a new one was refused: the group stays, its box shows nothing, and
     /// a new code comes when the app is active (in front) again.
     var waits = false
+    /// The box waits because the hub took no write when a code was due, so no request went: the next round asks while
+    /// he is here. A request that the hub refused, or that failed, waits for the app's next return to the front.
+    private var unsent = false
+    /// The short rounds of this visit while its first code was owed: a count, so that a hub that takes no write for
+    /// long is read at the usual pace again.
+    private var shortRounds = 0
+    private static let mostShortRounds = 10
 
     var connections: [AppConnection] { state?.connections ?? [] }
     /// The group "Connected apps" has rows.
@@ -77,14 +84,30 @@ import SwiftUI
         reads = (store.hub, database)
         while !Task.isCancelled {
             await read(store: store)
-            if store.state?.ui_features?.contains(ConnectedApps.feature) == true {
+            let serves = store.state?.ui_features?.contains(ConnectedApps.feature) == true
+            if state?.on == false {
+                // A Turn off ends each open code on the hub: the code of this visit is none any more, and a Turn on
+                // in the same visit asks for a new one, at Read again, as a page that opens does (a real window, 13
+                // November 2026: after Act, a Turn off and a Turn on, each new code was an Act code).
+                if made != nil || asked || waits || unsent || level != "read" {
+                    made = nil; asked = false; waits = false; unsent = false; level = "read"
+                }
+            } else if serves {
                 await keepCode(store: store, active: NSApplication.shared.isActive)
             }
-            do { _ = try await store.nap(15) } catch { return }
+            // The first code of this visit is still owed, because the hub took no write in this round (a start on a
+            // saved reading): the round comes again soon while he is here, and nothing wakes it for that.
+            // At most `mostShortRounds` such rounds in a visit: a write of his that the hub refused, or a storage
+            // error, can keep the hub from taking a write for as long as he does nothing about it.
+            let owed = serves && state?.on == true && state?.address != nil && !asked && made == nil
+                && NSApplication.shared.isActive && shortRounds < Self.mostShortRounds
+            if owed { shortRounds += 1 }
+            do { _ = try await store.nap(owed ? 2 : 15) } catch { return }
         }
     }
 
-    /// The app came to the front: a code that ended meanwhile is replaced now.
+    /// The app came to the front: a code that ended meanwhile is replaced now, and a visit whose group came while the
+    /// app was in the background gets its first code.
     func activated(store: FleetStore) async {
         guard reads != nil, isFor(store) else { return }
         await keepCode(store: store, active: true, activation: true)
@@ -117,6 +140,7 @@ import SwiftUI
 
     private func reset() {
         state = nil; made = nil; confirming = nil; level = "read"; reads = nil; asked = false; waits = false
+        unsent = false; shortRounds = 0
         confirmingOff = false
     }
 
@@ -128,6 +152,9 @@ import SwiftUI
             state = fresh
             if let confirming, !fresh.connections.contains(where: { $0.id == confirming }) { self.confirming = nil }
         } catch {
+            // The page's task ended with the read on its way: that says nothing about the hub, and the task that
+            // comes after it reads again. Taking the state away here made the groups go for a moment.
+            if Task.isCancelled { return }
             // A hub without the route, a 409, or no answer: nothing of it shows, and the next round reads again.
             guard isFor(store) else { return }
             state = nil
@@ -136,9 +163,12 @@ import SwiftUI
     }
 
     /// **No new code while he is not there** (the review, 12 November 2026): a code only when the group comes on
-    /// screen, when he changes the choice (`choose`), and when a code ended or was used while the app is active. A code
-    /// that ended while the app is in the background goes from the box, and the next one comes when the app is active
-    /// again (`activated`). Each code is a write to the hub.
+    /// screen while the app is active, when he changes the choice (`choose`), and when a code ended or was used while
+    /// the app is active. A code that ended while the app is in the background goes from the box, and the next one
+    /// comes when the app is active again (`activated`); so does the first code of a group that came in the
+    /// background, and one that the hub refused. A box that waits because no request could go (`unsent`: the hub took
+    /// no write at that moment) asks in the next round while he is here, so that it is not empty for the rest of the
+    /// visit. Each code is a write to the hub.
     private func keepCode(store: FleetStore, active: Bool, activation: Bool = false) async {
         guard let state, state.on, state.address != nil else { return }
         let now = store.state?.time ?? Date().timeIntervalSince1970
@@ -148,9 +178,13 @@ import SwiftUI
             waits = true
             if active { await makeCode(store: store) }
         } else if !asked {
+            // Not while the hub takes no write (the store's first reading of a start is a saved one): `makeCode` would
+            // return with nothing, and with `asked` set this visit would get no code and so no group at all. The
+            // next round asks. And not while the app is in the background: the first code is a write too.
+            guard store.canWrite, active else { return }
             asked = true
             await makeCode(store: store)
-        } else if waits, activation {
+        } else if waits, activation || (active && unsent) {
             await makeCode(store: store)
         }
     }
@@ -162,16 +196,32 @@ import SwiftUI
         defer { making = false }
         repeat {
             again = false
-            guard let reads, isFor(store), store.canWrite, let state, state.on else { return }
+            guard let reads, isFor(store), let state, state.on else { return }
+            // The hub takes no write now: the box waits, so that this visit never stays with no code and no wait.
+            guard store.canWrite else {
+                if made == nil { waits = true; unsent = true }
+                return
+            }
+            unsent = false
             let level = self.level
             let known = Set(state.connections.map(\.id))
+            // The hub and the generation that this request is for: its answer counts only while the page reads them.
+            let hub = reads.hub, database = reads.database, client = store.installation
             do {
-                let answer = try await HubClient().connectCode(hub: reads.hub, database: reads.database,
-                                                               client: store.installation, level: level)
-                guard isFor(store) else { return }
+                // In a task of its own: the page's task starts again when the hub begins to serve the feature and
+                // when a turn ends, and a request that ended with it left the box empty until the app came to the
+                // front again, with a code on the hub that no page showed (a real window, 13 November 2026). The
+                // write is sent either way, so its answer is kept.
+                let answer = try await Task {
+                    try await HubClient().connectCode(hub: hub, database: database, client: client, level: level)
+                }.value
+                // The page reads another hub or generation since (the request does not end with the page's task):
+                // this answer is not for it, and a call that came meanwhile (`again`) asks for the new one.
+                guard self.reads?.hub == hub, self.reads?.database == database, isFor(store) else { continue }
                 if let code = answer.code {
                     made = MadeConnectCode(code: code, level: answer.level, expires: answer.expires, known: known)
                     waits = false
+                    asked = true        // also for an answer that came after this visit began again on its hub
                 } else {
                     made = nil
                     waits = true
@@ -179,7 +229,7 @@ import SwiftUI
             } catch {
                 // The open code on the hub is the one that this page shows, so the choice goes back to its level.
                 // With no code, the box waits for the app's next return to the front.
-                guard isFor(store) else { return }
+                guard self.reads?.hub == hub, self.reads?.database == database, isFor(store) else { continue }
                 if let made {
                     if made.level != level, !again { self.level = made.level }
                 } else {

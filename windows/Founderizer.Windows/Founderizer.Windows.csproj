@@ -24,6 +24,12 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <!-- The one switch of the proofs in the build VM (Proofs.cs): only a build with -p:FounderizerProofs=true reads their
+       variables; a release build has no such switch. -->
+  <PropertyGroup Condition="'$(FounderizerProofs)' == 'true'">
+    <DefineConstants>$(DefineConstants);PROOFS</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Only the WinUI part of the Windows App SDK, not its AI, ML, search and widget parts. -->
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
@@ -37,5 +43,8 @@
     <!-- The sample fleet of the Mac and iPhone apps (Sample/make_sample_json.py copies it from app/ios). -->
     <EmbeddedResource Include="Sample/SampleFleet.json" LogicalName="Founderizer.Windows.Sample.SampleFleet.json" />
     <None Remove="Sample/make_sample_json.py" />
+    <!-- The providers' logos of the panel beside a chat, the Mac's own bytes (Assets/make_provider_logos.py). -->
+    <EmbeddedResource Include="Assets/*.png" LogicalName="Founderizer.Windows.Assets.%(Filename)%(Extension)" />
+    <None Remove="Assets/make_provider_logos.py" />
   </ItemGroup>
 </Project>

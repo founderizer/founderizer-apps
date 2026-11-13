@@ -26,6 +26,10 @@ public sealed class OwnerStore : IAsyncDisposable
     private readonly HubClient client;
     private readonly IStoreClock clock;
     private readonly Outbox outbox;
+    /// <summary>The writes that wait for their turn, by the order of their presses.</summary>
+    private readonly SortedSet<long> waitingWrites = new();
+    private long writeTickets;
+    private CancellationTokenSource? ageWatch;
     private readonly object gate = new();
     private readonly object raising = new();
     private StoreState state = new();
@@ -288,7 +292,30 @@ public sealed class OwnerStore : IAsyncDisposable
         {
             lastReadUptime = clock.Uptime;
             Update(x => x with { FirstReadWaits = false });
+            WatchTheAge();
         }
+    }
+
+    /// <summary>The reading turns old by time alone, with no read: then a write cannot go and the connection line may
+    /// show, so the store raises that change at that moment (the Mac's views follow its clock). Without it, a window
+    /// that draws on changes kept a Pause that the store no longer took.</summary>
+    private void WatchTheAge()
+    {
+        Interlocked.Exchange(ref ageWatch, null)?.Cancel();
+        if (disposed || State.LastRead is not { } read) return;
+        var due = read + StoreState.CurrentFor - clock.Now;
+        if (due <= TimeSpan.Zero) return;
+        var cancel = new CancellationTokenSource();
+        ageWatch = cancel;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await clock.Delay(due + TimeSpan.FromMilliseconds(5), cancel.Token);
+                Raise(byClock: true);
+            }
+            catch (OperationCanceledException) { }
+        });
     }
 
     /// <summary>One request of a read, with its hold: when it takes longer than twice the slowest request of the last good
@@ -716,16 +743,19 @@ public sealed class OwnerStore : IAsyncDisposable
 
     // ---------------------------------------------------------------- the writes
 
-    /// <summary>Sends the agent's draft (or <paramref name="text"/>) and the files of its composer. Nothing goes while the
-    /// store cannot write.</summary>
-    public Task SendMessageAsync(string agent, string? text = null) =>
+    // Every write below gives null when it went (or when it is no write that a screen offers now), else the owner's
+    // words of why nothing went. A write that comes while another write is on its way, or while the reading waits for
+    // a read that comes, waits and goes then, in the order the presses came (StoreState.HoldsWrites).
+
+    /// <summary>Sends the agent's draft (or <paramref name="text"/>) and the files of its composer.</summary>
+    public Task<string?> SendMessageAsync(string agent, string? text = null) =>
         WriteAsync(text ?? State.Drafts.GetValueOrDefault(agent, ""), recipient: agent, files: State.ReadyFiles("agent:" + agent));
 
     /// <summary>Sends the typed answer of an open request (its draft, or <paramref name="text"/>) with its files.</summary>
-    public Task AnswerAsync(long need, string? text = null)
+    public Task<string?> AnswerAsync(long need, string? text = null)
     {
         var item = State.Fleet?.Needs.FirstOrDefault(n => n.Id == need);
-        if (item is null) return Task.CompletedTask;
+        if (item is null) return NoWrite;
         return WriteAsync(text ?? State.AnswerDrafts.GetValueOrDefault(need, ""), needId: need, recipient: item.By,
                           files: State.ReadyFiles("need:" + need));
     }
@@ -772,40 +802,41 @@ public sealed class OwnerStore : IAsyncDisposable
         });
     }
 
-    private Task SendChoiceAsync(long need, int choice)
+    private Task<string?> SendChoiceAsync(long need, int choice)
     {
         var item = State.Fleet?.Needs.FirstOrDefault(n => n.Id == need);
-        if (item is null || choice < 0 || choice >= item.Choices.Count) return Task.CompletedTask;
+        if (item is null || choice < 0 || choice >= item.Choices.Count) return NoWrite;
         return WriteAsync(item.Choices[choice], needId: need, recipient: item.By, choice: choice);
     }
 
     /// <summary>Sends the ticked options of a request whose options combine.</summary>
-    public Task TickAsync(long need, IReadOnlyCollection<int> choices)
+    public Task<string?> TickAsync(long need, IReadOnlyCollection<int> choices)
     {
         var item = State.Fleet?.Needs.FirstOrDefault(n => n.Id == need);
         if (item is null || !item.Combines || choices.Count == 0 || choices.Any(c => c < 0 || c >= item.Choices.Count))
-            return Task.CompletedTask;
+            return NoWrite;
         var words = string.Join(", ", choices.Order().Select(c => item.Choices[c]));
         return WriteAsync(words, needId: need, recipient: item.By, choices: choices.Select(c => (long)c).ToList());
     }
 
     /// <summary>A question about an open request, in its discussion (`need_talk`).</summary>
-    public Task DiscussAsync(long need, string text) =>
-        State.Offers("need_talk") ? WriteAsync(text, command: OwnerCommand.NeedTalk(need)) : Task.CompletedTask;
+    public Task<string?> DiscussAsync(long need, string text) =>
+        WriteAsync(text, command: OwnerCommand.NeedTalk(need), feature: "need_talk");
 
     /// <summary>Pause, stop or resume a task (`task_controls`).</summary>
-    public Task ControlAsync(long task, TaskControl action) =>
-        State.Offers("task_controls") ? WriteAsync("", command: OwnerCommand.Control(task, action)) : Task.CompletedTask;
+    public Task<string?> ControlAsync(long task, TaskControl action) =>
+        WriteAsync("", command: OwnerCommand.Control(task, action), feature: "task_controls");
 
     /// <summary>Guidance for a task's current attempt (`task_steering`).</summary>
-    public Task GuideAsync(long task, string text)
+    public Task<string?> GuideAsync(long task, string text)
     {
         var s = State;
         var attempt = s.TaskPages.TryGetValue(task, out var page) ? page.Task.Attempt
             : s.Fleet?.Tasks.FirstOrDefault(t => t.Id == task)?.Attempt ?? 0;
-        return s.Offers("task_steering") && attempt > 0
-            ? WriteAsync(text, command: OwnerCommand.Steer(task, attempt)) : Task.CompletedTask;
+        return attempt > 0 ? WriteAsync(text, command: OwnerCommand.Steer(task, attempt), feature: "task_steering") : NoWrite;
     }
+
+    private static readonly Task<string?> NoWrite = Task.FromResult<string?>(null);
 
     /// <summary>Sends the waiting write again, with the same number: the hub answers the first event again.</summary>
     public Task RetryAsync()
@@ -836,43 +867,109 @@ public sealed class OwnerStore : IAsyncDisposable
         }
     }
 
-    private async Task WriteAsync(string value, long? needId = null, string? recipient = null, int? choice = null,
-                                  IReadOnlyList<long>? choices = null, IReadOnlyList<long>? files = null,
-                                  OwnerCommand? command = null)
+    private async Task<string?> WriteAsync(string value, long? needId = null, string? recipient = null, int? choice = null,
+                                           IReadOnlyList<long>? choices = null, IReadOnlyList<long>? files = null,
+                                           OwnerCommand? command = null, string? feature = null)
     {
-        var s = State;
-        var now = clock.Now;
-        if (!s.CanWrite(now) || s.Fleet is not { } fleet || s.Hub is not { } hub) return;
-        files ??= [];
+        var ticket = Interlocked.Increment(ref writeTickets);
+        lock (waitingWrites) waitingWrites.Add(ticket);
+        try
+        {
+            (Uri Hub, string Database)? first = null;
+            var askedRead = false;
+            while (!disposed)
+            {
+                var s = State;
+                var now = clock.Now;
+                if (s.Hub is { } h && s.Fleet is { } f)
+                {
+                    first ??= (h, f.Db);
+                    if (first != (h, f.Db)) return StoreState.ConnectionChanged;
+                }
+                var hold = s.HoldsWrites(now);
+                if (hold is { Waits: false } refused) return refused.Words;
+                if (hold is null)
+                {
+                    if (Request(s, value, needId, recipient, choice, choices, files ?? [], command, feature) is not { } request)
+                        return null;
+                    if (TryClaim(ticket, now)) return await GoAsync(request, needId, recipient, command);
+                }
+                else if (!s.Sending && !s.Refreshing && !askedRead)
+                {
+                    // The reading waits for a read: it comes now, not on the clock.
+                    askedRead = true;
+                    _ = RefreshAsync();
+                }
+                await clock.Delay(TimeSpan.FromMilliseconds(100), CancellationToken.None);
+            }
+            return null;
+        }
+        finally
+        {
+            lock (waitingWrites) waitingWrites.Remove(ticket);
+        }
+    }
+
+    /// <summary>The request of one write, from the state that may take it; null when it is no write that the screens
+    /// offer now (the same rules as their models: the feature, the chat, the text, an open request).</summary>
+    private PendingRequest? Request(StoreState s, string value, long? needId, string? recipient, int? choice,
+                                    IReadOnlyList<long>? choices, IReadOnlyList<long> files, OwnerCommand? command, string? feature)
+    {
+        if (s.Fleet is not { } fleet || s.Hub is not { } hub) return null;
+        if (feature is not null && !s.Offers(feature)) return null;
         if (command is null)
         {
-            if (needId is null && !fleet.CanChat(recipient ?? "manager")) return;
-            if (files.Count > 0 && !s.Offers("attachments")) return;
+            if (needId is null && !fleet.CanChat(recipient ?? "manager")) return null;
+            if (files.Count > 0 && !s.Offers("attachments")) return null;
         }
         var text = value.Trim();
         if (command is { Kind: "control" }) text = "";
-        else if ((text.Length == 0 && files.Count == 0) || new StringInfo(text).LengthInTextElements > StoreState.TextLimit) return;
-        if (needId is { } n && !fleet.Needs.Any(x => x.Id == n && x.IsOpen)) return;
-        var request = PendingRequest.New(hub, fleet.Db, settings.ClientLabel, text, needId: needId, choice: choice,
-                                         choices: choices, recipient: needId is null && command is null && s.Offers("direct_chat") ? recipient : null,
-                                         command: command, attachments: files);
+        else if ((text.Length == 0 && files.Count == 0) || new StringInfo(text).LengthInTextElements > StoreState.TextLimit) return null;
+        if (needId is { } n && !fleet.Needs.Any(x => x.Id == n && x.IsOpen)) return null;
+        return PendingRequest.New(hub, fleet.Db, settings.ClientLabel, text, needId: needId, choice: choice,
+                                  choices: choices, recipient: needId is null && command is null && s.Offers("direct_chat") ? recipient : null,
+                                  command: command, attachments: files);
+    }
+
+    /// <summary>The write whose turn it is takes the store, in one step with the check: nothing else can write until it
+    /// ends. A write that came earlier and still waits goes first.</summary>
+    private bool TryClaim(long ticket, DateTimeOffset now)
+    {
+        lock (gate)
+        {
+            if (!state.CanWrite(now)) return false;
+            lock (waitingWrites) if (waitingWrites.Min != ticket) return false;
+            state = state with { Sending = true, Version = state.Version + 1 };
+        }
+        Raise();
+        return true;
+    }
+
+    private async Task<string?> GoAsync(PendingRequest request, long? needId, string? recipient, OwnerCommand? command)
+    {
         try
         {
             outbox.Save(request);
         }
         catch (Exception e) when (e is IOException or OutboxException or UnauthorizedAccessException)
         {
-            Update(x => x with { StorageError = "Cannot save this request. Nothing was sent.", StorageErrorDetail = e.Message });
-            return;
+            const string words = "Cannot save this request. Nothing was sent.";
+            Update(x => x with { Sending = false, StorageError = words, StorageErrorDetail = e.Message });
+            return words;
         }
+        var name = recipient ?? "manager";
         Update(x => x with
         {
             Pending = request,
             AnswersTaken = needId is { } id ? x.AnswersTaken.Remove(id) : x.AnswersTaken,
-            Drafts = needId is null && command is null ? x.Drafts.Remove(recipient ?? "manager") : x.Drafts,
+            // The words leave the field as the request takes their place; words typed while it waited stay.
+            Drafts = needId is null && command is null && x.Drafts.GetValueOrDefault(name, "").Trim() == request.Text
+                ? x.Drafts.Remove(name) : x.Drafts,
         });
         if (needId is null && command is null) KeepDrafts();
         await TransmitAsync(request);
+        var s = State;
+        return s.Pending?.RequestId == request.RequestId ? s.Pending.Refusal ?? s.SendError ?? StoreState.SavedRequestWaits : null;
     }
 
     private async Task TransmitAsync(PendingRequest request)
@@ -1274,13 +1371,13 @@ public sealed class OwnerStore : IAsyncDisposable
     /// <summary>Raises the change from the last raised state to the newest, in order: two updates at once give one or two
     /// changes, never one that goes back. A state that changes no model of a screen raises nothing (a read that brought
     /// nothing new, a field that no screen reads): the next change then counts from the last one raised.</summary>
-    private void Raise()
+    private void Raise(bool byClock = false)
     {
         lock (raising)
         {
             StoreState current;
             lock (gate) current = state;
-            if (current.Version <= raised.Version) return;
+            if (current.Version < raised.Version || current.Version == raised.Version && !byClock) return;
             StoreView view;
             StoreChange change;
             try
@@ -1305,6 +1402,7 @@ public sealed class OwnerStore : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         disposed = true;
+        ageWatch?.Cancel();
         frontLoop?.Cancel();
         chatsCancel?.Cancel();
         StopWatching();

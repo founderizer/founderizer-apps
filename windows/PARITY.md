@@ -116,6 +116,7 @@ Mac, and a device route is all that the PC reaches.
 | `web_hosts` | waits (2.2) | |
 | `chat_waits` | built | `MobileAgent.WaitsSince` |
 | `central_vault` | waits (2.3) | |
+| `kept_pins` | waits (2.3) | the Mac signs each machine's kept pin again with the owner's key; a PC holds no owner key in step 1 |
 | `secret_replace` | waits (2.3) | Add secret puts a new value under a key that the list has, with the owner's signed statement |
 | `contact_roles` | waits (2.4) | |
 | `connected_apps` | waits (2.4) | the Mac alone today: no device route |
@@ -130,4 +131,13 @@ Mac, and a device route is all that the PC reaches.
 - **Fewer changes** from the store: built. A change only when a model of a screen changed, with its parts
   (`StoreChange.Parts`).
 - **The key in the TPM, and its unlock by Windows Hello**: waits (the screens' `IKeyProtection`; plan, slice 1.5).
+- **A press that comes while the store cannot write** (the window draws a change after the store made it): built. It
+  waits for the write before it, or for the read that comes, and goes then, in the order of the presses; a lasting
+  reason gives the owner's words (`StoreState.HoldsWrites`). The Mac draws its buttons on the thread of its store, so
+  no press comes between there.
+- **The app's own update** (the Mac's `AppUpdate` and `AppUpdateInstaller`, slice 1.6): the library's part is built:
+  the Windows build's manifest (`WindowsManifest`, a third kind of signed text, `founderizer-windows-1`), the read of
+  the channel and the comparison of builds (`WindowsUpdate`), and the download with its size and SHA-256
+  (`BuildDownload`). The publisher check, the unpack, the launcher and the swap wait for the screens; the release job
+  and the website wait (`~/dev/founderizer-plans/windows-app-release-design.md`).
 - **Pings while the app is closed**: not planned in step 1 (decision D4).

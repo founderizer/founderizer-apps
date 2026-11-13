@@ -41,7 +41,8 @@ public sealed class ShimmerText : Grid
             HorizontalAlignment = HorizontalAlignment.Left,
             TextTrimming = TextTrimming.CharacterEllipsis,
             TextWrapping = TextWrapping.NoWrap,
-            // The pane's line under an agent's name: 12 on 16, muted.
+            // The pane's line under an agent's name: 12 on 16, muted, in the pictures' Text instance.
+            FontFamily = new FontFamily("Segoe UI Variable Text"),
             FontSize = 12,
             LineHeight = 16,
             LineStackingStrategy = LineStackingStrategy.BlockLineHeight,

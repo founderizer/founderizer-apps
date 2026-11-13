@@ -21,7 +21,12 @@ public enum VaultFailure: String, Error, Sendable, CaseIterable {
     case unscopedCopy = "This sealed copy does not say where it comes from, so it is not used in a project."
     case relabelledCopy = "This sealed copy was made for another handover, so it is not used."
     case sourceMismatch = "The hub and the copy name different source logins, so the login is not handed over."
-    // The owner's pin of a handover's recipient (VaultOwnerPin), checked only where root gave the vault the owner's keys.
+    // The owner's pin of a handover's recipient (VaultOwnerPin). A vault without the owner's keys hands nothing over,
+    // in the Linux broker's words.
+    case ownerKeysMissing = "This machine's vault holds no key of the owner, so it hands no login over."
+    // Package 7: the move to the names of a new key generation met a key there with other bytes, or a key that the old
+    // names lack. It never chooses between two keys, so it stops at each start until a person looks.
+    case keyMoveStopped = "This Mac's vault keys did not move to their new names, because a key there differs from the old one. Nothing was lost; a person must look at this vault."
     case ownerPinMissing = "The owner has signed no pin of the receiving machine's key, so the login is not handed over."
     case ownerPinInvalid = "The owner's pin of the receiving machine's key is not valid, so the login is not handed over."
     case ownerPinOther = "The owner's pin names another key than the one the login would be locked for, so it is not handed over."
@@ -458,8 +463,8 @@ public struct VaultConfiguration: Codable, Sendable {
     public let socket: String
     public let workerUID: UInt32
     /// The owner's public keys and the fleet's id, both or neither (`VaultOwnerPin`): with them, a handover goes only to a
-    /// key that the owner signed a pin of. Root writes them with `install.py --owner-keys-only`, as a Linux broker gets
-    /// its own from `hubsetup.py vault --owner-key`.
+    /// key that the owner signed a pin of, and without them no handover goes. Root writes them with
+    /// `install.py --owner-keys-only`, as a Linux broker gets its own from `hubsetup.py vault --owner-key`.
     public let ownerKeys: [String]?
     public let fleet: String?
     enum CodingKeys: String, CodingKey {
