@@ -286,6 +286,54 @@ struct AgentSetupFlowTests {
         #expect(AgentSetupFlow.blocker(result) == "Runtime Signed In: Codex is signed out.")
         #expect(AgentSetupFlow.blocker(nil) == nil)
     }
+
+    // **The install's title says the step that runs** (the owner, 13 November 2026: "show some sort of progress bar
+    // there, otherwise it looks stuck! Same thing for other long actions where we actually know the progress").
+
+    @Test func anInstallThatRunsCountsItsStepOfTheServersFive() throws {
+        let steps = ["user", "runtime", "checkout", "service", "sign_in"]
+        for (index, step) in steps.enumerated() {
+            let count = AgentSetupFlow.installCount(try job("running", step: step), onMac: false)
+            #expect(count?.step == index + 1)
+            #expect(count?.of == 5)
+        }
+        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: try job("running", step: "runtime"), onMac: false)
+                == "Installing Codex on app-1 · 2 of 5")
+    }
+
+    @Test func aMacHasNoUserStepSoItsInstallHasFour() throws {
+        let checkout = try job("running", step: "checkout")
+        #expect(AgentSetupFlow.installCount(checkout, onMac: true)?.step == 2)
+        #expect(AgentSetupFlow.installCount(checkout, onMac: true)?.of == 4)
+        #expect(AgentSetupFlow.installing("Claude Code", on: "mac-1", job: checkout, onMac: true)
+                == "Installing Claude Code on mac-1 · 2 of 4")
+        // A step that a Mac's list does not hold gets no number.
+        #expect(AgentSetupFlow.installCount(try job("running", step: "user"), onMac: true) == nil)
+    }
+
+    @Test func aPreparationCountsItsTwoSteps() throws {
+        let signIn = try job("running", kind: "prepare", runtime: "claude", step: "sign_in")
+        #expect(AgentSetupFlow.installCount(signIn, onMac: false)?.step == 2)
+        #expect(AgentSetupFlow.installCount(signIn, onMac: false)?.of == 2)
+    }
+
+    @Test func aTitleShowsNoNumberThatTheAppDoesNotHave() throws {
+        let plain = "Installing Codex on app-1"
+        // No job, a job in the queue, and a running job that has reported no step yet.
+        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: nil, onMac: false) == plain)
+        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: try job("queued", step: nil), onMac: false) == plain)
+        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: try job("running", step: nil), onMac: false) == plain)
+        // A step that the list does not hold, from a newer server.
+        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: try job("running", step: "warm_up"), onMac: false) == plain)
+        // A job of another kind has other steps: a rename moves the checkout and the service only.
+        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: try job("running", kind: "rename", step: "service"),
+                                          onMac: false) == plain)
+        #expect(AgentSetupFlow.installCount(try job("running", kind: "remove", step: "service"), onMac: false) == nil)
+        // A job that waits for him or that ended is no wait of the machine.
+        for state in ["needs_owner", "failed", "done", "canceled"] {
+            #expect(AgentSetupFlow.installCount(try job(state, step: "sign_in"), onMac: false) == nil)
+        }
+    }
 }
 
 /// **The manager of a new fleet gets its server in its own setup** (hub feature `manager_server`, UI-API.md 1.82): the

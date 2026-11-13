@@ -161,11 +161,11 @@ public enum ProfileReading: Sendable {
     /// The orange line under an old reading of a profile. It keeps saying that this is the last reading, which is
     /// what stops it from reading as a current one.
     public var lastReadingLine: String {
-        FleetReading.line(reason, then: "Last reading. Founderizer reads the profile again every 15 seconds.")
+        FleetReading.line(reason, then: String(l10n: "Last reading. Founderizer reads the profile again every 15 seconds."))
     }
     /// The detail under "Profile not read": the hub's own sentence where it wrote one, and then the retry.
     public var notReadDetail: String {
-        FleetReading.line(reason, then: "Founderizer reads the profile again every 15 seconds.")
+        FleetReading.line(reason, then: String(l10n: "Founderizer reads the profile again every 15 seconds."))
     }
 
     /// The state after one more read; nil is a read that failed, and `reason` is the hub's words for it.

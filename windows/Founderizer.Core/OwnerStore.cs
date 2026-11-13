@@ -74,6 +74,11 @@ public sealed class OwnerStore : IAsyncDisposable
     /// <summary>Raised after each change, with the rows that changed since the last one raised.</summary>
     public event EventHandler<StoreChange>? Changed;
 
+    /// <summary>Raised when a reading brings notifications that are due (the Mac's rule, <see cref="Notifications.Due"/>):
+    /// a new request of the manager, or a new episode of its warning, once each, also while the window is behind. On the
+    /// thread of the read: move it to the UI thread.</summary>
+    public event EventHandler<IReadOnlyList<Notice>>? Notified;
+
     public string ClientLabel => settings.ClientLabel;
 
     // ---------------------------------------------------------------- the window
@@ -90,17 +95,21 @@ public sealed class OwnerStore : IAsyncDisposable
             var holds = s.Fleet is not null && s.ReadError is null;
             Update(x => x with { Front = true, FirstReadWaits = holds || x.FirstReadWaits });
             if (holds) _ = EndFirstWaitAsync();
+            behind = false;
+            MarkRepliesSeen();
             var cancel = frontLoop = new CancellationTokenSource();
             _ = FrontLoopAsync(cancel.Token);
         }
         else
         {
+            // Behind, the window is still open: the store keeps its key and its wait on the hub, and a wake reads the
+            // fleet alone, so that a new request notifies (decision D4). It reads no chat, no task and nothing on its
+            // clock until the window comes back.
+            behind = true;
             frontLoop?.Cancel();
             frontLoop = null;
             chatsCancel?.Cancel();
-            StopWatching();
-            key = null;
-            Update(x => x with { Front = false, Key = x.Key == KeyState.InHand ? KeyState.Locked : x.Key });
+            Update(x => x with { Front = false });
         }
     }
 
@@ -248,18 +257,18 @@ public sealed class OwnerStore : IAsyncDisposable
                 var early = s.Fleet?.Db;
                 if (early is not null)
                 {
-                    if (s.OpenChat is { } chat) await Holding(requested, () => ReadChatAsync(chat, requested, early));
-                    if (s.OpenTask is { } task) await Holding(requested, () => ReadTaskAsync(task, requested, early));
+                    if (!behind && s.OpenChat is { } chat) await Holding(requested, () => ReadChatAsync(chat, requested, early));
+                    if (!behind && s.OpenTask is { } task) await Holding(requested, () => ReadTaskAsync(task, requested, early));
                 }
                 await Holding(requested, () => ReadSnapshotAsync(requested));
                 if (State.Hub != requested || State.Fleet?.Db is not { } database) return;
                 Follow();
-                if (early != database)
+                if (early != database && !behind)
                 {
                     if (State.OpenChat is { } chat) await Holding(requested, () => ReadChatAsync(chat, requested, database));
                     if (State.OpenTask is { } task) await Holding(requested, () => ReadTaskAsync(task, requested, database));
                 }
-                ReadChangedChats(requested, database);
+                if (!behind) ReadChangedChats(requested, database);
                 await Holding(requested, () => ConfirmPendingAsync(requested, database));
                 lastRequestTook = slowestRequest;
                 Update(x => x with
@@ -362,6 +371,7 @@ public sealed class OwnerStore : IAsyncDisposable
         etag = reading.ETag;
         var now = clock.Now;
         Update(x => x with { Fleet = reading.Snapshot, SnapshotAt = now });
+        Notify(requested, reading.Snapshot);
         Keep("snapshot.json", JsonSerializer.SerializeToUtf8Bytes(
             new KeptSnapshot(requested.ToString(), reading.ETag, now.ToUnixTimeMilliseconds() / 1000.0,
                              Convert.ToBase64String(reading.Body)), CoreJson.Default.KeptSnapshot));
@@ -477,7 +487,7 @@ public sealed class OwnerStore : IAsyncDisposable
     private void Follow()
     {
         var s = State;
-        var token = s.Front && s.Offers(LiveChanges.Feature) ? LiveToken.Parse(s.Fleet?.Token) : null;
+        var token = s.Offers(LiveChanges.Feature) ? LiveToken.Parse(s.Fleet?.Token) : null;
         if (watched is { } w && w.Hub == s.Hub && w.Database == s.Fleet?.Db && token is not null) return;
         if (watched is null && token is null) return;
         StopWatching();
@@ -550,6 +560,28 @@ public sealed class OwnerStore : IAsyncDisposable
         });
     }
 
+    // ---------------------------------------------------------------- the notifications
+
+    private NotificationLedger ledger = new();
+    /// <summary>The window went behind and did not come back: a wake reads the fleet alone, and no reply is seen.</summary>
+    private volatile bool behind;
+
+    /// <summary>The notifications that a new body brings, by the ledger that stays between starts.</summary>
+    private void Notify(Uri hub, MobileSnapshot fleet)
+    {
+        IReadOnlyList<Notice> due;
+        byte[] kept;
+        lock (ledger)
+        {
+            due = Notifications.Due(ledger, hub, fleet, AgentBook.Of(fleet));
+            kept = JsonSerializer.SerializeToUtf8Bytes(new KeptLedger(ledger.Seen, ledger.Warnings), CoreJson.Default.KeptLedger);
+        }
+        Keep("notifications.json", kept);
+        if (due.Count == 0) return;
+        try { Notified?.Invoke(this, due); }
+        catch (Exception) when (!disposed) { }
+    }
+
     // ---------------------------------------------------------------- the seen marks
 
     /// <summary>The open chat's replies are seen; a new hub or generation takes the replies that it has as seen.</summary>
@@ -563,7 +595,7 @@ public sealed class OwnerStore : IAsyncDisposable
             var seen = x.SeenContext == context ? x.Seen : ImmutableDictionary<string, double>.Empty;
             if (x.SeenContext != context)
                 foreach (var a in fleet.Agents) if (a.Last is { Side: "agent" } last) seen = seen.SetItem(a.Name, last.Ts);
-            if (x.OpenChat is { } open && x.Agent(open)?.Last is { Side: "agent" } l) seen = seen.SetItem(open, l.Ts);
+            if (!behind && x.OpenChat is { } open && x.Agent(open)?.Last is { Side: "agent" } l) seen = seen.SetItem(open, l.Ts);
             if (x.SeenContext == context && seen.Count == x.Seen.Count && seen.All(p => x.Seen.GetValueOrDefault(p.Key, -1) == p.Value))
                 return x;
             return after = x with { Seen = seen, SeenContext = context };
@@ -693,6 +725,23 @@ public sealed class OwnerStore : IAsyncDisposable
     /// device sent up and still holds comes from its own copy.</summary>
     public async Task<byte[]> FileAsync(MessageAttachment file)
     {
+        Update(x => x with { FilesReading = x.FilesReading.Add(file.Id) });
+        try
+        {
+            var bytes = await ReadFileAsync(file);
+            Update(x => x with { FilesReading = x.FilesReading.Remove(file.Id), FilesUnloaded = x.FilesUnloaded.Remove(file.Id) });
+            return bytes;
+        }
+        catch
+        {
+            // "Not loaded" until a read of it works (MessageFilesView: unloadedFiles).
+            Update(x => x with { FilesReading = x.FilesReading.Remove(file.Id), FilesUnloaded = x.FilesUnloaded.Add(file.Id) });
+            throw;
+        }
+    }
+
+    private async Task<byte[]> ReadFileAsync(MessageAttachment file)
+    {
         var s = State;
         foreach (var staged in s.Staged.Values.SelectMany(v => v))
         {
@@ -815,13 +864,10 @@ public sealed class OwnerStore : IAsyncDisposable
         var item = State.Fleet?.Needs.FirstOrDefault(n => n.Id == need);
         if (item is null || !item.Combines || choices.Count == 0 || choices.Any(c => c < 0 || c >= item.Choices.Count))
             return NoWrite;
-        var words = string.Join(", ", choices.Order().Select(c => item.Choices[c]));
+        // The Mac's words of ticked options (FleetStore.answer(choices:)): their own words in order, joined by "; ".
+        var words = string.Join("; ", choices.Order().Select(c => item.Choices[c]));
         return WriteAsync(words, needId: need, recipient: item.By, choices: choices.Select(c => (long)c).ToList());
     }
-
-    /// <summary>A question about an open request, in its discussion (`need_talk`).</summary>
-    public Task<string?> DiscussAsync(long need, string text) =>
-        WriteAsync(text, command: OwnerCommand.NeedTalk(need), feature: "need_talk");
 
     /// <summary>Pause, stop or resume a task (`task_controls`).</summary>
     public Task<string?> ControlAsync(long task, TaskControl action) =>
@@ -1259,6 +1305,8 @@ public sealed class OwnerStore : IAsyncDisposable
                 Staged = staged.Composers.Where(p => p.Value.Count > 0).ToImmutableDictionary(p => p.Key, p => ValueList.Of(p.Value.Select(f =>
                     new StagedFile { RequestId = f.RequestId, Name = f.Name, Mime = f.Mime, Size = f.Size, File = f.File, Failure = f.Failure }))),
             };
+        if (Read("notifications.json", CoreJson.Default.KeptLedger) is { } notified)
+            ledger = new NotificationLedger { Seen = new Dictionary<string, long>(notified.Seen), Warnings = notified.Warnings is null ? null : new Dictionary<string, string>(notified.Warnings) };
         if (Read("seen.json", CoreJson.Default.KeptSeen) is { } seen)
             initial = initial with { SeenContext = seen.Context, Seen = seen.Seen.ToImmutableDictionary() };
         if (Read("drafts.json", CoreJson.Default.KeptDrafts) is { } drafts)
@@ -1487,6 +1535,8 @@ internal sealed record KeptDrafts(Dictionary<string, string> Agents, Dictionary<
 internal sealed record KeptHub(string? Hub);
 
 /// <summary>The files that the owner picked, by composer; their bytes are in the folder `staged`, by request id.</summary>
+internal sealed record KeptLedger(Dictionary<string, long> Seen, Dictionary<string, string>? Warnings);
+
 internal sealed record KeptStaged(Dictionary<string, List<KeptFile>> Composers);
 
 internal sealed record KeptFile(Guid RequestId, string Name, string Mime, long Size, MessageAttachment? File, string? Failure);

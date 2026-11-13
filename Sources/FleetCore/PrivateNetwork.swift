@@ -55,14 +55,14 @@ public struct NetworkCredential: Equatable, Sendable {
     /// a client id, and a secret that starts `tskey-client-`. Nothing here repeats a value.
     public var problem: String? {
         let fields = trimmed
-        guard !fields.id.isEmpty else { return "Paste the client id from Tailscale." }
+        guard !fields.id.isEmpty else { return String(l10n: "Paste the client id from Tailscale.") }
         guard fields.id.range(of: "^[A-Za-z0-9]{4,64}$", options: .regularExpression) != nil else {
-            return "A client id is the short code beside the credential in Tailscale, letters and digits only."
+            return String(l10n: "A client id is the short code beside the credential in Tailscale, letters and digits only.")
         }
-        guard !fields.secret.isEmpty else { return "Paste the client secret from Tailscale." }
+        guard !fields.secret.isEmpty else { return String(l10n: "Paste the client secret from Tailscale.") }
         guard fields.secret.hasPrefix("tskey-client-"), fields.secret.count <= 256,
               fields.secret.range(of: "^[A-Za-z0-9-]+$", options: .regularExpression) != nil else {
-            return "A client secret starts with tskey-client-. Tailscale shows it once, when the credential is made."
+            return String(l10n: "A client secret starts with tskey-client-. Tailscale shows it once, when the credential is made.")
         }
         return nil
     }
@@ -107,14 +107,13 @@ public enum NetworkError: LocalizedError, Equatable, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .notACredential: "Paste the client id and the client secret of the Tailscale credential."
-        case .notAccepted: "Tailscale did not accept that credential. Make a new one and paste both halves again."
-        case .refused(let says): "Tailscale refused: \(says)"
-        case .unreachable: "Tailscale could not be reached from this Mac."
-        case .notUnderstood: "Tailscale answered something this app does not understand."
+        case .notACredential: String(l10n: "Paste the client id and the client secret of the Tailscale credential.")
+        case .notAccepted: String(l10n: "Tailscale did not accept that credential. Make a new one and paste both halves again.")
+        case .refused(let says): String(l10n: "Tailscale refused: \(says)")
+        case .unreachable: String(l10n: "Tailscale could not be reached from this Mac.")
+        case .notUnderstood: String(l10n: "Tailscale answered something this app does not understand.")
         case .policyNotUnderstood:
-            "This app did not change your Tailscale policy file, because it could not see where the tag belongs. "
-                + "Add \(PrivateNetwork.tag) in Tailscale yourself, then try again."
+            String(l10n: "This app did not change your Tailscale policy file, because it could not see where the tag belongs. Add \(PrivateNetwork.tag) in Tailscale yourself, then try again.")
         }
     }
 }
@@ -131,9 +130,9 @@ public struct NetworkStanding: Equatable, Sendable {
     /// reached, which says nothing about the credential and is therefore not a doubt: the mark says only that this
     /// Mac holds one.
     public static func mark(_ confirmed: NetworkStanding?) -> (state: MarkState, words: String) {
-        guard let confirmed else { return (.good, "Held") }
-        if !confirmed.accepted { return (.bad, "Not accepted") }
-        return confirmed.tagReady ? (.good, "Ready") : (.warn, "Tag gone")
+        guard let confirmed else { return (.good, String(l10n: "Held")) }
+        if !confirmed.accepted { return (.bad, String(l10n: "Not accepted")) }
+        return confirmed.tagReady ? (.good, String(l10n: "Ready")) : (.warn, String(l10n: "Tag gone"))
     }
 }
 
@@ -308,7 +307,7 @@ public struct NetworkClient: Sendable {
         says = says.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\n", with: " ")
         if says.count > 300 { says = String(says.prefix(300)) + "…" }
-        return .refused(says.isEmpty ? "it answered \(http.statusCode) and said nothing." : says)
+        return .refused(says.isEmpty ? String(l10n: "it answered \(http.statusCode) and said nothing.") : says)
     }
 
     /// A key as Tailscale makes one: one line, and nothing of a shape this app would pass on by mistake.

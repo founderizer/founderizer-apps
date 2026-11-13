@@ -78,8 +78,8 @@ struct PersonAccessPage: View {
     private var current: [String: String] { draft ?? hubList }
 
     var body: some View {
-        FleetPage("\(People.agentWord(agent)) for \(person?.name ?? "Person")",
-                  back: FleetBack(person?.name ?? "Person", action: back)) {
+        FleetPage("\(People.agentWord(agent)) for \(person?.name ?? String(l10n: "Person"))",
+                  back: FleetBack(person?.name ?? String(l10n: "Person"), action: back)) {
             if let reading {
                 let holdings = reading.scopeHoldings(of: agent)
                 github(holdings)
@@ -88,11 +88,11 @@ struct PersonAccessPage: View {
                 // Not while the window's notice says the outage, as Can use says it.
                 if !store.hubNoticeShows {
                     FormSection {
-                        FormRow("Founderizer cannot read the resources now.", detail: "It reads again when the hub answers.")
+                        FormRow("Founderizer cannot read the resources now.", detail: String(l10n: "It reads again when the hub answers."))
                     }
                 }
             } else {
-                LoadingLine("Reading the resources…")
+                LoadingLine(String(l10n: "Reading the resources…"))
             }
         }
         .font(FleetStyle.body).foregroundStyle(FleetStyle.text)
@@ -219,7 +219,7 @@ struct PersonAccessPage: View {
                     // One level is a value, not a choice (fix round 3c): an agent at Read offers Read only.
                     Text(AccessSettings.levelName(level, kind: "repo")).font(FormMetrics.text).foregroundStyle(FleetStyle.muted)
                 } else {
-                    FleetSelect("What \(person?.name ?? "this person")'s conversations may do with \(repo)",
+                    FleetSelect("What \(person?.name ?? String(l10n: "this person"))'s conversations may do with \(repo)",
                                 options: levels.map { FleetOption($0, AccessSettings.levelName($0, kind: "repo")) },
                                 selection: level) { chosen in change("repo") { $0[id] = chosen } } label: {
                         FleetSelectLabel(title: AccessSettings.levelName(level, kind: "repo"))

@@ -24,7 +24,7 @@ struct MachineSignInSection: View {
     var card = true
     /// The card's title, or nil on the face of a server's page: there the state row above it already names the
     /// sign-in, and the card reads as what follows that row. A server with two agents waiting names each one.
-    var title: String? = "Sign-in"
+    var title: String? = String(l10n: "Sign-in")
     /// The page said already that this machine is not signed in, so this card says only what is new.
     var alreadySaid = false
     @State private var code = ""
@@ -89,14 +89,13 @@ struct MachineSignInSection: View {
     /// it (the owner, 21 October 2026: "wizard should be a modal like some other wizards we've created").
     @ViewBuilder private func rows(_ runtime: String) -> some View {
         if card || login?.isOpen == true || line?.warn == true {
-            FormRow(card ? providerName(runtime) : "Sign-in",
+            FormRow(card ? providerName(runtime) : String(l10n: "Sign-in"),
                     detail: line?.warn == false ? line?.says : nil,
                     warning: line?.warn == true ? line?.says : nil) {
                 Button(button) { store.destination = .signIn(agent) }
                     .buttonStyle(FleetOutlineButtonStyle())
                     .disabled(!store.canWrite || !fresh || reading?.stale == true)
-                    .help("Opens the sign-in: you authenticate on \(providerName(runtime))'s own page, in your own "
-                          + "browser, and nothing of your login is stored by Founderizer.")
+                    .help(String(l10n: "Opens the sign-in: you authenticate on \(providerName(runtime))'s own page, in your own browser, and nothing of your login is stored by Founderizer."))
                     .accessibilityIdentifier("sign-in-\(agent)")
             }.accessibilityIdentifier("sign-in-row-\(agent)")
         }
@@ -104,9 +103,9 @@ struct MachineSignInSection: View {
 
     /// What that one button says: it opens the same screen either way, so it says what opening it is for.
     private var button: String {
-        if login?.isOpen == true { return "Open" }
-        if login?.isFailure == true { return "Try again" }
-        return reading?.needsSignIn == true ? "Sign in" : "Sign in again"
+        if login?.isOpen == true { return String(l10n: "Open") }
+        if login?.isFailure == true { return String(l10n: "Try again") }
+        return reading?.needsSignIn == true ? String(l10n: "Sign in") : String(l10n: "Sign in again")
     }
 
     /// **What the hub said when it would not start a sign-in**, in its own words, once. The refused request leaves

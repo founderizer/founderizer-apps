@@ -8,17 +8,17 @@ extension CloudExisting {
     /// **Why this server cannot take an install of `job`**, in a few words, or nil when it can as far as its provider
     /// says. `fleet`: the names of the fleet's own servers, in lower case.
     public func unfit(for job: InstallJob, fleet: Set<String>) -> String? {
-        if fleet.contains(name.lowercased()) { return "In your fleet" }
-        if madeFor == "hub" || madeFor == "agent" { return "Used by Founderizer" }
-        if !running { return "Off" }
-        if ipv4 == nil { return "No IPv4 address" }
+        if fleet.contains(name.lowercased()) { return String(l10n: "In your fleet") }
+        if madeFor == "hub" || madeFor == "agent" { return String(l10n: "Used by Founderizer") }
+        if !running { return String(localized: "Off (a server)", defaultValue: "Off", bundle: Localized.bundle, locale: Localized.digits) }
+        if ipv4 == nil { return String(l10n: "No IPv4 address") }
         let need = job == .hub ? ServerCheck.hubMemory : ServerCheck.agentMemory
-        if let memoryMB, memoryMB < need.megabytes { return "\(Self.size(memoryMB)): too small" }
+        if let memoryMB, memoryMB < need.megabytes { return String(l10n: "\(Self.size(memoryMB)): too small") }
         if let system, let version, !Self.takes(job, system, version) {
             let name = (InstallPlan.systems(.hub) + InstallPlan.systems(.join)).first { $0.id == system }?.name
                 ?? system.capitalized
-            return job == .hub && Self.takes(.join, system, version) ? "\(name) \(version): not yet for a hub"
-                : "\(name) \(version): not supported"
+            return job == .hub && Self.takes(.join, system, version) ? String(l10n: "\(name) \(version): not yet for a hub")
+                : String(l10n: "\(name) \(version): not supported")
         }
         return nil
     }
@@ -67,7 +67,8 @@ extension CloudOffer {
         format.numberStyle = .currency
         format.currencyCode = currency
         format.maximumFractionDigits = 2
-        return (format.string(from: monthlyPrice as NSDecimalNumber) ?? "\(monthlyPrice) \(currency)") + " a month"
+        let amount = format.string(from: monthlyPrice as NSDecimalNumber) ?? "\(monthlyPrice) \(currency)"
+        return String(l10n: "\(amount) a month")
     }
 
     /// The new server's row in the list: "CX23 · 4 GB · Nuremberg · €5.49 a month".

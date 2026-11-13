@@ -77,9 +77,9 @@ final class RestoreModel {
     /// 20 October 2026 is the folder the automatic copy keeps.
     func choose() {
         let panel = NSOpenPanel()
-        panel.title = "Choose a copy of your fleet"
-        panel.prompt = "Open"
-        panel.message = "The zip your hub gave you. Founderizer reads what is in it before it sends anything."
+        panel.title = String(l10n: "Choose a copy of your fleet")
+        panel.prompt = String(l10n: "Open")
+        panel.message = String(l10n: "The zip your hub gave you. Founderizer reads what is in it before it sends anything.")
         panel.allowedContentTypes = [.zip]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -142,8 +142,7 @@ final class RestoreModel {
         switch RestoreConflict.read(sentWith: database, now: now) {
         case .staleGeneration:
             phase = .chosen
-            failure = "Your hub moved on while that was being sent. Nothing was written. Press Restore this copy "
-                + "again."
+            failure = String(l10n: "Your hub moved on while that was being sent. Nothing was written. Press Restore this copy again.")
             await store.refresh()
         case .holdsWork(let found):
             holds = found
@@ -234,7 +233,7 @@ struct RestoreRows: View {
     private var start: some View {
         FormRow("Put a copy back", symbol: "arrow.counterclockwise",
                 // One sentence (D-2 item 29): what the copy brings back, and no second one about the address.
-                detail: explains ? "Your fleet as it was when the copy was taken." : nil,
+                detail: explains ? String(l10n: "Your fleet as it was when the copy was taken.") : nil,
                 warning: model.failure) {
             // Only while it can act: never grey (the owner: "dont show the send button if it's not clickable").
             if store.isFresh {
@@ -254,10 +253,10 @@ struct RestoreRows: View {
             FormBlock("This copy", detail: says(copy)) {
                 VStack(alignment: .leading, spacing: 9) {
                     if let agents = copy.manifest.agentNames {
-                        line("Agents", agents)
+                        line(String(l10n: "Agents"), agents)
                     }
                     if copy.manifest.recordsSound == false {
-                        line("Its records", "The hub that made it said they were not sound. It will be refused.")
+                        line(String(l10n: "Its records"), String(l10n: "The hub that made it said they were not sound. It will be refused."))
                     }
                     if let vault = copy.manifest.vaultLine {
                         Text(vault).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
@@ -287,8 +286,7 @@ struct RestoreRows: View {
     }
 
     private func says(_ copy: ChosenCopy) -> String {
-        "Taken \(fleetDate(copy.manifest.made_at)) · fleet \(copy.manifest.fleet_id) · \(copy.manifest.agentsLine)"
-            + " · " + ByteCountFormatter.string(fromByteCount: copy.bytes, countStyle: .binary)
+        String(l10n: "Taken \(fleetDate(copy.manifest.made_at)) · fleet \(copy.manifest.fleet_id) · \(copy.manifest.agentsLine) · \(ByteCountFormatter.string(fromByteCount: copy.bytes, countStyle: .binary))")
     }
 
     // ---------------------------------------------------------------- the hub already holds a fleet
@@ -299,8 +297,7 @@ struct RestoreRows: View {
         if let copy = model.copy {
             FormBlock("This hub already has a fleet on it", detail: says(copy)) {
                 VStack(alignment: .leading, spacing: 9) {
-                    Text(model.holds?.says ?? "Founderizer could not read what is on it, so what the copy "
-                         + "replaces is not known. The hub keeps the records it puts aside, beside the new ones.")
+                    Text(model.holds?.says ?? String(l10n: "Founderizer could not read what is on it, so what the copy replaces is not known. The hub keeps the records it puts aside, beside the new ones."))
                         .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     if let said = model.hubSaid {
@@ -361,10 +358,10 @@ struct RestoreRows: View {
 
     private var waitTitle: String {
         switch model.phase {
-        case .sending: "Sending the copy to your hub"
-        case .restarting: "Your hub is restarting"
-        case .staged: "The copy is waiting on your hub"
-        case .lost: "Your hub has not come back"
+        case .sending: String(l10n: "Sending the copy to your hub")
+        case .restarting: String(l10n: "Your hub is restarting")
+        case .staged: String(l10n: "The copy is waiting on your hub")
+        case .lost: String(l10n: "Your hub has not come back")
         default: ""
         }
     }
@@ -372,16 +369,13 @@ struct RestoreRows: View {
     private var waitDetail: String {
         switch model.phase {
         case .sending:
-            "It is checked on the hub before anything is written."
+            String(l10n: "It is checked on the hub before anything is written.")
         case .restarting:
-            "It has your copy. The records are only taken at a start, so the hub restarts itself now and will "
-                + "not answer for a moment. That is not a failure."
+            String(l10n: "It has your copy. The records are only taken at a start, so the hub restarts itself now and will not answer for a moment. That is not a failure.")
         case .staged:
-            "This hub does not restart itself, so the records are beside its database and its next start takes "
-                + "them. Restart the hub service on that server and your fleet is back."
+            String(l10n: "This hub does not restart itself, so the records are beside its database and its next start takes them. Restart the hub service on that server and your fleet is back.")
         case .lost:
-            "The copy may be on it and waiting all the same, so look before you send it again. Sending it again "
-                + "is safe — your hub answers the second send with the first answer and restores nothing twice."
+            String(l10n: "The copy may be on it and waiting all the same, so look before you send it again. Sending it again is safe — your hub answers the second send with the first answer and restores nothing twice.")
         default: ""
         }
     }
@@ -393,9 +387,7 @@ struct RestoreRows: View {
     @ViewBuilder private var landed: some View {
         FormBlock("Your fleet is back", detail: landedDetail) {
             VStack(alignment: .leading, spacing: 9) {
-                Text("Read the open tasks before anything runs. They are from the moment the copy was taken, so "
-                     + "a task that was open then is open again now, and its agent cannot know what the old "
-                     + "server did after that.")
+                Text(String(l10n: "Read the open tasks before anything runs. They are from the moment the copy was taken, so a task that was open then is open again now, and its agent cannot know what the old server did after that."))
                     .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if let whenDone {
@@ -416,11 +408,10 @@ struct RestoreRows: View {
     private var landedDetail: String {
         guard let receipt = model.receipt else { return "" }
         let written = receipt.changed.isEmpty
-            ? "Its configuration was already the one on this server."
-            : "\(receipt.changed.count) configuration file\(receipt.changed.count == 1 ? "" : "s") written."
-        return "Your fleet \(receipt.fleet_id) · "
-            + ByteCountFormatter.string(fromByteCount: receipt.records_bytes, countStyle: .binary)
-            + " of records · " + written
+            ? String(l10n: "Its configuration was already the one on this server.")
+            : receipt.changed.count == 1 ? String(l10n: "\(receipt.changed.count) configuration file written.")
+            : String(l10n: "\(receipt.changed.count) configuration files written.")
+        return String(l10n: "Your fleet \(receipt.fleet_id) · \(ByteCountFormatter.string(fromByteCount: receipt.records_bytes, countStyle: .binary)) of records · \(written)")
     }
 
     @ViewBuilder private func reconnect(_ afterwards: RestoreAfterwards) -> some View {

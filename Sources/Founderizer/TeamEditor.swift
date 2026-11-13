@@ -49,7 +49,7 @@ struct TeamEditor: View {
                         ForEach(latest.lines) { line in
                             HStack(spacing: 0) {
                                 RowMark { AgentGlyph(name: line.agent, size: GlyphSize.inline) }
-                                Text("\(line.agent.agentLabel) · \(line.role.capitalized) → \(line.reports_to?.agentLabel ?? "Owner")")
+                                Text("\(line.agent.agentLabel) · \(line.role.capitalized) → \(line.reports_to?.agentLabel ?? String(l10n: "Owner"))")
                             }
                         }
                     }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
@@ -59,32 +59,31 @@ struct TeamEditor: View {
                     }.buttonStyle(FleetOutlineButtonStyle())
                 }
             } else if failure == nil, contextMatches {
-                LoadingLine("Reading the reporting lines…")
+                LoadingLine(String(l10n: "Reading the reporting lines…"))
             }
             if !contextMatches { Text("The connection changed. Open this tab again.").font(FormMetrics.detail).foregroundStyle(.orange) }
             // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3, item 33: it is said
             // once, over the page). `failure` still keeps "Reading the reporting lines…" away while the hub is down.
             if let failure, !store.hubNoticeShows { Text(failure).font(FormMetrics.detail).foregroundStyle(.orange) }
-            if store.pending != nil { Text(store.sendError ?? "Waiting for the saved request. Check it at the bottom of the window.").font(FormMetrics.detail).foregroundStyle(.orange) }
+            if store.pending != nil { Text(store.sendError ?? String(l10n: "Waiting for the saved request. Check it at the bottom of the window.")).font(FormMetrics.detail).foregroundStyle(.orange) }
             if !conflict, case .teamLines = store.pending?.command, store.pending?.refusal != nil {
                 Button("Discard refused request") {
                     store.discardRefused()
                     Task { await read() }
                 }.buttonStyle(FleetOutlineButtonStyle()).disabled(!contextMatches)
             }
-            // The form's Save comes with the form: under a line that the form replaces, it would move down.
-            // Save only while a change waits and can go: never grey (the owner: "dont show the send button if it's
-            // not clickable").
-            if original != nil, problem == nil, input.lines != original?.lines, store.canWrite, !loading, !conflict, contextMatches {
-                HStack {
-                    Spacer()
-                    Button("Save") { Task { await save() } }
-                        .accessibilityIdentifier("save-team-lines")
-                }.buttonStyle(FleetOutlineButtonStyle())
-            }
         } actions: {
+            // **Save in the page's header**, where every page has its buttons (the owner, 13 November 2026: "review all
+            // other pages for the same issues!!"): under one row for each agent, a large team scrolled to it. Only
+            // while a change waits and can go: never grey (the owner: "dont show the send button if it's not
+            // clickable").
+            if original != nil, problem == nil, input.lines != original?.lines, store.canWrite, !loading, !conflict, contextMatches {
+                Button("Save") { Task { await save() } }
+                    .buttonStyle(FleetOutlineButtonStyle())
+                    .accessibilityIdentifier("save-team-lines")
+            }
             // Pressed while a read is on its way, it reads once more: a read is no reason to disable it (C4.2).
-            IconButton(symbol: "arrow.clockwise", words: "Check for team changes") { Task { await read() } }
+            IconButton(symbol: "arrow.clockwise", words: String(l10n: "Check for team changes")) { Task { await read() } }
                 .disabled(!contextMatches)
                 .accessibilityLabel("Refresh reporting lines")
         }
@@ -99,7 +98,7 @@ struct TeamEditor: View {
     /// What stopped the read. While the hub does not answer nothing is read, so lines not read yet say they are
     /// unavailable then, and never "Reading the reporting lines…" for as long as the hub is down.
     private var failure: String? { error ?? (original == nil && store.connectionError != nil ? Self.unavailable : nil) }
-    private static let unavailable = "Team settings are unavailable. Check the connection, then refresh."
+    private static let unavailable = String(l10n: "Team settings are unavailable. Check the connection, then refresh.")
 
     /// One agent: its role, and the manager or lead that it reports to. The manager reports to the owner.
     @ViewBuilder private func member(_ index: Int) -> some View {
@@ -112,7 +111,7 @@ struct TeamEditor: View {
                 Text("Manager · reports to you").foregroundStyle(FleetStyle.muted)
             }
         } else {
-            let detail = tasks > 0 ? "\(tasks) open \(tasks == 1 ? "task" : "tasks") · role locked" : nil
+            let detail = tasks > 0 ? (tasks == 1 ? String(l10n: "1 open task · role locked") : String(l10n: "\(tasks) open tasks · role locked")) : nil
             // **Nothing is cut in a narrow window, and a row is as high as its words** (T-17): the name, its line and
             // the role with its "reports to" stand side by side only while each fits on its own one line; otherwise
             // the role and "reports to" go on a line of their own under the name, and no word stands one letter a
@@ -150,7 +149,7 @@ struct TeamEditor: View {
             if allowsLeads && tasks == 0 {
                 FleetSelect("\(line.agent.agentLabel) role", selection: $input.lines[index].role, options: [
                     FleetOption("worker", "Worker", mark: .symbol("person")),
-                    FleetOption("lead", "Lead", subtitle: "Gives tasks to the agents that report to it", mark: .symbol("person.2")),
+                    FleetOption("lead", "Lead", subtitle: String(l10n: "Gives tasks to the agents that report to it"), mark: .symbol("person.2")),
                 ])
             } else {
                 Text(line.role == "lead" ? "Lead" : "Worker").foregroundStyle(FleetStyle.muted)
@@ -174,7 +173,7 @@ struct TeamEditor: View {
                            options: input.lines.filter { $0.agent != line.agent && ["manager", "lead"].contains($0.role) }.map {
             FleetOption(Optional($0.agent), $0.agent.agentLabel, subtitle: $0.role.capitalized,
                         mark: .agent($0.agent, state: store.state, isFresh: store.isFresh))
-        }, placeholder: line.reports_to.map { "\($0.agentLabel) · choose a lead" } ?? "Choose a lead")
+        }, placeholder: line.reports_to.map { String(l10n: "\($0.agentLabel) · choose a lead") } ?? String(l10n: "Choose a lead"))
     }
 
     /// The first line of each choice that the card's "reports to" selects show: one select of each, drawn hidden under
@@ -212,6 +211,6 @@ struct TeamEditor: View {
                 // The saved lines become the new base of the form.
                 self.original = nil; await read()
             } else { await read() }
-        } catch { self.error = "Check the reporting lines before saving." }
+        } catch { self.error = String(l10n: "Check the reporting lines before saving.") }
     }
 }

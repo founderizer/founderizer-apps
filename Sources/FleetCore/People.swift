@@ -46,10 +46,10 @@ public enum People {
     /// The agents of a list, for one line, each by its name: "Studio", "Studio and Mini", "Vps, Mini and Nova".
     public static func agentWords(_ agents: [String]) -> String {
         switch agents.count {
-        case 0: "No agent"
+        case 0: String(l10n: "No agent")
         case 1: agentWord(agents[0])
         // Every one by name (D-2, fix round 2): "3 agents" did not say which.
-        default: agents.dropLast().map(agentWord).joined(separator: ", ") + " and " + agentWord(agents[agents.count - 1])
+        default: String(l10n: "\(agents.dropLast().map(agentWord).joined(separator: ", ")) and \(agentWord(agents[agents.count - 1]))")
         }
     }
 
@@ -57,19 +57,19 @@ public enum People {
     /// decides this (`agents[].says` of `GET /ui/people`) and its own line always wins; this one is for an agent
     /// that is not on the list yet, where the hub says nothing.
     public static func cannotChat(role: String, runtime: String, active: Bool?) -> String? {
-        if role == "manager" { return "The fleet's manager never talks with other people." }
-        if active == false { return "This agent is still in setup." }
+        if role == "manager" { return String(l10n: "The fleet's manager never talks with other people.") }
+        if active == false { return String(l10n: "This agent is still in setup.") }
         if runtime != "claude" {
             // The provider's own name, "Codex" (fix round 3, item 37: it said "codex").
-            return "A session of \(providerName(runtime)) cannot be locked down to a conversation yet, so other people never reach it."
+            return String(l10n: "A session of \(providerName(runtime)) cannot be locked down to a conversation yet, so other people never reach it.")
         }
         return nil
     }
 
     /// A refusal in the hub's own words, or a write without an answer that can still have arrived.
     public static func reason(_ error: Error) -> String {
-        if case HubError.refusal(_, let text) = error { return "The hub said: \(text.hasSuffix(".") ? text : text + ".")" }
-        if error is URLError { return "No answer from the hub. It can still have done it: look again before you try again." }
+        if case HubError.refusal(_, let text) = error { return String(l10n: "The hub said: \(text.hasSuffix(".") ? text : text + ".")") }
+        if error is URLError { return String(l10n: "No answer from the hub. It can still have done it: look again before you try again.") }
         return error.localizedDescription
     }
 
@@ -201,23 +201,23 @@ extension PeopleSnapshot {
         public var dailyLimit: Int? { daily ?? (agents.contains { $0.scope.map { !$0.isAll } ?? false } ? daily_set : nil) }
         /// What a person's page says of today: "3 today of 30", or "3 today" with no number to count against, never
         /// "of 0" for a limit that is not there.
-        public var todayWords: String { dailyLimit.map { "\(sentToday) today of \($0)" } ?? "\(sentToday) today" }
+        public var todayWords: String { dailyLimit.map { String(l10n: "\(sentToday) today of \($0)") } ?? String(l10n: "\(sentToday) today") }
 
         /// The one line under a person's name: what stops them first, else what they have. Orange where the owner
         /// can act. Never more than a handful of words.
         public func state(now: Double) -> (words: String, attention: Bool) {
-            if isBlocked { return ("Blocked", true) }
-            if agents.isEmpty { return ("No agent yet", true) }
-            if handles.isEmpty { return ("No handle yet", true) }
+            if isBlocked { return (String(l10n: "Blocked"), true) }
+            if agents.isEmpty { return (String(l10n: "No agent yet"), true) }
+            if handles.isEmpty { return (String(l10n: "No handle yet"), true) }
             if reachable.isEmpty {
                 let first = unreachable.first?.agent ?? ""
-                return ("\(People.agentWord(first)) cannot chat now", true)
+                return (String(l10n: "\(People.agentWord(first)) cannot chat now"), true)
             }
-            if sentToday >= limit, limit > 0 { return ("Reached today's limit", true) }
-            if conversations.isEmpty { return ("No message yet", false) }
+            if sentToday >= limit, limit > 0 { return (String(l10n: "Reached today's limit"), true) }
+            if conversations.isEmpty { return (String(l10n: "No message yet"), false) }
             let last = conversations.compactMap(\.last).max()
-            return (last.map { "Last message \(activityAge($0, now: now).lowercased())" }
-                    ?? "\(conversations.count) conversations", false)
+            return (last.map { String(l10n: "Last message \(activityAge($0, now: now).lowercased())") }
+                    ?? String(l10n: "\(conversations.count) conversations"), false)
         }
 
         /// **The same fact as one mark.** The owner, 20 October 2026: "not even sentences, just a check or a cross,
@@ -507,25 +507,25 @@ public struct PersonInput: Equatable, Sendable {
 
         /// What this handle would be refused for, in the owner's words, or nil.
         public var problem: String? {
-            if !People.apps.contains(app) { return "Choose WhatsApp or Discord." }
+            if !People.apps.contains(app) { return String(l10n: "Choose WhatsApp or Discord.") }
             let said = People.oneLine(typed)
             if said.isEmpty {
-                return app == "whatsapp" ? "Write their phone number, with the country code."
-                                         : "Write their Discord user ID."
+                return app == "whatsapp" ? String(l10n: "Write their phone number, with the country code.")
+                                         : String(l10n: "Write their Discord user ID.")
             }
-            if said.count > 200 { return "That is too long: at most 200 characters." }
+            if said.count > 200 { return String(l10n: "That is too long: at most 200 characters.") }
             if said.contains("@") || raw != nil { return nil }     // an ID that the chat app itself gave
             if app == "whatsapp" {
                 if said.contains(where: { !$0.isWholeNumber && !" +-().".contains($0) }) {
-                    return "A phone number is digits and the country code, with no letters."
+                    return String(l10n: "A phone number is digits and the country code, with no letters.")
                 }
                 if People.whatsappID(from: said) == nil {
-                    return "A phone number has 6 to 15 digits, with the country code."
+                    return String(l10n: "A phone number has 6 to 15 digits, with the country code.")
                 }
                 return nil
             }
             if said.contains(where: { !$0.isWholeNumber }) || !(5...25).contains(said.count) {
-                return "A Discord user ID is the number Discord copies, 5 to 25 digits."
+                return String(l10n: "A Discord user ID is the number Discord copies, 5 to 25 digits.")
             }
             return nil
         }
@@ -545,20 +545,20 @@ public struct PersonInput: Equatable, Sendable {
     /// limit that the hub keeps.
     public func problem(existing: Int = 0, adding: Bool = true) -> String? {
         let said = People.oneLine(name)
-        if said.isEmpty { return "Write the name you know them by." }
-        if said.count > People.nameMax { return "A name is at most \(People.nameMax) characters." }
+        if said.isEmpty { return String(l10n: "Write the name you know them by.") }
+        if said.count > People.nameMax { return String(l10n: "A name is at most \(People.nameMax) characters.") }
         // Any role the hub gave: the hub keeps the list, and a person keeps the role they have.
-        if People.oneLine(role).isEmpty { return "Choose a role." }
-        if agents.count > People.agentsMax { return "A person reaches at most \(People.agentsMax) agents." }
-        if note.count > People.noteMax { return "The note is at most \(People.noteMax.formatted()) characters." }
-        if let daily, !(0...People.dailyMax).contains(daily) { return "Messages a day is 0 to \(People.dailyMax.formatted())." }
+        if People.oneLine(role).isEmpty { return String(l10n: "Choose a role.") }
+        if agents.count > People.agentsMax { return String(l10n: "A person reaches at most \(People.agentsMax) agents.") }
+        if note.count > People.noteMax { return String(l10n: "The note is at most \(People.noteMax.formatted()) characters.") }
+        if let daily, !(0...People.dailyMax).contains(daily) { return String(l10n: "Messages a day is 0 to \(People.dailyMax.formatted()).") }
         if adding {
-            if handles.count > People.handlesMax { return "A person has at most \(People.handlesMax) handles." }
+            if handles.count > People.handlesMax { return String(l10n: "A person has at most \(People.handlesMax) handles.") }
             if let said = handles.compactMap(\.problem).first { return said }
             let made = handles.map { "\($0.app)/\($0.handle)" }
-            if Set(made).count != made.count { return "The same handle is in the list two times." }
+            if Set(made).count != made.count { return String(l10n: "The same handle is in the list two times.") }
         }
-        if adding, existing >= People.peopleMax { return "This fleet already has \(People.peopleMax) people." }
+        if adding, existing >= People.peopleMax { return String(l10n: "This fleet already has \(People.peopleMax) people.") }
         return nil
     }
 
@@ -602,8 +602,8 @@ extension People {
     }
 
     public static func handleHint(_ app: String) -> String {
-        app == "whatsapp" ? "With the country code. Founderizer makes the WhatsApp ID itself."
-                          : "Discord, Settings, Advanced, Developer Mode: right-click them and Copy User ID."
+        app == "whatsapp" ? String(l10n: "With the country code. Founderizer makes the WhatsApp ID itself.")
+                          : String(l10n: "Discord, Settings, Advanced, Developer Mode: right-click them and Copy User ID.")
     }
 }
 
@@ -650,7 +650,7 @@ public struct RoleList: Decodable, Sendable {
     }
 
     /// Why what the owner typed is no name of a role, in his words.
-    public static let nameRule = "A role's name is 2 to 31 letters, digits or hyphens, and starts with a letter."
+    public static let nameRule = String(l10n: "A role's name is 2 to 31 letters, digits or hyphens, and starts with a letter.")
 }
 
 /// The answer to a write of a role: the role as the hub now has it, and the fields that changed.
@@ -735,9 +735,9 @@ public struct Conversation: Decodable, Equatable, Sendable, Identifiable {
 
     /// What needs the owner, in a few words: his own answer first, then a message nobody read, then a pause.
     public func state(now: Double) -> (words: String, attention: Bool)? {
-        if openNeeds > 0 { return (openNeeds == 1 ? "Waits for you" : "\(openNeeds) wait for you", true) }
-        if isPaused { return ("Paused", true) }
-        if waitingCount > 0 { return ("\(waitingCount) not read yet", false) }
+        if openNeeds > 0 { return (openNeeds == 1 ? String(l10n: "Waits for you") : String(l10n: "\(openNeeds) wait for you"), true) }
+        if isPaused { return (String(l10n: "Paused"), true) }
+        if waitingCount > 0 { return (String(l10n: "\(waitingCount) not read yet"), false) }
         if state != "open" { return (state, false) }
         return nil
     }
@@ -807,20 +807,20 @@ public struct ConversationItem: Decodable, Equatable, Sendable, Identifiable {
 
         /// The delivery in words, for the hover text and for assistive apps.
         public func words(app: String?, time: (Double) -> String) -> String {
-            let name = app.map { ChatApps.title($0) } ?? "the chat app"
+            let name = app.map { ChatApps.title($0) } ?? String(l10n: "the chat app")
             let when = at.map { " \(time($0))" } ?? ""
             switch state {
-            case "queued": return "Waiting to send to \(name)"
-            case "sending": return "Sending to \(name)…"
-            case "sent": return "Sent to \(name)" + when
-            case "delivered": return "Sent to \(name) · Delivered" + when
-            case "read": return "Sent to \(name) · Read" + when
+            case "queued": return String(l10n: "Waiting to send to \(name)")
+            case "sending": return String(l10n: "Sending to \(name)…")
+            case "sent": return String(l10n: "Sent to \(name)") + when
+            case "delivered": return String(l10n: "Sent to \(name) · Delivered") + when
+            case "read": return String(l10n: "Sent to \(name) · Read") + when
             case "failed":
                 let reason = (error ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                return reason.isEmpty ? "Not sent to \(name)." : "Not sent: \(reason)\(reason.hasSuffix(".") ? "" : ".")"
-            case "unknown": return "Delivery to \(name) not confirmed"
-            case "expired": return "Too old to send to \(name)"
-            default: return "\(name) delivery: \(state)"
+                return reason.isEmpty ? String(l10n: "Not sent to \(name).") : String(l10n: "Not sent: \(reason)\(reason.hasSuffix(".") ? "" : ".")")
+            case "unknown": return String(l10n: "Delivery to \(name) not confirmed")
+            case "expired": return String(l10n: "Too old to send to \(name)")
+            default: return String(l10n: "\(name) delivery: \(state)")
             }
         }
     }
@@ -843,9 +843,9 @@ public struct ConversationItem: Decodable, Equatable, Sendable, Identifiable {
     /// Who said it, in the owner's words. An unknown kind from a newer hub shows as its own text.
     public func said(person: String?, agent: String) -> String {
         switch who {
-        case "person": return person ?? "They"
+        case "person": return person ?? String(l10n: "They")
         case "agent": return People.agentWord(agent)
-        case "owner": return "You"
+        case "owner": return String(l10n: "You")
         case "action": return People.agentWord(agent)
         default: return who
         }
@@ -854,8 +854,8 @@ public struct ConversationItem: Decodable, Equatable, Sendable, Identifiable {
     /// What an action is waiting for, in a few words, or nil when it is not an action.
     public var actionState: (words: String, attention: Bool)? {
         guard isAction, let need else { return nil }
-        if need.isOpen { return ("Waits for you", true) }
-        return ("You answered", false)
+        if need.isOpen { return (String(l10n: "Waits for you"), true) }
+        return (String(l10n: "You answered"), false)
     }
 }
 

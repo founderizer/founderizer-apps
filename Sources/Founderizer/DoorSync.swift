@@ -380,14 +380,14 @@ final class DoorSyncModel {
     /// The owner saved a GitHub App's key, which the door now holds: the door's file names it for that owner.
     func addGitHubApp(owner: String, login: String, appID: String) async -> String? {
         guard let devices = await Self.tailnet(), let door = DoorAccess.door(in: devices), let address = door.address else {
-            return "This Mac's Tailscale shows no door."
+            return String(l10n: "This Mac's Tailscale shows no door.")
         }
         guard let read = await ssh(door, address: address, DoorAccess.readProgram), let current = DoorAccess.file(read.output) else {
-            return "The door's access file could not be read over SSH."
+            return String(l10n: "The door's access file could not be read over SSH.")
         }
         let file = DoorAccess.canonical(DoorAccess.withGitHubApp(current, owner: owner, login: login, appID: appID))
         guard let written = await ssh(door, address: address, DoorAccess.writeProgram, stdin: file), written.ok else {
-            return "The door did not take its new access file."
+            return String(l10n: "The door did not take its new access file.")
         }
         lastRound = nil
         return nil

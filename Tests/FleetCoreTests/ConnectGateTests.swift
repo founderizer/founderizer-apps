@@ -318,6 +318,27 @@ struct ConnectGateTests {
         return try JSONDecoder().decode(ConnectState.self, from: JSONSerialization.data(withJSONObject: fields))
     }
 
+    @Test func turnOffIsOfferedOnlyOnTheRowOfATurnOnWhileTheHubSaysOn() throws {
+        let stop = ConnectGate.cutOff(.on)
+        let on = try reading(on: true, canTurnOn: false, stopped: "the hub cannot read the Tailscale serve status")
+        let off = try reading(on: false, canTurnOn: true)
+        // on, and it does not work: the hub's own reason, or a run of this launch that stopped
+        guard case .stopped(_, .on) = ConnectGate.show(features: ["connect_offer"], state: on, run: .idle, canAct: true) else {
+            Issue.record("no row for a hub that is on and says why it does not work"); return
+        }
+        #expect(ConnectGate.offersTurnOff(.stopped(stop, .on), state: on, canAct: true))
+        // not while the hub takes no write, not while the hub says off or has not answered, and not on the row of
+        // a Turn off that stopped, whose Try again is the Turn off
+        #expect(!ConnectGate.offersTurnOff(.stopped(stop, .on), state: on, canAct: false))
+        #expect(!ConnectGate.offersTurnOff(.stopped(stop, .on), state: off, canAct: true))
+        #expect(!ConnectGate.offersTurnOff(.stopped(stop, .on), state: nil, canAct: true))
+        #expect(!ConnectGate.offersTurnOff(.stopped(ConnectGate.cutOff(.off), .off), state: on, canAct: true))
+        // and in no other state of the group
+        for show in [ConnectGate.Show.nothing, .off(turnOn: true), .off(turnOn: false), .turningOn, .turningOff] {
+            #expect(!ConnectGate.offersTurnOff(show, state: on, canAct: true))
+        }
+    }
+
     @Test func theGroupComesFromTheHubsAnswersAndTheRun() throws {
         let offer = ["mobile", "connect_offer"]
         let off = try reading(on: false, canTurnOn: true)
@@ -332,8 +353,13 @@ struct ConnectGateTests {
         // the run, and the wait that the hub's answer says after a quit
         #expect(ConnectGate.show(features: offer, state: off, run: .turningOn, canAct: true) == .turningOn)
         #expect(ConnectGate.show(features: offer, state: try reading(on: true, canTurnOn: false), run: .idle, canAct: true) == .turningOn)
-        // the root step of a Turn off: no picture has that moment, so no group shows
-        #expect(ConnectGate.show(features: offer, state: off, run: .turningOff, canAct: true) == .nothing)
+        // the root step of a Turn off: "Turning off…" where "Turning on…" stands (the owner's yes, "Yes, both")
+        #expect(ConnectGate.show(features: offer, state: off, run: .turningOff, canAct: true) == .turningOff)
+        // whatever the hub takes or has answered: the line is the sign that the step runs
+        #expect(ConnectGate.show(features: offer, state: off, run: .turningOff, canAct: false) == .turningOff)
+        #expect(ConnectGate.show(features: offer, state: nil, run: .turningOff, canAct: true) == .turningOff)
+        // while the hub still serves the feature, the two approved groups carry that line, not this group
+        #expect(ConnectGate.show(features: offer + ["connected_apps"], state: off, run: .turningOff, canAct: true) == .nothing)
         // on, and the hub says why it does not work: the row with his sentence for that reason, so the wait has an end
         let closed = try reading(on: true, canTurnOn: false, stopped: "Tailscale Funnel does not publish only the gate "
             + "(http://127.0.0.1:8767), so the hub's socket for connected apps stays closed. Funnel: "
@@ -382,5 +408,17 @@ struct ConnectGateTests {
         let none = FleetTrouble.read(connectionError: nil, storageError: nil, isFresh: true, state: nil, health: nil,
                                      machines: [], servers: [], checklists: [:], at: 0)
         #expect(!none.findings.contains { $0.id == "hub/connect" })
+    }
+
+    /// **Turn off asks first only while an app is connected** (the owner's yes of 13 November 2026): no connection, no
+    /// question; one connection, the confirmation; no reading, the confirmation.
+    @Test func turnOffAsksFirstOnlyWhileAnAppIsConnected() throws {
+        #expect(!ConnectGate.asksBeforeTurnOff(try reading(on: true, canTurnOn: false, stopped: "no gate forwards to it")))
+        let connected = try JSONDecoder().decode(ConnectState.self, from: Data(#"""
+            {"db": "db", "on": true, "address": "https://hub.example.com/mcp", "gate": {"version": null, "ok": true},
+             "connections": [{"id": 1, "name": "Claude", "level": "read", "last_used": null, "created": 1}]}
+            """#.utf8))
+        #expect(ConnectGate.asksBeforeTurnOff(connected))
+        #expect(ConnectGate.asksBeforeTurnOff(nil))
     }
 }

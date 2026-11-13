@@ -167,10 +167,10 @@ public enum AttachmentError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .metadata: "The hub described this file in a way this app does not take."
-        case .bytes: "The file that came back is not the file that the hub named."
-        case .tooLarge: "A file is at most 25 MB."
-        case .type: "This hub takes images, PDF, ZIP, text, Markdown, CSV and JSON."
+        case .metadata: String(l10n: "The hub described this file in a way this app does not take.")
+        case .bytes: String(l10n: "The file that came back is not the file that the hub named.")
+        case .tooLarge: String(l10n: "A file is at most 25 MB.")
+        case .type: String(l10n: "This hub takes images, PDF, ZIP, text, Markdown, CSV and JSON.")
         }
     }
 }

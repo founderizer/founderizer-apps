@@ -61,7 +61,7 @@ struct SearchPalette: View {
                 // Its placeholder in the muted words that read (it was 2.29:1; `fieldPlaceholder`), and Esc closes the
                 // card from the field that has the keyboard, as a click outside it does (D-4).
                 TextField(text: $query, prompt: Text(verbatim: "")) { Text("Search") }
-                    .fieldPlaceholder("Search", shows: query.isEmpty)
+                    .fieldPlaceholder(String(l10n: "Search"), shows: query.isEmpty)
                     .textFieldStyle(.plain).font(ChatStyle.font).foregroundStyle(FleetStyle.text)
                     .focused($focused)
                     .onExitCommand { close() }
@@ -76,20 +76,20 @@ struct SearchPalette: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if !agents.isEmpty {
-                            label("Agents").padding(.top, 4).padding(.bottom, 6)
+                            label(String(l10n: "Agents")).padding(.top, 4).padding(.bottom, 6)
                             ForEach(Array(agents.enumerated()), id: \.element.id) { index, agent in
                                 agentRow(agent, highlighted: highlighted == index).id(index)
                             }
                         }
                         if !tasks.isEmpty {
-                            label("Tasks").padding(.top, agents.isEmpty ? 4 : 12).padding(.bottom, 4)
+                            label(String(l10n: "Tasks")).padding(.top, agents.isEmpty ? 4 : 12).padding(.bottom, 4)
                             ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
                                 taskRow(task, highlighted: highlighted == agents.count + index).id(agents.count + index)
                             }
                         }
                         if !messages.isEmpty {
                             let before = agents.count + tasks.count
-                            label("In messages").padding(.top, before == 0 ? 4 : 12).padding(.bottom, 4)
+                            label(String(l10n: "In messages")).padding(.top, before == 0 ? 4 : 12).padding(.bottom, 4)
                             ForEach(Array(messages.enumerated()), id: \.element.id) { index, match in
                                 messageRow(match, highlighted: highlighted == before + index).id(before + index)
                             }

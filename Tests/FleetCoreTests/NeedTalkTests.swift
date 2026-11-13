@@ -3,7 +3,7 @@ import Testing
 @testable import FleetCore
 
 /// Owner feature `need_talk` (API 1.106; the owner's yes of 9 November 2026 to each mockup): a short card with its long
-/// part behind Details, options that combine, and a discussion of the item with the manager apart from his answer.
+/// part behind Details, and options that combine. Its Discuss left the app on 13 November 2026 (API 1.158).
 struct NeedTalkTests {
     private let hub = URL(string: "http://hub.test:8765")!
 
@@ -15,15 +15,14 @@ struct NeedTalkTests {
                                         from: JSONSerialization.data(withJSONObject: base.merging(extra) { _, new in new }))
     }
 
-    @Test func anItemCarriesItsDetailsItsTicksAndItsDiscussion() throws {
+    @Test func anItemCarriesItsDetailsAndItsTicksAndAnOldDiscussionDoesNotStopItsRead() throws {
+        // the hub still gives the record of a discussion from before API 1.158, which the app no longer reads
         let item = try need(["details": "Leo's plan, in full.", "multi": true, "chose": NSNull(),
                              "talk": [["who": "owner", "text": "Why now?", "ts": 2],
                                       ["who": "manager", "text": "Support ends tomorrow.", "ts": 3]]])
         #expect(item.details == "Leo's plan, in full." && item.combines)
-        #expect(item.talk?.map(\.fromOwner) == [true, false])
-        #expect(item.talk?.last?.text == "Support ends tomorrow.")
         let older = try need()                                                  // a hub before the feature
-        #expect(older.details == nil && older.multi == nil && older.talk == nil && !older.combines)
+        #expect(older.details == nil && older.multi == nil && !older.combines)
         #expect(try need(["multi": true, "options": ["Only one"]]).combines == false)     // one option is no choice
     }
 
@@ -43,7 +42,9 @@ struct NeedTalkTests {
         #expect(message.choices == nil)                                         // only an item takes ticks
     }
 
-    @Test func aDiscussionMessageIsACommandOnItsItemAndItsReceiptConfirmsIt() throws {
+    /// Nothing makes this command since Discuss left the app, but an outbox that an app before 0.1.205 saved can hold
+    /// one: it still reads, so the outbox is not blocked, and it still matches its receipt.
+    @Test func aSavedDiscussionMessageStillReadsAndItsReceiptConfirmsIt() throws {
         let command = OwnerCommand.needTalk(need: 7)
         #expect(command.route == "ui/needs/7/talk" && command.requiredFeature == NeedTalk.feature)
         #expect(try command.bodyFields(text: "  Why now?  ") as? [String: String] == ["text": "Why now?"])
@@ -51,6 +52,7 @@ struct NeedTalkTests {
         #expect(throws: HubError.self) { try command.bodyFields(text: String(repeating: "x", count: NeedTalk.most + 1)) }
         #expect(throws: HubError.self) { try OwnerCommand.needTalk(need: 0).bodyFields(text: "Hi") }
         let request = PendingRequest(hub: hub, database: "db", client: "mac", command: command, text: "Why now?")
+        #expect(try JSONDecoder().decode(PendingRequest.self, from: JSONEncoder().encode(request)) == request)
         func receipt(_ need: Int, owner: Bool) throws -> ControlReceipt {
             try JSONDecoder().decode(ControlReceipt.self, from: JSONSerialization.data(withJSONObject: [
                 "ok": true, "request_id": request.requestID.uuidString.lowercased(), "client": "mac", "replayed": false, "need": need,

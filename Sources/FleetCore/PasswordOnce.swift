@@ -88,7 +88,7 @@ public enum PasswordOnce {
         defer { if !keeps { password.clear() } }
         let publicLine: String
         do { publicLine = try await AppSSHKey.make(in: keys, run: run) } catch {
-            return .refused((error as? LocalizedError)?.errorDescription ?? "This Mac could not make its own SSH key.")
+            return .refused((error as? LocalizedError)?.errorDescription ?? String(l10n: "This Mac could not make its own SSH key."))
         }
         let program = "/bin/sh -c " + InstallPlan.quote(addKey(publicLine))
         var line = password.line()
@@ -99,7 +99,7 @@ public enum PasswordOnce {
         switch need {
         case .ssh:
             guard let channel = try? AskpassChannel() else {
-                return .refused("This Mac could not open the way its password goes to ssh.")
+                return .refused(String(l10n: "This Mac could not open the way its password goes to ssh."))
             }
             channel.serve(password)
             answer = try? await run("/usr/bin/env", ["SSH_ASKPASS=\(channel.helper)", "SSH_ASKPASS_REQUIRE=force", ssh]
@@ -113,10 +113,10 @@ public enum PasswordOnce {
         let said = answer.lines
         let sudo = said.last { $0.hasPrefix(sudoMark) }.map { String($0.dropFirst(sudoMark.count)) }
         if sudo == "refused" {
-            return .refused(need == .sudo ? "sudo on \(target.host) did not take that password." : ServerCheck.notRoot(target.user))
+            return .refused(need == .sudo ? String(l10n: "sudo on \(target.host) did not take that password.") : ServerCheck.notRoot(target.user))
         }
         guard said.contains(keyAdded), let sudo, ["root", "nopasswd", "password"].contains(sudo) else {
-            return .refused("This Mac could not add its key to \(target.user)'s ~/.ssh/authorized_keys on \(target.host).")
+            return .refused(String(l10n: "This Mac could not add its key to \(target.user)'s ~/.ssh/authorized_keys on \(target.host)."))
         }
         var keyed = target
         keyed.identityFile = AppSSHKey.path(in: keys)
@@ -125,8 +125,7 @@ public enum PasswordOnce {
             .lines.contains(keyWorks) == true
         // With `sudo` the Mac's own keys still open the server, so a server that will not take the app's key keeps them.
         guard works || need == .sudo else {
-            return .refused("\(target.host) still asks for a password with this Mac's key in \(target.user)'s "
-                            + "authorized_keys, so its SSH server reads keys from elsewhere.")
+            return .refused(String(l10n: "\(target.host) still asks for a password with this Mac's key in \(target.user)'s authorized_keys, so its SSH server reads keys from elsewhere."))
         }
         keeps = sudo == "password"
         return .ready(works ? keyed : target, keepsPassword: keeps)
@@ -162,9 +161,9 @@ public enum PasswordOnce {
         if need == .ssh, let denied = said.range(of: "permission denied") {
             let ways = said[denied.upperBound...].drop { $0 != "(" }.prefix { $0 != ")" }
             guard ways.isEmpty || ways.contains("password") || ways.contains("keyboard-interactive") else {
-                return "\(host) takes SSH keys only, so a password cannot open it. Give it this Mac's key at your provider."
+                return String(l10n: "\(host) takes SSH keys only, so a password cannot open it. Give it this Mac's key at your provider.")
             }
-            return "\(host) did not take that password for \(target.user)."
+            return String(l10n: "\(host) did not take that password for \(target.user).")
         }
         switch ServerCheck.sshRefused(answer.output, host: host) {
         case .stop(let says): return says

@@ -60,13 +60,13 @@ public enum FleetCopyError: LocalizedError, Sendable {
     case refused(Int, String), tooLarge, checksum, cannotKeep(String)
     public var errorDescription: String? {
         switch self {
-        case .refused(403, _): "This hub does not serve copies. Its team file turned them off."
-        case .refused(409, _): "The hub changed while the copy was being taken. Refresh and take it again."
+        case .refused(403, _): String(l10n: "This hub does not serve copies. Its team file turned them off.")
+        case .refused(409, _): String(l10n: "The hub changed while the copy was being taken. Refresh and take it again.")
         case .refused(let status, let message):
-            message.isEmpty ? "The hub could not give the copy (HTTP \(status))." : message
-        case .tooLarge: "This fleet is larger than 256 MiB. Take the copy on the hub server itself."
-        case .checksum: "The copy that arrived is not the copy the hub sent. Nothing was saved; try again."
-        case .cannotKeep(let reason): "The copy could not be saved: \(reason)"
+            message.isEmpty ? String(l10n: "The hub could not give the copy (HTTP \(status)).") : message
+        case .tooLarge: String(l10n: "This fleet is larger than 256 MiB. Take the copy on the hub server itself.")
+        case .checksum: String(l10n: "The copy that arrived is not the copy the hub sent. Nothing was saved; try again.")
+        case .cannotKeep(let reason): String(l10n: "The copy could not be saved: \(reason)")
         }
     }
 }

@@ -132,6 +132,22 @@ public sealed class SwiftVectorTests
     }
 
     [TestMethod]
+    public void SearchFindsTheAgentsThatFleetCoreFinds()
+    {
+        var words = Vectors.Read("swift-words.json");
+        var agents = words.GetProperty("names").EnumerateArray()
+            .Select(n => (n.GetProperty("name").GetString()!, n.TryGetProperty("title", out var t) ? t.GetString() : null)).ToList();
+        var names = new AgentBook(agents);
+        foreach (var m in words.GetProperty("matches").EnumerateArray())
+        {
+            var typed = m.GetProperty("words").GetString()!;
+            CollectionAssert.AreEqual(m.GetProperty("names").EnumerateArray().Select(n => n.GetString()!).ToArray(),
+                                      agents.Select(a => a.Item1).Where(n => names.Matches(n, typed, CultureInfo.InvariantCulture)).ToArray(),
+                                      $"\"{typed}\"");
+        }
+    }
+
+    [TestMethod]
     public void AMessagesBlocksAreFleetCores()
     {
         foreach (var t in Vectors.Read("swift-words.json").GetProperty("texts").EnumerateArray())

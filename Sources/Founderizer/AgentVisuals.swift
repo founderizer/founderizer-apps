@@ -42,13 +42,13 @@ enum AgentPresence: Equatable {
     var label: String {
         switch self {
         // UI-PATTERNS' own word for an old reading; when it was read is on hover where the state shows.
-        case .unknown: "Last reading"
-        case .setup: "In setup"
-        case .offline: "Not answering"
+        case .unknown: String(l10n: "Last reading")
+        case .setup: String(l10n: "In setup")
+        case .offline: String(l10n: "Not answering")
         case .attention(let problem): problem
-        case .limited: "Usage limit"
-        case .working, .workingAtLastRead: "Working"
-        case .online: "Online"
+        case .limited: String(l10n: "Usage limit")
+        case .working, .workingAtLastRead: String(l10n: "Working")
+        case .online: String(l10n: "Online")
         }
     }
     var color: Color {

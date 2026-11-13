@@ -279,7 +279,9 @@ public sealed class StoreTests
         for (var i = 0; i < 60 && hub.MobileReads == reads; i++) await Task.Delay(50);
         Assert.IsTrue(hub.MobileReads > reads, "a wake reads the fleet again");
         store.SetFront(false);
-        Assert.AreEqual(KeyState.Locked, store.State.Key);
+        // Behind, the open app keeps its key and its wait, so that a new request notifies (decision D4); a start still
+        // holds the key back until the window is in front.
+        Assert.AreEqual(KeyState.InHand, store.State.Key);
     }
 
     [TestMethod]
@@ -341,7 +343,6 @@ public sealed class StoreTests
         await store.RefreshAsync();
         var count = hub.Writes.Count;
         await store.ControlAsync(12, TaskControl.Stop);
-        await store.DiscussAsync(1, "Why?");
         Assert.AreEqual(count, hub.Writes.Count, "a hub without the feature gets no command");
     }
 }

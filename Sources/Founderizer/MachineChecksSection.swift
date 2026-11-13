@@ -161,7 +161,7 @@ final class MachineChecksModel {
             failure = target.problem
             return
         }
-        restarting = "Restarting \(machine)…"; failure = nil
+        restarting = String(l10n: "Restarting \(machine)…"); failure = nil
         run(InstallPlan.restart(target: target, machine: kind), hub: hub) { [weak self] in
             self?.restarting = nil
             self?.restartedAt = Date().timeIntervalSince1970
@@ -179,7 +179,7 @@ final class MachineChecksModel {
             failure = target.problem
             return
         }
-        updating = "Updating Founderizer on \(agent.agentLabel)'s server…"; updateFailure = nil
+        updating = String(l10n: "Updating Founderizer on \(agent.agentLabel)'s server…"); updateFailure = nil
         run(InstallPlan.update(target: target, machine: kind, agent: agent), hub: hub) { [weak self] in
             guard let self else { return }
             updating = nil
@@ -345,8 +345,7 @@ struct MachineStandingSection: View {
     @ViewBuilder private var restartRow: some View {
         if confirmingRestart {
             FormRow("Restart \(model.machine)?", symbol: "exclamationmark.triangle",
-                    warning: "Its agents stop while it is away, and any task running on it ends. Founderizer "
-                    + "waits for the server and looks at it again.") {
+                    warning: String(l10n: "Its agents stop while it is away, and any task running on it ends. Founderizer waits for the server and looks at it again.")) {
                 HStack(spacing: 8) {
                     Button("Cancel") { confirmingRestart = false }.buttonStyle(FleetOutlineButtonStyle())
                         .accessibilityIdentifier("machine-restart-cancel")
@@ -359,7 +358,7 @@ struct MachineStandingSection: View {
             // What a restart costs is the confirmation's to say. This row says what it is and why.
             FormRow("Restart this server", symbol: "arrow.clockwise.circle",
                     detail: model.target.isValid ? ServerStanding.restartSays(server.reading?.security?.pending_security)
-                        : "Founderizer has no connection to this server yet.") {
+                        : String(l10n: "Founderizer has no connection to this server yet.")) {
                 Button("Restart") { confirmingRestart = true }.buttonStyle(FleetOutlineButtonStyle())
                     .disabled(model.reading || model.restarting != nil || model.updating != nil || !model.target.isValid)
                     .accessibilityIdentifier("machine-restart")
@@ -389,7 +388,7 @@ struct MachineStandingSection: View {
         } else {
             FormRow("Update Founderizer on \(agent.agentLabel)'s server", symbol: "arrow.down.circle",
                     detail: model.target.isValid ? ServerStanding.updateSays([agent])
-                        : "Founderizer has no connection to this server yet.",
+                        : String(l10n: "Founderizer has no connection to this server yet."),
                     warning: model.updateFailure) {
                 Button("Update") { confirmingUpdate = agent }.buttonStyle(FleetOutlineButtonStyle())
                     .disabled(model.reading || model.restarting != nil || model.updating != nil || !model.target.isValid)
@@ -401,14 +400,13 @@ struct MachineStandingSection: View {
     /// What this update ends, in the owner's own terms, and the work it ends by name when the hub says there is any.
     private func updateCosts(_ agent: String) -> String {
         let working = store.state?.working(agent) ?? []
-        let after = " The hub's own update waits until \(agent.agentLabel) is idle; this one cannot. Founderizer looks at "
-            + "the server again afterwards."
         guard !working.isEmpty else {
-            return "Its service restarts, so anything \(agent.agentLabel) starts meanwhile is lost." + after
+            return String(l10n: "Its service restarts, so anything \(agent.agentLabel) starts meanwhile is lost. The hub's own update waits until \(agent.agentLabel) is idle; this one cannot. Founderizer looks at the server again afterwards.")
         }
-        let ends = working.count == 1 ? "“\(working[0].title)”, which \(agent.agentLabel) is working on now, ends"
-            : "the \(working.count) tasks \(agent.agentLabel) is working on now end"
-        return "Its service restarts, so \(ends)." + after
+        if working.count == 1 {
+            return String(l10n: "Its service restarts, so “\(working[0].title)”, which \(agent.agentLabel) is working on now, ends. The hub's own update waits until \(agent.agentLabel) is idle; this one cannot. Founderizer looks at the server again afterwards.")
+        }
+        return String(l10n: "Its service restarts, so the \(working.count) tasks \(agent.agentLabel) is working on now end. The hub's own update waits until \(agent.agentLabel) is idle; this one cannot. Founderizer looks at the server again afterwards.")
     }
 
     /// The card says nothing under it while the machine is simply connected. Where this Mac could not reach it,
@@ -441,7 +439,7 @@ struct MachineLookRow: View {
     }
 
     private var words: String {
-        check.passed ? "Fine" : check.warned ? "Worth knowing" : "Not fine"
+        check.passed ? String(l10n: "Fine") : check.warned ? String(l10n: "Worth knowing") : String(l10n: "Not fine")
     }
 
     private var detail: String {
@@ -450,12 +448,12 @@ struct MachineLookRow: View {
 
     private var act: (words: String, run: () -> Void)? {
         guard check.failed, check.check != VerifyChecklist.signInCheck else { return nil }
-        return ("Report a problem", { openWindow(id: FounderizerApp.reportWindow) })
+        return (String(l10n: "Report a problem"), { openWindow(id: FounderizerApp.reportWindow) })
     }
 
     private var whoActs: String? {
         guard check.failed, check.check == VerifyChecklist.signInCheck else { return nil }
-        return "Signing in is your own step, and its card is on this page."
+        return String(l10n: "Signing in is your own step, and its card is on this page.")
     }
 }
 
@@ -472,13 +470,12 @@ struct MachineConnectionFields: View {
 
     var body: some View {
         FormSection("How this Mac reaches \(model.machine)",
-                    footer: "The key is read by `ssh` on this Mac and never leaves it. Founderizer remembers the "
-                    + "address, the user and the key — never a password.") {
+                    footer: String(l10n: "The key is read by `ssh` on this Mac and never leaves it. Founderizer remembers the address, the user and the key — never a password.")) {
             FormRow("Address", symbol: "network") {
                 TextField("", text: $model.host).fleetField().frame(width: 200)
                     .accessibilityIdentifier("machine-check-host")
             }
-            FormRow("User", symbol: "person", detail: "The user you reach that server with over SSH.") {
+            FormRow("User", symbol: "person", detail: String(l10n: "The user you reach that server with over SSH.")) {
                 HStack(spacing: 8) {
                     TextField("", text: $model.user).fleetField().frame(width: 110)
                         .accessibilityIdentifier("machine-check-user")
@@ -487,7 +484,7 @@ struct MachineConnectionFields: View {
                         .accessibilityIdentifier("machine-check-port")
                 }
             }
-            FormRow("SSH key", symbol: "key", detail: model.identityFile ?? "The keys your SSH agent holds.") {
+            FormRow("SSH key", symbol: "key", detail: model.identityFile ?? String(l10n: "The keys your SSH agent holds.")) {
                 Button(model.identityFile == nil ? "Choose key" : "Change") { chooseKey() }
                     .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("machine-check-key")
             }
@@ -503,7 +500,7 @@ struct MachineConnectionFields: View {
 
     private func chooseKey() {
         let panel = NSOpenPanel()
-        panel.title = "Choose the SSH private key for \(model.machine)"
+        panel.title = String(l10n: "Choose the SSH private key for \(model.machine)")
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.showsHiddenFiles = true

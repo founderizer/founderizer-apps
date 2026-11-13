@@ -6,7 +6,7 @@ import Foundation
 /// (`AboutPanel`), and the phone's Settings in one muted line under its last group.
 public enum Credit {
     /// The words of the credit.
-    public static let line = "Made by Miguel Pieras"
+    public static let line = String(l10n: "Made by \("Miguel Pieras")")
     /// His handle on X: the words of the link.
     public static let handle = "@mpieras"
     /// His profile on X, which the handle opens.

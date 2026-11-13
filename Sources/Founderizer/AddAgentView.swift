@@ -127,7 +127,7 @@ final class AddAgentModel {
             } catch let HubError.refusal(status, words) {
                 if status == 409, attempt == 0, words.contains("team.json changed") { continue }
                 error = words; return
-            } catch { self.error = "The hub has not answered. Look at the server's page before you try again."; return }
+            } catch { self.error = String(l10n: "The hub has not answered. Look at the server's page before you try again."); return }
         }
     }
 
@@ -147,7 +147,7 @@ final class AddAgentModel {
                                                            role: self.role, reportsTo: nil)
             watchJob(store: store)
         } catch let HubError.refusal(_, words) { error = words }
-        catch { self.error = "The hub has not answered. Try again." }
+        catch { self.error = String(l10n: "The hub has not answered. Try again.") }
     }
 
     private func follow() {
@@ -203,7 +203,7 @@ struct AddAgentView: View {
     }
 
     /// **Add agent is two centred steps under one mark and one title** (D-3 of 28 October 2026, and the owner's yes of
-    /// 7 November 2026 to the mockup): the new agent's glyph and "Add agent" stand still, and under them first the
+    /// 7 November 2026 to the mockup): the new agent's glyph and "Add agent" stay over both, and under them first the
     /// servers, then its name and its AI. It is a worker that reports to the manager, which Settings › Reporting lines
     /// changes.
     private var step: some View {
@@ -215,7 +215,7 @@ struct AddAgentView: View {
                 SetupBack { model.unpick() }.keyboardShortcut(.cancelAction).accessibilityIdentifier("add-agent-back")
             }
         } step: {
-            SetupStep(title: model.busy || handingOff ? "Adding \(model.name)" : "Add agent", waits: model.busy || handingOff) {
+            SetupStep(title: model.busy || handingOff ? String(l10n: "Adding \(model.name)") : String(l10n: "Add agent"), waits: model.busy || handingOff) {
                 // The glyph it will wear: its name, at the end of the hub's list.
                 AgentGlyph(name: model.key, size: SetupMetrics.mark).environment(\.glyphTeam, team + [model.key])
             } content: {
@@ -244,7 +244,7 @@ struct AddAgentView: View {
                 .accessibilityLabel("\(server.name), \(People.agentWords(server.agents))")
                 .accessibilityIdentifier("add-agent-server-\(server.name)")
             }
-            card(symbol: "plus", title: "New server", help: nil) { addServer() } trailing: { EmptyView() }
+            card(symbol: "plus", title: String(l10n: "New server"), help: nil) { addServer() } trailing: { EmptyView() }
                 .accessibilityIdentifier("add-agent-add-server")
         }
     }
@@ -268,7 +268,7 @@ struct AddAgentView: View {
     /// "I just chose Juno and it installed claude code??! why?? it should have asked me first"). The field holds a name
     /// already, and Return in it adds nothing. The AIs are Add server's, in its cards' look.
     @ViewBuilder private var naming: some View {
-        SetupField(placeholder: "Agent name", text: $model.name, wrong: !model.name.isEmpty && model.problem != nil) {}
+        SetupField(placeholder: String(l10n: "Agent name"), text: $model.name, wrong: !model.name.isEmpty && model.problem != nil) {}
             .accessibilityIdentifier("add-agent-name")
         if let error = model.error ?? (model.name.isEmpty ? nil : model.problem) {
             SetupWarning(error)
@@ -293,7 +293,8 @@ struct AddAgentView: View {
             HStack(spacing: 12) {
                 Image(systemName: symbol).font(IconMetrics.symbol(18)).foregroundStyle(FleetStyle.text)
                     .frame(width: 28).accessibilityHidden(true)
-                Text(title).font(SetupMetrics.choiceFont).foregroundStyle(FleetStyle.text).lineLimit(1)
+                // A server's name cut in the middle: names of one fleet share their start ("hel1-worker-…").
+                Text(title).font(SetupMetrics.choiceFont).foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 8)
                 trailing()
             }
@@ -354,7 +355,7 @@ struct AddAgentView: View {
             FormSection("Installing \(receipt.agent.agentLabel) on \(receipt.server)") {
                 // The app's one loading look (T-13): moving words, no spinner.
                 FormRow("The hub registered \(receipt.agent.agentLabel). The server starts the install in a few seconds.") {
-                    ShimmeringWords(text: "Starting").accessibilityElement().accessibilityLabel("Starting")
+                    ShimmeringWords(text: String(l10n: "Starting")).accessibilityElement().accessibilityLabel("Starting")
                 }
             }
         }
@@ -392,7 +393,7 @@ struct ServerJobView: View {
             }
             if job.state == "needs_owner", let prompt = job.prompt { signIn(prompt) }
             if let retry {
-                FormRow("Try again", detail: "The server checks each step again and repeats only what is missing.") {
+                FormRow("Try again", detail: String(l10n: "The server checks each step again and repeats only what is missing.")) {
                     Button("Try again") { retry() }.buttonStyle(FleetPrimaryButtonStyle()).accessibilityIdentifier("job-retry")
                 }
             }
@@ -400,21 +401,21 @@ struct ServerJobView: View {
     }
 
     private var title: String {
-        let agent = job.agent?.agentLabel ?? "The agent", provider = providerName(job.runtime ?? "")
+        let agent = job.agent?.agentLabel ?? String(l10n: "The agent"), provider = providerName(job.runtime ?? "")
         if job.kind == "prepare" {
-            return job.state == "done" ? "\(provider) is ready on \(server)" : job.state == "failed" ?
-                "The preparation of \(provider) stopped" : "Preparing \(provider) on \(server)"
+            return job.state == "done" ? String(l10n: "\(provider) is ready on \(server)") : job.state == "failed" ?
+                String(l10n: "The preparation of \(provider) stopped") : String(l10n: "Preparing \(provider) on \(server)")
         }
         if job.kind == "remove" {
-            return job.state == "done" ? "\(agent) is removed from \(server)" : job.state == "failed" ?
-                "The removal of \(agent) stopped" : "Removing \(agent) from \(server)"
+            return job.state == "done" ? String(l10n: "\(agent) is removed from \(server)") : job.state == "failed" ?
+                String(l10n: "The removal of \(agent) stopped") : String(l10n: "Removing \(agent) from \(server)")
         }
-        return job.state == "done" ? "\(agent) is installed on \(server)" : job.state == "failed" ? "The install of \(agent) stopped" :
-            "Installing \(agent) on \(server)"
+        return job.state == "done" ? String(l10n: "\(agent) is installed on \(server)") : job.state == "failed" ? String(l10n: "The install of \(agent) stopped") :
+            String(l10n: "Installing \(agent) on \(server)")
     }
 
     private func stepTitle(_ id: String, _ title: String) -> String {
-        id == "runtime" ? "AI provider: \(providerName(job.runtime ?? ""))" : title
+        id == "runtime" ? String(l10n: "AI provider: \(providerName(job.runtime ?? ""))") : title
     }
 
     private var order: [String] { Servers.steps(job, onMac: onMac).map(\.id) }
@@ -458,7 +459,7 @@ struct ServerJobView: View {
                 }
             }
         } else if let command = prompt.terminalCommand {
-            FormBlock("Sign in to Claude Code", detail: "Run this command in a terminal on \(server). Sign in with /login, then type /exit. Founderizer goes on by itself.") {
+            FormBlock("Sign in to Claude Code", detail: String(l10n: "Run this command in a terminal on \(server). Sign in with /login, then type /exit. Founderizer goes on by itself.")) {
                 Text(command).font(FormMetrics.code).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true).padding(10).frame(maxWidth: .infinity, alignment: .leading)
                     .background(FleetStyle.canvas, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
@@ -475,7 +476,7 @@ struct ServerJobView: View {
                     .accessibilityIdentifier("job-sign-in")
             }
         } else {
-            FormRow("The server asks for a sign-in that this app does not know.", warning: "Update the app.")
+            FormRow("The server asks for a sign-in that this app does not know.", warning: String(l10n: "Update the app."))
         }
     }
 }

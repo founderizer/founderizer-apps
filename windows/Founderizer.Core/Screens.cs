@@ -39,7 +39,7 @@ public sealed record Credit(string Line, string Handle, Uri Profile)
 /// <summary>The screen models of step 1, each built from one <see cref="StoreState"/>: what a screen draws, with the
 /// rules and the words of the Mac's views and the iPhone's pages. A model is a record whose lists compare by value, so
 /// two builds with the same rows are equal and <see cref="RowDiff"/> names the rows that changed.</summary>
-public static class Screens
+public static partial class Screens
 {
     // ---------------------------------------------------------------- the frame
 
@@ -76,11 +76,14 @@ public static class Screens
             var at = ChatLine.PreviewTime(agent.Name, agent.Last, fleet.Tasks);
             // While it works, its line says what it does now (hub 1.148), as on the Mac and the iPhone.
             var line = status is { State: AgentState.Working, Old: false } ? ChatLine.ActionNow(agent.Name, fleet.Tasks) ?? preview : preview;
+            var more = line is null ? null : System.Text.RegularExpressions.Regex.Match(line, " \u00b7 \\+[0-9]+\\z");
             rows.Add(new AgentRow
             {
                 Name = agent.Name,
                 Label = s.Names.Label(agent.Name),
                 Line = line,
+                LineText = more is { Success: true } ? line![..more.Index] : line,
+                LineCount = more is { Success: true } ? more.Value : null,
                 Time = line is not null && at is { } t ? TimeWords.RowTime(t, hubNow, context) : null,
                 Mark = MarkLook.Of(s.MarkOf(agent.Name), status.MarkState, moves: !reduceMotion && !status.Old),
                 Status = status,
@@ -99,6 +102,7 @@ public static class Screens
             TasksSelected = page.Kind is PageKind.Tasks or PageKind.Task,
             SettingsSelected = page.Kind is PageKind.Settings or PageKind.AddThisPc,
             ShowsSearch = fleet is not null && !s.HasNoHub,
+            Reading = s.ReadsTheHub,
             Agents = ValueList.Of(rows),
         };
     }
@@ -107,18 +111,22 @@ public static class Screens
 
     /// <summary>One agent's chat: its pill, its rows (stamps, his messages, the agent's replies and the request cards in
     /// their places), the waiting line, the composer and the panel beside it.</summary>
-    public static ChatModel Chat(StoreState s, string agent, DateTimeOffset now, ScreenContext context, bool reduceMotion = false)
+    public static ChatModel Chat(StoreState s, string agent, DateTimeOffset now, ScreenContext context, bool reduceMotion = false,
+                                 int shown = EarlierStep)
     {
         var fleet = s.Fleet;
         var entry = s.Agent(agent);
         var items = s.Items(agent);
-        var waiting = new[] { s.Pending, s.Delivered }.FirstOrDefault(r =>
-            r is { NeedId: null, Command: null } && (r.Recipient ?? "manager") == agent);
+        var waiting = OnItsWayTo(s, agent);
         var open = (fleet?.Needs ?? []).Where(n => n.By == agent).OrderBy(n => n.Raised).ToList();
         var ids = open.Select(n => n.Id).ToHashSet();
         var requests = open.Concat((fleet?.AnsweredNeeds ?? []).Where(n => n.By == agent && !ids.Contains(n.Id))).ToList();
         var lines = items.ToList();
         if (waiting is not null && !OwnerStore.Holds(waiting, items)) lines.Add(OnItsWay(waiting));
+        // The Mac's "Earlier messages" (ThreadViews): the newest items first, and the press adds as many again. A PC holds
+        // what it read since its first read of the chat (the newest 30, then the newer ones): no route gives older pages.
+        var earlier = lines.Count > Math.Max(shown, 1);
+        if (earlier) lines = lines.Skip(lines.Count - Math.Max(shown, 1)).ToList();
         var places = ChatPlaces.Of(requests, items);
         var byId = requests.GroupBy(n => n.Id).ToDictionary(g => g.Key, g => g.First());
         var rows = new List<ChatRow>();
@@ -154,11 +162,26 @@ public static class Screens
             Rows = ValueList.Of(rows),
             Waiting = line,
             WaitingMark = MarkLook.Of(s.MarkOf(agent), AgentState.Working, moves: !reduceMotion && moving),
+            Earlier = earlier ? "Earlier messages" : null,
             Loading = blank && !s.HasRead(agent) && s.ReadCanCome,
             Empty = blank && s.HasRead(agent) && entry?.Last is null,
             Composer = Composer(s, agent, canChat, now),
             Panel = Panel(s, agent, now, context, reduceMotion),
         };
+    }
+
+    /// <summary>How many items a chat shows at first, and how many each "Earlier messages" adds (the Mac's 60).</summary>
+    public const int EarlierStep = 60;
+
+    /// <summary>His message to this agent on its way (WordsOnTheirWay.request): the waiting request while it is on its way
+    /// or waits for its receipt, on its own hub and generation, and not a command, a correction or a refused one (the
+    /// request line has those); else the one that went, until the chat holds the hub's copy.</summary>
+    private static PendingRequest? OnItsWayTo(StoreState s, string agent)
+    {
+        bool Here(PendingRequest r) => r.Hub == s.Hub && r.Database == s.Fleet?.Db && r.Command is null &&
+                                       r.ReplacesRequestId is null && r.NeedId is null && (r.Recipient ?? "manager") == agent;
+        if (s.Pending is { Refusal: null } pending && Here(pending)) return pending;
+        return s.Delivered is { } delivered && Here(delivered) ? delivered : null;
     }
 
     /// <summary>His message on its way, as the item it will be (MobileChatItem(waiting:)).</summary>
@@ -205,21 +228,20 @@ public static class Screens
     {
         var mine = waiting is not null && string.Equals(item.Key, waiting.RequestIdText, StringComparison.OrdinalIgnoreCase) &&
                    item.Kind == "message";
+        // His message on its way: its time once the hub took it, "Sending…" while it goes (after a second), and no words
+        // while it waits for its receipt: the request line over the composer says that (the Mac's pendingBar).
         string? slot = null;
-        WriteAction action = WriteAction.None;
-        var warning = false;
+        var unconfirmed = false;
         if (mine && waiting is not null)
         {
             if (s.Delivered?.RequestId == waiting.RequestId) slot = MessageTime(item.Ts, Unix(now), context);
-            else if (waiting.Refusal is not null) { slot = waiting.Refusal; action = WriteAction.Discard; warning = true; }
             else if (s.Sending) slot = "Sending…";
-            else
-            {
-                slot = "Not sent";
-                warning = true;
-                action = s.CanRetry(now) ? WriteAction.TryAgain : WriteAction.None;
-            }
+            else unconfirmed = true;
         }
+        string? hover = null;
+        if (item.Kind == "message" && !mine)
+            hover = MessageWords.TimeHover(TimeWords.DateAndTime(item.Ts, context), item.ReadAt is not null,
+                                           item.Edited is { } edited ? MessageTime(edited, Unix(now), context) : null);
         return new ChatRow
         {
             Key = item.Id,
@@ -227,10 +249,11 @@ public static class Screens
             Text = item.Text,
             Blocks = ValueList.Of(MessageBlock.Parse(item.Text)),
             Time = item.Ts,
-            TimeWords = slot ?? MessageTime(item.Ts, Unix(now), context),
-            SlotIsWarning = warning,
-            SlotAction = action,
-            SlotHoldsBack = mine && s.Sending && s.Delivered?.RequestId != waiting!.RequestId && waiting.Refusal is null,
+            TimeWords = unconfirmed ? null : slot ?? MessageTime(item.Ts, Unix(now), context),
+            TimeHover = hover,
+            SlotIsWarning = false,
+            SlotAction = WriteAction.None,
+            SlotHoldsBack = mine && s.Sending && s.Delivered?.RequestId != waiting!.RequestId,
             Correction = item.Replaces is not null,
             Read = item.ReadAt is not null,
             Files = ValueList.Of(item.Attachments),
@@ -258,8 +281,6 @@ public static class Screens
         var todo = need.AsksForSecret ? "" : need.Todo;
         var isShort = need.Details is not null || Characters(need.Why) <= NeedTalkWhy;
         var hasMore = need.Details is not null || !isShort || todo.Length > 0;
-        var discussable = need.IsOpen && need.Conversation is null && s.Offers("need_talk");
-        var talk = need.Talk ?? [];
         var answer = (onItsWay?.Text ?? need.Answer ?? "").Trim();
         var inHub = s.Agent(need.By) is not null;
         return new RequestCard
@@ -278,10 +299,7 @@ public static class Screens
             DetailsIsCode = need.DoorScript is not null,
             Todo = todo.Length > 0 ? todo : null,
             TodoLabel = "What it needs from you",
-            Discussable = discussable,
-            ShowsDiscuss = discussable && talk.Count == 0,
-            Talk = ValueList.Of(talk),
-            DiscussPlaceholder = "Message " + s.Names.Label(ManagerName(s)),
+            WhyBlocks = ValueList.Of(NeedBody.Blocks(need.Why)),
             From = $"From {s.Names.Label(need.By)} · {MessageTime(need.Raised, Unix(now), context)}",
             Agent = need.By,
             Mark = inHub ? MarkLook.Of(s.MarkOf(need.By), s.StatusOf(need.By, now).MarkState, moves: false) : null,
@@ -326,7 +344,8 @@ public static class Screens
             Placeholder = "Your answer",
             Draft = draft,
             ShowsPlus = s.Offers("attachments") && need.TakesFiles,
-            Files = s.Staged.GetValueOrDefault(composer) ?? ValueList<StagedFile>.Empty,
+            Files = Unsent(s, s.Staged.GetValueOrDefault(composer)),
+            Chips = ValueList.Of(Unsent(s, s.Staged.GetValueOrDefault(composer)).Select(f => Chip(s, f))),
             FilesWait = s.FilesWait(composer),
             Note = note?.Words,
             NoteIsWarning = note?.Warning ?? false,
@@ -372,7 +391,8 @@ public static class Screens
         var date = context.LocalTime(time);
         var days = (date.Date - context.Day(now)).Days;
         var format = context.Culture.DateTimeFormat;
-        if (days <= 0) return date.ToString(format.ShortTimePattern, context.Culture);
+        if (days == 0) return date.ToString(format.ShortTimePattern, context.Culture);
+        if (days < 0) return date.ToString(format.MonthDayPattern.Replace("MMMM", "MMM"), context.Culture);
         if (days <= 6) return date.ToString("ddd ", context.Culture) + date.ToString(format.ShortTimePattern, context.Culture);
         return date.ToString(format.MonthDayPattern.Replace("MMMM", "MMM"), context.Culture);
     }
@@ -389,7 +409,7 @@ public static class Screens
         else if (s.FileWaitWords("agent:" + agent) is { } wait) { note = wait.Words; warning = wait.Warning; }
         else if (count > StoreState.TextLimit) { note = "Use no more than 16,000 characters."; warning = true; }
         else if (count > 15_500) note = $"{count.ToString("N0", CultureInfo.CurrentCulture)} of 16,000 characters";
-        var files = s.Staged.GetValueOrDefault("agent:" + agent) ?? ValueList<StagedFile>.Empty;
+        var files = Unsent(s, s.Staged.GetValueOrDefault("agent:" + agent));
         var waits = s.FilesWait("agent:" + agent);
         return new ComposerModel
         {
@@ -398,6 +418,7 @@ public static class Screens
             ShowsPlus = canChat && s.Offers("attachments"),
             Draft = draft,
             Files = files,
+            Chips = ValueList.Of(files.Select(f => Chip(s, f))),
             Note = note,
             NoteIsWarning = warning,
             // A file on its way, or one that did not go, holds the message back (filesAreWaiting).
@@ -405,6 +426,13 @@ public static class Screens
             SendHover = "Send this message to " + s.Names.Label(agent),
         };
     }
+
+    /// <summary>The files of a composer that no waiting request carries: the files of a message on its way are in the
+    /// request line, not in the composer (StagedFilesStrip).</summary>
+    private static ValueList<StagedFile> Unsent(StoreState s, ValueList<StagedFile>? files) =>
+        files is null ? ValueList<StagedFile>.Empty
+        : s.Pending is { } p && p.Attachments.Count > 0 ? ValueList.Of(files.Where(f => f.Id is not { } id || !p.Attachments.Contains(id)))
+        : files;
 
     /// <summary>Why a chat takes no message, in the owner's words (chatUnavailableWords), or null.</summary>
     public static string? UnavailableWords(StoreState s, string agent)
@@ -427,7 +455,13 @@ public static class Screens
             .Select(w => new UsageRow(ShortLabel(w.Label), Percent(w),
                                       !s.ShowsCurrent(now) ? UsageLevel.Old : Percent(w) >= 100 ? UsageLevel.Full
                                           : Percent(w) >= 80 ? UsageLevel.High : UsageLevel.Low,
-                                      w.ResetsAt is { } r && r > hubNow ? ComingTime(Math.Round(r / 60) * 60, hubNow, context) : null))
+                                      w.ResetsAt is { } r && r > hubNow ? ComingTime(Minute(r), hubNow, context) : null)
+            {
+                // The Mac's usageWords: the window's whole name and share, and when it resets.
+                Hover = UsageWords.Hover(w.Label ?? ShortLabel(w.Label), (w.UsedPercent ?? 0).ToString("0.#", context.Culture),
+                                         w.ResetsAt is { } at ? TimeWords.DateAndTime(Minute(at), context) : null,
+                                         entry?.Limit is { } l ? ComingTime(l.Until, hubNow, context) : null),
+            })
             .ToList();
         var warning = entry?.Role == "manager" && s.Fleet?.ManagerWarning is { } w
             ? $"The manager needs attention: {HubWords(w.Kind)} since {TimeWords.DateAndTime(w.Since, context)}." : null;
@@ -449,6 +483,9 @@ public static class Screens
             Machine = string.IsNullOrEmpty(entry?.Machine) ? null : entry!.Machine,
         };
     }
+
+    /// <summary>A reset time at its minute, half a minute up (ResetLine.minute).</summary>
+    private static double Minute(double time) => Math.Round(time / 60, MidpointRounding.AwayFromZero) * 60;
 
     private static int Percent(MobileUsageWindow window) => (int)Math.Round(window.UsedPercent ?? 0, MidpointRounding.AwayFromZero);
 
@@ -550,9 +587,12 @@ public static class Screens
         }
         var ended = lane.Ended.Select(day => new EndedDayModel(DayWords(day.Start, hubNow, context),
             ValueList.Of(day.Needs.Select(n => new EndedRowModel("need-" + n.Id, n.Id, n.Title, n.By, s.Names.Label(n.By),
-                                                                  MarkLook.Of(s.MarkOf(n.By), AgentState.Online, false), null)))))
+                                                                  MarkLook.Of(s.MarkOf(n.By), s.StatusOf(n.By, now).MarkState, false), null)))))
             .ToList();
-        var atHand = hand is { } h ? lane.Open.FirstOrDefault(n => n.Id == h) : null;
+        // A request that he chose and that ended (he answered it, here or elsewhere, or opened it from the answered ones)
+        // stays at hand with the check of its answer until he chooses another (NeedStep.answers).
+        var endedChoice = chosen is { } c && !openIds.Contains(c) ? all.FirstOrDefault(n => n.Id == c) : null;
+        var atHand = endedChoice ?? (hand is { } h ? lane.Open.FirstOrDefault(n => n.Id == h) : null);
         return new NeedsModel
         {
             OpenCount = lane.Open.Count + ownerTasks.Count,
@@ -562,7 +602,7 @@ public static class Screens
             EndedWords = $"{lane.EndedCount} answered",
             Ended = ValueList.Of(ended),
             AtHand = atHand is null ? null : Step(s, atHand, waits.GetValueOrDefault(atHand.Id) ?? [], now, context),
-            Empty = atHand is null && ownerTasks.Count == 0,
+            Empty = fleet is not null && atHand is null && ownerTasks.Count == 0,
         };
     }
 
@@ -578,8 +618,6 @@ public static class Screens
         var hasMore = need.Details is not null || !isShort || todo.Length > 0;
         var blocks = MessageBlock.Parse(need.Why);
         var answer = (onItsWay?.Text ?? need.Answer ?? "").Trim();
-        var talk = need.Talk ?? [];
-        var discussable = !ended && need.Conversation is null && s.Offers("need_talk");
         return new RequestStep
         {
             Id = need.Id,
@@ -591,7 +629,7 @@ public static class Screens
             Why = need.Why,
             Short = isShort,
             Centred = Characters(need.Why) <= NeedTalkWhy && blocks.Count == 1 && blocks[0].Kind == MessageBlock.Kinds.Paragraph,
-            ShortWhy = string.Join(' ', need.Why.Split('\n')),
+            ShortWhy = string.Join(' ', need.Why.ReplaceLineEndings("\n").Split('\n')),
             MoreClosed = !hasMore ? null : isShort ? (need.DoorHost is not null && need.Details is not null ? "Script" : "Details") : "Show all",
             MoreOpen = !hasMore ? null : isShort ? (need.DoorHost is not null && need.Details is not null ? "Script" : "Details") : "Show less",
             MoreChevron = hasMore && isShort,
@@ -604,10 +642,7 @@ public static class Screens
             Options = Options(s, need),
             Answer = AnswerBox(s, need),
             AsksForSecret = need.AsksForSecret,
-            Discussable = discussable,
-            ShowsDiscussion = discussable && talk.Count > 0,
-            Talk = ValueList.Of(talk),
-            DiscussPlaceholder = "Message " + s.Names.Label(ManagerName(s)),
+            AnswerFiles = ValueList.Of(s.Items(need.By).LastOrDefault(i => i.AnswerTo == need.Id)?.Attachments ?? []),
         };
     }
 
@@ -649,20 +684,21 @@ public static class Screens
                     Count = tasks.Count,
                     Cards = column == ActivityColumn.Done ? ValueList<TaskCardRow>.Empty
                         : ValueList.Of(tasks.Select(t => TaskCard(s, fleet, t, column, waits, now))),
-                    Ended = column == ActivityColumn.Done ? Ended(s, fleet, tasks, context) : null,
+                    Ended = column == ActivityColumn.Done ? Ended(s, fleet, tasks, now, context) : null,
                 });
             }
         }
         var hasTasks = fleet is not null && Activity.AllTasks(fleet).Any(t => agent is null || t.Owner == agent);
         return new TaskBoardModel
         {
+            Waiting = fleet is null,
             Periods = ValueList.Of(periods),
             Period = period,
             Agents = ValueList.Of(agents),
             Agent = agent,
             Lanes = ValueList.Of(lanes),
-            Empty = !any,
-            EmptyWords = any ? null : hasTasks ? "No tasks" : "No tasks yet",
+            Empty = fleet is not null && !any,
+            EmptyWords = fleet is null || any ? null : hasTasks ? "No tasks" : "No tasks yet",
         };
     }
 
@@ -692,13 +728,14 @@ public static class Screens
         };
     }
 
-    private static EndedModel Ended(StoreState s, MobileSnapshot fleet, IReadOnlyList<MobileTaskHead> tasks, ScreenContext context)
+    private static EndedModel Ended(StoreState s, MobileSnapshot fleet, IReadOnlyList<MobileTaskHead> tasks, DateTimeOffset now,
+                                    ScreenContext context)
     {
         var ended = new EndedTasks(tasks, context);
         return new EndedModel
         {
             Failed = ValueList.Of(ended.Failed.Select(t => new EndedRowModel("task-" + t.Id, t.Id, t.Title, t.Owner,
-                s.Names.Label(t.Owner), MarkLook.Of(s.MarkOf(t.Owner), AgentState.Online, false), t.FailedResult()))),
+                s.Names.Label(t.Owner), MarkLook.Of(s.MarkOf(t.Owner), s.StatusOf(t.Owner, now).MarkState, false), t.FailedResult()))),
             Rest = ended.Rest,
             RestWords = ended.Rest == 0 ? null : ended.Failed.Count == 0 ? "Show all" : $"{ended.Rest} more",
             Days = ValueList.Of(ended.Days.Select(day => new EndedTaskDay(DayWords(day.Start, fleet.Time, context),
@@ -706,7 +743,10 @@ public static class Screens
                     "group-" + g.Id, g.Title, g.Owner, s.Names.Label(g.Owner),
                     g.Tasks.Count == 1 ? (g.Tasks[0].Accepted != 1 ? TaskWords.State(g.Tasks[0], fleet, s.Names) : null)
                                        : "×" + g.Tasks.Count,
-                    ValueList.Of(g.Tasks.Select(t => new EndedTask(t.Id, t.Title, MessageTime(t.ActivityTime(), fleet.Time, context))))))))))
+                    ValueList.Of(g.Tasks.Select(t => new EndedTask(t.Id, t.Title, MessageTime(t.ActivityTime(), fleet.Time, context)))))
+                {
+                    Mark = MarkLook.Of(s.MarkOf(g.Owner), s.StatusOf(g.Owner, now).MarkState, false),
+                })))))
         };
     }
 
@@ -879,6 +919,8 @@ public static class Screens
 public sealed record ConnectionLine(string Words, bool ActionIsSettings)
 {
     public string ActionWords => ActionIsSettings ? "Settings" : "Try again";
+    /// <summary>The line's button; none for Settings on the Settings page itself (HubBanner.action).</summary>
+    public bool ShowsAction { get; init; } = true;
 }
 
 public sealed record PaneModel
@@ -890,6 +932,10 @@ public sealed record PaneModel
     public bool TasksSelected { get; init; }
     public bool SettingsSelected { get; init; }
     public bool ShowsSearch { get; init; }
+    /// <summary>The first read of the hub runs: one muted line where the agents will stand, after a second (the screen's
+    /// timing), and nothing else.</summary>
+    public bool Reading { get; init; }
+    public string ReadingWords => "Reading the hub\u2026";
     public ValueList<AgentRow> Agents { get; init; } = ValueList<AgentRow>.Empty;
 }
 
@@ -901,6 +947,10 @@ public sealed record AgentRow
     public string Label { get; init; } = "";
     /// <summary>The line under the name, or null: the row shows the name alone.</summary>
     public string? Line { get; init; }
+    /// <summary>The line without its " · +N" count, which a narrow row cuts with "…" (the Mac's splitCount).</summary>
+    public string? LineText { get; init; }
+    /// <summary>The line's " · +N" count, or null: a narrow row keeps it whole after the cut text.</summary>
+    public string? LineCount { get; init; }
     /// <summary>The time at the end of the name's line, only with a line.</summary>
     public string? Time { get; init; }
     public MarkLook Mark { get; init; } = null!;
@@ -916,7 +966,7 @@ public sealed record AgentRow
 public enum ChatRowKind { Stamp, Message, Reply, Request }
 
 /// <summary>What the one action under a write says: none, Try again, or Discard.</summary>
-public enum WriteAction { None, TryAgain, Discard }
+public enum WriteAction { None, TryAgain, Discard, RefreshReceipt }
 
 /// <summary>One row of a chat: a stamp, his message, the agent's reply, or a request card.</summary>
 public sealed record ChatRow
@@ -932,6 +982,11 @@ public sealed record ChatRow
     public WriteAction SlotAction { get; init; }
     /// <summary>"Sending…" shows only after a second.</summary>
     public bool SlotHoldsBack { get; init; }
+    /// <summary>The hover of a message's time in its footer: the date and time, whether the agent read it, and when it
+    /// was edited; null for a reply and for his message on its way.</summary>
+    public string? TimeHover { get; init; }
+    /// <summary>The footer's action under the pointer: it copies <see cref="Text"/>, the message as he wrote it.</summary>
+    public string CopyWords => "Copy message";
     public bool Correction { get; init; }
     public bool Read { get; init; }
     public bool Pushed { get; init; }
@@ -951,6 +1006,10 @@ public sealed record ChatModel
     public WaitingLineModel? Waiting { get; init; }
     /// <summary>The mark before "Thinking": it moves with the line.</summary>
     public MarkLook WaitingMark { get; init; } = null!;
+    /// <summary>"Earlier messages" over the first row while the chat holds more than it shows, else null.</summary>
+    public string? Earlier { get; init; }
+    /// <summary>The words of the button that brings the end back while he reads higher up (the screen decides when).</summary>
+    public string LatestWords => "Latest";
     /// <summary>"Reading…": the chat was not read yet.</summary>
     public bool Loading { get; init; }
     /// <summary>The empty chat's logo.</summary>
@@ -966,6 +1025,8 @@ public sealed record ComposerModel
     public bool ShowsPlus { get; init; }
     public string Draft { get; init; } = "";
     public ValueList<StagedFile> Files { get; init; } = ValueList<StagedFile>.Empty;
+    /// <summary>Each file of <see cref="Files"/> as its chip draws it.</summary>
+    public ValueList<FileChip> Chips { get; init; } = ValueList<FileChip>.Empty;
     public string? Note { get; init; }
     public bool NoteIsWarning { get; init; }
     /// <summary>Send shows only while this is true.</summary>
@@ -975,7 +1036,10 @@ public sealed record ComposerModel
 
 public enum UsageLevel { Low, High, Full, Old }
 
-public sealed record UsageRow(string Label, int Percent, UsageLevel Level, string? Resets);
+public sealed record UsageRow(string Label, int Percent, UsageLevel Level, string? Resets)
+{
+    public string Hover { get; init; } = "";
+}
 
 public sealed record AgentPanel
 {
@@ -989,6 +1053,7 @@ public sealed record AgentPanel
     public string? Warning { get; init; }
     public string? LimitWords { get; init; }
     public bool ShowsUsage { get; init; }
+    public string UsageHeading => "Usage";
     public ValueList<UsageRow> Usage { get; init; } = ValueList<UsageRow>.Empty;
     public string? Provider { get; init; }
     public string? Runtime { get; init; }
@@ -1006,6 +1071,8 @@ public sealed record OptionsModel
     /// <summary>The option whose press waits for the store ("Sending…" at its end, after a second).</summary>
     public int? WaitingPress { get; init; }
     public static string SendWords(int ticked) => $"Send {ticked}";
+    /// <summary>Send of ticked options is on with one tick at least while the store can write.</summary>
+    public static bool CanSendTicks(StoreState s, DateTimeOffset now, int ticked) => ticked > 0 && s.CanWrite(now);
 }
 
 public sealed record AnswerBoxModel
@@ -1015,6 +1082,7 @@ public sealed record AnswerBoxModel
     public bool ShowsPlus { get; init; }
     public string PlusHover { get; init; } = "";
     public ValueList<StagedFile> Files { get; init; } = ValueList<StagedFile>.Empty;
+    public ValueList<FileChip> Chips { get; init; } = ValueList<FileChip>.Empty;
     /// <summary>A file of this box is on its way up, or did not go: the answer waits for it.</summary>
     public bool FilesWait { get; init; }
     /// <summary>The line under the box, or null: the outbox, a file, or the count of characters.</summary>
@@ -1047,11 +1115,14 @@ public sealed record RequestCard
     public bool DetailsIsCode { get; init; }
     public string? Todo { get; init; }
     public string TodoLabel { get; init; } = "";
-    public bool Discussable { get; init; }
-    public bool ShowsDiscuss { get; init; }
-    public ValueList<NeedMessage> Talk { get; init; } = ValueList<NeedMessage>.Empty;
-    public string DiscussPlaceholder { get; init; } = "";
+    /// <summary>The heading of an answered card that he opened, and the label over his answer in it.</summary>
+    public string AnsweredHeading => "Answered";
+    public string YourAnswerLabel => "Your answer";
+    /// <summary>The reason as NeedBody draws it: items and paragraphs; a long reason, closed, shows its first block in
+    /// three lines.</summary>
+    public ValueList<NeedBody.Block> WhyBlocks { get; init; } = ValueList<NeedBody.Block>.Empty;
     public string From { get; init; } = "";
+
     public string Agent { get; init; } = "";
     /// <summary>The 16-px mark before "From", only for an agent of the hub.</summary>
     public MarkLook? Mark { get; init; }
@@ -1095,8 +1166,9 @@ public sealed record NeedsModel
     public string EndedWords { get; init; } = "";
     public ValueList<EndedDayModel> Ended { get; init; } = ValueList<EndedDayModel>.Empty;
     public RequestStep? AtHand { get; init; }
-    /// <summary>"Nothing needs you".</summary>
+    /// <summary>"Nothing needs you", with its mark (drawn by itself after his last answer); never before the first reading.</summary>
     public bool Empty { get; init; }
+    public string EmptyWords => "Nothing needs you";
 }
 
 /// <summary>The request at hand (NeedStep).</summary>
@@ -1125,11 +1197,8 @@ public sealed record RequestStep
     public OptionsModel Options { get; init; } = new();
     public AnswerBoxModel Answer { get; init; } = new();
     public bool AsksForSecret { get; init; }
-    public bool Discussable { get; init; }
-    /// <summary>The discussion shows open (it has lines); else the quiet "Discuss" link.</summary>
-    public bool ShowsDiscussion { get; init; }
-    public ValueList<NeedMessage> Talk { get; init; } = ValueList<NeedMessage>.Empty;
-    public string DiscussPlaceholder { get; init; } = "";
+    /// <summary>The files of his answer, under the check of an ended request at hand.</summary>
+    public ValueList<MessageAttachment> AnswerFiles { get; init; } = ValueList<MessageAttachment>.Empty;
 }
 
 public sealed record Choice<T>(T Value, string Words);
@@ -1153,7 +1222,11 @@ public sealed record TaskCardRow
 
 public sealed record EndedTask(long Id, string Title, string Time);
 
-public sealed record EndedGroup(string Key, string Title, string Agent, string AgentLabel, string? Note, ValueList<EndedTask> Tasks);
+public sealed record EndedGroup(string Key, string Title, string Agent, string AgentLabel, string? Note, ValueList<EndedTask> Tasks)
+{
+    /// <summary>The agent's glyph, grey while it does not answer.</summary>
+    public MarkLook? Mark { get; init; }
+}
 
 public sealed record EndedTaskDay(string Day, ValueList<EndedGroup> Groups);
 
@@ -1179,6 +1252,12 @@ public sealed record LaneModel
 public sealed record TaskBoardModel
 {
     public string Title => "Tasks";
+    /// <summary>No reading yet: the page shows its title alone (the Mac's waitingPage).</summary>
+    public bool Waiting { get; init; }
+    public string PeriodLabel => "Period";
+    public string PeriodHover => "Show the tasks of one period";
+    public string AgentLabel => "Agent";
+    public string AgentHover => "Show the tasks of one agent";
     public ValueList<Choice<ActivityPeriod>> Periods { get; init; } = ValueList<Choice<ActivityPeriod>>.Empty;
     public ActivityPeriod Period { get; init; }
     public ValueList<AgentChoice> Agents { get; init; } = ValueList<AgentChoice>.Empty;
@@ -1211,6 +1290,9 @@ public sealed record ControlsModel
     public bool ShowsResume { get; init; }
     public TaskControl ResumeAction { get; init; }
     public bool Enabled { get; init; }
+    public string PauseWords => "Pause";
+    public string StopWords => "Stop";
+    public string ResumeWords => "Resume";
 }
 
 public sealed record GuidanceModel
@@ -1261,6 +1343,7 @@ public sealed record SettingsModel
     public string? AddressError { get; init; }
     /// <summary>"Last reading" with its age, only while the reading is not current.</summary>
     public string? LastReading { get; init; }
+    public string LastReadingLabel => "Last reading";
     public string DeviceHeading => "This PC";
     public string KeyLabel => "Device key";
     public string KeyWords { get; init; } = "";

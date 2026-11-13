@@ -17,7 +17,7 @@ public enum AppSSHKey {
     public enum Failure: LocalizedError, Equatable, Sendable {
         case notMade(String)
         public var errorDescription: String? {
-            switch self { case .notMade(let says): return "This Mac could not make its own SSH key: \(says)" }
+            switch self { case .notMade(let says): return String(l10n: "This Mac could not make its own SSH key: \(says)") }
         }
     }
 
@@ -62,7 +62,7 @@ public enum AppSSHKey {
         if !FileManager.default.fileExists(atPath: key) {
             let made = try await run(keygen, ["-q", "-t", "ed25519", "-N", "", "-C", comment(macName), "-f", key], nil, 60)
             if !made.ok && !FileManager.default.fileExists(atPath: key) {
-                throw Failure.notMade(made.lines.last ?? "ssh-keygen answered \(made.status).")
+                throw Failure.notMade(made.lines.last ?? String(l10n: "ssh-keygen answered \(Int(made.status))."))
             }
         }
         _ = chmod(key, 0o600)
@@ -70,12 +70,12 @@ public enum AppSSHKey {
         let derived = try await run(keygen, ["-y", "-f", key], nil, 60)
         let line = derived.output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard derived.ok, line.hasPrefix("ssh-ed25519 ") else {
-            throw Failure.notMade("\(key) is not a key it can read.")
+            throw Failure.notMade(String(l10n: "\(key) is not a key it can read."))
         }
         // `-y` gives the key without its comment where the file has none of its own.
         let full = line.split(separator: " ").count >= 3 ? line : line + " " + comment(macName)
         try (full + "\n").write(toFile: key + ".pub", atomically: true, encoding: .utf8)
-        guard let written = publicLine(in: folder) else { throw Failure.notMade("\(key).pub could not be written.") }
+        guard let written = publicLine(in: folder) else { throw Failure.notMade(String(l10n: "\(key).pub could not be written.")) }
         return written
     }
 }

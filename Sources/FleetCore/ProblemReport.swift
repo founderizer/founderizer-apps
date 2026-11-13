@@ -58,8 +58,8 @@ public struct ProblemReport: Equatable, Sendable {
     /// The one thing that is not right yet, or nil. One line at a time, the most important fact now.
     public var refusal: String? {
         if trimmedText.isEmpty { return nil }
-        if trimmedText.count > Self.maxText { return "That is longer than we take. Keep it under \(Self.maxText.formatted()) characters." }
-        if !Self.isAddress(email) { return "Write the address we should answer at." }
+        if trimmedText.count > Self.maxText { return String(l10n: "That is longer than we take. Keep it under \(Self.maxText.formatted()) characters.") }
+        if !Self.isAddress(email) { return String(l10n: "Write the address we should answer at.") }
         return nil
     }
 
@@ -176,10 +176,10 @@ public enum ProblemReportError: LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .badChannel: "This fleet names a channel this app cannot reach."
+        case .badChannel: String(l10n: "This fleet names a channel this app cannot reach.")
         case .refused(let status, let message):
-            message.isEmpty ? "Our site refused the report (\(status))." : "Our site refused the report: \(message)"
-        case .unreadable: "Our site answered something this app could not read."
+            message.isEmpty ? String(l10n: "Our site refused the report (\(status)).") : String(l10n: "Our site refused the report: \(message)")
+        case .unreadable: String(l10n: "Our site answered something this app could not read.")
         }
     }
 }

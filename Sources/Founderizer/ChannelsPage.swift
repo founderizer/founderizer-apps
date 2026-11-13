@@ -126,7 +126,7 @@ struct ChannelsPage: View {
                 FormSection { FormRow("Not read", symbol: "exclamationmark.circle", warning: readError) }
             }
         } else {
-            LoadingLine("Reading the channels…")
+            LoadingLine(String(l10n: "Reading the channels…"))
         }
     }
 
@@ -228,18 +228,18 @@ struct ChannelsPage: View {
     }
 
     private func title(_ ignored: PeopleSnapshot.Ignored) -> String {
-        if ignored.messages.isEmpty { return "\(ignored.today) wrote today and were not answered" }
-        if ignored.today > 0 { return "Wrote and was not answered · \(ignored.today) today" }
-        return "Wrote and was not answered"
+        if ignored.messages.isEmpty { return String(l10n: "\(ignored.today) wrote today and were not answered") }
+        if ignored.today > 0 { return String(l10n: "Wrote and was not answered · \(ignored.today) today") }
+        return String(l10n: "Wrote and was not answered")
     }
 
     private func words(_ action: ChannelCard.Action) -> String {
         switch action {
-        case .addNumber: "Add number"
-        case .linkAgain: "Link again"
-        case .addBot: "Add bot"
-        case .fixToken: "Fix token"
-        case .turnOn: "Turn on"
+        case .addNumber: String(l10n: "Add number")
+        case .linkAgain: String(l10n: "Link again")
+        case .addBot: String(l10n: "Add bot")
+        case .fixToken: String(l10n: "Fix token")
+        case .turnOn: String(l10n: "Turn on")
         }
     }
 
@@ -290,7 +290,7 @@ struct ChannelsPage: View {
                                       destructive: true)
             }
         }
-        let title = "More \(ChatApps.title(card.app)) actions"
+        let title = String(l10n: "More \(ChatApps.title(card.app)) actions")
         return FleetSelect(title, options: options, onSelect: { item in
             message = nil
             switch item {
@@ -311,7 +311,7 @@ struct ChannelsPage: View {
     /// Add number: the account, then its QR code at once. The bridge reports a new number first (wa-link says that it
     /// has no device); then Fleet asks for the code, after at most 20 seconds in any case.
     private func addNumber() async {
-        guard let id = await save("Adding…", { current in
+        guard let id = await save(String(l10n: "Adding…"), { current in
             guard current.channel("whatsapp", of: agent) == nil else { return nil }
             let choice = ChatApps.agentAccount(app: "whatsapp", agent: agent, taken: Set(current.accounts.map(\.id)))
             return (choice.id, choice.account)
@@ -355,7 +355,7 @@ struct ChannelsPage: View {
 
     private func unlink(_ number: ChatAppsSnapshot.Account) async {
         guard canChange, let db = store.state?.db else { return }
-        busy = "Unlinking…"
+        busy = String(l10n: "Unlinking…")
         do {
             _ = try await client.link(hub: store.hub, database: db, client: store.installation, account: number.id, unlink: true)
             cancelled.insert(number.id)
@@ -365,7 +365,7 @@ struct ChannelsPage: View {
     }
 
     private func turnOn(_ id: String) async {
-        _ = await save("Turning on…") { current in
+        _ = await save(String(l10n: "Turning on…")) { current in
             guard var input = current.accounts.first(where: { $0.id == id }).map(ChatAccountInput.init), !input.enabled else { return nil }
             input.enabled = true
             return (id, input)
@@ -373,11 +373,11 @@ struct ChannelsPage: View {
     }
 
     private func remove(_ account: ChatAppsSnapshot.Account) async {
-        guard await save("Removing…", { current in current.accounts.contains { $0.id == account.id } ? (account.id, nil) : nil }) != nil
+        guard await save(String(l10n: "Removing…"), { current in current.accounts.contains { $0.id == account.id } ? (account.id, nil) : nil }) != nil
         else { return }
         if linking == account.id { linking = nil }
         codes[account.app] = nil
-        message = ("Removed", false)
+        message = (String(l10n: "Removed"), false)
     }
 
     /// One account write with the busy words, and the hub's refusal as the status line.

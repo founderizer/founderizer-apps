@@ -18,8 +18,15 @@ import SwiftUI
 /// also when the owner changes the choice (`keepCode`). The code is in this page's state only: never in a note, a file,
 /// a log or the pasteboard.
 @MainActor @Observable final class ConnectedAppsModel {
-    /// The last answer of `GET /ui/connect`, or nil while none came or after a read that failed.
+    /// The last answer of `GET /ui/connect`, or nil while none came or after a read that the hub refused. After a
+    /// read that got no answer it stays, as the last reading (`isOld`).
     var state: ConnectState?
+    /// **The last reading** (the owner's yes of 13 November 2026, "Yes, add it"): a read got no answer since `state`
+    /// came, so the groups keep their rows under the line "Last reading …", as "Your devices" does, with no button and
+    /// no code, and this page asks the hub for no code. A read that answers ends it.
+    private(set) var isOld = false
+    /// The hub's time when `state` came.
+    private(set) var readAt: Double?
     /// The level of the next code. Read when the page opens.
     var level = "read"
     /// The code that this page made, while it works.
@@ -64,10 +71,11 @@ import SwiftUI
     /// The group "Connect an app": the feature is on, the hub knows its address, and a code works or waits for the app
     /// to come to the front.
     func showsConnect(now: Double) -> Bool {
-        state?.on == true && state?.address != nil && (code(now: now) != nil || waits)
+        state?.on == true && state?.address != nil && (code(now: now) != nil || waits || (isOld && made != nil))
     }
-    /// The code to show: one that works on the hub's clock.
-    func code(now: Double) -> MadeConnectCode? { made.flatMap { $0.expires > now ? $0 : nil } }
+    /// The code to show: one that works on the hub's clock. None on a last reading: the hub's clock stands still
+    /// then, and a code that the hub ended meanwhile would show as one that works.
+    func code(now: Double) -> MadeConnectCode? { isOld ? nil : made.flatMap { $0.expires > now ? $0 : nil } }
     func draws(now: Double) -> Bool { showsConnected || showsConnect(now: now) }
 
     /// The page's loop while it shows: the state every 15 seconds (sooner when the hub's live changes wake the store),
@@ -92,14 +100,16 @@ import SwiftUI
                 if made != nil || asked || waits || unsent || level != "read" {
                     made = nil; asked = false; waits = false; unsent = false; level = "read"
                 }
-            } else if serves {
+                // And a confirmation of Turn off that stood open has nothing left to confirm.
+                if confirmingOff { confirmingOff = false }
+            } else if serves, !isOld {
                 await keepCode(store: store, active: NSApplication.shared.isActive)
             }
             // The first code of this visit is still owed, because the hub took no write in this round (a start on a
             // saved reading): the round comes again soon while he is here, and nothing wakes it for that.
             // At most `mostShortRounds` such rounds in a visit: a write of his that the hub refused, or a storage
             // error, can keep the hub from taking a write for as long as he does nothing about it.
-            let owed = serves && state?.on == true && state?.address != nil && !asked && made == nil
+            let owed = serves && !isOld && state?.on == true && state?.address != nil && !asked && made == nil
                 && NSApplication.shared.isActive && shortRounds < Self.mostShortRounds
             if owed { shortRounds += 1 }
             do { _ = try await store.nap(owed ? 2 : 15) } catch { return }
@@ -109,21 +119,21 @@ import SwiftUI
     /// The app came to the front: a code that ended meanwhile is replaced now, and a visit whose group came while the
     /// app was in the background gets its first code.
     func activated(store: FleetStore) async {
-        guard reads != nil, isFor(store) else { return }
+        guard reads != nil, isFor(store), !isOld else { return }
         await keepCode(store: store, active: true, activation: true)
     }
 
     /// He changed the choice: a new code at that level replaces the open one.
     func choose(_ level: String, store: FleetStore) async {
         // Not while the hub takes no write: the choice stays at the level of the code that shows.
-        guard ConnectedApps.levels.contains(level), level != self.level, isFor(store), store.canWrite else { return }
+        guard ConnectedApps.levels.contains(level), level != self.level, isFor(store), store.canWrite, !isOld else { return }
         self.level = level
         await makeCode(store: store)
     }
 
     /// Revoke, after its confirmation in the row.
     func revoke(_ connection: AppConnection, store: FleetStore) async {
-        guard let reads, isFor(store), store.canWrite, !busy else { return }
+        guard let reads, isFor(store), store.canWrite, !busy, !isOld else { return }
         busy = true
         defer { busy = false }
         do {
@@ -138,9 +148,18 @@ import SwiftUI
 
     func isFor(_ store: FleetStore) -> Bool { reads?.hub == store.hub && reads?.database == store.state?.db }
 
+    /// **A turn of this Mac ended**: what a last reading says of the feature is no longer what the hub holds, so it
+    /// goes, and the page shows nothing of the connected apps until a read answers, as a new visit does. After a Turn
+    /// off that ended while the read got no answer, the reading still said on, and the page said "Turning on…" for as
+    /// long as the route gave no answer (a real window, 13 November 2026).
+    func turnEnded() {
+        guard isOld else { return }
+        state = nil; isOld = false; readAt = nil; confirming = nil; confirmingOff = false
+    }
+
     private func reset() {
         state = nil; made = nil; confirming = nil; level = "read"; reads = nil; asked = false; waits = false
-        unsent = false; shortRounds = 0
+        unsent = false; shortRounds = 0; isOld = false; readAt = nil
         confirmingOff = false
     }
 
@@ -150,15 +169,28 @@ import SwiftUI
             let fresh = try await HubClient().connectState(hub: reads.hub, database: reads.database)
             guard isFor(store) else { return }
             state = fresh
+            if isOld { isOld = false }
+            readAt = store.state?.time ?? Date().timeIntervalSince1970
             if let confirming, !fresh.connections.contains(where: { $0.id == confirming }) { self.confirming = nil }
         } catch {
             // The page's task ended with the read on its way: that says nothing about the hub, and the task that
             // comes after it reads again. Taking the state away here made the groups go for a moment.
             if Task.isCancelled { return }
-            // A hub without the route, a 409, or no answer: nothing of it shows, and the next round reads again.
             guard isFor(store) else { return }
+            // No answer: what was read stays as the last reading, with its line and no button, and no confirmation
+            // stays open on it. The next round reads again.
+            if state != nil, ConnectedApps.keepsReading(after: error) {
+                if !isOld { isOld = true }
+                if confirming != nil { confirming = nil }
+                if confirmingOff { confirmingOff = false }
+                return
+            }
+            // A hub without the route, a 409, an answer that this app cannot read, or no answer before a first
+            // reading: nothing of it shows, and the next round reads again.
             state = nil
             confirming = nil
+            if isOld { isOld = false }
+            readAt = nil
         }
     }
 
@@ -191,6 +223,7 @@ import SwiftUI
 
     /// One code at a time: a choice that changes while a code is on its way makes one more after it.
     private func makeCode(store: FleetStore) async {
+        guard !isOld else { return }            // no code is asked for on a last reading
         guard !making else { again = true; return }
         making = true
         defer { making = false }
@@ -253,6 +286,8 @@ struct ConnectedAppsGroups: View {
     /// Turn off (the build specification of the MCP address, section 7, "Off"; the owner's yes of 13 November 2026 to
     /// the pictures 2e and 2f), behind one confirmation in the card. Nil: no Turn off now (a step runs).
     var turnOff: (() -> Void)?
+    /// A Turn off runs and the hub still serves the feature: "Turning off…" stands where Turn off stood.
+    var turningOff = false
     /// A Turn off that stopped while the hub still serves the feature: its row stands first in the card.
     var offStop: ConnectStop?
     /// Report a problem, for a Turn off that stopped on work that the machine needs.
@@ -269,7 +304,7 @@ struct ConnectedAppsGroups: View {
                 FormSection("Connect an app") {
                     // A Turn off that stopped, then the confirmation, under the heading's Turn off that opened it.
                     if let offStop, let turnOff {
-                        ConnectStopRow(title: "Connected apps did not turn off", stop: offStop,
+                        ConnectStopRow(title: String(l10n: "Connected apps did not turn off"), stop: offStop,
                                        canAct: canAct && !model.busy, tryAgain: turnOff, report: report)
                     } else if model.confirmingOff, let turnOff {
                         ConnectAppTurnOff(canAct: canAct && !model.busy, cancel: { model.confirmingOff = false },
@@ -280,9 +315,16 @@ struct ConnectedAppsGroups: View {
                     codeRow(model.code(now: now))
                 } accessory: {
                     // On the group's own heading, as Add device is on its own: only while it can act, never grey.
-                    if turnOff != nil, canAct, !model.busy, !model.confirmingOff, offStop == nil {
-                        Button("Turn off") { model.confirmingOff = true }.buttonStyle(FleetOutlineButtonStyle())
-                            .accessibilityIdentifier("connect-turn-off")
+                    if turningOff {
+                        LoadingLine(String(l10n: "Turning off…"), waits: false).fixedSize()
+                    } else if turnOff != nil, canAct, !model.busy, !model.confirmingOff, offStop == nil {
+                        // No confirmation while no app is connected, and words that name what stops (the owner's two
+                        // yeses of 13 November 2026: nothing would stop, and "Turn off" alone did not say what).
+                        Button("Turn off connected apps") {
+                            if !ConnectGate.asksBeforeTurnOff(model.state), let turnOff { turnOff() } else { model.confirmingOff = true }
+                        }
+                        .buttonStyle(FleetOutlineButtonStyle())
+                        .accessibilityIdentifier("connect-turn-off")
                     }
                 }
             }
@@ -343,7 +385,7 @@ struct ConnectedAppsGroups: View {
                 .textSelection(.enabled).lineLimit(1).truncationMode(.middle)
                 .accessibilityIdentifier("connect-address")
             Spacer(minLength: 12)
-            IconButton(symbol: "doc.on.doc", words: "Copy") { copyMessage(address) }
+            IconButton(symbol: "doc.on.doc", words: String(l10n: "Copy")) { copyMessage(address) }
                 .accessibilityIdentifier("connect-copy")
         }
         .padding(.horizontal, FormMetrics.rowInset).frame(minHeight: FormMetrics.row)

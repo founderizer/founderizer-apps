@@ -40,20 +40,20 @@ struct PasteField: View {
 extension SetupSteps {
     /// Tailscale's Keys page makes the access token from which the app makes the fleet's own key.
     static var tailscaleKey: SetupSteps {
-        SetupSteps(["Open [Keys](\(TailscaleFleetKey.keysPage.absoluteString)) in Tailscale",
-                    "Generate access token, then copy it"])
+        SetupSteps([String(l10n: "Open [Keys](\(TailscaleFleetKey.keysPage.absoluteString)) in Tailscale"),
+                    String(l10n: "Generate access token, then copy it")])
     }
 
     /// An AI provider's sign-in that gives a code to paste back (Claude Code's): its page, which the link opens (and
     /// which opened by itself after his press on the provider's card), and the code it shows after the sign-in.
     static func signIn(at page: URL, width: CGFloat? = SetupMetrics.field) -> SetupSteps {
-        SetupSteps(["Open [the sign-in page](\(page.absoluteString))", "Sign in, then copy the code it shows"], width: width)
+        SetupSteps([String(l10n: "Open [the sign-in page](\(page.absoluteString))"), String(l10n: "Sign in, then copy the code it shows")], width: width)
     }
 
     /// An AI provider's sign-in that shows a code to enter on its page (Codex's device code): its page, which the link
     /// opens and copies the code for, and the code under the steps. The page goes on by itself once he signed in.
     static func deviceCode(at page: URL, width: CGFloat? = SetupMetrics.field) -> SetupSteps {
-        SetupSteps(["Open [the sign-in page](\(page.absoluteString))", "Sign in, then enter this code"], width: width)
+        SetupSteps([String(l10n: "Open [the sign-in page](\(page.absoluteString))"), String(l10n: "Sign in, then enter this code")], width: width)
     }
 
     /// A VPS provider's token: Read & Write at Hetzner, Full Access at DigitalOcean, the account's API key at Vultr
@@ -62,15 +62,15 @@ extension SetupSteps {
         let page = FleetCloudModel.tokenPage(provider).absoluteString
         switch provider {
         case .hetzner:
-            return SetupSteps(["Open your project in [Hetzner Console](\(page))", "Security › API tokens › Generate API token",
-                               "Choose Read & Write, then copy the token"])
+            return SetupSteps([String(l10n: "Open your project in [Hetzner Console](\(page))"), String(l10n: "Security › API tokens › Generate API token"),
+                               String(l10n: "Choose Read & Write, then copy the token")])
         case .digitalOcean:
-            return SetupSteps(["Open [API](\(page)) in DigitalOcean", "Generate New Token with Full Access", "Copy the token"])
+            return SetupSteps([String(l10n: "Open [API](\(page)) in DigitalOcean"), String(l10n: "Generate New Token with Full Access"), String(l10n: "Copy the token")])
         case .vultr:
-            return SetupSteps(["Open [API](\(page)) in Vultr", "Enable API, then copy the key"])
+            return SetupSteps([String(l10n: "Open [API](\(page)) in Vultr"), String(l10n: "Enable API, then copy the key")])
         case .akamai:
-            return SetupSteps(["Open [API Tokens](\(page)) in Akamai", "Create a Personal Access Token",
-                               "Set Linodes and Firewalls to Read/Write", "Create Token, then copy it"])
+            return SetupSteps([String(l10n: "Open [API Tokens](\(page)) in Akamai"), String(l10n: "Create a Personal Access Token"),
+                               String(l10n: "Set Linodes and Firewalls to Read/Write"), String(l10n: "Create Token, then copy it")])
         }
     }
 }
@@ -297,7 +297,7 @@ final class FleetCloudModel {
                 }
                 try await Task.sleep(for: .seconds(Self.lookEvery))
             }
-            failure = "\(name) did not join your network within five minutes. Open it in \(provider.name)'s console."
+            failure = String(l10n: "\(name) did not join your network within five minutes. Open it in \(provider.name)'s console.")
         } catch {
             failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -450,7 +450,7 @@ struct CloudCards: View {
                             choose: { choose(provider) })
                     .accessibilityIdentifier("\(id)-cloud-\(provider.rawValue)")
             }
-            SetupChoice(title: "Other VPS", line: "Any server by SSH", mark: { IconTile(symbol: "server.rack") }, choose: other)
+            SetupChoice(title: String(l10n: "Other VPS"), line: String(l10n: "Any server by SSH"), mark: { IconTile(symbol: "server.rack") }, choose: other)
                 .accessibilityIdentifier("\(id)-cloud-other")
         }
     }
@@ -458,10 +458,10 @@ struct CloudCards: View {
     /// The short line under each provider's name, in the words the owner approved.
     static func line(_ provider: CloudProvider) -> String {
         switch provider {
-        case .hetzner: "Best price"
-        case .digitalOcean: "Simple to use"
-        case .vultr: "Many regions"
-        case .akamai: "Formerly Linode"
+        case .hetzner: String(l10n: "Best price")
+        case .digitalOcean: String(l10n: "Simple to use")
+        case .vultr: String(l10n: "Many regions")
+        case .akamai: String(l10n: "Formerly Linode")
         }
     }
 }
@@ -495,7 +495,7 @@ struct PolicyLines: View {
 
     var body: some View {
         VStack(spacing: SetupMetrics.gap) {
-            SetupWarning("Another tool keeps your Tailscale policy. Add these lines there, then paste a key again.")
+            SetupWarning(String(l10n: "Another tool keeps your Tailscale policy. Add these lines there, then paste a key again."))
             ScrollView([.vertical, .horizontal]) {
                 Text(lines).font(FormMetrics.code).textSelection(.enabled).fixedSize()
                     .frame(maxWidth: .infinity, alignment: .leading).padding(10)
@@ -527,14 +527,17 @@ struct CloudChoice: View {
         if let offer = cloud.offer {
             VStack(spacing: SetupMetrics.gap) {
                 if cloud.existing.isEmpty { alone(offer) } else { list(offer) }
-                Button(cloud.chosenServer == nil ? "Make the server" : "Use this server") {
-                    if let server = cloud.chosenServer { use(server) } else { makeNew() }
-                }
-                .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier("cloud-choice-press")
-                if cloud.provider == .hetzner {
-                    SetupLink("Servers in another project?") { cloud.askAnotherProject() }
-                        .accessibilityIdentifier("cloud-choice-project")
+                // An account of many servers scrolls: the press stays in view (`SetupAction`).
+                SetupAction {
+                    Button(cloud.chosenServer == nil ? "Make the server" : "Use this server") {
+                        if let server = cloud.chosenServer { use(server) } else { makeNew() }
+                    }
+                    .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("cloud-choice-press")
+                    if cloud.provider == .hetzner {
+                        SetupLink(String(l10n: "Servers in another project?")) { cloud.askAnotherProject() }
+                            .accessibilityIdentifier("cloud-choice-project")
+                    }
                 }
             }
         }
@@ -545,7 +548,7 @@ struct CloudChoice: View {
         FormSection {
             FormRow("Size") { value(offer.size) }
             FormRow("Location") { value(offer.place) }
-            FormRow("Price") { value("\(offer.monthly), billed by \(offer.provider.name)") }
+            FormRow("Price") { value(String(l10n: "\(offer.monthly), billed by \(offer.provider.name)")) }
         }
         .accessibilityIdentifier("cloud-choice-new")
     }
@@ -562,7 +565,7 @@ struct CloudChoice: View {
                 row(server.name, detail: [server.summary, why].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "),
                     chosen: cloud.chosen == server.id, usable: why == nil) { cloud.chosen = server.id }
             }
-            row("New server", detail: offer.row, chosen: cloud.chosen == nil, usable: true) { cloud.chosen = nil }
+            row(String(l10n: "New server"), detail: offer.row, chosen: cloud.chosen == nil, usable: true) { cloud.chosen = nil }
         }
         .accessibilityIdentifier("cloud-choice-list")
     }
@@ -598,8 +601,8 @@ struct CloudBuilding: View {
 
     private var status: String? {
         switch stage {
-        case .making: provider.map { "Making your server at \($0.name)" } ?? "Making your server"
-        case .joining: "Starting your server"
+        case .making: provider.map { String(l10n: "Making your server at \($0.name)") } ?? String(l10n: "Making your server")
+        case .joining: String(l10n: "Starting your server")
         case .token, .choosing: nil
         }
     }

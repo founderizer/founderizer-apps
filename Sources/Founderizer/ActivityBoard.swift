@@ -40,7 +40,7 @@ struct ActivityBoard: View {
     var body: some View {
         let state = store.state
         let board = state?.activity(agent: agent.isEmpty ? nil : agent, period: period) ?? [:]
-        FleetPage(scope == nil ? "Tasks" : AgentTab.tasks.heading, fills: true, wide: true) {
+        FleetPage(scope == nil ? String(l10n: "Tasks") : AgentTab.tasks.heading, fills: true, wide: true) {
             filters(state?.activityAgents(saved: chosen) ?? [])
             if let state, !board.isEmpty { lanes(board, state: state) }
             else {
@@ -81,7 +81,7 @@ struct ActivityBoard: View {
                     ForEach(board[.inProgress] ?? []) { task in
                         // A task in work says nothing more; one that stalled or lost its session says so.
                         let word = task.stateWord(holds: holds, limited: limited.contains(task.owner))
-                        card(task, wait: nil, state: state, why: word == "Working" ? nil : word)
+                        card(task, wait: nil, state: state, why: word == TaskWords.working ? nil : word)
                     }
                 }.frame(width: width)
                 lane(.waiting, count: board[.waiting]?.count ?? 0) {
@@ -130,7 +130,7 @@ struct ActivityBoard: View {
     /// ("Waiting for Fleet Manager", "Usage limit", "Paused", "Queued").
     private func why(_ task: FleetTask, holds: [TaskHold], limited: Bool, now: Double) -> String {
         if let until = task.parked_until, !holds.contains(where: { $0.task == task.id }), !limited {
-            return "Until \(fleetComingTime(until, now: now))"
+            return String(l10n: "Until \(fleetComingTime(until, now: now))")
         }
         return task.stateWord(holds: holds, limited: limited)
     }
@@ -155,7 +155,8 @@ struct ActivityBoard: View {
                 .padding(.horizontal, EndedRow.inset).frame(minHeight: EndedRow.height).contentShape(Rectangle())
             }
             .buttonStyle(FleetRowButtonStyle())
-            .accessibilityValue(showsRest ? "Open" : "Closed").accessibilityIdentifier("activity-ended-more")
+            .accessibilityValue(showsRest ? String(localized: "Open (a state)", defaultValue: "Open", bundle: Localized.bundle,
+                                                            locale: Localized.digits) : String(l10n: "Closed")).accessibilityIdentifier("activity-ended-more")
             if showsRest {
                 ForEach(ended.days) { day in
                     Text(Self.dayWords(day.start, now: state.time)).font(FormMetrics.detailTitle).foregroundStyle(FleetStyle.muted)
@@ -194,8 +195,8 @@ struct ActivityBoard: View {
     static func dayWords(_ start: Double, now: Double, calendar: Calendar = .current) -> String {
         let day = Date(timeIntervalSince1970: start), today = calendar.startOfDay(for: Date(timeIntervalSince1970: now))
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: day), to: today).day ?? 0
-        if days == 0 { return "Today" }
-        if days == 1 { return "Yesterday" }
+        if days == 0 { return String(l10n: "Today") }
+        if days == 1 { return String(l10n: "Yesterday") }
         return day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 

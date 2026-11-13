@@ -116,7 +116,7 @@ struct KnowledgePage: View {
                     } accessory: {
                         if offered, scoped != nil { giveMenu(entries ?? []) }
                     }
-                    if offered, scoped == nil, entries != nil, store.connectionError == nil { LoadingLine("Reading the profile…") }
+                    if offered, scoped == nil, entries != nil, store.connectionError == nil { LoadingLine(String(l10n: "Reading the profile…")) }
                     // **Only a refusal, in the hub's words** (UI-PATTERNS: a footer carries what went wrong and nothing
                     // else): a + or a − that worked shows itself in the list. Under the card it is the card's.
                     if carded == nil, message?.warning == true { status }
@@ -187,7 +187,7 @@ struct KnowledgePage: View {
                 }
                 Spacer(minLength: 12)
                 if let entry {
-                    IconButton(symbol: "eye", words: "Read \(entry.title)") { readText(entry) }
+                    IconButton(symbol: "eye", words: String(l10n: "Read \(entry.title)")) { readText(entry) }
                         .accessibilityIdentifier("knowledge-card-read")
                 }
                 Button("Done") { carded = nil }.buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.cancelAction)
@@ -227,7 +227,7 @@ struct KnowledgePage: View {
             if reading.isEmpty { FormEmpty("No agent reads it", symbol: "person.slash") }
             ForEach(reading, id: \.self) { name in
                 FormRow(name.agentLabel, mark: AgentGlyph(name: name, size: GlyphSize.inline)) {
-                    IconButton(symbol: "minus", words: "Take \(entry.title) from \(name.agentLabel)") {
+                    IconButton(symbol: "minus", words: String(l10n: "Take \(entry.title) from \(name.agentLabel)")) {
                         Task { await setAvailable(false, entry: entry, agent: name) }
                     }
                     .disabled(!canChange || profiles?.contains { $0.agent == name } != true)
@@ -239,7 +239,7 @@ struct KnowledgePage: View {
             if notReading.isEmpty { FormEmpty("Every agent reads it", symbol: "person.3") }
             ForEach(notReading, id: \.self) { name in
                 FormRow(name.agentLabel, mark: AgentGlyph(name: name, size: GlyphSize.inline)) {
-                    IconButton(symbol: "plus", words: "Give \(entry.title) to \(name.agentLabel)") {
+                    IconButton(symbol: "plus", words: String(l10n: "Give \(entry.title) to \(name.agentLabel)")) {
                         Task { await setAvailable(true, entry: entry, agent: name) }
                     }
                     .disabled(!canChange || profiles?.contains { $0.agent == name } != true)
@@ -267,7 +267,7 @@ struct KnowledgePage: View {
     @ViewBuilder private func giveMenu(_ entries: [KnowledgeEntry]) -> some View {
         let open = entries.filter { !mine.contains($0.path) }
         if let agent, profile != nil, store.isFresh, !open.isEmpty {
-            let words = "Give \(agent.agentLabel) a file"
+            let words = String(l10n: "Give \(agent.agentLabel) a file")
             FleetSelect(words, options: open.map { FleetOption($0.path, $0.title, mark: .symbol(Self.symbol($0))) }) { path in
                 guard let entry = open.first(where: { $0.path == path }) else { return }
                 Task { await setAvailable(true, entry: entry, agent: agent) }
@@ -290,7 +290,7 @@ struct KnowledgePage: View {
     /// own whose edge read 1.45:1, and only its 16-pt line of words took the click.
     private var filterField: some View {
         TextField(text: $filter, prompt: Text(verbatim: "")) { Text("Filter files") }
-            .fieldPlaceholder("Filter files", shows: filter.isEmpty).fleetField().frame(width: 180)
+            .fieldPlaceholder(String(l10n: "Filter files"), shows: filter.isEmpty).fleetField().frame(width: 180)
             .accessibilityIdentifier("knowledge-filter")
     }
 
@@ -306,7 +306,7 @@ struct KnowledgePage: View {
     }
 
     private var urlForm: some View {
-        FormSection("Add a web page", footer: "The hub reads the page and keeps its text with the address and the date. It reads the page again every day and keeps the new text when it changed. Only public pages.") {
+        FormSection("Add a web page", footer: String(l10n: "The hub reads the page and keeps its text with the address and the date. It reads the page again every day and keeps the new text when it changed. Only public pages.")) {
             HStack(spacing: 8) {
                 TextField(text: $address, prompt: Text(verbatim: "")) { Text("https://example.com/page") }
                     .fieldPlaceholder("https://example.com/page", shows: address.isEmpty).fleetField()
@@ -321,6 +321,12 @@ struct KnowledgePage: View {
     /// The agents that read a file, in the words of every list of the app: up to three names, else their count, or
     /// "No agent".
     private func readers(_ entry: KnowledgeEntry) -> String { agentWords(users(of: entry).map(\.agent)) }
+
+    /// On an agent's own list, the other agents that read the file, or nil when it is this agent's alone.
+    private func otherReaders(_ entry: KnowledgeEntry) -> String? {
+        let others = users(of: entry).map(\.agent).filter { $0 != agent }
+        return others.isEmpty ? nil : agentWords(others)
+    }
 
     /// One file on the fleet's page: its mark, its title and the agents that read it, which open its text, and its ⓘ,
     /// which opens its card.
@@ -337,7 +343,7 @@ struct KnowledgePage: View {
                 }.contentShape(Rectangle())
             }.buttonStyle(.plain).help("Read \(entry.title)").accessibilityIdentifier("knowledge-\(entry.path)")
                 .onHover { readAhead(entry, under: $0) }
-            IconButton(symbol: "info.circle", words: "Show who reads \(entry.title)", size: 14) {
+            IconButton(symbol: "info.circle", words: String(l10n: "Show who reads \(entry.title)"), size: 14) {
                 message = nil; deleting = nil; carded = KnowledgeCardID(id: entry.path)
             }.accessibilityIdentifier("knowledge-info-\(entry.path)")
         }
@@ -353,18 +359,23 @@ struct KnowledgePage: View {
                 IconTile(symbol: Self.symbol(entry))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(entry.title).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(1)
-                    Text(readers(entry)).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
+                    // The other agents that read it: this agent reads every file of its own list (the owner, 13
+                    // November 2026: "review all other pages for the same issues!!").
+                    if let others = otherReaders(entry) {
+                        Text(others).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
+                    }
                 }.padding(.vertical, 10)
                 Spacer(minLength: 12)
                 Color.clear.frame(width: IconMetrics.side, height: IconMetrics.side)
-            }.padding(.horizontal, FormMetrics.rowInset).frame(minHeight: FormMetrics.twoLineRow)
+            }.padding(.horizontal, FormMetrics.rowInset)
+                .frame(minHeight: otherReaders(entry) == nil ? FormMetrics.row : FormMetrics.twoLineRow)
         }
         .buttonStyle(FleetRowButtonStyle())
         .help("Show who reads \(entry.title)")
         .accessibilityIdentifier("knowledge-\(entry.path)")
         .overlay(alignment: .trailing) {
             if let agent {
-                IconButton(symbol: "minus", words: "Take \(entry.title) back from \(agent.agentLabel)") {
+                IconButton(symbol: "minus", words: String(l10n: "Take \(entry.title) back from \(agent.agentLabel)")) {
                     Task { await setAvailable(false, entry: entry, agent: agent) }
                 }
                 .disabled(!canChange || profile == nil)
@@ -430,7 +441,7 @@ struct KnowledgePage: View {
                         }
                     }
                 } else {
-                    LoadingLine("Reading the file…")
+                    LoadingLine(String(l10n: "Reading the file…"))
                 }
             }
         } actions: { readerActions(entry) }
@@ -444,10 +455,10 @@ struct KnowledgePage: View {
     @ViewBuilder private func readerActions(_ entry: KnowledgeEntry) -> some View {
         if draft?.path == entry.path {
             SaveMark(state: saveState) { save(draft) }
-            IconButton(symbol: "checkmark", words: "Done") { done() }.accessibilityIdentifier("knowledge-done")
+            IconButton(symbol: "checkmark", words: String(l10n: "Done")) { done() }.accessibilityIdentifier("knowledge-done")
         } else if entry.isOwner, store.state?.ui_features?.contains(KnowledgeClient.editFeature) == true,
                   let file, file.path == entry.path, let edit = KnowledgeEdit(file: file) {
-            IconButton(symbol: "pencil", words: "Edit \(entry.title)") {
+            IconButton(symbol: "pencil", words: String(l10n: "Edit \(entry.title)")) {
                 saveState = nil; problem = nil; taken[edit.path] = edit.saved; draft = edit
             }
             .disabled(!canChange)
@@ -587,8 +598,8 @@ struct KnowledgePage: View {
 
     private func chooseFiles() {
         let panel = NSOpenPanel()
-        panel.title = "Add files to your knowledge"
-        panel.prompt = "Add"
+        panel.title = String(l10n: "Add files to your knowledge")
+        panel.prompt = String(l10n: "Add")
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = KnowledgeImport.types
@@ -606,7 +617,7 @@ struct KnowledgePage: View {
         message = nil
         for (index, url) in urls.enumerated() {
             let name = url.lastPathComponent
-            busy = urls.count == 1 ? "Adding \(name)…" : "Adding \(index + 1) of \(urls.count): \(name)…"
+            busy = urls.count == 1 ? String(l10n: "Adding \(name)…") : String(l10n: "Adding \(index + 1) of \(urls.count): \(name)…")
             do {
                 let text = try KnowledgeImport.text(of: url)
                 _ = try await client.add(hub: hub, database: db, client: installation, title: KnowledgeImport.title(of: url),
@@ -615,7 +626,7 @@ struct KnowledgePage: View {
             } catch { cause = Self.cause(error) ?? cause; refused.append("\(name): \(Self.reason(error))") }
         }
         busy = nil
-        let done = added.isEmpty ? [] : ["Added \(added.joined(separator: ", "))."]
+        let done = added.isEmpty ? [] : [String(l10n: "Added \(added.joined(separator: ", ")).")]
         message = ((done + refused).joined(separator: " "), !refused.isEmpty)
         await readProfiles()
         await store.refresh()
@@ -624,19 +635,19 @@ struct KnowledgePage: View {
     private func addPage() async {
         guard canChange, let url = Self.pageAddress(address), let db = store.state?.db else { return }
         let hub = store.hub, installation = store.installation
-        await run("The hub reads \(url)…") {
+        await run(String(l10n: "The hub reads \(url)…")) {
             let receipt = try await client.addPage(hub: hub, database: db, client: installation, url: url)
             address = ""; addingURL = false
-            return "Added “\(receipt.title ?? receipt.path)”."
+            return String(l10n: "Added “\(receipt.title ?? receipt.path)”.")
         }
     }
 
     private func setAvailable(_ on: Bool, entry: KnowledgeEntry, agent: String) async {
         guard canChange, let profile = profiles?.first(where: { $0.agent == agent }), let db = store.state?.db else { return }
         let hub = store.hub, installation = store.installation
-        await run(on ? "Adding “\(entry.title)” to the profile of \(agent.agentLabel)…" : "Removing “\(entry.title)” from the profile of \(agent.agentLabel)…") {
+        await run(on ? String(l10n: "Adding “\(entry.title)” to the profile of \(agent.agentLabel)…") : String(l10n: "Removing “\(entry.title)” from the profile of \(agent.agentLabel)…")) {
             try await client.setAvailable(on, path: entry.path, profile: profile, hub: hub, database: db, client: installation)
-            return on ? "\(agent.agentLabel) now reads “\(entry.title)”." : "\(agent.agentLabel) no longer reads “\(entry.title)”."
+            return on ? String(l10n: "\(agent.agentLabel) now reads “\(entry.title)”.") : String(l10n: "\(agent.agentLabel) no longer reads “\(entry.title)”.")
         }
     }
 
@@ -645,14 +656,14 @@ struct KnowledgePage: View {
         guard canChange, let db = store.state?.db else { return }
         let hub = store.hub, installation = store.installation, users = users(of: entry)
         deleting = nil
-        await run("Deleting “\(entry.title)”…") {
+        await run(String(l10n: "Deleting “\(entry.title)”…")) {
             for profile in users {
                 try await client.setAvailable(false, path: entry.path, profile: profile, hub: hub, database: db, client: installation)
             }
             _ = try await client.delete(hub: hub, database: db, client: installation, path: entry.path)
             if opened == entry.path { opened = nil }
             if carded?.id == entry.path { carded = nil }
-            return "Deleted “\(entry.title)”."
+            return String(l10n: "Deleted “\(entry.title)”.")
         }
     }
 
@@ -670,7 +681,7 @@ struct KnowledgePage: View {
     }
 
     private static func reason(_ error: Error) -> String {
-        if case HubError.refusal(_, let text) = error { return "Not done. The hub said: \(text.hasSuffix(".") ? text : text + ".")" }
+        if case HubError.refusal(_, let text) = error { return String(l10n: "Not done. The hub said: \(text.hasSuffix(".") ? text : text + ".")") }
         if error is URLError { return unanswered }
         return error.localizedDescription
     }
@@ -748,10 +759,10 @@ struct KnowledgePage: View {
         case kind, unreadable, empty, large
         var errorDescription: String? {
             switch self {
-            case .kind: "Founderizer cannot read this kind of file. Use Markdown, text, PDF, Word (.docx), RTF or HTML."
-            case .unreadable: "Founderizer cannot open this PDF."
-            case .empty: "The file has no text. A scanned PDF can have only pictures."
-            case .large: "The text is larger than 1 MB."
+            case .kind: String(l10n: "Founderizer cannot read this kind of file. Use Markdown, text, PDF, Word (.docx), RTF or HTML.")
+            case .unreadable: String(l10n: "Founderizer cannot open this PDF.")
+            case .empty: String(l10n: "The file has no text. A scanned PDF can have only pictures.")
+            case .large: String(l10n: "The text is larger than 1 MB.")
             }
         }
     }

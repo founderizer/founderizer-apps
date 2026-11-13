@@ -28,16 +28,16 @@ enum SettingsTab: String, CaseIterable, Hashable {
 
     var title: String {
         switch self {
-        case .general: "General"
-        case .servers: "Servers"
-        case .updates: "Updates"
-        case .backup: "Backup"
-        case .secrets: "Secrets"
-        case .knowledge: "Knowledge"
-        case .apps: "Apps"
-        case .people: "People"
-        case .team: "Reporting lines"
-        case .status: "System status"
+        case .general: String(l10n: "General")
+        case .servers: String(l10n: "Servers")
+        case .updates: String(l10n: "Updates")
+        case .backup: String(l10n: "Backup")
+        case .secrets: String(l10n: "Secrets")
+        case .knowledge: String(l10n: "Knowledge")
+        case .apps: String(l10n: "Apps")
+        case .people: String(l10n: "People")
+        case .team: String(l10n: "Reporting lines")
+        case .status: String(l10n: "System status")
         }
     }
 
@@ -354,14 +354,14 @@ private struct DefaultModelsSection: View {
     /// Automatic, the models his servers report, and a saved model that none of them reports now.
     private static func models(_ options: [RuntimeModels.Option], current: String?) -> [FleetOption<String>] {
         [FleetOption("", automaticChoice)] +
-            options.map { FleetOption($0.model, $0.display_name, subtitle: $0.default ? "The provider's default" : nil) } +
-            (current.map { name in options.contains { $0.model == name } ? [] : [FleetOption(name, name, subtitle: "Not offered now")] } ?? [])
+            options.map { FleetOption($0.model, $0.display_name, subtitle: $0.default ? String(l10n: "The provider's default") : nil) } +
+            (current.map { name in options.contains { $0.model == name } ? [] : [FleetOption(name, name, subtitle: String(l10n: "Not offered now"))] } ?? [])
     }
 
     /// Automatic, the levels that the model takes, and a saved level that it does not take.
     private static func efforts(_ levels: [String], current: String?) -> [FleetOption<String>] {
         [FleetOption("", automaticChoice)] + levels.map { FleetOption($0, reasoningName($0)) } +
-            (current.map { levels.contains($0) ? [] : [FleetOption($0, reasoningName($0), subtitle: "Not offered for this model")] } ?? [])
+            (current.map { levels.contains($0) ? [] : [FleetOption($0, reasoningName($0), subtitle: String(l10n: "Not offered for this model"))] } ?? [])
     }
 
     /// The value on its way; the hub's once a save of it failed, beside Try again, which sends the failed one again.
@@ -417,7 +417,7 @@ private struct DefaultModelsSection: View {
             } catch {
                 guard wanted[runtime] == value else { continue }
                 unanswered[runtime] = id
-                states[runtime] = .failed("The hub has not answered. Try again sends the same request.")
+                states[runtime] = .failed(String(l10n: "The hub has not answered. Try again sends the same request."))
             }
         }
         // The page that this save read came while the row still sent, so `settle` passed it over: it does it now.
@@ -469,7 +469,7 @@ private struct ChannelsSettings: View {
         FormSection("Channels") {
             // A line only while it is paused (D-2): the switch says the rest.
             FormRow("Receive messages", symbol: "antenna.radiowaves.left.and.right",
-                    detail: paused ? "Paused: nothing comes in and nothing goes out." : nil,
+                    detail: paused ? String(l10n: "Paused: nothing comes in and nothing goes out.") : nil,
                     warning: problem) {
                 HStack(spacing: 14) {
                     if sending { ProgressView().controlSize(.small) }
@@ -574,7 +574,7 @@ struct BackupSettings: View {
             // **Only while it can act** (never grey): not while the hub does not answer, and while the copy is being
             // taken its place says so in moving words.
             if copy.busy {
-                ShimmeringWords(text: "Saving\u{2026}").accessibilityIdentifier("backup-saving-copy")
+                ShimmeringWords(text: String(l10n: "Saving\u{2026}")).accessibilityIdentifier("backup-saving-copy")
             } else if store.isFresh {
                 Button(FleetHealth.Warning.Act.saveCopy.label) { Task { await copy.save(store: store) } }
                     .buttonStyle(FleetPrimaryButtonStyle())

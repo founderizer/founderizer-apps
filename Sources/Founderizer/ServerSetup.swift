@@ -30,8 +30,8 @@ final class ServerSetupSession {
 
     func check() async {
         let status: (Bool, String) = await withCheckedContinuation { continuation in
-            guard let service = service(onError: { _ in continuation.resume(returning: (false, "The local setup helper is unavailable.")) }) else {
-                continuation.resume(returning: (false, "The local setup helper is unavailable.")); return
+            guard let service = service(onError: { _ in continuation.resume(returning: (false, String(l10n: "The local setup helper is unavailable."))) }) else {
+                continuation.resume(returning: (false, String(l10n: "The local setup helper is unavailable."))); return
             }
             service.availability { available, detail in continuation.resume(returning: (available, detail)) }
         }
@@ -69,8 +69,8 @@ final class ServerSetupSession {
         busy = true; error = nil; timeline = SetupTimeline()
         let data = try! JSONEncoder().encode(configuration)
         let result: (Bool, String) = await withCheckedContinuation { continuation in
-            guard let service = service(onError: { _ in continuation.resume(returning: (false, "The local setup helper disconnected.")) }) else {
-                continuation.resume(returning: (false, "The local setup helper is unavailable.")); return
+            guard let service = service(onError: { _ in continuation.resume(returning: (false, String(l10n: "The local setup helper disconnected."))) }) else {
+                continuation.resume(returning: (false, String(l10n: "The local setup helper is unavailable."))); return
             }
             service.start(configuration: data) { ok, message in continuation.resume(returning: (ok, message)) }
         }
@@ -81,8 +81,8 @@ final class ServerSetupSession {
     private func read() async {
         while !Task.isCancelled {
             let reply: (Data, Bool, String) = await withCheckedContinuation { continuation in
-                guard let service = service(onError: { _ in continuation.resume(returning: (Data(), false, "Setup disconnected. Resume to check the server.")) }) else {
-                    continuation.resume(returning: (Data(), false, "Setup disconnected.")); return
+                guard let service = service(onError: { _ in continuation.resume(returning: (Data(), false, String(l10n: "Setup disconnected. Resume to check the server."))) }) else {
+                    continuation.resume(returning: (Data(), false, String(l10n: "Setup disconnected."))); return
                 }
                 service.readEvents(after: timeline.sequence) { data, running, detail in continuation.resume(returning: (data, running, detail)) }
             }
@@ -98,7 +98,7 @@ final class ServerSetupSession {
                     return
                 }
             } catch {
-                self.error = reply.2.isEmpty ? "Setup returned an invalid status." : reply.2
+                self.error = reply.2.isEmpty ? String(l10n: "Setup returned an invalid status.") : reply.2
                 await cancel(); return
             }
             do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
@@ -115,7 +115,7 @@ final class ServerSetupSession {
         }
         busy = false
         if ok { timeline.answered(id); error = nil }
-        else { error = "The answer was not accepted. Check the setup connection." }
+        else { error = String(l10n: "The answer was not accepted. Check the setup connection.") }
     }
 
     /// Whether this Mac can answer a Tailscale key prompt by itself, from the credential in its keychain.
@@ -152,7 +152,7 @@ struct SetupMark: View {
     /// The state in words, or nil when no setup runs.
     static func words(_ setup: ProviderSetup, subject: String) -> String? {
         guard setup.running else { return nil }
-        return setup.waits ? "\(subject) waits for your answer" : "\(subject) runs"
+        return setup.waits ? String(l10n: "\(subject) waits for your answer") : String(l10n: "\(subject) runs")
     }
 
     var body: some View {
@@ -202,7 +202,7 @@ struct SetupPromptView: View {
                         .buttonStyle(FleetOutlineButtonStyle()).disabled(session.busy)
                         .accessibilityIdentifier("setup-network-key")
                 } else {
-                    let hint = prompt.data?.label == "tailscale_auth_key" ? "Tailscale auth key" : "Provider password"
+                    let hint = prompt.data?.label == "tailscale_auth_key" ? String(l10n: "Tailscale auth key") : String(l10n: "Provider password")
                     SecureField(text: $secret, prompt: Text(verbatim: "")) { Text(hint) }
                         .fieldPlaceholder(hint, shows: secret.isEmpty)
                         .fleetField().accessibilityIdentifier("setup-secret")
@@ -232,7 +232,7 @@ struct SetupPromptView: View {
                     }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                 } else { Text("The installer returned an unsupported command.").foregroundStyle(.orange) }
             case "choice":
-                Text(prompt.data?.question ?? "Choose an option")
+                Text(prompt.data?.question ?? String(l10n: "Choose an option"))
                 ForEach(prompt.data?.options ?? [], id: \.value) { option in
                     Button(option.label) { Task { await session.answer(option.value) } }.buttonStyle(FleetOutlineButtonStyle())
                 }

@@ -24,11 +24,11 @@ enum DoorKeys {
     /// is in memory for this call only. Gives the secret's reference. reference: the one that an earlier try of the same
     /// key registered (`DoorKeyReference`), so that a try that failed after the hub step leaves no second catalog entry.
     static func put(_ value: String, variable: String, store: FleetStore, reference: String? = nil) async throws -> String {
-        guard let database = store.state?.db else { throw Stop("No current status of this hub. Nothing was sent.") }
+        guard let database = store.state?.db else { throw Stop(String(l10n: "No current status of this hub. Nothing was sent.")) }
         let hub = store.hub, client = store.installation
         guard let reading = try await VaultClient().reading(hub: hub, database: database), let fleet = reading.fleetID,
               let recipient = reading.trusted(pin: CentralVaultPins.recipient(hub: hub, fleet: fleet)) else {
-            throw Stop("The central vault does not answer with the key this Mac pinned. Nothing was sent.")
+            throw Stop(String(l10n: "The central vault does not answer with the key this Mac pinned. Nothing was sent."))
         }
         var secret = LoginSecret()
         secret.kind = .apiKey
@@ -43,8 +43,7 @@ enum DoorKeys {
         // that can never hold the value (6 November 2026: an App key in PEM form, at every round of the door's sync).
         let prints = try SecretFingerprint.of(item, salts: salts)
         guard SecretFingerprint.areValid(prints) else {
-            throw Stop("The central vault takes a value only with a fingerprint, and this one has none: it has fewer than "
-                       + "8 characters or holds white space. Nothing was sent.")
+            throw Stop(String(l10n: "The central vault takes a value only with a fingerprint, and this one has none: it has fewer than 8 characters or holds white space. Nothing was sent."))
         }
         _ = try await SecretsClient().add(hub: hub, database: database, client: client, login: reference, title: secret.title,
                                           kind: .apiKey, variable: secret.variable, fingerprints: prints)

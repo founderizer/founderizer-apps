@@ -73,11 +73,11 @@ public struct MachineLogin: Decodable, Equatable, Sendable {
     /// the same instruction twice. Nothing for one that only waited too long for him.
     public var reason: String? {
         guard isFailure else { return nil }
-        var words = (detail ?? "The sign-in did not finish.").trimmingCharacters(in: .whitespaces)
+        var words = (detail ?? String(l10n: "The sign-in did not finish.")).trimmingCharacters(in: .whitespaces)
         for tail in ["Start the sign-in again.", "Start it again.", "Try again."] where words.hasSuffix(tail) {
             words = String(words.dropLast(tail.count)).trimmingCharacters(in: .whitespaces)
         }
-        return words.isEmpty ? "The sign-in did not finish." : words
+        return words.isEmpty ? String(l10n: "The sign-in did not finish.") : words
     }
 
     /// The code the runtime printed, when it is one.
@@ -103,14 +103,14 @@ public struct MachineLogin: Decodable, Equatable, Sendable {
     /// One line for the machine's row, in the owner's own words.
     public var summary: String {
         switch state {
-        case "signing_out": return "Signing out of the account it used…"
-        case "starting": return "Starting the sign-in on that server…"
+        case "signing_out": return String(l10n: "Signing out of the account it used…")
+        case "starting": return String(l10n: "Starting the sign-in on that server…")
         case "needs_owner":
-            if wants_code { return "Open the link, then paste the code it gives you." }
-            return deviceCode.map { "Open the link and enter \($0) there." } ?? "Open the link to finish the sign-in."
-        case "signing_in": return "The code went to the server…"
-        case "done": return detail ?? "Signed in."
-        default: return detail ?? "The sign-in did not finish."
+            if wants_code { return String(l10n: "Open the link, then paste the code it gives you.") }
+            return deviceCode.map { String(l10n: "Open the link and enter \($0) there.") } ?? String(l10n: "Open the link to finish the sign-in.")
+        case "signing_in": return String(l10n: "The code went to the server…")
+        case "done": return detail ?? String(l10n: "Signed in.")
+        default: return detail ?? String(l10n: "The sign-in did not finish.")
         }
     }
 }
@@ -156,11 +156,11 @@ extension MachineStatus {
     /// its own state row — "Waiting for your sign-in" — so the card under it says only what that row does not:
     /// the attempt that is going on, or the one that failed, and nothing at all while there is no attempt.
     public func signInLine(working: Bool, alreadySaid: Bool = false) -> SignInLine? {
-        if working { return SignInLine(says: "Working…", warn: false) }
+        if working { return SignInLine(says: String(l10n: "Working…"), warn: false) }
         if let login, login.isOpen { return SignInLine(says: login.summary, warn: false) }
         guard needsSignIn else { return nil }
         if let login, login.isFailure { return SignInLine(says: login.summary, warn: true) }
-        return alreadySaid ? nil : SignInLine(says: "Not signed in on this server.", warn: false)
+        return alreadySaid ? nil : SignInLine(says: String(l10n: "Not signed in on this server."), warn: false)
     }
 }
 

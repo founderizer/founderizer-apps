@@ -45,10 +45,13 @@ public struct MachineReach: Equatable, Sendable {
     /// same way as the fleet's own.
     public static func sentence(machine: String, user: String, address: String, port: Int,
                                 identityFile: String?) -> String {
-        let key = identityFile.map { "with the key \(URL(fileURLWithPath: $0).lastPathComponent)" }
-            ?? "with the key your SSH agent holds"
-        let place = port == 22 ? "at \(address)" : "at \(address) on port \(port)"
-        return "Founderizer reaches \(machine) as \(user) \(place), \(key)."
+        if let identityFile {
+            let file = URL(fileURLWithPath: identityFile).lastPathComponent
+            return port == 22 ? String(l10n: "Founderizer reaches \(machine) as \(user) at \(address), with the key \(file).")
+                : String(l10n: "Founderizer reaches \(machine) as \(user) at \(address) on port \(port), with the key \(file).")
+        }
+        return port == 22 ? String(l10n: "Founderizer reaches \(machine) as \(user) at \(address), with the key your SSH agent holds.")
+            : String(l10n: "Founderizer reaches \(machine) as \(user) at \(address) on port \(port), with the key your SSH agent holds.")
     }
 
     /// **A kept connection, at an address that still answers.** The installers let SSH into a Linux machine of a fleet
@@ -66,8 +69,7 @@ public struct MachineReach: Equatable, Sendable {
     /// What the page says of a machine the fleet reports without an `access` entry: the gap in the record, in the
     /// fleet's own terms, and the one thing the owner can do about it here.
     public static func nothingOnRecord(_ machine: String) -> String {
-        "The fleet has no connection to \(machine) on record: it knows no SSH user for that server. "
-            + "Give the one you reach it with."
+        String(l10n: "The fleet has no connection to \(machine) on record: it knows no SSH user for that server. Give the one you reach it with.")
     }
 }
 
@@ -111,11 +113,11 @@ public struct MachineAccessForm: Equatable, Sendable {
 
     /// Nil when the form is ready to send; otherwise the one line that says what is wrong with it, in his terms.
     public var problem: String? {
-        if trimmedUser.isEmpty { return "Give the user you reach this server as." }
+        if trimmedUser.isEmpty { return String(l10n: "Give the user you reach this server as.") }
         if trimmedUser.range(of: Self.userPattern, options: .regularExpression) == nil {
-            return "A user name is up to 32 characters: a letter or _ first, then letters, digits, . _ or -."
+            return String(l10n: "A user name is up to 32 characters: a letter or _ first, then letters, digits, . _ or -.")
         }
-        guard let port = portNumber, (1...65535).contains(port) else { return "A port is a number from 1 to 65535." }
+        guard let port = portNumber, (1...65535).contains(port) else { return String(l10n: "A port is a number from 1 to 65535.") }
         return nil
     }
 
@@ -127,8 +129,7 @@ public struct MachineAccessForm: Equatable, Sendable {
     /// no user has nothing to compare against, so the owner's own word stands.
     public func notAllowed(workerUser: String?) -> String? {
         guard let workerUser, !workerUser.isEmpty, !["root", workerUser].contains(trimmedUser) else { return nil }
-        return "The agents of this server run as \(workerUser), so the fleet can reach it as root or as "
-            + "\(workerUser). Another user would leave the server on record as one Founderizer may not use."
+        return String(l10n: "The agents of this server run as \(workerUser), so the fleet can reach it as root or as \(workerUser). Another user would leave the server on record as one Founderizer may not use.")
     }
 }
 

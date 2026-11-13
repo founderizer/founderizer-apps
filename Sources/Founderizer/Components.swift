@@ -665,7 +665,7 @@ struct FoldRow<Content: View>: View {
 }
 
 func fleetDate(_ timestamp: Double?) -> String {
-    guard let timestamp else { return "Not reported" }
+    guard let timestamp else { return String(l10n: "Not reported") }
     return Date(timeIntervalSince1970: timestamp).formatted(date: .abbreviated, time: .shortened)
 }
 

@@ -43,7 +43,7 @@ struct RolePage: View {
                             HStack(spacing: 8) {
                                 SaveMark(state: saving["name"], retry: keepName)
                                 TextField(text: $typedName, prompt: Text(verbatim: "")) { Text("Name") }
-                                    .fieldPlaceholder("Name", shows: typedName.isEmpty).fleetField(focus: $focus, equals: .name).frame(width: 190)
+                                    .fieldPlaceholder(String(l10n: "Name"), shows: typedName.isEmpty).fleetField(focus: $focus, equals: .name).frame(width: 190)
                                     .disabled(!canWrite)
                                     .onSubmit(keepName)
                                     .accessibilityIdentifier("role-name")
@@ -111,8 +111,8 @@ struct RolePage: View {
         let said = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard said != role.prompt else { return }
         if said.isEmpty || said.count > RoleList.promptMax {
-            let why = said.isEmpty ? "Write what the agent is told about such a person."
-                                   : "That is too long: at most \(RoleList.promptMax.formatted()) characters."
+            let why = said.isEmpty ? String(l10n: "Write what the agent is told about such a person.")
+                                   : String(l10n: "That is too long: at most \(RoleList.promptMax.formatted()) characters.")
             saving["prompt"] = .failed(why); problem = why
             return
         }

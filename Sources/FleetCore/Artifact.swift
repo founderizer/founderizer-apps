@@ -128,15 +128,15 @@ public enum ArtifactError: LocalizedError, Equatable, Sendable {
     case identity, metadata, size, mime, checksum, utf8, image, stale, refusedText
     public var errorDescription: String? {
         switch self {
-        case .identity: "The output response belongs to a different hub, generation, task or revision. Reload checked outputs."
-        case .metadata: "The hub returned an unsupported or invalid output reference."
-        case .size: "The output size does not match its checked reference or exceeds the display limit."
-        case .mime: "The output file type does not match its checked reference."
-        case .checksum: "The output checksum does not match its checked reference. Reload checked outputs."
-        case .utf8: "The output is not valid UTF-8 text."
-        case .image: "The image cannot be displayed safely. Supported images are PNG or JPEG, up to 40 million pixels."
-        case .stale: "The checked output list changed. Reload checked outputs."
-        case .refusedText: "The hub blocked text that contains a registered login. Nothing was displayed or saved."
+        case .identity: String(l10n: "The output response belongs to a different hub, generation, task or revision. Reload checked outputs.")
+        case .metadata: String(l10n: "The hub returned an unsupported or invalid output reference.")
+        case .size: String(l10n: "The output size does not match its checked reference or exceeds the display limit.")
+        case .mime: String(l10n: "The output file type does not match its checked reference.")
+        case .checksum: String(l10n: "The output checksum does not match its checked reference. Reload checked outputs.")
+        case .utf8: String(l10n: "The output is not valid UTF-8 text.")
+        case .image: String(l10n: "The image cannot be displayed safely. Supported images are PNG or JPEG, up to 40 million pixels.")
+        case .stale: String(l10n: "The checked output list changed. Reload checked outputs.")
+        case .refusedText: String(l10n: "The hub blocked text that contains a registered login. Nothing was displayed or saved.")
         }
     }
 }

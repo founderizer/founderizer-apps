@@ -25,7 +25,7 @@ extension IconTile where Mark == Image {
 /// The agents that have a secret, a repository or a tool, in the few words of a list row: up to three names, else
 /// their count. Two secrets of one variable name differ by these names.
 func agentWords(_ names: [String]) -> String {
-    names.isEmpty ? "No agent" : names.count <= 3 ? names.map(\.agentLabel).joined(separator: ", ") : "\(names.count) agents"
+    names.isEmpty ? String(l10n: "No agent") : names.count <= 3 ? names.map(\.agentLabel).joined(separator: ", ") : String(l10n: "\(names.count) agents")
 }
 
 /// The GitHub mark (the Octicons `mark-github` path, MIT license) as a template image: it takes the color of the text.

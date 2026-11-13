@@ -229,6 +229,9 @@ public sealed record StoreState
     public ImmutableDictionary<string, ValueList<StagedFile>> Staged { get; init; } = ImmutableDictionary<string, ValueList<StagedFile>>.Empty;
     /// <summary>The picked files whose upload runs now.</summary>
     public ImmutableHashSet<Guid> Uploading { get; init; } = ImmutableHashSet<Guid>.Empty;
+    /// <summary>The files of messages whose bytes are read now, and those whose last read failed ("Not loaded").</summary>
+    public ImmutableHashSet<long> FilesReading { get; init; } = ImmutableHashSet<long>.Empty;
+    public ImmutableHashSet<long> FilesUnloaded { get; init; } = ImmutableHashSet<long>.Empty;
     /// <summary>Why the last file that he picked was not taken (its type, its size, the count), in his words, and the
     /// system's words when this PC could not keep it.</summary>
     public string? FileError { get; init; }
@@ -400,8 +403,7 @@ public sealed record StoreState
         { Command: { } command } => command.Kind switch
         {
             "steer" => "Guidance to a task",
-            "control" => "A control of a task",
-            _ => "A question about a request",
+            _ => "A control of a task",
         },
         { } p => "Message to " + Names.Label(p.Recipient ?? "manager"),
     };
@@ -410,7 +412,7 @@ public sealed record StoreState
     internal static string PcWords(string words) =>
         words.Replace("This phone's", "This PC's").Replace("this phone's", "this PC's").Replace("This phone", "This PC")
              .Replace("this phone", "this PC").Replace("the phone sent", "the PC sent").Replace("The phone may", "The PC may")
-             .Replace("the phone's routes", "the PC's routes");
+             .Replace("the phone's routes", "the PC's routes").Replace("the phone's API", "the PC's API");
 
     private static DateTimeOffset Max(DateTimeOffset? a, DateTimeOffset b) => a is { } x && x > b ? x : b;
 }
@@ -441,7 +443,7 @@ public enum StoreParts
     None = 0,
     /// <summary>The pane (<see cref="Screens.Pane"/>): Needs you and its count, the agents' rows.</summary>
     Pane = 1,
-    /// <summary>The connection line over every page (<see cref="Screens.Line"/>).</summary>
+    /// <summary>The connection line over every page (<c>Screens.Line</c>).</summary>
     Line = 2,
     /// <summary>The open chat (<see cref="StoreState.OpenChat"/>, <see cref="Screens.Chat"/>): its rows, its waiting
     /// line, its composer and its panel.</summary>
@@ -571,7 +573,6 @@ public sealed record StoreChange
             {
                 if (request is null) continue;
                 if (request.NeedId is { } need) needs.Add(need);
-                else if (request.Command is { Kind: "need_talk" } talk) needs.Add(talk.Target);
                 else if (request.Command is { } command) pages.Add(command.Target);
                 else chats.Add(request.Recipient ?? "manager");
             }

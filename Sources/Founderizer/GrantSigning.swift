@@ -36,7 +36,7 @@ enum GrantSigning {
             } else {
                 let team = try await HubClient().team(hub: hub, database: database)
                 guard let placed = team.members.first(where: { $0.agent == agent })?.placement?.machine, CentralVault.isMachine(placed) else {
-                    throw Stop("The hub names no server for \(agent.agentLabel), so Founderizer signed nothing.")
+                    throw Stop(String(l10n: "The hub names no server for \(agent.agentLabel), so Founderizer signed nothing."))
                 }
                 machine = placed
             }
@@ -73,10 +73,10 @@ enum GrantSigning {
     /// This fleet's id, as the hub names it, and the owner key this Mac holds for it.
     private static func owner(hub: URL, database: String) async throws -> (String, any OwnerKey) {
         guard let fleet = try await VaultClient().reading(hub: hub, database: database)?.fleetID else {
-            throw Stop("The hub did not say which fleet this is, so Founderizer signed nothing.")
+            throw Stop(String(l10n: "The hub did not say which fleet this is, so Founderizer signed nothing."))
         }
         guard let key = OwnerKeychain.key(fleet: fleet) else {
-            throw Stop("This Mac holds no owner key for this fleet, so it cannot sign the change.")
+            throw Stop(String(l10n: "This Mac holds no owner key for this fleet, so it cannot sign the change."))
         }
         return (fleet, key)
     }

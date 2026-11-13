@@ -31,7 +31,7 @@ public enum ChatList {
         case .message(let message):
             // A message of files alone is its files, as the chat shows it.
             let files = (message.attachments ?? []).map(\.name).joined(separator: ", ")
-            return (plain(message.text) ?? plain(files)).map { "You: \($0)" }
+            return (plain(message.text) ?? plain(files)).map { String(l10n: "You: \($0)") }
         case nil: return nil
         }
     }
@@ -64,7 +64,7 @@ public enum ChatList {
             Date.FormatStyle(date: date, time: time, locale: locale, calendar: calendar, timeZone: calendar.timeZone)
         }
         if days <= 0 { return date.formatted(style(time: .shortened)) }
-        if days == 1 { return "Yesterday" }
+        if days == 1 { return String(l10n: "Yesterday") }
         if days < 7 { return date.formatted(style().weekday(.wide)) }
         return date.formatted(style(date: .numeric))
     }

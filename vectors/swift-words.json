@@ -1,5 +1,5 @@
 {
-  "about" : "Words that FleetCore makes: AgentNames.label and under with the roles of team.json, String.capitalized, MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and activityAge in UTC with two locales.",
+  "about" : "Words that FleetCore makes: AgentNames.label and under with the roles of team.json, String.capitalized, MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and activityAge in UTC with two locales, and AgentNames.matches (Search) for each typed text.",
   "ages" : [
     {
       "locale" : "en_GB",
@@ -183,6 +183,120 @@
     }
   ],
   "made_by" : "app/Tests/FleetCoreTests/WordsVectorsTests.swift",
+  "matches" : [
+    {
+      "names" : [
+        "wren"
+      ],
+      "words" : "support"
+    },
+    {
+      "names" : [
+        "wren"
+      ],
+      "words" : "Support"
+    },
+    {
+      "names" : [
+        "wren"
+      ],
+      "words" : "SUP"
+    },
+    {
+      "names" : [
+        "wren"
+      ],
+      "words" : "wren"
+    },
+    {
+      "names" : [
+        "wren"
+      ],
+      "words" : "WREN"
+    },
+    {
+      "names" : [
+        "theo",
+        "pax",
+        "dev-lead",
+        "web_dev"
+      ],
+      "words" : "dev"
+    },
+    {
+      "names" : [
+        "pax",
+        "ops"
+      ],
+      "words" : "ops"
+    },
+    {
+      "names" : [
+        "dev-lead"
+      ],
+      "words" : "lead"
+    },
+    {
+      "names" : [
+        "web_dev"
+      ],
+      "words" : "web_"
+    },
+    {
+      "names" : [
+        "worker-1",
+        "a1b2"
+      ],
+      "words" : "1"
+    },
+    {
+      "names" : [
+        "bistro"
+      ],
+      "words" : "cafe"
+    },
+    {
+      "names" : [
+        "bistro"
+      ],
+      "words" : "CAFÉ"
+    },
+    {
+      "names" : [
+
+      ],
+      "words" : "helper "
+    },
+    {
+      "names" : [
+
+      ],
+      "words" : ""
+    },
+    {
+      "names" : [
+        "manager",
+        "wren",
+        "qa",
+        "iris",
+        "sales-bot",
+        "bistro"
+      ],
+      "words" : " "
+    },
+    {
+      "names" : [
+        "manager"
+      ],
+      "words" : "Fleet Manager"
+    },
+    {
+      "names" : [
+
+      ],
+      "words" : "fleet  manager"
+    }
+  ],
   "names" : [
     {
       "capitalized" : "Manager",
@@ -279,6 +393,13 @@
       "capitalized" : "X",
       "label" : "X",
       "name" : "x"
+    },
+    {
+      "capitalized" : "Bistro",
+      "label" : "Café helper",
+      "name" : "bistro",
+      "title" : "Café helper",
+      "under" : "Bistro"
     }
   ],
   "texts" : [

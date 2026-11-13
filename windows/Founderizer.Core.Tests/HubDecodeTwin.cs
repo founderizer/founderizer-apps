@@ -165,14 +165,20 @@ public sealed class HubDecodeTwin
         Assert.IsFalse(answered.Needs.Any(n => n.Id == need), "an answered item is no longer open");
     }
 
+    /// <summary>Discuss left the product (owner API 1.158): the route of a question about a request answers 404 for a
+    /// device, so no build of this app has a write that goes there.</summary>
     [TestMethod]
-    public async Task need_talk()
+    public async Task need_talk_route_is_gone()
     {
         var key = Key();
-        var request = PendingRequest.New(Hub, Database, Client, "What does B cost?",
-                                         command: OwnerCommand.NeedTalk(Ids("NEEDS")[0]));
-        var receipt = await Read(c => c.CommandAsync(request, key));
-        Assert.IsTrue(receipt.Talk!.Any(m => m.FromOwner && m.Text == "What does B cost?"));
+        using var http = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(Hub, $"ui/needs/{Ids("NEEDS")[0]}/talk"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+        request.Headers.TryAddWithoutValidation("X-Fleet-Client", Client);
+        request.Content = new StringContent($$"""{"request_id":"{{Guid.NewGuid()}}","db":"{{Database}}","text":"What does B cost?"}""",
+                                            System.Text.Encoding.UTF8, "application/json");
+        using var answer = await http.SendAsync(request);
+        Assert.AreEqual(404, (int)answer.StatusCode, await answer.Content.ReadAsStringAsync());
     }
 
     [TestMethod]

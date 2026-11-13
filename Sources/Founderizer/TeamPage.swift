@@ -149,16 +149,16 @@ final class TeamModel {
     /// One save or delete of a rule, again on the newer version after each 409 that a change elsewhere caused.
     private func send(_ first: ProfileSectionEdit, key: EditKey, deleting removing: Bool, store: FleetStore) async -> SaveState {
         var edit = first
-        var words = "Not saved."
+        var words = String(l10n: "Not saved.")
         for _ in 0..<3 {
-            guard let payload = try? edit.payload(deleting: removing) else { return .failed("The hub cannot take this profile. Check the rule.") }
+            guard let payload = try? edit.payload(deleting: removing) else { return .failed(String(l10n: "The hub cannot take this profile. Check the rule.")) }
             var result = await store.save(edit.command, note: payload, queue: false)
             if case .unconfirmed(let id) = result {
                 unanswered = (key, id)
                 // Its row and the rule's editor say it, so the window's request line leaves it out on Behaviour
                 // (`pendingInItsRow`).
                 store.pendingInItsRow = (id, key.agent, .behaviour)
-                set(.failed("The hub has not answered. Try again sends the same request."), for: key)
+                set(.failed(String(l10n: "The hub has not answered. Try again sends the same request.")), for: key)
                 result = await store.answer(to: id)
                 unanswered = nil
                 if store.pendingInItsRow?.id == id { store.pendingInItsRow = nil }
@@ -178,7 +178,7 @@ final class TeamModel {
                 switch current.rebase(on: profile) {
                 case .gone:
                     edits[key] = nil
-                    return removing ? .saved : .failed("Another change removed this rule, so this text was not saved.")
+                    return removing ? .saved : .failed(String(l10n: "Another change removed this rule, so this text was not saved."))
                 case .sectionChanged:
                     // Another save gave the rule this same text: it is saved.
                     if !removing && !current.isChanged { edits[key] = current; return .saved }
@@ -189,7 +189,7 @@ final class TeamModel {
                     edit = current
                 }
             case .refused(let reason): return .failed(reason)
-            case .unconfirmed: return .failed("The hub has not answered.")
+            case .unconfirmed: return .failed(String(l10n: "The hub has not answered."))
             case .behind: return .behind
             }
         }
@@ -219,7 +219,7 @@ struct BehaviourView: View {
         FleetPage(AgentTab.behaviour.heading) {
             if features.contains("profiles") { profileBlocks }
             TriggersView(store: store, agent: agent)
-            if memoryOffered { AgentMemorySection(store: store, agent: agent, titled: "Memory") }
+            if memoryOffered { AgentMemorySection(store: store, agent: agent, titled: String(l10n: "Memory")) }
         }
         // The schedules are read here, so a section with no rule draws nothing at all (`TriggersView.poll`).
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(agent)/schedules") { await TriggersView.poll(store: store) }
@@ -248,13 +248,13 @@ struct BehaviourView: View {
             // While the hub does not answer nothing is read, and the profile is not read.
             case .loading where store.connectionError == nil:
                 rules(nil)
-                LoadingLine("Reading the rules…")
+                LoadingLine(String(l10n: "Reading the rules…"))
             // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3, item 33): the
             // heading stands alone, with no Add rule, because the editor has nothing to edit without the profile.
             case .loading, .failed:
                 if store.hubNoticeShows { rules(nil, adds: false) }
-                else { EmptyState(symbol: "exclamationmark.circle", title: "Profile not read", detail: team.reading.notReadDetail) }
-            case .current, .stale: EmptyState(symbol: "doc.questionmark", title: "No profile", detail: "The hub has no profile for \(agent.agentLabel).")
+                else { EmptyState(symbol: "exclamationmark.circle", title: String(l10n: "Profile not read"), detail: team.reading.notReadDetail) }
+            case .current, .stale: EmptyState(symbol: "doc.questionmark", title: String(l10n: "No profile"), detail: String(l10n: "The hub has no profile for \(agent.agentLabel)."))
             }
         }
     }
@@ -358,14 +358,14 @@ struct RuleEditor: View {
                 if let key, let edit { editor(edit, key: key) }
                 else {
                     switch team.reading {
-                    case .loading where store.connectionError == nil: LoadingLine("Reading the rule…")
+                    case .loading where store.connectionError == nil: LoadingLine(String(l10n: "Reading the rule…"))
                     // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`).
                     case .loading, .failed:
                         if !store.hubNoticeShows {
-                            EmptyState(symbol: "exclamationmark.circle", title: "Profile not read", detail: team.reading.notReadDetail)
+                            EmptyState(symbol: "exclamationmark.circle", title: String(l10n: "Profile not read"), detail: team.reading.notReadDetail)
                         }
                     case .current, .stale:
-                        EmptyState(symbol: "doc.questionmark", title: "Rule not found", detail: state?.failure ?? "This profile has no such rule now.")
+                        EmptyState(symbol: "doc.questionmark", title: String(l10n: "Rule not found"), detail: state?.failure ?? String(l10n: "This profile has no such rule now."))
                     }
                     Spacer(minLength: 0)
                 }
@@ -404,8 +404,8 @@ struct RuleEditor: View {
 
     /// The header's title: the rule's own name once it is read, else the name of its kind; "New rule" for one he adds.
     private var title: String {
-        if let edit { return edit.isNew ? "New rule" : edit.name }
-        return id.map { ProfileGuide.name(key: $0.key, title: "Rule") } ?? "New rule"
+        if let edit { return edit.isNew ? String(l10n: "New rule") : edit.name }
+        return id.map { ProfileGuide.name(key: $0.key, title: String(l10n: "Rule")) } ?? String(l10n: "New rule")
     }
 
     /// The save state, and Done; Add rule for a new rule. Back to Behaviour is the page's back link (Esc).
@@ -427,7 +427,7 @@ struct RuleEditor: View {
         if edit.id.key == "other" {
             TextField(text: Binding(get: { team.edits[key]?.title ?? edit.title },
                                     set: { team.begin(key); team.setTitle($0, of: key) }), prompt: Text(verbatim: "")) { Text("Title") }
-                .fieldPlaceholder("Title", shows: (team.edits[key]?.title ?? edit.title).isEmpty)
+                .fieldPlaceholder(String(l10n: "Title"), shows: (team.edits[key]?.title ?? edit.title).isEmpty)
                 .fleetField()
                 .accessibilityIdentifier("rule-title")
         }
@@ -448,7 +448,7 @@ struct RuleEditor: View {
             // a 1.39:1 edge, no ring with the cursor, room that took no click, and no stronger edge with Increase
             // Contrast — under a Title field in the field look.
             .fleetTextBox()
-            .accessibilityLabel(edit.isNew ? "Rule text" : edit.name).accessibilityIdentifier("rule-text")
+            .accessibilityLabel(edit.isNew ? String(l10n: "Rule text") : edit.name).accessibilityIdentifier("rule-text")
         // **Only while it has something to show** (the margins of 30 October 2026, row 32): empty, its line still took the
         // stack's 14 pt, and the box ended 38 pt over the window's bottom edge, where every page's last block ends 24 over it.
         let status = status(edit), deletes = !edit.isNew && edit.canDelete
@@ -474,9 +474,9 @@ struct RuleEditor: View {
     private func status(_ edit: ProfileSectionEdit) -> (text: String, warning: Bool)? {
         let typed = !edit.normalizedTitle.isEmpty || !edit.normalizedText.isEmpty
         if edit.isChanged, !edit.isNew || typed, let problem = edit.problem() { return (problem, true) }
-        if let failure = state?.failure { return ("Not saved. \(failure)", true) }
+        if let failure = state?.failure { return (String(l10n: "Not saved. \(failure)"), true) }
         if state == .behind { return nil }          // only Retry says it, with its reason on hover
-        if state == .changedElsewhere { return ("Another change also changed this rule. This is its saved text now.", true) }
+        if state == .changedElsewhere { return (String(l10n: "Another change also changed this rule. This is its saved text now."), true) }
         if case .stale = team.reading { return (team.reading.lastReadingLine, true) }
         // Nothing while all is well (D-2): the save mark says Saved, and Add rule says what it does.
         return nil

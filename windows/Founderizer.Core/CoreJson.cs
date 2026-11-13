@@ -35,6 +35,7 @@ namespace Founderizer.Core;
 [JsonSerializable(typeof(KeptDrafts))]
 [JsonSerializable(typeof(KeptHub))]
 [JsonSerializable(typeof(KeptStaged))]
+[JsonSerializable(typeof(KeptLedger))]
 internal sealed partial class CoreJson : JsonSerializerContext;
 
 /// <summary>The shapes that the hub and the Swift apps check, each anchored at both ends of the text (\A and \z): a

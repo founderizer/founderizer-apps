@@ -10,7 +10,8 @@
     <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
     <RootNamespace>Founderizer.Windows</RootNamespace>
-    <AssemblyName>Founderizer</AssemblyName>
+    <!-- The app of a build (Founderizer.App.exe); Founderizer.exe beside it is the launcher (Founderizer.Launcher). -->
+    <AssemblyName>Founderizer.App</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>ARM64;x64</Platforms>
     <RuntimeIdentifiers>win-arm64;win-x64</RuntimeIdentifiers>
@@ -35,13 +36,21 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
   </ItemGroup>
 
+  <!-- The files of the sample's picture 4 (the second set), only in the proofs' build. -->
+  <ItemGroup Condition="'$(FounderizerProofs)' == 'true'">
+    <EmbeddedResource Include="Sample/*.png" LogicalName="Founderizer.Windows.Sample.%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../Founderizer.Core/Founderizer.Core.csproj" />
+    <ProjectReference Include="../Founderizer.Install/Founderizer.Install.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- The sample fleet of the Mac and iPhone apps (Sample/make_sample_json.py copies it from app/ios). -->
     <EmbeddedResource Include="Sample/SampleFleet.json" LogicalName="Founderizer.Windows.Sample.SampleFleet.json" />
+    <Content Remove="Sample/*.png" />
+    <None Remove="Sample/*.png" />
     <None Remove="Sample/make_sample_json.py" />
     <!-- The providers' logos of the panel beside a chat, the Mac's own bytes (Assets/make_provider_logos.py). -->
     <EmbeddedResource Include="Assets/*.png" LogicalName="Founderizer.Windows.Assets.%(Filename)%(Extension)" />

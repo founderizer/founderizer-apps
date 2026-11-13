@@ -85,7 +85,7 @@ struct AddServerView: View {
 
     /// **Each page is a setup step, as the first run's are** (`SetupPage`, `SetupStep`): the product's muted mark at
     /// the size of every step's mark, the title under it, what the page asks under that, and Back at the page's top left.
-    /// The mark and the title stand where every setup step has them, and a wait is the title's moving words.
+    /// The page puts the whole step in the middle of the window, and a wait is the title's moving words.
     var body: some View {
         SetupPage { back } step: {
             SetupStep(title: title, waits: waits, width: page == .machine && model.way == .linux ? SetupMetrics.cardsWidth
@@ -182,45 +182,45 @@ struct AddServerView: View {
     /// The name of the page the owner is on. Each one says what it asks, so no page needs a line to explain itself.
     private var title: String {
         switch page {
-        case .ways: placing.map { "\($0.agent.agentLabel)'s server" } ?? "Add server"
-        case .ai: model.way == .mac ? "Which AI runs on this Mac?" : "Which AI runs on this server?"
-        case .opening: "Open the installer on that Mac"
+        case .ways: placing.map { String(l10n: "\($0.agent.agentLabel)'s server") } ?? String(l10n: "Add server")
+        case .ai: model.way == .mac ? String(l10n: "Which AI runs on this Mac?") : String(l10n: "Which AI runs on this server?")
+        case .opening: String(l10n: "Open the installer on that Mac")
         case .machine:
             switch model.way {
             // The first run's "A VPS for your fleet": the fleet has its own, and the agents run on the servers he adds.
-            case .linux: "A VPS for your agents"
-            case .mac: "The Mac that stays on"
-            case .line: "The server you paste it on"
+            case .linux: String(l10n: "A VPS for your agents")
+            case .mac: String(l10n: "The Mac that stays on")
+            case .line: String(l10n: "The server you paste it on")
             }
-        case .key: net.busy ? "Connecting your network" : "Your Tailscale key"
+        case .key: net.busy ? String(l10n: "Connecting your network") : String(l10n: "Your Tailscale key")
         // The build is the install's first steps, under the install's own title, so the words stay when it goes on. The
         // hub names the server at its join, after the build.
         case .token(let provider):
-            building ? "Installing the server"
-                : cloud.stage == .choosing ? placing.map { "\($0.agent.agentLabel)'s server at \(provider.name)" }
-                    ?? "A server at \(provider.name)"
-                : "Your \(provider.name) token"
+            building ? String(l10n: "Installing the server")
+                : cloud.stage == .choosing ? placing.map { String(l10n: "\($0.agent.agentLabel)'s server at \(provider.name)") }
+                    ?? String(l10n: "A server at \(provider.name)")
+                : String(l10n: "Your \(provider.name) token")
         case .vps:
             switch vps.phase {
-            case .address: "Your VPS"
-            case .checking: "Checking \(vps.host)"
-            case .waiting: "Waiting for \(vps.host)"
-            case .password: "Password for \(vps.target?.user ?? "root")@\(vps.host)"
+            case .address: String(l10n: "Your VPS")
+            case .checking: String(l10n: "Checking \(vps.host)")
+            case .waiting: String(l10n: "Waiting for \(vps.host)")
+            case .password: String(l10n: "Password for \(vps.target?.user ?? "root")@\(vps.host)")
             case .ready, .stopped: vps.host
             }
         case .install:
             switch model.way {
             // A stop has a true title (fix round 3, item 51): "Installing server-2" stood over it.
             // And so has an end: "Installing worker-5" stood over "worker-5 is in your fleet".
-            case .linux: model.failure != nil && !model.running ? "\(installed ?? "The server") did not install"
-                : model.checklist != nil && !model.running ? "\(installed ?? "The server") is installed"
-                : "Installing \(installed ?? "the server")"
-            case .mac: model.failure != nil && !model.running ? "\(installed ?? "The server") did not link"
-                : model.checklist != nil && !model.running ? "\(installed ?? "The server") is linked"
-                : "Linking \(installed ?? "the server")"
+            case .linux: model.failure != nil && !model.running ? String(l10n: "\(installed ?? String(l10n: "The server")) did not install")
+                : model.checklist != nil && !model.running ? String(l10n: "\(installed ?? String(l10n: "The server")) is installed")
+                : String(l10n: "Installing \(installed ?? String(l10n: "the server"))")
+            case .mac: model.failure != nil && !model.running ? String(l10n: "\(installed ?? String(l10n: "The server")) did not link")
+                : model.checklist != nil && !model.running ? String(l10n: "\(installed ?? String(l10n: "The server")) is linked")
+                : String(l10n: "Linking \(installed ?? String(l10n: "the server"))")
             // **The wait is the moving title** (T-36, fix round 2): "Waiting for server-2", where a row said "Waiting
             // for server-2 to join…" under a still "Your join line".
-            case .line: lineWaits ? "Waiting for \(lineName ?? "the server")" : "Your join line"
+            case .line: lineWaits ? String(l10n: "Waiting for \(lineName ?? String(l10n: "the server"))") : String(l10n: "Your join line")
             }
         }
     }
@@ -287,12 +287,12 @@ struct AddServerView: View {
     /// providers, right?", and "for Mac mini/studio use an apple icon too").
     private var ways: some View {
         VStack(spacing: 10) {
-            way(.linux, title: "VPS", symbol: "server.rack",
-                line: "Hetzner, DigitalOcean, Vultr, Akamai, or any VPS by its address.")
-            way(.mac, title: "Mac mini or Studio", symbol: "apple.logo",
-                line: "Its installer runs on that Mac and waits for one code.")
+            way(.linux, title: String(l10n: "VPS"), symbol: "server.rack",
+                line: String(l10n: "Hetzner, DigitalOcean, Vultr, Akamai, or any VPS by its address."))
+            way(.mac, title: String(l10n: "Mac mini or Studio"), symbol: "apple.logo",
+                line: String(l10n: "Its installer runs on that Mac and waits for one code."))
             if placing == nil {
-                way(.line, title: "Paste a line", symbol: "terminal", line: "One line that you paste in that server's own shell.")
+                way(.line, title: String(l10n: "Paste a line"), symbol: "terminal", line: String(l10n: "One line that you paste in that server's own shell."))
             }
         }
     }
@@ -433,7 +433,7 @@ struct AddServerView: View {
         if !net.busy {
             // What he does at Tailscale comes before the paste, so its steps stand over the field.
             SetupSteps.tailscaleKey
-            PasteField(placeholder: "Paste it here", text: $net.keyText, accepts: { $0.hasPrefix("tskey-api-") }) {
+            PasteField(placeholder: String(l10n: "Paste it here"), text: $net.keyText, accepts: { $0.hasPrefix("tskey-api-") }) {
                 // On to the provider only from this page: Back while the key was made leaves no server to make.
                 Task { if await net.sendKey(), page == .key(provider) { build(provider) } }
             }
@@ -454,7 +454,7 @@ struct AddServerView: View {
                         makeNew: { cloud.makeNew(then: installs()) }, use: useExisting)
         } else {
             SetupSteps.token(provider)
-            PasteField(placeholder: "Paste it here", text: $cloud.tokenText,
+            PasteField(placeholder: String(l10n: "Paste it here"), text: $cloud.tokenText,
                        accepts: { $0.count >= 20 && !$0.contains(" ") }) {
                 cloud.sendToken(provider, use: .agent)
             }
@@ -468,7 +468,7 @@ struct AddServerView: View {
     @ViewBuilder private var vpsPages: some View {
         switch vps.phase {
         case .address:
-            SetupField(placeholder: "Address", text: $vps.addressText) { vps.check(job: .join) }
+            SetupField(placeholder: String(l10n: "Address"), text: $vps.addressText) { vps.check(job: .join) }
                 .accessibilityIdentifier("add-server-vps-address")
                 // This Mac's own network, for the stop of a server that is on another one.
                 .task { if vps.tailnet == nil { vps.tailnet = await MacNetwork.read().tailnet } }
@@ -477,7 +477,7 @@ struct AddServerView: View {
         case .waiting(let why):
             Text(why).foregroundStyle(FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
         case .password:
-            SetupSecureField(placeholder: "Password", text: $vps.passwordText) { vps.givePassword(job: .join) }
+            SetupSecureField(placeholder: String(l10n: "Password"), text: $vps.passwordText) { vps.givePassword(job: .join) }
                 .accessibilityIdentifier("add-server-vps-password")
             Text("Used once, to add this Mac's key. Never kept.").foregroundStyle(FleetStyle.muted)
         case .ready(let summary, let changes):
@@ -504,19 +504,19 @@ struct AddServerView: View {
             FormSection {
                 if asksName {
                     FormRow("Name", symbol: "character.cursor.ibeam", warning: model.name.isEmpty ? nil : nameProblem) {
-                        field($model.name, placeholder: "Server name", width: 220, identifier: "link-name")
+                        field($model.name, placeholder: String(l10n: "Server name"), width: 220, identifier: "link-name")
                     }
                 }
-                FormRow("Address", symbol: "network", detail: "As the installer shows it, for example 192.168.1.42.") {
+                FormRow("Address", symbol: "network", detail: String(l10n: "As the installer shows it, for example 192.168.1.42.")) {
                     field($model.macHost, placeholder: "192.168.1.42", width: 220, identifier: "link-host")
                 }
                 FormRow("Link code", symbol: "number",
                         warning: model.linkCode.isEmpty || ClaimCode.read(model.linkCode) != nil ? nil
-                        : "A link code is twelve characters, in three groups of four.") {
+                        : String(l10n: "A link code is twelve characters, in three groups of four.")) {
                     field($model.linkCode, placeholder: "ABCD-EFGH-JKLM", width: 180, identifier: "link-code")
                 }
             }
-            onwards("Link this Mac", identifier: "link-start", warning: model.failure,
+            onwards(String(l10n: "Link this Mac"), identifier: "link-start", warning: model.failure,
                     disabled: model.running || nameProblem != nil
                     || MacInstallerClient.address(model.macHost) == nil || ClaimCode.read(model.linkCode) == nil) {
                 model.linkMac(store: store, withAgent: placing == nil)
@@ -531,13 +531,11 @@ struct AddServerView: View {
         @Bindable var model = self.model
         return VStack(alignment: .leading, spacing: FleetSpace.block) {
             FormSection(footer: kind == "linux"
-                        ? "Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13, with root access. Founderizer sets up "
-                        + "its user, security updates, private network and firewall."
-                        : "macOS 14 or later, with Tailscale signed in and Homebrew installed. The agents run as "
-                        + "the Mac user that pastes the line.") {
+                        ? String(l10n: "Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13, with root access. Founderizer sets up its user, security updates, private network and firewall.")
+                        : String(l10n: "macOS 14 or later, with Tailscale signed in and Homebrew installed. The agents run as the Mac user that pastes the line.")) {
                 if asksName {
                     FormRow("Name", symbol: "character.cursor.ibeam", warning: model.name.isEmpty ? nil : nameProblem) {
-                        field($model.name, placeholder: "Server name", width: 220, identifier: "add-server-name",
+                        field($model.name, placeholder: String(l10n: "Server name"), width: 220, identifier: "add-server-name",
                               submit: { Task { await make() } })
                     }
                 }
@@ -548,7 +546,7 @@ struct AddServerView: View {
                     ]).accessibilityIdentifier("add-server-kind")
                 }
             }
-            onwards("Make the line", identifier: "add-server-make", warning: error,
+            onwards(String(l10n: "Make the line"), identifier: "add-server-make", warning: error,
                     disabled: busy || list == nil || !store.isFresh || nameProblem != nil) {
                 Task { await make() }
             }
@@ -560,11 +558,11 @@ struct AddServerView: View {
     @ViewBuilder private var install: some View {
         switch model.way {
         case .linux:
-            MachineInstallRun(model: model, title: installed ?? "The server", next: AnyView(joined),
+            MachineInstallRun(model: model, title: installed ?? String(l10n: "The server"), next: AnyView(joined),
                               again: { model.installMachine(store: store) })
         case .mac:
             // Try again links the same Mac again (fix round 3, item 51): it emptied the page.
-            MachineInstallRun(model: model, title: installed ?? "The server", next: AnyView(joined),
+            MachineInstallRun(model: model, title: installed ?? String(l10n: "The server"), next: AnyView(joined),
                               again: { model.linkMac(store: store, withAgent: placing == nil) })
         case .line:
             if let code, let line = code.line { joinLine(code, line) }
@@ -624,14 +622,14 @@ struct AddServerView: View {
         // A Mac that the hub sets up has its first agent already, and the installer on it leads the rest.
         } else if model.way == .mac, model.firstAgent != nil {
             FormSection {
-                FormRow("\(installed ?? "The server") is in your fleet", symbol: "checkmark.circle") { openServer }
+                FormRow("\(installed ?? String(l10n: "The server")) is in your fleet", symbol: "checkmark.circle") { openServer }
             }
         } else if addsFirstAgent {
             Color.clear.frame(height: 0).task { await addFirstAgent() }
         } else {
-            FormSection(footer: "A server is signed in to its provider from its own page: Settings, Servers, the server, Sign in.") {
-                FormRow("\(installed ?? "The server") is in your fleet", symbol: "checkmark.circle",
-                        detail: "Add an agent to it, and sign that server in to your provider account.") {
+            FormSection(footer: String(l10n: "A server is signed in to its provider from its own page: Settings, Servers, the server, Sign in.")) {
+                FormRow("\(installed ?? String(l10n: "The server")) is in your fleet", symbol: "checkmark.circle",
+                        detail: String(l10n: "Add an agent to it, and sign that server in to your provider account.")) {
                     HStack(spacing: FleetSpace.actions) {
                         openServer
                         Button("Add agent") { addAgent(installed) }.buttonStyle(FleetPrimaryButtonStyle())
@@ -654,8 +652,8 @@ struct AddServerView: View {
         let expired = state == "expired" || code.expires_at <= time
         FormSection(code.kind == "linux" ? "Paste this line in a root shell on the VPS" :
                         "Paste this line in Terminal on the Mac, as the user that will run the agents",
-                    footer: "The line works once, for 30 minutes. It makes \(lineName ?? "the server") join your private network and Founderizer. A new line cancels this one.") {
-            FormBlock("Join line", detail: code.kind == "linux" ? "It installs Tailscale when the VPS has none: open the sign-in link that it shows." : nil) {
+                    footer: String(l10n: "The line works once, for 30 minutes. It makes \(lineName ?? String(l10n: "the server")) join your private network and Founderizer. A new line cancels this one.")) {
+            FormBlock("Join line", detail: code.kind == "linux" ? String(l10n: "It installs Tailscale when the VPS has none: open the sign-in link that it shows.") : nil) {
                 Text(line).font(FormMetrics.code).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true).padding(10).frame(maxWidth: .infinity, alignment: .leading)
                     .background(FleetStyle.canvas, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
@@ -690,10 +688,10 @@ struct AddServerView: View {
     }
 
     private func status(state: String, expired: Bool) -> String {
-        if state == "joined" { return "\(lineName ?? "The server") joined Founderizer." }
-        if state == "canceled" { return "A newer line replaced this line." }
-        if expired { return "This line expired. Make a new line." }
-        return "Waiting for \(lineName ?? "the server") to join…"
+        if state == "joined" { return String(l10n: "\(lineName ?? String(l10n: "The server")) joined Founderizer.") }
+        if state == "canceled" { return String(l10n: "A newer line replaced this line.") }
+        if expired { return String(l10n: "This line expired. Make a new line.") }
+        return String(l10n: "Waiting for \(lineName ?? String(l10n: "the server")) to join…")
     }
 
     // MARK: the pieces every page is built of
@@ -751,12 +749,12 @@ struct AddServerView: View {
         do {
             let answer = try await HubClient().joinCode(hub: store.hub, database: database, client: store.installation,
                                                         name: asksName ? model.name : nil, kind: kind)
-            guard answer.line != nil else { error = "The hub gave no line. Make a new line."; return }
+            guard answer.line != nil else { error = String(l10n: "The hub gave no line. Make a new line."); return }
             code = answer; copied = false
             page = .install
             list = try? await HubClient().servers(hub: store.hub, database: database)
         } catch let HubError.refusal(_, words) { error = words }
-        catch { self.error = "The hub has not answered. Try again." }
+        catch { self.error = String(l10n: "The hub has not answered. Try again.") }
     }
 
     /// Reads the servers: once for the free names, then every 3 seconds while a line waits for its server. A hub with

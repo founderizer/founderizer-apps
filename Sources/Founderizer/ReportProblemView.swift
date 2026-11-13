@@ -40,8 +40,8 @@ struct ReportProblemView: View {
                         .accessibilityIdentifier("report-text")
                 }
                 FormSection("Sent with it",
-                            footer: "Nothing of your fleet's work leaves this Mac: no task, no message, no file.") {
-                    FormRow("Answer to", detail: "We write back here and keep nothing else.") {
+                            footer: String(l10n: "Nothing of your fleet's work leaves this Mac: no task, no message, no file.")) {
+                    FormRow("Answer to", detail: String(l10n: "We write back here and keep nothing else.")) {
                         TextField(text: $email, prompt: Text(verbatim: "")) { Text("you@example.com") }
                             .fieldPlaceholder("you@example.com", shows: email.isEmpty).fleetField().frame(maxWidth: 260)
                             .accessibilityIdentifier("report-email")
@@ -103,7 +103,7 @@ struct ReportProblemView: View {
         // "5 things look wrong." came.
         FormSection("What Founderizer can see", detail: model.trouble?.summary ?? " ") {
             if model.reading && model.trouble == nil {
-                LoadingLine("Checking your fleet…").frame(minHeight: 44)
+                LoadingLine(String(l10n: "Checking your fleet…")).frame(minHeight: 44)
             } else if let trouble = model.trouble, !trouble.isClear {
                 ForEach(trouble.findings) { finding in
                     FormBlock(finding.title, detail: finding.says) {
@@ -131,10 +131,10 @@ struct ReportProblemView: View {
                 }
             } else if model.trouble != nil {
                 FormRow("Nothing to put right from here", symbol: "checkmark.circle",
-                        detail: "Tell us below and we read it.") { EmptyView() }
+                        detail: String(l10n: "Tell us below and we read it.")) { EmptyView() }
             } else {
                 FormRow("Founderizer could not read your fleet", symbol: "exclamationmark.circle",
-                        detail: "Tell us below anyway.") { EmptyView() }
+                        detail: String(l10n: "Tell us below anyway.")) { EmptyView() }
             }
         } accessory: {
             // **Its words, its size and its place from the first frame** (T-01, T-13): it went grey for the window's
@@ -261,10 +261,10 @@ final class ReportProblemModel {
         } catch {
             // A send that failed leaves the words where they are and says the other way out, which never needs us.
             // Our own words for a refusal stand in the line; the system's words for no answer are behind it.
-            let said = error is URLError ? "The report did not reach us."
+            let said = error is URLError ? String(l10n: "The report did not reach us.")
                 : (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             if error is URLError { cause = error.localizedDescription }
-            failure = "\(said) Copy report and mail it to support@founderizer.com."
+            failure = String(l10n: "\(said) Copy report and mail it to support@founderizer.com.")
         }
     }
 }

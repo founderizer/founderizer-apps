@@ -31,12 +31,12 @@ enum AgentTab: String, CaseIterable, Hashable {
 
     var title: String {
         switch self {
-        case .settings: "Runs on"
-        case .chat: "Chat"
-        case .behaviour: "Behaviour"
-        case .tasks: "Tasks"
-        case .people: "People"
-        case .canUse: "Can use"
+        case .settings: String(l10n: "Runs on")
+        case .chat: String(l10n: "Chat")
+        case .behaviour: String(l10n: "Behaviour")
+        case .tasks: String(l10n: "Tasks")
+        case .people: String(l10n: "People")
+        case .canUse: String(l10n: "Can use")
         }
     }
 
@@ -113,7 +113,7 @@ struct AgentPage: View {
         HStack(spacing: 0) {
             PageSidebar(items: AgentTab.available(features: store.state?.ui_features ?? [],
                                                   role: store.state?.agents.first { $0.name == agent }?.role).map {
-                .init(value: $0, title: $0.title, symbol: $0.symbol, attention: $0 == .people && attention ? "A channel needs you" : nil)
+                .init(value: $0, title: $0.title, symbol: $0.symbol, attention: $0 == .people && attention ? String(l10n: "A channel needs you") : nil)
             }, selection: tab, identifier: "agent-tab", select: select) { head }
             Rule(vertical: true)
             Group {
@@ -216,7 +216,7 @@ struct AgentPeoplePart: View {
         } else if !route.isEmpty {
             PeoplePage(store: store, agent: agent, grouped: true, route: $route)
         } else if let id = conversation {
-            ConversationPage(store: store, id: id, backTitle: "People", back: { conversation = nil })
+            ConversationPage(store: store, id: id, backTitle: String(l10n: "People"), back: { conversation = nil })
         } else if let other = agentChat {
             AgentConversationPage(store: store, agent: agent, other: other, back: { agentChat = nil })
         } else {
@@ -296,22 +296,22 @@ enum AgentMenu {
         let features = store.state?.ui_features ?? []
         let state = store.state?.agents.first { $0.name == agent }
         let pinned = store.pinned.contains(agent)
-        var items = [Item(action: .pin, title: pinned ? "Unpin" : "Pin to top", symbol: pinned ? "pin.slash" : "pin", group: 0)]
+        var items = [Item(action: .pin, title: pinned ? String(l10n: "Unpin") : String(l10n: "Pin to top"), symbol: pinned ? "pin.slash" : "pin", group: 0)]
         if store.hasNewReply(from: agent) {
-            items.append(Item(action: .markRead, title: "Mark as read", symbol: "envelope.open", group: 0))
+            items.append(Item(action: .markRead, title: String(l10n: "Mark as read"), symbol: "envelope.open", group: 0))
         } else {
-            items.append(Item(action: .markUnread, title: "Mark as unread", symbol: "envelope.badge", group: 0,
+            items.append(Item(action: .markUnread, title: String(l10n: "Mark as unread"), symbol: "envelope.badge", group: 0,
                               enabled: store.hasReply(from: agent)))
         }
         if features.contains(AgentRename.feature) && state?.role != "manager" {
-            items.append(Item(action: .rename, title: "Rename…", symbol: "pencil", group: 1, enabled: store.canWrite))
+            items.append(Item(action: .rename, title: String(l10n: "Rename…"), symbol: "pencil", group: 1, enabled: store.canWrite))
         }
         if state?.active == true && state?.role != "manager" {
-            items.append(Item(action: .deactivate, title: "Deactivate", symbol: "pause.circle", group: 1, enabled: store.canWrite))
+            items.append(Item(action: .deactivate, title: String(l10n: "Deactivate"), symbol: "pause.circle", group: 1, enabled: store.canWrite))
         }
-        items.append(Item(action: .details, title: "Agent details", symbol: AgentTab.settings.symbol, group: 2))
+        items.append(Item(action: .details, title: String(l10n: "Agent details"), symbol: AgentTab.settings.symbol, group: 2))
         if features.contains(Servers.feature) || features.contains("machines") {
-            items.append(Item(action: .server, title: "Server", symbol: "server.rack", group: 2))
+            items.append(Item(action: .server, title: String(l10n: "Server"), symbol: "server.rack", group: 2))
         }
         if AgentRemoval.offered(role: state?.role, features: features) {
             items.append(Item(action: .delete, title: deleteTitle, symbol: "trash", group: 3, enabled: store.canWrite))

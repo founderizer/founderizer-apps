@@ -214,9 +214,7 @@ stopped, say exactly where and why.
 """
 
     /// What the owner is told above the block, in their own words.
-    public static let says = "Paste this into the agent you already run — Claude Code, or any agent with a shell. "
-        + "It asks you for the server and for the path of a key file, puts that server on your private network, "
-        + "and gives you its address back. The key never leaves the file, and the prompt refuses to print it."
+    public static let says = String(l10n: "Paste this into the agent you already run — Claude Code, or any agent with a shell. It asks you for the server and for the path of a key file, puts that server on your private network, and gives you its address back. The key never leaves the file, and the prompt refuses to print it.")
 
     /// The lines that make this safe to hand to an agent. A copy that lost one of them is not this prompt.
     public static let refusals = ["You never touch a model provider credential.",

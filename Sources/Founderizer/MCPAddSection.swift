@@ -99,11 +99,11 @@ final class MCPAdding {
     /// is read on this Mac, and a key in it is dropped.
     func paste() {
         guard let text = NSPasteboard.general.string(forType: .string) else {
-            message = ("There is nothing to paste.", true)
+            message = (String(l10n: "There is nothing to paste."), true)
             return
         }
         guard let read = MCP.read(snippet: text) else {
-            message = ("That is not a server's configuration.", true)
+            message = (String(l10n: "That is not a server's configuration."), true)
             return
         }
         draft = read
@@ -125,10 +125,10 @@ final class MCPAdding {
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines), auth = draft.auth
         adding = false
         draft = MCPDraft()
-        await run("Adding \(title)…", store: store) { current, _ in
+        await run(String(l10n: "Adding \(title)…"), store: store) { current, _ in
             try await mcpClient.save(hub: store.hub, database: db, client: store.installation, sha256: current.sha256,
                                      name: free, server: server)
-            return "\(title) is in Founderizer as \(free)."
+            return String(l10n: "\(title) is in Founderizer as \(free).")
         }
         guard message?.warning != true else { return }
         await read(store: store)
@@ -144,12 +144,12 @@ final class MCPAdding {
 
     private func give(_ name: String, to agent: String, store: FleetStore) async {
         let hub = store.hub, installation = store.installation, label = agent.agentLabel, client = client
-        await run("Giving \(label) the server \(name)…", store: store) { current, db in
+        await run(String(l10n: "Giving \(label) the server \(name)…"), store: store) { current, db in
             let agents = Integrations.agents(current.agents(of: name), agent: agent, on: true,
                                              order: current.lines.map(\.agent))
             _ = try await client.saveTool(hub: hub, database: db, client: installation, sha256: current.sha256,
                                           tool: name, agents: agents)
-            return "\(label) gets \(name) in its next task session."
+            return String(l10n: "\(label) gets \(name) in its next task session.")
         }
     }
 
@@ -158,24 +158,24 @@ final class MCPAdding {
     private func connect(_ name: String, _ tool: IntegrationsSnapshot.Tool, store: FleetStore) async {
         guard let db = store.state?.db else { return }
         let hub = store.hub, installation = store.installation
-        busy = "Starting the sign-in to \(tool.title)…"
+        busy = String(l10n: "Starting the sign-in to \(tool.title)…")
         message = nil
         do {
             let loopback = try await GoogleLoopback.open()
             defer { loopback.stop() }
             let start = try await mcpClient.connect(hub: hub, database: db, client: installation, name: name,
                                                     redirectURI: loopback.redirectURI)
-            busy = "Waiting for the sign-in in your browser…"
+            busy = String(l10n: "Waiting for the sign-in in your browser…")
             NSWorkspace.shared.open(start.url)
             let code = try await loopback.code(state: start.state)
             connecting = nil
-            busy = "Saving the connection…"
+            busy = String(l10n: "Saving the connection…")
             let done = try await mcpClient.finish(hub: hub, database: db, client: installation, state: start.state,
                                                   code: code)
-            message = ("\(tool.title) is connected" + (done.tools.isEmpty ? "" : " · \(done.tools.count) tools")
-                       + ".", false)
+            message = (done.tools.isEmpty ? String(l10n: "\(tool.title) is connected.")
+                       : String(l10n: "\(tool.title) is connected · \(done.tools.count) tools."), false)
         } catch {
-            message = Task.isCancelled ? ("The sign-in stopped.", false) : (Self.reason(error), true)
+            message = Task.isCancelled ? (String(l10n: "The sign-in stopped."), false) : (Self.reason(error), true)
         }
         busy = nil
         connecting = nil
@@ -213,7 +213,7 @@ final class MCPAdding {
 
     private static func reason(_ error: Error) -> String {
         if case HubError.refusal(_, let text) = error { return text }
-        if error is URLError { return "The hub did not answer. Look at the list before you try again." }
+        if error is URLError { return String(l10n: "The hub did not answer. Look at the list before you try again.") }
         return error.localizedDescription
     }
 }
@@ -236,19 +236,19 @@ private struct MCPForm: View {
                 Button("Paste its configuration", action: paste).buttonStyle(FleetOutlineButtonStyle())
                     .accessibilityIdentifier("mcp-paste")
             }
-            field("Name", "Acme CRM", text: $draft.title, identifier: "mcp-title")
+            field(String(l10n: "Name"), "Acme CRM", text: $draft.title, identifier: "mcp-title")
             if draft.kind == .remote {
-                field("Address", "https://mcp.example.com/", text: $draft.address, identifier: "mcp-address")
+                field(String(l10n: "Address"), "https://mcp.example.com/", text: $draft.address, identifier: "mcp-address")
             } else {
-                field("Program", "notes-mcp stdio", text: $draft.command, identifier: "mcp-command")
+                field(String(l10n: "Program"), "notes-mcp stdio", text: $draft.command, identifier: "mcp-command")
             }
             Picker("", selection: $draft.auth) {
                 ForEach(draft.choices, id: \.self) { Text($0.title).tag($0) }
             }.pickerStyle(.radioGroup).labelsHidden().accessibilityIdentifier("mcp-auth")
             if draft.auth == .key {
-                field("API key", "ACME_CRM_KEY", text: $draft.key, identifier: "mcp-key")
+                field(String(l10n: "API key"), "ACME_CRM_KEY", text: $draft.key, identifier: "mcp-key")
                 if draft.kind == .local {
-                    field("The program reads it as", draft.key.isEmpty ? "NOTES_TOKEN" : draft.key,
+                    field(String(l10n: "The program reads it as"), draft.key.isEmpty ? "NOTES_TOKEN" : draft.key,
                           text: $draft.variable, identifier: "mcp-variable")
                 }
             }

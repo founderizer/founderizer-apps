@@ -50,8 +50,8 @@ struct HealthView: View {
     @State private var copy = FleetCopyModel()
     /// He asked to change the hub address. A hub that does not answer opens it by itself.
     @State private var changingAddress = false
-    /// Update fleet sends its requests.
-    @State private var updating = false
+    /// Update fleet sends its requests: the agent whose request is on its way, of the agents it had at the press.
+    @State private var updating: (at: Int, of: Int)?
 
     private var showsAddress: Bool { changingAddress || !store.isFresh }
     /// What the read brings is drawn: this visit's read has answered, the page has the reading from before, or no hub
@@ -72,7 +72,7 @@ struct HealthView: View {
             // A press while a read is on its way reads once more after it: the button stays as it is. **Only while it
             // can act** (never grey): while the hub does not answer, the window's notice has Try again.
             if store.isFresh {
-                IconButton(symbol: "arrow.clockwise", words: "Refresh system status") { Task { await refresh() } }
+                IconButton(symbol: "arrow.clockwise", words: String(l10n: "Refresh system status")) { Task { await refresh() } }
             }
         }
         .font(FleetStyle.body).background(FleetStyle.canvas)
@@ -107,18 +107,18 @@ struct HealthView: View {
     private var connected: some View {
         Group {
             FormSection("Your hub") {
-                FormMarkRow(title: "Connected", state: store.isFresh ? .good : .bad, words: store.connectionLabel,
+                FormMarkRow(title: String(l10n: "Connected"), state: store.isFresh ? .good : .bad, words: store.connectionLabel,
                             detail: hubDetail,
-                            act: showsAddress ? nil : ("Change the address", { changingAddress = true }),
-                            whoActs: showsAddress ? "The address is below." : nil,
+                            act: showsAddress ? nil : (String(l10n: "Change the address"), { changingAddress = true }),
+                            whoActs: showsAddress ? String(l10n: "The address is below.") : nil,
                             identifier: "health-hub")
                 if showsAddress { address }
                 // A hub that answers this app and not its own status is one more thing that is not connected, so
                 // it is one more row of this card, with the one thing he can do about it.
                 // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3, item 33).
                 if let error, !store.hubNoticeShows {
-                    FormMarkRow(title: "The hub's own status", state: .bad, words: "Cannot be read", detail: error,
-                                act: ("Report a problem", { openWindow(id: FounderizerApp.reportWindow) }),
+                    FormMarkRow(title: String(l10n: "The hub's own status"), state: .bad, words: String(l10n: "Cannot be read"), detail: error,
+                                act: (String(l10n: "Report a problem"), { openWindow(id: FounderizerApp.reportWindow) }),
                                 identifier: "health-error")
                 }
                 if ready, let reading { hubFacts(reading) }
@@ -140,7 +140,7 @@ struct HealthView: View {
         let where_ = store.hub.absoluteString
         if let trouble = store.connectionError { return "\(where_) — \(trouble)" }
         guard let last = store.lastSuccess else { return where_ }
-        return "\(where_) · last refresh \(last.formatted(date: .omitted, time: .standard))"
+        return String(l10n: "\(where_) · last refresh \(last.formatted(date: .omitted, time: .standard))")
     }
 
     /// The one field this page keeps, and it is not on the face of it: the hub moves about once in the life of a
@@ -149,7 +149,7 @@ struct HealthView: View {
         FormRow("Hub address") {
             HStack(spacing: 8) {
                 TextField(text: $store.addressText, prompt: Text(verbatim: "")) { Text("Hub address") }
-                    .fieldPlaceholder("Hub address", shows: store.addressText.isEmpty).fleetField().frame(width: 230)
+                    .fieldPlaceholder(String(l10n: "Hub address"), shows: store.addressText.isEmpty).fleetField().frame(width: 230)
                     .onSubmit { Task { await connect() } }.accessibilityIdentifier("hub-address")
                 Button("Connect") { Task { await connect() } }.buttonStyle(FleetOutlineButtonStyle())
                     .disabled(store.sending).accessibilityIdentifier("hub-connect")
@@ -169,12 +169,12 @@ struct HealthView: View {
     private var copyRow: some View {
         let schedule = store.copies.schedule
         let gone = !schedule.hasFolder
-        return FormMarkRow(title: "A copy of your fleet", state: .bad,
-                           words: gone ? "No folder" : "Not kept",
-                           detail: gone ? "Founderizer has no folder to put a copy in, so it keeps none."
+        return FormMarkRow(title: String(l10n: "A copy of your fleet"), state: .bad,
+                           words: gone ? String(l10n: "No folder") : String(l10n: "Not kept"),
+                           detail: gone ? String(l10n: "Founderizer has no folder to put a copy in, so it keeps none.")
                                : schedule.failure,
-                           act: gone ? ("Choose a folder", { store.copies.choose() })
-                               : ("Open Backup", { store.destination = .settings(.backup) }),
+                           act: gone ? (String(l10n: "Choose a folder"), { store.copies.choose() })
+                               : (String(l10n: "Open Backup"), { store.destination = .settings(.backup) }),
                            identifier: "health-copy")
     }
 
@@ -227,7 +227,7 @@ struct HealthView: View {
         let names = Self.width(block.updates.map(\.agentLabel)) + GlyphSize.inline + 8
         let roles = Self.width(block.updates.map(role))
         let servers = Self.width(block.updates.map(server))
-        let failed = failures.isEmpty ? 0 : ("Update failed" as NSString)
+        let failed = failures.isEmpty ? 0 : (String(l10n: "Update failed") as NSString)
             .size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width.rounded(.up)
         FormBlock(block.title) { EmptyView() } accessory: { button(for: .updateFleet(block.updates), reading: reading) }
             .accessibilityIdentifier("health-warning-update")
@@ -281,7 +281,7 @@ struct HealthView: View {
             // **Only while it can act** (never grey): not while the hub does not answer or keeps no copies, and while
             // the copy is being taken its place says so in moving words.
             if copy.busy {
-                ShimmeringWords(text: "Saving…").accessibilityIdentifier("health-saving-copy")
+                ShimmeringWords(text: String(l10n: "Saving…")).accessibilityIdentifier("health-saving-copy")
             } else if store.isFresh && reading.takesCopies {
                 Button(act.label) { Task { await save() } }
                     .buttonStyle(FleetPrimaryButtonStyle())
@@ -294,23 +294,26 @@ struct HealthView: View {
                 .buttonStyle(FleetPrimaryButtonStyle()).disabled(store.sending || !store.canWrite)
         case .updateFleet(let agents):
             // One request for each agent, one after the other; while they go, its place says so in moving words, as
-            // Save copy's does. Each helper updates when it has no task, and its row leaves the table as the hub
-            // takes its request.
-            if updating {
-                ShimmeringWords(text: "Updating…").accessibilityIdentifier("health-updating")
-            } else {
-                Button(act.label) {
-                    updating = true
-                    Task {
-                        // A request the hub did not take stops the rest: its line says why, and the next press sends
-                        // the ones still in the table.
-                        for agent in agents { guard await store.command(.machineUpdate(agent: agent)) else { break } }
-                        await refresh()
-                        updating = false
+            // Save copy's does, with the agent whose request is on its way of them all ("Updating 3 of 11…": the owner,
+            // 13 November 2026, "other long actions where we actually know the progress"). Each helper updates when it
+            // has no task, and its row leaves the table as the hub takes its request.
+            if let updating {
+                let words = FleetHealth.Warning.Act.updatingWords(updating.at, of: updating.of)
+                // **The words stand in the button's own place**: its room is kept, so no row under it moves, and they
+                // stand on the title's line, as the button's words did. Moving words give a row no text baseline, so
+                // beside the title they hung 13 pt under its line (seen on the screen check of 13 November 2026).
+                Button(act.label) {}.buttonStyle(FleetPrimaryButtonStyle()).hidden().accessibilityHidden(true)
+                    .overlay(alignment: .trailing) {
+                        // Digits of one width: the light's pass starts again when the words change their width
+                        // (`ShimmerView.sweep`), and a count that changes each moment would never let it cross them.
+                        ShimmeringWords(text: words, font: .monospacedDigitSystemFont(ofSize: 12, weight: .regular))
+                            .fixedSize()
+                            .accessibilityElement().accessibilityLabel(words).accessibilityIdentifier("health-updating")
                     }
-                }
-                .buttonStyle(FleetPrimaryButtonStyle()).disabled(store.sending || !store.canWrite)
-                .accessibilityIdentifier("health-update-fleet")
+            } else {
+                Button(act.label) { updateFleet(agents) }
+                    .buttonStyle(FleetPrimaryButtonStyle()).disabled(store.sending || !store.canWrite)
+                    .accessibilityIdentifier("health-update-fleet")
             }
         case .startManager(let agent):
             Button(act.label) { Task { await store.command(.managerStart(agent: agent)); await refresh() } }
@@ -339,14 +342,14 @@ struct HealthView: View {
     /// The hub's git revision was a row here and is gone. It is a support fact and it already travels as one:
     /// Report a problem carries it with every report, under "Sent with it", where it is read before it is sent.
     @ViewBuilder private func hubFacts(_ reading: FleetHealth) -> some View {
-        FormMarkRow(title: "Database",
+        FormMarkRow(title: String(l10n: "Database"),
                     state: reading.hub.integrity.result == "ok" ? .good
                         : reading.hub.integrity.result == nil ? .unknown : .bad,
-                    words: reading.hub.integrity.result == "ok" ? "Sound"
-                        : reading.hub.integrity.result ?? "Not checked",
-                    detail: "\(bytes(reading.hub.db_bytes)), checked \(fleetDate(reading.hub.integrity.at)).",
+                    words: reading.hub.integrity.result == "ok" ? String(l10n: "Sound")
+                        : reading.hub.integrity.result ?? String(l10n: "Not checked"),
+                    detail: String(l10n: "\(bytes(reading.hub.db_bytes)), checked \(fleetDate(reading.hub.integrity.at))."),
                     act: reading.hub.integrity.result != nil && reading.hub.integrity.result != "ok"
-                        ? ("Report a problem", { openWindow(id: FounderizerApp.reportWindow) }) : nil,
+                        ? (String(l10n: "Report a problem"), { openWindow(id: FounderizerApp.reportWindow) }) : nil,
                     identifier: "health-database")
         FormRow("Started") { value(fleetDate(reading.hub.started_at)) }
         FormRow("Disk") { value(disk(reading.hub)) }
@@ -357,9 +360,10 @@ struct HealthView: View {
     /// the load readings says its free space alone.
     private func disk(_ hub: FleetHealth.Hub) -> String {
         guard let free = hub.disk_free_bytes, let total = hub.disk_total_bytes, total > 0 else {
-            return hub.disk_free_bytes.map { "\(FleetHealth.storageWords($0)) free" } ?? "Not measured"
+            return hub.disk_free_bytes.map { String(l10n: "\(FleetHealth.storageWords($0)) free") } ?? String(l10n: "Not measured")
         }
-        return LoadWords.used(Double(total - min(free, total)), of: Double(total)) + (hub.machine.map { " on \($0)" } ?? "")
+        let used = LoadWords.used(Double(total - min(free, total)), of: Double(total))
+        return hub.machine.map { String(l10n: "\(used) on \($0)") } ?? used
     }
 
     /// The title of the server's page that `.server(name)` opens (`ServerPage.title`): the server's own name, its
@@ -377,7 +381,7 @@ struct HealthView: View {
     private func value(_ text: String) -> some View { Text(text).foregroundStyle(FleetStyle.muted).textSelection(.enabled) }
     /// One decimal at most (`FleetHealth.storageWords`; fix round 3b): "829,83 GB" became "829,8 GB" 0.1 s after the
     /// page opened, when the read that followed the kept one found 30 MB less.
-    private func bytes(_ value: Int64?) -> String { value.map(FleetHealth.storageWords) ?? "Not measured" }
+    private func bytes(_ value: Int64?) -> String { value.map(FleetHealth.storageWords) ?? String(l10n: "Not measured") }
 
     // ---------------------------------------------------------------- reading it
 
@@ -389,6 +393,21 @@ struct HealthView: View {
     private func save() async {
         await copy.save(store: store)
         await refresh()
+    }
+
+    /// Update fleet: one request for each agent, one after the other, with the place of the one on its way
+    /// (`updating`). A request the hub did not take stops the rest: its line says why, and the next press sends the
+    /// ones still in the table.
+    private func updateFleet(_ agents: [String]) {
+        updating = (1, agents.count)
+        Task {
+            for (index, agent) in agents.enumerated() {
+                updating = (index + 1, agents.count)
+                guard await store.command(.machineUpdate(agent: agent)) else { break }
+            }
+            await refresh()
+            updating = nil
+        }
     }
 
     private func refresh() async {
@@ -404,7 +423,7 @@ struct HealthView: View {
         } catch {
             // The hub writes a line for the owner beside every status it refuses with. He reads that one; a status
             // number and a sentence of ours are the same sentence to him.
-            result = nil; failure = HubError.said(error) ?? "Cannot read system status. Try Refresh."
+            result = nil; failure = HubError.said(error) ?? String(l10n: "Cannot read system status. Try Refresh.")
         }
         guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
         if let result { reading = result; error = nil } else { self.error = failure }
@@ -445,7 +464,7 @@ final class FleetCopyModel {
             let copy = try await client.takeCopy(hub: store.hub, database: database)
             taken = copy
             guard let kept = Self.place(copy) else {
-                said = "Nothing was saved, so your fleet still has no confirmed copy."
+                said = String(l10n: "Nothing was saved, so your fleet still has no confirmed copy.")
                 return
             }
             // The copy that he keeps carries the fleet's access key, his way back after a lost Mac (`OwnerAccess`).
@@ -453,11 +472,10 @@ final class FleetCopyModel {
             do {
                 try await client.confirmCopy(hub: store.hub, database: database, client: store.installation,
                                              sha256: copy.sha256, bytes: copy.bytes)
-                said = "Saved to \(kept.path) and confirmed with your hub."
+                said = String(l10n: "Saved to \(kept.path) and confirmed with your hub.")
             } catch {
                 // The copy is on his disk, which is the half that matters; only the hub's record is missing.
-                failure = "Saved to \(kept.path), but your hub did not record it. "
-                    + "Press \(FleetHealth.Warning.Act.saveCopy.label) again."
+                failure = String(l10n: "Saved to \(kept.path), but your hub did not record it. Press \(FleetHealth.Warning.Act.saveCopy.label) again.")
                 cause = HubError.said(error) ?? (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
         } catch {
@@ -469,10 +487,9 @@ final class FleetCopyModel {
     /// where the question "what does it save?" is answered in full, because that is where he is looking.
     private static func place(_ copy: FleetCopy) -> URL? {
         let panel = NSSavePanel()
-        panel.title = "Save a copy of your fleet"
-        panel.prompt = "Save"
-        panel.message = "Everything your hub holds: its records and your own configuration, in one file. "
-            + "It cannot carry a server's vault key, so the logins its own vault made stay on that server."
+        panel.title = String(l10n: "Save a copy of your fleet")
+        panel.prompt = String(l10n: "Save")
+        panel.message = String(l10n: "Everything your hub holds: its records and your own configuration, in one file. It cannot carry a server's vault key, so the logins its own vault made stay on that server.")
         panel.nameFieldStringValue = copy.suggestedName
         panel.allowedContentTypes = [.zip]
         panel.isExtensionHidden = false

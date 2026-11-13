@@ -7,7 +7,7 @@ import Foundation
 /// is its own, the checks are the end, and everything between them is the install. A step that a later plan adds or
 /// renames lands in one of the four by its place, so this needs no change for it.
 public struct InstallPhases: Equatable, Sendable {
-    public static let names = ["VPS", "Network", "Install", "Checks"]
+    public static let names = [String(l10n: "VPS"), String(l10n: "Network"), String(localized: "Install (a step)", defaultValue: "Install", bundle: Localized.bundle, locale: Localized.digits), String(l10n: "Checks")]
 
     /// The step that runs now, as an index of `names`; `names.count` once every step is done.
     public let current: Int
@@ -58,17 +58,17 @@ public struct InstallPhases: Equatable, Sendable {
     /// says what that installer prints it is doing: its security updates, then its own checks.
     static func status(_ step: InstallProgress) -> String? {
         switch step.step {
-        case "read": return "Starting your server"
-        case "network": return "Joining your private network"
-        case "code", "plan": return "Copying the Founderizer code"
-        case "start", "wait_claim": return "Starting your hub"
-        case "claim": return "Linking your hub to this Mac"
-        case "verify": return "Checking your hub"
+        case "read": return String(l10n: "Starting your server")
+        case "network": return String(l10n: "Joining your private network")
+        case "code", "plan": return String(l10n: "Copying the Founderizer code")
+        case "start", "wait_claim": return String(l10n: "Starting your hub")
+        case "claim": return String(l10n: "Linking your hub to this Mac")
+        case "verify": return String(l10n: "Checking your hub")
         case "wait_ready":
             let doing = step.lines.compactMap(Self.installerStep).last?.lowercased() ?? ""
-            if doing.contains("security updates") { return "Installing security updates" }
-            if doing.hasPrefix("verify") { return "Checking your hub" }
-            return "Starting your hub"
+            if doing.contains("security updates") { return String(l10n: "Installing security updates") }
+            if doing.hasPrefix("verify") { return String(l10n: "Checking your hub") }
+            return String(l10n: "Starting your hub")
         default: return nil
         }
     }

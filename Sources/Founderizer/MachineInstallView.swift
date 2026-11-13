@@ -162,7 +162,7 @@ final class MachineInstallModel {
         if firstMachine {
             guard let repository = URL(string: source.trimmingCharacters(in: .whitespaces)),
                   ["https", "ssh", "git"].contains(repository.scheme ?? ""), repository.host != nil else {
-                return "Give the address of the Founderizer repository, from your own download page."
+                return String(l10n: "Give the address of the Founderizer repository, from your own download page.")
             }
         } else if typedName, let trouble = Servers.nameProblem(name, taken: taken) {
             return trouble
@@ -228,7 +228,7 @@ final class MachineInstallModel {
                                                           client: store.installation, name: machine, kind: "linux")
                 made = (join.name, join.kind, join.expires_at)
                 guard let line = join.line, let code = join.code else {
-                    throw InstallError.cannotStart("The hub gave no join line. Try again.")
+                    throw InstallError.cannotStart(String(l10n: "The hub gave no join line. Try again."))
                 }
                 // The key carries the tags of the hub's own join line, as the sign-in link does, so the server has
                 // the tags by which the tailnet's policy gives the fleet's machines their rights. A credential that
@@ -256,7 +256,7 @@ final class MachineInstallModel {
             return
         }
         guard Servers.setsUpMacs(store.state?.ui_features) else {
-            failure = "Your hub needs the newest Founderizer first: Settings, Updates."; failureDetail = nil
+            failure = String(l10n: "Your hub needs the newest Founderizer first: Settings, Updates."); failureDetail = nil
             return
         }
         // A hub with `server_names` names this Mac by its name in Tailscale at its join, so its code is made with no
@@ -273,13 +273,13 @@ final class MachineInstallModel {
             do {
                 // An installer from before the choice would wait for a sign-in that this Mac does not have.
                 if let ai, ai != .both, try await MacInstallerClient().state(code: code, from: installer).choice != true {
-                    throw InstallError.cannotStart("The installer on that Mac is out of date. Download it again.")
+                    throw InstallError.cannotStart(String(l10n: "The installer on that Mac is out of date. Download it again."))
                 }
                 let join = try await HubClient().joinCode(hub: store.hub, database: database, client: store.installation,
                                                           name: asks ? machine : nil, kind: "mac", agent: firstAgent, ai: ai)
                 made = (join.name, join.kind, join.expires_at)
                 guard let line = join.line else {
-                    throw InstallError.cannotStart("The hub gave no join line. Try again.")
+                    throw InstallError.cannotStart(String(l10n: "The hub gave no join line. Try again."))
                 }
                 try await mintKey(for: asks ? machine : installer.host ?? "", life: PrivateNetwork.macKeyLifeSeconds)
                 let order = MacInstallOrder(code: code, hub: store.hub.absoluteString, name: machine, line: line,
@@ -335,7 +335,7 @@ final class MachineInstallModel {
                                    detail: step.state == "failed" ? step.says : nil))
         }
         if state.steps.isEmpty {
-            record(InstallProgress(step: "order", title: "The order", says: state.says, state: .running))
+            record(InstallProgress(step: "order", title: String(l10n: "The order"), says: state.says, state: .running))
         }
     }
 
@@ -469,7 +469,7 @@ struct MachineInstallForm: View {
                     FormRow("Name", symbol: "character.cursor.ibeam",
                             warning: model.name.isEmpty ? nil : Servers.nameProblem(model.name, taken: taken)) {
                         TextField(text: $model.name, prompt: Text(verbatim: "")) { Text("Server name") }
-                            .fieldPlaceholder("Server name", shows: model.name.isEmpty)
+                            .fieldPlaceholder(String(l10n: "Server name"), shows: model.name.isEmpty)
                             .fleetField()
                             .frame(width: 240).accessibilityIdentifier("install-name")
                     }
@@ -481,7 +481,7 @@ struct MachineInstallForm: View {
                         .fleetField()
                         .frame(width: 240).accessibilityIdentifier("install-host")
                 }
-                FormRow("User", symbol: "person", detail: model.user == "root" ? nil : "Not root: it needs sudo.") {
+                FormRow("User", symbol: "person", detail: model.user == "root" ? nil : String(l10n: "Not root: it needs sudo.")) {
                     HStack(spacing: 8) {
                         TextField(text: $model.user, prompt: Text(verbatim: "")) { Text("root") }
                             .fieldPlaceholder("root", shows: model.user.isEmpty)
@@ -509,7 +509,7 @@ struct MachineInstallForm: View {
             if firstMachine {
                 AdvancedLink(open: $advanced).accessibilityIdentifier("install-advanced")
                 if advanced {
-                    FormSection(footer: "Your download page gives this address.") {
+                    FormSection(footer: String(l10n: "Your download page gives this address.")) {
                         FormRow("Repository", symbol: "shippingbox") {
                             TextField(text: $model.source, prompt: Text(verbatim: "")) { Text(InstallPlan.defaultSource) }
                                 .fieldPlaceholder(InstallPlan.defaultSource, shows: model.source.isEmpty)
@@ -537,7 +537,7 @@ struct MachineInstallForm: View {
 
     private func chooseKey() {
         let panel = NSOpenPanel()
-        panel.title = "Choose the SSH private key for this server"
+        panel.title = String(l10n: "Choose the SSH private key for this server")
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.showsHiddenFiles = true
@@ -597,8 +597,7 @@ struct MachineInstallRun: View {
         VStack(alignment: .leading, spacing: FleetSpace.block) {
             FormSection {
                 FormRow("Your server is not on your private network", symbol: "exclamationmark.triangle",
-                        detail: "Connect your network, then install again. This Mac makes the key: used once, "
-                        + "worthless in fifteen minutes.", warning: model.networkFailure)
+                        detail: String(l10n: "Connect your network, then install again. This Mac makes the key: used once, worthless in fifteen minutes."), warning: model.networkFailure)
             }
             PrivateNetworkSection(model: network, showsThisMac: false)
             // Once the network's credential is in place: never grey.
@@ -617,7 +616,7 @@ struct MachineInstallRun: View {
     private func approve(_ signIn: NetworkSignIn) -> some View {
         FormSection {
             FormRow("Your server is not on your private network", symbol: "exclamationmark.triangle")
-            FormRow(signIn.server.map { "Approve \($0) in Tailscale" } ?? "Approve in Tailscale", symbol: "network") {
+            FormRow(signIn.server.map { String(l10n: "Approve \($0) in Tailscale") } ?? String(l10n: "Approve in Tailscale"), symbol: "network") {
                 Button("Open link") { NSWorkspace.shared.open(signIn.url) }
                     .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("install-network-sign-in")
@@ -659,7 +658,7 @@ struct MachineInstallRun: View {
                 // **What stopped, in a few plain words, over one Try again** (fix round 3, item 51): the line said the
                 // machine's own last line, under an outline "Install again" that only went back to the form. The same
                 // install runs again; the machine's own words stay on the line's hover, and Back goes to the form.
-                FormSection(footer: "Each step checks first, so nothing is done twice.") {
+                FormSection(footer: String(l10n: "Each step checks first, so nothing is done twice.")) {
                     FormRow("The install stopped", symbol: "exclamationmark.triangle", warning: failure) {
                         Button("Try again") { if let again { again() } else { model.again() } }
                             .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
@@ -673,20 +672,20 @@ struct MachineInstallRun: View {
                 // while it has not passed): the sign-in is the step the setup goes on to, and the section said
                 // "NOT READY: runtime_signed_in" under "Your fleet is up". A failed check keeps it, with its fix.
                 if !checklist.isReady && !checklist.onlyNeedsSignIn {
-                    VerifyChecklistView(checklist: checklist, subject: "this server",
-                                        footer: "Each failed check carries its own fix. Put it right, then check this "
-                                            + "server again from its page.")
+                    VerifyChecklistView(checklist: checklist, subject: String(l10n: "this server"),
+                                        footer: String(l10n: "Each failed check carries its own fix. Put it right, then check this server again from its page."))
                 }
-                next
+                // After a list of failed checks, the way on stays in view (`SetupAction`).
+                SetupAction { next }
             }
         }
     }
 
     private var detail: String? {
-        if model.running { return "Installing over your own SSH connection." }
+        if model.running { return String(l10n: "Installing over your own SSH connection.") }
         if let checklist = model.checklist {
             return checklist.isReady || checklist.onlyNeedsSignIn ?
-                "The install is done." : "The install ended. Its checks are below."
+                String(l10n: "The install is done.") : String(l10n: "The install ended. Its checks are below.")
         }
         return nil
     }
@@ -701,9 +700,9 @@ struct MachineInstallRun: View {
 
     private func word(_ step: InstallProgress) -> String {
         switch step.state {
-        case .done: "Done"
-        case .failed: "Failed"
-        default: "Waiting"
+        case .done: String(l10n: "Done")
+        case .failed: String(l10n: "Failed")
+        default: String(l10n: "Waiting")
         }
     }
 

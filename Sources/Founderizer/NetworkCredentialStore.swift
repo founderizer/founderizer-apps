@@ -71,7 +71,7 @@ enum NetworkStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .keychain(let status):
-            "This Mac's keychain refused (\(status)). Nothing was kept."
+            String(l10n: "This Mac's keychain refused (\(Int(status))). Nothing was kept.")
         }
     }
 }

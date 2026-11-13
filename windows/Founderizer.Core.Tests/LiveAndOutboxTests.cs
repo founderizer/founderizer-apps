@@ -177,12 +177,7 @@ public sealed class OutboxTests
         Assert.AreEqual("ui/tasks/5/control", pause.Route);
         Assert.AreEqual("resume_check", Body(pause).GetProperty("action").GetString());
         Assert.AreEqual("", Body(pause).GetProperty("note").GetString());
-        var talk = PendingRequest.New(Hub, "db", "pc", " why? ", command: OwnerCommand.NeedTalk(9));
-        Assert.AreEqual("ui/needs/9/talk", talk.Route);
-        Assert.AreEqual("why?", Body(talk).GetProperty("text").GetString());
         Assert.ThrowsExactly<OutboxException>(() => PendingRequest.New(Hub, "db", "pc", " ", command: OwnerCommand.Steer(5, 2)).Body());
-        Assert.ThrowsExactly<OutboxException>(() => PendingRequest.New(Hub, "db", "pc", new string('x', 2001),
-                                                                       command: OwnerCommand.NeedTalk(9)).Body());
     }
 
     [TestMethod]
@@ -268,11 +263,26 @@ public sealed class OutboxTests
         var resume = PendingRequest.New(Hub, "db", "pc", "", command: OwnerCommand.Control(4, TaskControl.Resume));
         Assert.IsTrue(resume.IsConfirmedBy(held with { RequestId = resume.RequestIdText,
                                                        Hold = held.Hold! with { State = "released" } }));
+    }
 
-        var talk = PendingRequest.New(Hub, "db", "pc", "why?", command: OwnerCommand.NeedTalk(6));
-        var talked = new ControlReceipt(true, talk.RequestIdText, "pc", false, Need: 6,
-                                        Talk: [new NeedMessage("owner", "why?", 1)]);
-        Assert.IsTrue(talk.IsConfirmedBy(talked));
-        Assert.IsFalse(talk.IsConfirmedBy(talked with { Talk = [new NeedMessage("manager", "because", 1)] }));
+    [TestMethod]
+    public async System.Threading.Tasks.Task AnOldOutboxWithAQuestionAboutARequestReadsAndItsQuestionIsDroppedWithNoWord()
+    {
+        // The record that a build before Discuss left the product (owner API 1.158) saved: a command of the kind
+        // need_talk. It reads, its file goes, and nothing is sent, retried or said.
+        var path = Path.Combine(folder, "outbox.json");
+        var outbox = new Outbox(path);
+        outbox.Save(PendingRequest.New(Hub, "db", "pc", "What does B cost?", command: OwnerCommand.Control(6, TaskControl.Pause)));
+        var record = File.ReadAllText(path);
+        Assert.IsTrue(record.Contains("\"command\":\"control\""), record);
+        File.WriteAllText(path, record.Replace("\"command\":\"control\"", "\"command\":\"need_talk\"").Replace("\"action\":\"pause\"", "\"action\":null"));
+        Assert.IsNull(outbox.Load());
+        Assert.IsFalse(File.Exists(path), "the old question is dropped");
+        File.WriteAllText(path, record.Replace("\"command\":\"control\"", "\"command\":\"need_talk\""));
+        await using var store = new OwnerStore(new StoreSettings { Folder = folder, Keys = new MemoryKeyStore("device-key-1") });
+        var s = store.State;
+        Assert.AreEqual((null, null, null, (string?)null), (s.Pending, s.StorageError, s.SendError, Screens.PendingBar(s, DateTimeOffset.UtcNow)?.State),
+                        "a store that starts with it holds no request and says nothing");
+        Assert.IsFalse(File.Exists(path));
     }
 }

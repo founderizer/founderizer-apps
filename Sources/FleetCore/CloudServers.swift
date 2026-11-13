@@ -68,7 +68,7 @@ public struct CloudServers: Sendable {
             let account = try await call.send("GET", "account")["account"] as? [String: Any]
             if account?["status"] as? String == "locked" {
                 let says = (account?["status_message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                throw CloudError.refused(provider, says.isEmpty ? "the account is locked." : says)
+                throw CloudError.refused(provider, says.isEmpty ? String(l10n: "the account is locked.") : says)
             }
         case .vultr:
             // Vultr lets a user's key read the account only with the billing permission, so the write that follows,
@@ -365,7 +365,7 @@ public struct CloudServers: Sendable {
             switch state?["status"] as? String {
             case "success": return
             case "error":
-                let says = ((state?["error"] as? [String: Any])?["message"] as? String) ?? "the server was not made."
+                let says = ((state?["error"] as? [String: Any])?["message"] as? String) ?? String(l10n: "the server was not made.")
                 throw CloudError.refused(provider, says)
             default: try await pause(Self.waitStep)
             }
@@ -803,7 +803,7 @@ public struct CloudServers: Sendable {
                     try? await hetznerWait(action: action, call)
                 }
             } else {
-                left.append("the server \(made.name)")
+                left.append(String(l10n: "the server \(made.name)"))
             }
         }
         if let firewall = made.firewall {
@@ -818,7 +818,7 @@ public struct CloudServers: Sendable {
                 guard inUse else { break }
                 try? await pause(Self.waitStep)
             }
-            if !gone { left.append("the firewall \(made.firewallName)") }
+            if !gone { left.append(String(l10n: "the firewall \(made.firewallName)")) }
         }
         return left
     }
@@ -911,14 +911,14 @@ public enum CloudProvider: String, CaseIterable, Codable, Sendable {
 
     /// The city and country of one of `locations`, in this app's own words; the code itself for one it does not know.
     public func place(_ location: String) -> String {
-        let places = ["fsn1": "Falkenstein, Germany", "nbg1": "Nuremberg, Germany", "hel1": "Helsinki, Finland",
-                      "ash": "Ashburn, USA", "hil": "Hillsboro, USA", "sin": "Singapore",
-                      "fra1": "Frankfurt, Germany", "ams3": "Amsterdam, Netherlands", "lon1": "London, UK",
-                      "nyc3": "New York, USA", "sfo3": "San Francisco, USA", "sgp1": "Singapore",
-                      "fra": "Frankfurt, Germany", "ams": "Amsterdam, Netherlands", "lhr": "London, UK",
-                      "ewr": "New Jersey, USA", "sjc": "Silicon Valley, USA", "sgp": "Singapore",
-                      "eu-central": "Frankfurt, Germany", "nl-ams": "Amsterdam, Netherlands", "eu-west": "London, UK",
-                      "us-east": "Newark, USA", "us-west": "Fremont, USA", "ap-south": "Singapore"]
+        let places = ["fsn1": String(l10n: "Falkenstein, Germany"), "nbg1": String(l10n: "Nuremberg, Germany"), "hel1": String(l10n: "Helsinki, Finland"),
+                      "ash": String(l10n: "Ashburn, USA"), "hil": String(l10n: "Hillsboro, USA"), "sin": String(l10n: "Singapore"),
+                      "fra1": String(l10n: "Frankfurt, Germany"), "ams3": String(l10n: "Amsterdam, Netherlands"), "lon1": String(l10n: "London, UK"),
+                      "nyc3": String(l10n: "New York, USA"), "sfo3": String(l10n: "San Francisco, USA"), "sgp1": String(l10n: "Singapore"),
+                      "fra": String(l10n: "Frankfurt, Germany"), "ams": String(l10n: "Amsterdam, Netherlands"), "lhr": String(l10n: "London, UK"),
+                      "ewr": String(l10n: "New Jersey, USA"), "sjc": String(l10n: "Silicon Valley, USA"), "sgp": String(l10n: "Singapore"),
+                      "eu-central": String(l10n: "Frankfurt, Germany"), "nl-ams": String(l10n: "Amsterdam, Netherlands"), "eu-west": String(l10n: "London, UK"),
+                      "us-east": String(l10n: "Newark, USA"), "us-west": String(l10n: "Fremont, USA"), "ap-south": String(l10n: "Singapore")]
         return places[location] ?? location
     }
 
@@ -1056,32 +1056,32 @@ public enum CloudError: LocalizedError, Equatable, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .notAToken(let provider): "This is not a \(provider.name) API token. Copy the token \(provider.name) showed you, and paste it."
-        case .noToken(let provider): "This Mac holds no \(provider.name) token yet. Paste one first."
+        case .notAToken(let provider): String(l10n: "This is not a \(provider.name) API token. Copy the token \(provider.name) showed you, and paste it.")
+        case .noToken(let provider): String(l10n: "This Mac holds no \(provider.name) token yet. Paste one first.")
         case .tokenNotAccepted(let provider):
-            "\(provider.name) did not accept this token: it was deleted, or it is not whole. Make a new one and paste it."
+            String(l10n: "\(provider.name) did not accept this token: it was deleted, or it is not whole. Make a new one and paste it.")
         case .readOnlyToken(.hetzner):
-            "This Hetzner token can only read. Make a token with Read & Write in the project's Security page, and paste it."
+            String(l10n: "This Hetzner token can only read. Make a token with Read & Write in the project's Security page, and paste it.")
         case .readOnlyToken(.vultr):
-            "This Vultr API key cannot make servers. Use the API key of the account, or of a user who may manage servers, "
-                + "and paste it."
+            String(l10n: "This Vultr API key cannot make servers. Use the API key of the account, or of a user who may manage servers, and paste it.")
         case .readOnlyToken(.akamai):
-            "This Akamai token cannot make servers. Make one with Read/Write for Linodes and Firewalls, and paste it."
+            String(l10n: "This Akamai token cannot make servers. Make one with Read/Write for Linodes and Firewalls, and paste it.")
         case .readOnlyToken(let provider):
-            "This \(provider.name) token cannot make servers. Make one with full access, or with write access to Droplets, "
-                + "SSH keys and firewalls, and paste it."
-        case .rateLimited(let provider): "\(provider.name) asks this Mac to wait. Try again in a minute."
-        case .unreachable(let provider): "\(provider.name) could not be reached. Check this Mac's connection to the internet."
-        case .refused(let provider, let says): "\(provider.name) refused: \(says)"
-        case .notUnderstood(let provider): "\(provider.name) answered something this app does not understand."
+            String(l10n: "This \(provider.name) token cannot make servers. Make one with full access, or with write access to Droplets, SSH keys and firewalls, and paste it.")
+        case .rateLimited(let provider): String(l10n: "\(provider.name) asks this Mac to wait. Try again in a minute.")
+        case .unreachable(let provider): String(l10n: "\(provider.name) could not be reached. Check this Mac's connection to the internet.")
+        case .refused(let provider, let says): String(l10n: "\(provider.name) refused: \(says)")
+        case .notUnderstood(let provider): String(l10n: "\(provider.name) answered something this app does not understand.")
         case .noRoom(let provider):
-            "\(provider.name) has no server of the smallest types free near you now. Try again later."
-        case .notReady(let provider): "The server did not come up at \(provider.name) in time, so it was deleted. Try again."
-        case .notAServerName: "Use a name of 2 to 31 characters: a-z, 0-9 and -, starting with a letter and not ending in -."
-        case .notAPublicKey: "This app's SSH public key could not be read."
-        case .notAnAuthKey: "The key for the private network is not a Tailscale auth key."
+            String(l10n: "\(provider.name) has no server of the smallest types free near you now. Try again later.")
+        case .notReady(let provider): String(l10n: "The server did not come up at \(provider.name) in time, so it was deleted. Try again.")
+        case .notAServerName: String(l10n: "Use a name of 2 to 31 characters: a-z, 0-9 and -, starting with a letter and not ending in -.")
+        case .notAPublicKey: String(l10n: "This app's SSH public key could not be read.")
+        case .notAnAuthKey: String(l10n: "The key for the private network is not a Tailscale auth key.")
         case .leftBehind(let provider, let reason, let left):
-            "\(reason) This app could not delete \(left.joined(separator: " and ")): delete it at \(provider.name)."
+            left.count == 2
+                ? String(l10n: "\(reason) This app could not delete \(left[0]) and \(left[1]): delete it at \(provider.name).")
+                : String(l10n: "\(reason) This app could not delete \(left.joined(separator: " and ")): delete it at \(provider.name).")
         }
     }
 }
@@ -1166,9 +1166,9 @@ struct CloudCall: Sendable {
 
     /// The provider's own words for a refusal, on one line and without the token.
     private func words(_ answer: Answer) -> String {
-        let says = answer.says.replacingOccurrences(of: token, with: "(not shown)")
+        let says = answer.says.replacingOccurrences(of: token, with: String(l10n: "(not shown)"))
             .trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ")
-        return says.isEmpty ? "it answered \(answer.status) and said nothing." : String(says.prefix(300))
+        return says.isEmpty ? String(l10n: "it answered \(answer.status) and said nothing.") : String(says.prefix(300))
     }
 }
 

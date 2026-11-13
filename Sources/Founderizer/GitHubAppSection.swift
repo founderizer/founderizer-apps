@@ -80,7 +80,7 @@ struct GitHubAppSection: View {
                             .onAppear { if renewing, appID.isEmpty, let id = app?.app_id { appID = id } }
                     }
                     FormRow("Private key", symbol: "key",
-                            detail: keyPath.map { "\(($0 as NSString).lastPathComponent) · delete your download after this" }) {
+                            detail: keyPath.map { String(l10n: "\(($0 as NSString).lastPathComponent) · delete your download after this") }) {
                         HStack(spacing: 8) {
                             if busy { ProgressView().controlSize(.small) }
                             Button(keyPath == nil ? "Choose file" : "Change") { choose() }
@@ -104,13 +104,14 @@ struct GitHubAppSection: View {
 
     /// The sentence behind the mark: what his agents get, or what they do not get and why.
     private var appDetail: String {
-        guard let app else { return "Founderizer is reading what your hub holds." }
+        guard let app else { return String(l10n: "Founderizer is reading what your hub holds.") }
         if app.app {
-            return (app.app_id.map { "App \($0). " } ?? "") + "Agents get a one-hour token for their own repositories."
+            return app.app_id.map { String(l10n: "App \($0). Agents get a one-hour token for their own repositories.") }
+                ?? String(l10n: "Agents get a one-hour token for their own repositories.")
         }
-        guard let problem = app.problem else { return "Your agents get no token until your hub has one." }
-        return problem.hasSuffix(".") ? problem + " Your agents get no token until your hub can use one."
-            : problem + ". Your agents get no token until your hub can use one."
+        guard let problem = app.problem else { return String(l10n: "Your agents get no token until your hub has one.") }
+        return problem.hasSuffix(".") ? problem + " " + String(l10n: "Your agents get no token until your hub can use one.")
+            : problem + ". " + String(l10n: "Your agents get no token until your hub can use one.")
     }
 
     /// A cross is never a dead end. With no App, the one thing to press is the five steps on GitHub — the same
@@ -118,33 +119,32 @@ struct GitHubAppSection: View {
     /// use, the thing to do is a save, and the two rows that take one are right below.
     private var appAct: (words: String, run: () -> Void)? {
         guard app?.app == false, app?.problem == nil else { return nil }
-        return ("Show steps", { steps = true })
+        return (String(l10n: "Show steps"), { steps = true })
     }
 
     private var appWhoActs: String? {
         app?.app == false && app?.problem != nil
-            ? "The App ID and the private key are in the two rows below: a save takes the place of the file that "
-                + "is there." : nil
+            ? String(l10n: "The App ID and the private key are in the two rows below: a save takes the place of the file that is there.") : nil
     }
 
     /// What the owner does on GitHub, folded away until they ask: five steps, and each one is a line.
     @ViewBuilder private var stepRows: some View {
         FormRow("1. New GitHub App", symbol: "1.circle",
-                detail: "Settings → Developer settings → GitHub Apps. Name it Founderizer.") {
+                detail: String(l10n: "Settings → Developer settings → GitHub Apps. Name it Founderizer.")) {
             Button("Open GitHub") {
                 NSWorkspace.shared.open(URL(string: "https://github.com/settings/apps/new")!)
             }.buttonStyle(FleetOutlineButtonStyle())
         }
         FormRow("2. Its permissions", symbol: "2.circle",
-                detail: "Webhook off. Contents and Pull requests: read and write. Metadata: read.")
-        FormRow("3. Generate a private key", symbol: "3.circle", detail: "GitHub downloads one .pem file.")
-        FormRow("4. Install it", symbol: "4.circle", detail: "On your account, on the repositories you choose.")
-        FormRow("5. Here", symbol: "5.circle", detail: "The App ID and that file, below.")
+                detail: String(l10n: "Webhook off. Contents and Pull requests: read and write. Metadata: read."))
+        FormRow("3. Generate a private key", symbol: "3.circle", detail: String(l10n: "GitHub downloads one .pem file."))
+        FormRow("4. Install it", symbol: "4.circle", detail: String(l10n: "On your account, on the repositories you choose."))
+        FormRow("5. Here", symbol: "5.circle", detail: String(l10n: "The App ID and that file, below."))
     }
 
     private func choose() {
         let panel = NSOpenPanel()
-        panel.title = "Choose the private key GitHub downloaded"
+        panel.title = String(l10n: "Choose the private key GitHub downloaded")
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = []
@@ -158,7 +158,7 @@ struct GitHubAppSection: View {
         note = nil
         defer { busy = false }
         guard let key = try? String(contentsOfFile: keyPath, encoding: .utf8) else {
-            note = ("This Mac could not read that file.", true)
+            note = (String(l10n: "This Mac could not read that file."), true)
             return
         }
         if let problem = GitHubAppForm.problem(appID: appID, key: key) {
@@ -177,9 +177,9 @@ struct GitHubAppSection: View {
                     return
                 }
                 self.keyPath = nil
-                note = ("The door has your GitHub App. Delete the .pem file you downloaded.", false)
+                note = (String(l10n: "The door has your GitHub App. Delete the .pem file you downloaded."), false)
             } catch {
-                note = (HubError.said(error) ?? (error as? LocalizedError)?.errorDescription ?? "The door did not get the App. Try again.", true)
+                note = (HubError.said(error) ?? (error as? LocalizedError)?.errorDescription ?? String(l10n: "The door did not get the App. Try again."), true)
             }
             return
         }
@@ -188,13 +188,13 @@ struct GitHubAppSection: View {
                                                                       client: store.installation, appID: appID,
                                                                       key: key)
             self.keyPath = nil
-            note = (receipt.replaced == true ? "Your hub uses this App now. Delete the .pem file you downloaded."
-                    : "Your hub has your GitHub App. Delete the .pem file you downloaded.", false)
+            note = (receipt.replaced == true ? String(l10n: "Your hub uses this App now. Delete the .pem file you downloaded.")
+                    : String(l10n: "Your hub has your GitHub App. Delete the .pem file you downloaded."), false)
             await refresh()
         } catch let HubError.refusal(_, words) {
             note = (words, true)
         } catch {
-            note = ("The hub did not take the App. Try again.", true)
+            note = (String(l10n: "The hub did not take the App. Try again."), true)
         }
     }
 
@@ -206,12 +206,12 @@ struct GitHubAppSection: View {
         do {
             _ = try await IntegrationsClient().removeGitHubApp(hub: store.hub, database: database,
                                                                client: store.installation)
-            note = ("The App file is gone. Your agents get no token until you save another.", false)
+            note = (String(l10n: "The App file is gone. Your agents get no token until you save another."), false)
             await refresh()
         } catch let HubError.refusal(_, words) {
             note = (words, true)
         } catch {
-            note = ("The hub did not take that. Try again.", true)
+            note = (String(l10n: "The hub did not take that. Try again."), true)
         }
     }
 }

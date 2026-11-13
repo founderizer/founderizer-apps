@@ -46,6 +46,7 @@ struct FleetOption<Value: Hashable> {
     /// An action that deletes: its words and its mark in red.
     var destructive: Bool
 
+    @_disfavoredOverload
     init(_ value: Value, _ title: String, subtitle: String? = nil, detail: String? = nil, mark: FleetSelectMark = .none,
          section: String? = nil, destructive: Bool = false) {
         self.value = value; self.title = title; self.subtitle = subtitle; self.detail = detail; self.mark = mark; self.section = section
@@ -68,6 +69,7 @@ struct FleetSelect<Value: Hashable, Label: View>: View {
     @State private var anchor = FleetMenuAnchor.Spot()
 
     /// A menu behind the caller's label. The row of `selection`, when there is one, has the check mark.
+    @_disfavoredOverload
     init(_ title: String, options: [FleetOption<Value>], selection: Value? = nil, onSelect: @escaping (Value) -> Void,
          @ViewBuilder label: () -> Label) {
         self.title = title; self.options = options; self.selection = selection; self.onSelect = onSelect; self.label = label()
@@ -107,7 +109,8 @@ struct FleetSelect<Value: Hashable, Label: View>: View {
 
 extension FleetSelect where Label == FleetSelectLabel {
     /// A dropdown for one value. A value that no row has shows the placeholder in the muted color.
-    init(_ title: String, selection: Binding<Value>, options: [FleetOption<Value>], placeholder: String = "Choose") {
+    @_disfavoredOverload
+    init(_ title: String, selection: Binding<Value>, options: [FleetOption<Value>], placeholder: String = String(l10n: "Choose")) {
         let current = options.first { $0.value == selection.wrappedValue }
         self.init(title, options: options, selection: selection.wrappedValue, onSelect: { selection.wrappedValue = $0 }) {
             FleetSelectLabel(title: current?.title ?? placeholder, detail: current?.detail, mark: current?.mark ?? .none,

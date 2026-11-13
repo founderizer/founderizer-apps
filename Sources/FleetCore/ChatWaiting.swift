@@ -31,9 +31,9 @@ public struct ChatWaiting: Equatable, Sendable {
     }
 
     /// The one word for every part of this that is the agent's own work.
-    public static let working = "Thinking"
+    public static let working = String(l10n: "Thinking")
     /// The two words of a usage limit, as the board and a thread's head say them.
-    public static let limited = "Usage limit"
+    public static let limited = String(l10n: "Usage limit")
 
     /// The mark of a blocked wait: the one its state has on every screen (fix round 3, one mark per state), so a
     /// usage limit has the board's hourglass, and the other waits the clock.
@@ -89,13 +89,13 @@ public struct ChatWaiting: Equatable, Sendable {
         // be left guessing about, because nothing will happen for a known length of time.
         if let limit {
             return ChatWaiting(says: limited, moving: false,
-                               detail: limit.reset_known ? "\(who) is at its usage limit until \(until(limit.until))."
-                               : "\(who) is at its usage limit.")
+                               detail: limit.reset_known ? String(l10n: "\(who) is at its usage limit until \(until(limit.until)).")
+                               : String(l10n: "\(who) is at its usage limit."))
         }
         // Not the agent's work either: the hub is not hearing from its server, so the message sits where it is.
         if offline {
-            return ChatWaiting(says: "Not answering", moving: false,
-                               detail: "\(who) is not answering. Your message is kept and reaches it when it is back.")
+            return ChatWaiting(says: String(l10n: "Not answering"), moving: false,
+                               detail: String(l10n: "\(who) is not answering. Your message is kept and reaches it when it is back."))
         }
         return ChatWaiting(says: working, moving: true)
     }

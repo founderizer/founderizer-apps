@@ -31,14 +31,14 @@ extension ServerEntry {
     /// good run is older than three days at `time` are stalled, which is not on (Fleet 2026.11.173 reads that run).
     public func securityParts(_ security: ServerReading.Security, at time: Double) -> [(name: String, on: Bool?, words: String)] {
         var parts: [(name: String, on: Bool?, words: String)] = [
-            ("Private network", security.tailscale, Servers.onOffWords(security.tailscale)),
-            ("Firewall", security.firewall.map { $0 == "active" }, security.firewall?.capitalized ?? "Not reported")]
+            (String(l10n: "Private network"), security.tailscale, Servers.onOffWords(security.tailscale)),
+            (String(l10n: "Firewall"), security.firewall.map { $0 == "active" }, security.firewall?.capitalized ?? String(l10n: "Not reported"))]
         if kind != "mac" {
             let stalled = security.unattended_upgrades == true
                 && (security.upgraded_at.map { time - $0 > Servers.updatesStalled } ?? false)
-            parts.append(("Security updates", stalled ? false : security.unattended_upgrades,
-                          stalled ? Servers.stalled : security.unattended_upgrades == true ? "Automatic"
-                            : security.unattended_upgrades == false ? "Off" : "Not reported"))
+            parts.append((String(l10n: "Security updates"), stalled ? false : security.unattended_upgrades,
+                          stalled ? Servers.stalled : security.unattended_upgrades == true ? String(l10n: "Automatic")
+                            : security.unattended_upgrades == false ? String(l10n: "Off") : String(l10n: "Not reported")))
         }
         return parts
     }
@@ -148,7 +148,7 @@ public enum LoadWords {
         while size >= 1024, unit < units.count - 1 { size /= 1024; unit += 1 }
         let scale = pow(1024, Double(unit + 1))
         func words(_ value: Double) -> String { (value / scale).formatted(.number.precision(.fractionLength(1))) }
-        return "\(words(min(max(used, 0), total))) of \(words(total)) \(units[unit]) used"
+        return String(l10n: "\(words(min(max(used, 0), total))) of \(words(total)) \(units[unit]) used")
     }
 
     /// "640 MB", "2,3 GB": the memory of an agent's own sessions, never more than three figures before the unit, so
@@ -361,27 +361,27 @@ public enum Servers {
     /// Why the name cannot be the name of a new server, or nil.
     public static func nameProblem(_ name: String, taken: [String]) -> String? {
         guard name.range(of: namePattern, options: .regularExpression) != nil else {
-            return "Use 2 to 31 characters: a-z, 0-9 and -, starting with a letter."
+            return String(l10n: "Use 2 to 31 characters: a-z, 0-9 and -, starting with a letter.")
         }
-        return taken.contains(name) ? "A server has this name." : nil
+        return taken.contains(name) ? String(l10n: "A server has this name.") : nil
     }
 
     /// What stops a new agent on a server, in words.
     public static func reason(_ code: String) -> String {
         switch code {
-        case "hub_machine": return "It is the hub's server."
+        case "hub_machine": return String(l10n: "It is the hub's server.")
         // Since a server takes a second agent (hub of 3 November 2026), this says that its Founderizer is older than the
         // hub's and cannot install one yet; it updates itself.
-        case "has_agent": return "It takes another agent once Founderizer there is updated."
-        case "no_service": return "It did not join with a join line, so it has no server service."
-        case "no_reading": return "Its server service sent no reading yet."
-        case "offline": return "Its server service sent no reading in the last 10 minutes."
+        case "has_agent": return String(l10n: "It takes another agent once Founderizer there is updated.")
+        case "no_service": return String(l10n: "It did not join with a join line, so it has no server service.")
+        case "no_reading": return String(l10n: "Its server service sent no reading yet.")
+        case "offline": return String(l10n: "Its server service sent no reading in the last 10 minutes.")
         // An install or a deleted agent's removal: one job at a time.
-        case "busy": return "It works on an agent now."
-        case "fix_holder": return "An agent there has full control of it."
+        case "busy": return String(l10n: "It works on an agent now.")
+        case "fix_holder": return String(l10n: "An agent there has full control of it.")
         // The agent there holds servers through the door, which knows it by its server's address.
-        case "door_caller": return "The agent there manages your servers, so it runs alone."
-        default: return "It cannot take an agent now."
+        case "door_caller": return String(l10n: "The agent there manages your servers, so it runs alone.")
+        default: return String(l10n: "It cannot take an agent now.")
         }
     }
 
@@ -395,9 +395,9 @@ public enum Servers {
         if !fresh { return (Self.lastReading, false) }
         if let job = server.job, job.kind == "install", let agent = job.agent?.agentLabel {
             switch job.state {
-            case "needs_owner": return ("Sign-in needed", true)
-            case "queued", "running": return ("Installing \(agent)…", false)
-            case "failed" where server.agents.contains(job.agent ?? ""): return ("Install of \(agent) failed", true)
+            case "needs_owner": return (String(l10n: "Sign-in needed"), true)
+            case "queued", "running": return (String(l10n: "Installing \(agent)…"), false)
+            case "failed" where server.agents.contains(job.agent ?? ""): return (String(l10n: "Install of \(agent) failed"), true)
             default: break
             }
         }
@@ -405,16 +405,16 @@ public enum Servers {
         // fleet, so a removal that stopped is the server's to show, with Try again on its page.
         if let job = server.job, job.kind == "remove", let agent = job.agent?.agentLabel {
             switch job.state {
-            case "queued", "running": return ("Removing \(agent)…", false)
-            case "failed": return ("Removal of \(agent) failed", true)
+            case "queued", "running": return (String(l10n: "Removing \(agent)…"), false)
+            case "failed": return (String(l10n: "Removal of \(agent) failed"), true)
             default: break
             }
         }
         // A failed preparation changes nothing for the agent: its Change provider shows it, with Try again.
         if let job = server.job, job.kind == "prepare", let agent = job.agent?.agentLabel {
             switch job.state {
-            case "needs_owner": return ("Sign-in needed", true)
-            case "queued", "running": return ("Preparing \(providerName(job.runtime ?? "")) for \(agent)…", false)
+            case "needs_owner": return (String(l10n: "Sign-in needed"), true)
+            case "queued", "running": return (String(l10n: "Preparing \(providerName(job.runtime ?? "")) for \(agent)…"), false)
             default: break
             }
         }
@@ -429,57 +429,62 @@ public enum Servers {
         // had gone silent stayed "Connected" here, for as long as its server service reported, while its page said "Not
         // answering" (31 October 2026).
         guard case .connected = MachineConnection.of(server, helpers: helpers, time: time, fresh: fresh) else {
-            return ("Not answering", true)
+            return (String(l10n: "Not answering"), true)
         }
         // **No "Free"** (the owner, 3 November 2026: "this is confusing, since we allow multiple agents per server"): a
         // server with agents takes one more, so room for an agent is no news on any row; the row names its agents.
         if let reading = server.reading, reading.isCurrent(at: time), reading.current == false {
-            return ("Update available", false)
+            return (Self.updateAvailable, false)
         }
-        return ("Connected", false)
+        return (Self.connected, false)
     }
 
     /// The state of a server on a reading that the hub has not confirmed since: unknown.
-    public static let lastReading = "Last reading"
+    public static let lastReading = String(l10n: "Last reading")
+
+    /// The state of a server that is well, which its card shows as no mark at all (`Servers.mark`).
+    public static let connected = String(l10n: "Connected")
+    /// The words of a server whose Fleet is older than the hub's, which `mark` compares as `connected` is compared.
+    public static let updateAvailable = String(l10n: "Update available")
 
     /// The words of a job: its step, then its own detail.
     public static func jobWords(_ job: ServerJob) -> String {
-        let agent = job.agent?.agentLabel ?? "The agent"
+        let agent = job.agent?.agentLabel ?? String(l10n: "The agent")
         let prepare = job.kind == "prepare", provider = providerName(job.runtime ?? "")
         if job.kind == "remove" { return removalWords(job, agent: agent) }
-        let work = prepare ? "The preparation of \(provider)" : "The install of \(agent)"
         switch job.state {
-        case "queued": return prepare ? "The server starts to prepare \(provider) in a few seconds." :
-            "The server starts the install of \(agent) in a few seconds."
-        case "done": return job.detail ?? (prepare ? "\(provider) is ready for \(agent)." : "\(agent) runs on its server.")
-        case "canceled": return "\(work) ended: the server left Founderizer."
+        case "queued": return prepare ? String(l10n: "The server starts to prepare \(provider) in a few seconds.") :
+            String(l10n: "The server starts the install of \(agent) in a few seconds.")
+        case "done": return job.detail ?? (prepare ? String(l10n: "\(provider) is ready for \(agent).") : String(l10n: "\(agent) runs on its server."))
+        case "canceled": return prepare ? String(l10n: "The preparation of \(provider) ended: the server left Founderizer.")
+            : String(l10n: "The install of \(agent) ended: the server left Founderizer.")
         default: break
         }
         if let detail = job.detail, !detail.isEmpty { return detail }
         switch job.step {
-        case "user": return "The OS user of \(agent) on the server."
-        case "runtime": return prepare ? "\(provider) on the server." : "The provider of \(agent)."
-        case "checkout": return "The checkout of \(agent)."
-        case "service": return "The service of \(agent)."
-        case "sign_in": return "The sign-in of \(prepare ? provider : agent)."
-        default: return "\(work)."
+        case "user": return String(l10n: "The OS user of \(agent) on the server.")
+        case "runtime": return prepare ? String(l10n: "\(provider) on the server.") : String(l10n: "The provider of \(agent).")
+        case "checkout": return String(l10n: "The checkout of \(agent).")
+        case "service": return String(l10n: "The service of \(agent).")
+        case "sign_in": return String(l10n: "The sign-in of \(prepare ? provider : agent).")
+        default: return prepare ? String(l10n: "The preparation of \(provider).") : String(l10n: "The install of \(agent).")
         }
     }
 
     /// The words of a deleted agent's removal: its step, then its own detail.
     private static func removalWords(_ job: ServerJob, agent: String) -> String {
         switch job.state {
-        case "queued": return "The server starts to remove \(agent) in a few seconds."
-        case "done": return job.detail ?? "\(agent) is removed from its server."
-        case "canceled": return "The removal of \(agent) ended: the server left Founderizer."
+        case "queued": return String(l10n: "The server starts to remove \(agent) in a few seconds.")
+        case "done": return job.detail ?? String(l10n: "\(agent) is removed from its server.")
+        case "canceled": return String(l10n: "The removal of \(agent) ended: the server left Founderizer.")
         default: break
         }
         if let detail = job.detail, !detail.isEmpty { return detail }
         switch job.step {
-        case "service": return "The service of \(agent)."
-        case "files": return "The files of \(agent)."
-        case "user": return "The OS user of \(agent) on the server."
-        default: return "The removal of \(agent)."
+        case "service": return String(l10n: "The service of \(agent).")
+        case "files": return String(l10n: "The files of \(agent).")
+        case "user": return String(l10n: "The OS user of \(agent) on the server.")
+        default: return String(l10n: "The removal of \(agent).")
         }
     }
 
@@ -487,14 +492,15 @@ public enum Servers {
     /// a Linux server makes before it installs anything, so that no agent's home is readable by another agent's
     /// user (PRODUCT.md P2).
     public static let installSteps: [(id: String, title: String)] = [
-        ("user", "User"), ("runtime", "AI provider"), ("checkout", "Checkout"), ("service", "Service"), ("sign_in", "Sign-in"),
+        ("user", String(l10n: "User")), ("runtime", String(l10n: "AI provider")), ("checkout", String(l10n: "Checkout")),
+        ("service", String(l10n: "Service")), ("sign_in", String(l10n: "Sign-in")),
     ]
     /// The steps of a preparation: the install's provider and sign-in. The agent's checkout and service stay.
-    public static let prepareSteps: [(id: String, title: String)] = [("runtime", "AI provider"), ("sign_in", "Sign-in")]
+    public static let prepareSteps: [(id: String, title: String)] = [("runtime", String(l10n: "AI provider")), ("sign_in", String(l10n: "Sign-in"))]
     /// The steps of a deleted agent's removal: its service stops, its files go, then its own OS user, which only a
     /// Linux server has.
     public static let removeSteps: [(id: String, title: String)] = [
-        ("service", "Its service"), ("files", "Its files"), ("user", "Its account"),
+        ("service", String(l10n: "Its service")), ("files", String(l10n: "Its files")), ("user", String(l10n: "Its account")),
     ]
 
     /// The steps of this job, in order. A Mac makes no user of its own for an agent — its agents are one Mac user's
@@ -507,11 +513,11 @@ public enum Servers {
 
     /// A provider on a server in a few words: not installed, its version and sign-in.
     public static func providerWords(_ runtime: ServerReading.Runtime?) -> String {
-        guard let runtime, let version = runtime.version, !version.isEmpty else { return "Not installed" }
+        guard let runtime, let version = runtime.version, !version.isEmpty else { return String(l10n: "Not installed") }
         switch runtime.signed_in {
-        case true?: return "\(version) · Signed in"
-        case false?: return "\(version) · Not signed in"
-        case nil: return "\(version) · Sign-in not reported"
+        case true?: return String(l10n: "\(version) · Signed in")
+        case false?: return String(l10n: "\(version) · Not signed in")
+        case nil: return String(l10n: "\(version) · Sign-in not reported")
         }
     }
 
@@ -534,45 +540,156 @@ public enum Servers {
 
     /// The words behind an on-or-off mark.
     public static func onOffWords(_ value: Bool?) -> String {
-        value.map { $0 ? "On" : "Off" } ?? "Not reported"
+        value.map { $0 ? String(l10n: "On") : String(l10n: "Off") } ?? String(l10n: "Not reported")
     }
 
     /// What is off, by name: "Private network, Firewall off".
-    public static func offWords(_ names: [String]) -> String { names.joined(separator: ", ") + " off" }
+    public static func offWords(_ names: [String]) -> String { String(l10n: "\(names.joined(separator: ", ")) off") }
 
     /// The same for the parts of a Security row that are not on, where security updates that stopped are said as
     /// what they are: "Firewall off, Security updates stalled".
     public static func offWords(_ parts: [(name: String, on: Bool?, words: String)]) -> String {
         let off = parts.filter { $0.on == false }
         let plain = off.filter { $0.words != stalled }.map(\.name)
-        return ((plain.isEmpty ? [] : [offWords(plain)]) + off.filter { $0.words == stalled }.map { "\($0.name) stalled" })
+        return ((plain.isEmpty ? [] : [offWords(plain)]) + off.filter { $0.words == stalled }.map { String(l10n: "\($0.name) stalled") })
             .joined(separator: ", ")
     }
 
     /// The words of automatic security updates that have not ended well for `updatesStalled` seconds, which the hub
     /// also tells the manager of (`server_watch_sweep`).
-    public static let stalled = "Stalled"
+    public static let stalled = String(l10n: "Stalled")
     public static let updatesStalled: Double = 3 * 86400
 
     /// How old a reading is, in a few words.
     public static func age(_ at: Double, now: Double) -> String {
         let seconds = max(0, now - at)
         // One of a unit is said in the singular (fix round 3, item 33: "1 seconds ago").
-        func ago(_ count: Int, _ unit: String) -> String { "\(count) \(unit)\(count == 1 ? "" : "s") ago" }
-        if seconds < 90 { return ago(Int(seconds), "second") }
-        if seconds < 5400 { return ago(Int(seconds / 60), "minute") }
-        if seconds < 172_800 { return ago(Int(seconds / 3600), "hour") }
-        return ago(Int(seconds / 86_400), "day")
+        if seconds < 90 {
+            let count = Int(seconds)
+            return count == 1 ? String(l10n: "1 second ago") : String(l10n: "\(count) seconds ago")
+        }
+        if seconds < 5400 {
+            let count = Int(seconds / 60)
+            return count == 1 ? String(l10n: "1 minute ago") : String(l10n: "\(count) minutes ago")
+        }
+        if seconds < 172_800 {
+            let count = Int(seconds / 3600)
+            return count == 1 ? String(l10n: "1 hour ago") : String(l10n: "\(count) hours ago")
+        }
+        let days = Int(seconds / 86_400)
+        return days == 1 ? String(l10n: "1 day ago") : String(l10n: "\(days) days ago")
     }
 
     /// Why Add agent cannot go now, or nil. The hub checks everything again.
     public static func agentProblem(name: String, server: ServerEntry?, existing: [String]) -> String? {
-        guard let server else { return "Select a server." }
+        guard let server else { return String(l10n: "Select a server.") }
         // The server he picked can no longer take one: why, in the words of its own row.
-        guard server.available else { return server.why.first.map(reason) ?? "It cannot take an agent now." }
+        guard server.available else { return server.why.first.map(reason) ?? String(l10n: "It cannot take an agent now.") }
         guard name.range(of: AgentPlacement.namePattern, options: .regularExpression) != nil, name != "owner" else {
-            return "Use a name of 2 to 31 characters: a-z, 0-9 and -, starting with a letter."
+            return String(l10n: "Use a name of 2 to 31 characters: a-z, 0-9 and -, starting with a letter.")
         }
-        return existing.contains(name) ? "An agent with this name exists." : nil
+        return existing.contains(name) ? String(l10n: "An agent with this name exists.") : nil
+    }
+}
+
+// MARK: The cards of the Servers list
+
+extension Servers {
+    /// **The one mark at the end of a server's card** (the owner's yes of 13 November 2026 to the clean Servers page,
+    /// and his answer "Nothing" for a server that is well): nil while the server is connected, so a well server has no
+    /// mark; else one mark for the kind of its state, whose words are its hover text and its accessibility label.
+    public enum Mark: Equatable, Sendable {
+        /// The hub has a newer Fleet for the server. Muted: nothing is wrong.
+        case update
+        /// A job runs on the server: an install, a removal or a preparation.
+        case working
+        /// The server needs the owner, or a job of it failed, or it does not answer. Orange.
+        case attention
+        /// The last reading of a hub that does not answer, or a state with no mark of its own. Muted.
+        case unknown
+    }
+
+    /// The mark of a state of `state(_:helpers:time:fresh:)`.
+    public static func mark(_ state: (words: String, attention: Bool)) -> Mark? {
+        // **The named words, never English text** (the words go through the Spanish table since 13 November 2026).
+        if state.words == connected { return nil }
+        if state.attention { return .attention }
+        if state.words == updateAvailable { return .update }
+        if state.words != lastReading, state.words.hasSuffix("…") { return .working }
+        return .unknown
+    }
+}
+
+/// **The columns of the server cards** (the owner's choice C1 of 13 November 2026: a card for each server, its CPU,
+/// memory and disk in columns whose heads stand once over the cards, and each agent on one line with its role, the
+/// provider's logo in one column, its account and a bar for each window). Every card takes the same columns, so that a
+/// column stands at one place in every card, and the view draws each line from these widths.
+///
+/// **Wide** while the account has room beside the role: the account's column holds the server's CPU, memory and disk on
+/// the server's line, the windows' heads stand once over the cards, and the account's column is as wide as its widest
+/// address and no wider, so that the bars stand beside the accounts and the room that is left goes before the mark at
+/// the line's end (a render at 1,180 points put 600 points between them); with less room, the role and the account
+/// take their least. Else **compact**: the account goes behind the provider's logo (its words on hover), each cell
+/// names its own window, the role takes the room that is left, the server's figures stand at the end of its line, and
+/// the bars go before the role is cut. No column is cut to a few letters (T-17: "fo", "v", "s" at 960 pt).
+public struct ServerCardLayout: Equatable, Sendable {
+    public enum Mode: Equatable, Sendable { case wide, compact }
+
+    /// The fixed parts of the lines, in points. The view measures the words; the rest are the app's sizes.
+    public struct Parts: Equatable, Sendable {
+        public var tile = 34.0, glyph = 16.0, logo = 14.0, mark = 22.0
+        public var gap = 12.0, small = 6.0, logoGap = 8.0
+        public var meter = 44.0, meterGap = 8.0
+        /// "100%" in the cells' figures.
+        public var percent: Double
+        /// The widest name of a window, for a compact cell ("7 d").
+        public var label: Double
+        /// CPU, Memory and Disk with the gaps between them.
+        public var figures: Double
+        /// The least that an account shows: eight characters.
+        public var accountLeast: Double
+        public var roleLeast = 96.0
+
+        public init(percent: Double, label: Double, figures: Double, accountLeast: Double) {
+            self.percent = percent; self.label = label; self.figures = figures; self.accountLeast = accountLeast
+        }
+
+        /// The line's start before the role: the room of the server's mark, the gap, the agent's glyph and its gap.
+        public var beforeRole: Double { tile + gap + glyph + small }
+        /// From the role's end to the account: the gap, the provider's logo and its gap.
+        public var roleToAccount: Double { gap + logo + logoGap }
+        /// The end of a line after the cells: the gap and the mark's column.
+        public var end: Double { gap + mark }
+
+        /// All the cells of a line, with the gap before them; nothing without a window.
+        public func cells(_ windows: Int, cell: Double) -> Double {
+            windows == 0 ? 0 : gap + Double(windows) * cell + Double(windows - 1) * gap
+        }
+        /// A cell of a wide line: the bar and the share.
+        public var wideCell: Double { meter + meterGap + percent }
+        /// A cell of a compact line: the window's name, the bar where it fits, and the share.
+        public func compactCell(meters: Bool) -> Double { label + small + (meters ? meter + meterGap : 0) + percent }
+    }
+
+    public let mode: Mode
+    /// The role's column of a wide line; nil on a compact one, where the role takes what is left.
+    public let role: Double?
+    /// The account's column of a wide line, which holds the server's figures on its line; nil on a compact one.
+    public let account: Double?
+    /// The cells draw their bars.
+    public let meters: Bool
+
+    /// **The layouts to try, the widest first**, for roles of at most `role` points and accounts of at most `account`:
+    /// the view draws the first whose lines fit the page (`ViewThatFits`), and the last where none fits, whose role then
+    /// gives way to "…". The width is the page's own: a view that measured the cards kept a wide layout wide, because
+    /// lines of fixed columns made the cards as wide as their columns (670 points on a page of 420, 13 November 2026).
+    public static func candidates(role: Double, account: Double, parts: Parts) -> [ServerCardLayout] {
+        let least = max(parts.figures, parts.accountLeast)
+        var list = [ServerCardLayout(mode: .wide, role: role, account: max(account, least), meters: true)]
+        if role > parts.roleLeast || account > least {
+            list.append(ServerCardLayout(mode: .wide, role: min(role, parts.roleLeast), account: least, meters: true))
+        }
+        return list + [ServerCardLayout(mode: .compact, role: nil, account: nil, meters: true),
+                       ServerCardLayout(mode: .compact, role: nil, account: nil, meters: false)]
     }
 }

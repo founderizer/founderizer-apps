@@ -94,7 +94,7 @@ final class AppUpdateModel {
             installed = true
         } catch {
             failure = (error as? LocalizedError)?.errorDescription
-                ?? "The update stopped, and nothing on this Mac changed."
+                ?? String(l10n: "The update stopped, and nothing on this Mac changed.")
             step = nil
         }
     }
@@ -108,18 +108,18 @@ final class AppUpdateModel {
     /// carries no release key either. Then this row shows the build it runs and nothing more: the reason is on the
     /// screen once, where the owner reads it first. nil while nothing is known yet: the version at the right says it.
     func says(quiet: Bool) -> String? {
-        if installed { return "The new Founderizer is in place. It starts when you say so, and not before." }
+        if installed { return String(l10n: "The new Founderizer is in place. It starts when you say so, and not before.") }
         if let step { return step.says }
         if let failure { return failure }
-        if quiet { return running.map { "Founderizer \($0.name)" } ?? "This build does not say which one it is." }
+        if quiet { return running.map { String(l10n: "Founderizer \($0.name)") } ?? String(l10n: "This build does not say which one it is.") }
         return AppUpdateWords.state(reading)
     }
 
     /// The short word at the right when this row offers no press: the version this Mac runs, with no build number.
     func word(quiet: Bool) -> String {
-        if quiet { return "Nothing to check" }
-        if reading?.refused == true { return "Cannot check" }
-        if reading?.manifest?.hold == true { return "Held" }
+        if quiet { return String(l10n: "Nothing to check") }
+        if reading?.refused == true { return String(l10n: "Cannot check") }
+        if reading?.manifest?.hold == true { return String(localized: "Held (a release)", defaultValue: "Held", bundle: Localized.bundle, locale: Localized.digits) }
         return AppUpdateWords.version(running)
     }
 }
@@ -233,7 +233,7 @@ final class AppAutoUpdate {
             AppAutoUpdate.relaunch(installer.bundle)
         } catch {
             failure = (error as? LocalizedError)?.errorDescription
-                ?? "The update stopped, and nothing on this Mac changed."
+                ?? String(l10n: "The update stopped, and nothing on this Mac changed.")
             waiting = nil
         }
     }

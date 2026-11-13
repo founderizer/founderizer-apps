@@ -315,11 +315,11 @@ public struct TailscaleFleetKey: Sendable {
         }
         says = hidden(says, secret).trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ")
         if says.count > 300 { says = String(says.prefix(300)) + "…" }
-        return .refused(says.isEmpty ? "it answered \(http.statusCode) and said nothing." : says)
+        return .refused(says.isEmpty ? String(l10n: "it answered \(http.statusCode) and said nothing.") : says)
     }
 
     static func hidden(_ text: String, _ secret: String) -> String {
-        secret.count >= 8 ? text.replacingOccurrences(of: secret, with: "(not shown)") : text
+        secret.count >= 8 ? text.replacingOccurrences(of: secret, with: String(l10n: "(not shown)")) : text
     }
 
     /// One form value. A credential has no character that needs escaping, and this makes sure of it.
@@ -368,22 +368,20 @@ public enum FleetKeyError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .notAnAccessToken:
-            "This is not a Tailscale API access token. Make one on Tailscale's Keys page: it starts with tskey-api-."
+            String(l10n: "This is not a Tailscale API access token. Make one on Tailscale's Keys page: it starts with tskey-api-.")
         case .tokenNotAccepted:
-            "Tailscale did not accept this access token: it has expired or it was revoked. Make a new one on Tailscale's "
-                + "Keys page and paste it."
+            String(l10n: "Tailscale did not accept this access token: it has expired or it was revoked. Make a new one on Tailscale's Keys page and paste it.")
         case .roleCannotWrite:
-            "Your role in Tailscale cannot change the policy file. Use an access token of an Owner or an Admin of the "
-                + "tailnet."
-        case .rateLimited: "Tailscale asks this Mac to wait. Try again in a minute."
-        case .unreachable: "Tailscale could not be reached. Check this Mac's connection to the internet."
-        case .refused(let says): "Tailscale refused: \(says)"
-        case .notUnderstood: "Tailscale answered something this app does not understand."
+            String(l10n: "Your role in Tailscale cannot change the policy file. Use an access token of an Owner or an Admin of the tailnet.")
+        case .rateLimited: String(l10n: "Tailscale asks this Mac to wait. Try again in a minute.")
+        case .unreachable: String(l10n: "Tailscale could not be reached. Check this Mac's connection to the internet.")
+        case .refused(let says): String(l10n: "Tailscale refused: \(says)")
+        case .notUnderstood: String(l10n: "Tailscale answered something this app does not understand.")
         case .policyChangedMeanwhile:
-            "Your Tailscale policy file changed while this app was adding to it. Try again."
-        case .noFleetKey: "This Mac has no key to your Tailscale network yet. Connect Tailscale first."
+            String(l10n: "Your Tailscale policy file changed while this app was adding to it. Try again.")
+        case .noFleetKey: String(l10n: "This Mac has no key to your Tailscale network yet. Connect Tailscale first.")
         case .fleetKeyEnded:
-            "Tailscale no longer accepts this Mac's key to your network: it was ended in Tailscale. Connect Tailscale again."
+            String(l10n: "Tailscale no longer accepts this Mac's key to your network: it was ended in Tailscale. Connect Tailscale again.")
         }
     }
 }

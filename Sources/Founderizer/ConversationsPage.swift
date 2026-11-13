@@ -89,7 +89,7 @@ struct ConversationsPage: View {
     var body: some View {
         Group {
             if let id = open {
-                ConversationPage(store: store, id: id, backTitle: "Conversations", back: { open = nil })
+                ConversationPage(store: store, id: id, backTitle: String(l10n: "Conversations"), back: { open = nil })
             } else {
                 list
             }
@@ -138,7 +138,7 @@ struct ConversationsPage: View {
             }
             if offered || agentsOffered {
                 if loading, store.connectionError == nil {
-                    LoadingLine("Reading the conversations…")
+                    LoadingLine(String(l10n: "Reading the conversations…"))
                 } else if !peopleRead || !agentsRead {
                     readingRow
                 }
@@ -176,7 +176,7 @@ struct ConversationsPage: View {
                 } else if case .loading = reading, store.connectionError == nil {
                     // The first visit: nothing of the list until it is read, then all of it in one frame. While the
                     // hub does not answer nothing is read, and the failed row stands in its place.
-                    LoadingLine("Reading the conversations…")
+                    LoadingLine(String(l10n: "Reading the conversations…"))
                 } else if reading.value == nil {
                     readingRow
                 } else {
@@ -249,9 +249,12 @@ struct ConversationsPage: View {
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(conversation.person?.name ?? "Somebody").font(FormMetrics.title)
+                        Text(conversation.person?.name ?? String(l10n: "Somebody")).font(FormMetrics.title)
                             .foregroundStyle(FleetStyle.text).lineLimit(1)
-                        Text("\(conversation.person?.roleWord ?? "") · \(People.agentWord(conversation.agent))")
+                        // In an agent's own group every row is that agent's: the role alone (the owner, 13 November
+                        // 2026: "review all other pages for the same issues!!").
+                        Text(grouped ? conversation.person?.roleWord ?? ""
+                             : "\(conversation.person?.roleWord ?? "") · \(People.agentWord(conversation.agent))")
                             .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
                     }
                     if let line = conversation.line {
@@ -274,9 +277,9 @@ struct ConversationsPage: View {
             .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 11).frame(minHeight: 44).contentShape(Rectangle())
         }
         .buttonStyle(FleetRowButtonStyle())
-        .help(state?.words ?? "Nothing waits.")
-        .accessibilityLabel(conversation.person?.name ?? "Somebody")
-        .accessibilityValue("\(People.agentWord(conversation.agent)). \(state?.words ?? "Nothing waits.")")
+        .help(state?.words ?? String(l10n: "Nothing waits."))
+        .accessibilityLabel(conversation.person?.name ?? String(l10n: "Somebody"))
+        .accessibilityValue("\(People.agentWord(conversation.agent)). \(state?.words ?? String(l10n: "Nothing waits."))")
         .accessibilityIdentifier("conversation-\(conversation.id)")
     }
 
@@ -288,9 +291,9 @@ struct ConversationsPage: View {
                 RowMark { AgentGlyph(name: conversation.other, size: GlyphSize.row) }
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        // No "Agent" after the name: its glyph says it, where a person's row wears the person's mark.
                         Text(People.agentWord(conversation.other)).font(FormMetrics.title)
                             .foregroundStyle(FleetStyle.text).lineLimit(1)
-                        Text("Agent").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
                     }
                     if let line = conversation.line {
                         Text(line).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)

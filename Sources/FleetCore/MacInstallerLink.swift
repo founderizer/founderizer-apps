@@ -113,10 +113,10 @@ public enum MacLinkError: LocalizedError, Equatable, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .notAnAddress: return "Give the address the installer shows on that Mac, and its link code."
+        case .notAnAddress: return String(l10n: "Give the address the installer shows on that Mac, and its link code.")
         case .refused(let says): return says
-        case .unreachable: return "This Mac cannot reach the installer on that Mac. Check the address it shows."
-        case .unreadable: return "The installer on that Mac answered something this app could not read."
+        case .unreachable: return String(l10n: "This Mac cannot reach the installer on that Mac. Check the address it shows.")
+        case .unreadable: return String(l10n: "The installer on that Mac answered something this app could not read.")
         }
     }
 }
@@ -177,7 +177,7 @@ public struct MacInstallerClient: Sendable {
             // A refusal comes before the seal is known to be right, so it is the one answer in the clear. It carries
             // nothing of the order, and it changes nothing here.
             let said = try? JSONDecoder().decode(MacInstallState.self, from: data)
-            throw MacLinkError.refused(said?.says ?? "The installer on that Mac refused this (\(http.statusCode)).")
+            throw MacLinkError.refused(said?.says ?? String(l10n: "The installer on that Mac refused this (\(http.statusCode))."))
         }
         guard let opened = MacLinkSeal.open(data, code: code),
               let state = try? JSONDecoder().decode(MacInstallState.self, from: opened) else {

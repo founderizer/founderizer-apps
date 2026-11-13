@@ -11,7 +11,7 @@ import Foundation
 /// server the screen checked.
 public enum ServerCheck {
     /// The install step that runs the check, as the plans and their failures name it.
-    public static let title = "Read the server"
+    public static let title = String(l10n: "Read the server")
 
     /// What the server must reach over HTTPS and IPv4: the code (GitHub), Tailscale's installer, and the two providers'
     /// runtimes and sign-ins.
@@ -239,26 +239,25 @@ public enum ServerCheck {
         guard let system = InstallPlan.systems(job).first(where: { $0.id == reading.system && $0.version == reading.version })
         else { return .stop(job == .hub ? InstallPlan.hubSystems : InstallPlan.joinSystems) }
         guard let arch = architectures[reading.arch] else {
-            let kind = reading.arch.isEmpty ? "of an unknown kind" : "a \(reading.arch) machine"
-            return .stop("This server is \(kind), and this install needs a 64-bit x86 or Arm server.")
+            return .stop(reading.arch.isEmpty
+                ? String(l10n: "This server is of an unknown kind, and this install needs a 64-bit x86 or Arm server.")
+                : String(l10n: "This server is a \(reading.arch) machine, and this install needs a 64-bit x86 or Arm server."))
         }
         guard reading.systemd else {
-            return .stop("This server does not run systemd, and this install needs a full VPS that does.")
+            return .stop(String(l10n: "This server does not run systemd, and this install needs a full VPS that does."))
         }
         if reading.sudo == .none { return .stop(notRoot(reading.user)) }
         let memory = job == .hub ? hubMemory : agentMemory
         if let have = reading.memoryMB, have < memory.megabytes {
-            let what = job == .hub ? "the hub" : "a server for agents"
-            return .stop("This server has \(size(have)) of memory, and \(what) needs about \(memory.words). "
-                         + "Choose a plan with more memory.")
+            return .stop(job == .hub
+                ? String(l10n: "This server has \(size(have)) of memory, and the hub needs about \(memory.words). Choose a plan with more memory.")
+                : String(l10n: "This server has \(size(have)) of memory, and a server for agents needs about \(memory.words). Choose a plan with more memory."))
         }
         if let free = reading.diskFreeMB, free < freeDisk.megabytes {
-            return .stop("This server has \(size(free)) of free disk, and the install needs about \(freeDisk.words). "
-                         + "Free some space, or choose a bigger disk.")
+            return .stop(String(l10n: "This server has \(size(free)) of free disk, and the install needs about \(freeDisk.words). Free some space, or choose a bigger disk."))
         }
         guard reading.ipv4Route else {
-            return .stop("This server has no IPv4 route, and GitHub answers over IPv4 only. "
-                         + "Give it a public IPv4 address at your provider.")
+            return .stop(String(l10n: "This server has no IPv4 route, and GitHub answers over IPv4 only. Give it a public IPv4 address at your provider."))
         }
         // The fleet's own VPS runs no agent, so it needs neither AI's site. A server for agents needs the site of the
         // AI its agents run, which each agent's own page chooses later, so either one of the two is enough here.
@@ -266,14 +265,14 @@ public enum ServerCheck {
         var unreached = hosts.filter { !ai.contains($0) && reading.reach[$0] == .no }
         if job == .join, ai.allSatisfy({ reading.reach[$0] == .no }) { unreached += ai }
         if !unreached.isEmpty {
-            return .stop("This server cannot reach \(spoken(unreached, "or")) over HTTPS. Let it make outgoing HTTPS connections.")
+            return .stop(String(l10n: "This server cannot reach \(spoken(unreached, String(l10n: "or"))) over HTTPS. Let it make outgoing HTTPS connections."))
         }
         if let tailnet, case .running(let theirs?) = reading.tailscale, theirs.lowercased() != tailnet.lowercased() {
-            return .stop("This server is on another Tailscale network, \(theirs). Run tailscale logout on it, then check again.")
+            return .stop(String(l10n: "This server is on another Tailscale network, \(theirs). Run tailscale logout on it, then check again."))
         }
         if reading.sudo == .password && !holdsSudoPassword { return .needsPassword(.sudo) }
-        if reading.cloudInit == .running { return .wait("The server is still setting itself up after its first start.") }
-        if reading.dpkgLock { return .wait("The server is installing its updates.") }
+        if reading.cloudInit == .running { return .wait(String(l10n: "The server is still setting itself up after its first start.")) }
+        if reading.dpkgLock { return .wait(String(l10n: "The server is installing its updates.")) }
         return .ready(summary: "\(system.name) \(system.version) · \(roundGigabytes(reading.memoryMB)) · \(arch)",
                       changes: changes(reading, sshPort: sshPort))
     }
@@ -281,13 +280,12 @@ public enum ServerCheck {
     /// **What the install changes, in one line**: SSH moves onto the private network, and every other TCP port that was
     /// open before stays open (the installers' firewall keeps each port that answered before the install, except SSH).
     static func changes(_ reading: Reading, sshPort: Int) -> String {
-        let moves = "SSH moves to Tailscale."
         let ports = Set(reading.listeners.filter { $0.proto == "tcp" && $0.port != sshPort && !["sshd", "ssh"].contains($0.process) }
             .map(\.port)).sorted()
         switch ports.count {
-        case 0: return moves
-        case 1: return moves + " Port \(ports[0]) stays open."
-        default: return moves + " Ports \(spoken(ports.map(String.init), "and")) stay open."
+        case 0: return String(l10n: "SSH moves to Tailscale.")
+        case 1: return String(l10n: "SSH moves to Tailscale. Port \(ports[0]) stays open.")
+        default: return String(l10n: "SSH moves to Tailscale. Ports \(spoken(ports.map(String.init), String(l10n: "and"))) stay open.")
         }
     }
 
@@ -295,21 +293,43 @@ public enum ServerCheck {
 
     /// The words of a user that cannot become root, the same as the install's own (`InstallError.notRoot`).
     public static func notRoot(_ user: String) -> String {
-        "The user \(user) is not root on that server. Give a user that is root, or that can become root."
+        String(l10n: "The user \(user) is not root on that server. Give a user that is root, or that can become root.")
     }
 
     /// The words of a server that SSH did not reach at all, and of one that took none of this Mac's keys and takes no
     /// password either: the same as a stopped install's (`InstallError.plain`).
-    public static func unreached(_ server: String) -> String { "This Mac could not reach \(server) over SSH." }
-    public static func keyRefused(_ server: String) -> String { "\(server) did not take your SSH key. Choose its key." }
+    public static func unreached(_ server: String) -> String { String(l10n: "This Mac could not reach \(server) over SSH.") }
+    public static func keyRefused(_ server: String) -> String { String(l10n: "\(server) did not take your SSH key. Choose its key.") }
     /// A server whose host key is not the one this Mac kept for it: rebuilt, or not the server it was.
     public static func hostKeyChanged(_ server: String) -> String {
-        "\(server) answers with another host key than this Mac knows. If the server was rebuilt, run "
-            + "ssh-keygen -R \(server) on this Mac, then check again."
+        String(l10n: "\(server) answers with another host key than this Mac knows. If the server was rebuilt, run ssh-keygen -R \(server) on this Mac, then check again.")
     }
     /// A server that took the connection and printed no reading.
     public static func noAnswer(_ server: String) -> String {
-        "\(server) did not answer the check. Give a user that can run commands there."
+        String(l10n: "\(server) did not answer the check. Give a user that can run commands there.")
+    }
+
+    /// **Why `ssh` did not reach a server, as its own words say it** (the report of 13 November 2026: one line, "could
+    /// not reach", for a port 22 that refused each connection of that Mac, told nobody where to look): a port that
+    /// refused, a port that did not answer, a server that closed the connection before any login, and a name that this
+    /// Mac could not find. `said` is what `ssh` printed, in lower case, and the port is the one in its words. Other
+    /// words are a server that `ssh` did not reach (`unreached`), as before. The install says the same (`InstallError.plain`).
+    public static func unreached(_ server: String, said: String) -> String {
+        let port = said.range(of: "port [0-9]{1,5}", options: .regularExpression).map { String(said[$0].dropFirst(5)) }
+        if said.contains("could not resolve hostname") {
+            return String(l10n: "This Mac could not find \(server). Check its address.")
+        }
+        if let port, said.contains("connection refused") {
+            return String(l10n: "\(server) refused SSH on port \(port). Check that SSH runs on that port and lets this Mac in.")
+        }
+        if let port, said.contains("timed out") {
+            return String(l10n: "\(server) did not answer SSH on port \(port). Check that the server is on and that its firewall lets SSH in.")
+        }
+        if ["kex_exchange_identification", "during banner exchange", "connection reset by"].contains(where: said.contains)
+            || said.split(whereSeparator: \.isNewline).contains(where: { $0.hasPrefix("connection closed by ") }) {
+            return String(l10n: "\(server) closed the SSH connection before any login. Check that it lets this Mac in.")
+        }
+        return unreached(server)
     }
 
     /// "80 and 443", "github.com, claude.ai or chatgpt.com".
@@ -323,7 +343,7 @@ public enum ServerCheck {
 
     /// "4 GB": the memory of a plan in the round figure it is sold by.
     static func roundGigabytes(_ megabytes: Int?) -> String {
-        guard let megabytes else { return "memory not read" }
+        guard let megabytes else { return String(l10n: "memory not read") }
         return "\(max(1, Int((Double(megabytes) / 1024).rounded()))) GB"
     }
 }
@@ -376,7 +396,8 @@ extension ServerCheck {
         }
         var reached = target
         if answer.status == 255, InstallError.keyRefused(answer.output) {
-            for key in keyFiles(in: keys) where key != target.identityFile {
+            let offered = await offeredKeys(target, answer: answer.output, ssh: ssh, run: run)
+            for key in keyFiles(in: keys) where key != target.identityFile && !offered.contains(key) {
                 var keyed = target
                 keyed.identityFile = key
                 guard let tried = try? await session(keyed, job: job, ssh: ssh, run: run), tried.status != 255 else { continue }
@@ -394,6 +415,22 @@ extension ServerCheck {
         }
         return Result(verdict: verdict(reading, job: job, sshPort: target.port, holdsSudoPassword: holdsSudoPassword,
                                        tailnet: tailnet), reading: reading, target: reached)
+    }
+
+    /// **The key files that the first session already offered**, which a session of their own would only see refused
+    /// again (the report of 13 November 2026: a check could open five sessions as root at a server that lets no root in,
+    /// and a server's fail2ban can then refuse this Mac on port 22, also for the person's own alias). A server that hung
+    /// up after too many keys heard only some of them, so none counts as offered; a target with a key of its own offered
+    /// only that one. Else `ssh` offered each key file that its configuration gives that server, or its own default
+    /// files, and `ssh -G` says which: it connects to nothing.
+    static func offeredKeys(_ target: InstallTarget, answer: String, ssh: String, run: ShellRunner) async -> Set<String> {
+        if answer.lowercased().contains("too many authentication failures") { return [] }
+        if let key = target.identityFile { return [key] }
+        guard let printed = try? await run(ssh, ["-G", "-p", String(target.port), target.destination], nil, 20), printed.ok,
+              let options = SSHOptions.read(printed.output) else { return [] }
+        return Set(options.identityFiles.compactMap {
+            SSHOptions.path($0, home: NSHomeDirectory(), localUser: NSUserName(), host: target.host, user: target.user)
+        })
     }
 
     /// One session of the check: the script on standard input, as the user this Mac logs in as.
@@ -424,7 +461,7 @@ extension ServerCheck {
         }
         // An agent with many keys offers them all, and the server hangs up before it says what else it takes.
         if said.contains("too many authentication failures") { return .needsPassword(.ssh) }
-        return .stop(unreached(host))
+        return .stop(unreached(host, said: said))
     }
 }
 #endif

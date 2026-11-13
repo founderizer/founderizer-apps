@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Founderizer.Core;
 
@@ -31,23 +32,51 @@ public interface IFleetSource : IAsyncDisposable
     /// <summary>His words in a chat's composer, kept as he types.</summary>
     void SetDraft(string agent, string text);
 
-    /// <summary>Sends the chat's draft through the store's outbox.</summary>
-    Task SendMessageAsync(string agent);
+    /// <summary>Sends the chat's draft through the store's outbox. Null when it went; else the owner's words.</summary>
+    Task<string?> SendMessageAsync(string agent);
 
     /// <summary>His words in a request's answer box, kept as he types.</summary>
     void SetAnswerDraft(long need, string text);
 
     /// <summary>Sends a request's typed answer through the outbox.</summary>
-    Task AnswerAsync(long need);
+    Task<string?> AnswerAsync(long need);
+
+    /// <summary>The ticks of a request whose options combine ("Send N").</summary>
+    Task<string?> TickAsync(long need, IReadOnlyCollection<int> choices);
 
     /// <summary>A press on one of a request's options.</summary>
     void Press(long need, int choice);
 
-    /// <summary>Pause or Stop of a task.</summary>
-    Task ControlAsync(long task, TaskControl action);
+    /// <summary>Pause, Stop or Resume of a task.</summary>
+    Task<string?> ControlAsync(long task, TaskControl action);
 
     /// <summary>Guidance for a task.</summary>
-    Task GuideAsync(long task, string text);
+    Task<string?> GuideAsync(long task, string text);
+
+    /// <summary>A read now (the line's Try again, the request line's Refresh receipt).</summary>
+    Task RefreshAsync();
+
+    /// <summary>The request line's Try again: the write that waits goes again.</summary>
+    Task RetryAsync();
+
+    /// <summary>The request line's Discard: a refused write is taken away.</summary>
+    void DiscardRefused();
+
+    /// <summary>A file that he added to a composer ("agent:&lt;name&gt;" or "need:&lt;id&gt;"). Null when it was
+    /// taken; else the owner's words.</summary>
+    Task<string?> AddFileAsync(string composer, string name, byte[] bytes, string? mime);
+
+    /// <summary>A file of a composer that did not go up goes again.</summary>
+    Task<string?> UploadAsync(string composer, Guid file);
+
+    /// <summary>The cross of a file in a composer.</summary>
+    void RemoveFile(string composer, Guid file);
+
+    /// <summary>The bytes of a file of a message.</summary>
+    Task<byte[]> FileAsync(MessageAttachment file);
+
+    /// <summary>The notifications that are due, once each, also while the window is behind (the store's Notified).</summary>
+    event EventHandler<IReadOnlyList<Notice>>? Notified;
 
     /// <summary>Settings' Connect: the hub's address as he typed it. Null when it took it; else the owner's words.</summary>
     Task<string?> ConnectAsync(string address);

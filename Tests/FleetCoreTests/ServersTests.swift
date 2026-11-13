@@ -376,4 +376,41 @@ struct ServersTests {
             #"{"agent":"scout","server":"box","runtime":"codex","job":2,"ok":true,"request_id":"0f8b6a52-5b8e-4a59-9d3c-4bb1d1c3e0a1","client":"app","replayed":false}"#.utf8))
         #expect(receipt.ok && receipt.job == 2 && receipt.server == "box" && receipt.runtime == "codex")
     }
+
+    /// **The mark at the end of a server's card** (the owner's answer "Nothing" for a well server, 13 November 2026): no
+    /// mark while it is connected, and one mark for each kind of state that needs something.
+    @Test func aWellServerHasNoMark() {
+        #expect(Servers.mark((Servers.connected, false)) == nil)
+        #expect(Servers.mark((Servers.updateAvailable, false)) == .update)
+        #expect(Servers.mark(("Sign-in needed", true)) == .attention)
+        #expect(Servers.mark(("Not answering", true)) == .attention)
+        #expect(Servers.mark(("Install of Scout failed", true)) == .attention)
+        #expect(Servers.mark(("Installing Scout\u{2026}", false)) == .working)
+        #expect(Servers.mark(("Removing Scout\u{2026}", false)) == .working)
+        #expect(Servers.mark((Servers.lastReading, false)) == .unknown)
+    }
+
+    /// **The cards' layouts, the widest first** (the owner's choice C1 of 13 November 2026): the roles and the accounts
+    /// at their widest, then at their least, then compact with bars and without; the view takes the first that fits.
+    @Test func theCardsTryTheWidestLayoutFirst() {
+        let parts = ServerCardLayout.Parts(percent: 30, label: 28, figures: 156, accountLeast: 74)
+        #expect(ServerCardLayout.candidates(role: 140, account: 170, parts: parts) == [
+            ServerCardLayout(mode: .wide, role: 140, account: 170, meters: true),
+            ServerCardLayout(mode: .wide, role: 96, account: 156, meters: true),
+            ServerCardLayout(mode: .compact, role: nil, account: nil, meters: true),
+            ServerCardLayout(mode: .compact, role: nil, account: nil, meters: false),
+        ])
+        // Short roles and accounts narrower than the server's figures have nothing to give: no second wide layout, and
+        // the account's column keeps the figures' width.
+        #expect(ServerCardLayout.candidates(role: 40, account: 90, parts: parts) == [
+            ServerCardLayout(mode: .wide, role: 40, account: 156, meters: true),
+            ServerCardLayout(mode: .compact, role: nil, account: nil, meters: true),
+            ServerCardLayout(mode: .compact, role: nil, account: nil, meters: false),
+        ])
+        // The widths that the view gives each wide line: 68 before the role, 34 to the account, two cells of 82 with
+        // their gaps, and 34 at the end.
+        #expect(parts.beforeRole == 68 && parts.roleToAccount == 34 && parts.end == 34)
+        #expect(parts.cells(2, cell: parts.wideCell) == 188 && parts.cells(0, cell: parts.wideCell) == 0)
+        #expect(parts.compactCell(meters: true) == 116 && parts.compactCell(meters: false) == 64)
+    }
 }

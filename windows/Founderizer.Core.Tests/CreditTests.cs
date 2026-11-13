@@ -21,7 +21,11 @@ public sealed class CreditTests
     public void TheCreditIsCreditSwiftsAndSettingsShowsItInThePhonesOneLine()
     {
         var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "sources", "Credit.swift"));
-        var line = Swift(source, @"static let line = ""([^""]+)""");
+        // The line as a plain text, or (since the Spanish table of 260b2b3c1) as String(l10n:) with the name put in it:
+        // its English words are the same.
+        var l10n = Regex.Match(source, @"static let line = String\(l10n: ""([^""\\]*)\\\(""([^""]+)""\)([^""\\]*)""\)");
+        var line = l10n.Success ? l10n.Groups[1].Value + l10n.Groups[2].Value + l10n.Groups[3].Value
+                                : Swift(source, @"static let line = ""([^""]+)""");
         var handle = Swift(source, @"static let handle = ""([^""]+)""");
         var profile = Swift(source, @"static let profile = URL\(string: ""([^""]+)""\)");
         Assert.AreEqual(line, Credit.Founderizer.Line);

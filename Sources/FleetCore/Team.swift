@@ -42,21 +42,21 @@ public struct TeamLinesInput: Codable, Equatable, Sendable {
     public static func problem(_ lines: [ReportingLine]) -> String? {
         guard !lines.isEmpty, lines.count <= 1000, Set(lines.map(\.agent)).count == lines.count,
               lines.allSatisfy({ $0.agent.range(of: "^[a-z][a-z0-9_-]{0,63}$", options: .regularExpression) != nil })
-        else { return "The team contains an invalid or repeated agent." }
+        else { return String(l10n: "The team contains an invalid or repeated agent.") }
         let managers = lines.filter { $0.role == "manager" }
-        guard managers.count == 1, let manager = managers.first, manager.reports_to == nil else { return "The team must have one manager." }
+        guard managers.count == 1, let manager = managers.first, manager.reports_to == nil else { return String(l10n: "The team must have one manager.") }
         let members = Dictionary(uniqueKeysWithValues: lines.map { ($0.agent, $0) })
         for line in lines where line.agent != manager.agent {
             guard ["lead", "worker"].contains(line.role), let parent = line.reports_to,
                   parent != line.agent, let recipient = members[parent], ["manager", "lead"].contains(recipient.role)
-            else { return "Each agent must report to the manager or a lead." }
+            else { return String(l10n: "Each agent must report to the manager or a lead.") }
             var seen: Set<String> = [line.agent]
             var next: String? = parent
             while let name = next, name != manager.agent {
-                guard seen.insert(name).inserted, let member = members[name] else { return "Reporting lines cannot form a loop." }
+                guard seen.insert(name).inserted, let member = members[name] else { return String(l10n: "Reporting lines cannot form a loop.") }
                 next = member.reports_to
             }
-            guard next == manager.agent else { return "Each reporting line must reach the manager." }
+            guard next == manager.agent else { return String(l10n: "Each reporting line must reach the manager.") }
         }
         return nil
     }
@@ -65,12 +65,12 @@ public struct TeamLinesInput: Codable, Equatable, Sendable {
         if let issue = Self.problem(lines) { return issue }
         guard Set(lines.map(\.agent)) == Set(original.lines.map(\.agent)),
               lines.first(where: { $0.role == "manager" })?.agent == original.lines.first(where: { $0.role == "manager" })?.agent
-        else { return "Refresh the team before saving." }
+        else { return String(l10n: "Refresh the team before saving.") }
         for line in lines {
-            guard let before = original.lines.first(where: { $0.agent == line.agent }) else { return "Refresh the team before saving." }
+            guard let before = original.lines.first(where: { $0.agent == line.agent }) else { return String(l10n: "Refresh the team before saving.") }
             if before.role != line.role {
-                if !allowsLeads { return "Update the hub to change agent roles." }
-                if (original.open_tasks[line.agent] ?? 0) > 0 { return "\(line.agent.agentLabel) has open tasks. Change its role when those tasks end." }
+                if !allowsLeads { return String(l10n: "Update the hub to change agent roles.") }
+                if (original.open_tasks[line.agent] ?? 0) > 0 { return String(l10n: "\(line.agent.agentLabel) has open tasks. Change its role when those tasks end.") }
             }
         }
         return nil

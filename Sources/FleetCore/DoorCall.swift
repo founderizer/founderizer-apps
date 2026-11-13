@@ -157,26 +157,26 @@ public enum DoorCall {
         public func line(by agent: String) -> String {
             switch self {
             case .noScript:
-                "This card does not carry its script, so this Mac cannot check what Run it once would sign. Ask \(agent) for a new card."
+                String(l10n: "This card does not carry its script, so this Mac cannot check what Run it once would sign. Ask \(agent) for a new card.")
             case .otherServer:
-                "This card's title and answers do not name the server of its script, so nothing was signed. Ask \(agent) for a new card."
+                String(l10n: "This card's title and answers do not name the server of its script, so nothing was signed. Ask \(agent) for a new card.")
             case .hidden(let code):
-                "The script holds a character that is not plain text (\(code)), so nothing was signed. Ask \(agent) for a new card."
+                String(l10n: "The script holds a character that is not plain text (\(code)), so nothing was signed. Ask \(agent) for a new card.")
             case .padded:
-                "The script is too long or has wide gaps that can hide a command, so nothing was signed. Ask \(agent) for a new card."
+                String(l10n: "The script is too long or has wide gaps that can hide a command, so nothing was signed. Ask \(agent) for a new card.")
             case .decoy:
-                "This card shows code outside its script, so nothing was signed. Ask \(agent) for a new card."
+                String(l10n: "This card shows code outside its script, so nothing was signed. Ask \(agent) for a new card.")
             case .notShown:
-                "The card does not show the whole script that it asks for, so nothing was signed. Ask \(agent) for a new card."
+                String(l10n: "The card does not show the whole script that it asks for, so nothing was signed. Ask \(agent) for a new card.")
             case .otherHash:
-                "The script on this card is not the script that the door refused, so nothing was signed. Ask \(agent) for a new card."
+                String(l10n: "The script on this card is not the script that the door refused, so nothing was signed. Ask \(agent) for a new card.")
             }
         }
     }
 
     /// The line for a card with no script from a hub that sends none yet (before API 1.125, which the owner feature
     /// `door_mode_set` marks): a new card of that hub would carry no script either, so the hub is what changes.
-    public static let olderHub = "This hub does not send the script of this card yet, so this Mac cannot check what Run it once would sign. Update the hub."
+    public static let olderHub = String(l10n: "This hub does not send the script of this card yet, so this Mac cannot check what Run it once would sign. Update the hub.")
 
     /// The call hash of a door card, when this Mac computed it itself from what the card shows and it is the hash
     /// that the hub gave; else the reason why the Mac does not sign. Only for the door's card of a run: an item with a

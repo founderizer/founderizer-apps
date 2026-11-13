@@ -40,11 +40,11 @@ public enum MarkState: String, Equatable, Sendable, CaseIterable {
     /// caller with a better word of its own passes it instead.
     public var words: String {
         switch self {
-        case .good: return "Fine"
-        case .bad: return "Not fine"
-        case .warn: return "Worth knowing"
-        case .unknown: return "Not known"
-        case .working: return "Finding out"
+        case .good: return String(l10n: "Fine")
+        case .bad: return String(l10n: "Not fine")
+        case .warn: return String(l10n: "Worth knowing")
+        case .unknown: return String(l10n: "Not known")
+        case .working: return String(l10n: "Finding out")
         }
     }
 

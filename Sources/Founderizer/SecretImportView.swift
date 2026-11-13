@@ -86,7 +86,7 @@ struct SecretImportView: View {
             case .password: passwordStep
             case .choose: chooseStep
             case .importing:
-                SetupStep(title: "Importing \(Self.words(chosen.count))", waits: true) {
+                SetupStep(title: String(l10n: "Importing \(Self.words(chosen.count))"), waits: true) {
                     IconTile(symbol: "square.and.arrow.down", size: SetupMetrics.mark).accessibilityHidden(true)
                 } content: { EmptyView() }
             case .done: doneStep
@@ -99,20 +99,20 @@ struct SecretImportView: View {
     // MARK: the steps
 
     private var sourceStep: some View {
-        SetupStep(title: "Where are your secrets now?") {
+        SetupStep(title: String(l10n: "Where are your secrets now?")) {
             IconTile(symbol: "square.and.arrow.down", size: SetupMetrics.mark).accessibilityHidden(true)
         } content: {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: 2), spacing: 14) {
-                SetupChoice(title: "Bitwarden", line: "From an export file", mark: { VaultBrandMark(vendor: .bitwarden) },
+                SetupChoice(title: "Bitwarden", line: String(l10n: "From an export file"), mark: { VaultBrandMark(vendor: .bitwarden) },
                             choose: { open(.bitwarden) }).accessibilityIdentifier("import-bitwarden")
-                SetupChoice(title: "1Password", line: "From an export file", mark: { VaultBrandMark(vendor: .onePassword) },
+                SetupChoice(title: "1Password", line: String(l10n: "From an export file"), mark: { VaultBrandMark(vendor: .onePassword) },
                             choose: { open(.onePassword) }).accessibilityIdentifier("import-1password")
             }
         }
     }
 
     private var exportStep: some View {
-        SetupStep(title: vendor == .bitwarden ? "Export your Bitwarden vault" : "Export your 1Password data") {
+        SetupStep(title: vendor == .bitwarden ? String(l10n: "Export your Bitwarden vault") : String(l10n: "Export your 1Password data")) {
             VaultBrandMark(vendor: vendor, size: SetupMetrics.mark)
         } content: {
             SetupSteps(vendor == .bitwarden ? Self.bitwardenSteps : Self.onePasswordSteps)
@@ -123,8 +123,8 @@ struct SecretImportView: View {
     }
 
     private var passwordStep: some View {
-        SetupStep(title: "Enter the file password") { VaultBrandMark(vendor: vendor, size: SetupMetrics.mark) } content: {
-            SetupSecureField(placeholder: "File password", text: $password) { openLocked() }
+        SetupStep(title: String(l10n: "Enter the file password")) { VaultBrandMark(vendor: vendor, size: SetupMetrics.mark) } content: {
+            SetupSecureField(placeholder: String(l10n: "File password"), text: $password) { openLocked() }
                 .accessibilityIdentifier("import-password")
             if let message { SetupWarning(message) }
             Button("Open") { openLocked() }.buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
@@ -134,18 +134,25 @@ struct SecretImportView: View {
 
     @ViewBuilder private var chooseStep: some View {
         if let reading {
-            SetupStep(title: "Choose what to import", width: SetupMetrics.cardsWidth) { EmptyView() } content: {
+            // **The list at a form's width, under the manager's logo, and Import always in view** (the owner, 13
+            // November 2026: "Build all four"): at the VPS page's 540 pt each long name was cut where the names differ,
+            // the page had no mark where every other page of the import has one, and Import stood under the last row.
+            SetupStep(title: String(l10n: "Choose what to import"), width: FormMetrics.formWidth) {
+                VaultBrandMark(vendor: vendor, size: SetupMetrics.mark)
+            } content: {
                 FormSection(lazy: true) {
                     if reading.rows.isEmpty { FormEmpty("Nothing to import", symbol: "key") }
                     ForEach(reading.rows) { row in pickRow(row) }
                 }
                 if let line = reading.skippedLine { Text(line).foregroundStyle(FleetStyle.muted) }
-                if chosen.count > room {
-                    SetupWarning("The list has room for \(room) more secrets. Uncheck \(chosen.count - room).")
-                } else if let message { SetupWarning(message) }
-                Button("Import \(Self.words(chosen.count))") { Task { await importChosen() } }
-                    .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
-                    .disabled(busy || chosen.isEmpty || chosen.count > room || context == nil).accessibilityIdentifier("import-save")
+                SetupAction {
+                    if chosen.count > room {
+                        SetupWarning(String(l10n: "The list has room for \(room) more secrets. Uncheck \(chosen.count - room)."))
+                    } else if let message { SetupWarning(message) }
+                    Button("Import \(Self.words(chosen.count))") { Task { await importChosen() } }
+                        .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
+                        .disabled(busy || chosen.isEmpty || chosen.count > room || context == nil).accessibilityIdentifier("import-save")
+                }
             }
         }
     }
@@ -157,10 +164,12 @@ struct SecretImportView: View {
     /// ticked (`isHeldKey`): the list takes no second key of one name.
     private func pickRow(_ row: SecretImport.Row) -> some View {
         let secret = row.secret
-        let kind = secret.kind == .login ? "Login" : "API key"
+        let kind = secret.kind == .login ? String(l10n: "Login") : String(l10n: "API key")
         let isChanged = row.problem == nil && changed.contains(row.id)
-        let detail = row.problem ?? (isChanged ? kind : known.contains(secret.title) ? "\(kind) · In Founderizer already" : kind)
-        return ImportRow(title: secret.title, monospaced: secret.kind == .apiKey, detail: detail, problem: row.problem != nil,
+        // **The kind is its tile's, with the word on hover** (the owner, 13 November 2026: "Build all four"): "API key"
+        // under each of 40 names told nothing. A second line only for news.
+        let detail = row.problem ?? (isChanged || !known.contains(secret.title) ? nil : String(l10n: "In Founderizer already"))
+        return ImportRow(title: secret.title, monospaced: secret.kind == .apiKey, kind: kind, detail: detail, problem: row.problem != nil,
                          changed: isChanged, vault: row.vault,
                          symbol: secret.kind == .login ? "person.badge.key" : "key.horizontal",
                          on: Binding(get: { chosen.contains(row.id) },
@@ -174,7 +183,8 @@ struct SecretImportView: View {
     private func isHeldKey(_ secret: LoginSecret) -> Bool { secret.kind == .apiKey && knownKeys.contains(secret.title) }
 
     private var doneStep: some View {
-        SetupStep(title: failed.isEmpty ? "\(Self.words(saved.count)) imported" : "\(saved.count) of \(chosen.count) imported") {
+        SetupStep(title: failed.isEmpty ? (saved.count == 1 ? String(l10n: "1 secret imported") : String(l10n: "\(saved.count) secrets imported"))
+                  : String(l10n: "\(saved.count) of \(chosen.count) imported")) {
             IconTile(symbol: failed.isEmpty ? "checkmark" : "exclamationmark.triangle", size: SetupMetrics.mark).accessibilityHidden(true)
         } content: {
             if !failed.isEmpty {
@@ -186,6 +196,7 @@ struct SecretImportView: View {
                 Button("Try again") { Task { await importChosen() } }.buttonStyle(FleetOutlineButtonStyle())
                     .disabled(busy || context == nil).accessibilityIdentifier("import-retry")
             }
+            SetupAction {
             if let message { SetupWarning(message) }
             Text(deleted ? "The export file is deleted." : "The export file still holds your secrets.")
                 .foregroundStyle(deleted ? FleetStyle.muted : FleetStyle.text)
@@ -200,6 +211,7 @@ struct SecretImportView: View {
                         .accessibilityIdentifier("import-done")
                 }
             }
+            }
         }
     }
 
@@ -207,14 +219,14 @@ struct SecretImportView: View {
 
     /// What to do in each manager, in its own words (Bitwarden: Tools › Export, and Settings › Export data of Secrets
     /// Manager; 1Password: File › Export, then 1PUX or CSV). The first step names the page of the manager's own help.
-    static let bitwardenSteps = ["In [Bitwarden](https://bitwarden.com/help/export-your-data/), open Tools › Export. For Secrets Manager: Settings › Export data.",
-                                 "Choose .json, or .json (Encrypted) with Password protected.",
-                                 "Save the file on this Mac."]
-    static let onePasswordSteps = ["In [1Password](https://support.1password.com/export/), choose File › Export, then your account.",
-                                   "Choose 1PUX, or CSV.",
-                                   "Save the file on this Mac."]
+    static let bitwardenSteps = [String(l10n: "In [Bitwarden](https://bitwarden.com/help/export-your-data/), open Tools › Export. For Secrets Manager: Settings › Export data."),
+                                 String(l10n: "Choose .json, or .json (Encrypted) with Password protected."),
+                                 String(l10n: "Save the file on this Mac.")]
+    static let onePasswordSteps = [String(l10n: "In [1Password](https://support.1password.com/export/), choose File › Export, then your account."),
+                                   String(l10n: "Choose 1PUX, or CSV."),
+                                   String(l10n: "Save the file on this Mac.")]
 
-    static func words(_ count: Int) -> String { count == 1 ? "1 secret" : "\(count) secrets" }
+    static func words(_ count: Int) -> String { count == 1 ? String(l10n: "1 secret") : String(l10n: "\(count) secrets") }
 
     // MARK: what the steps do
 
@@ -327,11 +339,11 @@ struct SecretImportView: View {
         defer { busy = false }
         await readVaultKey()
         guard let central, let context else {
-            message = "Founderizer Vault does not answer. Nothing was sent. Try again in a moment."; return
+            message = String(l10n: "Founderizer Vault does not answer. Nothing was sent. Try again in a moment."); return
         }
         // The room that the list has now: a row that the hub registered before is in it already.
         guard let team = try? await HubClient().team(hub: context.hub, database: context.db), let catalog = team.logins else {
-            message = "The hub did not answer. Nothing was sent. Try again in a moment."; return
+            message = String(l10n: "The hub did not answer. Nothing was sent. Try again in a moment."); return
         }
         page = .importing
         catalogCount = catalog.count
@@ -344,10 +356,10 @@ struct SecretImportView: View {
                 if let waiting = pending[row.id] {
                     step = waiting
                 } else {
-                    guard left > 0 else { failed[row.id] = "The list has \(LoginSecret.maxCatalog) secrets and takes no more."; continue }
+                    guard left > 0 else { failed[row.id] = String(l10n: "The list has \(LoginSecret.maxCatalog) secrets and takes no more."); continue }
                     let sealed: String
                     do { sealed = try AgeSeal.seal(try secret.value(), to: central) }
-                    catch { failed[row.id] = "Founderizer could not seal it for the vault. Nothing was sent."; continue }
+                    catch { failed[row.id] = String(l10n: "Founderizer could not seal it for the vault. Nothing was sent."); continue }
                     step = Pending(reference: "bws://\(UUID().uuidString.lowercased())", sealed: sealed)
                     pending[row.id] = step
                 }
@@ -362,7 +374,7 @@ struct SecretImportView: View {
                 pending[row.id] = nil
                 saved[row.id] = step.reference
             } catch {
-                failed[row.id] = (error as? LocalizedError)?.errorDescription ?? "The hub did not answer."
+                failed[row.id] = (error as? LocalizedError)?.errorDescription ?? String(l10n: "The hub did not answer.")
             }
         }
         page = .done
@@ -372,7 +384,7 @@ struct SecretImportView: View {
     private func deleteFile() {
         guard let file else { return }
         do { try FileManager.default.removeItem(at: file); deleted = true; message = nil }
-        catch { message = "Founderizer could not delete the file. Delete it in Finder, and empty the Trash." }
+        catch { message = String(l10n: "Founderizer could not delete the file. Delete it in Finder, and empty the Trash.") }
     }
 
     private func finish() {
@@ -389,10 +401,13 @@ struct SecretImportView: View {
 private struct ImportRow: View {
     let title: String
     let monospaced: Bool
-    let detail: String
+    /// "API key" or "Login": its tile shows it, and the word is on the tile's hover.
+    let kind: String
+    /// The second line, only for news: why it cannot be imported, or "In Founderizer already".
+    let detail: String?
     let problem: Bool
-    /// "Changed in 1Password" in the detail line, after the kind and in the text's own colour (the owner's yes of 12
-    /// November 2026 to its picture): "Login · Changed in 1Password".
+    /// "Changed in 1Password" as its second line, in the text's own colour (the owner's yes of 12 November 2026 to its
+    /// picture, which had the kind before it).
     let changed: Bool
     /// The name of the 1Password vault that holds the item, at the right in muted text; nil for a file that names none.
     let vault: String?
@@ -404,28 +419,31 @@ private struct ImportRow: View {
     var body: some View {
         let titleFont = FormMetrics.onStep(stepText, weight: .medium) ?? FormMetrics.title
         let detailFont = FormMetrics.onStep(stepText) ?? FormMetrics.detail
+        let twoLines = changed || detail != nil
         HStack(spacing: 12) {
-            IconTile(symbol: symbol)
+            IconTile(symbol: symbol).help(kind)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(monospaced ? titleFont.monospaced() : titleFont).foregroundStyle(FleetStyle.text).lineLimit(1)
+                // **Cut in the middle**, where a name is too long for its row: names of one file share their start
+                // ("NORTHWIND_PLATFORM_…"), and the end is what tells them apart.
+                Text(title).font(monospaced ? titleFont.monospaced() : titleFont).foregroundStyle(FleetStyle.text)
+                    .lineLimit(1).truncationMode(.middle)
                 if changed {
-                    Text("\(Text("\(detail) · ").foregroundStyle(FleetStyle.muted))\(Text("Changed in 1Password").foregroundStyle(FleetStyle.text))")
-                        .font(detailFont).lineLimit(1)
-                } else {
+                    Text("Changed in 1Password").font(detailFont).foregroundStyle(FleetStyle.text).lineLimit(1)
+                } else if let detail {
                     Text(detail).font(detailFont)
                         .foregroundStyle(problem ? Color.orange : FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
                 }
-            }.padding(.vertical, 10).multilineTextAlignment(.leading)
-            // The name and its kind take the room first, so that the vault's name at the right does not fold them.
+            }.padding(.vertical, twoLines ? 10 : 6).multilineTextAlignment(.leading)
+            // The name and its news take the room first, so that the vault's name at the right does not fold them.
             .layoutPriority(1)
             Spacer(minLength: 12)
             if let vault {
                 Text(vault).font(detailFont).foregroundStyle(FleetStyle.muted).lineLimit(1).fixedSize()
             }
             Toggle("", isOn: $on).labelsHidden().toggleStyle(FleetCheckboxStyle()).disabled(problem || locked)
-                .accessibilityLabel(title)
+                .accessibilityLabel(title).accessibilityHint(kind)
         }
-        .padding(.horizontal, FormMetrics.rowInset).frame(minHeight: FormMetrics.twoLineRow)
+        .padding(.horizontal, FormMetrics.rowInset).frame(minHeight: twoLines ? FormMetrics.twoLineRow : FormMetrics.row)
         .opacity(problem ? 0.7 : 1)
     }
 }

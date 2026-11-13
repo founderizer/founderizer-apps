@@ -73,9 +73,9 @@ public enum SetupError: Error, LocalizedError {
     case invalidConfiguration, invalidEvent, unsafeLink
     public var errorDescription: String? {
         switch self {
-        case .invalidConfiguration: "Check the agent name, server address and SSH user."
-        case .invalidEvent: "Setup returned an invalid status. Reconnect before continuing."
-        case .unsafeLink: "This sign-in link is not from a supported provider."
+        case .invalidConfiguration: String(l10n: "Check the agent name, server address and SSH user.")
+        case .invalidEvent: String(l10n: "Setup returned an invalid status. Reconnect before continuing.")
+        case .unsafeLink: String(l10n: "This sign-in link is not from a supported provider.")
         }
     }
 }

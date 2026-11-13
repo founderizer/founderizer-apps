@@ -217,7 +217,7 @@ struct FleetMenuList: View {
         HStack(spacing: FleetMenuMetrics.markGap) {
             Image(systemName: "magnifyingglass").font(.system(size: 12, weight: .medium)).foregroundStyle(FleetStyle.muted)
                 .frame(width: FleetMenuMetrics.markColumn)
-            Text(model.query.isEmpty ? "Type to filter" : model.query).lineLimit(1)
+            Text(model.query.isEmpty ? String(l10n: "Type to filter") : model.query).lineLimit(1)
                 .foregroundStyle(model.query.isEmpty ? FleetStyle.muted : FleetStyle.text)
             Spacer(minLength: 0)
         }
@@ -250,7 +250,8 @@ struct FleetMenuList: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
-                    Text(item.title).font(FleetMenuMetrics.font).foregroundStyle(words)
+                    // A long name (a secret's, a repository's) is cut in the middle, where its end stays.
+                    Text(item.title).font(FleetMenuMetrics.font).foregroundStyle(words).truncationMode(.middle)
                     if let detail = item.detail { Text(detail).font(FleetMenuMetrics.detail).foregroundStyle(FleetStyle.muted) }
                 }
                 if let subtitle = item.subtitle { Text(subtitle).font(FleetMenuMetrics.detail).foregroundStyle(FleetStyle.muted) }

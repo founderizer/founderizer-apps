@@ -113,9 +113,9 @@ public enum ConnectNetworkError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .hubNotFound:
-            "Founderizer did not find your hub's server in this access token's Tailscale network."
+            String(l10n: "Founderizer did not find your hub's server in this access token's Tailscale network.")
         case .hubNotTagged:
-            "Your hub's server has no tag in Tailscale, so Founderizer cannot let it publish an address."
+            String(l10n: "Your hub's server has no tag in Tailscale, so Founderizer cannot let it publish an address.")
         }
     }
 }

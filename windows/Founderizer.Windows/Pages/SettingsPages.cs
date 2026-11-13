@@ -135,14 +135,15 @@ internal static class Form
         new(Look.White(0.06), placeholder, centred, semibold, spacing, nudge);
 }
 
-/// <summary>Add this PC, as picture 5 draws it (the iPhone's EnrollPage, with "PC"): the title, "The code", the code's
-/// field in the middle at 26, and the line under it. A whole code sends itself, once (EnrollForm): no button. What the
-/// hub answers to a code that did not work, and "Try again", wait for their pictures.</summary>
+/// <summary>Add this PC, as pictures 5 and 8 draw it (the iPhone's EnrollPage, with "PC"): the title, "The code", the
+/// code's field in the middle at 26, the line under it, and under that in orange what the hub answered to a code that
+/// did not work. A whole code sends itself, once (EnrollForm): no button.</summary>
 internal sealed class AddThisPcPage : IPageView
 {
     private readonly IFleetSource source;
     private readonly Grid page;
     private readonly Field code;
+    private readonly TextBlock problem = Look.Words("", 12, 16, Look.Orange);
     private EnrollForm form = new();
 
     public AddThisPcPage(IFleetSource source)
@@ -157,6 +158,10 @@ internal sealed class AddThisPcPage : IPageView
         code.Typed += Typed;
         stack.Children.Add(Form.Card(new StackPanel { Padding = new Thickness(16, 12, 16, 12), Children = { code } }));
         stack.Children.Add(Form.Footer(EnrollForm.Footer));
+        problem.Margin = new Thickness(2, 6, 2, 0);
+        problem.Visibility = Visibility.Collapsed;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(problem, "CodeProblem");
+        stack.Children.Add(problem);
     }
 
     public FrameworkElement View => page;
@@ -168,18 +173,20 @@ internal sealed class AddThisPcPage : IPageView
         var (next, send) = form.Typed(text);
         form = next;
         if (!send || form.Sent is not { } whole) return;
-        var problem = await source.EnrollAsync(whole);
-        // The words of a code that did not work wait for their picture (8-code-refused): the proofs' log has them.
-        Readings.Note("enroll: " + (problem ?? "the PC took its key"));
-        form = form.Answered(problem);
-        if (problem is null) code.Clear();
+        problem.Visibility = Visibility.Collapsed;
+        var refused = await source.EnrollAsync(whole);
+        Readings.Note("enroll: " + (refused ?? "the PC took its key"));
+        form = form.Answered(refused);
+        if (refused is null) code.Clear();
+        problem.Text = form.Problem ?? "";
+        problem.Visibility = form.Problem is null ? Visibility.Collapsed : Visibility.Visible;
     }
 }
 
 /// <summary>Settings, as picture 6 draws it (the iPhone's Settings page, with "PC"): the hub's address and Connect; This
 /// PC with the device key, this PC's address as the hub knows it, Add this PC and Forget the key; and Founderizer's
-/// credit, its handle the one link. The last reading, a write that waits, Unlock, what a refused address or key says,
-/// wait for their pictures.</summary>
+/// credit, its handle the one link. Pictures 9b and 9c add the orange line of an address that cannot be a hub's under
+/// the Hub card, and Last reading in orange while the reading is not current.</summary>
 internal sealed class SettingsPage : IPageView
 {
     private readonly IFleetSource source;
@@ -187,6 +194,10 @@ internal sealed class SettingsPage : IPageView
     private readonly Action forgot;
     private readonly Grid page;
     private readonly Field address;
+    private readonly TextBlock addressError = Look.Words("", 12, 16, Look.Orange);
+    private readonly Border lastBlock = new() { Height = 22 };
+    private readonly Border lastCard;
+    private readonly TextBlock lastAge = Look.Words("", brush: Look.Orange, wrap: false);
     private readonly TextBlock keyWords = Look.Words("", wrap: false);
     private readonly Grid addressRow;
     private readonly TextBlock addressDetail = Look.Words("", 12, 16, Look.Muted, wrap: false);
@@ -222,6 +233,13 @@ internal sealed class SettingsPage : IPageView
         Grid.SetColumn(connect, 1);
         hubRow.Children.Add(connect);
         stack.Children.Add(Form.Card(new StackPanel { Children = { hubRow } }));
+        addressError.Margin = new Thickness(2, 8, 2, 0);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(addressError, "AddressError");
+        stack.Children.Add(addressError);
+        stack.Children.Add(lastBlock);
+        lastCard = Form.Card(new StackPanel { Children = { Form.Row(Look.Words(new SettingsModel().LastReadingLabel, wrap: false), lastAge) } });
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(lastAge, "LastReading");
+        stack.Children.Add(lastCard);
 
         stack.Children.Add(new Border { Height = 22 });
         stack.Children.Add(Form.Heading("This PC"));
@@ -268,6 +286,10 @@ internal sealed class SettingsPage : IPageView
         }
         var model = Screens.Settings(state, address.Box.Text, now, ScreenContext.Local);
         address.Show(model.HubPlaceholder, showsPlus: false, canSend: false);
+        addressError.Text = model.AddressError ?? "";
+        addressError.Visibility = model.AddressError is null ? Visibility.Collapsed : Visibility.Visible;
+        lastAge.Text = model.LastReading ?? "";
+        lastBlock.Visibility = lastCard.Visibility = model.LastReading is null ? Visibility.Collapsed : Visibility.Visible;
         keyWords.Text = model.KeyWords;
         keyWords.Foreground = model.KeyTone switch
         {
@@ -294,7 +316,6 @@ internal sealed class SettingsPage : IPageView
     private async void Connect()
     {
         var refused = await source.ConnectAsync(address.Box.Text);
-        // The words of a refused address wait for their picture (9c-address): the proofs' log has them.
         Readings.Note("connect: " + (refused ?? "the store took the address"));
     }
 }

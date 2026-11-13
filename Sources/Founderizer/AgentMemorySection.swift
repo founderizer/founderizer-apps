@@ -55,8 +55,8 @@ struct AgentMemorySection: View {
     private var lessonsFailed: String? {
         memoryFailure ?? (memory == nil && store.connectionError != nil ? Self.lessonsUnread : nil)
     }
-    private static let notesUnread = "The notes could not be read. Open this section again to retry."
-    private static let lessonsUnread = "The lessons could not be read. Open this section again to retry."
+    private static let notesUnread = String(l10n: "The notes could not be read. Open this section again to retry.")
+    private static let lessonsUnread = String(l10n: "The lessons could not be read. Open this section again to retry.")
     /// **A half with no reading says nothing while the window's notice says the outage** (`FleetStore.hubNoticeShows`;
     /// fix round 3, item 33: it is said once, over the page): its line said a second time that the hub does not answer.
     private var notesQuiet: Bool { notes == nil && notesFailed != nil && store.hubNoticeShows }
@@ -71,7 +71,7 @@ struct AgentMemorySection: View {
             }
             // The two halves come in one frame: one line for the section while either read is out (C5.1).
             if notesOffered && notes == nil && notesFailed == nil || lessonsOffered && memory == nil && lessonsFailed == nil {
-                LoadingLine("Reading the memory…")
+                LoadingLine(String(l10n: "Reading the memory…"))
             } else {
                 // Under the group's one heading, a quiet half takes no room: the group is its heading alone.
                 if notesOffered && !(notesQuiet && titled != nil) { notesBlock }
@@ -95,7 +95,7 @@ struct AgentMemorySection: View {
         VStack(alignment: .leading, spacing: FleetSpace.inside) {
             // A heading over each card, and the same empty card under each, as Lessons has; under the group's one
             // heading, none.
-            FormSection(titled == nil ? "How it works" : nil) {
+            FormSection(titled == nil ? String(l10n: "How it works") : nil) {
                 if let notesFailed, !store.hubNoticeShows {
                     FormRow(notesFailed, symbol: "exclamationmark.triangle")
                 } else if let notes {
@@ -147,7 +147,7 @@ struct AgentMemorySection: View {
     // MARK: Lessons
 
     private var lessonsCard: some View {
-        FormSection(titled == nil ? "Lessons" : nil) {
+        FormSection(titled == nil ? String(l10n: "Lessons") : nil) {
             if let lessonsFailed, !store.hubNoticeShows {
                 FormRow(lessonsFailed, symbol: "exclamationmark.triangle")
             } else if let memory {

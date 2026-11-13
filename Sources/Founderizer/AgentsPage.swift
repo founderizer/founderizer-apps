@@ -177,7 +177,7 @@ struct AgentsPage: View {
     private func use(_ agent: String) -> some View {
         let machine = machines?.machines.first { $0.agent == agent }
         let old = readFailed || !store.isFresh || machine?.isCurrent(at: time) != true
-        let when = old ? machine?.reported_at.map { "Last reading \(fleetDate($0))" } : nil
+        let when = old ? machine?.reported_at.map { String(l10n: "Last reading \(fleetDate($0))") } : nil
         let cpu = machine?.use?.cpu, memory = machine?.use?.memory
         return HStack(spacing: Self.gap) {
             Text(cpu.map(LoadWords.percent) ?? "–").monospacedDigit()
@@ -228,10 +228,10 @@ struct AgentsPage: View {
     /// The hover words of one window, as an agent's panel gives them: its full name and used share, the date and time
     /// it resets, and the age of an old reading and the end of a hold where there is one.
     private func words(_ window: UsageWindow, reading: AccountLimits, old: Bool, limit: RuntimeLimit?) -> String {
-        var words = "\(window.label): \(window.used_percent.formatted(.number.precision(.fractionLength(0...1))))% used"
-        if let resets = window.resets_at { words += " · resets \(fleetDate(ResetLine.minute(resets)))" }
-        if old { words += " · last reading \(fleetDate(reading.collected_at))" }
-        if let limit { words += " · limited until \(fleetComingTime(limit.until, now: time))" }
+        var words = String(l10n: "\(window.label): \(window.used_percent.formatted(.number.precision(.fractionLength(0...1))))% used")
+        if let resets = window.resets_at { words += " · " + String(l10n: "resets \(fleetDate(ResetLine.minute(resets)))") }
+        if old { words += " · " + String(l10n: "last reading \(fleetDate(reading.collected_at))") }
+        if let limit { words += " · " + String(l10n: "limited until \(fleetComingTime(limit.until, now: time))") }
         return words
     }
 
@@ -239,10 +239,10 @@ struct AgentsPage: View {
     /// first read goes on, which takes less than a second once the app has read its fleet.
     private func server(_ agent: String) -> (name: String, help: String)? {
         guard features.contains("machines") else { return nil }
-        guard let machines else { return readFailed ? ("Not reported", "") : nil }
-        guard let machine = machines.machines.first(where: { $0.agent == agent }) else { return ("Not reported", "") }
+        guard let machines else { return readFailed ? (String(l10n: "Not reported"), "") : nil }
+        guard let machine = machines.machines.first(where: { $0.agent == agent }) else { return (String(l10n: "Not reported"), "") }
         let old = readFailed || !store.isFresh || !machine.isCurrent(at: time)
-        return (machine.machine, old ? "Last reading \(fleetDate(machine.reported_at))" : "")
+        return (machine.machine, old ? String(l10n: "Last reading \(fleetDate(machine.reported_at))") : "")
     }
 
     // MARK: measures
@@ -260,12 +260,12 @@ struct AgentsPage: View {
     /// The Memory column: "999 MB" or "99,9 GB" in the row's figures, or its head.
     private static let memoryWidth = (["999 MB", "99,9 GB"].map {
         ($0 as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)]).width
-    } + [("Memory" as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width]).max()!.rounded(.up)
+    } + [(String(l10n: "Memory") as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width]).max()!.rounded(.up)
     /// One window: the meter at its one length and its share, or the reset under them where that is wider.
     private static let windowWidth: CGFloat = max(44 + 8 + percentWidth, ResetLine.widest)
     /// Every window of a row, and at least the words for none.
     private static func windowsWidth(_ columns: [String]) -> CGFloat {
-        let none = ("Not reported" as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13)]).width.rounded(.up)
+        let none = (String(l10n: "Not reported") as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13)]).width.rounded(.up)
         return max(none, CGFloat(columns.count) * windowWidth + CGFloat(max(columns.count - 1, 0)) * gap)
     }
     /// The widest of some words in the row's 13 points, at most 180: a role such as "Platform Engineering" too.

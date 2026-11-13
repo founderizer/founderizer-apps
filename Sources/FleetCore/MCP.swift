@@ -7,9 +7,9 @@ public enum MCPAuth: String, Codable, CaseIterable, Sendable {
 
     public var title: String {
         switch self {
-        case .none: "No sign-in"
-        case .oauth: "Connect in the browser"
-        case .key: "An API key"
+        case .none: String(l10n: "No sign-in")
+        case .oauth: String(l10n: "Connect in the browser")
+        case .key: String(l10n: "An API key")
         }
     }
     public var subtitle: String {
@@ -25,7 +25,7 @@ public enum MCPAuth: String, Codable, CaseIterable, Sendable {
 public enum MCPKind: String, CaseIterable, Sendable {
     case remote, local
 
-    public var title: String { self == .remote ? "A remote server" : "A program on the server" }
+    public var title: String { self == .remote ? String(l10n: "A remote server") : String(l10n: "A program on the server") }
 }
 
 /// One owner MCP server, as the hub takes it in `POST /ui/team/mcp`. It holds no secret: a `key` server names the

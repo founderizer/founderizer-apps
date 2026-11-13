@@ -114,7 +114,7 @@ struct DevicesSection: View {
                 }
             }
             if !held, reading.list == nil && draft == nil && reading.failure == nil && store.connectionError == nil {
-                LoadingLine("Reading the devices…")
+                LoadingLine(String(l10n: "Reading the devices…"))
             }
             statusLine
         }
@@ -130,26 +130,25 @@ struct DevicesSection: View {
 
     // MARK: one device
 
-    /// One device: its name, its address, one mark for what it is now, and its two actions. Its code and its
-    /// confirmation open in the row itself.
+    /// One device: its name, one mark for what it is now, and its two actions. Its code and its confirmation open in the
+    /// row itself.
     ///
-    /// The name and the address are values, so they keep their words; whether the phone reaches the hub is a
-    /// yes-or-no fact, so it is the mark, and the sentence this row used to print is behind it.
+    /// **One line** (the owner's yes of 13 November 2026 to the clean Servers page): the name, with its address on hover,
+    /// as a server's card has no address line either. Whether the phone reaches the hub is a yes-or-no fact, so it is
+    /// the mark, and the sentence this row used to print is behind it.
     private func row(_ device: OwnerDevice) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             HStack(spacing: 12) {
                 IconTile(symbol: device.symbol)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(device.label).font(FormMetrics.title).foregroundStyle(FleetStyle.text)
-                    Text(device.address).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).textSelection(.enabled)
-                }
+                Text(device.label).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(1)
+                    .help(device.address)
                 Spacer(minLength: 12)
                 actions(device)
             }
             if confirming == device.device { confirmation(device) } else if let code = shown(device) { codeBlock(code) }
         }
-        // A row of the Servers table's one height: its name over its address, its actions at the right (fix round 2).
-        .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 10).frame(minHeight: FormMetrics.twoLineRow)
+        // The height of a server card's first line: its mark, its name and its actions (fix round 2).
+        .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 10)
         .accessibilityElement(children: .contain).accessibilityIdentifier("device-\(device.device)")
     }
 
@@ -159,10 +158,10 @@ struct DevicesSection: View {
         // A cross is never a dead end: the one thing to press is the same Make a code this row carries, and when
         // the hub is out of reach the mark says so instead of offering a button that would do nothing.
         let act: (words: String, run: () -> Void)? = mark.state == .bad && canCode
-            ? ("New code", { Task { await makeCode(device) } }) : nil
+            ? (String(l10n: "New code"), { Task { await makeCode(device) } }) : nil
         let whoActs: String? = switch mark.state {
-        case .warn: "Nothing to do: the hub refused that one request, and the phone itself is fine."
-        case .bad where !canCode: "Founderizer cannot reach your hub now, so it can make no code."
+        case .warn: String(l10n: "Nothing to do: the hub refused that one request, and the phone itself is fine.")
+        case .bad where !canCode: String(l10n: "Founderizer cannot reach your hub now, so it can make no code.")
         default: nil
         }
         return HStack(spacing: 8) {
@@ -182,7 +181,7 @@ struct DevicesSection: View {
                 .accessibilityIdentifier("device-state-\(device.device)")
             // The quiet mark asks first, in the row; the confirmation carries the red button. Hidden as Make a code is.
             if canCode {
-                IconButton(symbol: "trash", words: "Remove \(device.label)") {
+                IconButton(symbol: "trash", words: String(l10n: "Remove \(device.label)")) {
                     confirming = device.device; made = nil; problem = nil
                 }
                 .accessibilityIdentifier("device-remove-\(device.device)")
@@ -210,7 +209,7 @@ struct DevicesSection: View {
     /// The code of this row: the code in large text, its picture for the phone's camera, and how long it still works
     /// on the hub's clock. A code that Fleet did not get says so, because the hub cannot show it again.
     @ViewBuilder private func codeBlock(_ made: MadeCode,
-                                        words: [String] = ["Type it in Founderizer on your phone: Settings, Add this phone."])
+                                        words: [String] = [String(l10n: "Type it in Founderizer on your phone: Settings, Add this phone.")])
         -> some View {
         if let value = made.code, made.expires > now {
             CodeAndPicture {
@@ -244,7 +243,7 @@ struct DevicesSection: View {
     /// address, and its new row takes the place of this block (`read`).
     private func newPhone(_ made: MadeCode) -> some View {
         VStack(alignment: .trailing, spacing: 9) {
-            codeBlock(made, words: ["Scan with your phone.", OwnerDevices.left(made.expires, now: now)])
+            codeBlock(made, words: [String(l10n: "Scan with your phone."), OwnerDevices.left(made.expires, now: now)])
             Button("Cancel") { self.made = nil }.buttonStyle(FleetOutlineButtonStyle())
                 .accessibilityIdentifier("device-new-cancel")
         }
@@ -276,7 +275,7 @@ struct DevicesSection: View {
                 .onSubmit { Task { await add() } }
         }
         let buttons = HStack(spacing: 8) {
-            if busy { LoadingLine("Adding \(value.label.isEmpty ? "the device" : value.label)…").fixedSize() }
+            if busy { LoadingLine(String(l10n: "Adding \(value.label.isEmpty ? String(l10n: "the device") : value.label)…")).fixedSize() }
             Button("Cancel") { draft = nil; problem = nil }.buttonStyle(FleetOutlineButtonStyle())
             // Once the two fields make a device the hub takes: no grey button.
             if canWrite && reason == nil {
@@ -377,23 +376,23 @@ struct DevicesSection: View {
         let value = (draft ?? OwnerDeviceInput()).named(taken: devices.map(\.device))
         guard let sha = team?.sha256, let payload = try? value.payload(),
               value.problem(existing: devices, limit: limit) == nil else {
-            problem = "Check the name and the address before you save."
+            problem = String(l10n: "Check the name and the address before you save.")
             return
         }
         busy = true
         defer { busy = false }
         let saved = await store.command(.ownerDevice(device: value.device, sha256: sha, delete: false), note: payload)
-        if saved { draft = nil; problem = nil } else { problem = refusal("Founderizer did not save the device.") }
+        if saved { draft = nil; problem = nil } else { problem = refusal(String(l10n: "Founderizer did not save the device.")) }
         await read()
     }
 
     private func remove(_ device: OwnerDevice) async {
         if team == nil { await read() }
-        guard let sha = team?.sha256 else { problem = "Founderizer has no current team.json. Try again."; return }
-        busy = true; working = (device.device, "Removing \(device.label)…")
+        guard let sha = team?.sha256 else { problem = String(l10n: "Founderizer has no current team.json. Try again."); return }
+        busy = true; working = (device.device, String(l10n: "Removing \(device.label)…"))
         defer { busy = false; working = nil }
         let removed = await store.command(.ownerDevice(device: device.device, sha256: sha, delete: true), note: "")
-        if removed { confirming = nil; made = nil; problem = nil } else { problem = refusal("Founderizer did not remove the device.") }
+        if removed { confirming = nil; made = nil; problem = nil } else { problem = refusal(String(l10n: "Founderizer did not remove the device.")) }
         await read()
     }
 
@@ -409,12 +408,12 @@ struct DevicesSection: View {
             if let made { DeviceBinds.remember(made.bind, until: made.expires + 3600) }
             problem = nil
         } else {
-            problem = refusal("The hub made no code.")
+            problem = refusal(String(l10n: "The hub made no code."))
         }
     }
 
     private func makeCode(_ device: OwnerDevice) async {
-        busy = true; working = (device.device, "Making a code…")
+        busy = true; working = (device.device, String(l10n: "Making a code…"))
         defer { busy = false; working = nil }
         made = nil
         confirming = nil
@@ -426,7 +425,7 @@ struct DevicesSection: View {
             }
             problem = nil
         } else {
-            problem = refusal("The hub made no code.")
+            problem = refusal(String(l10n: "The hub made no code."))
         }
         await read()
     }

@@ -71,6 +71,8 @@ public sealed class AgentBook
     /// as a search field does.</summary>
     public bool Matches(string name, string words, CultureInfo? culture = null)
     {
+        // An empty text finds nobody, as Swift's localizedStandardContains("") (swift-words.json, "matches").
+        if (words.Length == 0) return false;
         var compare = (culture ?? CultureInfo.CurrentCulture).CompareInfo;
         const CompareOptions loose = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace | CompareOptions.IgnoreWidth;
         return compare.IndexOf(Label(name), words, loose) >= 0 || compare.IndexOf(name, words, loose) >= 0;
@@ -479,4 +481,48 @@ public static partial class ChatLine
 
     [GeneratedRegex(@"\A([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?")]
     private static partial Regex ListMark();
+}
+
+/// <summary>The hover of a message's time in its footer (the Mac's footer): one whole sentence for each case, with its
+/// values in it.</summary>
+public static class MessageWords
+{
+    public static string TimeHover(string date, bool read, string? edited) => (read, edited) switch
+    {
+        (true, null) => $"{date} · Read",
+        (false, null) => $"{date} · Received, not read yet",
+        (true, { } at) => $"{date} · Read · Edited {at}",
+        (false, { } at) => $"{date} · Received, not read yet · Edited {at}",
+    };
+}
+
+/// <summary>The hover of one usage window (the Mac's usageWords): one whole sentence for each case.</summary>
+public static class UsageWords
+{
+    public static string Hover(string label, string percent, string? resets, string? limited) => (resets, limited) switch
+    {
+        (null, null) => $"{label}: {percent}% used",
+        ({ } r, null) => $"{label}: {percent}% used · resets {r}",
+        (null, { } l) => $"{label}: {percent}% used · limited until {l}",
+        ({ } r, { } l) => $"{label}: {percent}% used · resets {r} · limited until {l}",
+    };
+}
+
+/// <summary>A command's name in the request line (OwnerCommand.label and label(in:)): one whole sentence for each
+/// command, with its item's title in it when the reading has it.</summary>
+public static class CommandWords
+{
+    public static string Name(OwnerCommand command, string? title) => (command.Kind, command.Action, title) switch
+    {
+        ("steer", _, null) => "Guide the task",
+        ("steer", _, { } t) => $"Guide \u201c{t}\u201d",
+        ("control", TaskControl.Pause, null) => "Pause the task",
+        ("control", TaskControl.Pause, { } t) => $"Pause \u201c{t}\u201d",
+        ("control", TaskControl.Stop, null) => "Stop the task",
+        ("control", TaskControl.Stop, { } t) => $"Stop \u201c{t}\u201d",
+        ("control", TaskControl.Resume, null) => "Resume the task",
+        ("control", TaskControl.Resume, { } t) => $"Resume \u201c{t}\u201d",
+        (_, _, null) => "Resume Check the task",
+        (_, _, { } t) => $"Resume Check \u201c{t}\u201d",
+    };
 }

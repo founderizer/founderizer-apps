@@ -13,11 +13,11 @@ public enum GitHubAppKey {
 
         public var errorDescription: String? {
             switch self {
-            case .key: return "That file holds no RSA private key that this Mac can read."
-            case .sign: return "This Mac could not sign with that key."
-            case .refused(let status): return "GitHub did not take this key for that App ID (\(status))."
-            case .otherApp(let id): return "That key belongs to App \(id), not to the App ID you gave."
-            case .answer: return "GitHub's answer about the App was not one Founderizer reads."
+            case .key: return String(l10n: "That file holds no RSA private key that this Mac can read.")
+            case .sign: return String(l10n: "This Mac could not sign with that key.")
+            case .refused(let status): return String(l10n: "GitHub did not take this key for that App ID (\(status)).")
+            case .otherApp(let id): return String(l10n: "That key belongs to App \(id), not to the App ID you gave.")
+            case .answer: return String(l10n: "GitHub's answer about the App was not one Founderizer reads.")
             }
         }
     }

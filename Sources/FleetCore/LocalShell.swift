@@ -56,7 +56,7 @@ public enum LocalShell {
         environment["DISPLAY"] = nil
         child.environment = environment
         do { try child.run() } catch {
-            throw Failure.cannotStart("This Mac could not start \(executable): \(error.localizedDescription)")
+            throw Failure.cannotStart(String(l10n: "This Mac could not start \(executable): \(error.localizedDescription)"))
         }
         if let stdin {
             // A program that ends before it has read all of its input closes the pipe: the write then fails with EPIPE,

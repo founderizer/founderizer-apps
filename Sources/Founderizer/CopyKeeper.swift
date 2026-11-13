@@ -145,9 +145,9 @@ final class FleetCopyKeeper {
     /// His own Mac's panel, and nowhere this app chose for him.
     func choose() {
         let panel = NSOpenPanel()
-        panel.title = "Where Founderizer keeps a copy of your fleet"
-        panel.prompt = "Choose"
-        panel.message = "Every copy goes here. Founderizer keeps the newest \(Self.keeps) and deletes the older ones."
+        panel.title = String(l10n: "Where Founderizer keeps a copy of your fleet")
+        panel.prompt = String(l10n: "Choose")
+        panel.message = String(l10n: "Every copy goes here. Founderizer keeps the newest \(Self.keeps) and deletes the older ones.")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
@@ -170,7 +170,7 @@ final class FleetCopyKeeper {
 
     private func keep(folder: URL) {
         guard let bookmark = try? folder.bookmarkData() else {
-            fail("This Mac could not keep that folder. Choose another one.")
+            fail(String(l10n: "This Mac could not keep that folder. Choose another one."))
             return
         }
         defaults.set(bookmark, forKey: "copyFolder")

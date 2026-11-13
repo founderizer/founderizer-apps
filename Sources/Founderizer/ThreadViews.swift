@@ -339,15 +339,15 @@ private struct SentMessageView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             Text(messageTime(message.created))
-                .help("\(fleetDate(message.created)) · \(message.read_at == nil ? "Received, not read yet" : "Read")"
-                      + (message.edited.map { " · Edited \(messageTime($0))" } ?? ""))
-            MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: "Copy message") {
+                .help("\(fleetDate(message.created)) · \(message.read_at == nil ? String(l10n: "Received, not read yet") : String(localized: "Read (a message)", defaultValue: "Read", bundle: Localized.bundle, locale: Localized.digits))"
+                      + (message.edited.map { " · " + String(l10n: "Edited \(messageTime($0))") } ?? ""))
+            MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: String(l10n: "Copy message")) {
                 copyMessage(message.text); copied = true
             }
             // His own icon for it (20 October 2026): the hooked arrow of resending, not a pencil. The words
             // of the hover say what this one will do — replace the message, or go under it as a correction.
             if editable {
-                MessageAction(symbol: "arrow.uturn.right", label: "Correct",
+                MessageAction(symbol: "arrow.uturn.right", label: String(l10n: "Correct"),
                               help: store.editHelp(message)) { store.beginEdit(message) }
                     .disabled(!store.canEdit(message))
             }
@@ -404,7 +404,7 @@ struct TaskView: View {
                 // **A first read that takes longer than a second says so in the thread's first slot** (the loading
                 // contract, D-1 rule 1; fix round 2): the one loading line, at the column's edge where the request will
                 // stand, and nothing of the thread until all of it comes.
-                LoadingLine("Reading the task…").padding(.horizontal, -FormMetrics.rowInset).threadRows(top: FleetSpace.underBand)
+                LoadingLine(String(l10n: "Reading the task…")).padding(.horizontal, -FormMetrics.rowInset).threadRows(top: FleetSpace.underBand)
             }
         }
         .task(id: "\(state.db)/\(isFresh)/\(task.isTerminal)") { await readActivity() }
@@ -447,7 +447,7 @@ struct TaskView: View {
                 if task.isTerminal { return }
             } catch {
                 if Task.isCancelled { return }
-                readError = HubError.said(error) ?? "Activity is unavailable. Retrying…"
+                readError = HubError.said(error) ?? String(l10n: "Activity is unavailable. Retrying…")
                 if let partial = first {
                     await store.settle(since: start)
                     guard !Task.isCancelled else { return }
@@ -506,27 +506,27 @@ struct TaskView: View {
                     // state; here only when the session went, and the stall's own reason above. "· waiting for helper"
                     // and "Stalled · hub has sent a nudge" said the head's word again.
                     if let missing = task.missing_since, !task.isTerminal {
-                        StatusLabel(text: "Session missing since \(fleetDate(missing))", color: .orange)
+                        StatusLabel(text: String(l10n: "Session missing since \(fleetDate(missing))"), color: .orange)
                     }
                     // What it waits for, in his words: the hub's "Q-1" (or "P-3", "CM-7", "its screen") is a
                     // question, a prompt or a person that its requester answers (T-12), and a name is that agent; who
                     // it is, as the state word names them (`TaskWords`, fix round 2: "an answer" named nobody).
                     if let waiting = task.waiting_on, !waiting.isEmpty {
                         if let other = TaskWords.waiter(of: waiting) {
-                            DetailField(title: "Waiting on", value: other, agent: waiting.lowercased())
+                            DetailField(title: String(l10n: "Waiting on"), value: other, agent: waiting.lowercased())
                         } else {
-                            DetailField(title: "Waiting for", value: task.requester == "owner" ? "You" : task.requester.agentLabel,
+                            DetailField(title: String(l10n: "Waiting for"), value: task.requester == "owner" ? String(l10n: "You") : task.requester.agentLabel,
                                         agent: task.requester)
                         }
                     }
                     if task.delivered != nil {
                         Rule()
                         if let what = task.what { AgentReply(text: what, time: task.delivered, compact: true) }
-                        else { MessageText(text: "No result reported") }
+                        else { MessageText(text: String(l10n: "No result reported")) }
                         FoldRow(title: task.checkStatus, symbol: "checkmark.circle", chat: true) {
                             VStack(alignment: .leading, spacing: 10) {
-                                DetailField(title: "Output", value: task.where_ ?? "Not reported")
-                                DetailField(title: "How it was checked", value: task.how ?? "Not reported")
+                                DetailField(title: String(l10n: "Output"), value: task.where_ ?? String(l10n: "Not reported"))
+                                DetailField(title: String(l10n: "How it was checked"), value: task.how ?? String(l10n: "Not reported"))
                                 if let check = task.check_note { MessageText(text: check) }
                                 if let checked = task.checked_at { Text(fleetDate(checked)).font(ChatStyle.detail).foregroundStyle(FleetStyle.muted) }
                             }
@@ -601,8 +601,8 @@ struct ChatStamp: View {
     static func words(_ timestamp: Double) -> String {
         let date = Date(timeIntervalSince1970: timestamp), calendar = Calendar.current
         let day: String
-        if calendar.isDateInToday(date) { day = "Today" }
-        else if calendar.isDateInYesterday(date) { day = "Yesterday" }
+        if calendar.isDateInToday(date) { day = String(l10n: "Today") }
+        else if calendar.isDateInYesterday(date) { day = String(l10n: "Yesterday") }
         else if let weekBack = calendar.date(byAdding: .day, value: -6, to: .now), date > weekBack {
             day = date.formatted(.dateTime.weekday(.wide))
         } else { day = date.formatted(date: .abbreviated, time: .omitted) }

@@ -33,13 +33,13 @@ final class FleetNotifications: NSObject, UNUserNotificationCenterDelegate {
         } else {
             let settings = await center.notificationSettings()
             guard settings.authorizationStatus != .denied else {
-                status = "Allow Founderizer notifications in System Settings."
+                status = String(l10n: "Allow Founderizer notifications in System Settings.")
                 return
             }
             do {
                 enabled = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-                status = enabled ? nil : "Allow Founderizer notifications in System Settings."
-            } catch { status = "Notifications are unavailable."; cause = error.localizedDescription }
+                status = enabled ? nil : String(l10n: "Allow Founderizer notifications in System Settings.")
+            } catch { status = String(l10n: "Notifications are unavailable."); cause = error.localizedDescription }
         }
         UserDefaults.standard.set(enabled, forKey: "notifyNeedsYou")
     }
@@ -73,24 +73,24 @@ final class FleetNotifications: NSObject, UNUserNotificationCenterDelegate {
                 content.title = need.by.agentLabel
                 content.body = need.title.isEmpty ? need.why : need.title
             } else {
-                content.title = "Founderizer needs you"
-                content.body = "The manager needs your answer."
+                content.title = String(l10n: "Founderizer needs you")
+                content.body = String(l10n: "The manager needs your answer.")
             }
             content.sound = .default
             content.threadIdentifier = context
             content.userInfo = ["context": context, "need": id]
             do { try await center.add(UNNotificationRequest(identifier: "\(context)/\(id)", content: content, trigger: nil)) }
-            catch { status = "A notification could not be delivered. Check Needs you in Founderizer." }
+            catch { status = String(l10n: "A notification could not be delivered. Check Needs you in Founderizer.") }
         }
         if let newWarning {
             let content = UNMutableNotificationContent()
-            content.title = "Check the Founderizer manager"
-            content.body = "The manager needs your attention."
+            content.title = String(l10n: "Check the Founderizer manager")
+            content.body = String(l10n: "The manager needs your attention.")
             content.sound = .default
             content.threadIdentifier = context
             content.userInfo = ["context": context]
             do { try await center.add(UNNotificationRequest(identifier: "\(context)/warning/\(newWarning)", content: content, trigger: nil)) }
-            catch { status = "A notification could not be delivered. Check the manager in Founderizer." }
+            catch { status = String(l10n: "A notification could not be delivered. Check the manager in Founderizer.") }
         }
     }
 

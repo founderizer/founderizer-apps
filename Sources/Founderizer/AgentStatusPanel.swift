@@ -63,8 +63,8 @@ struct AgentStatusPanel: View {
         FormSection { agentRow(agent, presence: presence) }
         // A local model has no account limits: the account's own row says Local model, and a card that could only say
         // so again is not drawn.
-        if bar?.isLocalModel != true { section("Usage") { usage(bar) } }
-        section("Runs on") {
+        if bar?.isLocalModel != true { section(String(l10n: "Usage")) { usage(bar) } }
+        section(String(l10n: "Runs on")) {
             accountRow(agent)
             machineRow
         }
@@ -154,17 +154,17 @@ struct AgentStatusPanel: View {
             .font(FormMetrics.text)
             .padding(.horizontal, FormMetrics.rowInset)
         } else {
-            row("Not reported", muted: true).help(bar?.problem ?? "")
+            row(String(l10n: "Not reported"), muted: true).help(bar?.problem ?? "")
         }
     }
 
     /// The hover words of one window: its full name and used share, the date and time it resets, and the age of an old
     /// reading and the end of a hold where there is one.
     private func usageWords(_ window: UsageWindow, reading: AccountLimits, old: Bool, limit: RuntimeLimit?) -> String {
-        var words = "\(window.label): \(window.used_percent.formatted(.number.precision(.fractionLength(0...1))))% used"
-        if let resets = window.resets_at { words += " · resets \(fleetDate(ResetLine.minute(resets)))" }
-        if old { words += " · last reading \(fleetDate(reading.collected_at))" }
-        if let limit { words += " · limited until \(fleetComingTime(limit.until, now: time))" }
+        var words = String(l10n: "\(window.label): \(window.used_percent.formatted(.number.precision(.fractionLength(0...1))))% used")
+        if let resets = window.resets_at { words += " · " + String(l10n: "resets \(fleetDate(ResetLine.minute(resets)))") }
+        if old { words += " · " + String(l10n: "last reading \(fleetDate(reading.collected_at))") }
+        if let limit { words += " · " + String(l10n: "limited until \(fleetComingTime(limit.until, now: time))") }
         return words
     }
 
@@ -185,12 +185,12 @@ struct AgentStatusPanel: View {
         return Button(action: openDetails) {
             // An app icon has a margin of its own inside its square: at 18 points it stands as large as the 14-point
             // symbols of the rows under and over it.
-            row(agent.local_model == true ? "Local model" : address ?? provider, opens: true) {
+            row(agent.local_model == true ? String(l10n: "Local model") : address ?? provider, opens: true) {
                 ProviderIcon(runtime: agent.runtime, size: Self.mark + 4)
             }
         }
         .buttonStyle(FleetRowButtonStyle())
-        .help((address.map { "\(provider) · \($0)" } ?? provider) + " · Open Runs on")
+        .help((address.map { "\(provider) · \($0)" } ?? provider) + " · " + String(l10n: "Open Runs on"))
         .accessibilityIdentifier("panel-account")
     }
 
@@ -208,7 +208,7 @@ struct AgentStatusPanel: View {
                 .accessibilityIdentifier("panel-server")
         } else if !features.contains("machines") || machineRead || !store.isFresh {
             // Never "Reading…" while the hub does not answer: nothing is being read.
-            row(!features.contains("machines") ? "No server reading" : "Server not reported", symbol: "desktopcomputer", muted: true)
+            row(!features.contains("machines") ? String(l10n: "No server reading") : String(l10n: "Server not reported"), symbol: "desktopcomputer", muted: true)
         } else {
             readingRow
         }
@@ -223,7 +223,7 @@ struct AgentStatusPanel: View {
             if slow {
                 Group {
                     if reduceMotion { Text("Reading…").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
-                    else { ShimmeringWords(text: "Reading…") }
+                    else { ShimmeringWords(text: String(l10n: "Reading…")) }
                 }.transition(.opacity)
             }
             Spacer(minLength: 8)

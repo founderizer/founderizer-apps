@@ -37,7 +37,7 @@ struct PersonPage: View {
     private var agents: [FleetAgent] { (store.state?.agents ?? []).filter { $0.role != "manager" } }
 
     var body: some View {
-        FleetPage(person?.name ?? "Person", back: FleetBack("People", action: back)) {
+        FleetPage(person?.name ?? String(l10n: "Person"), back: FleetBack("People", action: back)) {
             Group {
                 if let person {
                     card(person)
@@ -96,7 +96,7 @@ struct PersonPage: View {
                 HStack(spacing: 8) {
                     SaveMark(state: saving["name"], retry: { Task { await save("name") { $0.name = name } } })
                     TextField(text: $name, prompt: Text(verbatim: "")) { Text("Name") }
-                        .fieldPlaceholder("Name", shows: name.isEmpty).fleetField(focus: $focus, equals: "name").frame(width: 190)
+                        .fieldPlaceholder(String(l10n: "Name"), shows: name.isEmpty).fleetField(focus: $focus, equals: "name").frame(width: 190)
                         .disabled(!canWrite)
                         .onSubmit { Task { await save("name") { $0.name = name } } }
                         .onChange(of: focus) { old, _ in if old == "name" { Task { await save("name") { $0.name = name } } } }
@@ -123,7 +123,7 @@ struct PersonPage: View {
                         .accessibilityIdentifier("person-daily")
                 }
             }
-            FormBlock("Note for the agent", detail: "No secrets: they can get this out of the agent.") {
+            FormBlock("Note for the agent", detail: String(l10n: "No secrets: they can get this out of the agent.")) {
                 // The one field look of a box of several lines (`fleetTextBox`; fix round 3, item 56).
                 TextEditor(text: $note).font(FleetStyle.body).fleetTextBox(focus: $focus, equals: "note").frame(height: 72)
                     .disabled(!canWrite)
@@ -132,7 +132,7 @@ struct PersonPage: View {
             } accessory: {
                 SaveMark(state: saving["note"], retry: { Task { await save("note") { $0.note = note } } })
             }
-            FormRow("Blocked", detail: person.isBlocked ? "Their messages are dropped." : nil) {
+            FormRow("Blocked", detail: person.isBlocked ? String(l10n: "Their messages are dropped.") : nil) {
                 HStack(spacing: 8) {
                     SaveMark(state: saving["blocked"], retry: { Task { await block(!person.isBlocked) } })
                     Toggle("", isOn: Binding(get: { person.isBlocked }, set: { value in Task { await block(value) } }))
@@ -151,7 +151,7 @@ struct PersonPage: View {
                 FormRow(handle.shown, detail: handle.name == nil ? nil : handle.handle) {
                     HStack(spacing: 8) {
                         BrandMark(app: handle.app, size: 13).foregroundStyle(FleetStyle.muted)
-                        IconButton(symbol: "trash", words: "Remove this handle") {
+                        IconButton(symbol: "trash", words: String(l10n: "Remove this handle")) {
                             Task { await writeHandle(.exact(app: handle.app, handle: handle.handle), delete: true) }
                         }.disabled(!canWrite)
                             .accessibilityIdentifier("person-handle-remove-\(handle.id)")
@@ -161,7 +161,7 @@ struct PersonPage: View {
             if let draft = newHandle { handleForm(draft) }
             if person.handles.isEmpty, newHandle == nil {
                 FormRow("No handle yet", symbol: "bubble.left",
-                        warning: "Without one they cannot reach \(People.agentWords(person.agentNames)).")
+                        warning: String(l10n: "Without one they cannot reach \(People.agentWords(person.agentNames))."))
             }
         } accessory: {
             if newHandle == nil, person.handles.count < People.handlesMax {
@@ -202,7 +202,7 @@ struct PersonPage: View {
     private func handleLine(_ draft: PersonInput.HandleInput) -> String {
         if draft.typed.isEmpty { return People.handleHint(draft.app) }
         if let why = draft.problem { return why }
-        return "\(ChatApps.title(draft.app)) ID: \(draft.handle)"
+        return String(l10n: "\(ChatApps.title(draft.app)) ID: \(draft.handle)")
     }
 
     // MARK: their conversations
@@ -216,9 +216,9 @@ struct PersonPage: View {
                             RowMark { AgentGlyph(name: conversation.agent, size: GlyphSize.row) }
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(People.agentWord(conversation.agent)).font(FormMetrics.title).foregroundStyle(FleetStyle.text)
-                                Text(conversation.state == "paused" ? "Paused" : conversation.last.map {
-                                    "Last message \(activityAge($0, now: now).lowercased())"
-                                } ?? "No message yet")
+                                Text(conversation.state == "paused" ? String(l10n: "Paused") : conversation.last.map {
+                                    String(l10n: "Last message \(activityAge($0, now: now).lowercased())")
+                                } ?? String(l10n: "No message yet"))
                                     .font(FormMetrics.detail)
                                     .foregroundStyle(conversation.state == "paused" ? .orange : FleetStyle.muted)
                             }
@@ -292,8 +292,8 @@ struct PersonPage: View {
     private func saveDaily() async {
         let said = daily.trimmingCharacters(in: .whitespacesAndNewlines)
         guard said.isEmpty || Int(said) != nil else {
-            saving["daily"] = .failed("Write a number, or nothing for the role's own number.")
-            problem = "Write a number, or nothing for the role's own number."
+            saving["daily"] = .failed(String(l10n: "Write a number, or nothing for the role's own number."))
+            problem = String(l10n: "Write a number, or nothing for the role's own number.")
             return
         }
         await save("daily") { $0.daily = said.isEmpty ? nil : Int(said) }

@@ -130,26 +130,26 @@ extension FleetHealth.Warning {
     public var title: String {
         let who = (agent ?? "").agentLabel
         switch kind {
-        case "backup_missing": return "No copy of your fleet"
-        case "backup_old": return "Your copy is old"
-        case "integrity": return "The hub's own records"
-        case "schema": return "The hub runs without a step"
-        case "disk_low": return "The hub's disk is nearly full"
-        case "helper_offline": return who.isEmpty ? "An agent is not answering" : "\(who) is not answering"
+        case "backup_missing": return String(l10n: "No copy of your fleet")
+        case "backup_old": return String(l10n: "Your copy is old")
+        case "integrity": return String(l10n: "The hub's own records")
+        case "schema": return String(l10n: "The hub runs without a step")
+        case "disk_low": return String(l10n: "The hub's disk is nearly full")
+        case "helper_offline": return who.isEmpty ? String(l10n: "An agent is not answering") : String(l10n: "\(who) is not answering")
         // His words, not the hub's kind: "Allowance Pace" was the hub's own name for this warning on his screen.
-        case "allowance_pace": return who.isEmpty ? "An agent nears its usage limit" : "\(who) nears its usage limit"
-        case "machine_stale": return who.isEmpty ? "A server sent no status" : "\(who) sent no status"
-        case "machine_behind": return who.isEmpty ? "A server is behind" : "\(who) is behind"
-        case "machine_failed": return who.isEmpty ? "An update failed" : "The update of \(who) failed"
-        case "manager_down": return who.isEmpty ? "The manager session is not running" : "\(who)'s session is not running"
-        case _ where kind.hasPrefix("manager_"): return "The manager needs you"
+        case "allowance_pace": return who.isEmpty ? String(l10n: "An agent nears its usage limit") : String(l10n: "\(who) nears its usage limit")
+        case "machine_stale": return who.isEmpty ? String(l10n: "A server sent no status") : String(l10n: "\(who) sent no status")
+        case "machine_behind": return who.isEmpty ? String(l10n: "A server is behind") : String(l10n: "\(who) is behind")
+        case "machine_failed": return who.isEmpty ? String(l10n: "An update failed") : String(l10n: "The update of \(who) failed")
+        case "manager_down": return who.isEmpty ? String(l10n: "The manager session is not running") : String(l10n: "\(who)'s session is not running")
+        case _ where kind.hasPrefix("manager_"): return String(l10n: "The manager needs you")
         // His words for the kinds that fell to the hub's own name in Title Case ("Timers Stalled", fix round 2, T-37).
-        case "allowance_spent": return who.isEmpty ? "An agent reached its usage limit" : "\(who) reached its usage limit"
-        case "timers_stalled": return "The hub's timers stopped"
-        case "vault_behind": return who.isEmpty ? "A server's vault is out of date" : "\(who)'s vault is out of date"
-        case "tasks_stuck": return "Some tasks are stuck"
-        case "circles_stuck": return "Some work runs in circles"
-        case "reports_undecided": return "Reports wait for a decision"
+        case "allowance_spent": return who.isEmpty ? String(l10n: "An agent reached its usage limit") : String(l10n: "\(who) reached its usage limit")
+        case "timers_stalled": return String(l10n: "The hub's timers stopped")
+        case "vault_behind": return who.isEmpty ? String(l10n: "A server's vault is out of date") : String(l10n: "\(who)'s vault is out of date")
+        case "tasks_stuck": return String(l10n: "Some tasks are stuck")
+        case "circles_stuck": return String(l10n: "Some work runs in circles")
+        case "reports_undecided": return String(l10n: "Reports wait for a decision")
         default: return kind.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
@@ -233,9 +233,9 @@ extension FleetHealth {
     static func updateBlock(_ group: [Warning]) -> Block {
         let agents = once(group.compactMap(\.agent))
         let failed = Set(group.filter { $0.kind == "machine_failed" }.compactMap(\.agent))
-        let title = agents.count == 1 ? "\(agents[0].agentLabel) runs an older version"
-            : "\(agents.count) agents run an older version"
-        let names = agents.map { failed.contains($0) ? "\($0.agentLabel) (its update failed)" : $0.agentLabel }
+        let title = agents.count == 1 ? String(l10n: "\(agents[0].agentLabel) runs an older version")
+            : String(l10n: "\(agents.count) agents run an older version")
+        let names = agents.map { failed.contains($0) ? String(l10n: "\($0.agentLabel) (its update failed)") : $0.agentLabel }
         return Block(warnings: group, title: title, detail: names.joined(separator: ", ") + ".", fixes: [],
                      acts: [.updateFleet(agents)])
     }
@@ -255,13 +255,21 @@ extension FleetHealth.Warning.Act {
     /// What the button says. One short line, and it names what it acts on.
     public var label: String {
         switch self {
-        case .saveCopy: "Save copy"
-        case .update(let agent): "Update \(agent.agentLabel)"
-        case .startManager: "Start the session"
-        case .openAgent(let name): "Open \(name.agentLabel)"
-        case .openMachine(let name): "Open \(name.capitalized)"
-        case .tellUs: "Report a problem"
-        case .updateFleet: "Update fleet"
+        case .saveCopy: String(l10n: "Save copy")
+        case .update(let agent): String(l10n: "Update \(agent.agentLabel)")
+        case .startManager: String(l10n: "Start the session")
+        case .openAgent(let name): String(l10n: "Open \(name.agentLabel)")
+        case .openMachine(let name): String(l10n: "Open \(name.capitalized)")
+        case .tellUs: String(l10n: "Report a problem")
+        case .updateFleet: String(l10n: "Update fleet")
         }
+    }
+
+    /// **What stands in the place of Update fleet while its requests go**, one for each agent, one after the other:
+    /// the agent whose request is on its way, of them all ("Updating 3 of 11…"), so that a fleet of many agents does
+    /// not look stuck (the owner, 13 November 2026: "other long actions where we actually know the progress"). One
+    /// agent has no count.
+    public static func updatingWords(_ at: Int, of total: Int) -> String {
+        total > 1 ? String(l10n: "Updating \(at) of \(total)…") : String(l10n: "Updating…")
     }
 }

@@ -53,10 +53,10 @@ public struct AppUpdateInstaller: Sendable {
         public var says: String {
             switch self {
             case .downloading(let part):
-                return part < 0 ? "Downloading…" : "Downloading… \(Int(part * 100))%"
-            case .checking: return "Checking what was downloaded…"
-            case .installing: return "Putting the new Founderizer in place…"
-            case .installed: return "Founderizer is updated. It restarts now."
+                return part < 0 ? String(l10n: "Downloading…") : String(l10n: "Downloading… \(Int(part * 100))%")
+            case .checking: return String(l10n: "Checking what was downloaded…")
+            case .installing: return String(l10n: "Putting the new Founderizer in place…")
+            case .installed: return String(l10n: "Founderizer is updated. It restarts now.")
             }
         }
     }
@@ -133,8 +133,8 @@ public struct AppUpdateInstaller: Sendable {
         let read = try AppUpdateInstaller.identity(of: app)
         guard read.identifier == identifier else { throw AppUpdateFailure.notFounderizer(read.identifier) }
         guard read.build == manifest.build, read.version == manifest.version else {
-            throw AppUpdateFailure.mismatch(said: "\(manifest.version) (build \(manifest.build))",
-                                            found: "\(read.version) (build \(read.build))")
+            throw AppUpdateFailure.mismatch(said: String(l10n: "\(manifest.version) (build \(manifest.build))"),
+                                            found: String(l10n: "\(read.version) (build \(read.build))"))
         }
     }
 
@@ -205,7 +205,7 @@ public struct AppUpdateInstaller: Sendable {
     static func unpack(_ zip: URL, into folder: URL) async throws -> URL {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let answer = try await LocalShell.run("/usr/bin/ditto", ["-x", "-k", zip.path, folder.path], timeout: 300)
-        guard answer.ok else { throw AppUpdateFailure.cannotUnpack(answer.lines.last ?? "ditto refused the download") }
+        guard answer.ok else { throw AppUpdateFailure.cannotUnpack(answer.lines.last ?? String(l10n: "ditto refused the download")) }
         let inside = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "app" }
         guard inside.count == 1, let app = inside.first else { throw AppUpdateFailure.notOneApp(inside.count) }
@@ -290,38 +290,34 @@ public enum AppUpdateFailure: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .manifest:
-            return "The channel's answer did not name a download this app could fetch."
+            return String(l10n: "The channel's answer did not name a download this app could fetch.")
         case .translocated:
-            return "Founderizer is running from a copy macOS made for it, which cannot be replaced. Move "
-                + "Founderizer to your Applications folder and open it from there."
+            return String(l10n: "Founderizer is running from a copy macOS made for it, which cannot be replaced. Move Founderizer to your Applications folder and open it from there.")
         case .readOnly(let folder):
-            return "Founderizer cannot write to \(folder), so it cannot replace itself there. Move it to your "
-                + "Applications folder, or download the new build yourself."
+            return String(l10n: "Founderizer cannot write to \(folder), so it cannot replace itself there. Move it to your Applications folder, or download the new build yourself.")
         case .download(let status):
-            return "The download did not start (\(status)). Nothing on this Mac changed."
+            return String(l10n: "The download did not start (\(status)). Nothing on this Mac changed.")
         case .size:
-            return "The download is not the size the signed manifest promised. Nothing was unpacked."
+            return String(l10n: "The download is not the size the signed manifest promised. Nothing was unpacked.")
         case .checksum:
-            return "The download does not match the checksum our channel signed. It was thrown away and nothing "
-                + "on this Mac changed."
+            return String(l10n: "The download does not match the checksum our channel signed. It was thrown away and nothing on this Mac changed.")
         case .cannotUnpack(let says):
-            return "The download could not be unpacked: \(says)"
+            return String(l10n: "The download could not be unpacked: \(says)")
         case .notOneApp(let count):
-            return count == 0 ? "The download holds no application." : "The download holds \(count) applications, "
-                + "and an update is one."
+            return count == 0 ? String(l10n: "The download holds no application.")
+                : String(l10n: "The download holds \(count) applications, and an update is one.")
         case .unreadableBundle:
-            return "The application in the download does not say which version it is."
+            return String(l10n: "The application in the download does not say which version it is.")
         case .notFounderizer(let identifier):
-            return "The download holds \(identifier), which is not Founderizer. Nothing was installed."
+            return String(l10n: "The download holds \(identifier), which is not Founderizer. Nothing was installed.")
         case .mismatch(let said, let found):
-            return "Our channel signed \(said) and the download holds \(found). Nothing was installed."
+            return String(l10n: "Our channel signed \(said) and the download holds \(found). Nothing was installed.")
         case .unsigned:
-            return "The application in the download carries no code signature this Mac can read."
+            return String(l10n: "The application in the download carries no code signature this Mac can read.")
         case .wrongSignature(let status):
-            return "The application in the download is not signed by whoever signed the Founderizer you are "
-                + "running (\(status)). Nothing was installed."
+            return String(l10n: "The application in the download is not signed by whoever signed the Founderizer you are running (\(Int(status))). Nothing was installed.")
         case .cannotReplace(let says):
-            return "Founderizer could not be replaced: \(says). The build you were using is back in its place."
+            return String(l10n: "Founderizer could not be replaced: \(says). The build you were using is back in its place.")
         }
     }
 }

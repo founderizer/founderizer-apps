@@ -55,7 +55,7 @@ final class PrivateNetworkModel {
         do {
             _ = try await NetworkClient().prepare(credential)
             confirmed = NetworkStanding(accepted: true, tagReady: true)
-            said = "Your network has the tag \(PrivateNetwork.tag) again."
+            said = String(l10n: "Your network has the tag \(PrivateNetwork.tag) again.")
         } catch {
             failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -74,9 +74,8 @@ final class PrivateNetworkModel {
             draft = NetworkCredential()
             held = credential.shownID
             confirmed = NetworkStanding(accepted: true, tagReady: true)
-            said = wrote ? "Your network is ready. Tailscale now has the tag \(PrivateNetwork.tag), and this Mac "
-                + "makes the key each server needs."
-                : "Your network is ready. This Mac makes the key each server needs."
+            said = wrote ? String(l10n: "Your network is ready. Tailscale now has the tag \(PrivateNetwork.tag), and this Mac makes the key each server needs.")
+                : String(l10n: "Your network is ready. This Mac makes the key each server needs.")
         } catch {
             failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -89,7 +88,7 @@ final class PrivateNetworkModel {
             try NetworkCredentialStore.forget()
             held = nil
             confirmed = nil
-            said = "This Mac no longer holds it. End it in Tailscale as well, so nothing can use it."
+            said = String(l10n: "This Mac no longer holds it. End it in Tailscale as well, so nothing can use it.")
         } catch {
             failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -103,8 +102,7 @@ final class PrivateNetworkModel {
         defer { busy = false }
         do {
             _ = try await MacNetwork.install()
-            said = "Tailscale's installer is open. Install it, allow it in System Settings → Privacy & Security, "
-                + "then sign in with your Tailscale account."
+            said = String(l10n: "Tailscale's installer is open. Install it, allow it in System Settings → Privacy & Security, then sign in with your Tailscale account.")
         } catch {
             failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -165,7 +163,7 @@ struct PrivateNetworkSection: View {
                 }
                 .accessibilityIdentifier("network-mac")
             } else {
-                FormMarkRow(title: "Tailscale", state: .working, symbol: "network", words: "Reading this Mac",
+                FormMarkRow(title: "Tailscale", state: .working, symbol: "network", words: String(l10n: "Reading this Mac"),
                             identifier: "network-mac")
             }
         }
@@ -176,8 +174,8 @@ struct PrivateNetworkSection: View {
     private func act(of step: MacNetwork.Standing.Step) -> (words: String, run: () -> Void)? {
         switch step {
         case .connected: nil
-        case .notInstalled: ("Install Tailscale", { Task { await model.installOnThisMac() } })
-        case .notSignedIn, .notConnected: ("Open Tailscale", { Task { await model.openTailscaleApp() } })
+        case .notInstalled: (String(l10n: "Install Tailscale"), { Task { await model.installOnThisMac() } })
+        case .notSignedIn, .notConnected: (String(l10n: "Open Tailscale"), { Task { await model.openTailscaleApp() } })
         }
     }
 
@@ -186,16 +184,15 @@ struct PrivateNetworkSection: View {
         guard let mac else { return nil }
         if mac.step == .connected {
             let here = [mac.tailnet, mac.address].compactMap { $0 }.joined(separator: " · ")
-            return here.isEmpty ? "This Mac is on your private network." : here
+            return here.isEmpty ? String(l10n: "This Mac is on your private network.") : here
         }
-        if mac.step == .notInstalled { return "Your fleet is reachable only over it." }
-        return "Tailscale says: \(mac.says ?? "nothing yet"). Sign in there with your own account."
+        if mac.step == .notInstalled { return String(l10n: "Your fleet is reachable only over it.") }
+        return String(l10n: "Tailscale says: \(mac.says ?? String(l10n: "nothing yet")). Sign in there with your own account.")
     }
 
     private var footer: String? {
         (model.mac ?? known)?.step == .notInstalled
-            ? "Tailscale's own installer, signed and checked before it opens. macOS asks for your password and "
-                + "for its system extension and VPN; this app asks for nothing."
+            ? String(l10n: "Tailscale's own installer, signed and checked before it opens. macOS asks for your password and for its system extension and VPN; this app asks for nothing.")
             : nil
     }
 
@@ -246,12 +243,11 @@ struct PrivateNetworkSection: View {
     /// reach says nothing about the credential, so the mark does not either. The three sentences this row used to
     /// pick one of are the detail behind it.
     private var heldDetail: String {
-        let mine = "Credential \(model.held ?? ""), in this Mac's keychain."
+        let mine = String(l10n: "Credential \(model.held ?? ""), in this Mac's keychain.")
         guard let confirmed = model.confirmed else { return mine }
-        if !confirmed.accepted { return "It was ended in Tailscale, or it expired. " + mine }
+        if !confirmed.accepted { return String(l10n: "It was ended in Tailscale, or it expired. \(mine)") }
         if !confirmed.tagReady {
-            return "\(PrivateNetwork.tag) is no longer in your policy file, so no server can join until it is "
-                + "back. " + mine
+            return String(l10n: "\(PrivateNetwork.tag) is no longer in your policy file, so no server can join until it is back. \(mine)")
         }
         return mine
     }
@@ -260,19 +256,17 @@ struct PrivateNetworkSection: View {
     /// tag that is gone this app puts back itself.
     private var heldAct: (words: String, run: () -> Void)? {
         guard let confirmed = model.confirmed else { return nil }
-        if !confirmed.accepted { return ("Open Tailscale", { model.open(PrivateNetwork.console) }) }
-        return confirmed.tagReady ? nil : ("Put the tag back", { Task { await model.makeReady() } })
+        if !confirmed.accepted { return (String(l10n: "Open Tailscale"), { model.open(PrivateNetwork.console) }) }
+        return confirmed.tagReady ? nil : (String(l10n: "Put the tag back"), { Task { await model.makeReady() } })
     }
 
     private var holding: some View {
         let mark = NetworkStanding.mark(model.confirmed)
-        return FormSection("Your servers", footer: "Each server gets its own key, used once and worthless in "
-                    + "fifteen minutes. Your servers are tagged \(PrivateNetwork.tag) in Tailscale, so they never "
-                    + "sign in again.") {
-            FormMarkRow(title: "Your credential", state: mark.state, symbol: "key", words: mark.words,
+        return FormSection("Your servers", footer: String(l10n: "Each server gets its own key, used once and worthless in fifteen minutes. Your servers are tagged \(PrivateNetwork.tag) in Tailscale, so they never sign in again.")) {
+            FormMarkRow(title: String(l10n: "Your credential"), state: mark.state, symbol: "key", words: mark.words,
                         detail: heldDetail, act: heldAct, identifier: "network-held")
             FormRow("End it", symbol: "xmark.circle",
-                    detail: "This Mac forgets it, and you delete it in Tailscale so nothing can use it again.") {
+                    detail: String(l10n: "This Mac forgets it, and you delete it in Tailscale so nothing can use it again.")) {
                 HStack(spacing: FleetSpace.actions) {
                     Button("Open Tailscale") { model.open(PrivateNetwork.revokePage) }
                         .buttonStyle(FleetOutlineButtonStyle())
@@ -297,8 +291,7 @@ struct NetworkPromptSection: View {
 
     var body: some View {
         FormSection("Or let your own agent do it", footer: NetworkPrompt.says) {
-            FormBlock("The prompt", detail: "It puts one Linux server on this network. It installs no Founderizer "
-                      + "and signs nothing in.") {
+            FormBlock("The prompt", detail: String(l10n: "It puts one Linux server on this network. It installs no Founderizer and signs nothing in.")) {
                 ScrollView {
                     Text(NetworkPrompt.text).font(FormMetrics.code)
                         .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(10)

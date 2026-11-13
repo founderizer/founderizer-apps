@@ -33,9 +33,10 @@ renamed or removed without a word to the screens lane.
   Windows' protection of the user's data, later the TPM; keep its file outside `Folder`), `ClientLabel`
   (`founderizer-windows/1/<installation id>`, the client of each write), and `Tailscale` (an `ITailscaleStatus` of the
   screens: the text of `tailscale status --json`, or null when Tailscale is not on the PC or does not run).
-- **Its life**: `SetFront(true)` when the window comes to the front and `SetFront(false)` when it leaves (it reads only
-  in front: at once, every 10 s with a chat, a task or a write open, else every 30 s, and on each wake of
-  `GET /ui/wait`); `OpenChat(agent)` and `OpenTask(id)` while a page shows (null when it goes); `RefreshAsync()` for Try
+- **Its life**: `SetFront(true)` when the window comes to the front and `SetFront(false)` when it leaves (in front it
+  reads at once, every 10 s with a chat, a task or a write open, else every 30 s, and on each wake of `GET /ui/wait`;
+  behind, the open app keeps its key and its wait, and a wake reads the fleet alone, with no chat, no task page and no
+  seen mark, so that a new request notifies: decision D4); `OpenChat(agent)` and `OpenTask(id)` while a page shows (null when it goes); `RefreshAsync()` for Try
   again.
 - **Its changes**: `Changed` gives a `StoreChange`, in order, never twice for one state, on the thread that changed the
   store (a pool thread for a read, the caller's for a write or a draft): move it to the UI thread. The store raises one
@@ -56,13 +57,12 @@ renamed or removed without a word to the screens lane.
   fill and opacity, dashed in setup, and whether it moves now), the outline and the inner mark as SVG path data in a
   square of 100 (`GlyphPaths.Outline(kind)`, `GlyphPaths.Core(kind)`), and its motion (`GlyphLook.Moves()`).
 - **The writes**: `SetDraft` and `SendMessageAsync(agent)`; `SetAnswerDraft` and `AnswerAsync(need)`; `Press(need,
-  option)` (never refused: it waits while the store cannot write); `TickAsync(need, options)`; `DiscussAsync(need,
-  text)`; `ControlAsync(task, action)`; `GuideAsync(task, text)`; `RetryAsync()`; `DiscardRefused()`;
+  option)` (never refused: it waits while the store cannot write); `TickAsync(need, options)`; `ControlAsync(task, action)`; `GuideAsync(task, text)`; `RetryAsync()`; `DiscardRefused()`;
   `AddFileAsync(composer, name, bytes)`, `UploadAsync(composer, requestId)` (a file that did not go goes again) and
   `RemoveFile(composer, requestId)` (composers `agent:<name>` and `need:<id>`); `FileAsync(file)`; `EnrollAsync(code)`;
   `ConnectAsync(address)`; `ForgetKey()`; `ReadDeviceAsync()`; `Unlock()`; `FindHubAsync()`. A write that returns
   words returns the owner's words of what failed. **A press is never lost with no word**: `SendMessageAsync`, `AnswerAsync`,
-  `TickAsync`, `DiscussAsync`, `ControlAsync` and `GuideAsync` give `Task<string?>`, null when the write went, else the
+  `TickAsync`, `ControlAsync` and `GuideAsync` give `Task<string?>`, null when the write went, else the
   owner's words. A press that comes while another write is on its way, or while the reading waits for a read that
   comes in front, waits and goes then, in the order of the presses (the window draws a change after the store made it,
   so a button can still show on). A lasting reason gives its words at once, and nothing goes: a request that waits
@@ -71,6 +71,32 @@ renamed or removed without a word to the screens lane.
   (`StoreState.HoldsWrites(now)` says which). A screen shows those words where the press was only where an approved
   element has a place for them (a composer's note); a Pause or a Stop has none, and its line over the page already
   says the same cause.
+- **The second set** (windows-app-pictures-2.md, the owner's "Yes, as shown"; each a pure model of one state):
+  - the request line of a write that waits (picture 14, the Mac's bar over the composer, on every page):
+    `Screens.PendingBar(state, now)` (`State`, `Why`, `OtherHub`, `Text`, `Files`, `Actions`: Refresh receipt
+    (`RefreshAsync`), Discard (`DiscardRefused`), Try again (`RetryAsync`)); his bubble has no words while it waits, and a
+    refused message is not in the chat;
+  - Search (picture 1, Ctrl+K): `Screens.Search(state, words, highlighted, now)`, `SearchModel.Move(highlighted, ±1,
+    count)` for Up and Down, `model.Open(highlighted)` for Enter; the highlighted row goes back to 0 when the words change;
+  - files (picture 4): `Screens.Tile(state, file, now)` for a file of a message (a picture whole, else its mark; "Not
+    loaded" and Read again from `state.FilesUnloaded`, which `FileAsync` keeps), and `Screens.Chip(state, file)` for a
+    file that he added (`ComposerModel.Chips`, `AnswerBoxModel.Chips`); the files of a message on its way are not in the
+    composer;
+  - the notification (picture 10): `store.Notified` gives each `Notice` that is due (`Title`, `Body`, `Tag`), once,
+    also behind; take away a shown one whose `Tag` is no longer in `Notifications.Open(hub, fleet)`; a click opens Needs
+    you at `Screens.NoticeTarget(state, notice)` (null: only to the front). A notice with no `Need` is the manager's
+    warning, the Mac's second kind, which no yes of the owner covers yet: show it only after the coordinator's word;
+  - the count on the taskbar icon (the owner's "Yes, add it"): `Screens.TaskbarCount(state)`, null for none;
+  - the least size (picture 11): `AgentRow.LineText`, cut with "…", and `AgentRow.LineCount` (" · +N"), kept whole;
+  - the small states: `ChatModel.Earlier` ("Earlier messages"; `Screens.Chat(..., shown)` shows the newest `shown`
+    items, and each press adds `Screens.EarlierStep`), `ChatModel.LatestWords`, `ChatRow.TimeHover` and
+    `ChatRow.CopyWords` (the footer under the pointer; Copy takes `Text`), `PaneModel.Reading` ("Reading the hub…",
+    after a second), `NeedsModel.EmptyWords`, an ended request at hand when he chose it (`Screens.Needs(state, chosen,
+    …)`, with `RequestStep.AnswerFiles`), `RequestCard.AnsweredHeading`, `YourAnswerLabel`,
+    `WhyBlocks` (`NeedBody.Blocks`), `OptionsModel.CanSendTicks`, the board's
+    `Waiting`, `PeriodLabel`, `AgentLabel` and their hovers, `EndedGroup.Mark`, `UsageRow.Hover`,
+    `AgentPanel.UsageHeading`, `ControlsModel.PauseWords`, `StopWords`, `ResumeWords`, `SettingsModel.LastReadingLabel`,
+    and `Screens.Line(state, now, page)` (no Settings button on Settings).
 - **The picked files** (the iPhone's StagedFile): `state.Staged[composer]` holds each `StagedFile` (`RequestId`, `Name`,
   `Mime`, `Size`, `File` once the hub holds it, `Failure`, `IsOnHub`), in the order he picked them, between starts;
   `state.Uploading` the ones that go up now. While a file of a composer waits, its Send is off (`ComposerModel.CanSend`,
@@ -93,8 +119,8 @@ renamed or removed without a word to the screens lane.
   `BuildDownload.NewClient()` is the client of both. The screens give the rest (`~/dev/founderizer-plans/
   windows-app-release-design.md`, sections 4 and 5): the publisher check, the unpack, the launcher and the swap. No
   element shows an update before the owner's yes to it.
-- An element that needs a hub feature asks the model, which reads `ui_features` (`state.Offers(...)`): Discuss
-  (`need_talk`), the task's controls (`task_controls`) and its guidance (`task_steering`), the plus of the files
+- An element that needs a hub feature asks the model, which reads `ui_features` (`state.Offers(...)`): the
+  task's controls (`task_controls`) and its guidance (`task_steering`), the plus of the files
   (`attachments`), the chat of an agent other than the manager (`direct_chat`).
 - `Directory.Build.props` no longer sets `InvariantGlobalization` (the self-check sets it for itself), so the screens
   write dates and times in the user's culture.

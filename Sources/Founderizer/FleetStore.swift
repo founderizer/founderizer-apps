@@ -520,7 +520,7 @@ final class FleetStore {
     func stage(_ data: Data, name: String, mime: String, for composer: String) async {
         guard storageError == nil else { return }
         guard stagedFiles(for: composer).count < MessageAttachment.perMessage else {
-            fileErrors[composer] = "A message carries at most \(MessageAttachment.perMessage) files."
+            fileErrors[composer] = String(l10n: "A message carries at most \(MessageAttachment.perMessage) files.")
             return
         }
         guard MessageAttachment.types[mime] != nil else { fileErrors[composer] = AttachmentError.type.errorDescription; return }
@@ -535,7 +535,7 @@ final class FleetStore {
                                                     attributes: [.posixPermissions: 0o700])
             try data.write(to: stagedURL(file), options: [.atomic])
         } catch {
-            fileFailed("Cannot keep this file on this Mac. Nothing was sent.", cause: error, for: composer)
+            fileFailed(String(l10n: "Cannot keep this file on this Mac. Nothing was sent."), cause: error, for: composer)
             return
         }
         fileErrors[composer] = nil
@@ -553,7 +553,7 @@ final class FleetStore {
         let opened = url.startAccessingSecurityScopedResource()
         defer { if opened { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {
-            fileErrors[composer] = "That file did not open."
+            fileErrors[composer] = String(l10n: "That file did not open.")
             return
         }
         if mime.hasPrefix("image/"), let picture = try? MessageAttachment.imageForSending(data) {
@@ -567,7 +567,7 @@ final class FleetStore {
     func upload(_ file: StagedFile, for composer: String) async {
         guard let state, !file.isOnHub, !uploading.contains(file.requestID) else { return }
         guard let data = try? Data(contentsOf: stagedURL(file)) else {
-            change(file, in: composer) { $0.failure = "The bytes of this file are gone. Pick it again." }
+            change(file, in: composer) { $0.failure = String(l10n: "The bytes of this file are gone. Pick it again.") }
             return
         }
         uploading.insert(file.requestID)
@@ -579,7 +579,7 @@ final class FleetStore {
             change(file, in: composer) { $0.attachmentID = sent.id; $0.failure = nil }
         } catch {
             change(file, in: composer) {
-                $0.failure = (error as? LocalizedError)?.errorDescription ?? "The file did not go up."
+                $0.failure = (error as? LocalizedError)?.errorDescription ?? String(l10n: "The file did not go up.")
             }
         }
     }
@@ -681,7 +681,7 @@ final class FleetStore {
             fileProblems[file.id] = nil
             await refresh()
         } catch {
-            fileProblems[file.id] = HubError.said(error) ?? "This file could not be kept. Try again."
+            fileProblems[file.id] = HubError.said(error) ?? String(l10n: "This file could not be kept. Try again.")
         }
     }
 
@@ -694,7 +694,7 @@ final class FleetStore {
     /// What the arrow says it will do. A Needs-you answer keeps its own words: it is no chat message, and the
     /// button is off for it.
     func editHelp(_ message: OwnerMessage) -> String {
-        message.kind == "answer" ? "This request was already answered" : state?.editHelp(message) ?? "Correct"
+        message.kind == "answer" ? String(l10n: "This request was already answered") : state?.editHelp(message) ?? String(l10n: "Correct")
     }
     func beginEdit(_ message: OwnerMessage) {
         guard canEdit(message) else { return }
@@ -1005,7 +1005,7 @@ final class FleetStore {
             staged = files
         }
         do { pending = try outbox.load() }
-        catch { storageFailed("Cannot read the saved request. Sending is blocked.", cause: error) }
+        catch { storageFailed(String(l10n: "Cannot read the saved request. Sending is blocked."), cause: error) }
         notifications.openRequest = { [weak self] context, id in
             guard let self, let state = self.state,
                   context == FleetNotifications.context(hub: self.hub, database: state.db) else { return }
@@ -1071,9 +1071,9 @@ final class FleetStore {
             pending.hub == hub && pending.database == state?.db
     }
     var connectionLabel: String {
-        if isFresh { return "Connected" }
-        if lastSuccess != nil { return "Disconnected · last state" }
-        return refreshing ? "Connecting" : "Disconnected"
+        if isFresh { return String(l10n: "Connected") }
+        if lastSuccess != nil { return String(l10n: "Disconnected · last state") }
+        return refreshing ? String(l10n: "Connecting") : String(l10n: "Disconnected")
     }
 
     func start() {
@@ -1349,7 +1349,7 @@ final class FleetStore {
                                          choice: choice, approval: nil, text: options[choice])
             refused.refusal = line
             do { try outbox.save(refused); pending = refused; sendError = line }
-            catch { storageFailed("Cannot save this answer. Nothing was sent.", cause: error) }
+            catch { storageFailed(String(l10n: "Cannot save this answer. Nothing was sent."), cause: error) }
             return
         }
         // API 1.94: the first option of an item that names an account makes a GitHub App there (GitHubManifestFlow)
@@ -1368,7 +1368,7 @@ final class FleetStore {
             pending = request
             sending = true
         } catch {
-            storageFailed("Cannot save this answer. Nothing was sent.", cause: error)
+            storageFailed(String(l10n: "Cannot save this answer. Nothing was sent."), cause: error)
             return
         }
         await transmit(request)
@@ -1387,20 +1387,10 @@ final class FleetStore {
             pending = request
             sending = true
         } catch {
-            storageFailed("Cannot save this answer. Nothing was sent.", cause: error)
+            storageFailed(String(l10n: "Cannot save this answer. Nothing was sent."), cause: error)
             return
         }
         await transmit(request)
-    }
-
-    /// His message in the discussion of one open Needs-you item (owner feature `need_talk`): it goes to the manager,
-    /// which replies under the item, and the item stays open. True once the hub took it.
-    func talk(_ need: OwnerNeed, text: String) async -> Bool {
-        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !words.isEmpty, words.count <= NeedTalk.most, openNeeds.contains(where: { $0.id == need.id }) else { return false }
-        let sent = await command(.needTalk(need: need.id), note: words)
-        if sent { await refresh() }
-        return sent
     }
 
     private func sendText(_ value: String, needID: Int? = nil, recipient: String, replaces: String? = nil,
@@ -1420,7 +1410,7 @@ final class FleetStore {
             pending = request
             sending = true
         } catch {
-            storageFailed("Cannot save this request. Nothing was sent.", cause: error)
+            storageFailed(String(l10n: "Cannot save this request. Nothing was sent."), cause: error)
             return
         }
         await transmit(request)
@@ -1432,10 +1422,10 @@ final class FleetStore {
         lastControlReceipt = nil
         let request = PendingRequest(hub: hub, database: state.db, client: installation, command: command, text: note)
         do {
-            guard try request.body().count <= 65_536 else { sendError = "This request is too large. Shorten it before saving."; return false }
-        } catch { sendError = "The command fields are invalid. Nothing was sent."; return false }
+            guard try request.body().count <= 65_536 else { sendError = String(l10n: "This request is too large. Shorten it before saving."); return false }
+        } catch { sendError = String(l10n: "The command fields are invalid. Nothing was sent."); return false }
         do { try outbox.save(request); pending = request; sending = true }
-        catch { storageError = "Cannot save this command. Nothing was sent."; return false }
+        catch { storageError = String(l10n: "Cannot save this command. Nothing was sent."); return false }
         await transmit(request)
         return pending == nil && storageError == nil && sendError == nil
     }
@@ -1456,13 +1446,13 @@ final class FleetStore {
     func save(_ command: OwnerCommand, note: String = "", queue: Bool = true) async -> SaveResult {
         let hub = hub, database = state?.db
         while !canWrite {
-            guard self.hub == hub, state?.db == database, storageError == nil else { return .refused("Not saved. The hub connection changed.") }
+            guard self.hub == hub, state?.db == database, storageError == nil else { return .refused(String(l10n: "Not saved. The hub connection changed.")) }
             if !queue, !sending, pending != nil { return .behind }
-            do { try await Task.sleep(for: .milliseconds(300)) } catch { return .refused("Not saved.") }
+            do { try await Task.sleep(for: .milliseconds(300)) } catch { return .refused(String(l10n: "Not saved.")) }
         }
         if await self.command(command, note: note) { return .saved(sha256: lastControlReceipt?.sha256) }
         guard let request = pending, request.command == command else {
-            return .refused(sendError ?? storageError ?? "Not saved. This hub does not offer this change.")
+            return .refused(sendError ?? storageError ?? String(l10n: "Not saved. This hub does not offer this change."))
         }
         return request.refusal == nil ? .unconfirmed(request.requestID) : refused(request)
     }
@@ -1483,7 +1473,7 @@ final class FleetStore {
     func answer(to id: UUID) async -> SaveResult {
         let hub = hub
         while let request = pending, request.requestID == id, request.refusal == nil {
-            guard self.hub == hub else { return .refused("Not saved. The hub connection changed.") }
+            guard self.hub == hub else { return .refused(String(l10n: "Not saved. The hub connection changed.")) }
             do { try await Task.sleep(for: .milliseconds(400)) } catch { return .unconfirmed(id) }
         }
         if let request = pending, request.requestID == id { return refused(request) }
@@ -1596,16 +1586,16 @@ final class FleetStore {
                 agentDrafts = [:]
                 cancelEdit()
                 do { pending = try outbox.rejectSecret(matching: request.requestID, drafts: .standard) }
-                catch { storageError = "Cannot remove rejected text from local storage. Sending is blocked." }
-                sendError = "The hub refused registered login text."
+                catch { storageError = String(l10n: "Cannot remove rejected text from local storage. Sending is blocked.") }
+                sendError = String(l10n: "The hub refused registered login text.")
             } else if let error = error as? HubError, error.definitiveRefusal || error.conflict {
                 var refused = request
                 refused.refusal = error.localizedDescription
                 do { try outbox.save(refused); pending = refused }
-                catch { storageError = "Cannot save the refusal. The original request is retained." }
+                catch { storageError = String(l10n: "Cannot save the refusal. The original request is retained.") }
                 sendError = error.localizedDescription
             } else {
-                sendError = "Receipt not confirmed. The saved request is kept; refresh to check it or retry the same request."
+                sendError = String(l10n: "Receipt not confirmed. The saved request is kept; refresh to check it or retry the same request.")
             }
         }
         await refresh()

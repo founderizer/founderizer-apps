@@ -108,7 +108,8 @@ public struct FleetManifest: Decodable, Sendable, Equatable {
 
     /// "4 agents", for the line that tells two copies apart.
     public var agentsLine: String {
-        agents.isEmpty ? "no agents" : "\(agents.count) agent\(agents.count == 1 ? "" : "s")"
+        agents.isEmpty ? String(l10n: "no agents")
+            : agents.count == 1 ? String(l10n: "\(agents.count) agent") : String(l10n: "\(agents.count) agents")
     }
 
     /// The agents in the copy, named, or nil when there are none. The owner knows his own fleet by its names.
@@ -130,8 +131,8 @@ public struct FleetManifest: Decodable, Sendable, Equatable {
         let machines = Set(holders.values.compactMap(\.machine)).sorted()
         let names = machines.map { $0.capitalized }.joined(separator: ", ")
         return machines.count == 1
-            ? "The logins \(names)'s own vault made stay on that server: no copy can carry its store key."
-            : "The logins the vaults of \(names) made stay on those servers: no copy carries a store key."
+            ? String(l10n: "The logins \(names)'s own vault made stay on that server: no copy can carry its store key.")
+            : String(l10n: "The logins the vaults of \(names) made stay on those servers: no copy carries a store key.")
     }
 }
 
@@ -171,66 +172,76 @@ public struct RestoreAfterwards: Sendable, Equatable {
         guard let held else {
             steps = []
             knows = false
-            nothing = "This copy does not say what its hub kept on its own disk — it was made by a hub from "
-                + "before that line. A restored fleet never carries the hub's own sign-ins, so check each of "
-                + "them: the GitHub App key first, then Google, then any MCP server."
+            nothing = String(l10n: "This copy does not say what its hub kept on its own disk — it was made by a hub from before that line. A restored fleet never carries the hub's own sign-ins, so check each of them: the GitHub App key first, then Google, then any MCP server.")
             return
         }
         knows = true
         var steps: [Step] = []
-        var had: [String] = []
+        var noGitHub = false, noGoogle = false, noMCP = false
         if held.github_app?.present == true {
             steps.append(Step(
-                title: "A GitHub App key",
-                detail: "This one first: it is one file and it unblocks every task that touches code. GitHub "
-                    + "never gives a key out twice, so make a new one for your App and paste it with the App ID. "
-                    + "Your repositories are in the copy, so the App you want is the one installed on them.",
+                title: String(l10n: "A GitHub App key"),
+                detail: String(l10n: "This one first: it is one file and it unblocks every task that touches code. GitHub never gives a key out twice, so make a new one for your App and paste it with the App ID. Your repositories are in the copy, so the App you want is the one installed on them."),
                 place: .apps))
         } else {
-            had.append("GitHub App")
+            noGitHub = true
         }
         if let google = held.google, google.present, google.accounts != 0 || google.client == true {
             let accounts = google.accounts
-            let many = accounts.map { $0 == 1 ? "your Google account" : "your \($0) Google accounts" }
-                ?? "your Google accounts"
+            let detail = accounts.map {
+                $0 == 1
+                    ? String(l10n: "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your Google account and which agent had which level, so nothing has to be remembered. You need the Desktop client file again.")
+                    : String(l10n: "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your \($0) Google accounts and which agent had which level, so nothing has to be remembered. You need the Desktop client file again.")
+            } ?? String(l10n: "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your Google accounts and which agent had which level, so nothing has to be remembered. You need the Desktop client file again.")
             steps.append(Step(
-                title: "Google, one account at a time",
-                detail: "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your "
-                    + "mail are untouched — this is a sign-in. The copy names \(many) and which agent had which "
-                    + "level, so nothing has to be remembered. You need the Desktop client file again.",
+                title: String(l10n: "Google, one account at a time"),
+                detail: detail,
                 place: .apps))
         } else {
-            had.append("Google account connected")
+            noGoogle = true
         }
         if let mcp = held.mcp, mcp.present, mcp.servers != 0 {
-            let many = mcp.servers.map { $0 == 1 ? "The one MCP server" : "The \($0) MCP servers" } ?? "The MCP servers"
+            let detail = mcp.servers.map {
+                $0 == 1
+                    ? String(l10n: "The one MCP server you connected are signed in on the old server. Until each is connected again, the agents that had those tools are told the server is not connected. The copy names the servers and their addresses.")
+                    : String(l10n: "The \($0) MCP servers you connected are signed in on the old server. Until each is connected again, the agents that had those tools are told the server is not connected. The copy names the servers and their addresses.")
+            } ?? String(l10n: "The MCP servers you connected are signed in on the old server. Until each is connected again, the agents that had those tools are told the server is not connected. The copy names the servers and their addresses.")
             steps.append(Step(
-                title: "Each MCP server",
-                detail: "\(many) you connected are signed in on the old server. Until each is connected again, "
-                    + "the agents that had those tools are told the server is not connected. The copy names the "
-                    + "servers and their addresses.",
+                title: String(l10n: "Each MCP server"),
+                detail: detail,
                 place: .mcps))
         } else {
-            had.append("MCP server connected")
+            noMCP = true
         }
         if let files = held.attachments, files.present {
             let count = files.files ?? 0
             steps.append(Step(
-                title: "The files you attached to messages",
-                detail: "\(count) file\(count == 1 ? "" : "s") on the old hub server, left out on purpose: they "
-                    + "are your own files and the hub throws them away itself after ninety days. The messages "
-                    + "keep their text; an attachment that will not open is the whole of the loss.",
+                title: String(l10n: "The files you attached to messages"),
+                detail: count == 1
+                    ? String(l10n: "\(count) file on the old hub server, left out on purpose: they are your own files and the hub throws them away itself after ninety days. The messages keep their text; an attachment that will not open is the whole of the loss.")
+                    : String(l10n: "\(count) files on the old hub server, left out on purpose: they are your own files and the hub throws them away itself after ninety days. The messages keep their text; an attachment that will not open is the whole of the loss."),
                 place: .nowhere))
         }
         self.steps = steps
         if steps.isEmpty {
-            nothing = "When this copy was made your hub had no GitHub App, no Google account, no connected MCP "
-                + "server and no attached file, so there is nothing of that kind to put back."
-        } else if !had.isEmpty {
-            nothing = "Your hub had no " + had.joined(separator: " and no ") + ", so there is nothing of those "
-                + "to put back."
+            nothing = String(l10n: "When this copy was made your hub had no GitHub App, no Google account, no connected MCP server and no attached file, so there is nothing of that kind to put back.")
         } else {
-            nothing = nil
+            switch (noGitHub, noGoogle, noMCP) {
+            case (true, false, false): nothing = String(l10n: "Your hub had no GitHub App, so there is nothing of those to put back.")
+            case (false, true, false):
+                nothing = String(l10n: "Your hub had no Google account connected, so there is nothing of those to put back.")
+            case (false, false, true):
+                nothing = String(l10n: "Your hub had no MCP server connected, so there is nothing of those to put back.")
+            case (true, true, false):
+                nothing = String(l10n: "Your hub had no GitHub App and no Google account connected, so there is nothing of those to put back.")
+            case (true, false, true):
+                nothing = String(l10n: "Your hub had no GitHub App and no MCP server connected, so there is nothing of those to put back.")
+            case (false, true, true):
+                nothing = String(l10n: "Your hub had no Google account connected and no MCP server connected, so there is nothing of those to put back.")
+            case (true, true, true):
+                nothing = String(l10n: "Your hub had no GitHub App and no Google account connected and no MCP server connected, so there is nothing of those to put back.")
+            case (false, false, false): nothing = nil
+            }
         }
     }
 
@@ -241,9 +252,9 @@ extension RestoreAfterwards.Place {
     /// What the button says, or nil where there is nothing to press.
     public var label: String? {
         switch self {
-        case .apps: "Open Apps"
+        case .apps: String(l10n: "Open Apps")
         // The MCP servers are a group of Settings › Apps.
-        case .mcps: "Open Apps"
+        case .mcps: String(l10n: "Open Apps")
         case .nowhere: nil
         }
     }
@@ -281,19 +292,19 @@ public struct FleetHolds: Sendable, Equatable {
     /// What putting a copy over this hub would take away, in his words.
     public var says: String {
         var parts: [String] = []
-        if tasks > 0 { parts.append("\(tasks) task\(tasks == 1 ? "" : "s")") }
-        if goals > 0 { parts.append("\(goals) goal\(goals == 1 ? "" : "s")") }
-        if needs > 0 { parts.append("\(needs) thing\(needs == 1 ? "" : "s") that needed you") }
-        if reports > 0 { parts.append("\(reports) report\(reports == 1 ? "" : "s")") }
-        let seen = parts.isEmpty ? "" : "This hub holds " + sentence(parts) + ". "
-        return seen + "It also counts conversations, duties and wake-up rules, which this list does not show. "
-            + "The copy replaces all of it. The records it puts aside are kept on the hub server beside the new "
-            + "ones, and only the one set: a second replacement writes over them."
+        if tasks > 0 { parts.append(tasks == 1 ? String(l10n: "\(tasks) task") : String(l10n: "\(tasks) tasks")) }
+        if goals > 0 { parts.append(goals == 1 ? String(l10n: "\(goals) goal") : String(l10n: "\(goals) goals")) }
+        if needs > 0 {
+            parts.append(needs == 1 ? String(l10n: "\(needs) thing that needed you") : String(l10n: "\(needs) things that needed you"))
+        }
+        if reports > 0 { parts.append(reports == 1 ? String(l10n: "\(reports) report") : String(l10n: "\(reports) reports")) }
+        let seen = parts.isEmpty ? "" : String(l10n: "This hub holds \(sentence(parts)).") + " "
+        return seen + String(l10n: "It also counts conversations, duties and wake-up rules, which this list does not show. The copy replaces all of it. The records it puts aside are kept on the hub server beside the new ones, and only the one set: a second replacement writes over them.")
     }
 
     private func sentence(_ parts: [String]) -> String {
         guard parts.count > 1 else { return parts.first ?? "" }
-        return parts.dropLast().joined(separator: ", ") + " and " + parts[parts.count - 1]
+        return String(l10n: "\(parts.dropLast().joined(separator: ", ")) and \(parts[parts.count - 1])")
     }
 }
 
@@ -626,12 +637,12 @@ public enum RestoreError: LocalizedError, Sendable, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .notACopy: "That file is not a copy of a fleet. Choose the zip your hub gave you."
+        case .notACopy: String(l10n: "That file is not a copy of a fleet. Choose the zip your hub gave you.")
         case .otherFormat(let format):
-            "That copy is format \(format) and this app reads format \(FleetManifest.format1)."
-        case .tooLarge: "A copy is at most 256 MiB. Put this one back on the hub server itself."
-        case .empty: "That file is empty."
-        case .cannotRead(let reason): "That copy could not be read: \(reason)"
+            String(l10n: "That copy is format \(format) and this app reads format \(FleetManifest.format1).")
+        case .tooLarge: String(l10n: "A copy is at most 256 MiB. Put this one back on the hub server itself.")
+        case .empty: String(l10n: "That file is empty.")
+        case .cannotRead(let reason): String(l10n: "That copy could not be read: \(reason)")
         case .holdsWork(let said): said
         }
     }
@@ -654,7 +665,7 @@ public struct ChosenCopy: Sendable, Equatable {
     /// what decides.
     public static func read(_ file: URL) throws -> ChosenCopy {
         let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber)??.int64Value
-        guard let size else { throw RestoreError.cannotRead("this Mac cannot read that file.") }
+        guard let size else { throw RestoreError.cannotRead(String(l10n: "this Mac cannot read that file.")) }
         guard size > 0 else { throw RestoreError.empty }
         guard size <= FleetCopy.sizeLimit else { throw RestoreError.tooLarge }
         let manifest: FleetManifest

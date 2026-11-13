@@ -33,7 +33,7 @@ private final class ArtifactPreview {
     func list(_ context: ArtifactContext) {
         clear()
         let token = identity
-        loading = "Loading checked outputs…"
+        loading = String(l10n: "Loading checked outputs…")
         operation = Task {
             do {
                 let result = try await client.artifacts(in: context)
@@ -57,7 +57,7 @@ private final class ArtifactPreview {
         text = nil
         image = nil
         error = nil
-        loading = "Loading and verifying output…"
+        loading = String(l10n: "Loading and verifying output…")
         operation = Task {
             do {
                 let content = try await client.artifact(file, in: context)
@@ -155,18 +155,18 @@ struct ArtifactSection: View {
                                 .accessibilityIdentifier("artifact-text")
                         }
                     }
-                    FoldRow(title: "Verified download · \(ByteCountFormatter.string(fromByteCount: Int64(selected.bytes), countStyle: .file))", symbol: "checkmark.shield") {
+                    FoldRow(title: String(l10n: "Verified download · \(ByteCountFormatter.string(fromByteCount: Int64(selected.bytes), countStyle: .file))"), symbol: "checkmark.shield") {
                         VStack(alignment: .leading, spacing: 8) {
-                            DetailField(title: "Snapshot commit", value: selected.commit)
+                            DetailField(title: String(l10n: "Snapshot commit"), value: selected.commit)
                             DetailField(title: "SHA-256", value: selected.sha256)
-                            DetailField(title: "Type", value: selected.mime)
+                            DetailField(title: String(l10n: "Type"), value: selected.mime)
                         }
                     }
                 }.padding(12).background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.radius))
             }
         }
         .onChange(of: isFresh) { _, fresh in
-            if !fresh { preview.clear(message: "Output discarded because the hub state is stale.") }
+            if !fresh { preview.clear(message: String(l10n: "Output discarded because the hub state is stale.")) }
         }
         .onDisappear { preview.clear() }
     }

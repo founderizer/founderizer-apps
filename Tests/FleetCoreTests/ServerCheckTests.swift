@@ -326,7 +326,7 @@ struct ServerCheckTests {
         #expect(await check(255, "root@203.0.113.9: Permission denied (publickey).").verdict
                 == .stop("203.0.113.9 did not take your SSH key. Choose its key."))
         #expect(await check(255, "ssh: connect to host 203.0.113.9 port 22: Connection refused").verdict
-                == .stop("This Mac could not reach 203.0.113.9 over SSH."))
+                == .stop("203.0.113.9 refused SSH on port 22. Check that SSH runs on that port and lets this Mac in."))
         #expect(await check(255, "").verdict == .stop("This Mac could not reach 203.0.113.9 over SSH."))
         let changed = await check(255, "@@@@@@@@\nWARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!\nHost key verification failed.")
         #expect(changed.verdict == .stop(ServerCheck.hostKeyChanged("203.0.113.9")))
@@ -334,10 +334,33 @@ struct ServerCheckTests {
         #expect(await check(1, "This account is currently not available.").verdict
                 == .stop(ServerCheck.noAnswer("203.0.113.9")))
         // The words the install itself says for the same two stops.
-        #expect(ServerCheck.unreached("h") == InstallError.step("Read the server", "ssh: connect to host h port 22: "
-                                                                + "Connection refused").plain(host: "h"))
+        #expect(ServerCheck.unreached("h", said: "ssh: connect to host h port 22: connection refused")
+                == InstallError.step("Read the server", "ssh: connect to host h port 22: Connection refused").plain(host: "h"))
         #expect(ServerCheck.keyRefused("h") == InstallError.step("Read the server", "Permission denied (publickey).")
                     .plain(host: "h"))
+    }
+
+    /// **Where `ssh` did not reach the server, its own words say why** (the report of 13 November 2026: port 22 refused
+    /// every connection of one Mac, also those of the person's own alias, and the line said only "could not reach").
+    @Test func whereSshDidNotReachTheServerItsOwnWordsSayWhy() async {
+        let refused = "203.0.113.9 refused SSH on port 2222. Check that SSH runs on that port and lets this Mac in."
+        #expect(await check(255, "Warning: Permanently added '[203.0.113.9]:2222' (ED25519) to the list of known hosts.\n"
+                            + "ssh: connect to host 203.0.113.9 port 2222: Connection refused").verdict == .stop(refused))
+        let silent = "203.0.113.9 did not answer SSH on port 22. Check that the server is on and that its firewall lets SSH in."
+        #expect(await check(255, "ssh: connect to host 203.0.113.9 port 22: Operation timed out").verdict == .stop(silent))
+        #expect(await check(255, "Connection timed out during banner exchange\nConnection to 203.0.113.9 port 22 timed out")
+                    .verdict == .stop(silent))
+        let closed = "203.0.113.9 closed the SSH connection before any login. Check that it lets this Mac in."
+        #expect(await check(255, "kex_exchange_identification: Connection closed by remote host\n"
+                            + "Connection closed by 203.0.113.9 port 22").verdict == .stop(closed))
+        #expect(await check(255, "kex_exchange_identification: read: Connection reset by peer").verdict == .stop(closed))
+        #expect(await check(255, "ssh: Could not resolve hostname box: nodename nor servname provided, or not known",
+                            target: InstallTarget(host: "box")).verdict == .stop("This Mac could not find box. Check its address."))
+        // What says nothing of why stays a server that ssh did not reach.
+        #expect(await check(255, "ssh: connect to host 203.0.113.9 port 22: No route to host").verdict
+                == .stop("This Mac could not reach 203.0.113.9 over SSH."))
+        #expect(await check(255, "ssh: connect to host 203.0.113.9: Connection refused").verdict
+                == .stop("This Mac could not reach 203.0.113.9 over SSH."))
     }
 
     // MARK: this Mac's own key files, one at a time
@@ -406,6 +429,38 @@ struct ServerCheckTests {
         #expect(calls.all.map { Self.key($0.arguments) } == [keys[1], keys[0], keys[2]])
         #expect(result.verdict == .needsPassword(.ssh))
         #expect(result.target == target)
+    }
+
+    /// **A refused key goes on only to the key files that the first session did not offer** (the report of 13 November
+    /// 2026: up to five sessions as root at a server that lets no root in, where fail2ban can then refuse this Mac). With
+    /// no key of its own, `ssh` offered each file that `ssh -G` names for that server, so only the app's own key, which
+    /// no default names, goes alone. A target with a key of its own offered only that key.
+    @Test func aRefusedKeyGoesOnOnlyToTheKeyFilesTheFirstSessionDidNotOffer() async throws {
+        let folder = try Self.keyFolder(["id_ed25519", "id_rsa", "founderizer_ed25519"])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let keys = ServerCheck.keyFiles(in: folder), calls = Calls()
+        let denied = "root@203.0.113.9: Permission denied (publickey)."
+        let result = await ServerCheck.run(InstallTarget(host: "203.0.113.9"), job: .join, keys: folder,
+                                           ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
+            calls.add(executable, arguments, stdin)
+            if arguments.first == "-G" {
+                return LocalShell.Answer(status: 0, output: "hostname 203.0.113.9\nuser root\nport 22\n"
+                                         + "identityfile \(keys[1])\nidentityfile \(keys[0])\nidentityfile /nonexistent/id_dsa\n")
+            }
+            return LocalShell.Answer(status: 255, output: denied)
+        }
+        #expect(calls.all.map(\.arguments.first) == ["-o", "-G", "-o"])
+        #expect(calls.all[1].arguments == ["-G", "-p", "22", "root@203.0.113.9"])
+        #expect(calls.all.map { Self.key($0.arguments) } == [nil, nil, keys[2]])
+        #expect(result.verdict == .stop(ServerCheck.keyRefused("203.0.113.9")))
+        // With a key of its own, the first session offered that key only: the other files go, and no ssh -G.
+        let own = Calls()
+        _ = await ServerCheck.run(InstallTarget(host: "203.0.113.9", identityFile: keys[0]), job: .join, keys: folder,
+                                  ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
+            own.add(executable, arguments, stdin)
+            return LocalShell.Answer(status: 255, output: denied)
+        }
+        #expect(own.all.map { Self.key($0.arguments) } == [keys[0], keys[1], keys[2]])
     }
 
     /// Only a refused key leads to the key files: a server that was not reached, that changed its host key, that takes
@@ -501,5 +556,92 @@ struct ServerCheckTests {
         }
         #expect(none.all.isEmpty)
         #expect(typed.isValid == false)
+    }
+
+    // MARK: the alias of an address
+
+    /// A folder that stands for a home folder, with the given files under its `.ssh`.
+    private static func home(_ files: [String: String]) throws -> URL {
+        let home = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("fleet-home-" + UUID().uuidString)
+        for (path, text) in files {
+            let file = home.appendingPathComponent(".ssh").appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(text.utf8).write(to: file)
+        }
+        return home
+    }
+
+    @Test func theAliasesOfAnAddressAreTheHostNamesWhoseBlockGivesIt() throws {
+        let home = try Self.home([
+            "config": """
+            # a comment: Host commented 198.51.100.7
+            Host app-prod app-prod-2 *.example.org !bad
+                User deploy
+                HostName 198.51.100.7
+            Host=other
+                HostName=203.0.113.20
+            Include config.d/*
+            Include ~/.ssh/missing
+            Match host 198.51.100.7
+                HostName 198.51.100.7
+            Host   upper
+              hostname 198.51.100.7
+            """,
+            "config.d/b-team": "Host team-box\n  HostName 198.51.100.7\n  ProxyJump jump\nHost -oProxyCommand=evil\n  HostName 198.51.100.7\n",
+            "config.d/a-first": "Host first\n  HostName 198.51.100.7\nHost app-prod\n  HostName 198.51.100.7\n",
+        ])
+        defer { try? FileManager.default.removeItem(at: home) }
+        let config = home.appendingPathComponent(".ssh/config")
+        #expect(SSHConfig.aliases(of: "198.51.100.7", config: config, home: home.path)
+                == ["app-prod", "app-prod-2", "first", "team-box", "upper"])
+        #expect(SSHConfig.aliases(of: "203.0.113.20", config: config, home: home.path) == ["other"])
+        #expect(SSHConfig.aliases(of: "192.0.2.1", config: config, home: home.path).isEmpty)
+        #expect(SSHConfig.aliases(of: "198.51.100.7", config: home.appendingPathComponent("none"), home: home.path).isEmpty)
+        #expect(SSHConfig.words("HostName = 192.0.2.10") == ["HostName", "192.0.2.10"])
+        #expect(SSHConfig.words("Host \"a\"\tb") == ["Host", "a", "b"])
+    }
+
+    /// **An address that no `Host` block names takes the alias that gives it** (the report of 13 November 2026: a
+    /// server chosen from the provider's list was checked as root, while the person reached it as `deploy` through an
+    /// alias). An alias through another host is not one, an alias with user root comes first, and a typed user or an
+    /// address with its own block reads no alias.
+    @Test func anAddressWithNoBlockOfItsOwnTakesTheAliasThatGivesIt() async throws {
+        let home = try Self.home(["config": "Host jumped\n HostName 198.51.100.7\nHost app-prod\n HostName 198.51.100.7\n"
+                                            + "Host admin\n HostName 198.51.100.7\n"])
+        defer { try? FileManager.default.removeItem(at: home) }
+        let me = NSUserName()
+        let plain = "hostname %@\nuser \(me)\nport 22\nidentityfile ~/.ssh/id_ed25519\n"
+        func answers(_ admin: String) -> [String: String] {
+            ["198.51.100.7": String(format: plain, "198.51.100.7"),
+             "jumped": "hostname 198.51.100.7\nuser root\nport 22\nidentityfile ~/.ssh/id_ed25519\nproxyjump jump\n",
+             "app-prod": "hostname 198.51.100.7\nuser deploy\nport 2222\nidentityfile ~/.ssh/id_ed25519\n",
+             "admin": "hostname 198.51.100.7\nuser \(admin)\nport 22\nidentityfile ~/.ssh/id_ed25519\n"]
+        }
+        func named(_ typed: String, _ answers: [String: String], calls: Calls) async -> InstallTarget {
+            await InstallTarget.named(typed, ssh: "/usr/bin/ssh", home: home.path) { executable, arguments, stdin, _ in
+                calls.add(executable, arguments, stdin)
+                let name = arguments.last ?? ""
+                return LocalShell.Answer(status: 0, output: answers[name] ?? String(format: plain, name))
+            }
+        }
+        let calls = Calls()
+        #expect(await named("198.51.100.7", answers(me), calls: calls)
+                == InstallTarget(host: "198.51.100.7", user: "deploy", port: 2222, becomeRoot: true))
+        #expect(calls.all.compactMap(\.arguments.last).filter { !$0.hasSuffix(".invalid") }
+                == ["198.51.100.7", "jumped", "app-prod", "admin"])
+        // An alias with user root comes first.
+        #expect(await named("198.51.100.7", answers("root"), calls: Calls())
+                == InstallTarget(host: "198.51.100.7", user: "root", port: 22, becomeRoot: false))
+        // A user he typed reads no alias, and neither does an address that a block of his names.
+        let typed = Calls()
+        #expect(await named("ubuntu@198.51.100.7", answers(me), calls: typed)
+                == InstallTarget(host: "198.51.100.7", user: "ubuntu", becomeRoot: true))
+        #expect(typed.all.count == 2)
+        var own = answers(me)
+        own["198.51.100.7"] = "hostname 198.51.100.7\nuser ops\nport 22\nidentityfile ~/.ssh/id_ed25519\n"
+        let kept = Calls()
+        #expect(await named("198.51.100.7", own, calls: kept)
+                == InstallTarget(host: "198.51.100.7", user: "ops", port: 22, becomeRoot: true))
+        #expect(kept.all.count == 2)
     }
 }

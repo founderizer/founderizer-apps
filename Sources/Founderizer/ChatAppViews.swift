@@ -88,7 +88,7 @@ struct ChannelStatusLine: View {
     var spinning = false
 
     var body: some View {
-        let hover = [status.detail, status.readingAt.map { "Last reading \(messageTime($0))." }].compactMap { $0 }.joined(separator: " ")
+        let hover = [status.detail, status.readingAt.map { String(l10n: "Last reading \(messageTime($0)).") }].compactMap { $0 }.joined(separator: " ")
         HStack(spacing: 6) {
             if spinning { ProgressView().controlSize(.mini).frame(width: 9, height: 9) } else { ToneDot(tone: status.tone) }
             Text(status.words).font(FormMetrics.detail).foregroundStyle(status.tone == .problem ? .orange : FleetStyle.muted).lineLimit(1)
@@ -147,7 +147,7 @@ struct OwnerLinkStep: View {
                         HStack(spacing: 6) {
                             Text("link \(code.display)").font(FormMetrics.title)
                                 .foregroundStyle(FleetStyle.text).textSelection(.enabled).accessibilityIdentifier("channels-code-\(app)")
-                            MessageAction(symbol: "square.on.square", label: "Copy the message") { copyMessage("link \(code.display)") }
+                            MessageAction(symbol: "square.on.square", label: String(l10n: "Copy the message")) { copyMessage("link \(code.display)") }
                                 .foregroundStyle(FleetStyle.muted)
                         }
                         if let link = target?.link {
@@ -213,7 +213,7 @@ struct DeliveryLine: View {
                 .help(words + (delivery.at.map { " · \(fleetDate($0))" } ?? ""))
                 .accessibilityElement(children: .ignore).accessibilityLabel(words)
                 if delivery.canSendAgain && offered && sentAgain != delivery.outbound {
-                    MessageAction(symbol: "arrow.clockwise", label: "Send again", help: "Send again. The first one can still arrive.", height: 16) {
+                    MessageAction(symbol: "arrow.clockwise", label: String(l10n: "Send again"), help: String(l10n: "Send again. The first one can still arrive."), height: 16) {
                         Task { await sendAgain() }
                     }.foregroundStyle(FleetStyle.muted).disabled(sending || !store.isFresh)
                 }
@@ -264,8 +264,8 @@ private struct DeliveryIcon: View {
 enum ChatAppWords {
     /// A refusal in the hub's words, or a write without an answer that can still arrive.
     static func reason(_ error: Error) -> String {
-        if case HubError.refusal(_, let text) = error { return "The hub said: \(text.hasSuffix(".") ? text : text + ".")" }
-        if error is URLError { return "No answer from the hub. It can still do it: look again before you try again." }
+        if case HubError.refusal(_, let text) = error { return String(l10n: "The hub said: \(text.hasSuffix(".") ? text : text + ".")") }
+        if error is URLError { return String(l10n: "No answer from the hub. It can still do it: look again before you try again.") }
         return error.localizedDescription
     }
 

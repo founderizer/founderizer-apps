@@ -24,9 +24,10 @@ public enum ProfileGuide {
     /// The sections that every profile has exactly once. They cannot be deleted.
     public static let required: Set<String> = ["character", "responsible_for", "may_do", "must_ask"]
     /// The plain name of each known key in Fleet. It is not a title for the hub: a saved section keeps its own title.
-    private static let names = ["character": "Character", "responsible_for": "Responsible for", "may_do": "May do without asking",
-                                "must_ask": "Asks you first", "knowledge": "Knowledge", "logins": "Logins it may use",
-                                "knowledge_files": "Knowledge files"]
+    private static let names = ["character": String(l10n: "Character"), "responsible_for": String(l10n: "Responsible for"),
+                                "may_do": String(l10n: "May do without asking"), "must_ask": String(l10n: "Asks you first"),
+                                "knowledge": String(l10n: "Knowledge"), "logins": String(l10n: "Logins it may use"),
+                                "knowledge_files": String(l10n: "Knowledge files")]
 
     /// The key that the hub gives a title, as its `profile_key` does: a known title in any case, else `other`.
     public static func key(forTitle title: String) -> String {
@@ -40,14 +41,14 @@ public enum ProfileGuide {
     /// What to write in a section, in one line.
     public static func description(key: String) -> String {
         switch key {
-        case "character": "How this agent behaves and sounds, in one or two sentences."
-        case "responsible_for": "What this agent owns and delivers."
-        case "may_do": "Decisions it can make alone."
-        case "must_ask": "What it must bring to you before it acts."
-        case "knowledge": "Facts and links that it must know."
-        case "logins": "Saved login names only, never passwords."
-        case "knowledge_files": "Files in knowledge/ that it reads first."
-        default: "Extra rules for this agent."
+        case "character": String(l10n: "How this agent behaves and sounds, in one or two sentences.")
+        case "responsible_for": String(l10n: "What this agent owns and delivers.")
+        case "may_do": String(l10n: "Decisions it can make alone.")
+        case "must_ask": String(l10n: "What it must bring to you before it acts.")
+        case "knowledge": String(l10n: "Facts and links that it must know.")
+        case "logins": String(l10n: "Saved login names only, never passwords.")
+        case "knowledge_files": String(l10n: "Files in knowledge/ that it reads first.")
+        default: String(l10n: "Extra rules for this agent.")
         }
     }
 
@@ -200,42 +201,42 @@ public struct ProfileSectionEdit: Equatable, Sendable {
     /// The first hub rule that a save would break, in words, or nil. `catalog` holds the paths of the hub's knowledge
     /// catalog, for a "Knowledge files" section.
     public func problem(deleting: Bool = false, catalog: Set<String>? = nil) -> String? {
-        guard isNew || saved != nil else { return "This section is not in the profile now. Reload the profile." }
+        guard isNew || saved != nil else { return String(l10n: "This section is not in the profile now. Reload the profile.") }
         if deleting {
-            guard canDelete else { return "\(name) cannot be deleted. Every profile has it once." }
+            guard canDelete else { return String(l10n: "\(name) cannot be deleted. Every profile has it once.") }
         } else {
             if id.key == "other" {
                 let title = normalizedTitle
-                if title.isEmpty || title.unicodeScalars.count > 80 { return "A title has 1 to 80 characters." }
-                if title.contains(where: \.isNewline) { return "A title has one line only." }
-                if title.contains("*") { return "A title cannot contain *." }
-                if ProfileGuide.key(forTitle: title) != "other" { return "“\(title)” is the title of another section. Use another title." }
+                if title.isEmpty || title.unicodeScalars.count > 80 { return String(l10n: "A title has 1 to 80 characters.") }
+                if title.contains(where: \.isNewline) { return String(l10n: "A title has one line only.") }
+                if title.contains("*") { return String(l10n: "A title cannot contain *.") }
+                if ProfileGuide.key(forTitle: title) != "other" { return String(l10n: "“\(title)” is the title of another section. Use another title.") }
             }
             let text = normalizedText
             if text.isEmpty {
-                return isNew ? "Write the text of this rule." : canDelete ? "Write a text, or delete this section." : "Write a text. This section cannot be empty."
+                return isNew ? String(l10n: "Write the text of this rule.") : canDelete ? String(l10n: "Write a text, or delete this section.") : String(l10n: "Write a text. This section cannot be empty.")
             }
             let count = text.unicodeScalars.count
             // Numbers as his Mac writes them (review B13, fix round 2): "8,000" was fixed in the code, the count bare.
-            if count > 8000 { return "A text has at most \(8000.formatted()) characters. This text has \(count.formatted())." }
+            if count > 8000 { return String(l10n: "A text has at most \(8000.formatted()) characters. This text has \(count.formatted()).") }
             if let line = text.split(separator: "\n").first(where: { $0.range(of: "^\\*\\*[^*\\n]+?\\.\\*\\*", options: .regularExpression) != nil }) {
-                return "A line cannot start like a section title: “\(line.prefix(40))”."
+                return String(l10n: "A line cannot start like a section title: “\(String(describing: line.prefix(40)))”.")
             }
             if id.key == "knowledge_files" {
-                guard let paths = ProfileGuide.knowledgePaths(text) else { return "Each line names one file, for example “- knowledge/services.md”." }
-                if !(1...32).contains(paths.count) || Set(paths).count != paths.count { return "Select 1 to 32 different files." }
+                guard let paths = ProfileGuide.knowledgePaths(text) else { return String(l10n: "Each line names one file, for example “- knowledge/services.md”.") }
+                if !(1...32).contains(paths.count) || Set(paths).count != paths.count { return String(l10n: "Select 1 to 32 different files.") }
                 if let catalog, let missing = paths.first(where: { !catalog.contains($0) }) {
-                    return "\(missing) is not in the knowledge catalog. Clear it before you save."
+                    return String(l10n: "\(missing) is not in the knowledge catalog. Clear it before you save.")
                 }
             }
         }
         // The hub checks every section of the profile, not only this one.
         let input = input(deleting: deleting)
         if let other = input.sections.first(where: { ProfileGuide.key(forTitle: $0.title) != $0.key }) {
-            return "The section “\(other.title)” has the title of another section. The hub cannot save this profile until that title changes."
+            return String(l10n: "The section “\(other.title)” has the title of another section. The hub cannot save this profile until that title changes.")
         }
-        if input.wireSize > ProfileInput.wireLimit { return "The whole profile must stay under 32 KiB. Make this text shorter." }
-        guard input.isValid else { return "Another section of this profile breaks a hub rule. Check the profile file." }
+        if input.wireSize > ProfileInput.wireLimit { return String(l10n: "The whole profile must stay under 32 KiB. Make this text shorter.") }
+        guard input.isValid else { return String(l10n: "Another section of this profile breaks a hub rule. Check the profile file.") }
         return nil
     }
 

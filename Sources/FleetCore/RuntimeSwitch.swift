@@ -21,7 +21,7 @@ public func reasoningName(_ level: String) -> String {
 
 /// The first choice of a model or reasoning menu while the owner chose none: the provider decides. It said "Provider's
 /// own" until the owner, 10 November 2026: "both dropdowns there don't make any sense!! what do they even mean?".
-public let automaticChoice = "Automatic"
+public let automaticChoice = String(l10n: "Automatic")
 
 /// `runtime_switch` of a `GET /ui/team` line: whether the hub can switch this agent to its other provider now. The
 /// hub decides, also for an agent that cannot switch at all (`manager_not_supported`, `runtime_not_supported`, with
@@ -71,7 +71,7 @@ public struct RuntimeSwitch: Decodable, Equatable, Sendable {
     /// The hub's `missing` codes as short facts, in the hub's order. `current`: the agent's runtime now.
     public func reasons(current: String) -> [String] {
         if ready { return [] }
-        if missing.isEmpty { return ["Founderizer cannot tell yet."] }
+        if missing.isEmpty { return [String(l10n: "Founderizer cannot tell yet.")] }
         return missing.map { Self.reason($0, to: to, current: current, busy: busy) }
     }
 
@@ -80,56 +80,57 @@ public struct RuntimeSwitch: Decodable, Equatable, Sendable {
     /// hub." is the fact and the place, in four words.
     public func rowReasons(current: String, machine: String, agent: String) -> [String] {
         if ready { return [] }
-        if missing.isEmpty { return ["Founderizer cannot tell yet."] }
+        if missing.isEmpty { return [String(l10n: "Founderizer cannot tell yet.")] }
         return missing.map { code in
             switch code {
-            case "runtime_not_installed": "Not installed on \(machine)."
-            case "runtime_not_signed_in": "Not signed in on \(machine)."
-            case "runtime_sign_in_unknown": "Sign-in on \(machine) is not known."
+            case "runtime_not_installed": String(l10n: "Not installed on \(machine).")
+            case "runtime_not_signed_in": String(l10n: "Not signed in on \(machine).")
+            case "runtime_sign_in_unknown": String(l10n: "Sign-in on \(machine) is not known.")
             // **What a switch would cost this agent, not what it would do to a word.** "Switching would change this
             // agent's permissions" states a fact, disables the button and offers nothing; the capability is his.
             case "access_not_equivalent":
-                "\(to.map(providerName) ?? "The other provider") cannot do everything \(agent.agentLabel) does."
+                to.map { String(l10n: "\(providerName($0)) cannot do everything \(agent.agentLabel) does.") }
+                    ?? String(l10n: "The other provider cannot do everything \(agent.agentLabel) does.")
             default: Self.reason(code, to: to, current: current, busy: busy)
             }
         }
     }
 
     public static func reason(_ code: String, to: String?, current: String, busy: Busy?) -> String {
-        let name = to.map(providerName) ?? "The other provider"
+        let name = to.map(providerName) ?? String(l10n: "The other provider")
         switch code {
-        case "manager_not_supported": return "Switching the manager is not supported yet."
-        case "runtime_not_supported": return "\(providerName(current)) cannot switch."
-        case "helper_without_runtime_switch": return "Update Founderizer on its server first."
-        case "helper_status_unknown": return "No recent status from Founderizer on its server."
-        case "runtime_not_installed": return "\(name) is not installed."
-        case "runtime_not_signed_in": return "\(name) is not signed in."
-        case "runtime_sign_in_unknown": return "\(name) sign-in is unknown."
-        case "access_not_equivalent": return "\(name) cannot do everything this agent does."
-        case "settings_pending": return "Waiting for its current settings."
-        case "chat_not_bound": return "Link its existing chat first."
-        case "wakeup_rules_depend": return "Pause its code wake-up rules or change their runner first."
-        case "capability_not_supported": return "\(name) cannot give all its capabilities."
+        case "manager_not_supported": return String(l10n: "Switching the manager is not supported yet.")
+        case "runtime_not_supported": return String(l10n: "\(providerName(current)) cannot switch.")
+        case "helper_without_runtime_switch": return String(l10n: "Update Founderizer on its server first.")
+        case "helper_status_unknown": return String(l10n: "No recent status from Founderizer on its server.")
+        case "runtime_not_installed": return String(l10n: "\(name) is not installed.")
+        case "runtime_not_signed_in": return String(l10n: "\(name) is not signed in.")
+        case "runtime_sign_in_unknown": return String(l10n: "\(name) sign-in is unknown.")
+        case "access_not_equivalent": return String(l10n: "\(name) cannot do everything this agent does.")
+        case "settings_pending": return String(l10n: "Waiting for its current settings.")
+        case "chat_not_bound": return String(l10n: "Link its existing chat first.")
+        case "wakeup_rules_depend": return String(l10n: "Pause its code wake-up rules or change their runner first.")
+        case "capability_not_supported": return String(l10n: "\(name) cannot give all its capabilities.")
         case "agent_busy":
             var parts: [String] = []
             if let busy {
                 // The hub names the open tasks and the desktop's task by their numbers (T-90); he reads how many.
                 if !busy.open_tasks.isEmpty {
-                    parts.append(busy.open_tasks.count == 1 ? "1 task open" : "\(busy.open_tasks.count) tasks open")
+                    parts.append(busy.open_tasks.count == 1 ? String(l10n: "1 task open") : String(l10n: "\(busy.open_tasks.count) tasks open"))
                 }
-                if busy.chats_waiting > 0 { parts.append("\(busy.chats_waiting) chat waiting") }
-                if busy.desktop != nil { parts.append("its desktop in use") }
+                if busy.chats_waiting > 0 { parts.append(String(l10n: "\(busy.chats_waiting) chat waiting")) }
+                if busy.desktop != nil { parts.append(String(l10n: "its desktop in use")) }
             }
-            return parts.isEmpty ? "Busy." : "Busy: \(parts.joined(separator: ", "))."
-        default: return "Cannot switch now."
+            return parts.isEmpty ? String(l10n: "Busy.") : String(l10n: "Busy: \(parts.joined(separator: ", ")).")
+        default: return String(l10n: "Cannot switch now.")
         }
     }
 
     /// Why no readiness can be shown, or nil when the hub's readiness decides: a hub without the feature, or a line
     /// without a reading.
     public static func unavailable(offered: Bool, readiness: RuntimeSwitch?) -> String? {
-        if !offered { return "This hub cannot switch providers." }
-        return readiness == nil ? "No switch status yet." : nil
+        if !offered { return String(l10n: "This hub cannot switch providers.") }
+        return readiness == nil ? String(l10n: "No switch status yet.") : nil
     }
 }
 

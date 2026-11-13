@@ -38,12 +38,12 @@ public enum InstallError: LocalizedError, Equatable, Sendable {
         case .cannotStart(let says): return says
         case .step(let title, let says): return "\(title): \(says)"
         case .notRoot(let user): return ServerCheck.notRoot(user)
-        case .timedOut(let title): return "\(title) took too long. The server is still working, or it cannot be reached."
-        case .noClaimCode: return "The installer did not print a link code for this Mac. Read its log on the server."
-        case .noChecklist: return "The server did not answer its checks. Nothing was installed twice."
+        case .timedOut(let title): return String(l10n: "\(title) took too long. The server is still working, or it cannot be reached.")
+        case .noClaimCode: return String(l10n: "The installer did not print a link code for this Mac. Read its log on the server.")
+        case .noChecklist: return String(l10n: "The server did not answer its checks. Nothing was installed twice.")
         case .checkStopped(let says): return says
-        case .needsPassword(.sudo): return "sudo on that server asks for a password."
-        case .needsPassword(.ssh): return "That server takes none of this Mac's SSH keys, and asks for a password."
+        case .needsPassword(.sudo): return String(l10n: "sudo on that server asks for a password.")
+        case .needsPassword(.ssh): return String(l10n: "That server takes none of this Mac's SSH keys, and asks for a password.")
         }
     }
 
@@ -53,16 +53,16 @@ public enum InstallError: LocalizedError, Equatable, Sendable {
     /// the installer's own reason, and else where it stopped. The line keeps the machine's words on its hover. Every
     /// other stop is in this app's own words already. `host` is the server's address as he typed it.
     public func plain(host: String) -> String {
-        guard case .step(let title, let says) = self else { return errorDescription ?? "The install stopped." }
-        let said = says.lowercased(), server = host.isEmpty ? "the server" : host
+        guard case .step(let title, let says) = self else { return errorDescription ?? String(l10n: "The install stopped.") }
+        let said = says.lowercased(), server = host.isEmpty ? String(l10n: "the server") : host
         if let mark = InstallPlan.stopMarks.first(where: says.contains),
            let reason = says.components(separatedBy: mark).last?.trimmingCharacters(in: .whitespaces), !reason.isEmpty {
             return reason.prefix(1).uppercased() + reason.dropFirst()
         }
-        if InstallError.unreached(said) { return ServerCheck.unreached(server) }
+        if InstallError.unreached(said) { return ServerCheck.unreached(server, said: said) }
         if InstallError.keyRefused(said) { return ServerCheck.keyRefused(server) }
         if InstallError.ownWords.contains(says) { return says }
-        return "It stopped at “\(title)”."
+        return String(l10n: "It stopped at “\(title)”.")
     }
 
     /// `ssh`'s own words when it did not reach the server at all, or its status for that (255) with nothing printed.
@@ -81,9 +81,9 @@ public enum InstallError: LocalizedError, Equatable, Sendable {
     }
     /// The lines this app gives a step that failed: already his words.
     static let ownWords = [InstallPlan.hubSystems, InstallPlan.joinSystems,
-                           "It did not answer which user this is.", MachineInstaller.notOnYourNetwork,
+                           String(l10n: "It did not answer which user this is."), MachineInstaller.notOnYourNetwork,
                            NetworkSignIn.notApproved, NetworkSignIn.notStarted,
-                           "The hub refused the link code.", "The join did not reach the checks of this server."]
+                           String(l10n: "The hub refused the link code."), String(l10n: "The join did not reach the checks of this server.")]
 }
 
 /// Installs one Linux machine of a fleet from this Mac, over the owner's own SSH connection (PRODUCT.md P3).
@@ -171,7 +171,7 @@ public actor MachineInstaller {
             let lines = self.lines(of: redact(answer.output))
             lastOutput = redact(answer.output)
             guard answer.status == 0 || lines.contains(where: { $0.contains(VerifyChecklist.readyLine) }) else {
-                throw InstallError.step(step.title, lines.last ?? "The join did not reach the checks of this server.")
+                throw InstallError.step(step.title, lines.last ?? String(l10n: "The join did not reach the checks of this server."))
             }
             return lines
         case .sendAuthKey(let program):
@@ -187,7 +187,7 @@ public actor MachineInstaller {
         case .claim:
             guard let found = ClaimCode.found(in: lastOutput) else { throw InstallError.noClaimCode }
             try await claim(found.code, found.claim)
-            return ["This Mac claimed the hub at \(found.claim.host ?? "")."]
+            return [String(l10n: "This Mac claimed the hub at \(found.claim.host ?? "").")]
         case .verify(let program):
             return try await ssh(program, title: step.title, timeout: 1800, allowFailure: true)
         }
@@ -204,7 +204,7 @@ public actor MachineInstaller {
             let lines = try await ssh("/bin/sh -s", title: step.title, stdin: Data(ServerCheck.script.utf8), timeout: 120,
                                       runs: .login)
             guard let reading = ServerCheck.read(lines.joined(separator: "\n")) else {
-                throw InstallError.step(step.title, "It did not answer which user this is.")
+                throw InstallError.step(step.title, String(l10n: "It did not answer which user this is."))
             }
             if reading.uid != 0 && !plan.target.becomeRoot { throw InstallError.notRoot(plan.target.user) }
             let holds = sudoPassword.map { !$0.isEmpty } ?? false
@@ -322,12 +322,12 @@ public actor MachineInstaller {
     /// The claim of a new hub, from this Mac and from nowhere else: the code on the request body, to the address the
     /// installer printed. The hub takes the address this call comes from as the owner's own (`hubsetup.py`).
     /// The claim's one refusal of this Mac's own: the address is not on the owner's private network, so nothing is sent.
-    public static let notOnYourNetwork = "The installer printed an address that is not on your own network."
+    public static let notOnYourNetwork = String(l10n: "The installer printed an address that is not on your own network.")
 
     public static func sendClaim(code: String, to url: URL) async throws {
         guard url.scheme == "http", let host = url.host, ClaimCode.isPrivateAddress(host),
               url.path == "/claim" else {
-            throw InstallError.step("Claim the hub", notOnYourNetwork)
+            throw InstallError.step(String(l10n: "Claim the hub"), notOnYourNetwork)
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -339,7 +339,7 @@ public actor MachineInstaller {
         let (data, answer) = try await URLSession(configuration: configuration).data(for: request)
         let said = String(decoding: data.prefix(300), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         guard let http = answer as? HTTPURLResponse, http.statusCode == 200 else {
-            throw InstallError.step("Claim the hub", said.isEmpty ? "The hub refused the link code." : said)
+            throw InstallError.step(String(l10n: "Claim the hub"), said.isEmpty ? String(l10n: "The hub refused the link code.") : said)
         }
     }
 }
@@ -348,8 +348,15 @@ extension InstallTarget {
     /// **The server an address names, read through this Mac's own `ssh -G`** (`named(_:options:general:...)`): a
     /// `Host` alias of `~/.ssh/config` gives its hostname, user, port and key, and an address that names no alias stays
     /// as it was typed. `ssh -G` reads the configuration only; it connects to nothing.
-    public static func named(_ address: String, ssh: String = "/usr/bin/ssh", run: ShellRunner = Shell.local) async
-        -> InstallTarget {
+    ///
+    /// **An address that no `Host` block names, typed with no user, takes the alias that gives it as its `HostName`**
+    /// (the report of 13 November 2026: a server chosen from the provider's list was checked as root on port 22, while
+    /// the person reached that same address as `deploy` through an alias of theirs). Its user, port and key are then
+    /// the alias's, as if its name had been typed: an alias with user root first, else the first that the files give.
+    /// An alias that goes through another host (`SSHOptions.proxied`) is not one, because the install's `ssh` goes
+    /// straight to the address. `home` is the folder whose `.ssh/config` is read.
+    public static func named(_ address: String, ssh: String = "/usr/bin/ssh", home: String = NSHomeDirectory(),
+                             run: ShellRunner = Shell.local) async -> InstallTarget {
         let typed = address.trimmingCharacters(in: .whitespaces)
         let host = typed.lastIndex(of: "@").map { String(typed[typed.index(after: $0)...]) } ?? typed
         func options(_ name: String) async -> SSHOptions? {
@@ -358,10 +365,22 @@ extension InstallTarget {
         }
         // A name `ssh` would read as one of its own options never reaches it.
         guard host.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", options: .regularExpression) != nil else {
-            return named(typed, options: nil, localUser: NSUserName(), home: NSHomeDirectory()) { _ in false }
+            return named(typed, options: nil, localUser: NSUserName(), home: home) { _ in false }
         }
-        let mine = await options(host), general = await options("founderizer-\(UUID().uuidString.lowercased()).invalid")
-        return named(typed, options: mine, general: general, localUser: NSUserName(), home: NSHomeDirectory()) {
+        var mine = await options(host)
+        let general = await options("founderizer-\(UUID().uuidString.lowercased()).invalid")
+        if !typed.contains("@"), let found = mine, let general, found.hostname.lowercased() == host.lowercased(),
+           found.user == general.user, found.port == general.port, found.identityFiles == general.identityFiles,
+           !found.proxied {
+            var aliases: [SSHOptions] = []
+            for name in SSHConfig.aliases(of: host, config: URL(fileURLWithPath: home + "/.ssh/config"), home: home) {
+                if let alias = await options(name), alias.hostname.lowercased() == host.lowercased(), !alias.proxied {
+                    aliases.append(alias)
+                }
+            }
+            mine = aliases.first { $0.user == "root" } ?? aliases.first ?? mine
+        }
+        return named(typed, options: mine, general: general, localUser: NSUserName(), home: home) {
             FileManager.default.fileExists(atPath: $0)
         }
     }

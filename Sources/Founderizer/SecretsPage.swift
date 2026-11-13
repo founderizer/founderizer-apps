@@ -165,7 +165,7 @@ struct SecretsPage: View {
         Group {
             if agent == nil { CentralVaultSection(store: store, model: vault) }
             if !offered {
-                FormSection(grouped ? "Secrets" : nil) {
+                FormSection(grouped ? String(l10n: "Secrets") : nil) {
                     FormEmpty(store.state?.ui_features?.contains(SecretEntryView.feature) == true
                               ? "Update the hub to add and share secrets here." : "This hub does not list its secrets yet.", symbol: "key")
                 }
@@ -174,15 +174,15 @@ struct SecretsPage: View {
                 // **Not while the window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item 33:
                 // an outage is said once): an agent's group keeps its heading alone, as while it reads.
                 if !store.hubNoticeShows {
-                    FormSection(grouped ? "Secrets" : nil) {
-                        FormRow("Founderizer cannot read the secrets now.", detail: "It reads again when the hub answers.")
+                    FormSection(grouped ? String(l10n: "Secrets") : nil) {
+                        FormRow("Founderizer cannot read the secrets now.", detail: String(l10n: "It reads again when the hub answers."))
                     }
                 } else if grouped {
                     FormSection("Secrets") { EmptyView() }
                 }
             } else {
                 if grouped { FormSection("Secrets") { EmptyView() } }
-                LoadingLine("Reading the secrets…")
+                LoadingLine(String(l10n: "Reading the secrets…"))
             }
         }
     }
@@ -197,7 +197,9 @@ struct SecretsPage: View {
         } else if !added.isEmpty {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "checkmark.circle").foregroundStyle(.green)
-                Text("\(added.map { "“\($0.value.name)”" }.joined(separator: ", ")) \(added.count == 1 ? "is" : "are") in the list.")
+                // One sentence for each count, so that each language says it in its own grammar.
+                let names = added.map { String(l10n: "“\($0.value.name)”") }.joined(separator: ", ")
+                Text(added.count == 1 ? "\(names) is in the list." : "\(names) are in the list.")
                     .fixedSize(horizontal: false, vertical: true)
             }.font(FormMetrics.text).foregroundStyle(FleetStyle.text).accessibilityIdentifier("secret-added")
         }
@@ -207,7 +209,7 @@ struct SecretsPage: View {
             // No line under the list about what a click does: the row's own ⓘ says it, as on Apps. As a group of an
             // agent's Can use, the empty card when the agent has none, and the + that gives it one more (the owner's
             // yes of 3 November 2026).
-            FormSection(grouped ? "Secrets" : nil) {
+            FormSection(grouped ? String(l10n: "Secrets") : nil) {
                 if entries.isEmpty { FormEmpty(grouped ? "No secrets" : "No secrets yet", symbol: "key") }
                 ForEach(entries, id: \.key) { entry in
                     row(entry.key, entry.value, reading: reading, isNew: added.contains { $0.key == entry.key })
@@ -237,7 +239,7 @@ struct SecretsPage: View {
             let open = reading.catalog.filter { !reading.holders($0.key, $0.value, agents: agents).contains(agent) }
                 .sorted { ($0.value.name.lowercased(), $0.key) < ($1.value.name.lowercased(), $1.key) }
             if !open.isEmpty {
-                let words = "Give \(agent.agentLabel) a secret"
+                let words = String(l10n: "Give \(agent.agentLabel) a secret")
                 FleetSelect(words, options: open.map { FleetOption($0.key, $0.value.name,
                                                                    mark: .symbol($0.value.isAPIKey ? "key.horizontal" : "person.badge.key")) }) { reference in
                     guard let entry = reading.catalog[reference] else { return }
@@ -270,22 +272,30 @@ struct SecretsPage: View {
         }
     }
 
-    /// One secret: its kind as a mark, its name, its kind and the agents that have it. A click opens its detail.
+    /// One secret: its kind as a mark, its name and the agents that have it. A click opens its detail. **The kind is its
+    /// mark's, and on an agent's own list the agent is the page's** (the owner, 13 November 2026, of the import's list:
+    /// "review all other pages for the same issues!!"): "API key ·" on every row, and the agent's own name on every row of
+    /// its list, told nothing. There the line names the other agents that have it, and a secret of this agent alone has
+    /// one line.
     private func row(_ reference: String, _ entry: TeamLogin, reading: LoginReading, isNew: Bool) -> some View {
-        let summary = "\(entry.isAPIKey ? "API key" : "Login") · \(agentWords(reading.holders(reference, entry, agents: agents)))"
+        let kind = entry.isAPIKey ? String(l10n: "API key") : String(l10n: "Login")
+        let holders = reading.holders(reference, entry, agents: agents)
+        let others = agent.map { mine in holders.filter { $0 != mine } } ?? holders
+        let summary: String? = agent != nil && others.isEmpty ? nil : agentWords(others)
         return Button { note = nil; shown = ShownSecret(id: reference) } label: {
             HStack(spacing: 12) {
                 IconTile(symbol: entry.isAPIKey ? "key.horizontal" : "person.badge.key")
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 7) {
+                        // Cut in the middle: the names of one project share their start, and the end tells them apart.
                         Text(entry.name).font(entry.isAPIKey ? FormMetrics.title.monospaced() : FormMetrics.title)
-                            .foregroundStyle(FleetStyle.text).lineLimit(1)
+                            .foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle)
                         if isNew {
                             Text("New").font(FormMetrics.detailTitle).padding(.horizontal, 6).padding(.vertical, 1.5)
                                 .background(Color.green.opacity(0.2), in: Capsule())
                         }
                     }
-                    Text(summary).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
+                    if let summary { Text(summary).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1) }
                 }.padding(.vertical, 10)
                 Spacer(minLength: 12)
                 // Who may give it, only where the fleet manager may: the same word as on MCPs and Apps.
@@ -296,11 +306,11 @@ struct SecretsPage: View {
                 } else {
                     Color.clear.frame(width: IconMetrics.side, height: IconMetrics.side)
                 }
-            }.padding(.horizontal, FormMetrics.rowInset).frame(minHeight: FormMetrics.twoLineRow)
+            }.padding(.horizontal, FormMetrics.rowInset).frame(minHeight: summary == nil ? FormMetrics.row : FormMetrics.twoLineRow)
         }
         .buttonStyle(FleetRowButtonStyle())
-        .help("Show which agents can use \(entry.name)")
-        .accessibilityLabel(([entry.name, summary] + [managerLevel(reference).map { "Manager may give: \($0)" }].compactMap { $0 })
+        .help("\(kind): show which agents can use \(entry.name)")
+        .accessibilityLabel(([entry.name, kind, summary] + [managerLevel(reference).map { String(l10n: "Manager may give: \($0)") }]).compactMap { $0 }
             .joined(separator: ", "))
         .accessibilityHint("Shows its detail")
         .accessibilityIdentifier("secret-\(reference)")
@@ -317,7 +327,7 @@ struct SecretsPage: View {
         if working == "\(reference) \(agent)" {
             ProgressView().controlSize(.small).frame(width: IconMetrics.side, height: IconMetrics.side)
         } else if entry.grants?[agent] != nil {
-            IconButton(symbol: "minus", words: "Take \(entry.name) back from \(name)") {
+            IconButton(symbol: "minus", words: String(l10n: "Take \(entry.name) back from \(name)")) {
                 Task { await setGrant(nil, agent: agent, reference: reference, entry: entry) }
             }
             .disabled(!canChange)
@@ -340,8 +350,8 @@ struct SecretsPage: View {
                         .lineLimit(1).truncationMode(.middle).textSelection(.enabled).accessibilityAddTraits(.isHeader)
                     HStack(spacing: 4) {
                         Text(entry?.isAPIKey == true ? "API key" : "Login").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                        MessageAction(symbol: copied == reference ? "checkmark" : "square.on.square", label: "Copy the reference",
-                                      help: "Copy its reference, \(reference)", height: 16) { copyMessage(reference); copied = reference }
+                        MessageAction(symbol: copied == reference ? "checkmark" : "square.on.square", label: String(l10n: "Copy the reference"),
+                                      help: String(l10n: "Copy its reference, \(reference)"), height: 16) { copyMessage(reference); copied = reference }
                             .foregroundStyle(FleetStyle.muted)
                     }
                 }
@@ -352,8 +362,8 @@ struct SecretsPage: View {
             if let entry, let reading {
                 let holders = reading.holders(reference, entry, agents: agents)
                 FormSection("Available to", footer: entry.isAPIKey
-                            ? "Agents use the key without seeing it. With Reads it, the key is in the agent's sessions."
-                            : "Agents sign in with it. They never see the password.") {
+                            ? String(l10n: "Agents use the key without seeing it. With Reads it, the key is in the agent's sessions.")
+                            : String(l10n: "Agents sign in with it. They never see the password.")) {
                     ForEach(agents, id: \.self) { access($0, reference: reference, entry: entry, reading: reading) }
                 }
                 if let resources, let resource = resources.resource(Self.resourceID(reference)),
@@ -397,7 +407,7 @@ struct SecretsPage: View {
         let grant = entry.grants?[agent].flatMap(SecretGrant.init(rawValue:))
         let listed = reading.listed?[reference]?.contains(agent) == true
         let name = agent.agentLabel, busy = working == "\(reference) \(agent)"
-        let words = grant == .read ? "Reads it in its sessions" : grant == .use ? "Can use it" : listed ? "Can use it (its profile)" : "No access"
+        let words = grant == .read ? String(l10n: "Reads it in its sessions") : grant == .use ? String(l10n: "Can use it") : listed ? String(l10n: "Can use it (its profile)") : String(l10n: "No access")
         // **The glyph in the one mark column** (margins row 9): its name begins where "Who may give it" and every row
         // title of the card begins, 50 points in. A 16-point glyph and 10 of spacing put it 8 points to the left.
         return HStack(spacing: 0) {
@@ -433,8 +443,8 @@ struct SecretsPage: View {
                            grant: SecretGrant?) -> some View {
         let reads = grant == .read
         let rows = [
-            FleetOption(SecretChoice.use, "Uses it", subtitle: "\(name) uses the key and never sees it.", mark: .symbol("lock")),
-            FleetOption(SecretChoice.read, "Reads it", subtitle: "The key is in its sessions as $\(entry.name). \(name) can copy it.",
+            FleetOption(SecretChoice.use, "Uses it", subtitle: String(l10n: "\(name) uses the key and never sees it."), mark: .symbol("lock")),
+            FleetOption(SecretChoice.read, "Reads it", subtitle: String(l10n: "The key is in its sessions as $\(entry.name). \(name) can copy it."),
                         mark: .symbol("eye")),
             FleetOption(SecretChoice.none, "Take it back", mark: .symbol("slash.circle")),
         ]
@@ -442,7 +452,7 @@ struct SecretsPage: View {
             let next: SecretGrant? = choice == .read ? .read : choice == .use ? .use : nil
             Task { await setGrant(next, agent: agent, reference: reference, entry: entry) }
         } label: {
-            FleetSelectLabel(title: reads ? "Reads it" : "Uses it", mark: .symbol(reads ? "eye" : "lock"))
+            FleetSelectLabel(title: reads ? String(l10n: "Reads it") : String(l10n: "Uses it"), mark: .symbol(reads ? "eye" : "lock"))
         }.disabled(!canChange)
     }
 
@@ -481,7 +491,7 @@ struct SecretsPage: View {
 
     // MARK: changes
 
-    private static func text(_ error: Error) -> String { (error as? LocalizedError)?.errorDescription ?? "The hub did not answer." }
+    private static func text(_ error: Error) -> String { (error as? LocalizedError)?.errorDescription ?? String(l10n: "The hub did not answer.") }
 
     /// One click: the grant of one secret to one agent, or its end. The hub commits it at once.
     private func setGrant(_ grant: SecretGrant?, agent: String, reference: String, entry: TeamLogin) async {
@@ -504,7 +514,7 @@ struct SecretsPage: View {
             return Self.note(receipt, entry: entry)
         } catch {
             await read()
-            return ("Founderizer could not change this for \(agent.agentLabel). \(Self.text(error))", true)
+            return (String(l10n: "Founderizer could not change this for \(agent.agentLabel). \(Self.text(error))"), true)
         }
     }
 
@@ -512,12 +522,12 @@ struct SecretsPage: View {
     private static func note(_ receipt: SecretGrantReceipt, entry: TeamLogin) -> (text: String, warning: Bool)? {
         let name = receipt.agent.agentLabel
         if let vault = receipt.vault {
-            if vault.after == "broker" { return ("\(name) uses its server's vault now.", false) }
+            if vault.after == "broker" { return (String(l10n: "\(name) uses its server's vault now."), false) }
             let reasons = (vault.missing ?? []).map(VaultAccessControl.reason).joined(separator: " ")
-            return ("\(name) has it, but it has no vault access yet, so it cannot use it now. \(reasons)", true)
+            return (String(l10n: "\(name) has it, but it has no vault access yet, so it cannot use it now. \(reasons)"), true)
         }
         if receipt.grant == SecretGrant.read.rawValue && receipt.changed {
-            return ("\(name) reads $\(entry.name) in its sessions from their next start.", false)
+            return (String(l10n: "\(name) reads $\(entry.name) in its sessions from their next start."), false)
         }
         return nil
     }
@@ -549,12 +559,11 @@ struct SecretsPage: View {
             if standing == .ownerOnly { try await GrantSigning.pool(false, login: reference, store: store, hub: hub, database: database) }
             await read()
             if receipt.changed, case .grantable(let max, let to) = standing, let resources {
-                note = (reference, "The fleet manager may give \(entry.name) to \(resources.audienceWords(to)), "
-                        + "at most \(max).", false)
+                note = (reference, String(l10n: "The fleet manager may give \(entry.name) to \(resources.audienceWords(to)), at most \(max)."), false)
             }
         } catch {
             await read()
-            note = (reference, "Founderizer could not change this. \(Self.text(error))", true)
+            note = (reference, String(l10n: "Founderizer could not change this. \(Self.text(error))"), true)
         }
     }
 
@@ -568,9 +577,9 @@ struct SecretsPage: View {
         do {
             _ = try await HubClient().removeLogin(hub: hub, database: database, client: client, sha256: sha256, login: reference)
             shown = nil; before = nil
-            removed = "Removed “\(entry.name)” from Founderizer. Its value stays in the vaults."
+            removed = String(l10n: "Removed “\(entry.name)” from Founderizer. Its value stays in the vaults.")
             await read()
-        } catch { note = (reference, "Founderizer could not remove it. \(Self.text(error))", true) }
+        } catch { note = (reference, String(l10n: "Founderizer could not remove it. \(Self.text(error))"), true) }
     }
 
     // MARK: reading

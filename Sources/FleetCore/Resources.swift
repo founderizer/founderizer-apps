@@ -51,9 +51,11 @@ public struct ResourceGrantRecord: Decodable, Identifiable, Equatable, Sendable 
 
     /// The line the owner reads: "Manager gave dev write" or "You took it back from dev".
     public var words: String {
-        let who = by == "owner" ? "You" : by.agentLabel
-        return level == nil ? "\(who) took it back from \(agent.agentLabel)"
-            : "\(who) gave \(agent.agentLabel) \(level ?? "")"
+        let you = by == "owner", who = by.agentLabel, to = agent.agentLabel
+        guard let level else {
+            return you ? String(l10n: "You took it back from \(to)") : String(l10n: "\(who) took it back from \(to)")
+        }
+        return you ? String(l10n: "You gave \(to) \(level)") : String(l10n: "\(who) gave \(to) \(level)")
     }
 }
 
@@ -254,7 +256,7 @@ public struct ResourceList: Decodable, Sendable {
     /// One audience in the owner's words. The hub keeps exactly one, every worker and lead, since the project
     /// concept went; anything else is shown as the hub wrote it, never dressed up as something this app invented.
     public func audienceWords(_ to: String) -> String {
-        to == Self.everyone ? "every worker and lead" : to
+        to == Self.everyone ? String(l10n: "every worker and lead") : to
     }
     public func resource(_ id: String) -> FleetResource? { resources.first { $0.id == id } }
 

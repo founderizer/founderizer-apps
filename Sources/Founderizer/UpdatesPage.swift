@@ -79,7 +79,7 @@ final class UpdatesModel {
             try await call(HubClient(), store.hub, database)
             await read(store: store)
         } catch let HubError.refusal(_, words) { error = words }
-        catch { self.error = "The hub has not answered. Try again." }
+        catch { self.error = String(l10n: "The hub has not answered. Try again.") }
     }
 }
 
@@ -164,10 +164,10 @@ private struct ReleasesSection: View {
                     // while the window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item 33):
                     // it is said once, over the page.
                     if !store.hubNoticeShows {
-                        FormSection { FormRow("Founderizer cannot read the updates now.", detail: "It reads again when the hub answers.") }
+                        FormSection { FormRow("Founderizer cannot read the updates now.", detail: String(l10n: "It reads again when the hub answers.")) }
                     }
                 } else {
-                    LoadingLine("Reading the updates…")
+                    LoadingLine(String(l10n: "Reading the updates…"))
                 }
             }
         } actions: {
@@ -177,7 +177,7 @@ private struct ReleasesSection: View {
                 // word in the header, where a spinner stood (a second look of waiting). One that answers sooner
                 // shows nothing, and so do the check the page makes by itself, an update and a run: their rows say
                 // what goes on.
-                if checking { LoadingLine("Checking…").fixedSize() }
+                if checking { LoadingLine(String(l10n: "Checking…")).fixedSize() }
                 // **A button that names what it does.** It was a refresh mark with these words behind it, because
                 // "Check again" named no object (19 October 2026); the mark then read as a refresh of the page and
                 // nothing more (24 October 2026: "The button to Install update or check for Updates should be
@@ -270,7 +270,7 @@ private struct ReleasesSection: View {
                         .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 } else if reserve {
                     // The room is kept from the first frame: a held line is nothing before its second.
-                    Color.clear.frame(height: 15).overlay(alignment: .leading) { Held { ShimmeringWords(text: "Checking…") } }
+                    Color.clear.frame(height: 15).overlay(alignment: .leading) { Held { ShimmeringWords(text: String(l10n: "Checking…")) } }
                 }
             }.padding(.vertical, 10)
             Spacer(minLength: 16)

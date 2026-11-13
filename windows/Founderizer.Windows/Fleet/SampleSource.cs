@@ -22,7 +22,7 @@ namespace Founderizer.Windows.Fleet;
 /// For the pictures and the readings only: FOUNDERIZER_SAMPLE_ASK adds one message of his to Customer Support's chat,
 /// a minute before the clock, which the agent works on (picture 2); FOUNDERIZER_READING=long-chat gives Customer
 /// Support a chat of 2,000 messages and replies.</summary>
-public sealed class SampleSource : IFleetSource
+public sealed partial class SampleSource : IFleetSource
 {
     /// <summary>The messages and replies of the long chat of the scroll reading.</summary>
     public const int LongChat = 2000;
@@ -53,6 +53,7 @@ public sealed class SampleSource : IFleetSource
         chats = Chats();
         tasks = Tasks();
         state = Read(DateTimeOffset.UtcNow);
+        NotifyLater();
         // A reading of rule 6 (app/windows/vm/README.md, "Readings"): the sample changes one line every 3 seconds, and
         // the window logs the time from each change to its frame. Off unless the reading asks for it.
         if (Proofs.Variable("FOUNDERIZER_READING") == "changes")
@@ -98,19 +99,43 @@ public sealed class SampleSource : IFleetSource
         Renew();
     }
 
-    public Task SendMessageAsync(string agent) => Task.CompletedTask;
+    public Task<string?> SendMessageAsync(string agent) => Task.FromResult<string?>(null);
 
-    public Task AnswerAsync(long need) => Task.CompletedTask;
+    public Task<string?> AnswerAsync(long need) => Task.FromResult<string?>(null);
+
+    public Task<string?> TickAsync(long need, IReadOnlyCollection<int> choices) => Task.FromResult<string?>(null);
 
     public void Press(long need, int choice) { }
 
-    public Task ControlAsync(long task, TaskControl action) => Task.CompletedTask;
+    public Task<string?> ControlAsync(long task, TaskControl action) => Task.FromResult<string?>(null);
 
-    public Task GuideAsync(long task, string text) => Task.CompletedTask;
+    public Task<string?> GuideAsync(long task, string text) => Task.FromResult<string?>(null);
 
-    public Task<string?> ConnectAsync(string address) => Task.FromResult<string?>(null);
+    public Task RefreshAsync() => Task.CompletedTask;
 
-    public Task<string?> EnrollAsync(string code) => Task.FromResult<string?>(null);
+    public Task RetryAsync() => Task.CompletedTask;
+
+    public void DiscardRefused() { }
+
+    public Task<string?> AddFileAsync(string composer, string name, byte[] bytes, string? mime) => Task.FromResult<string?>(null);
+
+    public Task<string?> UploadAsync(string composer, Guid file) => Task.FromResult<string?>(null);
+
+    public void RemoveFile(string composer, Guid file) { }
+
+    public Task<byte[]> FileAsync(MessageAttachment file) => Task.FromResult(SampleFile(file));
+
+    /// <summary>The sample notifies only in the state of picture 10 (SampleStates.cs).</summary>
+    public event EventHandler<IReadOnlyList<Notice>>? Notified;
+
+    public Task<string?> ConnectAsync(string address)
+    {
+        var refused = Connect(address);
+        Renew();
+        return Task.FromResult(refused);
+    }
+
+    public Task<string?> EnrollAsync(string code) => Task.FromResult(EnrollWords());
 
     public string? ForgetKey() => null;
 
@@ -130,7 +155,7 @@ public sealed class SampleSource : IFleetSource
     }
 
     /// <summary>A whole new state, read at <paramref name="at"/>.</summary>
-    private StoreState Read(DateTimeOffset at) => new()
+    private StoreState Read(DateTimeOffset at) => Picture(new()
     {
         Version = ++version,
         // The Mac's example address and this PC's line as Settings shows them (picture 6), with an example address of
@@ -147,7 +172,7 @@ public sealed class SampleSource : IFleetSource
         TaskPages = tasks,
         Drafts = drafts,
         AnswerDrafts = answerDrafts,
-    };
+    }, at);
 
     private void Renew()
     {
@@ -167,6 +192,7 @@ public sealed class SampleSource : IFleetSource
                 agent["last"] = new JsonObject { ["preview"] = ask, ["side"] = "owner", ["ts"] = now - 60 };
             }
         }
+        PictureMobile(mobile);
         change?.Invoke(mobile);
         return Encoding.UTF8.GetBytes(mobile.ToJsonString());
     }
@@ -184,6 +210,7 @@ public sealed class SampleSource : IFleetSource
                 foreach (var item in LongItems()) items.Add(item);
             }
             if (agent == "wren" && ask is not null) items.Add(Message("00000000-0000-0000-0000-0000000000a1", ask, now - 60));
+            PictureChat(agent, chat);
             var page = HubDecode.ChatPage(Encoding.UTF8.GetBytes(chat.ToJsonString()), "sample", agent);
             pages[agent] = new ChatPageState { Agent = agent, Items = ValueList.Of(page.Items) };
         }
@@ -196,7 +223,9 @@ public sealed class SampleSource : IFleetSource
         foreach (var (key, node) in all["tasks"]!.AsObject())
         {
             long id = long.Parse(key, CultureInfo.InvariantCulture);
-            var page = HubDecode.TaskPage(Encoding.UTF8.GetBytes(Timed(node!.DeepClone(), now)!.ToJsonString()), "sample", id);
+            var timed = Timed(node!.DeepClone(), now)!.AsObject();
+            PictureTask(id, timed);
+            var page = HubDecode.TaskPage(Encoding.UTF8.GetBytes(timed.ToJsonString()), "sample", id);
             pages[id] = new TaskPageState
             {
                 Task = page.Task,

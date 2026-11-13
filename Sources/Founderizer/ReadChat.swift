@@ -219,7 +219,7 @@ struct ReadBubble: View {
     private var footer: some View {
         HStack(spacing: 10) {
             if message.ours { time }
-            MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: "Copy message") {
+            MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: String(l10n: "Copy message")) {
                 copyMessage(message.text); copied = true
             }
             if !message.ours { time }

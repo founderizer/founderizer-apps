@@ -13,16 +13,17 @@ public enum AgentRemoval {
     }
 
     /// The confirmation's question.
-    public static func question(_ agent: String) -> String { "Delete \(People.agentWord(agent))?" }
+    public static func question(_ agent: String) -> String { String(l10n: "Delete \(People.agentWord(agent))?") }
 
     /// The confirmation's one line: what goes on its server, and which agents there stay. nil for an agent that no
     /// server lists, which has nothing there to go.
     public static func line(_ agent: String, in list: ServerList?) -> String? {
         guard let server = list?.server(of: agent) else { return nil }
-        let first = "Its account and files on \(server.name) go too."
+        let first = String(l10n: "Its account and files on \(server.name) go too.")
         let others = server.agents.filter { $0 != agent }
         guard !others.isEmpty else { return first }
-        return "\(first) \(People.agentWords(others)) \(others.count == 1 ? "stays" : "stay")."
+        return others.count == 1 ? String(l10n: "\(first) \(People.agentWords(others)) stays.")
+            : String(l10n: "\(first) \(People.agentWords(others)) stay.")
     }
 }
 

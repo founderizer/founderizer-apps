@@ -18,54 +18,52 @@ public struct HubReach: Equatable, Sendable {
 
     /// The owner's words for one failed read of a hub.
     public static func words(_ error: Error, hub: URL?) -> HubReach {
-        let at = hub.map { " at \(address(of: $0))" } ?? ""
+        let at = hub.map { String(l10n: " at \(address(of: $0))") } ?? ""
         if let refusal = error as? HubError {
             switch refusal {
             case .invalidAddress:
-                return HubReach(says: "That is not a hub address.",
-                                next: "An address looks like http://100.84.1.2:8765 — the private address of your "
-                                    + "hub, and its port.")
+                return HubReach(says: String(l10n: "That is not a hub address."),
+                                next: String(l10n: "An address looks like http://100.84.1.2:8765 — the private address of your hub, and its port."))
             case .refusal(let status, _) where status == 403:
                 // Never the hub's own words in brackets (fix round 3, item 50): "(owner only)" ended this line.
-                return HubReach(says: "Your hub answered\(at), and it does not serve its pages to this Mac.",
-                                next: "A hub serves the owner's own address only. Claim it from this Mac, or add "
-                                    + "this Mac to the same private network.")
+                return HubReach(says: String(l10n: "Your hub answered\(at), and it does not serve its pages to this Mac."),
+                                next: String(l10n: "A hub serves the owner's own address only. Claim it from this Mac, or add this Mac to the same private network."))
             case .refusal(let status, _) where status == 404:
-                return HubReach(says: "Something answered\(at), but it is not a Founderizer hub.",
-                                next: "Check the address and the port.")
+                return HubReach(says: String(l10n: "Something answered\(at), but it is not a Founderizer hub."),
+                                next: String(l10n: "Check the address and the port."))
             case .refusal(_, let message):
                 // No status code in a line of his (review B8, fix round 2): "(503)" said nothing to him.
-                return HubReach(says: "Your hub refused this read.", next: message)
+                return HubReach(says: String(l10n: "Your hub refused this read."), next: message)
             case .invalidResponse:
-                return HubReach(says: "Your hub answered something this app could not read.",
-                                next: "It may run an older Founderizer. Update it from Updates on its own server.")
+                return HubReach(says: String(l10n: "Your hub answered something this app could not read."),
+                                next: String(l10n: "It may run an older Founderizer. Update it from Updates on its own server."))
             case .unavailable:
                 // The address is on System status, where he can change it: an error line says what failed, in a
                 // few plain words, and no host or port (the owner's "avoid as much text as possible").
-                return HubReach(says: "Your hub did not answer.", next: nil)
+                return HubReach(says: String(l10n: "Your hub did not answer."), next: nil)
             }
         }
         let reason = error as? URLError
         switch reason?.code {
         case .some(.appTransportSecurityRequiresSecureConnection):
-            return HubReach(says: "This Mac refused to open a plain connection to your hub\(at).",
-                            next: "This is a setting of this app, not of your hub. Tell us, and we will put it right.")
+            return HubReach(says: String(l10n: "This Mac refused to open a plain connection to your hub\(at)."),
+                            next: String(l10n: "This is a setting of this app, not of your hub. Tell us, and we will put it right."))
         case .some(.cannotFindHost), .some(.dnsLookupFailed):
-            return HubReach(says: "This Mac cannot find your hub\(at).",
-                            next: "Check the address, and that this Mac is on the same private network.")
+            return HubReach(says: String(l10n: "This Mac cannot find your hub\(at)."),
+                            next: String(l10n: "Check the address, and that this Mac is on the same private network."))
         case .some(.cannotConnectToHost), .some(.networkConnectionLost):
-            return HubReach(says: "Your hub did not answer.", next: "Check that its server is on.")
+            return HubReach(says: String(l10n: "Your hub did not answer."), next: String(l10n: "Check that its server is on."))
         case .some(.notConnectedToInternet):
-            return HubReach(says: "This Mac has no network.", next: "Connect it, and this app reads again by itself.")
+            return HubReach(says: String(l10n: "This Mac has no network."), next: String(l10n: "Connect it, and this app reads again by itself."))
         case .some(.timedOut):
-            return HubReach(says: "Your hub took too long to answer\(at).",
-                            next: "It may be busy or asleep. This app reads again by itself.")
+            return HubReach(says: String(l10n: "Your hub took too long to answer\(at)."),
+                            next: String(l10n: "It may be busy or asleep. This app reads again by itself."))
         case .some(.secureConnectionFailed), .some(.serverCertificateUntrusted):
-            return HubReach(says: "The connection to your hub could not be secured\(at).",
-                            next: "Check the address: a hub on your own private network is plain http.")
+            return HubReach(says: String(l10n: "The connection to your hub could not be secured\(at)."),
+                            next: String(l10n: "Check the address: a hub on your own private network is plain http."))
         default:
-            return HubReach(says: "This Mac could not read your hub\(at).",
-                            next: "Check that the server is on, and that this Mac is on the same private network.")
+            return HubReach(says: String(l10n: "This Mac could not read your hub\(at)."),
+                            next: String(l10n: "Check that the server is on, and that this Mac is on the same private network."))
         }
     }
 
@@ -97,7 +95,7 @@ public struct HubReach: Equatable, Sendable {
     /// **The same line without " at host:port"** (T-18, fix round 2): on the first run's claim and address steps the
     /// address is the one he just pasted, and saying it again only made the line longer.
     public static func withoutAddress(_ line: String, hub: URL) -> String {
-        line.replacingOccurrences(of: " at \(address(of: hub))", with: "")
+        line.replacingOccurrences(of: String(l10n: " at \(address(of: hub))"), with: "")
     }
 
     /// **One short break says nothing** (the owner, 27 October 2026: "show the connection notice only after several

@@ -400,16 +400,11 @@ struct NeedsBoard: View {
     }
 }
 
-/// **What he left open in one request, while the page shows**: Details, Discuss, and the words of his next message in
-/// it. They were the step's own, so a look at another request and back closed Details and lost a question that he was
-/// writing.
+/// **What he left open in one request, while the page shows**: Details. It was the step's own, so a look at another
+/// request and back closed Details.
 struct StepMemory: Equatable {
     /// Details, or the whole of a long reason, shows.
     var expanded = false
-    /// Owner feature `need_talk` (API 1.106): Discuss is open.
-    var discussing = false
-    /// The words of his next message in the discussion.
-    var talk = ""
 }
 
 /// **The keys of the request at hand, which its answer box gives the page.** The page has one watch on the window's
@@ -538,8 +533,9 @@ private struct NeedCard: View {
 /// **The request at hand, in the big layout of a setup step** (the owner, 11 November 2026: "I really like the big
 /// layout for the decision at hand"): the glyph of the agent that asks, its name and when it asked, the request's title
 /// at the step's 22 points, the reason at its 15, and under them what he answers with — the agent's options, Your
-/// answer, or the secure form of a key or a login. Details opens the long part. Discuss, a quiet link under the
-/// answers, opens his discussion of the request with the manager.
+/// answer, or the secure form of a key or a login. Details opens the long part. Your answer is also his reply when he
+/// asks something back (the owner, 13 November 2026: "lets use the free-type text input as the general reply too, so
+/// we can remove the discuss option completely"): the manager answers it with a new request.
 ///
 /// **Its words are drawn as a message's are** (`MessageText`): a link is a link and code is code. They were plain
 /// text, so a request showed its backticks and an address that he could not press.
@@ -580,10 +576,6 @@ private struct NeedStep: View {
     /// item from before the rule, shows its first three lines until Show all.
     private var short: Bool { need.details != nil || need.why.count <= NeedTalk.why }
     private var hasMore: Bool { need.details != nil || !short || !todo.isEmpty }
-    /// Discuss, apart from his answer: an open item that is no conversation's question, on a hub that takes it.
-    private var discussable: Bool {
-        !ended && need.conversation == nil && store.state?.ui_features?.contains(NeedTalk.feature) == true
-    }
     /// A reason of one paragraph stands in the middle, as a step's line does; a list or several paragraphs read from
     /// their leading edge.
     private var centred: Bool {
@@ -669,7 +661,7 @@ private struct NeedStep: View {
         .multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// What he answers with, and Discuss under it; for a request that ended, what he answered.
+    /// What he answers with; for a request that ended, what he answered.
     private var answers: some View {
         VStack(spacing: 18) {
             if ended {
@@ -689,14 +681,6 @@ private struct NeedStep: View {
                 .transition(.opacity)
                 // Owner feature attachments: a file dropped on an open request is staged in its answer.
                 .stageDroppedFiles(store: store, composer: need.takesFiles ? FleetStore.stageKey(need: need.id) : nil, mark: true)
-                if discussable {
-                    if memory.discussing || !(need.talk ?? []).isEmpty {
-                        NeedDiscussion(store: store, need: need, draft: $memory.talk)
-                    } else {
-                        SetupLink("Discuss") { memory.discussing = true }.accessibilityIdentifier("need-discuss-\(need.id)")
-                            .transition(.opacity)
-                    }
-                }
             }
         }
         // Only the answer that settles moves: a request that ended in another way changes in one step, as before.

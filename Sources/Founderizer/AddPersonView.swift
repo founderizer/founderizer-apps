@@ -76,12 +76,13 @@ struct AddPersonView: View {
     /// The name of the page he is on. Each one says what it asks, so no page needs a line to explain itself.
     private var title: String {
         switch page {
-        case .who: "Add person"
-        case .note: "What should \(reader) know about \(who)?"
-        case .role: "What is \(who) to you?"
-        case .agents: "Who can \(who) talk to?"
-        case .places: "Where does \(who) write from?"
-        case .handle: draft.app == "whatsapp" ? "\(who)'s phone number" : "\(who)'s Discord user ID"
+        case .who: String(l10n: "Add person")
+        case .note: agent == nil ? String(l10n: "What should your agents know about \(who)?")
+            : String(l10n: "What should \(reader) know about \(who)?")
+        case .role: String(l10n: "What is \(who) to you?")
+        case .agents: String(l10n: "Who can \(who) talk to?")
+        case .places: String(l10n: "Where does \(who) write from?")
+        case .handle: draft.app == "whatsapp" ? String(l10n: "\(who)'s phone number") : String(l10n: "\(who)'s Discord user ID")
         }
     }
 
@@ -129,7 +130,7 @@ struct AddPersonView: View {
 
     private var whoPage: some View {
         SetupStep(title: title) { mark } content: {
-            SetupField(placeholder: "Their name", text: $input.name, wrong: !input.name.isEmpty && nameProblem != nil) {
+            SetupField(placeholder: String(l10n: "Their name"), text: $input.name, wrong: !input.name.isEmpty && nameProblem != nil) {
                 if nameProblem == nil { step(from: .who) }
             }.accessibilityIdentifier("new-person-name")
             if !input.name.isEmpty, let why = nameProblem {
@@ -219,9 +220,12 @@ struct AddPersonView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 12)], spacing: 12) {
                 ForEach(agents) { one in agentTile(one) }
             }
-            Button("Continue") { step(from: .agents) }
-                .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier("add-person-agents-on")
+            // A fleet of many agents scrolls: Continue stays in view (`SetupAction`).
+            SetupAction {
+                Button("Continue") { step(from: .agents) }
+                    .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("add-person-agents-on")
+            }
         }
     }
 
@@ -257,7 +261,7 @@ struct AddPersonView: View {
         .buttonStyle(FleetCardButtonStyle())
         .help(why ?? "")
         .accessibilityLabel(People.agentWord(one.name))
-        .accessibilityValue([chosen ? "Chosen" : "Not chosen", why].compactMap { $0 }.joined(separator: ". "))
+        .accessibilityValue([chosen ? String(l10n: "Chosen") : String(l10n: "Not chosen"), why].compactMap { $0 }.joined(separator: ". "))
         .accessibilityIdentifier("person-agent-\(one.name)")
     }
 
@@ -265,7 +269,7 @@ struct AddPersonView: View {
 
     @ViewBuilder private var placesPage: some View {
         if busy {
-            SetupStep(title: "Adding \(who)", waits: true) { mark }
+            SetupStep(title: String(l10n: "Adding \(who)"), waits: true) { mark }
         } else {
             SetupStep(title: title) { mark } content: {
                 if !input.handles.isEmpty {
@@ -274,11 +278,13 @@ struct AddPersonView: View {
                 if input.handles.count < People.handlesMax {
                     HStack(alignment: .top, spacing: 14) { ForEach(People.apps, id: \.self) { app in appCard(app) } }
                 }
-                if let warning = problem ?? reason { SetupWarning(warning).accessibilityIdentifier("new-person-problem") }
-                if reason == nil, canWrite {
-                    Button("Add person") { Task { await add() } }
-                        .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
-                        .accessibilityIdentifier("new-person-save")
+                SetupAction {
+                    if let warning = problem ?? reason { SetupWarning(warning).accessibilityIdentifier("new-person-problem") }
+                    if reason == nil, canWrite {
+                        Button("Add person") { Task { await add() } }
+                            .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
+                            .accessibilityIdentifier("new-person-save")
+                    }
                 }
             }
         }
@@ -288,9 +294,9 @@ struct AddPersonView: View {
     private func placeRow(_ place: PersonInput.HandleInput) -> some View {
         HStack(spacing: 12) {
             BrandMark(app: place.app, size: 17).foregroundStyle(BrandMark.color(place.app))
-            Text(place.handle.split(separator: "@").first.map(String.init) ?? place.handle).lineLimit(1)
+            Text(place.handle.split(separator: "@").first.map(String.init) ?? place.handle).lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 8)
-            IconButton(symbol: "trash", words: "Remove this one") {
+            IconButton(symbol: "trash", words: String(l10n: "Remove this one")) {
                 input.handles.removeAll { $0.id == place.id }
             }.accessibilityIdentifier("add-person-remove-\(place.app)")
         }

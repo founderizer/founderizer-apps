@@ -528,10 +528,10 @@ public enum CentralVaultRemote {
             guard text.hasPrefix("{"), let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
                   let ok = object["ok"] as? Bool else { continue }
             if !ok && object["owner"] as? String == "other" { return .otherOwner }
-            guard ok else { return .refused((object["error"] as? String).map { String($0.prefix(300)) } ?? "It gave no reason.") }
+            guard ok else { return .refused((object["error"] as? String).map { String($0.prefix(300)) } ?? String(l10n: "It gave no reason.")) }
             guard let recipient = CentralVault.recipient(object["recipient"] as? String),
                   let fleet = object["fleet"] as? String, CentralVault.isFleet(fleet) else {
-                return .refused("It printed no vault key and no fleet that Founderizer can read.")
+                return .refused(String(l10n: "It printed no vault key and no fleet that Founderizer can read."))
             }
             return .installed(recipient: recipient, fleet: fleet)
         }

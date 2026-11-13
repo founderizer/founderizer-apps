@@ -65,10 +65,10 @@ public enum MacNetwork {
         /// so the row answers with the mark and Tailscale's own words are behind it.
         public var mark: (state: MarkState, words: String) {
             switch step {
-            case .connected: (.good, "On your network")
-            case .notInstalled: (.bad, "Not installed")
-            case .notSignedIn: (.bad, "Not signed in")
-            case .notConnected: (.bad, "Not connected")
+            case .connected: (.good, String(l10n: "On your network"))
+            case .notInstalled: (.bad, String(l10n: "Not installed"))
+            case .notSignedIn: (.bad, String(l10n: "Not signed in"))
+            case .notConnected: (.bad, String(l10n: "Not connected"))
             }
         }
     }
@@ -157,7 +157,7 @@ public enum MacNetwork {
             configuration.timeoutIntervalForResource = 600
             let (temporary, response) = try await URLSession(configuration: configuration).download(from: download)
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                throw MacNetworkError.cannotDownload("Tailscale's own download page did not give the installer.")
+                throw MacNetworkError.cannotDownload(String(l10n: "Tailscale's own download page did not give the installer."))
             }
             try FileManager.default.moveItem(at: temporary, to: file)
         } catch let error as MacNetworkError {
@@ -206,10 +206,10 @@ public enum MacNetworkError: LocalizedError, Equatable, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .cannotDownload(let says): "Tailscale's installer could not be downloaded: \(says)"
+        case .cannotDownload(let says): String(l10n: "Tailscale's installer could not be downloaded: \(says)")
         case .notTailscales:
-            "That download is not signed by Tailscale, so this Mac did not open it. Nothing was installed."
-        case .cannotOpen(let path): "This Mac could not open \(path). Open it yourself to install Tailscale."
+            String(l10n: "That download is not signed by Tailscale, so this Mac did not open it. Nothing was installed.")
+        case .cannotOpen(let path): String(l10n: "This Mac could not open \(path). Open it yourself to install Tailscale.")
         }
     }
 }

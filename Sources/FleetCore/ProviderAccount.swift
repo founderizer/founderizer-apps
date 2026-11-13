@@ -22,8 +22,8 @@ public enum AccountEmail: Equatable, Sendable {
     public var words: String {
         switch self {
         case .current(let email): email
-        case .old: "Email reading is old"
-        case .unknown: "Email not reported"
+        case .old: String(l10n: "Email reading is old")
+        case .unknown: String(l10n: "Email not reported")
         }
     }
 
@@ -81,8 +81,8 @@ public struct ProviderAccountFacts: Equatable, Sendable {
     /// **The account, as its own title.** It is the address the provider reported, because that is how the owner
     /// knows one account from another. An account with no address says so; it is never named by an owner's label.
     public var title: String {
-        if localModel { return "Local model" }
-        return email?.address ?? "Account not reported"
+        if localModel { return String(l10n: "Local model") }
+        return email?.address ?? String(l10n: "Account not reported")
     }
 
     /// The one muted line under it: the provider, the plan the provider reported, a week it did not report, and the
@@ -95,7 +95,7 @@ public struct ProviderAccountFacts: Equatable, Sendable {
     public var detailWithoutAge: String { line(age: false) }
 
     private func line(age: Bool) -> String {
-        if localModel { return "No account of a provider" }
+        if localModel { return String(l10n: "No account of a provider") }
         var parts = [providerName(runtime)]
         // **A plan whose name the provider's own name already carries is said once.** His plan field for one Claude
         // account reads "Claude", and "Claude Code · Claude" is the provider twice; "Claude Max 5x" is a plan and stays.
@@ -103,15 +103,15 @@ public struct ProviderAccountFacts: Equatable, Sendable {
             parts.append(plan)
         }
         // **A window the provider does not report is a silence, and this is where it is said.** Never a 0% row.
-        if weekMissing { parts.append("week not reported") }
+        if weekMissing { parts.append(String(l10n: "week not reported")) }
         // **An allowance two agents spend is a different number**, so this one clause is on the face of the row
         // and not behind it: without it the share moves for no reason he can see.
         if !sharedWith.isEmpty {
-            parts.append("shared with \(sharedWith.map(\.agentLabel).formatted(.list(type: .and)))")
+            parts.append(String(l10n: "shared with \(sharedWith.map(\.agentLabel).formatted(.list(type: .and)))"))
         }
-        if signedIn == false { parts.append("not signed in") }
+        if signedIn == false { parts.append(String(l10n: "not signed in")) }
         let oldReading = if case .old = email { true } else { stale }
-        if age && oldReading { parts.append("last reading") }
+        if age && oldReading { parts.append(String(l10n: "last reading")) }
         return parts.joined(separator: " · ")
     }
 
@@ -119,9 +119,9 @@ public struct ProviderAccountFacts: Equatable, Sendable {
     /// provider reported, "Not signed in" while the machine says the provider is signed out there, else that no
     /// address is known.
     public var accountWords: String {
-        if localModel { return "Local model" }
-        if signedIn == false { return "Not signed in" }
-        return email?.address ?? "Not reported"
+        if localModel { return String(l10n: "Local model") }
+        if signedIn == false { return String(l10n: "Not signed in") }
+        return email?.address ?? String(l10n: "Not reported")
     }
 
     /// **The muted line under the account row, only where it has news**: the plan the provider reported, the agents
@@ -134,10 +134,10 @@ public struct ProviderAccountFacts: Equatable, Sendable {
             parts.append(plan)
         }
         if !sharedWith.isEmpty {
-            parts.append("shared with \(sharedWith.map(\.agentLabel).formatted(.list(type: .and)))")
+            parts.append(String(l10n: "shared with \(sharedWith.map(\.agentLabel).formatted(.list(type: .and)))"))
         }
         let oldReading = if case .old = email { true } else { stale }
-        if oldReading, email?.address != nil { parts.append("last reading") }
+        if oldReading, email?.address != nil { parts.append(String(l10n: "last reading")) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -145,12 +145,12 @@ public struct ProviderAccountFacts: Equatable, Sendable {
     /// spend this same allowance, what the hub has recorded, and what went wrong with the reading.
     public func help(date: (Double) -> String) -> String {
         var lines: [String] = []
-        if localModel { lines.append("A local model has no provider account and no allowance.") }
-        if let collectedAt { lines.append("\(stale ? "Last reading" : "Read"): \(date(collectedAt))") }
+        if localModel { lines.append(String(l10n: "A local model has no provider account and no allowance.")) }
+        if let collectedAt { lines.append(stale ? String(l10n: "Last reading: \(date(collectedAt))") : String(l10n: "Read: \(date(collectedAt))")) }
         if !sharedWith.isEmpty {
-            lines.append("Same account as \(sharedWith.map(\.agentLabel).formatted(.list(type: .and))): one allowance between them.")
+            lines.append(String(l10n: "Same account as \(sharedWith.map(\.agentLabel).formatted(.list(type: .and))): one allowance between them."))
         }
-        if let tokens { lines.append("\(tokens.formatted()) tokens recorded") }
+        if let tokens { lines.append(String(l10n: "\(tokens.formatted()) tokens recorded")) }
         if let error, !error.isEmpty { lines.append(error) }
         return lines.joined(separator: "\n")
     }

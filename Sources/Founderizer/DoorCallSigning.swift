@@ -76,9 +76,9 @@ enum DoorCallSigning {
         case notOffered, noOwnerKey, clock
         var errorDescription: String? {
             switch self {
-            case .notOffered: "This hub does not take a server's mode yet. Update the hub."
-            case .noOwnerKey: "This Mac does not hold the owner key of this fleet, which signs a server's mode."
-            case .clock: "This Mac's clock is behind the time of this server's last mode. Set the clock, then try again."
+            case .notOffered: String(l10n: "This hub does not take a server's mode yet. Update the hub.")
+            case .noOwnerKey: String(l10n: "This Mac does not hold the owner key of this fleet, which signs a server's mode.")
+            case .clock: String(l10n: "This Mac's clock is behind the time of this server's last mode. Set the clock, then try again.")
             }
         }
     }

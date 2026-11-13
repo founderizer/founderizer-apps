@@ -161,6 +161,9 @@ import SwiftUI
     /// Turn off, after its confirmation in the card.
     func turnOff(store: FleetStore) {
         guard store.hub == hub, !running else { return }
+        // As Try again does: this is a new turn, and a stop of it is its own (a Turn off from the row of a Turn on
+        // that a quit cut off would else lose its "did not turn off" row when he leaves the page, `left`).
+        cutOff = false
         start(.off, store: store)
     }
 
@@ -215,11 +218,22 @@ struct ConnectAppOffer: View {
     let turnOn: () -> Void
     let tryAgain: () -> Void
     let report: () -> Void
+    /// Turn off while the feature is on and does not work (`ConnectGate.offersTurnOff`): on the heading, as in the
+    /// working state, behind the same confirmation in the card. Nil: no Turn off here.
+    var turnOff: (() -> Void)?
+    /// The confirmation of that Turn off is open.
+    var confirmingOff = false
+    var askOff: () -> Void = {}
+    var cancelOff: () -> Void = {}
 
     var body: some View {
         FormSection("Connect an app") {
             if case .stopped(let stop, let turn) = show {
-                ConnectStopRow(title: turn == .on ? "Connected apps did not turn on" : "Connected apps did not turn off",
+                // The confirmation over the row, as it stands over the address in the working state.
+                if confirmingOff, let turnOff {
+                    ConnectAppTurnOff(canAct: canAct, cancel: cancelOff, turnOff: turnOff)
+                }
+                ConnectStopRow(title: turn == .on ? String(l10n: "Connected apps did not turn on") : String(l10n: "Connected apps did not turn off"),
                                stop: stop, canAct: canAct, tryAgain: tryAgain, report: report)
             } else {
                 FormEmpty("No connected apps yet", symbol: "powerplug")
@@ -227,10 +241,15 @@ struct ConnectAppOffer: View {
         } accessory: {
             // On the group's own heading, where Add device stands on its own: only while it can act, never grey.
             if show == .turningOn {
-                LoadingLine("Turning on…", waits: false).fixedSize()
+                LoadingLine(String(l10n: "Turning on…"), waits: false).fixedSize()
+            } else if show == .turningOff {
+                LoadingLine(String(l10n: "Turning off…"), waits: false).fixedSize()
             } else if show == .off(turnOn: true), canAct {
                 Button("Turn on", action: turnOn).buttonStyle(FleetOutlineButtonStyle())
                     .accessibilityIdentifier("connect-turn-on")
+            } else if turnOff != nil, canAct, !confirmingOff {
+                Button("Turn off connected apps", action: askOff).buttonStyle(FleetOutlineButtonStyle())
+                    .accessibilityIdentifier("connect-turn-off")
             }
         }
         .font(FleetStyle.body).foregroundStyle(FleetStyle.text)
@@ -280,10 +299,10 @@ struct ConnectAppKeyStep: View {
         SetupPage {
             SetupBack(action: back)
         } step: {
-            SetupStep(title: busy ? "Connecting your network" : "Your Tailscale key", waits: busy) { NetworkMark() } content: {
+            SetupStep(title: busy ? String(l10n: "Connecting your network") : String(l10n: "Your Tailscale key"), waits: busy) { NetworkMark() } content: {
                 if !busy {
                     SetupSteps.tailscaleKey
-                    PasteField(placeholder: "Paste it here", text: $text, accepts: { $0.hasPrefix("tskey-api-") }, send: send)
+                    PasteField(placeholder: String(l10n: "Paste it here"), text: $text, accepts: { $0.hasPrefix("tskey-api-") }, send: send)
                         .accessibilityIdentifier("connect-tailscale-key")
                 }
                 if let linesToAdd { PolicyLines(lines: linesToAdd, copied: copied, copy: copy) }

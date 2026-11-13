@@ -117,19 +117,18 @@ public struct VerifyChecklist: Equatable, Sendable {
 
     /// What this machine's page says above the list, in the owner's own words.
     public var summary: String {
-        guard !checks.isEmpty else { return "This server has not been checked yet." }
+        guard !checks.isEmpty else { return String(l10n: "This server has not been checked yet.") }
         if onlyNeedsSignIn {
-            return "This server is in your fleet. It is not signed in to your provider yet, which is your own "
-                + "next step: no installer can do it for you."
+            return String(l10n: "This server is in your fleet. It is not signed in to your provider yet, which is your own next step: no installer can do it for you.")
         }
         if !failing.isEmpty {
             let names = failing.map(\.title).joined(separator: ", ")
-            return failing.count == 1 ? "\(names) failed. Its fix is below." : "\(failing.count) checks failed: \(names)."
+            return failing.count == 1 ? String(l10n: "\(names) failed. Its fix is below.") : String(l10n: "\(failing.count) checks failed: \(names).")
         }
         if !warning.isEmpty {
-            return "Ready, with \(warning.count) warning\(warning.count == 1 ? "" : "s")."
+            return warning.count == 1 ? String(l10n: "Ready, with \(warning.count) warning.") : String(l10n: "Ready, with \(warning.count) warnings.")
         }
-        return "Ready. Every check of this server passed."
+        return String(l10n: "Ready. Every check of this server passed.")
     }
 
     /// The answers of `verify --json`, as the command wrote them. A body that is not that array, or that carries an
@@ -164,19 +163,19 @@ public struct VerifyChecklist: Equatable, Sendable {
     /// The title of one check, as the owner reads it.
     public static func title(_ id: String) -> String {
         switch id {
-        case "services": return "Services"
-        case "hub_answers": return "The hub answers"
-        case "owner_claimed": return "Your own address"
-        case "tailnet": return "Private network"
-        case "firewall": return "Firewall"
-        case "clock": return "Clock"
-        case "disk": return "Disk space"
-        case "runtime_installed": return "Provider installed"
-        case "runtime_signed_in": return "Signed in"
-        case "desktop": return "This Mac's desktop"
-        case "selftest": return "Self-test"
-        case "version": return "Revision"
-        case "team": return "The team file"
+        case "services": return String(l10n: "Services")
+        case "hub_answers": return String(l10n: "The hub answers")
+        case "owner_claimed": return String(l10n: "Your own address")
+        case "tailnet": return String(l10n: "Private network")
+        case "firewall": return String(l10n: "Firewall")
+        case "clock": return String(l10n: "Clock")
+        case "disk": return String(l10n: "Disk space")
+        case "runtime_installed": return String(l10n: "Provider installed")
+        case "runtime_signed_in": return String(l10n: "Signed in")
+        case "desktop": return String(l10n: "This Mac's desktop")
+        case "selftest": return String(l10n: "Self-test")
+        case "version": return String(l10n: "Revision")
+        case "team": return String(l10n: "The team file")
         default: return id.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }

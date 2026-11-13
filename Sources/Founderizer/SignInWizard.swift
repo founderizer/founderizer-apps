@@ -46,7 +46,7 @@ struct SignInWizard: View {
         return login
     }
     private var runtime: String { machine?.signInRuntime ?? store.state?.agents.first { $0.name == agent }?.runtime ?? "claude" }
-    private var where_: String { machine?.machine ?? "its server" }
+    private var where_: String { machine?.machine ?? String(l10n: "its server") }
     private var replacing: Bool { machine?.needsSignIn != true }
     private var fresh: Bool { store.isFresh && machine?.isCurrent(at: store.state?.time ?? 0) == true }
 
@@ -89,10 +89,10 @@ struct SignInWizard: View {
     /// The name of the page he is on. Each one says what it asks, so no page needs a line to explain itself.
     private var title: String {
         switch page {
-        case .start: replacing ? "Use another \(providerName(runtime)) account" : "Sign \(agent.agentLabel) in"
-        case .link, .code: "Sign in to \(providerName(runtime))"
-        case .done: "\(agent.agentLabel) is signed in"
-        case .failed: "The sign-in did not finish"
+        case .start: replacing ? String(l10n: "Use another \(providerName(runtime)) account") : String(l10n: "Sign \(agent.agentLabel) in")
+        case .link, .code: String(l10n: "Sign in to \(providerName(runtime))")
+        case .done: String(l10n: "\(agent.agentLabel) is signed in")
+        case .failed: String(l10n: "The sign-in did not finish")
         }
     }
 
@@ -100,7 +100,7 @@ struct SignInWizard: View {
 
     @ViewBuilder private var first: some View {
         if busy {
-            SetupStep(title: "Starting the sign-in", waits: true) { mark }
+            SetupStep(title: String(l10n: "Starting the sign-in"), waits: true) { mark }
         } else {
             SetupStep(title: title) { mark } content: {
                 VStack(spacing: 18) {
@@ -128,8 +128,10 @@ struct SignInWizard: View {
     /// **What it costs, said before it happens and nowhere else.** A provider starts no second sign-in while one
     /// is live, so another account means signing this one out, and that stops the agent until he is back in.
     private var cost: String {
-        "\(providerName(runtime)) signs out on \(where_). \(agent.agentLabel) stops working until you have signed "
-            + "in with the other account."
+        if let server = machine?.machine {
+            return String(l10n: "\(providerName(runtime)) signs out on \(server). \(agent.agentLabel) stops working until you have signed in with the other account.")
+        }
+        return String(l10n: "\(providerName(runtime)) signs out on its server. \(agent.agentLabel) stops working until you have signed in with the other account.")
     }
 
     // MARK: two — the provider's own page
@@ -146,8 +148,8 @@ struct SignInWizard: View {
             }
         } else {
             // A wait names what it waits for (B-ONB-5, fix round 2): "Signing in to Claude Code", never "Signing in".
-            SetupStep(title: sent || login?.state == "signing_in" ? "Signing in to \(providerName(runtime))"
-                      : login?.isSigningOut == true ? "Signing out of \(providerName(runtime))" : "Starting the sign-in",
+            SetupStep(title: sent || login?.state == "signing_in" ? String(l10n: "Signing in to \(providerName(runtime))")
+                      : login?.isSigningOut == true ? String(l10n: "Signing out of \(providerName(runtime))") : String(l10n: "Starting the sign-in"),
                       waits: true) { mark }
         }
     }
@@ -156,7 +158,7 @@ struct SignInWizard: View {
 
     @ViewBuilder private var paste: some View {
         if sent {
-            SetupStep(title: "Signing in to \(providerName(runtime))", waits: true) { mark }
+            SetupStep(title: String(l10n: "Signing in to \(providerName(runtime))"), waits: true) { mark }
         } else {
             SetupStep(title: title) { mark } content: {
                 VStack(spacing: SetupMetrics.gap) {
@@ -230,7 +232,7 @@ struct SignInWizard: View {
             defer { busy = false }
             if !(await store.command(.machineSigninCode(agent: agent, code: ready))) {
                 sent = false
-                refusal = store.sendError ?? "The code did not reach the hub. Paste it again."
+                refusal = store.sendError ?? String(l10n: "The code did not reach the hub. Paste it again.")
             }
             code = ""
             await read()

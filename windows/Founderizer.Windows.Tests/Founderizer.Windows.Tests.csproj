@@ -17,13 +17,16 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Founderizer.Core/Founderizer.Core.csproj" />
+    <ProjectReference Include="../Founderizer.Install/Founderizer.Install.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Founderizer.Windows/Fleet/IFleetSource.cs" Link="Linked/IFleetSource.cs" />
     <Compile Include="../Founderizer.Windows/Fleet/SampleSource.cs" Link="Linked/SampleSource.cs" />
+    <Compile Include="../Founderizer.Windows/Fleet/SampleStates.cs" Link="Linked/SampleStates.cs" />
     <Compile Include="../Founderizer.Windows/Proofs.cs" Link="Linked/Proofs.cs" />
     <Compile Include="../Founderizer.Windows/Fleet/WindowsParts.cs" Link="Linked/WindowsParts.cs" />
     <Compile Include="../Founderizer.Windows/Navigation/History.cs" Link="Linked/History.cs" />
+    <Compile Include="../Founderizer.Windows/Update/ReleaseChannel.cs" Link="Linked/ReleaseChannel.cs" />
     <EmbeddedResource Include="../Founderizer.Windows/Sample/SampleFleet.json" LogicalName="Founderizer.Windows.Sample.SampleFleet.json" />
   </ItemGroup>
 </Project>

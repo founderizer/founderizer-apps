@@ -74,6 +74,12 @@ struct PeoplePage: View {
         return all.filter { person in person.agents.contains { $0.agent == agent } }
     }
     private var roles: [PeopleSnapshot.Role] { reading.value?.roleList ?? [] }
+
+    /// The agents a person talks to, without the agent whose page this is; nil when none is left there.
+    private func otherAgents(_ person: PeopleSnapshot.Person) -> String? {
+        let names = person.agentNames.filter { $0 != agent }
+        return agent != nil && names.isEmpty ? nil : People.agentWords(names)
+    }
     private var now: Double { store.state?.time ?? Date().timeIntervalSince1970 }
     private var offered: Bool { store.state?.ui_features?.contains(People.feature) == true }
     /// The roles are the fleet's, so only the fleet's own page has them, and only after the switch (`RoleList.feature`).
@@ -145,8 +151,8 @@ struct PeoplePage: View {
     }
 
     private var backTitle: String {
-        if case .person(let id)? = route.dropLast().last { return people.first { $0.id == id }?.name ?? "Person" }
-        return "People"
+        if case .person(let id)? = route.dropLast().last { return people.first { $0.id == id }?.name ?? String(l10n: "Person") }
+        return String(l10n: "People")
     }
 
     // MARK: the list
@@ -167,7 +173,7 @@ struct PeoplePage: View {
                 }
             }
             if offered, reading.value == nil {
-                if case .loading = reading, store.connectionError == nil { LoadingLine("Reading the people…") } else { readingRow }
+                if case .loading = reading, store.connectionError == nil { LoadingLine(String(l10n: "Reading the people…")) } else { readingRow }
             }
             statusLine
         }
@@ -179,14 +185,14 @@ struct PeoplePage: View {
                 if offered, reading.value?.hasPeople == false {
                     FormSection {
                         FormRow("The hub does not serve people yet", symbol: "exclamationmark.circle",
-                                warning: "Update the hub to UI-API 1.17.")
+                                warning: String(l10n: "Update the hub to UI-API 1.17."))
                     }
                 } else if !offered {
                     FormSection { FormRow("Your hub has no People yet", symbol: "person.2.slash") }
                 } else if waits, store.connectionError == nil {
                     // The first visit: nothing of the list until it is read, then all of its cards in one frame. While
                     // the hub does not answer nothing is read, and the failed row stands in its place.
-                    LoadingLine("Reading the people…")
+                    LoadingLine(String(l10n: "Reading the people…"))
                 } else if reading.value == nil {
                     readingRow
                 } else {
@@ -232,7 +238,9 @@ struct PeoplePage: View {
                 IconTile(symbol: "person.crop.circle")
                 VStack(alignment: .leading, spacing: 3) {
                     Text(person.name).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(1)
-                    Text("\(person.roleWord) · \(People.agentWords(person.agentNames))")
+                    // On an agent's own People, the other agents they talk to: this agent is on every row there (the
+                    // owner, 13 November 2026: "review all other pages for the same issues!!").
+                    Text(([person.roleWord] + [otherAgents(person)].compactMap { $0 }).joined(separator: " · "))
                         .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
                 }
                 Spacer(minLength: 12)
@@ -273,7 +281,7 @@ struct PeoplePage: View {
     }
 
     private func roleRow(_ role: RoleList.Role) -> some View {
-        let switched = role.tools ? "With the agent's tools" : "Closed, without the agent's tools"
+        let switched = role.tools ? String(l10n: "With the agent's tools") : String(l10n: "Closed, without the agent's tools")
         return Button { route.append(.role(role.name)) } label: {
             HStack(spacing: 12) {
                 IconTile(symbol: role.tools ? "wrench.and.screwdriver" : "lock")
@@ -316,7 +324,8 @@ struct PeoplePage: View {
                     route.append(.add(app: item.app, handle: item.message.sender, name: item.message.name))
                 }
                 .buttonStyle(FleetOutlineButtonStyle()).disabled(!canWrite || item.message.sender == nil)
-                .help("Add them as a person, so \(item.agent.map(People.agentWord) ?? "your agent") can answer.")
+                .help(item.agent.map { String(l10n: "Add them as a person, so \(People.agentWord($0)) can answer.") }
+                      ?? String(l10n: "Add them as a person, so your agent can answer."))
                 .accessibilityIdentifier("stranger-add-\(item.id)")
             }
             if let said = item.message.said {

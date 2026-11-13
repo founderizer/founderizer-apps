@@ -47,18 +47,19 @@ public struct ServerStanding: Equatable, Sendable {
     /// and on the Sign-in card, and once is what a line is worth.
     public static func restartSays(_ pending: Int?) -> String {
         guard let pending, pending > 0 else {
-            return "Its system installed security updates that take effect after a restart."
+            return String(l10n: "Its system installed security updates that take effect after a restart.")
         }
-        return "\(pending) security update\(pending == 1 ? " is" : "s are") installed and waiting for a restart."
+        return pending == 1 ? String(l10n: "\(pending) security update is installed and waiting for a restart.")
+            : String(l10n: "\(pending) security updates are installed and waiting for a restart.")
     }
 
     /// Why a helper on this machine asks to be updated, in the hub's own terms: it does not run the revision the
     /// fleet runs. What an update costs is said once, by the confirmation that asks for it, as a restart's is.
     public static func updateSays(_ agents: [String]) -> String {
         guard agents.count == 1, let only = agents.first else {
-            return "Founderizer on it is behind for \(agents.count) agents."
+            return String(l10n: "Founderizer on it is behind for \(agents.count) agents.")
         }
-        return "Founderizer on it is behind for \(only.agentLabel)."
+        return String(l10n: "Founderizer on it is behind for \(only.agentLabel).")
     }
 
     /// **The one word about this machine, and the things the owner has to do about it.**
@@ -90,9 +91,9 @@ public struct ServerStanding: Equatable, Sendable {
             ServerStanding(words: words, says: says, fix: fix, attention: attention, working: working,
                            needsRestart: restart, needsUpdate: update, failing: failing, settled: settled)
         }
-        if let restarting { return made("Restarting", restarting, working: true) }
-        if let updating { return made("Updating", updating, working: true) }
-        if looking { return made(connected.words, "Founderizer is looking closer at \(server.name)…", working: true) }
+        if let restarting { return made(String(l10n: "Restarting"), restarting, working: true) }
+        if let updating { return made(String(l10n: "Updating"), updating, working: true) }
+        if looking { return made(connected.words, String(l10n: "Founderizer is looking closer at \(server.name)…"), working: true) }
         // The hub has not answered this Mac yet. The page waits for it: a machine that is perfectly well must
         // never read as "Not connected" for the second before the first reading lands.
         if connected == .waiting { return made(connected.words, connected.says(server.name, now: now), working: true) }
@@ -115,7 +116,7 @@ public struct ServerStanding: Equatable, Sendable {
 
     /// What a closer look found, counted. The sentences themselves are the rows under it.
     private static func foundWords(_ found: [VerifyCheck]) -> String {
-        "Founderizer looked closer and found \(found.count) things to put right."
+        String(l10n: "Founderizer looked closer and found \(found.count) things to put right.")
     }
 
 }

@@ -108,7 +108,7 @@ public enum AgentSettingEdit: Equatable, Sendable {
     /// capabilities again. Throws the reason in words when the hub would refuse the change.
     public func request(agent: String, team: TeamSnapshot, can: [String]) throws -> (command: OwnerCommand, payload: String) {
         guard let index = team.lines.firstIndex(where: { $0.agent == agent }) else {
-            throw SettingProblem(words: "\(agent.agentLabel) is not in the team now.")
+            throw SettingProblem(words: String(l10n: "\(agent.agentLabel) is not in the team now."))
         }
         let line = team.lines[index]
         var settings = AgentSettingsInput(model: line.model, effort: line.effort, can: line.can ?? can)
@@ -124,7 +124,7 @@ public enum AgentSettingEdit: Equatable, Sendable {
         case .capabilities(let list): settings.can = list
         case .screen(let screen): settings.screen = screen
         }
-        guard settings.isValid else { throw SettingProblem(words: "The hub does not take this value.") }
+        guard settings.isValid else { throw SettingProblem(words: String(l10n: "The hub does not take this value.")) }
         return (.agentSettings(agent: agent, sha256: team.sha256), try settings.payload())
     }
 }
@@ -185,13 +185,13 @@ public struct VaultAccessControl: Equatable, Sendable {
     /// The hub's `vault_grant.missing` codes as facts. They ask for no permission or sign-in change.
     public static func reason(_ code: String) -> String {
         switch code {
-        case "agent_without_key": return "This agent has no agent key yet."
-        case "helper_without_broker_callers": return "Founderizer on its server is not updated for a shared vault yet."
-        case "no_vault_store": return "Its server has no vault store."
-        case "broker_status_unknown": return "Founderizer has no recent vault status from its server."
-        case "vault_store_mismatch": return "The server's vault key is not the key that Founderizer recorded for it."
-        case "broker_without_callers": return "The server's vault cannot serve more than one agent yet."
-        default: return "Founderizer cannot give vault access now."
+        case "agent_without_key": return String(l10n: "This agent has no agent key yet.")
+        case "helper_without_broker_callers": return String(l10n: "Founderizer on its server is not updated for a shared vault yet.")
+        case "no_vault_store": return String(l10n: "Its server has no vault store.")
+        case "broker_status_unknown": return String(l10n: "Founderizer has no recent vault status from its server.")
+        case "vault_store_mismatch": return String(l10n: "The server's vault key is not the key that Founderizer recorded for it.")
+        case "broker_without_callers": return String(l10n: "The server's vault cannot serve more than one agent yet.")
+        default: return String(l10n: "Founderizer cannot give vault access now.")
         }
     }
 }

@@ -98,14 +98,14 @@ public struct FleetTrouble: Equatable, Sendable {
         if findings.isEmpty {
             if checksRead == 0 {
                 return unchecked.isEmpty
-                    ? "Founderizer sees nothing wrong from here."
-                    : "Founderizer sees nothing wrong from here, and has not read the checks of \(Self.names(unchecked)) yet."
+                    ? String(l10n: "Founderizer sees nothing wrong from here.")
+                    : String(l10n: "Founderizer sees nothing wrong from here, and has not read the checks of \(Self.names(unchecked)) yet.")
             }
             return unchecked.isEmpty
-                ? "Founderizer sees nothing wrong from here."
-                : "Founderizer sees nothing wrong from here. It has not read the checks of \(Self.names(unchecked)) yet."
+                ? String(l10n: "Founderizer sees nothing wrong from here.")
+                : String(l10n: "Founderizer sees nothing wrong from here. It has not read the checks of \(Self.names(unchecked)) yet.")
         }
-        return findings.count == 1 ? "One thing looks wrong." : "\(findings.count) things look wrong."
+        return findings.count == 1 ? String(l10n: "One thing looks wrong.") : String(l10n: "\(findings.count) things look wrong.")
     }
 
     /// What goes in the report, and what the screen shows him in full before it does. It is bounded so that one
@@ -127,8 +127,8 @@ public struct FleetTrouble: Equatable, Sendable {
     private static func names(_ list: [String]) -> String {
         switch list.count {
         case 1: return list[0]
-        case 2: return "\(list[0]) and \(list[1])"
-        default: return "\(list.count) servers"
+        case 2: return String(l10n: "\(list[0]) and \(list[1])")
+        default: return String(l10n: "\(list.count) servers")
         }
     }
 }
@@ -164,27 +164,26 @@ extension FleetTrouble {
 
         // ---- this Mac and the hub
         if let connectionError, !connectionError.isEmpty {
-            findings.append(Trouble(id: "hub/unreachable", title: "The hub did not answer",
+            findings.append(Trouble(id: "hub/unreachable", title: String(l10n: "The hub did not answer"),
                                     says: connectionError,
-                                    fix: "Check that the server is on and that this Mac is on your private network. "
-                                        + "Settings shows the hub address this app uses.",
+                                    fix: String(l10n: "Check that the server is on and that this Mac is on your private network. Settings shows the hub address this app uses."),
                                     kind: .hub))
         } else if state != nil && !isFresh {
-            findings.append(Trouble(id: "hub/stale", title: "The last reading is old",
-                                    says: "This Mac has a reading of your fleet, but not a current one.",
-                                    fix: "Press Refresh. If it stays old, the hub is reachable but not answering.",
+            findings.append(Trouble(id: "hub/stale", title: String(l10n: "The last reading is old"),
+                                    says: String(l10n: "This Mac has a reading of your fleet, but not a current one."),
+                                    fix: String(l10n: "Press Refresh. If it stays old, the hub is reachable but not answering."),
                                     kind: .hub))
         }
         if let storageError, !storageError.isEmpty {
-            findings.append(Trouble(id: "app/storage", title: "This Mac could not write",
+            findings.append(Trouble(id: "app/storage", title: String(l10n: "This Mac could not write"),
                                     says: storageError, kind: .hub))
         }
         // A Turn on or a Turn off of the connected apps that stopped (Settings › Servers, `ConnectGate`): its row's own
         // title and sentence, which its Report a problem carries here.
         if let connectStop {
             findings.append(Trouble(id: "hub/connect",
-                                    title: connectStop.turn == .on ? "Connected apps did not turn on"
-                                                                   : "Connected apps did not turn off",
+                                    title: connectStop.turn == .on ? String(l10n: "Connected apps did not turn on")
+                                                                   : String(l10n: "Connected apps did not turn off"),
                                     says: connectStop.stop.words, kind: .hub))
         }
         // The hub writes a `fix` line for every warning it raises (owner API 1.5), so this window says the same
@@ -212,9 +211,9 @@ extension FleetTrouble {
         // not answering", "Silent since 23:06."), and none where the hub's own warning about it is already a row.
         let told = Set((health?.warnings ?? []).filter { $0.kind == "helper_offline" }.compactMap(\.agent))
         for helper in (health?.helpers ?? []).filter(\.offline) where !told.contains(helper.agent) {
-            findings.append(Trouble(id: "\(helper.agent)/offline", title: "\(helper.agent.agentLabel) is not answering",
-                                    says: helper.last_seen.map { "Silent since \(since($0, now: time))." }
-                                        ?? "It has never answered.",
+            findings.append(Trouble(id: "\(helper.agent)/offline", title: String(l10n: "\(helper.agent.agentLabel) is not answering"),
+                                    says: helper.last_seen.map { String(l10n: "Silent since \(since($0, now: time)).") }
+                                        ?? String(l10n: "It has never answered."),
                                     machine: helper.agent,
                                     server: machines.first { $0.agent == helper.agent }?.machine
                                         ?? servers.first { $0.agents.contains(helper.agent) }?.name,
@@ -227,50 +226,50 @@ extension FleetTrouble {
         let withNoAgent = servers.filter { $0.joined && $0.agents.isEmpty }
         for server in withNoAgent {
             guard case .notConnected = MachineConnection.of(server, helpers: [], time: time, fresh: isFresh) else { continue }
-            findings.append(Trouble(id: "\(server.name)/silent", title: "\(server.name) is not answering",
-                                    says: server.reading.map { "Silent since \(since($0.reported_at, now: time))." }
-                                        ?? "It has never answered.",
+            findings.append(Trouble(id: "\(server.name)/silent", title: String(l10n: "\(server.name) is not answering"),
+                                    says: server.reading.map { String(l10n: "Silent since \(since($0.reported_at, now: time)).") }
+                                        ?? String(l10n: "It has never answered."),
                                     machine: server.name, server: server.name, agents: [], kind: .machine))
         }
         var trouble: [MachineTrouble] = []
         for machine in machines {
             guard machine.isCurrent(at: time) else { continue }
             if machine.runtime.signed_in == false {
-                let provider = machine.runtime.name ?? "Its provider"
+                let provider = machine.runtime.name
                 trouble.append(MachineTrouble(slug: "signed_in", machine: machine.agent, server: machine.machine,
-                                              one: "\(machine.agent.agentLabel) is signed out", many: "agents are signed out",
-                                              says: "\(provider) is not signed in, so this agent takes no work.",
-                                              fix: "Sign it in from this agent's page. It is your own step, with "
-                                                  + "the provider's own page: no agent of yours may take it.",
-                                              manySays: "\(provider) is not signed in on them, so they take no work.",
-                                              manyFix: "Sign each one in from its own page. It is your own step, "
-                                                  + "with the provider's own page: no agent of yours may take it.",
+                                              one: String(l10n: "\(machine.agent.agentLabel) is signed out"),
+                                              many: String(l10n: "agents are signed out"),
+                                              says: provider.map { String(l10n: "\($0) is not signed in, so this agent takes no work.") }
+                                                  ?? String(l10n: "Its provider is not signed in, so this agent takes no work."),
+                                              fix: String(l10n: "Sign it in from this agent's page. It is your own step, with the provider's own page: no agent of yours may take it."),
+                                              manySays: provider.map { String(l10n: "\($0) is not signed in on them, so they take no work.") }
+                                                  ?? String(l10n: "Its provider is not signed in on them, so they take no work."),
+                                              manyFix: String(l10n: "Sign each one in from its own page. It is your own step, with the provider's own page: no agent of yours may take it."),
                                               ownerOnly: true))
             }
             if machine.update.state == "failed" {
                 trouble.append(MachineTrouble(slug: "update", machine: machine.agent, server: machine.machine,
-                                              one: "The update of \(machine.agent.agentLabel) failed",
-                                              many: "servers failed their update",
-                                              says: machine.update.detail ?? "The last Founderizer update on this server did not finish.",
-                                              fix: "Its server kept running the revision it had. Update Fleet on "
-                                                  + "its page tries again."))
+                                              one: String(l10n: "The update of \(machine.agent.agentLabel) failed"),
+                                              many: String(l10n: "servers failed their update"),
+                                              says: machine.update.detail ?? String(l10n: "The last Founderizer update on this server did not finish."),
+                                              fix: String(l10n: "Its server kept running the revision it had. Update Fleet on its page tries again.")))
             }
             if let check = machine.check, ["failed", "offline"].contains(check.state) {
                 trouble.append(MachineTrouble(slug: "check", machine: machine.agent, server: machine.machine,
-                                              one: "The check of \(machine.agent.agentLabel) failed",
-                                              many: "servers failed their check",
-                                              says: check.detail ?? "The hub's own check of this server did not come back.",
-                                              fix: "Check it again from its page."))
+                                              one: String(l10n: "The check of \(machine.agent.agentLabel) failed"),
+                                              many: String(l10n: "servers failed their check"),
+                                              says: check.detail ?? String(l10n: "The hub's own check of this server did not come back."),
+                                              fix: String(l10n: "Check it again from its page.")))
             }
             if machine.security.reboot_required == true {
                 trouble.append(restart(machine: machine.agent, server: machine.machine,
-                                       one: "\(machine.agent.agentLabel) waits for a restart"))
+                                       one: String(l10n: "\(machine.agent.agentLabel) waits for a restart")))
             }
         }
         for server in withNoAgent where !server.isMac && server.reading?.isCurrent(at: time) == true
             && server.reading?.security?.reboot_required == true {
             trouble.append(restart(machine: server.name, server: server.name, agents: [],
-                                   one: "\(server.name) waits for a restart"))
+                                   one: String(l10n: "\(server.name) waits for a restart")))
         }
         findings += gathered(trouble)
 
@@ -341,11 +340,11 @@ extension FleetTrouble {
 
     /// A machine that waits for a restart: his own step, because an agent may be running on it.
     private static func restart(machine: String, server: String, agents: [String]? = nil, one: String) -> MachineTrouble {
-        MachineTrouble(slug: "reboot", machine: machine, server: server, one: one, many: "servers wait for a restart",
-                       says: "Its system installed updates that need a restart.",
-                       fix: "Restart it when no task of yours runs on it.",
-                       manySays: "Their systems installed updates that need a restart.",
-                       manyFix: "Restart each one when no task of yours runs on it.",
+        MachineTrouble(slug: "reboot", machine: machine, server: server, one: one, many: String(l10n: "servers wait for a restart"),
+                       says: String(l10n: "Its system installed updates that need a restart."),
+                       fix: String(l10n: "Restart it when no task of yours runs on it."),
+                       manySays: String(l10n: "Their systems installed updates that need a restart."),
+                       manyFix: String(l10n: "Restart each one when no task of yours runs on it."),
                        ownerOnly: true, agents: agents)
     }
 
@@ -412,8 +411,7 @@ extension FleetTrouble {
 /// has no exception, because a check that fails for a sign-in is the owner's own step and a helpful agent must not
 /// try it.
 public enum TroublePrompt {
-    public static let says = "Paste this into the agent you already run. It fixes this one thing and tells you "
-        + "what it did. It signs nothing in: your provider account stays yours."
+    public static let says = String(l10n: "Paste this into the agent you already run. It fixes this one thing and tells you what it did. It signs nothing in: your provider account stays yours.")
 
     public static func text(for finding: Trouble, fleet: String?, revision: String?) -> String {
         // A hub since 30 October 2026 writes the fix in his words and its command apart. An older one wrote the

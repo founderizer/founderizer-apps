@@ -102,6 +102,28 @@ public enum AgentSetupFlow {
         return job
     }
 
+    /// **The step of an install that runs, as a number: 2 of 5** (the owner, 13 November 2026, of a wait that stood
+    /// for minutes with no sign of progress: "show some sort of progress bar there, otherwise it looks stuck! Same
+    /// thing for other long actions where we actually know the progress"). The server reports each step when it
+    /// starts (`ServerJob.step`), and the steps are the list that a server's page draws as rows (`Servers.steps`):
+    /// five on a Linux server, four on a Mac, two for a preparation. nil while the job waits in the queue, for a step
+    /// that is not in that list, and for a job of another kind, whose steps that list does not hold: the page shows
+    /// no number that the app does not have.
+    public static func installCount(_ job: ServerJob?, onMac: Bool) -> (step: Int, of: Int)? {
+        guard let job, job.state == "running", job.kind == "install" || job.kind == "prepare" else { return nil }
+        let steps = Servers.steps(job, onMac: onMac).map(\.id)
+        guard let at = steps.firstIndex(of: job.step ?? "") else { return nil }
+        return (at + 1, steps.count)
+    }
+
+    /// **The title of the install's page**: what installs and where, and after them the step that runs, once the
+    /// server reports one ("Installing Codex on app-1 · 2 of 5"). The count stands in the title itself, which is the
+    /// page's moving words: no bar and no spinner comes with it (UI-PATTERNS.md, "A wait that knows its count").
+    public static func installing(_ provider: String, on server: String, job: ServerJob?, onMac: Bool) -> String {
+        guard let count = installCount(job, onMac: onMac) else { return String(l10n: "Installing \(provider) on \(server)") }
+        return String(l10n: "Installing \(provider) on \(server) · \(count.step) of \(count.of)")
+    }
+
     /// **The page the setup shows now, from the hub's own readings.** A job or a sign-in that goes on is its own page,
     /// whatever was chosen before: what the hub does now is what he sees. `switchingTo` is the other provider he
     /// chose on this visit, until the agent runs it. An agent that its machine reports signed in to its provider is
@@ -139,7 +161,7 @@ public enum AgentSetupFlow {
         if signedIn(runtime: runtime, machine: machine) { return nil }
         if let line = machine?.signInLine(working: false), line.warn { return machine?.login?.reason ?? line.says }
         if let job, job.state == "failed", job.timed_out != true {
-            return offline(job.detail, runtime: runtime, server: machine?.machine) ?? trimmed(job.detail) ?? "The install stopped."
+            return offline(job.detail, runtime: runtime, server: machine?.machine) ?? trimmed(job.detail) ?? String(l10n: "The install stopped.")
         }
         return nil
     }
@@ -149,7 +171,8 @@ public enum AgentSetupFlow {
     /// where, and the hub's own words stay on the line's hover.
     static func offline(_ detail: String?, runtime: String, server: String?) -> String? {
         guard let detail, ["ETIMEDOUT", "ECONNRESET", "EAI_AGAIN"].contains(where: detail.contains) else { return nil }
-        return "\(providerName(runtime)) did not install: \(server ?? "its server") could not reach the internet."
+        if let server { return String(l10n: "\(providerName(runtime)) did not install: \(server) could not reach the internet.") }
+        return String(l10n: "\(providerName(runtime)) did not install: its server could not reach the internet.")
     }
 
     /// The hub's words without the step they end with: the provider cards are that step ("Codex did not sign in
@@ -201,7 +224,7 @@ public enum AgentSetupFlow {
         guard let item = result?.items.first(where: { $0.required == true && $0.state != "ok" }) else { return nil }
         let title = item.ref.replacingOccurrences(of: "_", with: " ").capitalized
         let detail = item.detail.trimmingCharacters(in: .whitespacesAndNewlines)
-        return detail.isEmpty ? "\(title) did not pass." : "\(title): \(detail)"
+        return detail.isEmpty ? String(l10n: "\(title) did not pass.") : "\(title): \(detail)"
     }
 }
 

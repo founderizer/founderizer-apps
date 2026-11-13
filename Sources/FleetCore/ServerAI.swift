@@ -25,16 +25,16 @@ public enum ServerAI: String, CaseIterable, Sendable {
         switch self {
         case .claude: "Claude"
         case .chatGPT: "ChatGPT"
-        case .both: "Both"
+        case .both: String(l10n: "Both")
         }
     }
 
     /// The one line of its card on the page for a Mac.
     public var macLine: String {
         switch self {
-        case .claude: "Browser tasks in Chrome."
-        case .chatGPT: "Computer use, in any app."
-        case .both: "Claude does the work. ChatGPT adds computer use."
+        case .claude: String(l10n: "Browser tasks in Chrome.")
+        case .chatGPT: String(l10n: "Computer use, in any app.")
+        case .both: String(l10n: "Claude does the work. ChatGPT adds computer use.")
         }
     }
 

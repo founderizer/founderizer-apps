@@ -40,7 +40,7 @@ struct ConversationPage: View {
     static func headName(_ id: Int) -> String { "conversation.head.\(id)" }
 
     var body: some View {
-        ReadChatPage(title: head?.person?.name ?? "Conversation", back: FleetBack(backTitle, action: back)) {
+        ReadChatPage(title: head?.person?.name ?? String(l10n: "Conversation"), back: FleetBack(backTitle, action: back)) {
             if let head {
                 Button(head.isPaused ? "Let it run" : "Pause") { Task { await pause(!head.isPaused) } }
                     .buttonStyle(FleetOutlineButtonStyle()).disabled(!canWrite)
@@ -59,7 +59,7 @@ struct ConversationPage: View {
                     if readAt == nil, readError == nil, store.connectionError == nil {
                         // The first visit: nothing of the record until it is read, then all of it in one frame. While
                         // the hub does not answer nothing is read, and the failed row stands in its place.
-                        LoadingLine("Reading the conversation…")
+                        LoadingLine(String(l10n: "Reading the conversation…"))
                     } else if readAt == nil {
                         // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3,
                         // item 33).
@@ -206,7 +206,7 @@ struct AgentConversationPage: View {
             } else {
                 VStack(alignment: .leading, spacing: FleetSpace.block) {
                     if kept == nil, failure == nil, store.connectionError == nil {
-                        LoadingLine("Reading the conversation…")
+                        LoadingLine(String(l10n: "Reading the conversation…"))
                     } else if kept == nil {
                         if !store.hubNoticeShows {
                             FormSection {

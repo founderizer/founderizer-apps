@@ -6,11 +6,11 @@ import SwiftUI
 /// D-4: "Servers and devices are one section of Settings"; they were two pages of the main sidebar). Two groups, each
 /// with its add on its heading: Servers with Add server, Your devices with Add device (`DevicesSection`).
 ///
-/// The servers (owner feature `servers`, `GET /ui/servers` and `GET /ui/health` every 15 seconds while it shows): one row
-/// for each machine that runs agents or can run them, also one with no agent, with a mark for its kind, its name, its
-/// system and address, its agents and its state in a few words. A click opens the server's page. Add server opens the wizard
-/// that adds one (`AddServerView` in `AddMachineView.swift`). A hub without `servers` shows the machines of its
-/// agents (`GET /ui/machines`), as before.
+/// The servers (owner feature `servers`, `GET /ui/servers` and `GET /ui/health` every 15 seconds while it shows): a card
+/// for each machine that runs agents or can run them, also one with no agent (`ServerCards`): its mark, its name, its
+/// CPU, memory and disk, its agents with what each runs on, and a mark only where it needs something. A click opens the
+/// server's page. Add server, on the page's title, opens the wizard that adds one (`AddServerView` in
+/// `AddMachineView.swift`). A hub without `servers` shows the machines of its agents (`GET /ui/machines`), as before.
 struct ServersPage: View {
     @Bindable var store: FleetStore
     /// The readings are the store's (`FleetStore.reading`): the list he saw last shows in the first frame when he comes
@@ -46,21 +46,18 @@ struct ServersPage: View {
             Group {
                 if offered, let list {
                     if (failed || !store.isFresh) && !store.hubNoticeShows { lastReading }
-                    // No line under the list about what a click does: every row says it with its own pointer,
-                    // and the other lists of the app (Apps, Devices) carry none.
-                    // The CPU, Memory and Disk columns where the hub reads them (the load readings, 4 November 2026).
-                    let load = list.servers.contains { $0.load != nil }
-                    FormSection("Servers") {
-                        if list.servers.isEmpty {
-                            FormEmpty("No servers yet", symbol: "server.rack")
-                        } else if load {
-                            loadHeads(stateWidth: stateWidth(list))
-                        }
-                        ForEach(list.servers) { row($0, stateWidth: stateWidth(list), load: load) }
-                    } accessory: { addServer }
+                    // No line under the list about what a click does: every card says it with its own pointer,
+                    // and the other lists of the app (Apps, Devices) carry none. **No heading over the cards**: the
+                    // page's title says "Servers" and carries Add server (the owner's yes of 13 November 2026 to the
+                    // clean page; "Servers" stood twice, as the title and as the heading under it).
+                    if list.servers.isEmpty {
+                        FormSection { FormEmpty("No servers yet", symbol: "server.rack") }
+                    } else {
+                        ServerCards(store: store, list: list, helpers: helpers)
+                    }
                 } else if older, let machines {
                     if (failed || !store.isFresh) && !store.hubNoticeShows { lastReading }
-                    FormSection("Servers", footer: "Update the Founderizer hub to add servers here.") {
+                    FormSection(footer: String(l10n: "Update the Founderizer hub to add servers here.")) {
                         ForEach(Self.groups(machines), id: \.name) { olderRow($0.name, $0.rows) }
                     }
                 } else if !offered && !older {
@@ -71,17 +68,16 @@ struct ServersPage: View {
                     // **While the hub does not answer, nothing is being read**, so the page says it cannot read the
                     // servers instead of a "Reading the servers…" that would stand for as long as the hub is down.
                     // **Not while the window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item
-                    // 33: it is said once, over the page): the heading and its Add server stand alone, as while it reads.
-                    FormSection("Servers") {
+                    // 33: it is said once, over the page): the title and its Add server stand alone, as while it reads.
+                    FormSection {
                         if !store.hubNoticeShows {
                             FormRow("Founderizer cannot read the servers now.",
-                                    detail: ([reason] + ["It reads again when the hub answers."]).compactMap { $0 }.joined(separator: " "))
+                                    detail: ([reason] + [String(l10n: "It reads again when the hub answers.")]).compactMap { $0 }.joined(separator: " "))
                         }
-                    } accessory: { addServer }
+                    }
                 } else {
-                    // The heading and its Add server from the first frame; the wait is the line under them.
-                    FormSection("Servers") { EmptyView() } accessory: { addServer }
-                    LoadingLine("Reading the servers…")
+                    // The title and its Add server from the first frame; the wait is the line under them.
+                    LoadingLine(String(l10n: "Reading the servers…"))
                 }
             }
             // His own devices beside this Mac, the section's second group: drawn with the servers, and read meanwhile.
@@ -94,24 +90,53 @@ struct ServersPage: View {
             }
             // The connected apps under his devices (hub feature `connected_apps`): only while one of their two groups
             // has something to show, so that the page gets no empty block; and with the devices, after the servers.
-            if connectedApps, !holdsDevices, connect.draws(now: connectNow) {
+            let groupsDraw = connectedApps && !holdsDevices && connect.draws(now: connectNow)
+            if groupsDraw {
                 let running = switchModel.running
-                ConnectedAppsGroups(model: connect, now: connectNow, canAct: store.canWrite && connect.isFor(store),
+                ConnectedAppsGroups(model: connect, now: connectNow, canAct: connectCanAct,
                                     choose: { level in Task { await connect.choose(level, store: store) } },
                                     revoke: { connection in Task { await connect.revoke(connection, store: store) } },
                                     turnOff: running ? nil : { switchModel.turnOff(store: store) },
+                                    turningOff: switchModel.run == .turningOff,
                                     offStop: switchModel.offStop,
                                     report: { openWindow(id: FounderizerApp.reportWindow) })
             }
             // Turn on, its wait and its failure row (the owner's yes of 13 November 2026 to the pictures 2a to 2d): only
             // while the hub names `connect_offer`, and never while it serves `connected_apps`.
+            // A Turn off runs and the working groups went before the store read that the hub serves them no more:
+            // "Turning off…" stands on, where the group was gone for a moment between its two headings.
+            let offerShows = offerShows == .nothing && switchModel.run == .turningOff && !groupsDraw
+                ? ConnectGate.Show.turningOff : offerShows
             if !holdsDevices, offerShows != .nothing {
-                ConnectAppOffer(show: offerShows, canAct: store.canWrite && connect.isFor(store),
+                let canAct = connectCanAct
+                // Turn off while the feature is on and does not work, behind the confirmation of the working state.
+                let offersOff = !switchModel.running && ConnectGate.offersTurnOff(
+                    offerShows, state: connect.isFor(store) ? connect.state : nil, canAct: canAct)
+                ConnectAppOffer(show: offerShows, canAct: canAct,
                                 turnOn: { switchModel.turnOn(store: store) },
-                                tryAgain: { switchModel.tryAgain(store: store) },
-                                report: { openWindow(id: FounderizerApp.reportWindow) })
+                                tryAgain: { connect.confirmingOff = false; switchModel.tryAgain(store: store) },
+                                report: { openWindow(id: FounderizerApp.reportWindow) },
+                                turnOff: offersOff ? { connect.confirmingOff = false; switchModel.turnOff(store: store) } : nil,
+                                confirmingOff: connect.confirmingOff,
+                                // **No confirmation while no app is connected** (the owner's yes of 13 November 2026):
+                                // "Every connected app stops at once" stood over "Connected apps did not turn on", and
+                                // nothing would stop. A state that this page could not read keeps the confirmation.
+                                askOff: {
+                                    if !ConnectGate.asksBeforeTurnOff(connect.isFor(store) ? connect.state : nil) {
+                                        connect.confirmingOff = false; switchModel.turnOff(store: store)
+                                    } else {
+                                        connect.confirmingOff = true
+                                    }
+                                },
+                                cancelOff: { connect.confirmingOff = false })
             }
-        }
+            // Under the connected apps' groups, as the devices' own line stands under their card.
+            if !holdsDevices, groupsDraw || offerShows != .nothing, let at = connectOldAt {
+                // The devices' own sentence, word for word, so that it is one sentence of the app in each language.
+                Text("Last reading \(Servers.age(at, now: connectNow)). Founderizer reads again every 15 seconds.")
+                    .font(FormMetrics.detail).foregroundStyle(.orange).accessibilityIdentifier("connect-stale")
+            }
+        } actions: { addServer }
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(offered)") { await poll() }
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(connectedApps)/\(connectOffer)/\(switchModel.ended)") {
             await connect.run(store: store)
@@ -120,6 +145,8 @@ struct ServersPage: View {
         .onDisappear { switchModel.left() }
         // The hub serves them: a Turn on that stopped has nothing left to do.
         .onChange(of: connectedApps, initial: true) { _, serves in if serves { switchModel.served() } }
+        // A turn ended: a last reading from before it says nothing true of the feature any more.
+        .onChange(of: switchModel.ended) { connect.turnEnded() }
         // A code that ended while the app was in the background is replaced when it comes to the front.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             if connectedApps { Task { await connect.activated(store: store) } }
@@ -135,7 +162,24 @@ struct ServersPage: View {
     /// What the group of Turn on shows, from the hub's answer and the store's run.
     private var offerShows: ConnectGate.Show {
         ConnectGate.show(features: store.state?.ui_features, state: connect.isFor(store) ? connect.state : nil,
-                         run: switchModel.run, canAct: store.canWrite && connect.isFor(store))
+                         run: switchModel.run, canAct: connectCanAct)
+    }
+    /// A button of the connected apps can act: the hub takes a write, the page reads this hub, and what it shows is
+    /// no last reading (`ConnectedAppsModel.isOld`).
+    private var connectCanAct: Bool { store.canWrite && connect.isFor(store) && !connect.isOld }
+    /// **The last reading's line of the connected apps**, in the words and the look of the line under "Your devices"
+    /// (the owner's yes of 13 November 2026, "Yes, add it"). Not while the window's notice says the outage
+    /// (`FleetStore.hubNoticeShows`), as there; and not while this page's own line at its top is drawn, which says
+    /// that the page is a last reading: one outage is said once (fix round 3, item 33: Servers said one outage three
+    /// times). The hub's time of the reading that the groups show, or nil while no line is due.
+    private var connectOldAt: Double? {
+        guard connect.isOld, connect.isFor(store), !store.hubNoticeShows, !topLineShows else { return nil }
+        return connect.readAt
+    }
+    /// The page's own line "Last reading. Founderizer reads the servers again when the hub answers." is drawn: only
+    /// over a list of servers or of machines that was read.
+    private var topLineShows: Bool {
+        (failed || !store.isFresh) && !store.hubNoticeShows && ((offered && list != nil) || (older && machines != nil))
     }
     private var connectNow: Double { store.state?.time ?? Date().timeIntervalSince1970 }
 
@@ -148,11 +192,12 @@ struct ServersPage: View {
     /// under the line, with a line of its own, and went 536 pt down when the list came on a slow hub.
     private var holdsDevices: Bool { offered && list == nil && !failed && store.connectionError == nil }
 
-    /// **The section's one main button**, on the heading of its servers, where the mockup he approved puts it.
+    /// **Add server, on the page's title** (the owner's yes of 13 November 2026 to the clean page), in the look of Add
+    /// device on the heading of his devices: one kind of button, one look.
     @ViewBuilder private var addServer: some View {
         if offered {
             Button { store.destination = .addServer } label: { Label("Add server", systemImage: "plus") }
-                .buttonStyle(FleetPrimaryButtonStyle()).accessibilityIdentifier("servers-add")
+                .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("servers-add")
         }
     }
 
@@ -160,174 +205,6 @@ struct ServersPage: View {
         Label("Last reading. Founderizer reads the servers again when the hub answers.", systemImage: "clock.arrow.circlepath")
             .font(FormMetrics.detail).foregroundStyle(.orange)
     }
-
-    /// One server: a mark for its kind, its name, its system and address, its agents with what each runs on, and its
-    /// state.
-    ///
-    /// **One two-line row per server, as the D-4 mockup draws it** (fix round 2): the name over its system and address in
-    /// the first column, then the agent, its account, its usage and the state, each in a column of its own, so the
-    /// columns stand at one place in every row. **Nothing is cut in a narrow window** (at 960 pt the card keeps about 370
-    /// pt, where the table's columns need about 500): the agents go under the name, an account gives up its width to "…"
-    /// but keeps eight characters (it was cut to one or two letters), and **the state stays on the name's line** (fix
-    /// round 3, item 8: it stood alone on the row's last line, in rows of 101–127 pt).
-    private func row(_ server: ServerEntry, stateWidth: CGFloat, load: Bool) -> some View {
-        let state = Servers.state(server, helpers: helpers, time: time, fresh: store.isFresh)
-        return Button { store.destination = .server(server.name) } label: {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 12) {
-                    IconTile(symbol: server.symbol)
-                    names(server).frame(minWidth: 96, idealWidth: 120, maxWidth: .infinity, alignment: .leading)
-                    if load { figures(server.load) }
-                    agentColumns(server.agents).layoutPriority(1)
-                    stateColumn(state).frame(width: stateWidth, alignment: .trailing)
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .center, spacing: 12) {
-                        IconTile(symbol: server.symbol)
-                        names(server)
-                        Spacer(minLength: 8)
-                        // **The state keeps its words whole** (fix round 3b, item 8): at 960 the name's column took
-                        // the line first, and "Sign-in needed" shrank to a 4-pt sliver, "Installing Echo…" to
-                        // "Instal…cho…". The system and address give way with "…" instead.
-                        stateColumn(state).fixedSize().layoutPriority(2)
-                    }
-                    // Under the name, where the heads stand in a narrow window (`loadHeads`).
-                    if load { figures(server.load).padding(.leading, 34 + 12) }
-                    agents(server.agents, alignment: .leading).padding(.leading, 34 + 12)
-                }
-            }.padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 10).frame(minHeight: FormMetrics.twoLineRow)
-        }
-        .buttonStyle(FleetRowButtonStyle())
-        .accessibilityLabel("\(server.name), \(state.words)").accessibilityHint("Opens the server")
-        .accessibilityIdentifier("server-\(server.name)")
-    }
-
-    /// **A server's CPU, memory and disk, each under its head** (the owner, 4 November 2026: "do we have data of
-    /// cpu/memory/disk usage for the different fleet servers? THAT would be useful for the Servers section", and his yes
-    /// to the mockup): the share in use in whole percent, orange at 90% or more, gray for a reading older than ten
-    /// minutes, and the amounts and the time of an old reading on hover. A dash where a figure was not read.
-    private func figures(_ load: ServerLoad?) -> some View {
-        let old = !store.isFresh || load?.isCurrent(at: time) != true
-        let when = old ? load?.at.map { "Last reading \(fleetDate($0))" } : nil
-        return HStack(spacing: 12) {
-            figure(load?.cpu, help: when, old: old)
-            figure(load?.memory, help: [ServerPage.used(load?.memory_used, load?.memory_total), when].compactMap { $0 }
-                .joined(separator: "\n"), old: old)
-            figure(load?.disk, help: [ServerPage.used(load?.disk_used, load?.disk_total), when].compactMap { $0 }
-                .joined(separator: "\n"), old: old)
-        }.font(FormMetrics.detail)
-    }
-
-    private func figure(_ share: Double?, help: String?, old: Bool) -> some View {
-        Text(share.map(LoadWords.percent) ?? "–").monospacedDigit().lineLimit(1)
-            .foregroundStyle(share == nil || old ? FleetStyle.muted
-                : ServerLoad.isHigh(share ?? 0) ? Color.orange : FleetStyle.text)
-            .frame(width: Self.figureWidth, alignment: .leading)
-            .help(help ?? "")
-    }
-
-    /// **The heads of CPU, Memory and Disk, once, over their columns**: the table's first row, built as a server's
-    /// row is, with empty columns in the other places, so each head stands over its column. In a window too narrow
-    /// for the table's one line, every row takes its figures under its name, and the heads stand there.
-    private func loadHeads(stateWidth: CGFloat) -> some View {
-        let heads = HStack(spacing: 12) {
-            ForEach(["CPU", "Memory", "Disk"], id: \.self) { Text($0).frame(width: Self.figureWidth, alignment: .leading) }
-        }
-        return ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 12) {
-                Color.clear.frame(width: 34, height: 1)
-                Color.clear.frame(height: 1).frame(minWidth: 0).layoutPriority(1)
-                    .frame(minWidth: 96, idealWidth: 120, maxWidth: .infinity, alignment: .leading)
-                heads
-                HStack(spacing: 12) {
-                    Color.clear.frame(width: Self.agentWidth, height: 1)
-                    HStack(spacing: 12) {
-                        Color.clear.frame(minWidth: AgentAccountLine.accountLeast, idealWidth: AgentAccountLine.accountLeast,
-                                          maxWidth: AgentAccountLine.accountWidth, maxHeight: 1)
-                        Color.clear.frame(width: AgentAccountLine.usageWidth, height: 1)
-                    }
-                }.layoutPriority(1)
-                Color.clear.frame(width: stateWidth, height: 1)
-            }
-            HStack(spacing: 0) {
-                heads.padding(.leading, 34 + 12)
-                Spacer(minLength: 0)
-            }
-        }
-        .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
-        .padding(.horizontal, FormMetrics.rowInset).frame(height: FormMetrics.headingRow)
-        .accessibilityHidden(true)
-    }
-
-    /// A figure's column: "100%" in the row's 12-pt figures, or the head "Memory", whichever is wider.
-    private static let figureWidth: CGFloat = max(
-        ("100%" as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)]).width,
-        ("Memory" as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width).rounded(.up)
-
-    /// The server's name, which keeps its room before every other column, and its system and address.
-    private func names(_ server: ServerEntry) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(server.name).font(FormMetrics.title).foregroundStyle(FleetStyle.text)
-                .lineLimit(1).truncationMode(.middle)
-            // **Cut at its end** (the polish of 30 October 2026): a cut in its middle kept the system's last ")" alone,
-            // "Debian GNU/L…)", at 960.
-            Text(Self.systemLine(server)).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                .lineLimit(1).truncationMode(.tail)
-        }.frame(minWidth: 0).layoutPriority(1)
-    }
-
-    /// **Connected is a tick**, with the word behind it (the owner, 27 October 2026: "instead of "Connected" a check
-    /// icon would be enough"). **The last reading of a hub that does not answer is the unknown mark**, muted, with its
-    /// words behind it: the app does not know the state then (`Servers.lastReading`). Every other state keeps its few
-    /// words, because each one says what goes on or what to do. `Servers.state` says "Connected" for a machine that is
-    /// well.
-    @ViewBuilder private func stateColumn(_ state: (words: String, attention: Bool)) -> some View {
-        if state.words == "Connected" {
-            RowStateMark(state: .good).help(state.words)
-        } else if state.words == Servers.lastReading {
-            RowStateMark(state: .unknown).help("Last reading: Founderizer reads this server again when the hub answers.")
-        } else {
-            Text(state.words).font(FormMetrics.detail)
-                .foregroundStyle(state.attention ? Color.orange : FleetStyle.muted).lineLimit(1).truncationMode(.middle)
-        }
-    }
-
-    /// The state column is as wide as its widest state: a column of marks takes the width of one mark, so the agents'
-    /// columns stand at one place in every row either way.
-    private func stateWidth(_ list: ServerList) -> CGFloat {
-        list.servers.allSatisfy {
-            [Servers.lastReading, "Connected"].contains(Servers.state($0, helpers: helpers, time: time, fresh: store.isFresh).words)
-        } ? 22 : 200
-    }
-
-    /// The table's columns of the agents here, one line each: the agent's glyph and name, its account and its usage,
-    /// each column as wide in every row. A server with no agent says so in the agent's column.
-    @ViewBuilder private func agentColumns(_ names: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if names.isEmpty {
-                Text("No agent").foregroundStyle(FleetStyle.muted)
-                    .frame(minWidth: Self.agentWidth + 12 + AgentAccountLine.accountLeast + 12 + AgentAccountLine.usageWidth,
-                           maxWidth: Self.agentWidth + 12 + AgentAccountLine.accountWidth + 12 + AgentAccountLine.usageWidth,
-                           alignment: .leading)
-            }
-            ForEach(names, id: \.self) { name in
-                HStack(spacing: 12) {
-                    HStack(spacing: 6) {
-                        AgentGlyph(name: name, size: GlyphSize.inline)
-                        Text(name.agentLabel).foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle)
-                    }.frame(width: Self.agentWidth, alignment: .leading)
-                    if let agent = store.state?.agents.first(where: { $0.name == name }) {
-                        AgentAccountLine(store: store, agent: agent, table: true)
-                    } else {
-                        Color.clear.frame(width: AgentAccountLine.accountWidth + 12 + AgentAccountLine.usageWidth, height: 1)
-                    }
-                }
-            }
-        }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-    }
-
-    /// The agent's column of the table: a glyph and a name of about ten letters.
-    private static let agentWidth: CGFloat = 110
 
     /// The agents here, one line each: the agent's glyph and name, then what it runs on (`AgentAccountLine`).
     @ViewBuilder private func agents(_ names: [String], alignment: HorizontalAlignment) -> some View {
@@ -350,11 +227,6 @@ struct ServersPage: View {
         }
     }
 
-    static func systemLine(_ server: ServerEntry) -> String {
-        let line = [server.reading?.os.name, server.address].compactMap { $0 }.joined(separator: " · ")
-        return line.isEmpty ? "System not reported" : line
-    }
-
     // MARK: A hub without servers
 
     /// The machines in the hub's order, each with the readings of its agents.
@@ -370,8 +242,8 @@ struct ServersPage: View {
     private func olderRow(_ name: String, _ rows: [MachineStatus]) -> some View {
         let first = rows[0]
         let mac = first.os.name?.localizedCaseInsensitiveContains("mac") == true
-        let words = first.reported_at == nil ? "No reading yet" : !store.isFresh || !first.isCurrent(at: time) ?
-            "Last reading \(activityAge(first.reported_at ?? 0, now: time).lowercased())" : "Reported"
+        let words = first.reported_at == nil ? String(l10n: "No reading yet") : !store.isFresh || !first.isCurrent(at: time) ?
+            String(l10n: "Last reading \(activityAge(first.reported_at ?? 0, now: time).lowercased())") : String(l10n: "Reported")
         return Button { store.destination = .server(name) } label: {
             HStack(spacing: 12) {
                 IconTile(symbol: mac ? "desktopcomputer" : "server.rack")
@@ -382,7 +254,9 @@ struct ServersPage: View {
                 }.padding(.vertical, 10)
                 Spacer(minLength: 12)
                 agents(rows.map(\.agent), alignment: .trailing).padding(.vertical, 8)
-                Text(words).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).frame(minWidth: 110, alignment: .trailing)
+                // A server that reports says nothing, as the cards above mark only a server that needs something.
+                Text(words == "Reported" ? "" : words).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                    .frame(minWidth: 110, alignment: .trailing)
             }.padding(.horizontal, FormMetrics.rowInset).frame(minHeight: FormMetrics.twoLineRow)
         }.buttonStyle(FleetRowButtonStyle()).accessibilityIdentifier("server-\(name)")
     }
@@ -426,15 +300,16 @@ struct ServersPage: View {
     }
 }
 
-/// One server's page: **the machine in one card, and each agent on it in one card under it.**
+/// One server's page: **the machine in one card, and its agents in one card under it.**
 ///
 /// The owner, 27 October 2026, of the page it replaces: "This page is a mess, machine data is duplicated, we need to
 /// simplify it a lot!" — and of the server list beside it: "here I should see the AI provider and the account being
-/// used as well as the usage % value!" So a machine that is connected has a tick beside its name and no card that
-/// says so; the standing card is there only when something goes on or waits for him (a restart, a helper to update,
-/// what a closer look found, a machine that is not connected). Then the Server card — system, private address,
-/// Founderizer, security — and one card for each agent: its provider, its account and the used share of each window,
-/// and the way into the machine as that agent. There is no Details line any more: the server's own list of providers
+/// used as well as the usage % value!" So a machine that is well has no mark and no card that says so (13 November
+/// 2026: "Nothing" beside its name); the standing card is there only when something goes on or waits for him (a
+/// restart, a helper to update, what a closer look found, a machine that is not connected). Then the Server card —
+/// system, private address, Founderizer, security — and the Agents card: one line for each agent with its provider,
+/// its account and the used share of each window, and the way into the machine as that agent (13 November 2026, his
+/// yes to the picture, after "terrible design!" of a header whose agent buttons had pushed the name out). There is no Details line any more: the server's own list of providers
 /// is gone, because it looks for them as another user and showed two crosses on a machine whose agent was signed in,
 /// and so is the second copy of the machine's facts that each agent's reading drew under it. Nor is there a Look
 /// closer in the header (the owner, 6 November 2026: "I dont like it, we should remove it from the UI"): a closer look
@@ -483,7 +358,9 @@ struct ServerPage: View {
     }
 
     var body: some View {
-        FleetPage(title, back: FleetBack("Servers") { store.destination = .settings(.servers) }, mark: server.flatMap(tick)) {
+        // **No mark beside the name while the server is well** (the owner's answer "Nothing", 13 November 2026, as on
+        // the Servers list): the standing card says what is not well.
+        FleetPage(title, back: FleetBack("Servers") { store.destination = .settings(.servers) }) {
             Group {
                 if let server {
                     if let job = server.job, job.kind == "install", job.isOpen || job.state == "failed" && server.agents.contains(job.agent ?? "") {
@@ -517,7 +394,7 @@ struct ServerPage: View {
                         signIn(server)
                     }
                     serverCard(server)
-                    ForEach(server.agents, id: \.self) { agentCard($0) }
+                    if !server.agents.isEmpty { agentsCard(server) }
                     if server.agents.isEmpty && server.joined && !server.hub { removal(server) }
                 } else if offered && list != nil {
                     FormSection { FormEmpty("Founderizer has no server named \(name).", symbol: "server.rack") }
@@ -526,10 +403,10 @@ struct ServerPage: View {
                 } else if failed || store.connectionError != nil {
                     // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3, item 33).
                     if !store.hubNoticeShows {
-                        FormSection { FormRow("Founderizer cannot read this server now.", detail: "It reads again when the hub answers.") }
+                        FormSection { FormRow("Founderizer cannot read this server now.", detail: String(l10n: "It reads again when the hub answers.")) }
                     }
                 } else {
-                    LoadingLine("Reading the server…")
+                    LoadingLine(String(l10n: "Reading the server…"))
                 }
             }
         } actions: {
@@ -574,18 +451,13 @@ struct ServerPage: View {
         return .linuxWorker
     }
 
-    /// The page's actions: one button for each agent on the server, then Add agent.
+    /// **The page's one action, Add agent** (the owner's yes of 13 November 2026 to the picture), in the look of Add
+    /// server. Each agent opens from its own line in the Agents card: one button for each agent stood here, and five of
+    /// them took the title's room, so the server's name went and the header grew some 600 points high.
     @ViewBuilder private func serverActions(_ server: ServerEntry) -> some View {
-        Group {
-            ForEach(server.agents, id: \.self) { agent in
-                Button { store.destination = .agentDetail(agent, .settings) } label: {
-                    HStack(spacing: 7) { AgentGlyph(name: agent, size: GlyphSize.inline); Text(agent.agentLabel) }
-                }.buttonStyle(FleetOutlineButtonStyle()).help("Open the agent").accessibilityIdentifier("server-agent-\(agent)")
-            }
-            if server.available {
-                Button { addAgent(server.name) } label: { Label("Add agent", systemImage: "plus") }
-                    .buttonStyle(FleetPrimaryButtonStyle()).accessibilityIdentifier("server-add-agent")
-            }
+        if server.available {
+            Button { addAgent(server.name) } label: { Label("Add agent", systemImage: "plus") }
+                .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("server-add-agent")
         }
     }
 
@@ -601,13 +473,6 @@ struct ServerPage: View {
 
     /// **Connected is a tick beside the name**, with the word and its line behind it, as on the Servers list. A
     /// machine that is not connected has none: the card under the name says what is wrong.
-    private func tick(_ server: ServerEntry) -> AnyView? {
-        let connected = connection(server)
-        guard connected.isConnected else { return nil }
-        return AnyView(StateMark(state: .good, words: connected.words, detail: connected.says(server.name, now: time),
-                                 size: 18))
-    }
-
     /// **The machine, in one card**: its system, its private address, Founderizer on it and its security, each a
     /// mark or a value with its words behind it. The providers are not here: each agent's card names the one it runs
     /// on, from that agent's own reading.
@@ -619,24 +484,24 @@ struct ServerPage: View {
                 let fresh = store.isFresh && reading.isCurrent(at: time)
                 // A reading's age is a yes-or-no fact — is this current? — so it is a mark, and the date it was read
                 // is behind it. The system name stays the row's own title.
-                FormMarkRow(title: reading.os.name ?? "System not reported", state: fresh ? .good : .warn,
-                            symbol: server.symbol, words: fresh ? "Current" : "Last reading",
-                            detail: "Read \(fleetDate(reading.reported_at)).",
-                            whoActs: fresh ? nil : "The server sends its own reading every few minutes.",
+                FormMarkRow(title: reading.os.name ?? String(l10n: "System not reported"), state: fresh ? .good : .warn,
+                            symbol: server.symbol, words: fresh ? String(l10n: "Current") : String(l10n: "Last reading"),
+                            detail: String(l10n: "Read \(fleetDate(reading.reported_at))."),
+                            whoActs: fresh ? nil : String(l10n: "The server sends its own reading every few minutes."),
                             identifier: "server-reading")
                 if let address = server.address { FormRow("Private address", symbol: "network") { value(address) } }
                 FormMarkRow(title: "Founderizer", state: reading.current == false ? .warn
                             : reading.current == true ? .good : .unknown,
                             symbol: "arrow.triangle.2.circlepath",
-                            words: reading.current == false ? "Update available"
-                                : reading.current == true ? "Up to date" : "Not reported",
-                            detail: reading.revision.map { "It runs \($0.prefix(12))." } ?? "It reported no revision.",
+                            words: reading.current == false ? String(l10n: "Update available")
+                                : reading.current == true ? String(l10n: "Up to date") : String(l10n: "Not reported"),
+                            detail: reading.revision.map { String(l10n: "It runs \(String($0.prefix(12))).") } ?? String(l10n: "It reported no revision."),
                             whoActs: reading.current == false && server.joined
-                                ? "The server updates itself when it has no job." : nil,
+                                ? String(l10n: "The server updates itself when it has no job.") : nil,
                             identifier: "server-revision")
                 if let security = reading.security { securityRow(server, security) }
             } else if server.load == nil || server.joined {
-                FormRow("No reading yet", detail: server.joined ? "Its server service sends one within a minute of its start." : nil)
+                FormRow("No reading yet", detail: server.joined ? String(l10n: "Its server service sends one within a minute of its start.") : nil)
             }
             // The hub's own machine has its figures with no reading of its own: the hub reads them itself. One that
             // joined still owes its service's reading, and says so.
@@ -649,7 +514,7 @@ struct ServerPage: View {
     /// more, gray for a reading older than ten minutes, with its time on hover.
     @ViewBuilder private func loadRows(_ load: ServerLoad) -> some View {
         let old = !store.isFresh || !load.isCurrent(at: time)
-        let when = old ? load.at.map { "Last reading \(fleetDate($0))" } : nil
+        let when = old ? load.at.map { String(l10n: "Last reading \(fleetDate($0))") } : nil
         FormRow("CPU", symbol: "cpu") { loadValue(load.cpu.map(LoadWords.percent), share: load.cpu, old: old, help: when) }
             .accessibilityIdentifier("server-cpu")
         FormRow("Memory", symbol: "memorychip") {
@@ -667,7 +532,7 @@ struct ServerPage: View {
     }
 
     private func loadValue(_ words: String?, share: Double?, old: Bool, help: String?) -> some View {
-        Text(words ?? "Not reported").multilineTextAlignment(.trailing).textSelection(.enabled)
+        Text(words ?? String(l10n: "Not reported")).multilineTextAlignment(.trailing).textSelection(.enabled)
             .foregroundStyle(!old && ServerLoad.isHigh(share ?? 0) ? Color.orange : FleetStyle.muted)
             .help(help ?? "")
     }
@@ -679,48 +544,103 @@ struct ServerPage: View {
         let parts = server.securityParts(security, at: time)
         let off = parts.filter { $0.on == false }.map(\.name)
         let state: MarkState = !off.isEmpty ? .bad : parts.contains { $0.on == nil } ? .unknown : .good
-        let waiting = (security.pending_security ?? 0) > 0 ? " · \(security.pending_security ?? 0) security updates are waiting." : ""
-        return FormMarkRow(title: "Security", state: state, symbol: "lock.shield",
-                           words: !off.isEmpty ? Servers.offWords(parts) : state == .good ? "All on" : "Not reported",
+        let waiting = (security.pending_security ?? 0) > 0 ? " · " + String(l10n: "\(security.pending_security ?? 0) security updates are waiting.") : ""
+        return FormMarkRow(title: String(l10n: "Security"), state: state, symbol: "lock.shield",
+                           words: !off.isEmpty ? Servers.offWords(parts) : state == .good ? String(l10n: "All on") : String(l10n: "Not reported"),
                            detail: parts.map { "\($0.name): \($0.words)" }.joined(separator: " · ") + waiting,
                            act: state == .bad ? problem : nil,
-                           whoActs: state == .unknown ? "The server reports these with its own reading." : nil,
+                           whoActs: state == .unknown ? String(l10n: "The server reports these with its own reading.") : nil,
                            identifier: "server-security")
     }
 
-    /// **Each agent here, in one card**: what it runs on — its provider, the address of its account and the used share
-    /// of each window of that account — and the way into the machine as that agent, Terminal and, on a Mac, Screen
-    /// Sharing.
-    @ViewBuilder private func agentCard(_ name: String) -> some View {
-        let reading = readings.first { $0.agent == name }
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 7) { AgentGlyph(name: name, size: GlyphSize.inline); Text(name.agentLabel) }
-                .font(FormMetrics.heading).foregroundStyle(FleetStyle.text)
-                .frame(minHeight: FormMetrics.headingRow).padding(.leading, 2)
-            FormSection {
-                if let agent = store.state?.agents.first(where: { $0.name == name }) {
-                    let account = AgentAccount(agent, store: store)
-                    FormRow(account.provider, mark: ProviderIcon(runtime: agent.runtime, size: 18)) {
-                        HStack(spacing: 16) {
-                            Text(account.name).foregroundStyle(FleetStyle.muted).lineLimit(1).truncationMode(.middle)
-                                .textSelection(.enabled).help(account.help)
-                            Text(account.usage).monospacedDigit()
-                                .foregroundStyle(account.old ? FleetStyle.muted : FleetStyle.text).help(account.usageHelp)
+    /// **The agents on this server, in one card** (the owner's yes of 13 November 2026 to the picture; five cards stood
+    /// here, each with its provider, the same account and the same usage, and a Terminal row): one line for each agent
+    /// in the columns of the Servers cards (`AgentUsageLine`), the windows' heads on the card's heading, a click that
+    /// opens the agent, and its Terminal and Screen Sharing at the line's end. The widest layout that fits the page.
+    @ViewBuilder private func agentsCard(_ server: ServerEntry) -> some View {
+        let bars = UsageBar.bars(for: store.state?.agents ?? [], time: time, isFresh: store.isFresh)
+        let columns = UsageBar.columns(server.agents.compactMap { bars[$0] }, at: time)
+        let parts = ServerCards.parts(columns)
+        let layouts = ServerCardLayout.candidates(role: ServerCards.roleWidth(server.agents),
+                                                  account: ServerCards.accountWidth(server.agents, store: store), parts: parts)
+        ViewThatFits(in: .horizontal) {
+            agentsBlock(server, layout: layouts[0], parts: parts, columns: columns, bars: bars)
+            if layouts.count > 3 { agentsBlock(server, layout: layouts[1], parts: parts, columns: columns, bars: bars) }
+            agentsBlock(server, layout: layouts[layouts.count - 2], parts: parts, columns: columns, bars: bars)
+            agentsBlock(server, layout: layouts[layouts.count - 1], parts: parts, columns: columns, bars: bars)
+        }
+    }
+
+    /// The Agents heading with the windows' heads over their cells on a wide card, and the card of its lines.
+    private func agentsBlock(_ server: ServerEntry, layout: ServerCardLayout, parts: ServerCardLayout.Parts,
+                             columns: [String], bars: [String: UsageBar]) -> some View {
+        let access = server.agents.contains { reading(of: $0).map(Self.hasScreen) ?? false } ? Self.screenAccess : Self.terminalAccess
+        // The start of a wide line before its cells: the glyph, the role, the logo and the account.
+        let lead = layout.role.flatMap { role in layout.account.map { parts.glyph + parts.small + role + parts.roleToAccount + $0 } }
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 0) {
+                if let lead, !columns.isEmpty {
+                    Text("Agents").frame(width: CGFloat(lead) + FormMetrics.rowInset - 2, alignment: .leading)
+                    HStack(spacing: CGFloat(parts.gap)) {
+                        ForEach(columns, id: \.self) { title in
+                            Text(title).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
+                                .frame(width: CGFloat(parts.wideCell), alignment: .leading)
                         }
-                    }.accessibilityIdentifier("server-agent-account-\(name)")
+                    }.padding(.leading, CGFloat(parts.gap)).accessibilityHidden(true)
+                    Spacer(minLength: 0)
+                } else {
+                    Text("Agents")
+                    Spacer(minLength: 0)
                 }
-                if let reading, reading.sshURL != nil || reading.screenSharingConnection != nil || reading.screenSharingURL != nil {
-                    MachineAccessButtons(reading: reading, fresh: store.isFresh && reading.isCurrent(at: time))
-                        .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 11)
+            }
+            .font(FormMetrics.heading).foregroundStyle(FleetStyle.text).accessibilityAddTraits(.isHeader)
+            .frame(minHeight: FormMetrics.headingRow).padding(.leading, 2)
+            FormSection {
+                ForEach(server.agents, id: \.self) { name in
+                    agentLine(name, layout: layout, parts: parts, columns: columns, bar: bars[name], access: access)
                 }
             }
         }
     }
 
+    /// One agent's line: the agent, which opens its page, then its Terminal and its Screen Sharing.
+    private func agentLine(_ name: String, layout: ServerCardLayout, parts: ServerCardLayout.Parts, columns: [String],
+                           bar: UsageBar?, access: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Button { store.destination = .agentDetail(name, .settings) } label: {
+                AgentUsageLine(store: store, name: name, layout: layout, parts: parts, columns: columns, bar: bar)
+                    .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).help("Open the agent").accessibilityIdentifier("server-agent-\(name)")
+            Group {
+                if let reading = reading(of: name),
+                   reading.sshURL != nil || reading.screenSharingConnection != nil || reading.screenSharingURL != nil {
+                    MachineAccessButtons(reading: reading, fresh: store.isFresh && reading.isCurrent(at: time))
+                        .labelStyle(.iconOnly)
+                } else {
+                    Color.clear.frame(height: 1)
+                }
+            }
+            .frame(width: access, alignment: .trailing).padding(.leading, CGFloat(parts.gap))
+        }
+        .padding(.horizontal, FormMetrics.rowInset).frame(minHeight: FormMetrics.row)
+    }
+
+    /// The machine reading of one agent here: its Terminal and its Screen Sharing come from it.
+    private func reading(of agent: String) -> MachineStatus? { readings.first { $0.agent == agent } }
+
+    private static func hasScreen(_ reading: MachineStatus) -> Bool {
+        reading.screenSharingConnection != nil || reading.screenSharingURL != nil
+    }
+
+    /// The end of a line: Terminal alone, or Terminal, Screen Sharing and its Disconnect, each a mark of 16 points.
+    private static let terminalAccess: CGFloat = 20
+    private static let screenAccess: CGFloat = 16 * 3 + 12 * 2
+
     /// The one thing a cross carries when the work is on the machine itself and no button of this app does it:
     /// the report window, which reads the whole fleet and carries this reading to one of his own agents.
     private var problem: (words: String, run: () -> Void) {
-        ("Report a problem", { openWindow(id: FounderizerApp.reportWindow) })
+        (String(l10n: "Report a problem"), { openWindow(id: FounderizerApp.reportWindow) })
     }
 
     /// Remove server, a danger button at the end of the page, with the hub's refusal under it: no row of its own named
@@ -753,7 +673,7 @@ struct ServerPage: View {
                                                    server: server.name, sha256: team.sha256)
             store.destination = .settings(.servers)
         } catch let HubError.refusal(_, words) { error = words }
-        catch { self.error = "The hub has not answered. Try again." }
+        catch { self.error = String(l10n: "The hub has not answered. Try again.") }
     }
 
     private func value(_ text: String) -> some View {
@@ -830,23 +750,24 @@ struct AgentAccount {
                 case .unknown: nil
                 }
             }
-        name = agent.local_model == true ? "Local model" : address ?? provider
+        name = agent.local_model == true ? String(l10n: "Local model") : address ?? provider
         let bar = UsageBar.bars(for: store.state?.agents ?? [], time: time, isFresh: store.isFresh)[agent.name]
         help = [provider, bar?.reading?.plan, address].compactMap { $0 }.joined(separator: " · ")
         guard bar?.isLocalModel != true else {
             usage = ""; old = false; usageHelp = ""; return
         }
         guard let reading = bar?.reading, !reading.windows.isEmpty else {
-            usage = "Not reported"; old = false; usageHelp = bar?.problem ?? ""; return
+            usage = String(l10n: "Not reported"); old = false; usageHelp = bar?.problem ?? ""; return
         }
         let windows = reading.ownWindows(at: time)
         old = !store.isFresh || reading.isStale(at: time)
         usage = windows.map { "\($0.shortLabel) · \(Int($0.used_percent.rounded()))%" }.joined(separator: " · ")
-        usageHelp = (windows.map { window in
-            "\(window.label): \(window.used_percent.formatted(.number.precision(.fractionLength(0...1))))% used"
-                + (window.resets_at.map { ", resets \(fleetDate(ResetLine.minute($0)))" } ?? "")
-        } + [old ? "Last reading \(fleetDate(reading.collected_at))" : nil,
-             bar?.limit.map { "Usage limit until \(fleetComingTime($0.until, now: time))" }].compactMap { $0 })
+        usageHelp = (windows.map { window -> String in
+            let used = window.used_percent.formatted(.number.precision(.fractionLength(0...1)))
+            guard let resets = window.resets_at else { return String(l10n: "\(window.label): \(used)% used") }
+            return String(l10n: "\(window.label): \(used)% used, resets \(fleetDate(ResetLine.minute(resets)))")
+        } + [old ? String(l10n: "Last reading \(fleetDate(reading.collected_at))") : nil,
+             bar?.limit.map { String(l10n: "Usage limit until \(fleetComingTime($0.until, now: time))") }].compactMap { $0 })
             .joined(separator: "\n")
     }
 }

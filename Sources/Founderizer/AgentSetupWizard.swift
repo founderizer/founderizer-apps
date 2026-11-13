@@ -96,7 +96,7 @@ struct AgentSetupWizard: View {
               entry.agents.allSatisfy({ $0 == agent }) else { return nil }
         return joined
     }
-    private var serverName: String { server?.name ?? machine?.machine ?? "its server" }
+    private var serverName: String { server?.name ?? machine?.machine ?? String(l10n: "its server") }
     /// Something goes on that the page is about: an install or a preparation, or a sign-in.
     private var running: Bool { job?.isOpen == true || machine?.login?.isOpen == true }
 
@@ -139,7 +139,7 @@ struct AgentSetupWizard: View {
                 if !readingsCurrent {
                     if store.addedAgent == agent {
                         // **"Adding Juno", as Add agent said it, until the page can draw** (fix round 3, item 12).
-                        SetupStep(title: "Adding \(name)", waits: true) { AgentGlyph(name: agent, size: SetupMetrics.mark) }
+                        SetupStep(title: String(l10n: "Adding \(name)"), waits: true) { AgentGlyph(name: agent, size: SetupMetrics.mark) }
                     } else {
                         // Nothing for a second: the page it opens on comes with the first readings.
                         Held(since: began) { settingUp }
@@ -153,7 +153,7 @@ struct AgentSetupWizard: View {
                     case .signIn(let provider): signIn(provider)
                     case .activate:
                         if signingInAgain {
-                            SetupStep(title: "Signing in to \(providerName(runtime))", waits: true) { mark(runtime) }
+                            SetupStep(title: String(l10n: "Signing in to \(providerName(runtime))"), waits: true) { mark(runtime) }
                         } else if placing {
                             // Active from the start: its session starts by itself once it is signed in.
                             settingUp
@@ -182,12 +182,14 @@ struct AgentSetupWizard: View {
     /// The name of the page he is on. Each one says what it asks, so no page needs a line to explain itself.
     private var title: String {
         switch page {
-        case .server: "\(name)'s server"
-        case .provider: "\(name)'s AI provider"
-        case .installing(let provider): "Installing \(providerName(provider)) on \(serverName)"
-        case .switching: "Setting up \(name)"
-        case .signIn(let provider): "Sign in to \(providerName(provider))"
-        case .activate: "Activate \(name)"
+        case .server: String(l10n: "\(name)'s server")
+        case .provider: String(l10n: "\(name)'s AI provider")
+        // With the step of the server's job that runs, once it reports one: "Installing Codex on app-1 · 2 of 5".
+        case .installing(let provider):
+            AgentSetupFlow.installing(providerName(provider), on: serverName, job: job, onMac: server?.isMac == true)
+        case .switching: String(l10n: "Setting up \(name)")
+        case .signIn(let provider): String(l10n: "Sign in to \(providerName(provider))")
+        case .activate: String(l10n: "Activate \(name)")
         }
     }
 
@@ -195,7 +197,7 @@ struct AgentSetupWizard: View {
     /// loads, the machine check and the activation, and then the chat's own "Setting up" (`ChatSettingUp`), which
     /// looks the same, so the page does not change while the machine works.
     private var settingUp: some View {
-        SetupStep(title: "Setting up \(name)", waits: true) { AgentGlyph(name: agent, size: SetupMetrics.mark) }
+        SetupStep(title: String(l10n: "Setting up \(name)"), waits: true) { AgentGlyph(name: agent, size: SetupMetrics.mark) }
     }
 
     // MARK: the AI provider
@@ -276,7 +278,7 @@ struct AgentSetupWizard: View {
         let shown = prompt?.deviceCode ?? login?.deviceCode
         if login?.codeOnItsWay(sentFrom: sentFrom) == true || login?.state == "signing_in" {
             // A wait names what it waits for (B-ONB-5, fix round 2): "Signing in to Claude Code".
-            SetupStep(title: "Signing in to \(providerName(provider))", waits: true) { mark(provider) } content: { refused }
+            SetupStep(title: String(l10n: "Signing in to \(providerName(provider))"), waits: true) { mark(provider) } content: { refused }
         } else if let link {
             SetupStep(title: title) { mark(provider) } content: {
                 // What he does on the provider's page comes before what he enters here, so its steps stand over it.
@@ -296,7 +298,7 @@ struct AgentSetupWizard: View {
                 if AgentSetupFlow.opensByItself(askedHere: askedSignIn, opened: opened, link: link) { openSignIn(link, code: shown) }
             }
         } else {
-            SetupStep(title: login?.isSigningOut == true ? "Signing out of \(providerName(provider))" : "Starting the sign-in",
+            SetupStep(title: login?.isSigningOut == true ? String(l10n: "Signing out of \(providerName(provider))") : String(l10n: "Starting the sign-in"),
                       waits: true) {
                 mark(provider)
             } content: { refused }
@@ -396,7 +398,7 @@ struct AgentSetupWizard: View {
             }
         case .installAgain:
             switchingTo = nil
-            guard let server = server?.name else { refusal = "Founderizer cannot read \(name)'s server now."; break }
+            guard let server = server?.name else { refusal = String(l10n: "Founderizer cannot read \(name)'s server now."); break }
             // Its first server's install again: the same command, on the same server, with the provider it has.
             if placing { await place(on: server, runtime: provider, database: database); break }
             do {
@@ -406,17 +408,17 @@ struct AgentSetupWizard: View {
                                                          server: server, sha256: team.sha256, agent: agent,
                                                          runtime: provider, role: role, reportsTo: nil)
             } catch let HubError.refusal(_, words) { refusal = words }
-            catch { refusal = "The hub has not answered. Try again." }
+            catch { refusal = String(l10n: "The hub has not answered. Try again.") }
         case .prepare:
             switchingTo = provider; askedSwitch = false
             // Signed in there already: nothing to prepare, the switch goes now.
             if teamLine?.runtime_switch?.to == provider, teamLine?.runtime_switch?.ready == true { break }
-            guard let server = server?.name else { refusal = "Founderizer cannot read \(name)'s server now."; break }
+            guard let server = server?.name else { refusal = String(l10n: "Founderizer cannot read \(name)'s server now."); break }
             do {
                 _ = try await HubClient().prepareServerRuntime(hub: store.hub, database: database, client: store.installation,
                                                                server: server, agent: agent, runtime: provider)
             } catch let HubError.refusal(_, words) { refusal = words; switchingTo = nil }
-            catch { refusal = "The hub has not answered. Try again."; switchingTo = nil }
+            catch { refusal = String(l10n: "The hub has not answered. Try again."); switchingTo = nil }
         }
         askedSignIn = start.signsIn && refusal == nil
         await read()
@@ -436,7 +438,7 @@ struct AgentSetupWizard: View {
             } catch let HubError.refusal(status, words) {
                 if status == 409, attempt == 0, words.contains("team.json changed") { continue }
                 refusal = words; return
-            } catch { refusal = "The hub has not answered. Try again."; return }
+            } catch { refusal = String(l10n: "The hub has not answered. Try again."); return }
         }
     }
 
@@ -448,7 +450,7 @@ struct AgentSetupWizard: View {
             defer { busy = false }
             if !(await store.command(.machineSigninCode(agent: agent, code: ready))) {
                 sentFrom = nil
-                refusal = store.sendError ?? "The code did not reach the hub. Paste it again."
+                refusal = store.sendError ?? String(l10n: "The code did not reach the hub. Paste it again.")
             }
             code = ""
             await read()
@@ -479,9 +481,9 @@ struct AgentSetupWizard: View {
             case .saved: activated = true
             case .behind: break               // only with queue false
             case .refused(let words), .conflict(let words): refusal = words
-            case .unconfirmed: refusal = "The hub has not answered. The request line at the bottom of the window can try again."
+            case .unconfirmed: refusal = String(l10n: "The hub has not answered. The request line at the bottom of the window can try again.")
             }
-        } catch { refusal = "Founderizer cannot read the team now. Try again." }
+        } catch { refusal = String(l10n: "Founderizer cannot read the team now. Try again.") }
         await store.refresh()
         await read()
     }
@@ -510,7 +512,7 @@ struct AgentSetupWizard: View {
             askedSwitch = true; busy = true
             defer { busy = false }
             if !(await store.command(.agentRuntime(agent: agent, sha256: sha256, runtime: switchingTo))) {
-                refusal = store.sendError ?? "The switch was not confirmed."
+                refusal = store.sendError ?? String(l10n: "The switch was not confirmed.")
                 self.switchingTo = nil
             }
             await store.refresh()

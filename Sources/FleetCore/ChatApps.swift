@@ -42,18 +42,20 @@ public struct ReportDelivery: Decodable, Equatable, Sendable {
 
     /// The delivery line: "Sent to WhatsApp · Read 14:03". `time` gives the short time of `at`.
     public func words(time: (Double) -> String) -> String {
-        let app = ChatApps.title(self.app), when = at.map { " \(time($0))" } ?? ""
+        let app = ChatApps.title(self.app), when = at.map { time($0) }
         switch state {
-        case "queued": return "Waiting to send to \(app)"
-        case "sending": return "Sending to \(app)…"
-        case "sent": return "Sent to \(app)" + (at.map { " · \(time($0))" } ?? "")
-        case "delivered": return "Sent to \(app) · Delivered" + when
-        case "read": return "Sent to \(app) · Read" + when
+        case "queued": return String(l10n: "Waiting to send to \(app)")
+        case "sending": return String(l10n: "Sending to \(app)…")
+        case "sent": return when.map { String(l10n: "Sent to \(app) · \($0)") } ?? String(l10n: "Sent to \(app)")
+        case "delivered":
+            return when.map { String(l10n: "Sent to \(app) · Delivered \($0)") } ?? String(l10n: "Sent to \(app) · Delivered")
+        case "read": return when.map { String(l10n: "Sent to \(app) · Read \($0)") } ?? String(l10n: "Sent to \(app) · Read")
         case "failed":
             let reason = (error ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return reason.isEmpty ? "Not sent to \(app)." : "Not sent: \(reason)\(reason.hasSuffix(".") ? "" : ".")"
-        case "unknown": return "Delivery to \(app) not confirmed"
-        default: return "\(app) delivery: \(state)"
+            if reason.isEmpty { return String(l10n: "Not sent to \(app).") }
+            return reason.hasSuffix(".") ? String(l10n: "Not sent: \(reason)") : String(l10n: "Not sent: \(reason).")
+        case "unknown": return String(l10n: "Delivery to \(app) not confirmed")
+        default: return String(l10n: "\(app) delivery: \(state)")
         }
     }
 }
@@ -220,34 +222,34 @@ public struct ChannelCard: Equatable, Sendable {
         let whatsApp = app == "whatsapp"
         guard let account else {
             kind = .none; action = whatsApp ? .addNumber : .addBot; menu = []
-            status = ChatStateWords(words: whatsApp ? "No number" : "No bot", tone: .off)
+            status = ChatStateWords(words: whatsApp ? String(l10n: "No number") : String(l10n: "No bot"), tone: .off)
             return
         }
         guard account.isEnabled else {
             kind = .off; action = .turnOn; menu = [.remove]
-            status = ChatStateWords(words: "Turned off", tone: .off)
+            status = ChatStateWords(words: String(l10n: "Turned off"), tone: .off)
             return
         }
         let reason = ChatApps.clean(account.link?.error) ?? ChatApps.clean(account.error)
         var kind: Kind, action: Action?, menu: [MenuItem] = [.remove], status: ChatStateWords
         switch (whatsApp, account.state) {
         case (true, _) where linking && account.state != "connected":
-            kind = .linking; status = ChatStateWords(words: "Linking", tone: .waiting)
+            kind = .linking; status = ChatStateWords(words: String(l10n: "Linking"), tone: .waiting)
         case (_, "connected"):
-            kind = .connected; status = ChatStateWords(words: "Connected", tone: .good)
+            kind = .connected; status = ChatStateWords(words: String(l10n: "Connected"), tone: .good)
             menu = whatsApp ? [.unlink, .remove] : (account.inviteURL == nil ? [] : [.invite]) + [.changeToken, .remove]
         case (_, nil) where account.link == nil, (_, "connecting") where account.link?.state != "waiting":
-            kind = .connecting; status = ChatStateWords(words: "Connecting…", tone: .waiting)
+            kind = .connecting; status = ChatStateWords(words: String(l10n: "Connecting…"), tone: .waiting)
         case (false, "missing_token"):
             kind = .failed; action = .fixToken
-            status = ChatStateWords(words: "No token", tone: .problem, detail: "The hub server has no token for this bot.")
+            status = ChatStateWords(words: String(l10n: "No token"), tone: .problem, detail: String(l10n: "The hub server has no token for this bot."))
         case (false, let state):
             kind = .failed; action = .fixToken
-            status = ChatStateWords(words: state == "logged_out" ? "Logged out" : ChatApps.shortReason(account.error), tone: .problem,
-                                    detail: reason ?? "The bridge could not connect the bot.")
+            status = ChatStateWords(words: state == "logged_out" ? String(l10n: "Logged out") : ChatApps.shortReason(account.error), tone: .problem,
+                                    detail: reason ?? String(l10n: "The bridge could not connect the bot."))
         case (true, _):
             kind = .unlinked; action = .linkAgain
-            status = ChatStateWords(words: "Unlinked", tone: .problem, detail: reason)
+            status = ChatStateWords(words: String(l10n: "Unlinked"), tone: .problem, detail: reason)
         }
         // A bridge report older than three minutes is the last reading, never a current state.
         if kind != .linking, let serverTime, let at = account.status_at, serverTime - at > ChatApps.statusAge {
@@ -288,7 +290,7 @@ public enum DiscordProgress: Equatable, Sendable {
         guard let bot, (bot.status_at ?? 0) > sentAt else { self = .connecting; return }
         switch bot.state {
         case "connected": self = .connected(bot.name ?? bot.label)
-        case "error", "logged_out": self = .refused(bot.state == "logged_out" ? "Logged out" : ChatApps.shortReason(bot.error))
+        case "error", "logged_out": self = .refused(bot.state == "logged_out" ? String(l10n: "Logged out") : ChatApps.shortReason(bot.error))
         default: self = .connecting
         }
     }
@@ -343,7 +345,7 @@ public struct PeopleSnapshot: Decodable, Sendable {
                 let said = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 if !said.isEmpty { return String(said.prefix(80)) }
                 let id = (sender ?? "").split(separator: "@").first.map(String.init) ?? ""
-                return id.isEmpty ? "Somebody" : String(id.prefix(40))
+                return id.isEmpty ? String(l10n: "Somebody") : String(id.prefix(40))
             }
 
             /// What they wrote, bounded as the hub bounds it, or nil when the message carried no text.
@@ -632,7 +634,7 @@ public enum ChatApps {
     /// A Discord error in one or two words; the full text goes to the hover text. Close code 4004 is a refused token.
     public static func shortReason(_ error: String?) -> String {
         let text = (error ?? "").lowercased()
-        return text.contains("4004") || text.contains("authentication") || text.contains("token") ? "Token refused" : "Not connected"
+        return text.contains("4004") || text.contains("authentication") || text.contains("token") ? String(l10n: "Token refused") : String(l10n: "Not connected")
     }
 
     /// A reason from the bridge without spaces at its ends, and with an end mark; nil for none.
@@ -654,9 +656,9 @@ public enum ChatApps {
     public static func masked(_ id: String, app: String) -> String {
         guard app == "whatsapp", !id.contains("•") else { return id }
         let user = id.split(separator: "@", maxSplits: 1).first.map(String.init) ?? id
-        if id.hasSuffix("@lid") { return "Hidden number" }
+        if id.hasSuffix("@lid") { return String(l10n: "Hidden number") }
         let digits = user.split(separator: ":").first.map { $0.filter(\.isNumber) } ?? ""
-        guard digits.count >= 7 else { return digits.isEmpty ? "Hidden number" : "+•••\(digits.suffix(2))" }
+        guard digits.count >= 7 else { return digits.isEmpty ? String(l10n: "Hidden number") : "+•••\(digits.suffix(2))" }
         let start = Array(digits)
         return "+\(String(start[0..<2])) \(start[2])•• ••• \(digits.suffix(3))"
     }

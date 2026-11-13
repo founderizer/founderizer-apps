@@ -12,7 +12,8 @@
 # 1. Publishes the ARM64 build: Release, self-contained, not packaged (plan decision D3).
 # 2. Compiles the x64 build, to prove that it compiles; this ARM64 VM does not run it.
 # 3. Makes a code signing test key in the VM once (LocalMachine\My, RSA 3072), trusts its certificate in the
-#    VM only, and signs Founderizer.exe and Founderizer.dll of the ARM64 build with it.
+#    VM only, and signs Founderizer.App.exe and Founderizer.App.dll of the ARM64 build with it. The zip and the
+#    setup of a release, with the launcher, are release/build-release.ps1's.
 # A test key is not the release identity: plan decision D2 (Azure Artifact Signing) signs the releases.
 
 param(
@@ -41,8 +42,8 @@ if (-not $Proofs) {
 Step 'build x64'
 & $dotnet build $project -c Release -r win-x64 -p:Platform=x64 -nologo -clp:NoSummary
 if ($LASTEXITCODE -ne 0) { throw "the x64 build failed: exit $LASTEXITCODE" }
-$x64 = Get-ChildItem -Path (Join-Path $Source 'bin\x64\Release') -Recurse -Filter 'Founderizer.exe' | Select-Object -First 1
-if (-not $x64) { throw 'no x64 Founderizer.exe' }
+$x64 = Get-ChildItem -Path (Join-Path $Source 'bin\x64\Release') -Recurse -Filter 'Founderizer.App.exe' | Select-Object -First 1
+if (-not $x64) { throw 'no x64 Founderizer.App.exe' }
 $machine = [BitConverter]::ToUInt16([IO.File]::ReadAllBytes($x64.FullName), [BitConverter]::ToInt32([IO.File]::ReadAllBytes($x64.FullName), 0x3C) + 4)
 Write-Output ("x64 build: {0}, PE machine 0x{1:x4} (0x8664 is x64)" -f $x64.FullName, $machine)
 }
@@ -65,12 +66,12 @@ foreach ($store in 'Root', 'TrustedPublisher') {
 Write-Output "certificate $($certificate.Thumbprint), $subject, until $($certificate.NotAfter.ToString('yyyy-MM-dd'))"
 
 Step 'sign'
-foreach ($name in 'Founderizer.exe', 'Founderizer.dll') {
+foreach ($name in 'Founderizer.App.exe', 'Founderizer.App.dll') {
     $file = Join-Path $arm64 $name
     $result = Set-AuthenticodeSignature -FilePath $file -Certificate $certificate -HashAlgorithm SHA256
     if ($result.Status -ne 'Valid') { throw "signing $name failed: $($result.Status) $($result.StatusMessage)" }
 }
-Get-AuthenticodeSignature -FilePath (Join-Path $arm64 'Founderizer.exe'), (Join-Path $arm64 'Founderizer.dll') |
+Get-AuthenticodeSignature -FilePath (Join-Path $arm64 'Founderizer.App.exe'), (Join-Path $arm64 'Founderizer.App.dll') |
     Format-Table -AutoSize @{ n = 'File'; e = { Split-Path $_.Path -Leaf } }, Status, @{ n = 'Signer'; e = { $_.SignerCertificate.Subject } } |
     Out-String | Write-Output
 

@@ -130,7 +130,7 @@ final class FirstRunModel {
     }
 
     /// A hub that answers and does not serve this Mac: it is somebody else's, or not claimed yet.
-    static let notOwned = "Your hub answered, and it does not serve its pages to this Mac."
+    static let notOwned = String(l10n: "Your hub answered, and it does not serve its pages to this Mac.")
 
     /// Connects, and says what this Mac has proved: the hub answers, and it serves its pages to this Mac, which is
     /// what being its owner means.
@@ -193,8 +193,8 @@ final class FirstRunModel {
 /// **Each screen is a setup step, as an agent's setup is** (`SetupPage`, `SetupStep`; the owner, 28 October 2026, of
 /// a wizard of the same app: "it has to be centered like the ai provider login"): the product's muted mark at the
 /// size of every step's mark, the title under it, what the step asks under that, and Back at the page's top left,
-/// which Esc follows too. The mark and the title stand where every setup step has them, whatever is under them, and a
-/// wait is the title's moving words and no spinner ("remove that circle, I liked the Thinking text animation").
+/// which Esc follows too. The page puts the whole step in the middle of the window (`SetupPage`), and a wait is the
+/// title's moving words and no spinner ("remove that circle, I liked the Thinking text animation").
 struct FirstRunView: View {
     @Bindable var store: FleetStore
     @State private var model = FirstRunModel()
@@ -317,10 +317,10 @@ struct FirstRunView: View {
         // **Connect Tailscale, and nothing else to read** (the onboarding of 4 November 2026): Connect brings Tailscale's
         // own installer, or Tailscale itself with its sign-in, whose first sign-in makes the owner's account and network.
         // The step reads this Mac every two seconds and goes on by itself once it is on the network.
-        SetupStep(title: net.pressed ? "Waiting for Tailscale" : "Connect Tailscale", waits: net.pressed) { NetworkMark() } content: {
+        SetupStep(title: net.pressed ? String(l10n: "Waiting for Tailscale") : String(l10n: "Connect Tailscale"), waits: net.pressed) { NetworkMark() } content: {
             if !net.busy {
                 if net.pressed {
-                    SetupLink("Open Tailscale again") { Task { await net.connect() } }
+                    SetupLink(String(l10n: "Open Tailscale again")) { Task { await net.connect() } }
                 } else {
                     Button("Connect") { Task { await net.connect() } }
                         .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
@@ -342,11 +342,11 @@ struct FirstRunView: View {
     /// of Tailscale makes an access token, and the app makes the fleet's lasting key from it and forgets the token. Every
     /// server then joins with no press, and none expires.
     private var key: some View {
-        SetupStep(title: net.busy ? "Connecting your network" : "Your Tailscale key", waits: net.busy) { NetworkMark() } content: {
+        SetupStep(title: net.busy ? String(l10n: "Connecting your network") : String(l10n: "Your Tailscale key"), waits: net.busy) { NetworkMark() } content: {
             if !net.busy {
                 // What he does at Tailscale comes before the paste, so its steps stand over the field.
                 SetupSteps.tailscaleKey
-                PasteField(placeholder: "Paste it here", text: $net.keyText, accepts: { $0.hasPrefix("tskey-api-") }) {
+                PasteField(placeholder: String(l10n: "Paste it here"), text: $net.keyText, accepts: { $0.hasPrefix("tskey-api-") }) {
                     Task { if await net.sendKey() { model.afterKey(); opensChoice() } }
                 }
                 .accessibilityIdentifier("first-run-tailscale-key")
@@ -367,7 +367,7 @@ struct FirstRunView: View {
     /// manager gets a server of its own on its own page. A copy of a fleet goes back on the new hub, where the wizard
     /// offers it after the install (`offersRestore`).
     private var cloudStep: some View {
-        SetupStep(title: "A VPS for your fleet", width: SetupMetrics.cardsWidth) { mark } content: {
+        SetupStep(title: String(l10n: "A VPS for your fleet"), width: SetupMetrics.cardsWidth) { mark } content: {
             CloudCards(id: "first-run", choose: { model.choose(.token($0)); opensChoice() }) {
                 vps.reset(); model.choose(.vps)
             }
@@ -402,8 +402,8 @@ struct FirstRunView: View {
     private func token(_ provider: CloudProvider) -> some View {
         let building = cloud.stage == .making || cloud.stage == .joining
         let choosing = cloud.stage == .choosing
-        return SetupStep(title: building ? "Building your fleet" : choosing ? "Your hub's server at \(provider.name)"
-                            : "Your \(provider.name) token",
+        return SetupStep(title: building ? String(l10n: "Building your fleet") : choosing ? String(l10n: "Your hub's server at \(provider.name)")
+                            : String(l10n: "Your \(provider.name) token"),
                          waits: building || (choosing && cloud.offer == nil)) {
             // The provider's own logo over its pages, as Add server has it (the owner, 10 November 2026).
             CloudMark(provider: provider, size: SetupMetrics.mark)
@@ -415,7 +415,7 @@ struct FirstRunView: View {
                             use: useExisting)
             } else {
                 SetupSteps.token(provider)
-                PasteField(placeholder: "Paste it here", text: $cloud.tokenText,
+                PasteField(placeholder: String(l10n: "Paste it here"), text: $cloud.tokenText,
                            accepts: { $0.count >= 20 && !$0.contains(" ") }) {
                     cloud.sendToken(provider, use: .hub)
                 }
@@ -431,21 +431,21 @@ struct FirstRunView: View {
     @ViewBuilder private var vpsStep: some View {
         switch vps.phase {
         case .address:
-            SetupStep(title: "Your VPS") { serverMark } content: {
-                SetupField(placeholder: "Address", text: $vps.addressText) { vps.tailnet = model.mac?.tailnet; vps.check(job: .hub) }
+            SetupStep(title: String(l10n: "Your VPS")) { serverMark } content: {
+                SetupField(placeholder: String(l10n: "Address"), text: $vps.addressText) { vps.tailnet = model.mac?.tailnet; vps.check(job: .hub) }
                     .accessibilityIdentifier("first-run-vps-address")
             }
         case .checking:
-            SetupStep(title: "Checking \(vps.host)", waits: true) { serverMark }
+            SetupStep(title: String(l10n: "Checking \(vps.host)"), waits: true) { serverMark }
         case .waiting(let why):
-            SetupStep(title: "Waiting for \(vps.host)", waits: true) { serverMark } content: {
+            SetupStep(title: String(l10n: "Waiting for \(vps.host)"), waits: true) { serverMark } content: {
                 Text(why).foregroundStyle(FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
             }
         case .password:
-            SetupStep(title: "Password for \(vps.target?.user ?? "root")@\(vps.host)") {
+            SetupStep(title: String(l10n: "Password for \(vps.target?.user ?? "root")@\(vps.host)")) {
                 IconTile(symbol: "lock", size: SetupMetrics.mark).accessibilityHidden(true)
             } content: {
-                SetupSecureField(placeholder: "Password", text: $vps.passwordText) { vps.givePassword(job: .hub) }
+                SetupSecureField(placeholder: String(l10n: "Password"), text: $vps.passwordText) { vps.givePassword(job: .hub) }
                     .accessibilityIdentifier("first-run-vps-password")
                 Text("Used once, to add this Mac's key. Never kept.").foregroundStyle(FleetStyle.muted)
             }
@@ -482,12 +482,12 @@ struct FirstRunView: View {
             let connecting = checked && (store.state == nil || passed && !offersRestore)
             let stopped = !install.running && install.failure != nil
             let host = install.host.trimmingCharacters(in: .whitespacesAndNewlines)
-            SetupStep(title: stopped ? "Your hub did not install" : connecting ? "Connecting to your hub"
-                        : checked ? (passed ? "Your fleet is up" : "Your hub is installed")
-                        : "Building your fleet",
+            SetupStep(title: stopped ? String(l10n: "Your hub did not install") : connecting ? String(l10n: "Connecting to your hub")
+                        : checked ? (passed ? String(l10n: "Your fleet is up") : String(l10n: "Your hub is installed"))
+                        : String(l10n: "Building your fleet"),
                       waits: install.running || connecting) { mark } content: {
                 form {
-                    MachineInstallRun(model: install, title: "Your hub", next: AnyView(afterInstall),
+                    MachineInstallRun(model: install, title: String(l10n: "Your hub"), next: AnyView(afterInstall),
                                       again: { install.installHub(store: store) }, showsStatus: true)
                 }
             }
@@ -498,7 +498,7 @@ struct FirstRunView: View {
                 if onwards { finish() }
             }
         } else {
-            SetupStep(title: "Your server") { mark } content: {
+            SetupStep(title: String(l10n: "Your server")) { mark } content: {
                 form {
                     MachineInstallForm(model: install, taken: [], firstMachine: true) {
                         install.installHub(store: store)
@@ -541,7 +541,7 @@ struct FirstRunView: View {
     /// step — and nothing else waits. **What stopped it is one orange line under the form**, as every setup step says
     /// it (fix round 3, item 50): it was a muted footer.
     private var address: some View {
-        SetupStep(title: model.busy ? "Checking your fleet" : "Your hub's address", waits: model.busy) { mark } content: {
+        SetupStep(title: model.busy ? String(l10n: "Checking your fleet") : String(l10n: "Your hub's address"), waits: model.busy) { mark } content: {
             form { addressBlock }
             if let failure = model.failure { SetupWarning(failure).accessibilityIdentifier("first-run-address-failure") }
             // Only while it can act: no grey button (the owner: "dont show the send button if it's not clickable").
@@ -580,7 +580,7 @@ struct FirstRunView: View {
         // **"Your fleet is up" only with the offer that stays under it** (fix round 3, item 49): on a hub with work it stood
         // for 1–2 frames before the app; the moving words stand until the app takes the window.
         let stays = allProved && offersRestore
-        return SetupStep(title: stays ? "Your fleet is up" : "Checking your fleet", waits: !stays) { mark } content: {
+        return SetupStep(title: stays ? String(l10n: "Your fleet is up") : String(l10n: "Checking your fleet"), waits: !stays) { mark } content: {
             form { proofs }
             if allProved && offersRestore {
                 HStack(spacing: 10) {
@@ -602,10 +602,10 @@ struct FirstRunView: View {
         Group {
             FormSection(footer: allProved && offersRestore
                 // Fifteen words at most (fix round 3, item 36): it was 25.
-                ? "If this hub replaces one you lost, put your copy back first." : nil) {
-                if !model.reached { proof("Your hub answers", false, "This Mac reached it on your private network.") }
-                if !model.owned { proof("This Mac is its owner", false, "Your hub serves its pages to this Mac and to nothing else.") }
-                if store.state == nil { proof("Your fleet is reading", false, "Waiting for the first read.") }
+                ? String(l10n: "If this hub replaces one you lost, put your copy back first.") : nil) {
+                if !model.reached { proof(String(l10n: "Your hub answers"), false, String(l10n: "This Mac reached it on your private network.")) }
+                if !model.owned { proof(String(l10n: "This Mac is its owner"), false, String(l10n: "Your hub serves its pages to this Mac and to nothing else.")) }
+                if store.state == nil { proof(String(l10n: "Your fleet is reading"), false, String(l10n: "Waiting for the first read.")) }
             }
         }
     }
@@ -615,7 +615,7 @@ struct FirstRunView: View {
     /// The copy, on the hub this wizard has just claimed. Everything it does is `RestoreRows`, which System
     /// status shows as well, so there is one restore in this app and not two.
     private var restore: some View {
-        SetupStep(title: "Restore a copy") { mark } content: {
+        SetupStep(title: String(l10n: "Restore a copy")) { mark } content: {
             form {
                 // One sentence about the hub keeping its address, the restore's own (D-2): this one said it twice.
                 FormSection {

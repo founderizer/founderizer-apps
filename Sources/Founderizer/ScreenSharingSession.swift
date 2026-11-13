@@ -26,7 +26,7 @@ final class ScreenSharingSession {
 
     private func disconnected(_ id: UUID) {
         guard id == connectionID else { return }
-        for request in opened { errors[request] = "The Screen Sharing connection closed. Open it again to reconnect." }
+        for request in opened { errors[request] = String(l10n: "The Screen Sharing connection closed. Open it again to reconnect.") }
         opened.removeAll(); connection = nil; connectionID = nil
     }
 
@@ -36,20 +36,20 @@ final class ScreenSharingSession {
         defer { busy.remove(request) }
         let result: (Int, String) = await withCheckedContinuation { continuation in
             let reply = ScreenSharingReply(continuation)
-            guard let service = service(onError: { _ in reply.finish((0, "The local connection helper is unavailable.")) }) else {
-                reply.finish((0, "The local connection helper is unavailable.")); return
+            guard let service = service(onError: { _ in reply.finish((0, String(l10n: "The local connection helper is unavailable."))) }) else {
+                reply.finish((0, String(l10n: "The local connection helper is unavailable."))); return
             }
             service.openScreenSharing(configuration: data) { port, detail in reply.finish((port, detail)) }
         }
         guard (1024...65535).contains(result.0) else {
             opened.remove(request)
-            errors[request] = result.1.isEmpty ? "Screen Sharing could not connect." : result.1
+            errors[request] = result.1.isEmpty ? String(l10n: "Screen Sharing could not connect.") : result.1
             return
         }
         opened.insert(request)
         if !NSWorkspace.shared.open(URL(string: "vnc://127.0.0.1:\(result.0)")!) {
             if await closeConnection(data) { opened.remove(request) }
-            errors[request] = "The Screen Sharing app could not open."
+            errors[request] = String(l10n: "The Screen Sharing app could not open.")
         }
     }
 
@@ -58,7 +58,7 @@ final class ScreenSharingSession {
         busy.insert(request)
         defer { busy.remove(request) }
         if await closeConnection(data) { opened.remove(request); errors[request] = nil }
-        else { errors[request] = "The connection helper did not confirm disconnection. Quit Founderizer to close its connections." }
+        else { errors[request] = String(l10n: "The connection helper did not confirm disconnection. Quit Founderizer to close its connections.") }
     }
 
     private func closeConnection(_ data: Data) async -> Bool {

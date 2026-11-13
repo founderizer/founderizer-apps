@@ -83,12 +83,12 @@ public sealed class WindowTests
             chat.Rows.Select(r => r.Kind).ToArray());
         Assert.AreEqual("Today 15:03", chat.Rows[0].Text);
         Assert.AreEqual("Can we start the spring sale on Monday?", chat.Rows[1].Text);
-        // The two requests at the end, in the order raised, each with its options, "Show all" and Discuss.
+        // The two requests at the end, in the order raised, each with its options and "Show all".
         var cards = chat.Rows.Where(r => r.Request is not null).Select(r => r.Request!).ToArray();
         CollectionAssert.AreEqual(new[] { "Refund an order from 45 days ago?", "Send the spring sale email on Monday?" }, cards.Select(c => c.Title).ToArray());
         CollectionAssert.AreEqual(new[] { "Refund it", "Offer a 20% voucher", "Say no, politely" }, cards[0].Options.Labels.ToArray());
         Assert.AreEqual("From Fleet Manager · 14:32", cards[0].From);
-        Assert.IsTrue(cards.All(c => c.MoreClosed == "Show all" && c.ShowsDiscuss && !c.Folded));
+        Assert.IsTrue(cards.All(c => c.MoreClosed == "Show all" && !c.Folded));
         Assert.AreEqual("Message Fleet Manager", chat.Composer.Placeholder);
         Assert.IsFalse(chat.Composer.CanSend);
         Assert.AreEqual(("Fleet Manager", (string?)null, "Claude Code", "hub"), (chat.Panel.Label, chat.Panel.Under, chat.Panel.Provider, chat.Panel.Machine));
@@ -131,11 +131,59 @@ public sealed class WindowTests
     }
 
     [TestMethod]
+    public void EachStateOfTheSecondSetIsAReadingOfTheLibrary()
+    {
+        // The sample's states of the second set of pictures decode as the hub's own reads, and every page's model takes
+        // them (a state that the decoder refuses would leave the picture's window empty).
+        foreach (var name in new[] { "code-refused", "not-enrolled", "no-answer", "not-sent", "answered", "all-answered",
+                                     "usage", "marks", "failed", "paused", "stopping", "reading", "files", "notify" })
+        {
+            Environment.SetEnvironmentVariable("FOUNDERIZER_SAMPLE_STATE", name);
+            try
+            {
+                var state = SampleAt1512();
+                var now = DateTimeOffset.UtcNow;
+                var page = Screens.FirstPage(state);
+                Assert.IsNotNull(Screens.Pane(state, page, now, British), name);
+                Assert.IsNotNull(Screens.Settings(state, "", now, British), name);
+                if (state.Fleet is null) continue;
+                foreach (var agent in state.Fleet.Agents) Assert.IsNotNull(Screens.Chat(state, agent.Name, now, British), name);
+                Assert.IsNotNull(Screens.Needs(state, null, null, now, British), name);
+                Assert.IsNotNull(Screens.Board(state, ActivityPeriod.Week, null, now, British), name);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("FOUNDERIZER_SAMPLE_STATE", null);
+            }
+        }
+        Environment.SetEnvironmentVariable("FOUNDERIZER_SAMPLE_STATE", "answered");
+        try
+        {
+            var answered = SampleAt1512();
+            var card = Screens.Chat(answered, "manager", DateTimeOffset.UtcNow, British).Rows.First(r => r.Request?.Id == 1).Request!;
+            Assert.IsTrue(card.Folded);
+            Assert.AreEqual("Offer a 20% voucher", card.AnswerWords);
+            Environment.SetEnvironmentVariable("FOUNDERIZER_SAMPLE_STATE", "paused");
+            Assert.AreEqual("Paused", Screens.Task(SampleAt1512(), 2, DateTimeOffset.UtcNow, British)!.Controls!.StateWord);
+            Environment.SetEnvironmentVariable("FOUNDERIZER_SAMPLE_STATE", "not-sent");
+            Assert.AreEqual("Not sent", Screens.PendingBar(SampleAt1512(), DateTimeOffset.UtcNow)!.State);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FOUNDERIZER_SAMPLE_STATE", null);
+        }
+    }
+
+    [TestMethod]
     public void TheScrollReadingHasAChatOfTwoThousand()
     {
         var state = SampleAt1512(reading: "long-chat");
         Assert.AreEqual(SampleSource.LongChat, state.Items("wren").Count);
-        var chat = Screens.Chat(state, "wren", DateTimeOffset.UtcNow, British);
+        // The Mac's "Earlier messages": the newest 60 items at first, and each press adds as many again.
+        var first = Screens.Chat(state, "wren", DateTimeOffset.UtcNow, British);
+        Assert.AreEqual("Earlier messages", first.Earlier);
+        var chat = Screens.Chat(state, "wren", DateTimeOffset.UtcNow, British, shown: SampleSource.LongChat);
+        Assert.IsNull(chat.Earlier);
         Assert.IsTrue(chat.Rows.Count > SampleSource.LongChat, "stamps come between the days");
     }
 

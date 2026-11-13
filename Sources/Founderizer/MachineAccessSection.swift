@@ -43,7 +43,7 @@ struct MachineAccessRecord: View {
     var body: some View {
         // Nothing on a hub without the route, and nothing for a machine whose connection the fleet already has.
         if asked {
-            FormSection(asking ? "How the fleet reaches \(machine)" : nil, footer: asking ? Self.footer : nil) {
+            FormSection(asking ? String(l10n: "How the fleet reaches \(machine)") : nil, footer: asking ? Self.footer : nil) {
                 if asking { fields } else { missing }
             }
         }
@@ -52,20 +52,20 @@ struct MachineAccessRecord: View {
     /// The cross, and the one thing he presses. The sentence is behind the mark, which is the rule for every row
     /// of this app that states a fact.
     @ViewBuilder private var missing: some View {
-        FormMarkRow(title: "Connection", state: .bad, symbol: "network",
-                    words: "Not on record",
+        FormMarkRow(title: String(l10n: "Connection"), state: .bad, symbol: "network",
+                    words: String(l10n: "Not on record"),
                     detail: MachineReach.nothingOnRecord(machine)
-                        + " Without it no agent can be added to this server, and nothing here can reach it.",
-                    act: store.canWrite ? ("Record it", { open() }) : nil,
+                        + " " + String(l10n: "Without it no agent can be added to this server, and nothing here can reach it."),
+                    act: store.canWrite ? (String(l10n: "Record it"), { open() }) : nil,
                     whoActs: store.canWrite ? nil
-                        : "Founderizer is waiting for the hub. The record can be written when it answers.",
+                        : String(l10n: "Founderizer is waiting for the hub. The record can be written when it answers."),
                     identifier: "machine-access-missing")
     }
 
     @ViewBuilder private var fields: some View {
         FormRow("User", symbol: "person",
-                detail: workerUser.map { "This server's agents run as \($0), so the fleet may be recorded as "
-                    + "\($0) or as root." } ?? "The user you reach this server as over SSH.",
+                detail: workerUser.map { String(l10n: "This server's agents run as \($0), so the fleet may be recorded as \($0) or as root.") }
+                    ?? String(l10n: "The user you reach this server as over SSH."),
                 warning: refused) {
             HStack(spacing: 8) {
                 TextField("", text: $form.user).fleetField().frame(width: 110)
@@ -76,12 +76,12 @@ struct MachineAccessRecord: View {
             }
         }
         FormRow("Screen Sharing", symbol: "display",
-                detail: "Whether this server answers Screen Sharing, so the app offers its screen.") {
+                detail: String(l10n: "Whether this server answers Screen Sharing, so the app offers its screen.")) {
             Toggle("Screen Sharing", isOn: $form.screenSharing).toggleStyle(.switch).controlSize(.small)
                 .labelsHidden().accessibilityIdentifier("machine-access-screen")
         }
         FormRow("Put it on record", symbol: "square.and.arrow.down",
-                detail: busy ? "Writing it to your fleet…" : form.problem,
+                detail: busy ? String(l10n: "Writing it to your fleet…") : form.problem,
                 warning: message?.warning == true ? message?.text : nil) {
             HStack(spacing: 8) {
                 if busy { ProgressView().controlSize(.small) }
@@ -103,8 +103,7 @@ struct MachineAccessRecord: View {
         }
     }
 
-    private static let footer = "Founderizer keeps this in your fleet's own team.json, so every screen and every "
-        + "agent reads the same connection. It holds no password and no key: the key stays on this Mac."
+    private static let footer = String(l10n: "Founderizer keeps this in your fleet's own team.json, so every screen and every agent reads the same connection. It holds no password and no key: the key stays on this Mac.")
 
     private func open() {
         asking = true; message = nil
@@ -137,7 +136,7 @@ struct MachineAccessRecord: View {
                 do {
                     _ = try await client.recordMachineAccess(hub: hub, database: db, client: installation,
                                                              machine: machine, sha256: current.sha256, form: form)
-                    message = ("The fleet reaches \(machine) as \(form.trimmedUser) from now on.", false)
+                    message = (String(l10n: "The fleet reaches \(machine) as \(form.trimmedUser) from now on."), false)
                     asking = false
                     break
                 } catch HubError.refusal(409, _) where attempt == 1 {
@@ -151,7 +150,7 @@ struct MachineAccessRecord: View {
 
     private static func reason(_ error: Error) -> String {
         if case HubError.refusal(_, let text) = error {
-            return "Not done. The hub said: \(text.hasSuffix(".") ? text : text + ".")"
+            return String(l10n: "Not done. The hub said: \(text.hasSuffix(".") ? text : text + ".")")
         }
         if error is URLError { return unanswered }
         return error.localizedDescription

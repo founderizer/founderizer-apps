@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Founderizer.Windows.Marks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -22,7 +23,8 @@ internal sealed record FieldLook(Color Fill, Brush? Placeholder = null, bool Cen
 /// <summary>A field he writes in, as the pictures draw the composer, the answer box and the guidance box: the composer's
 /// fill, Windows' edge with its lighter bottom line, a corner of 4; the plus of the files at its left where the model
 /// offers it, and the Mac's round Send at its right only while there is something to send (SendSlot, SendMark). Enter
-/// sends. The plus does nothing yet: the chip of a picked file waits for its picture.</summary>
+/// sends. The plus picks files; the files that he added stand over the line, in the same frame (picture 4 of the second
+/// set), and the field grows by their row.</summary>
 internal sealed class Field : Grid
 {
     private readonly Border frame;
@@ -39,10 +41,16 @@ internal sealed class Field : Grid
     /// <summary>Enter or Send: the words go.</summary>
     public event Action? Sent;
 
+    /// <summary>The plus: he wants to add files.</summary>
+    public event Action? PlusPressed;
+
+    private readonly StackPanel chips = new() { Orientation = Orientation.Horizontal, Spacing = 8, Padding = new Thickness(6, 6, 8, 0), Visibility = Visibility.Collapsed };
+    private readonly double lineHeight;
+
     public Field(double height, double fontSize, double textLeft, FieldLook? look = null)
     {
         look ??= FieldLook.Composer;
-        Height = height;
+        lineHeight = height;
         frame = new Border
         {
             Background = Look.Brush(look.Fill),
@@ -123,8 +131,37 @@ internal sealed class Field : Grid
         send.Click += (_, _) => Sent?.Invoke();
         Tint(Look.Accent, Color.FromArgb(255, 255, 255, 255));
 
-        frame.Child = new Grid { Children = { box, plus, send } };
+        plus.Click += (_, _) => PlusPressed?.Invoke();
+        var line = new Grid { Height = height - 2, Children = { box, plus, send } };
+        var rows = new Grid();
+        rows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        rows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        rows.Children.Add(chips);
+        Grid.SetRow(line, 1);
+        rows.Children.Add(line);
+        frame.Child = rows;
+        // The edge's lighter bottom line stays at the foot while the field grows by its files.
+        frame.SizeChanged += (_, e) => frame.BorderBrush = Look.FieldEdge(Math.Max(e.NewSize.Height, 2), Look.White(0.45));
         Children.Add(frame);
+    }
+
+    /// <summary>The files that he added, over the line (none: the field is one line high again).</summary>
+    public void ShowChips(IReadOnlyList<UIElement> files)
+    {
+        chips.Children.Clear();
+        foreach (var file in files) chips.Children.Add(file);
+        chips.Visibility = files.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    public double LineHeight => lineHeight;
+
+    /// <summary>The plus's and Send's words under the pointer (the models' hovers), also their names for assistive apps.</summary>
+    public void Hovers(string? plusWords, string? sendWords)
+    {
+        ToolTipService.SetToolTip(plus, plusWords);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(plus, plusWords ?? "");
+        ToolTipService.SetToolTip(send, sendWords);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(send, sendWords ?? "");
     }
 
     public TextBox Box => box;

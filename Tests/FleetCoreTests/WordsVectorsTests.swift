@@ -20,8 +20,12 @@ struct WordsVectorsTests {
         ("manager", "Fleet Manager"), ("wren", "Customer Support"), ("theo", "Developer"), ("pax", "DevOps"),
         ("orla", "Marketing"), ("nova", nil), ("dev-lead", nil), ("web_dev", nil), ("worker-1", nil), ("a1b2", nil),
         ("qa", "  Quality   assurance "), ("ops", ""), ("scout", "Scout"), ("iris", "Iris's helper"),
-        ("sales-bot", "Sales bot"), ("x", nil),
+        ("sales-bot", "Sales bot"), ("x", nil), ("bistro", "Café helper"),
     ]
+
+    /// What the owner types into Search (the Mac's SearchPalette): each against each agent, by `AgentNames.matches`.
+    static let searches: [String] = ["support", "Support", "SUP", "wren", "WREN", "dev", "ops", "lead", "web_", "1",
+                                     "cafe", "CAFÉ", "helper ", "", " ", "Fleet Manager", "fleet  manager"]
 
     static let texts: [String] = [
         "Here is the draft:\n\n# Simpler prices for November\n\nFrom **1 November**, three plans: *Starter*, *Team* and "
@@ -56,9 +60,10 @@ struct WordsVectorsTests {
     struct Text: Codable { let text: String; let blocks: [Block]; let plain: String; let preview: String? }
     struct Time: Codable { let time: Double; let now: Double; let locale: String; let words: String }
     struct Age: Codable { let time: Double; let now: Double; let locale: String; let words: String }
+    struct Match: Codable { let words: String; let names: [String] }
     struct Document: Codable {
         let about: String; let made_by: String; let time_zone: String
-        let names: [Name]; let texts: [Text]; let times: [Time]; let ages: [Age]
+        let names: [Name]; let texts: [Text]; let times: [Time]; let ages: [Age]; let matches: [Match]
     }
 
     static func kind(_ kind: MessageBlock.Kind) -> String {
@@ -99,12 +104,15 @@ struct WordsVectorsTests {
                                 words: activityAge(now - age, now: now, calendar: calendar, locale: Locale(identifier: locale))))
             }
         }
+        let matches = searches.map { words in
+            Match(words: words, names: agents.map(\.0).filter { AgentNames.matches($0, words, roles: roles) })
+        }
         let document = Document(
             about: "Words that FleetCore makes: AgentNames.label and under with the roles of team.json, String.capitalized, "
                 + "MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and "
-                + "activityAge in UTC with two locales.",
+                + "activityAge in UTC with two locales, and AgentNames.matches (Search) for each typed text.",
             made_by: "app/Tests/FleetCoreTests/WordsVectorsTests.swift", time_zone: "UTC", names: names, texts: texts,
-            times: times, ages: ages)
+            times: times, ages: ages, matches: matches)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(document) + Data("\n".utf8)

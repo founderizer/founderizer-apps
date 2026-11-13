@@ -14,10 +14,10 @@ public enum ActivityColumn: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
     public var title: String {
         switch self {
-        case .inProgress: "In progress"
-        case .waiting: "Waiting"
+        case .inProgress: String(l10n: "In progress")
+        case .waiting: String(l10n: "Waiting")
         // "Ended", the iPhone's word (T-33, fix round 2): it holds canceled, failed and rejected tasks too.
-        case .done: "Ended"
+        case .done: String(l10n: "Ended")
         }
     }
 }
@@ -28,10 +28,10 @@ public enum ActivityPeriod: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
     public var title: String {
         switch self {
-        case .today: "Today"
-        case .week: "Last 7 days"
-        case .month: "Last 30 days"
-        case .all: "All"
+        case .today: String(l10n: "Today")
+        case .week: String(l10n: "Last 7 days")
+        case .month: String(l10n: "Last 30 days")
+        case .all: String(l10n: "All")
         }
     }
     /// The first moment of the period, or nil for all time.
@@ -59,9 +59,9 @@ public enum OwnerWait: Equatable, Sendable {
     public var words: String {
         switch self {
         case .request(_, let title): title
-        case .outcome: "Outcome not known: check it"
-        case .stop: "Stop not confirmed"
-        case .signIn: "Sign-in needed"
+        case .outcome: String(l10n: "Outcome not known: check it")
+        case .stop: String(l10n: "Stop not confirmed")
+        case .signIn: String(l10n: "Sign-in needed")
         }
     }
 }
@@ -86,10 +86,10 @@ extension FleetTask {
     /// The word for a result that is not a success, or nil: a success, a result that waits for its check, or open work.
     public var failedResult: String? {
         switch state {
-        case "failed": "Failed"
-        case "rejected": "Rejected"
-        case "canceled": "Canceled"
-        case "completed": accepted == 0 ? "Not accepted" : nil
+        case "failed": String(l10n: "Failed")
+        case "rejected": String(l10n: "Rejected")
+        case "canceled": String(l10n: "Canceled")
+        case "completed": accepted == 0 ? String(l10n: "Not accepted") : nil
         default: nil
         }
     }
@@ -269,10 +269,10 @@ public struct EndedTasks: Sendable {
 public func activityAge(_ time: Double, now: Double, calendar: Calendar = .current, locale: Locale = .current) -> String {
     let seconds = max(0, now - time)
     switch seconds {
-    case ..<60: return "Just now"
-    case ..<3600: return "\(Int(seconds / 60)) min ago"
-    case ..<86_400: return "\(Int(seconds / 3600)) h ago"
-    case ..<(7 * 86_400): return Int(seconds / 86_400) == 1 ? "1 day ago" : "\(Int(seconds / 86_400)) days ago"
+    case ..<60: return String(l10n: "Just now")
+    case ..<3600: return String(l10n: "\(Int(seconds / 60)) min ago")
+    case ..<86_400: return String(l10n: "\(Int(seconds / 3600)) h ago")
+    case ..<(7 * 86_400): return Int(seconds / 86_400) == 1 ? String(l10n: "1 day ago") : String(l10n: "\(Int(seconds / 86_400)) days ago")
     default:
         let date = Date(timeIntervalSince1970: time)
         var style = Date.FormatStyle.dateTime.day().month(.abbreviated)

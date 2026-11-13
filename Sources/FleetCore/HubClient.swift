@@ -17,10 +17,10 @@ public enum HubError: LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .invalidAddress: "Enter an HTTP or HTTPS hub address without a path or login."
-        case .invalidResponse: "The hub response does not match API version 1."
+        case .invalidAddress: String(l10n: "Enter an HTTP or HTTPS hub address without a path or login.")
+        case .invalidResponse: String(l10n: "The hub response does not match API version 1.")
         case .refusal(let status, let message): "Hub refused the request (\(status)): \(message)"
-        case .unavailable: "The hub is unavailable. The last received state is shown."
+        case .unavailable: String(l10n: "The hub is unavailable. The last received state is shown.")
         }
     }
 

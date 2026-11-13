@@ -67,8 +67,8 @@ struct SetupCheck: View {
     let logins: [String: TeamLogin]?
 
     var body: some View {
-        FormSection("Setup check", detail: "Checked \(fleetDate(result.checked_at)) · \(result.revision.prefix(8))",
-                    footer: "This check uses no AI. Actual model use is reported after a real session.") {
+        FormSection("Setup check", detail: String(l10n: "Checked \(fleetDate(result.checked_at)) · \(String(describing: result.revision.prefix(8)))"),
+                    footer: String(l10n: "This check uses no AI. Actual model use is reported after a real session.")) {
             ForEach(result.items) { item in
                 if item.kind == "login" { loginCheck(item) } else { plainCheck(item) }
             }
@@ -81,7 +81,7 @@ struct SetupCheck: View {
         let unused = item.kind == "capability" && item.state == "failed" && item.required == false
         return FormMarkRow(title: item.ref.replacingOccurrences(of: "_", with: " ").capitalized,
                            state: unused ? .unknown : Self.mark(item.state),
-                           words: unused ? "Not available" : Self.words(item.state),
+                           words: unused ? String(l10n: "Not available") : Self.words(item.state),
                            detail: said(item.detail, item),
                            whoActs: unused || item.state == "ok" ? nil : Self.onTheMachine,
                            identifier: "check-\(item.ref)")
@@ -94,7 +94,7 @@ struct SetupCheck: View {
         let name = logins?[item.ref.lowercased()]?.title
         let words = Self.loginProbeWords(state: item.state, reason: item.detail)
         // Two logins without a name differ by the end of their reference.
-        let title = name ?? "Login without a name …" + String(item.ref.suffix(4))
+        let title = name ?? String(l10n: "Login without a name …\(String(describing: item.ref.suffix(4)))")
         return FormMarkRow(title: title, state: Self.mark(item.state), words: Self.words(item.state),
                            detail: said([words.fact, words.more, item.ref].compactMap { $0 }
                             .joined(separator: "\n\n"), item),
@@ -105,7 +105,7 @@ struct SetupCheck: View {
     /// The item's own explanation, and, where activation waits on it, that it does.
     private func said(_ detail: String, _ item: MachineVerification.Item) -> String {
         guard item.required == true, item.state != "ok" else { return detail }
-        return detail + "\n\nRequired for activation."
+        return detail + "\n\n" + String(l10n: "Required for activation.")
     }
 
     static func mark(_ state: String) -> MarkState {
@@ -113,12 +113,11 @@ struct SetupCheck: View {
     }
 
     static func words(_ state: String) -> String {
-        state == "ok" ? "Passed" : state == "failed" ? "Failed" : "Not verified"
+        state == "ok" ? String(l10n: "Passed") : state == "failed" ? String(l10n: "Failed") : String(l10n: "Not verified")
     }
 
     /// What a cross says when putting it right is work on the machine and no button of this app takes it.
-    static let onTheMachine = "This is work on the server itself. Help → Report a problem sends it, with this "
-        + "check, to one of your agents."
+    static let onTheMachine = String(l10n: "This is work on the server itself. Help → Report a problem sends it, with this check, to one of your agents.")
 
     /// The reason of a `login` check item as a fact and, where the owner can act, the next step. The reasons are the
     /// vault's fixed probe codes (UI-API.md, "Login probe"). `not_found` says that the vault's store has no item with
@@ -129,26 +128,26 @@ struct SetupCheck: View {
     static func loginProbeWords(state: String, reason: String) -> (fact: String, more: String?) {
         switch (state, reason) {
         case ("ok", _):
-            return ("This server's vault opened this login in the check.", nil)
+            return (String(l10n: "This server's vault opened this login in the check."), nil)
         case ("failed", "no_access"):
-            return ("This server's vault was not allowed to open this login.", "Check the server again.")
+            return (String(l10n: "This server's vault was not allowed to open this login."), String(l10n: "Check the server again."))
         case ("failed", "not_found"):
-            return ("This server's vault has no login with this reference.",
-                    "Check the reference in the agent's logins. Then check the server again.")
+            return (String(l10n: "This server's vault has no login with this reference."),
+                    String(l10n: "Check the reference in the agent's logins. Then check the server again."))
         case ("failed", "bad_format"):
-            return ("The item is not a login that Founderizer can use. A login has a user name and a password.",
-                    "Use another login.")
+            return (String(l10n: "The item is not a login that Founderizer can use. A login has a user name and a password."),
+                    String(l10n: "Use another login."))
         case ("failed", "no_token"):
-            return ("This server's vault has no store that opens.", "Check the vault of that server. Then check the server again.")
+            return (String(l10n: "This server's vault has no store that opens."), String(l10n: "Check the vault of that server. Then check the server again."))
         case ("failed", "timeout"):
-            return ("This server's vault did not finish the check in time.", "Check the server again.")
+            return (String(l10n: "This server's vault did not finish the check in time."), String(l10n: "Check the server again."))
         case ("failed", "error"):
-            return ("This server's vault could not open this login. It gave no more exact reason.", "Check the server again.")
+            return (String(l10n: "This server's vault could not open this login. It gave no more exact reason."), String(l10n: "Check the server again."))
         case (_, "not probed"):
-            return ("This server's vault gave no answer for this login, so the check did not test it.",
-                    "Check the server again. If the result stays, the vault of that server is not available or cannot test logins yet.")
+            return (String(l10n: "This server's vault gave no answer for this login, so the check did not test it."),
+                    String(l10n: "Check the server again. If the result stays, the vault of that server is not available or cannot test logins yet."))
         default:
-            return ("The check gives no reason that Founderizer can explain.", reason.isEmpty ? nil : "Its code is “\(reason)”.")
+            return (String(l10n: "The check gives no reason that Founderizer can explain."), reason.isEmpty ? nil : String(l10n: "Its code is “\(reason)”."))
         }
     }
 }
@@ -157,11 +156,11 @@ extension AgentAttention {
     /// The status of an agent row with this problem.
     var short: String {
         switch self {
-        case .staleReading: "Old reading"
-        case .signIn: "Sign-in needed"
-        case .updateFailed: "Update failed"
-        case .checkFailed: "Check failed"
-        case .restart: "Restart needed"
+        case .staleReading: String(l10n: "Old reading")
+        case .signIn: String(l10n: "Sign-in needed")
+        case .updateFailed: String(l10n: "Update failed")
+        case .checkFailed: String(l10n: "Check failed")
+        case .restart: String(l10n: "Restart needed")
         }
     }
 }

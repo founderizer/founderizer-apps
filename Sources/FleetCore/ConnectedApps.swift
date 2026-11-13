@@ -12,8 +12,24 @@ public enum ConnectedApps {
     /// The two levels of a code and of a connection, in the hub's words.
     public static let levels = ["read", "act"]
 
+    /// **A read of `GET /ui/connect` that got no answer leaves the last reading**, which the page then shows as old:
+    /// its line "Last reading …", no button and no code (the owner's yes of 13 November 2026, "Yes, add it", to:
+    /// 'Show "Last reading" on the two groups while the hub does not answer, as "Your devices" does'). No answer says
+    /// nothing about the feature; so does a fault of the hub or of what stands before it (a 5xx), and an answer that
+    /// only says "not now" (408, 429). An answer of the hub takes the reading away, as before: a refusal (a hub
+    /// without the route, a 409 while the feature is not there, a caller that is not the owner), or an answer that this
+    /// app cannot read.
+    public static func keepsReading(after error: Error) -> Bool {
+        if error is URLError || error is CancellationError { return true }
+        switch error as? HubError {
+        case .unavailable?: return true
+        case .refusal(let status, _)?: return status >= 500 || status == 408 || status == 429
+        default: return false
+        }
+    }
+
     /// A level in the owner's words: "Read" or "Act".
-    public static func levelWord(_ level: String) -> String { level == "act" ? "Act" : "Read" }
+    public static func levelWord(_ level: String) -> String { level == "act" ? String(l10n: "Act") : String(l10n: "Read") }
 
     /// The muted detail of one connection: its level and its last use, or the time since it was made before a first
     /// use ("Read · 2 h ago").

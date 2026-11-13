@@ -9,7 +9,7 @@ namespace Founderizer.Windows.Pages;
 
 /// <summary>The kinds of a thread's rows: a chat's stamp, his message, the agent's reply, a request card and the
 /// "Thinking" line; a task's notes are replies, and its last row says who did the work.</summary>
-internal enum RowKind { Stamp, Own, Reply, Request, Waiting, Who }
+internal enum RowKind { Stamp, Own, Reply, Request, Waiting, Who, Earlier }
 
 /// <summary>One row of a thread: its key, its kind, the room above it, and the model it draws. Equal by value, so a row
 /// whose model did not change is not drawn again.</summary>
@@ -22,7 +22,19 @@ internal sealed record WaitingRow(ChatWaiting Line, MarkLook Mark);
 internal interface IThreadContext : IAnswers
 {
     bool CanSendAnswer(RequestCard card);
+
+    /// <summary>"Earlier messages" over the first row: the chat shows more of its items.</summary>
+    void ShowEarlier() { }
+
+    /// <summary>A file of a message: its picture once its bytes came (null until then; the row draws again then), a
+    /// press that opens it, and Read again.</summary>
+    Microsoft.UI.Xaml.Media.ImageSource? Picture(FileTile tile) => null;
+    void OpenFile(FileTile tile) { }
+    void ReadAgain(FileTile tile) { }
 }
+
+/// <summary>His message with its files under it (picture 4).</summary>
+internal sealed record OwnRow(ChatRow Row, ValueList<FileTile> Files);
 
 /// <summary>A thread's rows in a virtualized list (ItemsRepeater in a ScrollViewer: only the rows in view and near it
 /// exist), in a column of at most 692. A new model changes only the rows that came, went, moved or changed.</summary>
@@ -116,10 +128,11 @@ internal sealed class RowFactory : IElementFactory
     private RowView MakeView(RowKind kind) => kind switch
     {
         RowKind.Stamp => new StampRowView(),
-        RowKind.Own => new OwnRowView(),
+        RowKind.Own => new OwnRowView(context),
         RowKind.Reply => new ReplyRowView(),
         RowKind.Request => new RequestRowView(context),
         RowKind.Waiting => new WaitingRowView(),
+        RowKind.Earlier => new EarlierRowView(context),
         _ => new WhoRowView(),
     };
 }
@@ -136,6 +149,63 @@ internal abstract class RowView : HeldView<ThreadItem>
     }
 
     protected abstract void DrawRow(ThreadItem item);
+}
+
+/// <summary>The footer of a message or a reply (the Mac's message footer): its time and "Copy message", under the
+/// pointer only; a word of its state on its way ("Sending…") stays.</summary>
+internal sealed class MessageFooter : StackPanel
+{
+    private readonly TextBlock time = Look.Words("", 12, 16, Look.Muted, wrap: false);
+    private readonly Button copy;
+    private string text = "";
+    private bool pointer;
+    private bool always;
+
+    public MessageFooter(bool right)
+    {
+        Orientation = Orientation.Horizontal;
+        Spacing = 10;
+        // In the room under its row (the next row's gap of 28): it takes no height, so nothing moves when it shows.
+        Margin = new Thickness(0, 4, 0, -20);
+        Height = 16;
+        HorizontalAlignment = right ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+        var words = Look.Words("", 12, 16, Look.Link, wrap: false);
+        copy = new Button { Style = (Style)Application.Current.Resources["QuietButtonStyle"], Content = words };
+        copy.Click += (_, _) =>
+        {
+            var package = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(text);
+            global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+        };
+        Children.Add(time);
+        Children.Add(copy);
+        Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Shows the footer of a row; the row's view tells it when the pointer comes and goes.</summary>
+    public void Show(ChatRow row)
+    {
+        text = row.Text;
+        time.Text = row.TimeWords ?? "";
+        time.Foreground = row.SlotIsWarning ? Look.Orange : Look.Muted;
+        ToolTipService.SetToolTip(time, row.TimeHover);
+        ((TextBlock)copy.Content).Text = row.CopyWords;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(copy, row.CopyWords);
+        // A word of the message's way (the slot) stays; its time shows under the pointer.
+        always = row.TimeWords is { } words && words.EndsWith('\u2026');
+        copy.Visibility = always ? Visibility.Collapsed : Visibility.Visible;
+        Draw();
+    }
+
+    public void Hide() { always = false; Draw(); }
+
+    public void Pointer(bool over)
+    {
+        pointer = over;
+        Draw();
+    }
+
+    private void Draw() => Visibility = always || (pointer && time.Text.Length > 0) ? Visibility.Visible : Visibility.Collapsed;
 }
 
 /// <summary>The time stamp over a message (ChatStamp): 12 on 16, muted, in the middle, 14 above the row under it.</summary>
@@ -158,11 +228,15 @@ internal sealed class StampRowView : RowView
 /// <summary>His message in his bubble (OwnerBubble): at the right, at most 72 % of the column, a corner of 16.</summary>
 internal sealed class OwnRowView : RowView
 {
+    private readonly IThreadContext? context;
     private readonly TextBlock words = Blocks.Selectable("", lineHeight: 20);
     private readonly Border bubble;
+    private readonly StackPanel files = new() { Spacing = 8, Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Right };
+    private readonly MessageFooter footer = new(right: true);
 
-    public OwnRowView()
+    public OwnRowView(IThreadContext? context = null)
     {
+        this.context = context;
         bubble = new Border
         {
             Background = Look.OwnBrush,
@@ -172,17 +246,32 @@ internal sealed class OwnRowView : RowView
             MaxWidth = 692 * 0.72,
             Child = words,
         };
-        Children.Add(bubble);
+        Children.Add(new StackPanel { Children = { bubble, files, footer } });
+        PointerEntered += (_, _) => footer.Pointer(true);
+        PointerExited += (_, _) => footer.Pointer(false);
     }
 
     public override RowKind Kind => RowKind.Own;
 
-    protected override void DrawRow(ThreadItem item) => words.Text = item.Model switch
+    protected override void DrawRow(ThreadItem item)
     {
-        ChatRow row => row.Text,
-        string asks => asks,
-        _ => "",
-    };
+        words.Text = item.Model switch
+        {
+            OwnRow own => own.Row.Text,
+            ChatRow row => row.Text,
+            string asks => asks,
+            _ => "",
+        };
+        bubble.Visibility = words.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        if (item.Model is OwnRow { Row: var chatRow }) footer.Show(chatRow);
+        else if (item.Model is ChatRow plain) footer.Show(plain);
+        else footer.Hide();
+        files.Children.Clear();
+        if (item.Model is OwnRow { Files.Count: > 0 } withFiles && context is not null)
+            foreach (var tile in withFiles.Files)
+                files.Children.Add(new FileTileView(tile, context.Picture(tile), context.OpenFile, context.ReadAgain));
+        files.Visibility = files.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
 }
 
 /// <summary>An agent's reply, or a task's progress note, as plain text in its blocks (AgentReply), 14 on 22.</summary>
@@ -191,8 +280,14 @@ internal sealed class ReplyRowView : RowView
     private readonly ContentControl content = new() { IsTabStop = false, HorizontalContentAlignment = HorizontalAlignment.Stretch };
     // Most replies are one paragraph: the view keeps its one text block and changes only its words.
     private readonly TextBlock paragraph = Blocks.Selectable("");
+    private readonly MessageFooter footer = new(right: false);
 
-    public ReplyRowView() => Children.Add(content);
+    public ReplyRowView()
+    {
+        Children.Add(new StackPanel { Children = { content, footer } });
+        PointerEntered += (_, _) => footer.Pointer(true);
+        PointerExited += (_, _) => footer.Pointer(false);
+    }
 
     public override RowKind Kind => RowKind.Reply;
 
@@ -204,6 +299,8 @@ internal sealed class ReplyRowView : RowView
             NoteRow note => (note.Blocks, note.Text),
             _ => (ValueList<MessageBlock>.Empty, ""),
         };
+        if (item.Model is ChatRow chatRow) footer.Show(chatRow);
+        else footer.Hide();
         if (blocks.Count <= 1 && (blocks.Count == 0 || blocks[0].Kind == MessageBlock.Kinds.Paragraph))
         {
             paragraph.Text = InlineMarks.Plain(blocks.Count == 0 ? text : blocks[0].Text);
@@ -267,5 +364,45 @@ internal sealed class WhoRowView : RowView
 
     public override RowKind Kind => RowKind.Who;
 
-    protected override void DrawRow(ThreadItem item) => words.Text = (string)item.Model;
+    protected override void DrawRow(ThreadItem item)
+    {
+        // Who did the work, muted; a line of what holds the task (stalled, its usage limit, a lost session), orange.
+        words.Text = item.Model is AlertLine alert ? alert.Words : (string)item.Model;
+        words.Foreground = item.Model is AlertLine ? Look.Orange : Look.Muted;
+        words.TextWrapping = item.Model is AlertLine ? TextWrapping.Wrap : TextWrapping.NoWrap;
+    }
+}
+
+/// <summary>A line of what holds a task, at the end of its thread.</summary>
+internal sealed record AlertLine(string Words);
+
+/// <summary>"Earlier messages" over the first row of a chat that holds more than it shows (the Mac's ThreadViews): a
+/// link in the middle, 12 on 16; a press shows as many items again.</summary>
+internal sealed class EarlierRowView : RowView
+{
+    private readonly TextBlock words = Look.Words("", 12, 16, Look.Link, wrap: false);
+
+    public EarlierRowView(IThreadContext context)
+    {
+        var button = new Button
+        {
+            Style = (Style)Application.Current.Resources["QuietButtonStyle"],
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 14),
+            Content = words,
+        };
+        button.Click += (_, _) => context.ShowEarlier();
+        this.button = button;
+        Children.Add(button);
+    }
+
+    public override RowKind Kind => RowKind.Earlier;
+
+    private readonly Button button;
+
+    protected override void DrawRow(ThreadItem item)
+    {
+        words.Text = (string)item.Model;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, words.Text);
+    }
 }

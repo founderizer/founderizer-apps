@@ -118,20 +118,20 @@ struct SecretEntryView: View {
     /// four", 13 November 2026). They are new words in elements that he has. `second` is the line from before.
     enum SameName {
         /// The orange line: one API key of that variable name. The next Save puts the new value under it.
-        static func replaces(_ name: String) -> String { "The list has “\(name)” already. Save replaces its key: the same agents keep it." }
+        static func replaces(_ name: String) -> String { String(l10n: "The list has “\(name)” already. Save replaces its key: the same agents keep it.") }
         /// The orange line: two keys of that name, from before the list refused a second one. Save sends nothing.
-        static func twice(_ name: String) -> String { "The list has “\(name)” two times. Remove one first." }
+        static func twice(_ name: String) -> String { String(l10n: "The list has “\(name)” two times. Remove one first.") }
         /// The orange line: the central vault's program does not replace a value yet. Save sends nothing.
-        static func notYet(_ name: String) -> String { "Founderizer Vault cannot replace “\(name)” yet. Try again in a few minutes." }
+        static func notYet(_ name: String) -> String { String(l10n: "Founderizer Vault cannot replace “\(name)” yet. Try again in a few minutes.") }
         /// The orange line: a login of that title. A second one, as before.
-        static func second(_ name: String) -> String { "The list has “\(name)” already. Save again to add a second one." }
+        static func second(_ name: String) -> String { String(l10n: "The list has “\(name)” already. Save again to add a second one.") }
         /// The first row of what came of a save, while the new value of a replace is not in the vault.
-        static func notInVault(_ name: String) -> String { "The new key of “\(name)” is not in the vault yet" }
+        static func notInVault(_ name: String) -> String { String(l10n: "The new key of “\(name)” is not in the vault yet") }
         /// The rows of what came of a save, for an agent that the owner took the key back from in a replace: after
         /// the step, while it is not done, and the note of a step that failed.
-        static func tookBack(_ agent: String) -> String { "\(agent) has no access" }
-        static func notTakenBack(_ agent: String) -> String { "\(agent) still has it" }
-        static let takeBackFailed = "Not taken back."
+        static func tookBack(_ agent: String) -> String { String(l10n: "\(agent) has no access") }
+        static func notTakenBack(_ agent: String) -> String { String(l10n: "\(agent) still has it") }
+        static let takeBackFailed = String(l10n: "Not taken back.")
         /// The owner's message to the chat's agent after a replace: never "No agent holds it yet." It names no
         /// reference: the key keeps the one that its holders know, and the owner reads this bubble.
         static func told(_ name: String) -> String {
@@ -140,7 +140,7 @@ struct SecretEntryView: View {
     }
     /// The detail of the row "Founderizer Vault does not answer" while the central vault does not answer: new words
     /// in an existing row, which wait for the owner's yes (AGENTS.md).
-    static let noVaultDetail: String? = "Nothing was sent. Try again in a moment."
+    static let noVaultDetail: String? = String(l10n: "Nothing was sent. Try again in a moment.")
     @State private var phase: Phase
     @State private var login: LoginSecret
     /// The access that each agent gets, by name. An agent that is not in it gets none.
@@ -239,7 +239,7 @@ struct SecretEntryView: View {
             switch phase {
             // **An error is its line and one sentence, with no footer that explains** (fix round 3, item 35).
             case .noVault:
-                FormSection(compact ? nil : "Add secret") {
+                FormSection(compact ? nil : String(l10n: "Add secret")) {
                     FormRow("Founderizer Vault does not answer", detail: Self.noVaultDetail) {
                         Button("Try again") { Task { await start() } }.buttonStyle(FleetOutlineButtonStyle()).disabled(busy)
                             .accessibilityIdentifier("secret-vault-retry")
@@ -281,7 +281,7 @@ struct SecretEntryView: View {
                 if isRequest {
                     Button("Decline") { Task { await decline() } }.buttonStyle(FleetOutlineButtonStyle())
                         .disabled(busy || context == nil)
-                        .help("Tell \(need?.by.agentLabel ?? "the agent") that you do not give it").accessibilityIdentifier("secret-decline")
+                        .help("Tell \(need?.by.agentLabel ?? String(l10n: "the agent")) that you do not give it").accessibilityIdentifier("secret-decline")
                 }
                 if !isRequest {
                     Button(phase == .form ? "Cancel" : "Close") { clear(); onDone(nil) }.buttonStyle(FleetOutlineButtonStyle())
@@ -295,7 +295,7 @@ struct SecretEntryView: View {
         }
     }
 
-    private var saveLabel: String { preset.tell.map { "Save and tell \($0.agentLabel)" } ?? "Save" }
+    private var saveLabel: String { preset.tell.map { String(l10n: "Save and tell \($0.agentLabel)") } ?? String(l10n: "Save") }
 
     /// **The same actions under a request at hand, in the middle** (`onStep`): Save, the step's one button, and Decline
     /// as the quiet link under it, where a step has its way back; after a save, Try again and Done.
@@ -316,8 +316,8 @@ struct SecretEntryView: View {
                     Button(saveLabel) { if !SecondClick.isNow { Task { await save() } } }.buttonStyle(FleetPrimaryButtonStyle())
                         .disabled(!canSave).accessibilityIdentifier("secret-save")
                 }
-                SetupLink("Decline") { if !SecondClick.isNow { Task { await decline() } } }.disabled(busy || context == nil)
-                    .help("Tell \(need?.by.agentLabel ?? "the agent") that you do not give it").accessibilityIdentifier("secret-decline")
+                SetupLink(String(l10n: "Decline")) { if !SecondClick.isNow { Task { await decline() } } }.disabled(busy || context == nil)
+                    .help("Tell \(need?.by.agentLabel ?? String(l10n: "the agent")) that you do not give it").accessibilityIdentifier("secret-decline")
             }
         }
     }
@@ -340,10 +340,10 @@ struct SecretEntryView: View {
     private var stepFields: some View {
         VStack(spacing: 10) {
             if login.kind == .login {
-                stepField("User name or email", text: $login.username, secure: false, id: "secret-user")
-                stepField("Password", text: $login.password, secure: true, id: "secret-password")
+                stepField(String(l10n: "User name or email"), text: $login.username, secure: false, id: "secret-user")
+                stepField(String(l10n: "Password"), text: $login.password, secure: true, id: "secret-password")
             } else {
-                stepField("Key", text: $login.password, secure: true, id: "secret-password")
+                stepField(String(l10n: "Key"), text: $login.password, secure: true, id: "secret-password")
             }
             // In the middle, as the step's lines are: the line's own row keeps its words at its leading edge.
             waitRow.fixedSize()
@@ -355,7 +355,7 @@ struct SecretEntryView: View {
     /// page, where moving words made each frame of a card take 241–325 ms (the 28 October rule).
     @ViewBuilder private var waitRow: some View {
         if busy || (phase == .form && central == nil) {
-            Held { LoadingLine(busy ? "Saving…" : "Reading Founderizer Vault…", waits: false).padding(.vertical, 12) }
+            Held { LoadingLine(busy ? String(l10n: "Saving…") : String(l10n: "Reading Founderizer Vault…"), waits: false).padding(.vertical, 12) }
         }
     }
 
@@ -385,24 +385,24 @@ struct SecretEntryView: View {
             }
             if login.kind == .login {
                 if !knowsSite {
-                    FormRow("Address", detail: "The sign-in page, with https://.") {
+                    FormRow("Address", detail: String(l10n: "The sign-in page, with https://.")) {
                         TextField(text: $login.url, prompt: Text(verbatim: "")) { Text("https://") }
                             .fieldPlaceholder("https://", shows: login.url.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-url")
                     }
                 }
                 FormRow("User name") { TextField(text: $login.username, prompt: Text(verbatim: "")) { Text("User name or email") }
-                    .fieldPlaceholder("User name or email", shows: login.username.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-user") }
+                    .fieldPlaceholder(String(l10n: "User name or email"), shows: login.username.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-user") }
                 FormRow("Password") { SecureField(text: $login.password, prompt: Text(verbatim: "")) { Text("Password") }
-                    .fieldPlaceholder("Password", shows: login.password.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-password") }
+                    .fieldPlaceholder(String(l10n: "Password"), shows: login.password.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-password") }
                 // A request asks for the login alone: an authenticator's seed, if a site needs one, goes in on Secrets.
                 if !isRequest {
                     if withSeed {
-                        FormRow("2FA code", detail: "The authenticator's seed, or its otpauth:// address. The vault types the code at sign-in.") {
+                        FormRow("2FA code", detail: String(l10n: "The authenticator's seed, or its otpauth:// address. The vault types the code at sign-in.")) {
                             SecureField(text: $login.totp, prompt: Text(verbatim: "")) { Text("Seed") }
-                                .fieldPlaceholder("Seed", shows: login.totp.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-totp")
+                                .fieldPlaceholder(String(l10n: "Seed"), shows: login.totp.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-totp")
                         }
                     } else {
-                        FormRow("2FA code", detail: "Optional.") {
+                        FormRow("2FA code", detail: String(l10n: "Optional.")) {
                             Button("Add 2FA code") { withSeed = true }.buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("secret-add-totp")
                         }
                     }
@@ -414,16 +414,16 @@ struct SecretEntryView: View {
                             .accessibilityIdentifier("secret-env")
                     }
                 } else {
-                    FormRow("Variable name", detail: "The agent's name for the key, for example OPENAI_API_KEY.") {
+                    FormRow("Variable name", detail: String(l10n: "The agent's name for the key, for example OPENAI_API_KEY.")) {
                         TextField(text: $login.env, prompt: Text(verbatim: "")) { Text("OPENAI_API_KEY") }
                             .fieldPlaceholder("OPENAI_API_KEY", shows: login.env.isEmpty).font(FormMetrics.text.monospaced()).fleetField().frame(width: 260)
                             .accessibilityIdentifier("secret-env")
                     }
                 }
                 FormRow("Key") { SecureField(text: $login.password, prompt: Text(verbatim: "")) { Text("Key") }
-                    .fieldPlaceholder("Key", shows: login.password.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-password") }
+                    .fieldPlaceholder(String(l10n: "Key"), shows: login.password.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-password") }
                 if !knowsSite {
-                    FormRow("Service address", detail: "Optional. With it, an agent can call the service with the key (call_api).") {
+                    FormRow("Service address", detail: String(l10n: "Optional. With it, an agent can call the service with the key (call_api).")) {
                         TextField(text: $login.url, prompt: Text(verbatim: "")) { Text("https://api.example.com") }
                             .fieldPlaceholder("https://api.example.com", shows: login.url.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-url")
                     }
@@ -434,8 +434,9 @@ struct SecretEntryView: View {
     }
 
     private var footer: String {
-        let shown = login.problem == nil ? "Founderizer shows it as “\(login.title)”. " : ""
-        return shown + "Founderizer Vault keeps it, and gives it to the servers of the agents that get it. No agent sees it."
+        login.problem == nil
+            ? String(l10n: "Founderizer shows it as “\(login.title)”. Founderizer Vault keeps it, and gives it to the servers of the agents that get it. No agent sees it.")
+            : String(l10n: "Founderizer Vault keeps it, and gives it to the servers of the agents that get it. No agent sees it.")
     }
 
     // MARK: who gets it
@@ -446,10 +447,10 @@ struct SecretEntryView: View {
     private var accessChoice: some View {
         let proposed = isRequest && !preset.give.isEmpty
         let words = login.kind == .apiKey
-            ? "Uses it: its vault sends the key for it, and it never sees it. Reads it: the key is in its sessions as $\(login.variable ?? "NAME")."
-            : "Its vault signs in with it. No agent sees the password."
-        return FormSection(compact ? nil : "Who can use it",
-                           footer: (proposed ? "\(need?.by.agentLabel ?? "The agent") proposes this. " : "") + words) {
+            ? String(l10n: "Uses it: its vault sends the key for it, and it never sees it. Reads it: the key is in its sessions as $\(login.variable ?? "NAME").")
+            : String(l10n: "Its vault signs in with it. No agent sees the password.")
+        return FormSection(compact ? nil : String(l10n: "Who can use it"),
+                           footer: proposed ? String(l10n: "\(need?.by.agentLabel ?? String(l10n: "The agent")) proposes this. \(words)") : words) {
             ForEach(holders, id: \.self) { agent in accessRow(agent) }
         }
     }
@@ -458,11 +459,11 @@ struct SecretEntryView: View {
         let name = agent.agentLabel
         let level: Level = access[agent].map { login.kind == .login || $0 == .use ? Level.use : Level.read } ?? Level.off
         var rows = [FleetOption(Level.off, "No access", mark: .symbol("slash.circle")),
-                    FleetOption(Level.use, "Uses it", subtitle: "\(name) uses it and never sees it.", mark: .symbol("lock"))]
+                    FleetOption(Level.use, "Uses it", subtitle: String(l10n: "\(name) uses it and never sees it."), mark: .symbol("lock"))]
         if login.kind == .apiKey {
-            rows.append(FleetOption(Level.read, "Reads it", subtitle: "The key is in its sessions. \(name) can copy it.", mark: .symbol("eye")))
+            rows.append(FleetOption(Level.read, "Reads it", subtitle: String(l10n: "The key is in its sessions. \(name) can copy it."), mark: .symbol("eye")))
         }
-        let title = level == .read ? "Reads it" : level == .use ? "Uses it" : "No access"
+        let title = level == .read ? String(l10n: "Reads it") : level == .use ? String(l10n: "Uses it") : String(l10n: "No access")
         let mark = level == .read ? "eye" : level == .use ? "lock" : "slash.circle"
         // **The glyph in the one mark column** (`RowMark`), as on a secret's card: the name begins 50 points in, where
         // the agents' names of that card begin. A 16-point glyph and 10 of spacing put it at 42.
@@ -504,8 +505,8 @@ struct SecretEntryView: View {
     /// The secrets of the catalog that already fit the request: one that was saved before can answer it, so the
     /// owner does not type it twice.
     private var fits: some View {
-        FormSection(compact ? nil : "In the vault already",
-                    footer: "Answer with it, or save a new one below.") {
+        FormSection(compact ? nil : String(l10n: "In the vault already"),
+                    footer: String(l10n: "Answer with it, or save a new one below.")) {
             ForEach(fitting) { found in
                 FormRow("“\(found.entry.name)” is in the vault", symbol: "key", detail: found.login) {
                     Button("Answer with it") {
@@ -521,9 +522,9 @@ struct SecretEntryView: View {
     // MARK: what came of a save
 
     @ViewBuilder private func saved(_ progress: SecretProgress) -> some View {
-        FormSection(compact ? nil : "Saved") {
+        FormSection(compact ? nil : String(l10n: "Saved")) {
             if progress.sealed != nil {
-                FormRow(progress.replaces ? SameName.notInVault(progress.title) : "“\(progress.title)” is not in the vault yet",
+                FormRow(progress.replaces ? SameName.notInVault(progress.title) : String(l10n: "“\(progress.title)” is not in the vault yet"),
                         symbol: "exclamationmark.circle", detail: progress.login, warning: progress.sealedProblem)
             } else {
                 FormRow("“\(progress.title)” is in the vault", symbol: "checkmark.circle", detail: progress.login)
@@ -548,15 +549,15 @@ struct SecretEntryView: View {
 
     private static func holds(_ grant: SecretProgress.Grant) -> String {
         switch grant.grant {
-        case .read: "\(grant.agent.agentLabel) reads it in its sessions"
-        case .use: "\(grant.agent.agentLabel) can use it"
+        case .read: String(l10n: "\(grant.agent.agentLabel) reads it in its sessions")
+        case .use: String(l10n: "\(grant.agent.agentLabel) can use it")
         case nil: SameName.tookBack(grant.agent.agentLabel)
         }
     }
 
     /// The row of a step that is not done: the agent does not have the secret yet, or still has the one to take back.
     private static func waits(_ grant: SecretProgress.Grant) -> String {
-        grant.grant == nil ? SameName.notTakenBack(grant.agent.agentLabel) : "\(grant.agent.agentLabel) does not have it yet"
+        grant.grant == nil ? SameName.notTakenBack(grant.agent.agentLabel) : String(l10n: "\(grant.agent.agentLabel) does not have it yet")
     }
 
     // MARK: steps
@@ -570,7 +571,7 @@ struct SecretEntryView: View {
 
     private func clear() { login = Self.blank(preset); sameName = nil; withSeed = false }
 
-    private func text(_ error: Error) -> String { (error as? LocalizedError)?.errorDescription ?? "The hub did not answer." }
+    private func text(_ error: Error) -> String { (error as? LocalizedError)?.errorDescription ?? String(l10n: "The hub did not answer.") }
 
     /// The central vault's key, read as the form opens and at each Try again: while the hub serves the vault and names
     /// the very key this Mac pinned at Set up, the form saves there. Otherwise nothing can be saved, and the row says
@@ -598,7 +599,7 @@ struct SecretEntryView: View {
         guard !busy else { return }
         message = nil
         if let problem = login.problem { message = problem; return }
-        guard let context else { message = "No current status of this hub. Nothing was sent."; return }
+        guard let context else { message = String(l10n: "No current status of this hub. Nothing was sent."); return }
         guard let central else { phase = .noVault; return }
         busy = true
         defer { busy = false }
@@ -609,7 +610,7 @@ struct SecretEntryView: View {
         // Before anything is sent: the hub answers for this generation, and its catalog has room.
         do {
             let team = try await client.team(hub: context.hub, database: context.db)
-            guard let catalog = team.logins else { message = "This hub has no list of secrets. Nothing was sent."; return }
+            guard let catalog = team.logins else { message = String(l10n: "This hub has no list of secrets. Nothing was sent."); return }
             // The entry of a central save that the hub did not confirm is this very save, not a second secret.
             switch SecretNameHeld.of(title, kind: kind, in: catalog, but: centralLogin) {
             case .none:
@@ -637,9 +638,9 @@ struct SecretEntryView: View {
                     .map { SecretProgress.Grant(agent: $0.agent, grant: $0.grant) } + doorGrant
             }
             guard replacing != nil || catalog.count < LoginSecret.maxCatalog else {
-                message = "The list has \(LoginSecret.maxCatalog) secrets and takes no more. Nothing was sent."; return
+                message = String(l10n: "The list has \(LoginSecret.maxCatalog) secrets and takes no more. Nothing was sent."); return
             }
-        } catch { message = "The hub did not answer for this save. Nothing was sent. \(text(error))"; return }
+        } catch { message = String(l10n: "The hub did not answer for this save. Nothing was sent. \(text(error))"); return }
         await saveCentral(to: central, context: context, title: title, kind: kind, variable: variable, grants: grants,
                           replacing: replacing)
     }
@@ -656,15 +657,15 @@ struct SecretEntryView: View {
     private func saveCentral(to recipient: String, context: (hub: URL, db: String), title: String, kind: LoginSecret.Kind,
                              variable: String?, grants: [SecretProgress.Grant],
                              replacing: (reference: String, entry: TeamLogin)? = nil) async {
-        guard let value = try? login.value() else { message = "This secret cannot be sent. Nothing was sent."; return }
+        guard let value = try? login.value() else { message = String(l10n: "This secret cannot be sent. Nothing was sent."); return }
         let sealed: String
         do { sealed = try AgeSeal.seal(value, to: recipient) }
-        catch { message = "Founderizer could not seal it for the vault. Nothing was sent."; return }
+        catch { message = String(l10n: "Founderizer could not seal it for the vault. Nothing was sent."); return }
         let reference = replacing?.reference ?? centralLogin ?? "bws://\(UUID().uuidString.lowercased())"
         var signed: (statement: String, signature: String)?
         if replacing != nil {
             do { signed = try await GrantSigning.replace(login: reference, sealed: sealed, hub: context.hub, database: context.db) }
-            catch { message = "\(text(error)) Nothing was sent."; return }
+            catch { message = String(l10n: "\(text(error)) Nothing was sent."); return }
         } else {
             centralLogin = reference
         }
@@ -675,7 +676,7 @@ struct SecretEntryView: View {
         } catch {
             // The hub takes no new secret while the central vault does not answer: nothing was sent.
             if case HubError.refusal(503, _) = error { central = nil; phase = .noVault; return }
-            message = "The hub did not register this secret. \(text(error)) Save again to try once more."; return
+            message = String(l10n: "The hub did not register this secret. \(text(error)) Save again to try once more."); return
         }
         clear(); centralLogin = nil
         let progress = SecretProgress(login: reference, title: title, kind: kind, grants: grants, need: preset.need, tell: preset.tell,
@@ -721,7 +722,7 @@ struct SecretEntryView: View {
     /// is done is not done again; Try again runs the rest. Nothing follows a save before the vault has its value: an
     /// agent told of a secret that is in no vault would ask for it in vain.
     private func proceed(_ start: SecretProgress) async {
-        guard let context else { message = "No current status of this hub. Try again when it answers."; return }
+        guard let context else { message = String(l10n: "No current status of this hub. Try again when it answers."); return }
         var progress = start
         let wasBusy = busy
         busy = true
@@ -759,7 +760,7 @@ struct SecretEntryView: View {
                 progress.grants[index].done = true
                 progress.grants[index].note = note?.text; progress.grants[index].warning = note?.warning ?? false
             } catch {
-                progress.grants[index].note = "\(wanted.grant == nil ? SameName.takeBackFailed : "Not given.") \(text(error))"
+                progress.grants[index].note = "\(wanted.grant == nil ? SameName.takeBackFailed : String(l10n: "Not given.")) \(text(error))"
                 progress.grants[index].warning = true
             }
             phase = .saved(progress)
@@ -772,14 +773,14 @@ struct SecretEntryView: View {
             } catch {
                 // A request that had its answer already, here or on another of this Mac's views of it, takes no other.
                 if case HubError.refusal(409, let words) = error, words.contains("already answered") {
-                    progress.answered = true; progress.answerProblem = nil; progress.answerNote = "It had an answer already."
+                    progress.answered = true; progress.answerProblem = nil; progress.answerNote = String(l10n: "It had an answer already.")
                 } else { progress.answerProblem = text(error) }
             }
             phase = .saved(progress)
         }
         if let agent = progress.tell, !progress.told {
             if await store.say(Self.telling(progress), to: agent) { progress.told = true; progress.tellProblem = nil }
-            else { progress.tellProblem = store.sendError ?? "Founderizer could not send the message now. Try again." }
+            else { progress.tellProblem = store.sendError ?? String(l10n: "Founderizer could not send the message now. Try again.") }
             phase = .saved(progress)
         }
         await store.refresh()
@@ -807,12 +808,12 @@ struct SecretEntryView: View {
     private static func note(_ receipt: SecretGrantReceipt, title: String) -> (text: String, warning: Bool)? {
         let name = receipt.agent.agentLabel
         if let vault = receipt.vault {
-            if vault.after == "broker" { return ("\(name) uses its server's vault now.", false) }
+            if vault.after == "broker" { return (String(l10n: "\(name) uses its server's vault now."), false) }
             let reasons = (vault.missing ?? []).map(VaultAccessControl.reason).joined(separator: " ")
-            return ("\(name) has it, but it has no vault access yet, so it cannot use it now. \(reasons)", true)
+            return (String(l10n: "\(name) has it, but it has no vault access yet, so it cannot use it now. \(reasons)"), true)
         }
         if receipt.grant == SecretGrant.read.rawValue && receipt.changed {
-            return ("\(name) reads $\(title) in its sessions from their next start.", false)
+            return (String(l10n: "\(name) reads $\(title) in its sessions from their next start."), false)
         }
         return nil
     }
@@ -831,7 +832,7 @@ struct SecretEntryView: View {
             onDone(nil)
         } catch {
             if case HubError.refusal(409, _) = error { declineID = UUID() }      // the request had its answer; a new one is another command
-            message = "The decline did not reach the hub. \(text(error))"
+            message = String(l10n: "The decline did not reach the hub. \(text(error))")
         }
     }
 }

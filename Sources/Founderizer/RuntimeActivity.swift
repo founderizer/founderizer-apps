@@ -130,7 +130,7 @@ struct RuntimeActivity: View {
                 Button { childPath.removeLast() } label: {
                     Label("Back", systemImage: "arrow.left").font(FormMetrics.text).foregroundStyle(FleetStyle.muted).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityIdentifier("child-thread-back")
-                Text(timeline.rows.first { $0.event.toolKey == key }?.subagent?.name ?? "Agent thread").font(FormMetrics.heading).lineLimit(2)
+                Text(timeline.rows.first { $0.event.toolKey == key }?.subagent?.name ?? String(l10n: "Agent thread")).font(FormMetrics.heading).lineLimit(2)
                 Spacer()
                 Text("Attempt \(key.attempt)").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
             }
@@ -154,7 +154,7 @@ struct RuntimeActivity: View {
                 case .note(let note): AgentReply(text: note.text, time: note.ts, compact: true)
                 case .permission(let permission):
                     FoldRow(title: permission.tool, symbol: "hand.raised",
-                            status: permission.decision ?? "Waiting", statusColor: .orange, chat: true) {
+                            status: permission.decision ?? String(l10n: "Waiting"), statusColor: .orange, chat: true) {
                         VStack(alignment: .leading, spacing: 9) {
                             Text(permission.input).font(ChatStyle.code).textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -288,11 +288,11 @@ private struct StepsRow: View {
     private var failures: Int { rows.filter { $0.row.status == "failed" }.count }
     private var title: String {
         if let running { return toolTitle(running.event.title) }
-        return rows.count == 1 ? "1 step" : "\(rows.count) steps"
+        return rows.count == 1 ? String(l10n: "1 step") : String(l10n: "\(rows.count) steps")
     }
     private var status: String {
-        if running != nil { return rows.count == 1 ? "Running" : "Step \(rows.count) · Running" }
-        return failures == 0 ? "" : failures == 1 ? "1 failed" : "\(failures) failed"
+        if running != nil { return rows.count == 1 ? String(l10n: "Running") : String(l10n: "Step \(rows.count) · Running") }
+        return failures == 0 ? "" : failures == 1 ? String(l10n: "1 failed") : String(l10n: "\(failures) failed")
     }
 
     var body: some View {
@@ -349,9 +349,9 @@ private struct RuntimeRow: View {
     @ViewBuilder private var content: some View {
         switch row.event.type {
         case "agent_thought":
-            FoldRow(title: "Thinking", symbol: "sparkle", chat: true) { Text(verbatim: row.event.text ?? "").textSelection(.enabled) }
+            FoldRow(title: String(l10n: "Thinking"), symbol: "sparkle", chat: true) { Text(verbatim: row.event.text ?? "").textSelection(.enabled) }
         case "tool_call":
-            FoldRow(title: row.subagent?.name ?? toolTitle(row.event.title), symbol: row.subagent == nil ? toolSymbol(row.event.kind) : "person.crop.square", status: ended ? "Result unknown" : toolStatus(row.status), statusColor: row.status == "failed" ? .orange : FleetStyle.muted, chat: true) {
+            FoldRow(title: row.subagent?.name ?? toolTitle(row.event.title), symbol: row.subagent == nil ? toolSymbol(row.event.kind) : "person.crop.square", status: ended ? String(l10n: "Result unknown") : toolStatus(row.status), statusColor: row.status == "failed" ? .orange : FleetStyle.muted, chat: true) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let title = row.event.title, toolTitle(title) != title {
                         Text(verbatim: title).font(ChatStyle.code).textSelection(.enabled)
@@ -369,7 +369,7 @@ private struct RuntimeRow: View {
                         // The script that made this call: its line, and its own result on demand.
                         Text(verbatim: script.event.title ?? "exec").font(ChatStyle.code).foregroundStyle(FleetStyle.muted)
                             .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                        FoldRow(title: "Script result", symbol: "terminal") {
+                        FoldRow(title: String(l10n: "Script result"), symbol: "terminal") {
                             Text(verbatim: script.output ?? "No output reported.").font(ChatStyle.code).textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -377,7 +377,7 @@ private struct RuntimeRow: View {
                     if row.subagent != nil, let key = row.event.toolKey {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(children.suffix(3)) { child in
-                                Text(child.event.title ?? child.event.text ?? child.event.message ?? "Activity")
+                                Text(child.event.title ?? child.event.text ?? child.event.message ?? String(l10n: "Activity"))
                                     .font(ChatStyle.detail).lineLimit(2).foregroundStyle(FleetStyle.muted)
                             }
                             Button("Open agent thread", systemImage: "arrow.up.right") { open(key) }.buttonStyle(.plain).font(ChatStyle.detail)
@@ -386,15 +386,15 @@ private struct RuntimeRow: View {
                 }
             }.id(script?.id ?? row.id)
         case "plan": RuntimePlan(entries: row.event.entries ?? [])
-        case "error": Label(row.event.message ?? "Runtime error", systemImage: "exclamationmark.circle").foregroundStyle(.orange)
+        case "error": Label(row.event.message ?? String(l10n: "Runtime error"), systemImage: "exclamationmark.circle").foregroundStyle(.orange)
         default: Text("The worker reached its activity record limit.").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
         }
     }
 }
 
 private func toolTitle(_ title: String?) -> String {
-    guard let title else { return "Tool" }
-    if title.hasPrefix("exec:") { return "Run tools" }
+    guard let title else { return String(l10n: "Tool") }
+    if title.hasPrefix("exec:") { return String(l10n: "Run tools") }
     if title.hasPrefix("fleet: ") { return String(title.dropFirst(7)).replacingOccurrences(of: "_", with: " ").capitalized }
     return title
 }
@@ -409,14 +409,14 @@ private func toolSymbol(_ kind: String?) -> String {
     }
 }
 private func toolStatus(_ status: String?) -> String {
-    switch status { case "completed": "Done"; case "failed": "Failed"; case "in_progress": "Running"; default: "Waiting" }
+    switch status { case "completed": String(l10n: "Done"); case "failed": String(l10n: "Failed"); case "in_progress": String(l10n: "Running"); default: String(l10n: "Waiting") }
 }
 
 /// A plan as a row of a subagent's thread: one of the plans it wrote, folded.
 private struct RuntimePlan: View {
     let entries: [RuntimeEvent.PlanEntry]
     var body: some View {
-        FoldRow(title: "Plan", symbol: "checklist", chat: true) { PlanSteps(entries: entries) }
+        FoldRow(title: String(l10n: "Plan"), symbol: "checklist", chat: true) { PlanSteps(entries: entries) }
     }
 }
 
@@ -534,32 +534,32 @@ struct TaskControls: View {
                             }
                         }
                         // The owner's Stop takes over the stop of a requester's restart, so the hub starts no new session.
-                        if hold.state == "not_confirmed" || hold.kind == "pause" || hold.isAgentStop { controlButton("Stop", symbol: "stop", action: .stop) }
+                        if hold.state == "not_confirmed" || hold.kind == "pause" || hold.isAgentStop { controlButton(String(l10n: "Stop"), symbol: "stop", action: .stop) }
                     } else {
                         // The panel's word for the task (`stateWord`): "Usage limit" while its agent's usage limit holds it.
                         Text(task.stateWord(in: store.state)).foregroundStyle(FleetStyle.muted)
                         Spacer()
-                        controlButton("Pause", symbol: "pause", action: .pause)
-                        controlButton("Stop", symbol: "stop", action: .stop)
+                        controlButton(String(l10n: "Pause"), symbol: "pause", action: .pause)
+                        controlButton(String(l10n: "Stop"), symbol: "stop", action: .stop)
                     }
                 }.font(FormMetrics.detail).disabled(!store.canWrite)
             }
             if let outcome = resolving, unknown.contains(where: { $0.id == outcome.id }) {
                 // The check of one result, in place of the list; no sheet.
-                FormSection("Check the result", detail: "Confirm what happened before the task repeats an action.") {
+                FormSection("Check the result", detail: String(l10n: "Confirm what happened before the task repeats an action.")) {
                     FormRow(outcome.title) {
                         FleetSelect("Result", selection: $finding, options: [
                             FleetOption(.done, "Completed", mark: .symbol("checkmark.circle")),
                             FleetOption(.not_done, "Did not happen", mark: .symbol("xmark.circle")),
-                        ], placeholder: "Choose a result").accessibilityIdentifier("outcome-result")
+                        ], placeholder: String(l10n: "Choose a result")).accessibilityIdentifier("outcome-result")
                     }
-                    FormBlock("How you checked", detail: "Optional.") {
+                    FormBlock("How you checked", detail: String(l10n: "Optional.")) {
                         // The one field look (`.fleetField`, T-30), where the stock bezel stood; its placeholder the muted
                         // words, with or without the cursor (`fieldPlaceholder`; fix round 3, item 55).
                         TextField(text: $note, prompt: Text(verbatim: "")) { Text("How you checked") }
-                            .fieldPlaceholder("How you checked", shows: note.isEmpty).fleetField()
+                            .fieldPlaceholder(String(l10n: "How you checked"), shows: note.isEmpty).fleetField()
                     }
-                    FormRow("", warning: store.pending != nil ? "A saved request waits. Check it below." : nil) {
+                    FormRow("", warning: store.pending != nil ? String(l10n: "A saved request waits. Check it below.") : nil) {
                         HStack(spacing: 8) {
                             Button("Cancel") { resolving = nil }.buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.cancelAction)
                             Button("Save finding") {

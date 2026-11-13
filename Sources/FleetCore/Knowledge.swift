@@ -97,7 +97,7 @@ public struct KnowledgeEdit: Equatable, Sendable {
     public var isChanged: Bool { !sent.isEmpty && sent != saved.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     /// The words for an empty box, which is never sent.
-    public static let empty = "A knowledge file needs text. To remove the file, delete it on its card."
+    public static let empty = String(l10n: "A knowledge file needs text. To remove the file, delete it on its card.")
 
     /// The text after a file's "# <title>" and "Source: " lines (the hub's `knowledge_content`), or nil without them.
     public static func body(of text: String) -> String? {
@@ -271,6 +271,6 @@ public enum KnowledgeAccess {
 public struct KnowledgeAccessError: LocalizedError {
     public let agent: String
     public var errorDescription: String? {
-        "The Knowledge files section of \(agent.agentLabel) has a line that is not a file. Correct it in the agent's profile first."
+        String(l10n: "The Knowledge files section of \(agent.agentLabel) has a line that is not a file. Correct it in the agent's profile first.")
     }
 }

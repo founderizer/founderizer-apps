@@ -36,7 +36,7 @@ struct AgentDeleteCard: View {
                     .accessibilityIdentifier("agent-delete-cancel")
                 // The app's one loading look while the command is on its way (T-13), and Delete only while it can act.
                 if busy {
-                    ShimmeringWords(text: "Deleting").accessibilityElement().accessibilityLabel("Deleting")
+                    ShimmeringWords(text: String(l10n: "Deleting")).accessibilityElement().accessibilityLabel("Deleting")
                 } else if store.canWrite {
                     Button("Delete", role: .destructive) { Task { await delete() } }.buttonStyle(FleetDangerButtonStyle())
                         .accessibilityIdentifier("agent-delete-confirm")
@@ -68,7 +68,7 @@ struct AgentDeleteCard: View {
 @MainActor enum AgentDeletion {
     /// nil once the hub took it, or the hub's own words when it refused.
     static func send(store: FleetStore, agent: String) async -> String? {
-        guard let database = store.state?.db else { return "The hub has not answered. Try again." }
+        guard let database = store.state?.db else { return String(l10n: "The hub has not answered. Try again.") }
         for attempt in 0..<2 {
             do {
                 let team = try await HubClient().team(hub: store.hub, database: database)
@@ -81,10 +81,10 @@ struct AgentDeleteCard: View {
                 if status == 409, attempt == 0, words.contains("team.json changed") { continue }
                 return words
             } catch {
-                return "The hub has not answered. Try again."
+                return String(l10n: "The hub has not answered. Try again.")
             }
         }
-        return "The hub has not answered. Try again."
+        return String(l10n: "The hub has not answered. Try again.")
     }
 
     /// A page of the agent that is gone gives way: its chat or details to Tasks, its server's page to that server's own,

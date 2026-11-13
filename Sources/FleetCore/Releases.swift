@@ -36,13 +36,13 @@ public struct ReleaseRow: Codable, Equatable, Identifiable, Sendable {
     public var summary: String {
         if let says, !says.isEmpty { return says }
         switch state {
-        case "verified": return "Release \(version) is on the channel."
-        case "held": return "Release \(version) is held by us. No fleet takes it."
-        case "updating": return "This fleet is updating to \(version)…"
-        case "done": return "This fleet runs \(version)."
-        case "kept": return "\(version) was not taken, and this fleet did not move."
-        case "rolled_back": return "\(version) did not pass its checks, and this fleet did not move."
-        default: return "The update to \(version) did not finish."
+        case "verified": return String(l10n: "Release \(version) is on the channel.")
+        case "held": return String(l10n: "Release \(version) is held by us. No fleet takes it.")
+        case "updating": return String(l10n: "This fleet is updating to \(version)…")
+        case "done": return String(l10n: "This fleet runs \(version).")
+        case "kept": return String(l10n: "\(version) was not taken, and this fleet did not move.")
+        case "rolled_back": return String(l10n: "\(version) did not pass its checks, and this fleet did not move.")
+        default: return String(l10n: "The update to \(version) did not finish.")
         }
     }
 
@@ -199,51 +199,50 @@ public struct ReleaseState: Codable, Equatable, Sendable {
     /// reached makes it up to date; everything else says what is missing.
     public var stand: Stand {
         if let run = newestRun, run.isRunning {
-            return Stand(says: run.summary, value: "Updating")
+            return Stand(says: run.summary, value: String(l10n: "Updating"))
         }
         if let run = newestRun, run.needsOwner {
-            return Stand(says: run.summary, value: "Did not finish", take: offered, waiting: !idle, warn: true)
+            return Stand(says: run.summary, value: String(l10n: "Did not finish"), take: offered, waiting: !idle, warn: true)
         }
         if !have_release_key {
             return Stand(says: releases.isEmpty
-                         ? "We have published no release yet, and this build carries no key to check one with. "
-                         + "Your fleet is not behind."
-                         : "This build has no release key.",
-                         value: "Nothing to check")
+                         ? String(l10n: "We have published no release yet, and this build carries no key to check one with. Your fleet is not behind.")
+                         : String(l10n: "This build has no release key."),
+                         value: String(l10n: "Nothing to check"))
         }
         // What our channel answered decides, whatever the hub holds of the old subscription: a channel that refuses
         // a fleet is said as it answered, and a channel that answers a fleet is believed.
         if let status = last_check.status, status != 200 {
-            return Stand(says: last_check.says ?? "Our channel answered \(status) when your fleet last asked. "
-                         + "Your fleet asks again by itself.", value: "Cannot check", warn: true)
+            return Stand(says: last_check.says ?? String(l10n: "Our channel answered \(status) when your fleet last asked. Your fleet asks again by itself."),
+                         value: String(l10n: "Cannot check"), warn: true)
         }
         if releases.isEmpty {
             // A fleet that has not asked yet knows of no release, and that is not "we have published none": it is
             // what the first install of a fleet read and was never what happened.
-            guard last_check.at != nil else { return Stand(says: checkedLine, value: "Nothing to check") }
-            return Stand(says: "We have published no release yet. Your fleet is not behind.", value: "Nothing to check")
+            guard last_check.at != nil else { return Stand(says: checkedLine, value: String(l10n: "Nothing to check")) }
+            return Stand(says: String(l10n: "We have published no release yet. Your fleet is not behind."), value: String(l10n: "Nothing to check"))
         }
-        if let held = releases.first, held.hold { return Stand(says: held.summary, value: "Held") }
+        if let held = releases.first, held.hold { return Stand(says: held.summary, value: String(localized: "Held (a release)", defaultValue: "Held", bundle: Localized.bundle, locale: Localized.digits)) }
         if let ready = offered {
             // Plan P0: a release waits only for the tasks whose turn runs now (`open_tasks`), and for a check that
             // runs, which lists no task. A task between turns, parked or waiting for an answer, does not hold it.
             // **What it waits for is the row's value, and no button is drawn meanwhile** (fix round 3, item 1): the white
             // Update was drawn disabled, with its reason on its hover only.
-            let waits = open_tasks.count == 1 ? "Waits for a task"
-                : open_tasks.isEmpty ? "Waits for a check" : "Waits for \(open_tasks.count) tasks"
-            return Stand(says: idle ? runs : open_tasks.isEmpty ? "It waits until no check runs."
-                                                                : "It waits until no task runs.",
+            let waits = open_tasks.count == 1 ? String(l10n: "Waits for a task")
+                : open_tasks.isEmpty ? String(l10n: "Waits for a check") : String(l10n: "Waits for \(open_tasks.count) tasks")
+            return Stand(says: idle ? runs : open_tasks.isEmpty ? String(l10n: "It waits until no check runs.")
+                                                                : String(l10n: "It waits until no task runs."),
                          value: idle ? "" : waits, take: ready, waiting: !idle)
         }
-        if let current { return Stand(says: "Your fleet runs the newest release. \(checkedLine)", value: current.version) }
-        return Stand(says: runs, value: "Unknown")
+        if let current { return Stand(says: String(l10n: "Your fleet runs the newest release. \(checkedLine)"), value: current.version) }
+        return Stand(says: runs, value: String(l10n: "Unknown"))
     }
 
     /// Which of our releases this fleet runs, in the owner's own words. The revision under it is this app's
     /// business and not his: a screen of ours names a version, never an id.
     private var runs: String {
-        guard let current else { return "Your fleet has not taken one of our releases yet." }
-        return "Your fleet runs \(current.version)."
+        guard let current else { return String(l10n: "Your fleet has not taken one of our releases yet.") }
+        return String(l10n: "Your fleet runs \(current.version).")
     }
 
     /// One row of the Updates screen: what it says, what it shows at the right, and whether it offers a press.
@@ -266,8 +265,8 @@ public struct ReleaseState: Codable, Equatable, Sendable {
 
     /// When the channel was last asked, in a few words.
     public var checkedLine: String {
-        guard let at = last_check.at else { return "Your fleet has not asked our channel yet." }
-        return "Asked \(Servers.age(at, now: time))."
+        guard let at = last_check.at else { return String(l10n: "Your fleet has not asked our channel yet.") }
+        return String(l10n: "Asked \(Servers.age(at, now: time)).")
     }
 }
 

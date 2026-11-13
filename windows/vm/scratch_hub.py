@@ -10,6 +10,8 @@ time, to "changes.log" there:
     need    a new open Needs-you item from the manager: the pane's count goes up
     line    a new reply from the agent "vps": its row's line and time change
     code    a new code for the PC, in changes.log (the app keeps its key in memory, so each start needs one)
+    settle  the helper confirms each hold that waits (a pause or a stop holds: state "stopped")
+    two     the hub answers every open request but the two newest (for the taskbar's count from 2)
     quit    the hub stops
 
     python3 -I app/windows/vm/scratch_hub.py      (from the repository's root; run it in the background)
@@ -80,6 +82,20 @@ while True:
                         (f"The example build passed its checks ({count}).", "", hub.now(), "vps", None))
                 hub.changed("state")
                 note("line")
+            elif word == "settle":
+                held = hub.q("SELECT id FROM holds WHERE state='requested'")
+                for row in held:
+                    hub.q("UPDATE holds SET state='stopped', confirmed=? WHERE id=?", (hub.now(), row["id"]))
+                hub.changed("state")
+                note(f"settle {len(held)}")
+            elif word == "two":
+                keep = [r["id"] for r in hub.q("SELECT id FROM needs WHERE answered IS NULL ORDER BY id DESC LIMIT 2")]
+                rest = hub.q("SELECT id FROM needs WHERE answered IS NULL")
+                for row in rest:
+                    if row["id"] not in keep:
+                        hub.q("UPDATE needs SET answered=?, answer='Option A' WHERE id=?", (hub.now(), row["id"]))
+                hub.changed("state")
+                note(f"two {keep}")
             elif word == "code":
                 note("code " + hub.new_device_code(app_decode.WINDOWS_DEVICE)["code"])
             elif word == "quit":

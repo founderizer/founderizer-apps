@@ -65,7 +65,7 @@ struct AccessSettings: View {
     /// The name of the fleet's resources, or of one agent's: the MCPs and Apps lists and the Secrets page draw it.
     nonisolated static func name(_ agent: String?) -> String { "resources.\(agent ?? "fleet")" }
     /// The words behind the orange mark of a repository that the hub's GitHub App does not reach.
-    static let unreachedWords = "The GitHub App cannot reach this repository"
+    static let unreachedWords = String(l10n: "The GitHub App cannot reach this repository")
     /// The resources, read before the page first opens (`PagePrefetch`): the fleet's, and each agent's.
     static let prefetch = PagePrefetch(name(nil), feature: ResourceList.feature) {
         try await ResourcesClient().read(hub: $0, database: $1)
@@ -109,9 +109,9 @@ struct AccessSettings: View {
             // **Not while the window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item 33: an
             // outage is said once): the line stands only where no notice over the page says why.
             if !store.hubNoticeShows {
-                FormSection { FormRow("Founderizer cannot read the resources now.", detail: "It reads again when the hub answers.") }
+                FormSection { FormRow("Founderizer cannot read the resources now.", detail: String(l10n: "It reads again when the hub answers.")) }
             }
-        } else { LoadingLine("Reading the resources…") }
+        } else { LoadingLine(String(l10n: "Reading the resources…")) }
     }
 
     // MARK: list
@@ -212,7 +212,8 @@ struct AccessSettings: View {
         }
         .buttonStyle(FleetRowButtonStyle())
         .help(open ? "Hide these repositories" : "Show these repositories")
-        .accessibilityLabel("\(account), \(group.repos.count) repositories, \(level)" + (unreached ? ", \(Self.unreachedWords)" : ""))
+        .accessibilityLabel(unreached ? String(l10n: "\(account), \(group.repos.count) repositories, \(level), \(Self.unreachedWords)")
+                            : String(l10n: "\(account), \(group.repos.count) repositories, \(level)"))
         .accessibilityValue(open ? "Expanded" : "Collapsed")
         .accessibilityIdentifier("access-repo-group-\(group.id)")
         // The account as GitHub writes it, from the list that the + reads; until then, as team.json keeps it.
@@ -222,11 +223,11 @@ struct AccessSettings: View {
     /// The empty card of one kind on an agent's Can use, under its heading, which already names the kind.
     private static func emptyForAgent(_ kind: String) -> String {
         switch kind {
-        case "tool": "No MCP servers"
-        case "repo": "No repositories"
-        case "gmail", "drive": "No accounts"
-        case "secret": "No secrets"
-        default: "None"
+        case "tool": String(l10n: "No MCP servers")
+        case "repo": String(l10n: "No repositories")
+        case "gmail", "drive": String(l10n: "No accounts")
+        case "secret": String(l10n: "No secrets")
+        default: String(l10n: "None")
         }
     }
 
@@ -249,11 +250,11 @@ struct AccessSettings: View {
     /// list of the app says it.
     private func empty(_ kind: ResourceKind) -> String {
         switch kind.kind {
-        case "tool": "No MCP servers yet"
-        case "repo": "No repositories yet"
-        case "gmail", "drive": "No accounts yet"
-        case "secret": "No secrets yet"
-        default: "None yet"
+        case "tool": String(l10n: "No MCP servers yet")
+        case "repo": String(l10n: "No repositories yet")
+        case "gmail", "drive": String(l10n: "No accounts yet")
+        case "secret": String(l10n: "No secrets yet")
+        default: String(l10n: "None yet")
         }
     }
 
@@ -268,7 +269,9 @@ struct AccessSettings: View {
                     Text(resource.title).font(Self.isCode(resource.kind) ? FormMetrics.title.monospaced()
                                               : FormMetrics.title)
                         .foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle)
-                    Text(who(resource)).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
+                    if let who = who(resource) {
+                        Text(who).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
+                    }
                 }
                 Spacer(minLength: 12)
                 // Who may give it, only where the fleet manager may: "You give it" on every other row said the
@@ -307,7 +310,7 @@ struct AccessSettings: View {
         if working == "\(resource.id) \(agent)" {
             ProgressView().controlSize(.small).frame(width: IconMetrics.side, height: IconMetrics.side)
         } else {
-            IconButton(symbol: "minus", words: "Take \(resource.title) back from \(agent.agentLabel)") {
+            IconButton(symbol: "minus", words: String(l10n: "Take \(resource.title) back from \(agent.agentLabel)")) {
                 Task {
                     guard let reading, let database = store.state?.db else { return }
                     working = "\(resource.id) \(agent)"
@@ -323,14 +326,17 @@ struct AccessSettings: View {
         }
     }
 
-    /// Who has this item, in the same words on the fleet's own list and on an agent's: the agents that hold it, or
-    /// all of them. The level each one has is in the item's detail.
-    private func who(_ resource: FleetResource) -> String {
+    /// Who has this item: the agents that hold it, or all of them. The level each one has is in the item's detail. **On an
+    /// agent's own list, the other agents** (the owner, 13 November 2026: "review all other pages for the same
+    /// issues!!"): this agent holds every item there, so its name on every row told nothing; an item of this agent
+    /// alone has no line.
+    private func who(_ resource: FleetResource) -> String? {
         let all = (store.state?.agents.map(\.name) ?? []).sorted()
         let holders = resource.holders.map(\.agent).sorted()
-        if holders.isEmpty { return "No agent" }
-        if !all.isEmpty && Set(all) == Set(holders) { return "All agents" }
-        return agentWords(holders)
+        if holders.isEmpty { return String(l10n: "No agent") }
+        if !all.isEmpty && Set(all) == Set(holders) { return String(l10n: "All agents") }
+        let others = holders.filter { $0 != agent }
+        return others.isEmpty ? nil : agentWords(others)
     }
 
     // MARK: detail
@@ -391,8 +397,8 @@ struct AccessSettings: View {
                 // which for a mail account is Send — what it hands out belongs where it is handed out, not in a
                 // footer under it.
                 FormRow("All agents", symbol: "person.3",
-                        detail: resource.kind == "secret" ? "Every agent: \(Self.levelName(level, kind: resource.kind))."
-                            : "Gives every agent \(Self.levelName(level, kind: resource.kind)).") {
+                        detail: resource.kind == "secret" ? String(l10n: "Every agent: \(Self.levelName(level, kind: resource.kind)).")
+                            : String(l10n: "Gives every agent \(Self.levelName(level, kind: resource.kind)).")) {
                     if working == "\(resource.id) all" { ProgressView().controlSize(.small) }
                     else {
                         Toggle("All agents", isOn: Binding(
@@ -411,15 +417,15 @@ struct AccessSettings: View {
                 // row"; margins row 15), as a secret's card has it: one agent row in every card, its name at the edge
                 // of "All agents".
                 FormRow(agent.agentLabel, mark: AgentGlyph(name: agent, size: GlyphSize.inline),
-                        detail: level.map { resource.kind == "secret" ? "Has it: \(Self.levelName($0, kind: resource.kind))"
-                            : "Has it at \(Self.levelName($0, kind: resource.kind))" }) {
+                        detail: level.map { resource.kind == "secret" ? String(l10n: "Has it: \(Self.levelName($0, kind: resource.kind))")
+                            : String(l10n: "Has it at \(Self.levelName($0, kind: resource.kind))") }) {
                     if busy { ProgressView().controlSize(.small) } else {
                         FleetSelect("What \(agent.agentLabel) may do with \(resource.title)",
                                     options: [FleetOption("", "No access")]
                                         + kind.levels.map { FleetOption($0, Self.levelName($0, kind: resource.kind)) },
                                     selection: level ?? "") { chosen in
                             Task { await give(resource, to: agent, level: chosen.isEmpty ? nil : chosen) }
-                        } label: { FleetSelectLabel(title: level.map { Self.levelName($0, kind: resource.kind) } ?? "No access") }
+                        } label: { FleetSelectLabel(title: level.map { Self.levelName($0, kind: resource.kind) } ?? String(l10n: "No access")) }
                             .disabled(!canChange).accessibilityIdentifier("access-agent-\(agent)")
                     }
                 }
@@ -433,8 +439,8 @@ struct AccessSettings: View {
     static func levelName(_ level: String, kind: String) -> String {
         if kind == "secret" {
             switch level {
-            case SecretGrant.use.rawValue: return "Uses it"
-            case SecretGrant.read.rawValue: return "Reads it"
+            case SecretGrant.use.rawValue: return String(l10n: "Uses it")
+            case SecretGrant.read.rawValue: return String(l10n: "Reads it")
             default: break
             }
         }
@@ -452,7 +458,9 @@ struct AccessSettings: View {
     private static func levelsFooter(_ kind: ResourceKind) -> String? {
         let reaching = kind.levels.compactMap(GoogleLevel.init(rawValue:)).filter(\.reachesOthers)
         guard !reaching.isEmpty else { return nil }
-        return "\(reaching.map(\.title).joined(separator: " and ")): \(Google.reachesOthers)"
+        let titles = reaching.map(\.title)
+        if titles.count == 2 { return String(l10n: "\(titles[0]) and \(titles[1]): \(Google.reachesOthers)") }
+        return "\(titles.joined(separator: " and ")): \(Google.reachesOthers)"
     }
 
     /// Gives every agent this item at one level, or takes it from all of them: the one control for "everyone".
@@ -479,8 +487,8 @@ struct AccessSettings: View {
             note = (resource.id, refused, true)
             return
         }
-        note = (resource.id, level == nil ? "\(agent.agentLabel) no longer has \(resource.title)."
-                : "\(agent.agentLabel) has \(resource.title) at \(level ?? "").", false)
+        note = (resource.id, level == nil ? String(l10n: "\(agent.agentLabel) no longer has \(resource.title).")
+                : String(l10n: "\(agent.agentLabel) has \(resource.title) at \(level ?? "")."), false)
         await read()
     }
 
@@ -519,15 +527,15 @@ struct AccessSettings: View {
                                                     service: resource.kind == "drive" ? .drive : .gmail,
                                                     access: resource.googleAccess(giving: agent, level: level))
             default:
-                return "Founderizer cannot give this kind yet."
+                return String(l10n: "Founderizer cannot give this kind yet.")
             }
             return nil
         } catch let HubError.refusal(_, words) {
             return words
         } catch let stop as GrantSigning.Stop {
-            return stop.errorDescription ?? "The hub did not take this change. Try again."
+            return stop.errorDescription ?? String(l10n: "The hub did not take this change. Try again.")
         } catch {
-            return "The hub did not take this change. Try again."
+            return String(l10n: "The hub did not take this change. Try again.")
         }
     }
 
@@ -568,7 +576,7 @@ struct AccessSettings: View {
 
     // MARK: changes
 
-    private static func text(_ error: Error) -> String { (error as? LocalizedError)?.errorDescription ?? "The hub did not answer." }
+    private static func text(_ error: Error) -> String { (error as? LocalizedError)?.errorDescription ?? String(l10n: "The hub did not answer.") }
 
     /// One standing at the hub, against the team.json version of the last reading, then a new reading. The hub refuses
     /// a standing that it would refuse in team.json, with its reason, and an old version (409), after which the new
@@ -592,12 +600,11 @@ struct AccessSettings: View {
             }
             await read()
             if receipt.changed, case .grantable(let max, let to) = standing, let reading {
-                note = (resource.id, "The fleet manager may give \(resource.title) to \(reading.audienceWords(to)), "
-                        + "at most \(max).", false)
+                note = (resource.id, String(l10n: "The fleet manager may give \(resource.title) to \(reading.audienceWords(to)), at most \(max)."), false)
             }
         } catch {
             await read()
-            note = (resource.id, "Founderizer could not change this. \(Self.text(error))", true)
+            note = (resource.id, String(l10n: "Founderizer could not change this. \(Self.text(error))"), true)
         }
     }
 
@@ -676,14 +683,13 @@ struct AccessGive: View {
 
     /// What the + gives, in the owner's words: "Give Web-Lead a repository".
     private var words: String {
-        let what = switch kind {
-        case "repo": "a repository"
-        case "drive": "a Drive account"
-        case "gmail": "a Gmail account"
-        case "tool": "an MCP server"
-        default: "one more"
+        switch kind {
+        case "repo": String(l10n: "Give \(agent.agentLabel) a repository")
+        case "drive": String(l10n: "Give \(agent.agentLabel) a Drive account")
+        case "gmail": String(l10n: "Give \(agent.agentLabel) a Gmail account")
+        case "tool": String(l10n: "Give \(agent.agentLabel) an MCP server")
+        default: String(l10n: "Give \(agent.agentLabel) one more")
         }
-        return "Give \(agent.agentLabel) \(what)"
     }
 
     private func give(_ resource: FleetResource, reading: ResourceList) async {
@@ -754,7 +760,7 @@ struct StandingRows: View {
         }
         if case .grantable(let max, let to) = standing {
             FormRow("At most", symbol: "arrow.up.to.line",
-                    detail: "The manager may give this level and the ones under it.") {
+                    detail: String(l10n: "The manager may give this level and the ones under it.")) {
                 if levels.count < 2 {
                     // **One level is a value, not a choice** (fix round 3c): an MCP server's "Use" stood as a grey select.
                     Text(AccessSettings.levelName(max, kind: kind)).foregroundStyle(FleetStyle.muted)
@@ -779,23 +785,23 @@ struct StandingRows: View {
                                                                                footer: String?) {
         switch standing {
         case .ownerOnly:
-            return ("You alone", "You give it", "person.fill", FleetStyle.muted,
-                    "Only you give it. The fleet manager must ask you for it with a Needs-you item.")
+            return (String(l10n: "You alone"), String(l10n: "You give it"), "person.fill", FleetStyle.muted,
+                    String(l10n: "Only you give it. The fleet manager must ask you for it with a Needs-you item."))
         case .grantable(let max, _):
             // No footer of 35 words on what the manager may do (D-2): the two rows above it say it.
             // The row's words (fix round 2): what the manager may give, by the level's one name.
-            return ("You and the fleet manager", "Manager may give: \(AccessSettings.levelName(max, kind: kind))",
+            return (String(l10n: "You and the fleet manager"), String(l10n: "Manager may give: \(AccessSettings.levelName(max, kind: kind))"),
                     "person.2.fill", FleetStyle.text, nil)
         }
     }
 
     /// The rows of the first dropdown: you, or you and the manager.
     fileprivate static func choices(levels: [String]) -> [FleetOption<StandingChoice>] {
-        var rows = [FleetOption(StandingChoice.owner, "You alone", subtitle: "The manager asks you for it.",
+        var rows = [FleetOption(StandingChoice.owner, "You alone", subtitle: String(l10n: "The manager asks you for it."),
                                 mark: .symbol("person.fill"))]
         if !levels.isEmpty {
             rows.append(FleetOption(StandingChoice.manager, "You and the fleet manager",
-                                    subtitle: "The manager may hand it out, up to a level you set.",
+                                    subtitle: String(l10n: "The manager may hand it out, up to a level you set."),
                                     mark: .symbol("person.2.fill")))
         }
         return rows

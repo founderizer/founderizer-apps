@@ -121,7 +121,8 @@ public sealed record MobileChatItem(
     string? InReplyTo = null,
     [property: JsonPropertyName("attachments")] IReadOnlyList<MessageAttachment>? RawAttachments = null,
     bool? Pushed = null,
-    long? AnswerTo = null)
+    long? AnswerTo = null,
+    double? Edited = null)
 {
     /// <summary>A message's request UUID, or a report's number as text. Set by HubDecode.</summary>
     [JsonIgnore] public string Key { get; init; } = "";
@@ -208,11 +209,9 @@ public sealed record RuntimeLimit(double Since, double Until, bool ResetKnown, l
 
 public sealed record ManagerWarning(string Kind, double Since);
 
-/// <summary>One message in the discussion of a Needs-you item: `who` is `owner` or the agent that replied.</summary>
-public sealed record NeedMessage(string Who, string Text, double Ts)
-{
-    public bool FromOwner => Who == "owner";
-}
+/// <summary>The mark of a file where no picture shows: a picture's, a PDF's, a ZIP's, or a text's.</summary>
+public enum FileSymbol { Picture, Pdf, Zip, Text }
+
 
 /// <summary>One Needs-you item (FleetCore's OwnerNeed). `secret` is read leniently, as Swift's NeedSecret reads it: see
 /// <see cref="NeedSecret.From"/>.</summary>
@@ -239,8 +238,7 @@ public sealed record OwnerNeed(
     long? AddDevice = null,
     string? Details = null,
     bool? Multi = null,
-    IReadOnlyList<long>? Chose = null,
-    IReadOnlyList<NeedMessage>? Talk = null)
+    IReadOnlyList<long>? Chose = null)
 {
     [JsonIgnore] public bool IsOpen => Answered is null && Answer is null;
     [JsonIgnore] public NeedSecret? Secret => NeedSecret.From(RawSecret);
@@ -358,7 +356,7 @@ public sealed record TaskSteer(long Id, long Task, long Attempt, string Text, do
 }
 
 /// <summary>The hub's receipt of an owner command (FleetCore's ControlReceipt), with the fields that the device's
-/// commands read: a task's control and guidance, and the discussion of a Needs-you item.</summary>
+/// commands read: a task's control and its guidance.</summary>
 public sealed record ControlReceipt(
     bool Ok,
     string RequestId,
@@ -366,9 +364,7 @@ public sealed record ControlReceipt(
     bool Replayed,
     JsonElement? Changed = null,
     TaskSteer? Steer = null,
-    TaskHold? Hold = null,
-    long? Need = null,
-    IReadOnlyList<NeedMessage>? Talk = null)
+    TaskHold? Hold = null)
 {
     /// <summary>`changed` when the hub sent true or false; null for a list or nothing.</summary>
     [JsonIgnore]
@@ -380,6 +376,18 @@ public sealed record ControlReceipt(
 public sealed record MessageAttachment(long Id, string Name, string Mime, long Size, string Sha256, double Created,
                                        AttachmentKept? Kept = null)
 {
+    /// <summary>A picture, which a message shows whole (MessageAttachment.isImage).</summary>
+    public bool IsImage => Mime.StartsWith("image/", System.StringComparison.Ordinal);
+
+    /// <summary>The mark that stands for it where no picture shows (MessageAttachment.symbol).</summary>
+    public FileSymbol Symbol => Mime switch
+    {
+        _ when IsImage => FileSymbol.Picture,
+        "application/pdf" => FileSymbol.Pdf,
+        "application/zip" => FileSymbol.Zip,
+        _ => FileSymbol.Text,
+    };
+
     /// <summary>The types that the hub takes, and the extension that each keeps.</summary>
     public static readonly IReadOnlyDictionary<string, string> Types = new Dictionary<string, string>
     {
@@ -436,7 +444,8 @@ public sealed record MessageAttachment(long Id, string Name, string Mime, long S
         culture ??= System.Globalization.CultureInfo.CurrentCulture;
         if (size < 1024) return size.ToString("N0", culture) + " B";
         if (size < 1024 * 1024) return (size / 1024).ToString("N0", culture) + " KB";
-        return (size / (1024.0 * 1024)).ToString("N1", culture) + " MB";
+        // Swift's FormatStyle rounds half to even: 1,310,720 B is "1.2 MB".
+        return Math.Round(size / (1024.0 * 1024), 1, MidpointRounding.ToEven).ToString("N1", culture) + " MB";
     }
 
     /// <summary>These bytes are the file that the hub named: the same count and the same SHA-256.</summary>

@@ -99,10 +99,10 @@ public enum ConnectGate {
         }
     }
 
-    static let rootWords = "Founderizer could not run the setup as root on your hub's server."
-    static let busyPort = "Your hub's server already publishes another address on port 443. Founderizer does not change it."
-    static let notPublished = "Tailscale does not let your hub's server publish the address yet."
-    static let notRunning = "Connected apps did not keep running on your hub's server."
+    static let rootWords = String(l10n: "Founderizer could not run the setup as root on your hub's server.")
+    static let busyPort = String(l10n: "Your hub's server already publishes another address on port 443. Founderizer does not change it.")
+    static let notPublished = String(l10n: "Tailscale does not let your hub's server publish the address yet.")
+    static let notRunning = String(l10n: "Connected apps did not keep running on your hub's server.")
 
     /// In the order they are tried. A phrase can stand in more than one message of `hubsetup.py` (the vault's steps
     /// have "could not be put in place" too): only the messages of `connect on`, `connect off` and the hub's
@@ -112,19 +112,19 @@ public enum ConnectGate {
         Match("run it as root on the hub's machine", rootWords, retries: false),
         Match("the connect gate is installed only from root's own clone", rootWords, retries: false),
         // hub_account: no user of the hub, or the hub runs as root
-        Match("name the user the hub runs as with --hub-user", "Your hub's user is missing on its server.", retries: false),
-        Match("the hub never runs as root", "Your hub's user is missing on its server.", retries: false),
+        Match("name the user the hub runs as with --hub-user", String(l10n: "Your hub's user is missing on its server."), retries: false),
+        Match("the hub never runs as root", String(l10n: "Your hub's user is missing on its server."), retries: false),
         // tailnet_name: no full DNS name
         Match("Tailscale gives this machine no full DNS name",
-              "MagicDNS is off on your private network. Turn it on in Tailscale's DNS page.", retries: true),
+              String(l10n: "MagicDNS is off on your private network. Turn it on in Tailscale's DNS page."), retries: true),
         // connect_conflicts: port 443 or Funnel holds another target
         Match("this machine's Tailscale already publishes", busyPort, retries: false),
         // gate.py not readable in root's clone
         Match("is not readable, so the connect gate cannot be installed",
-              "This release's files are missing on your hub's server.", retries: false),
+              String(l10n: "This release's files are missing on your hub's server."), retries: false),
         // the user founderizer-connect with another group
         Match("is there with another group",
-              "Your hub's server already has a user named founderizer-connect for something else.", retries: false),
+              String(l10n: "Your hub's server already has a user named founderizer-connect for something else."), retries: false),
         // connect_on's look at the machine's rights, before it changes anything, and a Funnel command that waits:
         // the private network does not give the hub's machine the funnel attribute or HTTPS certificates
         Match("does not give this machine the funnel attribute, so Tailscale Funnel cannot publish", notPublished,
@@ -133,7 +133,7 @@ public enum ConnectGate {
         Match("Tailscale did not turn Funnel on in", notPublished, retries: true, keyAgain: true),
         // a part could not be put in place (the user, the folder, the program, the service, the mark, Funnel): one
         // sentence for every part, and the part's name only in what the stop carries for a report (`said`)
-        Match(" could not be put in place: ", "Setting up connected apps on your hub's server failed.", retries: true),
+        Match(" could not be put in place: ", String(l10n: "Setting up connected apps on your hub's server failed."), retries: true),
         // the gate is not running after its start
         Match("seconds after its start", notRunning, retries: false),
         // Funnel status does not show the gate alone: the policy lacks the funnel attribute
@@ -141,7 +141,7 @@ public enum ConnectGate {
               keyAgain: true),
         // the hub's own reason while the feature is on and does not work (`GET /ui/connect` `stopped`): capp_funnel_ok
         // and a gate that does not forward to the hub's socket
-        Match("the hub cannot read the Tailscale serve status", "Your hub cannot read Tailscale's state.", retries: true),
+        Match("the hub cannot read the Tailscale serve status", String(l10n: "Your hub cannot read Tailscale's state."), retries: true),
         Match("Tailscale Funnel does not publish only the gate", busyPort, retries: false),
         // Funnel was turned off on the hub's machine: Try again runs the root step, which turns it on again
         Match("Tailscale Funnel publishes nothing on the hub's machine", notPublished, retries: true),
@@ -149,8 +149,8 @@ public enum ConnectGate {
         Match("the gate of the connected apps does not forward to the hub's socket",
               notRunning, retries: true),
         // connect off
-        Match("tailscale funnel --https=443 off` failed: ", "Tailscale did not stop publishing the address.", retries: true),
-        Match(" could not be stopped: ", "Connected apps did not stop on your hub's server.", retries: true),
+        Match("tailscale funnel --https=443 off` failed: ", String(l10n: "Tailscale did not stop publishing the address."), retries: true),
+        Match(" could not be stopped: ", String(l10n: "Connected apps did not stop on your hub's server."), retries: true),
     ]
 
     /// What `sudo -n` prints when the SSH user may not become root with no password (sudo's own words, not the hub's).
@@ -158,13 +158,13 @@ public enum ConnectGate {
     static let notRoot = ConnectStop(words: rootWords, retries: false)
 
     /// The app's SSH run to the hub's server did not answer, or could not start.
-    public static let unreached = ConnectStop(words: "Founderizer could not reach your hub's server.", retries: true)
+    public static let unreached = ConnectStop(words: String(l10n: "Founderizer could not reach your hub's server."), retries: true)
 
     /// A message that matches nothing: "Turning on stopped on your hub's server.", with Try again. For a Turn off the
     /// table has no such row, and its words are the same sentence for Turn off.
     static func other(_ turn: ConnectTurn) -> ConnectStop {
-        ConnectStop(words: turn == .on ? "Turning on stopped on your hub's server."
-                                       : "Turning off stopped on your hub's server.", retries: true)
+        ConnectStop(words: turn == .on ? String(l10n: "Turning on stopped on your hub's server.")
+                                       : String(l10n: "Turning off stopped on your hub's server."), retries: true)
     }
 
     /// The stop of a turn that a quit of the app cut off (`kept`): the sentence of a stop that matches nothing, with
@@ -292,6 +292,9 @@ public enum ConnectGate {
         case off(turnOn: Bool)
         /// "Turning on…" on the heading (2c).
         case turningOn
+        /// "Turning off…" on the heading, where "Turning on…" stands, over the empty card (the owner's yes of 13
+        /// November 2026, "Yes, both", to: 'the line "Turning off…" in the place where "Turning on…" stands').
+        case turningOff
         /// The failure row in the card (2d, 2d-b): "Connected apps did not turn on", or "did not turn off".
         case stopped(ConnectStop, ConnectTurn)
     }
@@ -301,14 +304,15 @@ public enum ConnectGate {
     /// names `connect_offer`; never while it serves `connected_apps` (the two approved groups show then, with Turn off).
     /// `canAct`: the hub takes a write now. The empty card with Turn on shows only while no step runs, the hub says it
     /// can be turned on, and it takes a write; a key page that he left by another way than Back keeps it. During the
-    /// root step of a Turn off no group shows: no picture has that moment. A hub that is on and says why it does not
-    /// work (`ConnectState.stopped`) is the failure row with his sentence for that reason, so that the wait has an end.
+    /// root step of a Turn off the heading says "Turning off…" over the empty card (`Show.turningOff`). A hub that is
+    /// on and says why it does not work (`ConnectState.stopped`) is the failure row with his sentence for that
+    /// reason, so that the wait has an end.
     public static func show(features: [String]?, state: ConnectState?, run: Run, canAct: Bool) -> Show {
         let features = features ?? []
         guard features.contains(ConnectedApps.offer), !features.contains(ConnectedApps.feature) else { return .nothing }
         switch run {
         case .stopped(let stop, let turn): return .stopped(stop, turn)
-        case .turningOff: return .nothing
+        case .turningOff: return .turningOff
         case .turningOn: return .turningOn
         case .idle, .keyPage:
             guard let state else { return .nothing }
@@ -319,6 +323,21 @@ public enum ConnectGate {
             return state.canTurnOn && canAct ? .off(turnOn: true) : .nothing
         }
     }
+
+    /// **Turn off while the feature is on and does not work** (the owner's yes of 13 November 2026, "Yes, both", to:
+    /// "a Turn off on the heading there too, as in the picture of the working state"): the failure row of a Turn on
+    /// shows, the hub says that the feature is on, and the hub takes a write. Before, that row had only Try again or
+    /// Report a problem, and nothing on the page could turn the feature off. Not on the row of a Turn off that
+    /// stopped: its Try again is the Turn off. Not while the hub says off: nothing is on then.
+    public static func offersTurnOff(_ show: Show, state: ConnectState?, canAct: Bool) -> Bool {
+        guard case .stopped(_, .on) = show else { return false }
+        return state?.on == true && canAct
+    }
+
+    /// **Turn off asks first only while an app is connected** (the owner's yes of 13 November 2026 to the clean Servers
+    /// page): "Every connected app stops at once" stood over "Connected apps did not turn on", where nothing would stop.
+    /// With no connection it turns off at once; a state that the page could not read asks first.
+    public static func asksBeforeTurnOff(_ state: ConnectState?) -> Bool { state?.connections.isEmpty != true }
 
     // MARK: a turn that a quit cut off
 

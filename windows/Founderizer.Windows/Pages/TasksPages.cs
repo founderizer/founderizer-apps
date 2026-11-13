@@ -21,10 +21,16 @@ internal sealed class BoardPage : Grid, IPageView, ILaneContext
     private readonly Action<Page> go;
     private readonly Action<long> openNeed;
     private readonly LaneView[] lanes = new LaneView[3];
-    private readonly Button showAll;
-    private readonly TextBlock showAllWords = Look.Words("", wrap: false, brush: Look.Muted);
+    private readonly EndedView ended = new();
+    private readonly TextBlock empty = Look.Words("", brush: Look.Muted, wrap: false);
     private readonly TextBlock period = Look.Words("", wrap: false);
     private readonly TextBlock agentWords = Look.Words("", wrap: false);
+    private readonly Button periodBox;
+    private readonly Button agentBox;
+    private StoreState state = new();
+    private ActivityPeriod chosenPeriod = ActivityPeriod.Week;
+    private string? chosenAgent;
+    private TaskBoardModel? model;
 
     public BoardPage(Action<Page> go, Action<long> openNeed)
     {
@@ -38,12 +44,16 @@ internal sealed class BoardPage : Grid, IPageView, ILaneContext
         title.Margin = new Thickness(0, 28 + Look.TitleNudge, 0, 16 - Look.TitleNudge);
         Children.Add(title);
 
+        periodBox = Combo(Icons.Calendar, period);
+        agentBox = Combo(Icons.People, agentWords);
+        periodBox.Click += (_, _) => Choose(periodBox, model?.Periods.Select(p => (p.Words, (Action)(() => chosenPeriod = p.Value))));
+        agentBox.Click += (_, _) => Choose(agentBox, model?.Agents.Select(a => (a.Words, (Action)(() => chosenAgent = a.Agent))));
         var filters = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 8,
             Margin = new Thickness(0, 0, 0, 22),
-            Children = { Combo(Icons.Calendar, period), Combo(Icons.People, agentWords) },
+            Children = { periodBox, agentBox },
         };
         SetRow(filters, 1);
         Children.Add(filters);
@@ -56,44 +66,61 @@ internal sealed class BoardPage : Grid, IPageView, ILaneContext
             SetColumn(lanes[i], i);
             board.Children.Add(lanes[i]);
         }
-        var chevron = Icons.Of(Icons.ChevronRight, Look.Muted, 12);
-        chevron.VerticalAlignment = VerticalAlignment.Center;
-        showAllWords.VerticalAlignment = VerticalAlignment.Center;
-        showAll = new Button
-        {
-            Style = (Style)Application.Current.Resources["QuietButtonStyle"],
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Content = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 6,
-                MinHeight = 32,
-                Padding = new Thickness(10, 0, 0, 0),
-                Children = { showAllWords, chevron },
-            },
-        };
-        lanes[2].Below(showAll);
+        lanes[2].Footer(ended);
         SetRow(board, 2);
         Children.Add(board);
+        empty.HorizontalAlignment = HorizontalAlignment.Center;
+        empty.VerticalAlignment = VerticalAlignment.Top;
+        empty.Margin = new Thickness(0, 66, 0, 0);
+        SetRow(empty, 2);
+        Children.Add(empty);
     }
 
     public FrameworkElement View => this;
 
-    public void Show(StoreState state, DateTimeOffset now, bool reduceMotion)
+    public void Show(StoreState next, DateTimeOffset now, bool reduceMotion)
     {
-        var model = Screens.Board(state, ActivityPeriod.Week, null, now, ScreenContext.Local);
-        period.Text = model.Periods.FirstOrDefault(p => p.Value == model.Period)?.Words ?? "";
-        agentWords.Text = model.Agents.FirstOrDefault(a => a.Agent == model.Agent)?.Words ?? "";
-        for (int i = 0; i < lanes.Length && i < model.Lanes.Count; i++)
+        state = next;
+        var board = model = Screens.Board(next, chosenPeriod, chosenAgent, now, ScreenContext.Local);
+        period.Text = board.Periods.FirstOrDefault(p => p.Value == board.Period)?.Words ?? "";
+        agentWords.Text = board.Agents.FirstOrDefault(a => a.Agent == board.Agent)?.Words ?? "";
+        ToolTipService.SetToolTip(periodBox, board.PeriodHover);
+        ToolTipService.SetToolTip(agentBox, board.AgentHover);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(periodBox, board.PeriodLabel);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(agentBox, board.AgentLabel);
+        empty.Text = board.EmptyWords ?? "";
+        empty.Visibility = board.EmptyWords is null ? Visibility.Collapsed : Visibility.Visible;
+        for (int i = 0; i < lanes.Length && i < board.Lanes.Count; i++)
         {
-            var lane = model.Lanes[i];
+            var lane = board.Lanes[i];
             lanes[i].Show(lane.Title, lane.Count, lane.Cards.Select(LaneCard.Of).ToList());
-            if (lane.Ended is { } ended)
+            if (lane.Ended is { } end)
             {
-                showAllWords.Text = ended.RestWords ?? "";
-                showAll.Visibility = ended.RestWords is not null && ended.Failed.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                EndedLine Line(EndedRowModel r) => new(r.Key, r.Mark, r.Title, r.Badge, () => go(Page.OfTask(r.Id)));
+                ended.Show(end.Failed.Select(Line).ToList(), end.RestWords,
+                           end.Days.Select(day => (day.Day, (IReadOnlyList<EndedLine>)day.Groups
+                               .Select(g => new EndedLine(g.Key, g.Mark, g.Title, null, () => go(Page.OfTask(g.Tasks[0].Id)))).ToList())).ToList());
             }
         }
+    }
+
+    /// <summary>A box's list, as Windows draws a drop-down's (the Mac's period and agent selects): a press chooses, and
+    /// the board draws again.</summary>
+    private void Choose(Button box, IEnumerable<(string Words, Action Pick)>? choices)
+    {
+        if (choices is null) return;
+        var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
+        foreach (var (words, pick) in choices)
+        {
+            var item = new MenuFlyoutItem { Text = words };
+            item.Click += (_, _) =>
+            {
+                pick();
+                Show(state, DateTimeOffset.UtcNow, false);
+            };
+            menu.Items.Add(item);
+        }
+        menu.ShowAt(box);
     }
 
     public void Open(LaneCard card) => go(Page.OfTask(card.Id));
@@ -101,7 +128,7 @@ internal sealed class BoardPage : Grid, IPageView, ILaneContext
     public void OpenNeed(long need) => openNeed(need);
 
     /// <summary>A drop-down box as Windows draws it (the Mac's period and agent selects): its icon, its words and the
-    /// chevron. Its list waits for its picture.</summary>
+    /// chevron.</summary>
     private static Button Combo(Icon icon, TextBlock words)
     {
         var mark = Icons.Of(icon, Look.Muted);
@@ -136,10 +163,15 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
 {
     private readonly long id;
     private readonly IFleetSource source;
+    private readonly LineBand band;
+    private readonly PendingBarView bar;
     private readonly ThreadList thread;
     private readonly TextBlock stateWord = Look.Words("", 12, 16, Look.Muted, wrap: false);
     private readonly Button pause;
     private readonly Button stop;
+    private readonly Button resume;
+    private readonly FrameworkElement heldMark = Icons.Of(Icons.PauseCircle, Look.Muted);
+    private TaskControl resumeAction = TaskControl.Resume;
     private readonly Grid controls;
     private readonly Field guidance;
     private readonly TextBlock heading = Look.Words("", semibold: true);
@@ -151,10 +183,12 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
     private bool loaded;
     private int settle;
 
-    public TaskPage(long id, IFleetSource source)
+    public TaskPage(long id, PageServices services)
     {
+        source = services.Source;
+        band = new LineBand(services);
+        bar = new PendingBarView(services);
         this.id = id;
-        this.source = source;
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -163,7 +197,10 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
 
         pause = IconButton(Icons.Pause, "Pause", TaskControl.Pause);
         stop = IconButton(Icons.Stop, "Stop", TaskControl.Stop);
+        resume = Buttons.Plain(new ControlsModel().ResumeWords, Icons.Play);
+        resume.Click += (_, _) => _ = source.ControlAsync(id, resumeAction);
         stateWord.VerticalAlignment = VerticalAlignment.Center;
+        heldMark.VerticalAlignment = VerticalAlignment.Center;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(stateWord, "TaskState");
         controls = new Grid
         {
@@ -173,13 +210,13 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
             VerticalAlignment = VerticalAlignment.Bottom,
             Children =
             {
-                stateWord,
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Children = { heldMark, stateWord } },
                 new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
                     Spacing = 12,
                     HorizontalAlignment = HorizontalAlignment.Right,
-                    Children = { pause, stop },
+                    Children = { resume, pause, stop },
                 },
             },
         };
@@ -197,12 +234,11 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
             guidance.Clear();
         };
 
-        Children.Add(new Grid { Children = { thread.Scroll, controls, guidance } });
+        Children.Add(Banded.Wrap(new Grid { Children = { thread.Scroll, controls, guidance } }, band, bar));
 
         heading.Padding = new Thickness(16, 16, 16, 14);
         var panel = new Border
         {
-            Width = 380,
             Background = Look.RailBrush,
             BorderBrush = Look.Line,
             BorderThickness = new Thickness(1, 0, 0, 0),
@@ -215,6 +251,7 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
                 },
             },
         };
+        Widths.FollowPanel(panel);
         SetColumn(panel, 1);
         Children.Add(panel);
 
@@ -227,6 +264,10 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
     }
 
     public FrameworkElement View => this;
+
+    public LineBand Band => band;
+
+    public PendingBarView Bar => bar;
 
     public void Show(StoreState next, DateTimeOffset at, bool reduceMotion)
     {
@@ -245,13 +286,22 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
         {
             controls.Visibility = Visibility.Visible;
             stateWord.Text = c.StateWord;
+            stateWord.Foreground = c.Alert ? Look.Orange : Look.Muted;
+            heldMark.Visibility = c.Held ? Visibility.Visible : Visibility.Collapsed;
             pause.Visibility = c.ShowsPause ? Visibility.Visible : Visibility.Collapsed;
             stop.Visibility = c.ShowsStop ? Visibility.Visible : Visibility.Collapsed;
-            pause.IsEnabled = stop.IsEnabled = c.Enabled;
+            resume.Visibility = c.ShowsResume ? Visibility.Visible : Visibility.Collapsed;
+            resumeAction = c.ResumeAction;
+            ToolTipService.SetToolTip(pause, c.PauseWords);
+            ToolTipService.SetToolTip(stop, c.StopWords);
+            pause.IsEnabled = stop.IsEnabled = resume.IsEnabled = c.Enabled;
         }
         else controls.Visibility = Visibility.Collapsed;
 
+        // While a hold stands there is no guidance box (TaskSteering.shows): the controls take its place at the foot.
         guidance.Visibility = model.Guidance is null ? Visibility.Collapsed : Visibility.Visible;
+        controls.Margin = new Thickness(23.5, 0, 23.5, model.Guidance is null ? 12 : 64);
+        thread.Scroll.Margin = new Thickness(0, 0, 0, model.Guidance is null ? 52 : 104);
         if (model.Guidance is { } g)
             guidance.Show(g.Placeholder, false, GuidanceModel.CanSend(next, at, guidance.Box.Text));
 
@@ -265,6 +315,8 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
         Add("asks", RowKind.Own, model.Asks);
         foreach (var note in model.Notes) Add(note.Key, RowKind.Reply, note);
         Add("who", RowKind.Who, model.Who);
+        foreach (var (key, words) in new[] { ("stalled", model.StalledReason), ("limit", model.LimitWords), ("missing", model.MissingWords) })
+            if (words is not null) Add(key, RowKind.Who, new AlertLine(words));
         bool atEnd = !loaded || thread.AtEnd;
         thread.Show(rows);
         if (atEnd) settle = loaded ? 2 : 6;
@@ -316,6 +368,10 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
     // A task's thread has no request cards.
     public bool CanSendAnswer(RequestCard card) => false;
     public void Press(long need, int choice) { }
+    public void Tick(long need, IReadOnlyCollection<int> choices) { }
     public void Type(long need, string text) { }
     public void Answer(long need) { }
+    public bool CanSendTicks(int ticked) => false;
+    public bool IsOpen(long need, string part) => false;
+    public void SetOpen(long need, string part, bool open) { }
 }

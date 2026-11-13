@@ -50,6 +50,9 @@ In this folder:
 | `pictures/` | the proofs with pictures: a scripted run and the writes (`ui.ps1`), frames of motion (`frames.ps1`, `motion.py`, `changes.py`), comparisons with the approved pictures (`compare.py`, `glyphs.py`, `sheet.py`), the desktop for pictures (`look.ps1`) |
 | `scratch_hub.py` | a scratch hub on the Mac that the VM's app reads, and the changes for the proofs |
 | `tailnet/find-hub.cs` | the library's own search for the hub on the owner's private network, run in the VM |
+| `test_channel.py` | the test channel of the update on the Mac: manifests that a test key signed, and the builds' zips, over HTTPS on 127.0.0.1 |
+| `../release/build-release.ps1` | the build of a release: the zip and the setup of each kind of PC (`../release/README.md`) |
+| `release-proofs/` | the release's proofs in the VM: the install's state (`state.ps1`), and the zips whose file has another signer or none (`make-refusals.ps1`) |
 
 ## The downloads
 
@@ -102,7 +105,7 @@ app/windows/vm/vm.sh copy app/windows/Directory.Build.props app/windows/global.j
     app/windows/Founderizer.Windows vm:C:/fz/src/windows/
 app/windows/vm/vm.sh copy app/windows/vm/setup/build-window.ps1 vm:C:/fz/setup/
 app/windows/vm/vm.sh run 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\fz\setup\build-window.ps1 -Source C:\fz\src\windows\Founderizer.Windows'
-app/windows/vm/vm.sh desktop 'Start-Process C:\fz\out\arm64\Founderizer.exe'
+app/windows/vm/vm.sh desktop 'Start-Process C:\fz\out\arm64\Founderizer.App.exe'
 app/windows/vm/vm.sh picture /tmp/window.png    # a picture of the desktop, taken in the VM
 app/windows/vm/vm.sh stop                      # the power button through the monitor; waits until QEMU ends
 ```
@@ -169,7 +172,7 @@ hub it opens on Add this PC. It reads no variable.
 
 **The proofs' build** (`build-window.ps1 -Proofs`, `-p:FounderizerProofs=true`, into `C:\fz\out\arm64-proofs`) reads
 the variables below, for the proofs in this VM only; the release build (`C:\fz\out\arm64`) has no such switch, and its
-`Founderizer.dll` does not refer to `GetEnvironmentVariable` at all.
+`Founderizer.App.dll` does not refer to `GetEnvironmentVariable` at all.
 
 | Variable | What |
 | --- | --- |
@@ -191,7 +194,7 @@ taskbar hidden (`look.ps1`); the frames of motion with the animation effects on.
 
 ```
 app/windows/vm/vm.sh desktop '& C:\fz\setup\look.ps1'
-app/windows/vm/vm.sh desktop '$env:FOUNDERIZER_SAMPLE_CLOCK = "15:12"; Start-Process C:\fz\out\arm64\Founderizer.exe -ArgumentList "-openPage", "agent.manager"'
+app/windows/vm/vm.sh desktop '$env:FOUNDERIZER_SAMPLE_CLOCK = "15:12"; Start-Process C:\fz\out\arm64\Founderizer.App.exe -ArgumentList "-openPage", "agent.manager"'
 app/windows/vm/vm.sh desktop '& C:\fz\setup\ui.ps1 -Click "Tasks"'       # one step of a scripted run, as a mouse click
 app/windows/vm/vm.sh picture built.png
 python3 -I app/windows/vm/pictures/compare.py approved.png built.png side.png 0 0 2880 96 0 96 640 1800 642 98 2120 1800 2120 96 2880 1800
@@ -227,7 +230,7 @@ nothing of the machine's), makes the VM a PC owner device, and prints the hub's 
 
 ```
 python3 -I app/windows/vm/scratch_hub.py > hub.out &
-app/windows/vm/vm.sh desktop '$env:FOUNDERIZER_HUB = "http://10.0.2.2:<port>"; $env:FOUNDERIZER_DEVICE_CODE = "<code>"; $env:FOUNDERIZER_STORE = "C:\fz\store-test"; Start-Process C:\fz\out\arm64\Founderizer.exe'
+app/windows/vm/vm.sh desktop '$env:FOUNDERIZER_HUB = "http://10.0.2.2:<port>"; $env:FOUNDERIZER_DEVICE_CODE = "<code>"; $env:FOUNDERIZER_STORE = "C:\fz\store-test"; Start-Process C:\fz\out\arm64\Founderizer.App.exe'
 echo need > <folder>/commands
 app/windows/vm/vm.sh desktop '& C:\fz\setup\ui.ps1 -Field "Message Manager" -Type "A message from the PC."'
 ```
@@ -294,6 +297,54 @@ app/windows/vm/vm.sh run '& "C:\Program Files\Tailscale\tailscale.exe" up --unat
   of each device of the network) and prints the hub's address; no address is written into a file of this folder.
   Copy it to `C:\fz\src\windows\vm\tailnet\` beside the copied `Founderizer.Core` and run `dotnet run find-hub.cs`.
 
+## The second set of pictures in the VM
+
+The states of `~/dev/founderizer-plans/windows-app-pictures-2.md` (the owner's "Yes, as shown") are drawn from the
+library's models, as the first set's. For their pictures, the proofs' build takes one more variable:
+
+| `FOUNDERIZER_SAMPLE_STATE` | The state (`Fleet/SampleStates.cs`) |
+| --- | --- |
+| `code-refused` | picture 8: no hub yet; the code that he types is refused (403) |
+| `not-enrolled`, `no-answer` | 9a, 9b: the hub no longer knows this PC; the hub does not answer; the reading 4 minutes old |
+| `not-sent` | 14: his message to Customer Support waits, not confirmed |
+| `answered`, `all-answered` | 16, 12: his answer to the refund at 15:12; both requests answered |
+| `files` | 4: his message with a picture and a file, and a file in Marketing's composer |
+| `failed`, `paused`, `stopping` | 5, 6a, 6b: a result that failed; a pause, then a stop, on the Developer's task |
+| `usage`, `marks`, `reading`, `notify` | 7, 15, 13, 10: a usage reading; an agent at its limit and one not answering; the first read; the notification of the email's request |
+
+Pictures 1, 2a, 2b and 9c are the sample as it is, with presses. Picture 3 (Discuss) has no state any more: Discuss
+left the product (the owner, 13 November 2026), and each picture that shows it differs from the built one by it. The helpers in `pictures/` (copy them to
+`C:\fz\run\`): `window.ps1` waits for the window and says whether it is in front, `start-menu.ps1` starts the app as
+the owner does (the Windows key, its name, Enter), `size.ps1` asks Windows for a client area (the least size),
+`keys.ps1` types keys, `notify.ps1` pictures Windows' notification while it shows, `toastpress.ps1` presses the next
+notification with the mouse, and `reveal.ps1` brings up the taskbar that hides by itself (the taskbar's count). With a
+store against `scratch_hub.py`, its word `settle` (the helper confirms a hold) stands in for the agents.
+
+## The release in the VM
+
+The install, the update and the removal of slice 1.6 (`../release/README.md`) are proved in the VM against a test
+channel on the Mac, with the proofs' build: only it reads the test channel's address, its certificate and its key,
+from the user's environment, so that the app that the Start menu entry starts reads them too.
+
+```
+python3 -I app/windows/vm/test_channel.py setup --folder <folder>    # once: the test key and the TLS certificate
+python3 -I app/windows/vm/test_channel.py serve --folder <folder> &  # https://10.0.2.2:58443 for the VM
+python3 -I app/windows/vm/test_channel.py offer --folder <folder> --zip <build's zip> --version 0.1.1 --build 2 --arch arm64
+```
+
+- `setup` prints the proofs' variables: `FOUNDERIZER_UPDATE_CHANNEL` (the channel), `FOUNDERIZER_UPDATE_KEY` (the
+  test key's public half; its private half stays in the folder, mode 600) and `FOUNDERIZER_UPDATE_PIN` (the SHA-256
+  of the channel's certificate, the one certificate that the proofs' build takes). `FOUNDERIZER_UPDATE_EVERY` and
+  `FOUNDERIZER_UPDATE_AWAY` shorten the hour and the two minutes to seconds; `FOUNDERIZER_UPDATE_FAIL_BUILD=<build>`
+  ends that build before its first good start (the way back).
+- Set them for the user in the desktop session (`[Environment]::SetEnvironmentVariable(<name>, <value>, 'User')`):
+  Explorer takes them at once, and the Start menu entry then starts the app with them. Remove them after the proofs.
+- `offer` signs a manifest with the test key (the hub's own `releases.sign`); `--tamper signature` or `--tamper sha256`
+  makes the refused ones, `--slot arm64 --arch x64` offers the other kind of PC, `--cut` stops the next download of
+  that zip after half of its bytes. `none` offers nothing. Each request is a line of `requests.log` in the folder.
+- The channel listens on 127.0.0.1 only: QEMU's user network brings the VM's calls to 10.0.2.2 there, and nothing of
+  the private network or the LAN reaches it.
+
 ## Limits
 
 - **Windows is not activated** in the VM, so after a while Windows draws "Activate Windows" in the screen's bottom
@@ -302,7 +353,7 @@ app/windows/vm/vm.sh run '& "C:\Program Files\Tailscale\tailscale.exe" up --unat
   numbers are not the reference numbers of the plan's rule 6. Those come from the real PC.
 - **The TPM is swtpm**, a TPM 2.0 in software on the Mac. A reading with it proves the Windows and .NET side, not a
   real TPM's behaviour.
-- **x64:** the VM compiles the x64 build; it does not prove that the x64 build runs.
+- **x64:** the VM compiles the x64 build and makes its zip and its setup; it does not prove that the x64 build runs.
 - **Native AOT** (plan rule 7) needs, on Windows, Visual Studio's "Desktop development with C++" (Microsoft's
   Native AOT prerequisites). It is not in this VM and was not tried; the builds here are self-contained, with JIT.
 - The ARM64 build is 455 files and 194 MB (the .NET runtime and the Windows App SDK, self-contained, not trimmed).

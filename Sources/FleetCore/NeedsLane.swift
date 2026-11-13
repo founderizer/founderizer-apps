@@ -70,8 +70,8 @@ public struct NeedsLane: Sendable {
         let names = agents.map(\.agentLabel)
         switch names.count {
         case 0: return ""
-        case 1: return "\(names[0]) waits for this"
-        default: return "\(names.dropLast().joined(separator: ", ")) and \(names[names.count - 1]) wait for this"
+        case 1: return String(l10n: "\(names[0]) waits for this")
+        default: return String(l10n: "\(names.dropLast().joined(separator: ", ")) and \(names[names.count - 1]) wait for this")
         }
     }
 }

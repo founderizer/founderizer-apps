@@ -11,8 +11,8 @@ public enum AgentRename {
     public static func problem(_ name: String, agent: String, existing: [String]) -> String? {
         if name == agent { return nil }
         guard name.range(of: AgentPlacement.namePattern, options: .regularExpression) != nil, !["owner", "hub"].contains(name)
-        else { return "Use a name of 2 to 31 characters: a-z, 0-9 and -, starting with a letter." }
-        return existing.contains(name) ? "An agent with this name exists." : nil
+        else { return String(l10n: "Use a name of 2 to 31 characters: a-z, 0-9 and -, starting with a letter.") }
+        return existing.contains(name) ? String(l10n: "An agent with this name exists.") : nil
     }
 
     /// The rename of this agent that its server works on now, or that stopped there: the newest job of the agent's

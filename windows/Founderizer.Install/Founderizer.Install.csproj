@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The install of Founderizer for Windows for one user (~/dev/founderizer-plans/windows-app-release-design.md,
+    sections 4 and 5): the folder form under %LOCALAPPDATA%\Programs\Founderizer, the unpack of a build with its path
+    rules and its build.json, the publisher check of each .exe and .dll, the Start menu entry and the entry in Windows'
+    list of installed apps. The launcher (Founderizer.Launcher, also the setup) and the app's updater share it. No step
+    needs an administrator. It draws nothing.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>Founderizer.Install</RootNamespace>
+    <!-- The launcher is one trimmed file: nothing here may need reflection. -->
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <!-- LibraryImport and the generated COM interfaces of the Start menu entry. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+</Project>

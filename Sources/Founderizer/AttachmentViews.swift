@@ -14,8 +14,8 @@ struct AttachFilesButton: View {
 
     private var room: Int { max(0, MessageAttachment.perMessage - store.stagedFiles(for: composer).count) }
     private var words: String {
-        room > 0 ? "Send a picture, a PDF, a ZIP or a text file with this message"
-                 : "A message carries at most \(MessageAttachment.perMessage) files"
+        room > 0 ? String(l10n: "Send a picture, a PDF, a ZIP or a text file with this message")
+                 : String(l10n: "A message carries at most \(MessageAttachment.perMessage) files")
     }
 
     var body: some View {
@@ -75,12 +75,12 @@ struct StagedFilesStrip: View {
             }
             if sending == nil {
                 if file.failure != nil {
-                    IconButton(symbol: "arrow.clockwise", words: "Send this file up again", size: 10,
+                    IconButton(symbol: "arrow.clockwise", words: String(l10n: "Send this file up again"), size: 10,
                                side: IconMetrics.small, tint: FleetStyle.accent) {
                         Task { await store.upload(file, for: composer) }
                     }
                 }
-                IconButton(symbol: "xmark", words: "Take \(file.name) out", size: 9.5,
+                IconButton(symbol: "xmark", words: String(l10n: "Take \(file.name) out"), size: 9.5,
                            side: IconMetrics.small) {
                     store.removeStaged(file, for: composer)
                 }
@@ -93,9 +93,9 @@ struct StagedFilesStrip: View {
     }
 
     private func words(_ file: FleetStore.StagedFile) -> String {
-        if let failure = file.failure { return failure.count > 28 ? "Not sent" : failure }
-        if store.uploading.contains(file.requestID) { return "Going up…" }
-        return file.isOnHub ? MessageAttachment.sizeWords(file.size) : "Waiting"
+        if let failure = file.failure { return failure.count > 28 ? String(l10n: "Not sent") : failure }
+        if store.uploading.contains(file.requestID) { return String(l10n: "Going up…") }
+        return file.isOnHub ? MessageAttachment.sizeWords(file.size) : String(l10n: "Waiting")
     }
 
     @ViewBuilder private func picture(_ file: FleetStore.StagedFile) -> some View {
@@ -135,7 +135,7 @@ struct KeepFileRow: View {
                     Text(file.keptAs == nil ? "Kept" : "Kept as knowledge").font(ChatStyle.detail)
                 }
                 MessageAction(symbol: file.isKept ? "bookmark.fill" : "bookmark",
-                              label: file.isKept ? "Stop keeping \(file.name)" : "Keep \(file.name)",
+                              label: file.isKept ? String(l10n: "Stop keeping \(file.name)") : String(l10n: "Keep \(file.name)"),
                               help: keepHelp) {
                     Task { await store.keep(file, !file.isKept) }
                 }
@@ -144,9 +144,8 @@ struct KeepFileRow: View {
                 // Only a file that is not kept yet, because the hub refuses this one for a file it already keeps
                 // (409), and only a type whose words can be text that search_knowledge reads (415 otherwise).
                 if !file.isKept, file.canBecomeKnowledge {
-                    MessageAction(symbol: "text.book.closed", label: "Keep \(file.name) as knowledge",
-                                  help: "Keep the words of \(file.name) as one of your own knowledge files, with "
-                                        + "the file itself beside them. Your manager reads them.") {
+                    MessageAction(symbol: "text.book.closed", label: String(l10n: "Keep \(file.name) as knowledge"),
+                                  help: String(l10n: "Keep the words of \(file.name) as one of your own knowledge files, with the file itself beside them. Your manager reads them.")) {
                         Task { await store.keepAsKnowledge(file) }
                     }
                     .disabled(store.keeping.contains(file.id))
@@ -164,13 +163,12 @@ struct KeepFileRow: View {
 
     private var keepHelp: String {
         if let path = file.keptAs {
-            return "Stop keeping the original of \(file.name) on the hub. \(path) stays in your knowledge."
+            return String(l10n: "Stop keeping the original of \(file.name) on the hub. \(path) stays in your knowledge.")
         }
         if file.isKept {
-            return "Stop keeping \(file.name). The hub lets it go with its message again, as it does every file."
+            return String(l10n: "Stop keeping \(file.name). The hub lets it go with its message again, as it does every file.")
         }
-        return "Keep \(file.name) on the hub. Without this the hub lets it go ninety days after its message, and "
-            + "it is in no copy of your fleet."
+        return String(l10n: "Keep \(file.name) on the hub. Without this the hub lets it go ninety days after its message, and it is in no copy of your fleet.")
     }
 }
 
@@ -217,7 +215,7 @@ struct MessageFilesView: View {
                         .lineLimit(1).truncationMode(.middle)
                     // "Not loaded" as a picture's tile says it (fix round 3, item 4): orange while the hub answers.
                     let unloaded = store.unloadedFiles.contains(file.id)
-                    Text(unloaded ? "Not loaded" : file.sizeWords).font(ChatStyle.detail)
+                    Text(unloaded ? String(l10n: "Not loaded") : file.sizeWords).font(ChatStyle.detail)
                         .foregroundStyle(unloaded && store.isFresh ? Color.orange : FleetStyle.muted)
                 }
             }
@@ -243,7 +241,7 @@ struct MessageFilesView: View {
                 try data.write(to: place, options: [.atomic])
                 NSWorkspace.shared.open(place)
                 store.setFileProblem(nil, for: file.id)
-            } catch { store.setFileProblem("This file did not open on this Mac.", for: file.id) }
+            } catch { store.setFileProblem(String(l10n: "This file did not open on this Mac."), for: file.id) }
         }
     }
 }
@@ -367,7 +365,7 @@ private struct PictureTile: View {
         .overlay(alignment: .topTrailing) {
             // Only while it can act: the hub answers and no read is on its way.
             if !reading, store.isFresh, store.unloadedFiles.contains(file.id) {
-                IconButton(symbol: "arrow.clockwise", words: "Read \(file.name) again", size: 12) {
+                IconButton(symbol: "arrow.clockwise", words: String(l10n: "Read \(file.name) again"), size: 12) {
                     Task { await read() }
                 }
                 .environment(\.onCard, true)
@@ -384,7 +382,7 @@ private struct ReadingWords: View {
 
     var body: some View {
         if reduceMotion { Text("Reading…").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
-        else { ShimmeringWords(text: "Reading…") }
+        else { ShimmeringWords(text: String(l10n: "Reading…")) }
     }
 }
 

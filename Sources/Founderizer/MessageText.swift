@@ -153,7 +153,7 @@ private struct CodeBlock: View {
             if chat && !wraps {     // over a wrapped script, the icon would cover the end of its first row
                 // A one-line block is 41 points high, so the 28-point icon 6 points in from its corner stands in its
                 // middle; a longer block keeps it at its top.
-                IconButton(symbol: copied ? "checkmark" : "square.on.square", words: "Copy code", size: 12) {
+                IconButton(symbol: copied ? "checkmark" : "square.on.square", words: String(l10n: "Copy code"), size: 12) {
                     copyMessage(text); copied = true
                 }
                 .padding(6)
@@ -240,7 +240,7 @@ struct OwnerBubble: View {
             .background(ChatStyle.bubble, in: RoundedRectangle(cornerRadius: ChatStyle.bubbleRadius))
             .overlay(alignment: .bottomLeading) {
                 if let origin {
-                    ChatAppMark(app: origin.app, size: 18, help: "Sent from \(ChatApps.title(origin.app))").offset(x: -7, y: 5)
+                    ChatAppMark(app: origin.app, size: 18, help: String(l10n: "Sent from \(ChatApps.title(origin.app))")).offset(x: -7, y: 5)
                 }
             }
             .overlay(alignment: .bottomLeading) {
@@ -332,7 +332,7 @@ struct AgentReply: View {
             MessageText(text: text, chat: true).equatable()
             if let detail { detail }
             HStack(spacing: 10) {
-                MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: "Copy message", height: row) {
+                MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: String(l10n: "Copy message"), height: row) {
                     copyMessage(text); copied = true
                 }
                 if let time { Text(messageTime(time)).help(fleetDate(time)) }

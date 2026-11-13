@@ -216,7 +216,7 @@ public struct FleetKeychainItem: Sendable {
     public struct Failure: LocalizedError, Equatable {
         public let label: String
         public let status: OSStatus
-        public var errorDescription: String? { "This Mac's keychain did not keep the \(label) (\(status))." }
+        public var errorDescription: String? { String(l10n: "This Mac's keychain did not keep the \(label) (\(Int(status))).") }
     }
 
     private func query(fleet: String) -> [String: Any] {

@@ -53,17 +53,19 @@ struct TriggersView: View {
     private func when(_ trigger: FleetTrigger) -> String {
         var words = [scheduleSummary(trigger.schedule)]
         if trigger.state == "active", let due = trigger.next_due {
-            words.append("next \(scheduleDate(due, timezone: trigger.schedule.timezone))")
+            words.append(String(l10n: "next \(scheduleDate(due, timezone: trigger.schedule.timezone))"))
         }
-        // He is "you" on every screen of the app; an agent is its name.
-        words.append(trigger.isAgentRule ? "set by \(trigger.author.agentLabel)" : "set by you")
+        // He is "you" on every screen of the app; an agent is its name, and not on its own page, where its rules are
+        // most of them (the owner, 13 November 2026: "review all other pages for the same issues!!").
+        if !trigger.isAgentRule { words.append(String(l10n: "set by you")) }
+        else if trigger.author != agent { words.append(String(l10n: "set by \(trigger.author.agentLabel)")) }
         return words.joined(separator: " · ")
     }
 
     /// The one thing that is not right: a rule that is paused, or the hub's own reason for the last run it did not
     /// start — which is where its daily limit appears, and the only place the owner meets it.
     private func trouble(_ trigger: FleetTrigger) -> String? {
-        if trigger.state == "paused" { return trigger.paused_reason ?? "Paused" }
+        if trigger.state == "paused" { return trigger.paused_reason ?? String(l10n: "Paused") }
         guard let last = trigger.last_run, !last.isCheckMatch,
               !["started", "quiet", "sent"].contains(last.state) else { return nil }
         return last.reason ?? last.state.replacingOccurrences(of: "_", with: " ").capitalized
@@ -93,16 +95,19 @@ private func scheduleDate(_ timestamp: Double, timezone: String?) -> String {
     formatter.dateFormat = "HH:mm"
     let time = formatter.string(from: date)
     if calendar.isDateInToday(date) { return time }
-    if calendar.isDateInTomorrow(date) { return "tomorrow \(time)" }
+    if calendar.isDateInTomorrow(date) { return String(l10n: "tomorrow \(time)") }
     formatter.dateFormat = "EEE d MMM HH:mm"
     return formatter.string(from: date)
 }
 
+/// **The zone only where it is not this Mac's**: the same zone on every rule said nothing.
 private func scheduleSummary(_ schedule: TriggerSchedule) -> String {
+    let zone = schedule.timezone.flatMap { $0.isEmpty || $0 == TimeZone.current.identifier ? nil : $0 }
+    func line(_ parts: String?...) -> String { parts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") }
     switch schedule.kind {
-    case "once": return "Once · \(schedule.at?.replacingOccurrences(of: "T", with: " ") ?? "") · \(schedule.timezone ?? "")"
-    case "every": return "Every \(schedule.minutes ?? 0) minutes"
-    case "monthly": return "Day \(schedule.day ?? 1) · \(schedule.time ?? "") · \(schedule.timezone ?? "")"
-    default: return "\(schedule.days?.map(\.capitalized).joined(separator: ", ") ?? "Daily") · \(schedule.time ?? "") · \(schedule.timezone ?? "")"
+    case "once": return line(String(l10n: "Once"), schedule.at?.replacingOccurrences(of: "T", with: " "), zone)
+    case "every": return String(l10n: "Every \(schedule.minutes ?? 0) minutes")
+    case "monthly": return line(String(l10n: "Day \(schedule.day ?? 1)"), schedule.time, zone)
+    default: return line(schedule.days?.map(\.capitalized).joined(separator: ", ") ?? String(l10n: "Daily"), schedule.time, zone)
     }
 }

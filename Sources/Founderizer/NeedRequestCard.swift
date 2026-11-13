@@ -432,7 +432,7 @@ private struct SendingWords: View {
     var body: some View {
         Group {
             if reduceMotion { Text("Sending…").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
-            else { ShimmeringWords(text: "Sending…") }
+            else { ShimmeringWords(text: String(l10n: "Sending…")) }
         }
         .fixedSize()
         .accessibilityHidden(true)
@@ -486,7 +486,7 @@ struct NeedAnswerGiven: View {
                 if answer.isEmpty {
                     Text("Your answer").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                 } else {
-                    DetailField(title: "Your answer", value: answer)
+                    DetailField(title: String(l10n: "Your answer"), value: answer)
                 }
                 if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .leading) }
             }
@@ -496,8 +496,8 @@ struct NeedAnswerGiven: View {
 
 /// One request in the chat of the agent that asked it (D-7): the title, the first lines of it, and its answer where it
 /// is read. The rest opens with one click, so a long request does not fill the column. On Needs you the same request
-/// is a card of the lane and the request at hand (`NeedsBoard`), which share its answers (`NeedAnswerBox`), its secure
-/// form and its discussion (`NeedDiscussion`).
+/// is a card of the lane and the request at hand (`NeedsBoard`), which share its answers (`NeedAnswerBox`) and its
+/// secure form. Your answer is also his reply when he asks something back: the manager answers it with a new request.
 ///
 /// **An answered request folds to two lines** (the owner's yes of 28 October 2026, D-7): its title and "✓ Correos",
 /// the rest on a click, as Grok Bot folds a question card it answered. An answered one took as much room as an open
@@ -506,8 +506,6 @@ struct NeedRequestCard: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
     @State private var expanded = false
-    /// Owner feature `need_talk` (API 1.106): Discuss is open, and the words of his next message in it.
-    @State private var discussing = false
     /// His answer as the outbox saved it, kept from the frame it went until the reading says the request is answered
     /// (`WordsOnTheirWay`): the store lets the request go with its receipt, a round trip before that reading.
     @State private var sent: PendingRequest?
@@ -529,11 +527,6 @@ struct NeedRequestCard: View {
     /// **A short card** (the owner's yes of 9 November 2026): an item from a hub with `need_talk` has a why of one or two
     /// sentences, shown whole, and its long part behind Details. An older item keeps Show all.
     private var short: Bool { need.details != nil || need.why.count <= NeedTalk.why }
-    /// Discuss, apart from his answer: an open item that is no conversation's question, on a hub that takes it.
-    private var discussable: Bool {
-        need.isOpen && need.conversation == nil && store.state?.ui_features?.contains(NeedTalk.feature) == true
-    }
-    private var talk: [NeedMessage] { need.talk ?? [] }
     /// The request's title, folded or whole, **without its number** (D-2, the owner's yes of 28 October 2026): "N-3" is
     /// the hub's bookkeeping, and the agents' own words name a request by what it asks.
     private var heading: String { need.title }
@@ -545,7 +538,7 @@ struct NeedRequestCard: View {
     /// What he answered, in the folded card's second line: his words or the option he pressed.
     private var answerWords: String {
         let answer = (onItsWay?.text ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return answer.isEmpty ? "Answered" : answer
+        return answer.isEmpty ? String(l10n: "Answered") : answer
     }
 
     var body: some View {
@@ -620,31 +613,24 @@ struct NeedRequestCard: View {
                     .foregroundStyle(FleetStyle.muted).padding(.top, 2)
                 NeedBody(text: todo)
             }
-            if hasMore || discussable {
+            if hasMore {
                 HStack(spacing: 10) {
-                    if hasMore {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
-                        } label: {
-                            HStack(spacing: 3) {
-                                // the door's card shows its script there, as the owner approved it ("Yes, as shown")
-                                Text(need.details != nil ? (need.door_host != nil ? "Script" : "Details")
-                                     : expanded ? "Show less" : "Show all")
-                                if need.details != nil {
-                                    Image(systemName: expanded ? "chevron.down" : "chevron.right").font(IconMetrics.symbol(9, weight: .semibold))
-                                }
-                            }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
-                        }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).font(FormMetrics.detail).foregroundStyle(FleetStyle.link)
-                            .accessibilityIdentifier("need-more-\(need.id)")
-                    }
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
+                    } label: {
+                        HStack(spacing: 3) {
+                            // the door's card shows its script there, as the owner approved it ("Yes, as shown")
+                            Text(need.details != nil ? (need.door_host != nil ? "Script" : "Details")
+                                 : expanded ? "Show less" : "Show all")
+                            if need.details != nil {
+                                Image(systemName: expanded ? "chevron.down" : "chevron.right").font(IconMetrics.symbol(9, weight: .semibold))
+                            }
+                        }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
+                    }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).font(FormMetrics.detail).foregroundStyle(FleetStyle.link)
+                        .accessibilityIdentifier("need-more-\(need.id)")
                     Spacer(minLength: 8)
-                    if discussable && !discussing && talk.isEmpty {
-                        Button { discussing = true } label: { Label("Discuss", systemImage: "bubble.left.and.bubble.right") }
-                            .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("need-discuss-\(need.id)")
-                    }
                 }
             }
-            if discussable && (discussing || !talk.isEmpty) { NeedDiscussion(store: store, need: need) }
             NeedAnswerGiven(store: store, need: need)
             // Who asks, by the name the sidebar gives it and its glyph before it (D-8), and when: a clock time today
             // (T-12).
@@ -659,82 +645,6 @@ struct NeedRequestCard: View {
     }
 
 }
-
-/// **His discussion of one open request** (the owner's yes of 9 November 2026, "a button to clarify or to discuss"): his
-/// messages in the chat's bubble, the replies as the chat draws an agent's words, and a field of its own. It is no
-/// answer: the options and Your answer stay with it until he decides. It stands in the request's card in a chat, and
-/// under the request at hand on Needs you (`NeedStep`), where its words take the step's size.
-struct NeedDiscussion: View {
-    @Bindable var store: FleetStore
-    let need: OwnerNeed
-    /// The words of his next message where the page keeps them (`StepMemory`), so a look at another request does not
-    /// lose them; nil in a chat's card, which keeps its own.
-    var draft: Binding<String>? = nil
-    @State private var own = ""
-    @State private var talking = false
-    @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.stepText) private var stepText
-
-    private var talk: [NeedMessage] { need.talk ?? [] }
-    private var words: Font { FormMetrics.onStep(stepText) ?? FormMetrics.text }
-    private var message: Binding<String> { draft ?? $own }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(talk.enumerated()), id: \.offset) { _, line in
-                if line.fromOwner {
-                    Text(line.text).font(words).foregroundStyle(FleetStyle.text).textSelection(.enabled)
-                        .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(ChatStyle.bubble, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                } else {
-                    Text(line.text).font(words).foregroundStyle(FleetStyle.text).textSelection(.enabled)
-                        .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityLabel("\(line.who.agentLabel): \(line.text)")
-                }
-            }
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("Message \(manager.agentLabel)", text: message, axis: .vertical)
-                    .textFieldStyle(.plain).font(words).multilineTextAlignment(.leading)
-                    .growingField(1...6, line: stepText == nil ? ChatStyle.line : 18)
-                    .onSubmit { sendMessage() }
-                    .accessibilityIdentifier("need-talk-field-\(need.id)")
-                SendSlot(shows: canTalk) {
-                    Button { sendMessage() } label: { SendMark() }
-                        .buttonStyle(FleetIconButtonStyle(filled: true)).disabled(!canTalk)
-                        .help("Send this message").accessibilityLabel("Send message")
-                        .accessibilityIdentifier("need-talk-send-\(need.id)")
-                }
-            }.padding(8)
-                .background(FleetStyle.composer, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
-                .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner)
-                    .strokeBorder(FleetStyle.hairline(0.32), lineWidth: FleetStyle.edgeWidth(contrast)))
-        }
-        .padding(10)
-        .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner)
-            .strokeBorder(FleetStyle.hairline(0.10), lineWidth: FleetStyle.edgeWidth(contrast)))
-    }
-
-    /// The agent that answers his discussion: the manager, which holds every Needs-you item.
-    private var manager: String { store.state?.agents.first { $0.role == "manager" }?.name ?? "manager" }
-    private var canTalk: Bool {
-        let words = message.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return store.canWrite && !talking && !words.isEmpty && words.count <= NeedTalk.most
-    }
-
-    private func sendMessage() {
-        guard canTalk else { return }
-        let words = message.wrappedValue
-        talking = true
-        Task {
-            if await store.talk(need, text: words) { message.wrappedValue = "" }
-            talking = false
-        }
-    }
-}
-
 
 private extension View {
     /// Tells where this view stands under the top of the space `name`, while `on`: the answer box on a step.

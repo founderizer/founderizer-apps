@@ -94,7 +94,6 @@ public sealed class ScreensTests
         var card = chat.Rows[3].Request!;
         Assert.AreEqual("From Fleet Manager · 14:32", card.From);
         Assert.AreEqual("Show all", card.MoreClosed);
-        Assert.IsTrue(card.ShowsDiscuss);
         CollectionAssert.AreEqual(new[] { "Refund it", "Offer a 20% voucher", "Say no, politely" }, card.Options.Labels.ToArray());
         Assert.AreEqual(OptionsKind.Press, card.Options.Kind);
         Assert.AreEqual("Message Fleet Manager", chat.Composer.Placeholder);
@@ -134,11 +133,12 @@ public sealed class ScreensTests
         var sending = Screens.Chat(s with { Pending = request, Sending = true }, "manager", Now, Utc);
         var row = sending.Rows.Last(r => r.Kind == ChatRowKind.Message);
         Assert.AreEqual(("Start now", "Sending…", true), (row.Text, row.TimeWords, row.SlotHoldsBack));
+        // The second set (choice 1): the Mac's request line over the composer says it, and the bubble has no words.
         var failed = Screens.Chat(s with { Pending = request }, "manager", Now, Utc).Rows.Last(r => r.Kind == ChatRowKind.Message);
-        Assert.AreEqual(("Not sent", true, WriteAction.TryAgain), (failed.TimeWords, failed.SlotIsWarning, failed.SlotAction));
-        var refused = Screens.Chat(s with { Pending = request with { Refusal = "Not sent: No." } }, "manager", Now, Utc)
-            .Rows.Last(r => r.Kind == ChatRowKind.Message);
-        Assert.AreEqual(("Not sent: No.", WriteAction.Discard), (refused.TimeWords, refused.SlotAction));
+        Assert.AreEqual(("Start now", (string?)null, false, WriteAction.None), (failed.Text, failed.TimeWords, failed.SlotIsWarning, failed.SlotAction));
+        Assert.AreEqual("Not sent", Screens.PendingBar(s with { Pending = request }, Now)!.State);
+        var refused = Screens.Chat(s with { Pending = request with { Refusal = "Not sent: No." } }, "manager", Now, Utc);
+        Assert.IsFalse(refused.Rows.Any(r => r.Text == "Start now"), "a refused message is the request line's, not the chat's");
     }
 
     [TestMethod]
@@ -154,7 +154,6 @@ public sealed class ScreensTests
         Assert.AreEqual("Fleet Manager · 25 min ago", step.From);
         Assert.AreEqual("Details", step.MoreClosed, "the request at hand says Details where its chat card says Show all");
         Assert.IsTrue(step.Centred);
-        Assert.IsTrue(step.Discussable && !step.ShowsDiscussion);
         Assert.AreEqual("Your answer", step.Answer.Placeholder);
         Assert.IsTrue(step.Answer.ShowsPlus);
         // The chosen request, and the one that comes to hand when it leaves.
@@ -179,8 +178,6 @@ public sealed class ScreensTests
         });
         Assert.AreEqual(OptionsKind.Ticks, Screens.Needs(ticks, null, null, Now, Utc).AtHand!.Options.Kind);
         Assert.AreEqual("Send 2", OptionsModel.SendWords(2));
-        var noTalk = Sample(x => x["ui_features"] = new JsonArray("mobile"));
-        Assert.IsFalse(Screens.Needs(noTalk, null, null, Now, Utc).AtHand!.Discussable);
     }
 
     [TestMethod]

@@ -57,7 +57,7 @@ struct ProviderAccountSection: View {
         let replacing = machine?.needsSignIn != true
         FormRow("Account", symbol: "person.crop.circle", detail: facts.accountDetail, warning: signInFailure) {
             HStack(spacing: FleetSpace.actions) {
-                Text(signInShown ? "Signing in…" : facts.accountWords).foregroundStyle(FleetStyle.muted).lineLimit(1)
+                Text(signInShown ? String(l10n: "Signing in…") : facts.accountWords).foregroundStyle(FleetStyle.muted).lineLimit(1)
                     .truncationMode(.middle).textSelection(.enabled)
                 // **The sign-in is a screen of its own** (`SignInWizard`), so this row has one button and no steps:
                 // what it costs, the provider's page and the code it gives are that wizard's own pages. One that is
@@ -68,8 +68,7 @@ struct ProviderAccountSection: View {
                 if canSignIn(agentState) {
                     Button(signInShown ? "Continue" : replacing ? "Switch account" : "Sign in") { store.destination = .signIn(agent) }
                         .buttonStyle(FleetOutlineButtonStyle())
-                        .help("Opens the sign-in: \(providerName(agentState.runtime))'s own page, in your own browser, "
-                              + "with whichever account you want this agent to use.")
+                        .help(String(l10n: "Opens the sign-in: \(providerName(agentState.runtime))'s own page, in your own browser, with whichever account you want this agent to use."))
                         .accessibilityIdentifier("use-another-account")
                 }
             }
@@ -129,8 +128,8 @@ struct ProviderAccountSection: View {
         let windows = agentState.local_model == true || !current ? [] : limits?.ownWindows(at: time) ?? []
         let hold = UsageBar.bars(for: store.state?.agents ?? [], time: time, isFresh: store.isFresh)[agent]?.limit
         FormRow("Usage", symbol: "gauge.with.dots.needle.50percent",
-                detail: limits?.weekMissing == true && !windows.isEmpty ? "Week not reported" : nil,
-                warning: hold.map { "Usage limit until \(fleetComingTime($0.until, now: time))" }) {
+                detail: limits?.weekMissing == true && !windows.isEmpty ? String(l10n: "Week not reported") : nil,
+                warning: hold.map { String(l10n: "Usage limit until \(fleetComingTime($0.until, now: time))") }) {
             if windows.isEmpty {
                 Text(agentState.local_model == true ? "Local model" : limits == nil ? "Not reported" : "No current reading")
                     .foregroundStyle(FleetStyle.muted)
@@ -153,8 +152,8 @@ struct ProviderAccountSection: View {
                                 .foregroundStyle(FleetStyle.text)
                                 .frame(width: 38, height: Self.line, alignment: .trailing).layoutPriority(1)
                         }
-                        .help("\(window.label): \(window.used_percent.formatted(.number.precision(.fractionLength(0...1))))% used · "
-                              + (window.resets_at.map { "resets \(fleetDate(ResetLine.minute($0)))" } ?? "reset not reported"))
+                        .help(window.resets_at.map { String(l10n: "\(window.label): \(window.used_percent.formatted(.number.precision(.fractionLength(0...1))))% used · resets \(fleetDate(ResetLine.minute($0)))") }
+                              ?? String(l10n: "\(window.label): \(window.used_percent.formatted(.number.precision(.fractionLength(0...1))))% used · reset not reported"))
                         .accessibilityIdentifier("allowance-\(window.id)")
                     }
                 }

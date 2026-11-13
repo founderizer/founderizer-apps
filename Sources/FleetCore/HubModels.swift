@@ -80,10 +80,10 @@ public struct HubState: Decodable, Sendable {
     /// where it stands, and one that was read or answered keeps its bubble and takes a correction under it.
     public func editHelp(_ message: OwnerMessage) -> String {
         let name = message.chatRecipient.agentLabel
-        if editsInPlace(message) { return "\(name) has not read this yet: your words replace it." }
-        if wasAnswered(message) { return "\(name) already answered this: your words go under it as a correction." }
-        if message.read_at != nil { return "\(name) already read this: your words go under it as a correction." }
-        return "Your words go under it as a correction."
+        if editsInPlace(message) { return String(l10n: "\(name) has not read this yet: your words replace it.") }
+        if wasAnswered(message) { return String(l10n: "\(name) already answered this: your words go under it as a correction.") }
+        if message.read_at != nil { return String(l10n: "\(name) already read this: your words go under it as a correction.") }
+        return String(l10n: "Your words go under it as a correction.")
     }
 
     public func receipt(for request: PendingRequest) -> OwnerMessage? {
@@ -183,7 +183,7 @@ public struct FleetAgent: Decodable, Identifiable, Sendable {
             usageError = nil
         } catch {
             usage = nil
-            usageError = "The usage reading is invalid. Waiting for a new reading."
+            usageError = String(l10n: "The usage reading is invalid. Waiting for a new reading.")
         }
     }
 
@@ -257,9 +257,9 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     /// and the owner as "you".
     public var checkStatus: String {
         let who = requester == "owner" ? "you" : requester.agentLabel
-        if accepted == 1 { return "Accepted by \(who)" }
-        if accepted == 0 { return "Not accepted by \(who)" }
-        return delivered == nil ? "No result yet" : requester == "owner" ? "Waiting for your check" : "Waiting for \(who)'s check"
+        if accepted == 1 { return requester == "owner" ? String(l10n: "Accepted by you") : String(l10n: "Accepted by \(who)") }
+        if accepted == 0 { return requester == "owner" ? String(l10n: "Not accepted by you") : String(l10n: "Not accepted by \(who)") }
+        return delivered == nil ? String(l10n: "No result yet") : requester == "owner" ? String(l10n: "Waiting for your check") : String(l10n: "Waiting for \(who)'s check")
     }
 }
 
@@ -292,7 +292,7 @@ extension FleetTask {
     /// a grey pause in its agent's panel.
     public func mark(holds: [TaskHold], limited: Bool = false,
                      outcomeUnknown: Bool = false) -> (symbol: String, words: String, attention: Bool, inWork: Bool) {
-        if outcomeUnknown { return ("questionmark.circle", "Outcome not known: check it", true, false) }
+        if outcomeUnknown { return ("questionmark.circle", String(l10n: "Outcome not known: check it"), true, false) }
         let words = stateWord(holds: holds, limited: limited)
         if let hold = holds.first(where: { $0.task == id && $0.state != "released" }) {
             return hold.state == "not_confirmed" ? ("exclamationmark.circle", words, true, false) : ("pause.circle", words, false, false)
@@ -370,30 +370,33 @@ public enum TaskWords {
         public init(kind: String, state: String) { self.kind = kind; self.state = state }
     }
 
+    /// The word of a task in work, which the Tasks board leaves out of its card (`ActivityBoard`).
+    public static let working = String(l10n: "Working")
+
     /// The state word: the owner's hold first, then, for a task that is not over, its agent's usage limit, a stall and a
     /// lost session; then a checked result, what the task waits on, and its own state.
     public static func state(_ state: String, accepted: Int?, requester: String, waitingOn: String? = nil,
                              stalled: Bool = false, reconnecting: Bool = false, hold: Hold? = nil,
                              limited: Bool = false) -> String {
         if let hold, hold.state != "released" {
-            if hold.state == "requested" { return "Stopping…" }
-            if hold.state == "not_confirmed" { return "Stop not confirmed" }
-            return hold.kind == "pause" ? "Paused" : "Stopped"
+            if hold.state == "requested" { return String(l10n: "Stopping…") }
+            if hold.state == "not_confirmed" { return String(l10n: "Stop not confirmed") }
+            return hold.kind == "pause" ? String(l10n: "Paused") : String(l10n: "Stopped")
         }
         let over = ["completed", "failed", "rejected", "canceled"].contains(state)
-        if !over, limited { return "Usage limit" }
-        if !over, stalled { return "Stalled" }
-        if !over, reconnecting { return "Reconnecting" }
-        if accepted == 1 && state == "completed" { return "Checked" }
-        if accepted == 0 && state == "completed" { return "Not accepted" }
+        if !over, limited { return String(l10n: "Usage limit") }
+        if !over, stalled { return String(l10n: "Stalled") }
+        if !over, reconnecting { return String(l10n: "Reconnecting") }
+        if accepted == 1 && state == "completed" { return String(l10n: "Checked") }
+        if accepted == 0 && state == "completed" { return String(l10n: "Not accepted") }
         if !over, let waitingOn, !waitingOn.isEmpty { return waiting(on: waitingOn, requester: requester) }
         switch state {
-        case "working": return "Working"
-        case "submitted": return "Queued"
+        case "working": return working
+        case "submitted": return String(l10n: "Queued")
         case "input-required": return waitingFor(requester)
-        case "auth-required": return "Sign-in needed"
-        case "completed": return "Awaiting check"
-        case "canceled": return "Canceled"
+        case "auth-required": return String(l10n: "Sign-in needed")
+        case "completed": return String(l10n: "Awaiting check")
+        case "canceled": return String(l10n: "Canceled")
         default: return state.prefix(1).uppercased() + state.dropFirst()
         }
     }
@@ -401,7 +404,7 @@ public enum TaskWords {
     /// **Who a task waits for, in three words** (fix round 2): "Waiting for you" when its requester is the owner, else
     /// "Waiting for Manager". It said "Waiting for an answer", which named nobody in four words.
     public static func waitingFor(_ requester: String) -> String {
-        requester == "owner" ? "Waiting for you" : "Waiting for \(requester.agentLabel)"
+        requester == "owner" ? String(l10n: "Waiting for you") : String(l10n: "Waiting for \(requester.agentLabel)")
     }
 
     /// The one a task waits on when it is not its requester: a name ("Juno"). The hub's own reference to a question, a
@@ -412,7 +415,7 @@ public enum TaskWords {
 
     /// What a task waits on, in words: "Waiting on Juno", or its requester for one of the hub's references.
     static func waiting(on waitingOn: String, requester: String) -> String {
-        waiter(of: waitingOn).map { "Waiting on \($0)" } ?? waitingFor(requester)
+        waiter(of: waitingOn).map { String(l10n: "Waiting on \($0)") } ?? waitingFor(requester)
     }
 
     /// The hub's own references are bookkeeping, never words for the owner (B-COPY-21).
@@ -440,17 +443,20 @@ public struct ProgressNote: Decodable, Identifiable, Sendable {
     public let text: String
 }
 
-/// Owner feature `need_talk` (the owner, 9 November 2026: "a way to clarify some points and have a conversation with
-/// the agent", apart from Your answer): the Discuss of a Needs-you item.
+/// Owner feature `need_talk` (the owner, 9 November 2026: "Needs You items should be formatted MUCH better so they are
+/// shorter and much easier to read"): a short card, Details and options that combine. Its Discuss left the apps on 13
+/// November 2026 ("lets use the free-type text input as the general reply too, so we can remove the discuss option
+/// completely"): Your answer is his one reply.
 public enum NeedTalk {
     public static let feature = "need_talk"
-    /// The hub's most for one message of the discussion.
+    /// The hub's most for one message of the discussion, for a request that an older app saved (`OwnerCommand.needTalk`).
     public static let most = 2000
     /// The hub's most for a card's why: an item written before the rule may be longer, and keeps its fold.
     public static let why = 240
 }
 
-/// One message in the discussion of a Needs-you item: `who` is `owner` or the agent that replied.
+/// One message in the discussion of a Needs-you item, in the answer to a request that an older app saved
+/// (`OwnerCommand.needTalk`): `who` is `owner` or the agent that replied.
 public struct NeedMessage: Decodable, Equatable, Sendable {
     public let who: String
     public let text: String
@@ -510,9 +516,6 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     public let multi: Bool?
     /// The indexes of the options he ticked, once he answered an item whose options combine.
     public let chose: [Int]?
-    /// His discussion of the item with the manager, oldest first: what he asked and what it replied, apart from his
-    /// answer. nil on a hub without the feature.
-    public let talk: [NeedMessage]?
     public var isOpen: Bool { answered == nil && answer == nil }
     /// The same card to sign, byte for byte: its words, its answers, its door call, server and script, and what its
     /// first option starts on this Mac (a GitHub App, the Add device picture). A press

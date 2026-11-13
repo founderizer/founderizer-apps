@@ -108,7 +108,7 @@ Mac, and a device route is all that the PC reaches.
 | `door_setup` | waits (2.4) | |
 | `agent_remove` | waits (2.2) | |
 | `repo_picker` | waits (2.3) | |
-| `need_talk` | built | `OwnerCommand.NeedTalk`, `POST /ui/needs/<id>/talk`, with its receipt |
+| `need_talk` | built | the short card, Details and options that combine (`RequestCard`, `RequestStep`, `OptionsModel`); no Discuss since owner API 1.158: the talk route answers 404, and an old outbox's question is dropped |
 | `person_scope` | waits (2.4) | |
 | `history_messages` | waits (step 2) | |
 | `secret_compare` | waits (2.3) | |

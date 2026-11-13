@@ -54,24 +54,24 @@ public struct LoginSecret: Equatable, Sendable {
         let fields = trimmed
         switch kind {
         case .login:
-            if fields.username.isEmpty { return "Give the user name." }
-            if password.isEmpty { return "Give the password." }
-            if !Self.isAddress(fields.url) { return "Give an address that starts with http:// or https://, with a host and no user name." }
+            if fields.username.isEmpty { return String(l10n: "Give the user name.") }
+            if password.isEmpty { return String(l10n: "Give the password.") }
+            if !Self.isAddress(fields.url) { return String(l10n: "Give an address that starts with http:// or https://, with a host and no user name.") }
             if !fields.totp.isEmpty && !Self.isSeed(fields.totp) {
-                return "The authenticator seed can have only the letters A to Z and the digits 2 to 7, or be an otpauth:// address with such a secret."
+                return String(l10n: "The authenticator seed can have only the letters A to Z and the digits 2 to 7, or be an otpauth:// address with such a secret.")
             }
         case .apiKey:
             if !Self.isVariable(fields.env) {
-                return "Give a variable name of 1 to \(Self.maxLabel) characters: the letters A to Z, the digits and _, with a letter first."
+                return String(l10n: "Give a variable name of 1 to \(Self.maxLabel) characters: the letters A to Z, the digits and _, with a letter first.")
             }
-            if Self.isReserved(fields.env) { return "\(fields.env) is a name that a session sets itself. Give another name." }
-            if password.isEmpty { return "Give the key." }
+            if Self.isReserved(fields.env) { return String(l10n: "\(fields.env) is a name that a session sets itself. Give another name.") }
+            if password.isEmpty { return String(l10n: "Give the key.") }
             if !fields.url.isEmpty && !Self.isAddress(fields.url) {
-                return "Give a service address that starts with http:// or https://, with a host and no user name, or no address."
+                return String(l10n: "Give a service address that starts with http:// or https://, with a host and no user name, or no address.")
             }
         }
         guard let line = try? line(fields), line.count <= Self.maxValueBytes else {
-            return "This secret is too long: a vault's sealed copy takes at most \(Self.maxValueBytes) bytes."
+            return String(l10n: "This secret is too long: a vault's sealed copy takes at most \(Self.maxValueBytes) bytes.")
         }
         return nil
     }

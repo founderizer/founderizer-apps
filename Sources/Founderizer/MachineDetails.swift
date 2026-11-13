@@ -18,7 +18,7 @@ struct MachineDetails: View {
     /// What stopped the read. While the hub does not answer nothing is read, so a machine not read yet says it is
     /// unavailable then, and never "Reading the server…" for as long as the hub is down.
     private var failure: String? { error ?? (reading == nil && store.connectionError != nil ? Self.unavailable : nil) }
-    private static let unavailable = "Server status is unavailable."
+    private static let unavailable = String(l10n: "Server status is unavailable.")
     private var fresh: Bool { store.isFresh && reading?.isCurrent(at: store.state?.time ?? 0) == true }
 
     var body: some View {
@@ -30,19 +30,19 @@ struct MachineDetails: View {
                 MachineAccessRecord(store: store, reading: reading, refresh: refresh)
                 FormSection("Server") {
                     // Is this reading current? A yes-or-no fact, so a mark, with the time it was read behind it.
-                    FormMarkRow(title: reading.os.name ?? "System not reported", state: fresh ? .good : .warn,
-                                words: fresh ? "Current" : "Last reading",
-                                detail: "Read \(fleetDate(reading.reported_at)).",
-                                whoActs: fresh ? nil : "The server sends its own reading every few minutes.",
+                    FormMarkRow(title: reading.os.name ?? String(l10n: "System not reported"), state: fresh ? .good : .warn,
+                                words: fresh ? String(l10n: "Current") : String(l10n: "Last reading"),
+                                detail: String(l10n: "Read \(fleetDate(reading.reported_at))."),
+                                whoActs: fresh ? nil : String(l10n: "The server sends its own reading every few minutes."),
                                 identifier: "machine-reading")
                     // A revision is a value and not a state: a mark cannot carry one, so this row keeps its words.
-                    FormRow("Founderizer") { value(reading.revision.map { String($0.prefix(8)) } ?? "Not reported") }
+                    FormRow("Founderizer") { value(reading.revision.map { String($0.prefix(8)) } ?? String(l10n: "Not reported")) }
                     if let runtimes = reading.runtimes?.byName, !runtimes.isEmpty {
                         ForEach(runtimes.keys.sorted(), id: \.self) { name in
                             let row = ProviderRow(name: name, runtime: runtimes[name], reading: reading)
                             switch row.answer {
                             case .mark(let state, let words, let whoActs):
-                                FormMarkRow(title: row.title, state: state, words: words, detail: "On \(reading.machine).",
+                                FormMarkRow(title: row.title, state: state, words: words, detail: String(l10n: "On \(reading.machine)."),
                                             whoActs: whoActs, identifier: "machine-provider-\(name)")
                             case .notSetUp(let words):
                                 FormRow(row.title) { value(words) }.accessibilityIdentifier("machine-provider-\(name)")
@@ -50,12 +50,12 @@ struct MachineDetails: View {
                         }
                         if let loaded = reading.runtime.name { FormRow("Loaded provider") { value(providerName(loaded)) } }
                     } else {
-                        FormRow("Runtime") { value(reading.runtime.version ?? "Not reported") }
-                        FormMarkRow(title: "Signed in", state: Servers.onOffMark(reading.runtime.signed_in),
+                        FormRow("Runtime") { value(reading.runtime.version ?? String(l10n: "Not reported")) }
+                        FormMarkRow(title: String(l10n: "Signed in"), state: Servers.onOffMark(reading.runtime.signed_in),
                                     words: yesNo(reading.runtime.signed_in),
-                                    detail: "As Founderizer on \(reading.machine) last read it.",
+                                    detail: String(l10n: "As Founderizer on \(reading.machine) last read it."),
                                     whoActs: reading.runtime.signed_in == false
-                                        ? "Signing in is your own step: the Sign in card below takes it." : nil,
+                                        ? String(l10n: "Signing in is your own step: the Sign in card below takes it.") : nil,
                                     identifier: "machine-signed-in")
                     }
                 }
@@ -63,43 +63,43 @@ struct MachineDetails: View {
                     MachineSignInSection(store: store, agent: agent, reading: reading, fresh: fresh, refresh: refresh)
                 }
                 FormSection("Security") {
-                    FormMarkRow(title: "Private network", state: Servers.onOffMark(reading.security.tailscale),
+                    FormMarkRow(title: String(l10n: "Private network"), state: Servers.onOffMark(reading.security.tailscale),
                                 words: yesNo(reading.security.tailscale),
-                                detail: "Tailscale, which every server of your fleet is reached over.",
+                                detail: String(l10n: "Tailscale, which every server of your fleet is reached over."),
                                 whoActs: reading.security.tailscale == false ? onTheMachine : nil,
                                 identifier: "machine-tailnet")
-                    FormMarkRow(title: "Firewall",
+                    FormMarkRow(title: String(l10n: "Firewall"),
                                 state: Servers.onOffMark(reading.security.firewall.map { $0 == "active" }),
-                                words: reading.security.firewall?.capitalized ?? "Not reported",
-                                detail: "The server's own firewall, as it reported it.",
+                                words: reading.security.firewall?.capitalized ?? String(l10n: "Not reported"),
+                                detail: String(l10n: "The server's own firewall, as it reported it."),
                                 whoActs: reading.security.firewall == "inactive" ? onTheMachine : nil,
                                 identifier: "machine-firewall")
                     if store.state?.ui_features?.contains("vault_isolation") == true {
-                        FormMarkRow(title: "Vault token", state: Servers.onOffMark(reading.security.vault?.isolated),
+                        FormMarkRow(title: String(l10n: "Vault token"), state: Servers.onOffMark(reading.security.vault?.isolated),
                                     words: reading.security.vault?.isolated
-                                        .map { $0 ? "Protected" : "Not isolated" } ?? "Not configured",
-                                    detail: "Whether this server's vault keeps its token apart from the agents.",
+                                        .map { $0 ? String(l10n: "Protected") : String(l10n: "Not isolated") } ?? String(l10n: "Not configured"),
+                                    detail: String(l10n: "Whether this server's vault keeps its token apart from the agents."),
                                     whoActs: reading.security.vault?.isolated == false
-                                        ? "Set up this server's vault before using logins here." : nil,
+                                        ? String(l10n: "Set up this server's vault before using logins here.") : nil,
                                     identifier: "machine-vault")
                     }
                     if reading.os.name?.hasPrefix("macOS") != true {
-                        FormMarkRow(title: "Security updates",
+                        FormMarkRow(title: String(l10n: "Security updates"),
                                     state: Servers.onOffMark(reading.security.unattended_upgrades),
                                     words: reading.security.unattended_upgrades
-                                        .map { $0 ? "Automatic" : "Not automatic" } ?? "Not reported",
-                                    detail: "Whether the server installs its own security updates.",
+                                        .map { $0 ? String(l10n: "Automatic") : String(l10n: "Not automatic") } ?? String(l10n: "Not reported"),
+                                    detail: String(l10n: "Whether the server installs its own security updates."),
                                     whoActs: reading.security.unattended_upgrades == false ? onTheMachine : nil,
                                     identifier: "machine-updates")
                         // The restart itself is on that machine's own server page, which has the connection for it.
-                        FormMarkRow(title: "Waiting for a restart",
+                        FormMarkRow(title: String(l10n: "Waiting for a restart"),
                                     state: reading.security.reboot_required == true ? .warn
                                         : reading.security.reboot_required == false ? .good : .unknown,
-                                    words: reading.security.reboot_required == true ? "Yes"
-                                        : reading.security.reboot_required == false ? "No" : "Not reported",
+                                    words: reading.security.reboot_required == true ? String(l10n: "Yes")
+                                        : reading.security.reboot_required == false ? String(l10n: "No") : String(l10n: "Not reported"),
                                     detail: pendingWords(reading.security.pending_security),
                                     act: reading.security.reboot_required == true
-                                        ? ("Open its server", { store.destination = .server(reading.machine) }) : nil,
+                                        ? (String(l10n: "Open its server"), { store.destination = .server(reading.machine) }) : nil,
                                     identifier: "machine-restart-needed")
                     }
                 }
@@ -118,7 +118,7 @@ struct MachineDetails: View {
                         }
                     }
                     if store.state?.ui_features?.contains("machine_check") == true {
-                        let state = checking ? "Requesting…" : reading.check.map { checkLabel($0.state) }
+                        let state = checking ? String(l10n: "Requesting…") : reading.check.map { checkLabel($0.state) }
                         let problem = !checking && ["failed", "offline"].contains(reading.check?.state ?? "")
                         FormRow("Server check", detail: problem ? nil : state,
                                 warning: lines(problem ? state : nil, reading.check?.detail)) {
@@ -135,7 +135,7 @@ struct MachineDetails: View {
                         }
                     }
                 }
-            } else if failure == nil { LoadingLine("Reading the server…") }
+            } else if failure == nil { LoadingLine(String(l10n: "Reading the server…")) }
             // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3, item 33: it is
             // said once); `failure` still keeps "Reading the server…" away while the hub is down.
             if let failure, !store.hubNoticeShows { Text(failure).foregroundStyle(.orange) }
@@ -157,35 +157,35 @@ struct MachineDetails: View {
         let kept = parts.compactMap { $0 }.filter { !$0.isEmpty }
         return kept.isEmpty ? nil : kept.joined(separator: "\n")
     }
-    private func yesNo(_ value: Bool?) -> String { value.map { $0 ? "Yes" : "No" } ?? "Not reported" }
+    private func yesNo(_ value: Bool?) -> String { value.map { $0 ? String(l10n: "Yes") : String(l10n: "No") } ?? String(l10n: "Not reported") }
 
     /// How many security updates are waiting, behind the mark that says whether a restart is.
     private func pendingWords(_ pending: Int?) -> String {
-        guard let pending else { return "The server reported no count of waiting updates." }
-        return pending == 1 ? "1 security update is installed and waiting."
-            : "\(pending) security updates are installed and waiting."
+        guard let pending else { return String(l10n: "The server reported no count of waiting updates.") }
+        return pending == 1 ? String(l10n: "1 security update is installed and waiting.")
+            : String(l10n: "\(pending) security updates are installed and waiting.")
     }
 
     /// What a cross says when the work is on the machine itself and no button of this app takes it.
     private var onTheMachine: String {
-        "This is work on the server itself. Help → Report a problem sends it to one of your agents."
+        String(l10n: "This is work on the server itself. Help → Report a problem sends it to one of your agents.")
     }
     private func checkLabel(_ state: String) -> String {
         switch state {
-        case "requested": "Checking…"
-        case "completed": "Check complete"
-        case "offline": "Server offline"
-        default: "Check failed"
+        case "requested": String(l10n: "Checking…")
+        case "completed": String(l10n: "Check complete")
+        case "offline": String(l10n: "Server offline")
+        default: String(l10n: "Check failed")
         }
     }
     private func updateLabel(_ state: String?) -> String {
         switch state {
-        case "current": "Up to date"
-        case "behind": "Update available"
-        case "requested", "waiting_idle": "Waiting for idle"
-        case "updating": "Updating…"
-        case "failed": "Update failed"
-        default: "Version not reported"
+        case "current": String(l10n: "Up to date")
+        case "behind": String(l10n: "Update available")
+        case "requested", "waiting_idle": String(l10n: "Waiting for idle")
+        case "updating": String(l10n: "Updating…")
+        case "failed": String(l10n: "Update failed")
+        default: String(l10n: "Version not reported")
         }
     }
     private func refresh() async {
@@ -195,7 +195,7 @@ struct MachineDetails: View {
             let list = try await client.machines(hub: hub, database: database)
             guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
             store.keep(list, as: "machines"); error = nil
-            if reading == nil { error = "This server is not registered." }
+            if reading == nil { error = String(l10n: "This server is not registered.") }
         } catch { if !Task.isCancelled { self.error = HubError.said(error) ?? Self.unavailable } }
     }
 }
@@ -230,7 +230,7 @@ struct MachineAccessButtons: View {
                     }
                 } else if let url = reading.screenSharingURL {
                     Button("Screen Sharing", systemImage: "display") { open(url) }
-                        .help(availability(reading.access?.screen_sharing?.available, name: "Screen Sharing"))
+                        .help(availability(reading.access?.screen_sharing?.available, name: String(l10n: "Screen Sharing")))
                 }
             }.buttonStyle(.plain).font(FormMetrics.detail)
             if let error { Text(error).font(FormMetrics.detail).foregroundStyle(.orange) }
@@ -240,11 +240,13 @@ struct MachineAccessButtons: View {
         }
     }
     private func availability(_ value: Bool?, name: String) -> String {
-        guard fresh, let value else { return "Open \(name) · Service status not confirmed" }
-        return "Open \(name) · Service \(value ? "on" : "off") at last server check. Connection from this Mac is not checked."
+        guard fresh, let value else { return String(l10n: "Open \(name) · Service status not confirmed") }
+        return value ? String(l10n: "Open \(name) · Service on at last server check. Connection from this Mac is not checked.")
+            : String(l10n: "Open \(name) · Service off at last server check. Connection from this Mac is not checked.")
     }
     private func open(_ url: URL) {
-        error = NSWorkspace.shared.open(url) ? nil : "No app opened this connection. Check the default app for \(url.scheme?.uppercased() ?? "remote") links."
+        error = NSWorkspace.shared.open(url) ? nil : url.scheme.map { String(l10n: "No app opened this connection. Check the default app for \($0.uppercased()) links.") }
+            ?? String(l10n: "No app opened this connection. Check the default app for remote links.")
     }
 }
 
@@ -271,7 +273,7 @@ struct TaskMachineAccess: View {
                 let result = try await HubClient().machines(hub: hub, database: database)
                 guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
                 store.keep(result, as: "machines"); error = nil
-            } catch { if !Task.isCancelled { self.error = HubError.said(error) ?? "Server access is unavailable." } }
+            } catch { if !Task.isCancelled { self.error = HubError.said(error) ?? String(l10n: "Server access is unavailable.") } }
         }
     }
 }

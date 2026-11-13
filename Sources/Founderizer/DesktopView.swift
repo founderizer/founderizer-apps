@@ -7,7 +7,7 @@ struct DesktopView: View {
     let isFresh: Bool
     @State private var viewing = false
     @State private var image: NSImage?
-    @State private var status = "Open the view to watch this task."
+    @State private var status = String(l10n: "Open the view to watch this task.")
     @State private var captured: Double?
     @Environment(\.scenePhase) private var scenePhase
     private var running: Bool { viewing && isFresh && scenePhase != .background }
@@ -31,7 +31,7 @@ struct DesktopView: View {
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { timeline in
                     let age = captured.map { max(0, Int(timeline.date.timeIntervalSince1970 - $0)) }
-                    Text(!isFresh ? "Connection lost. View stopped." : age.map { $0 > 5 ? "No fresh frame · \($0)s ago" : "Live · \($0)s ago · view only" } ?? status)
+                    Text(!isFresh ? String(l10n: "Connection lost. View stopped.") : age.map { $0 > 5 ? String(l10n: "No fresh frame · \($0)s ago") : String(l10n: "Live · \($0)s ago · view only") } ?? status)
                         .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                         .accessibilityIdentifier("desktop-status")
                 }
@@ -40,7 +40,7 @@ struct DesktopView: View {
             .task(id: running) {
                 image = nil; captured = nil
                 guard running else { return }
-                status = "Connecting to the worker…"
+                status = String(l10n: "Connecting to the worker…")
                 let client = HubClient()
                 while !Task.isCancelled {
                     do {
@@ -50,15 +50,15 @@ struct DesktopView: View {
                         image = data.flatMap(NSImage.init(data:))
                         captured = frame.captured_at
                         status = switch frame.status {
-                        case "permission_required": "On the agent's Mac, allow “Fleet Worker”, as System Settings names it, in Privacy & Security → Screen & System Audio Recording."
-                        case "locked": "The worker desktop is locked. Unlock it to continue."
-                        case "unavailable": "Desktop capture is unavailable. Check the worker installer and screen permission."
-                        default: "Waiting for a fresh frame…"
+                        case "permission_required": String(l10n: "On the agent's Mac, allow “Fleet Worker”, as System Settings names it, in Privacy & Security → Screen & System Audio Recording.")
+                        case "locked": String(l10n: "The worker desktop is locked. Unlock it to continue.")
+                        case "unavailable": String(l10n: "Desktop capture is unavailable. Check the worker installer and screen permission.")
+                        default: String(l10n: "Waiting for a fresh frame…")
                         }
                     } catch {
                         guard !Task.isCancelled else { return }
                         image = nil; captured = nil
-                        status = HubError.said(error) ?? "View stopped or connection unavailable."
+                        status = HubError.said(error) ?? String(l10n: "View stopped or connection unavailable.")
                     }
                     do { try await Task.sleep(for: .seconds(1)) } catch { return }
                 }

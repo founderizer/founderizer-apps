@@ -157,8 +157,8 @@ public enum OutboxError: LocalizedError {
     case pendingRequest, invalidRecord
     public var errorDescription: String? {
         switch self {
-        case .pendingRequest: "Another saved request is waiting for a receipt."
-        case .invalidRecord: "The saved request cannot be read. Sending is blocked to prevent a duplicate."
+        case .pendingRequest: String(l10n: "Another saved request is waiting for a receipt.")
+        case .invalidRecord: String(l10n: "The saved request cannot be read. Sending is blocked to prevent a duplicate.")
         }
     }
 }

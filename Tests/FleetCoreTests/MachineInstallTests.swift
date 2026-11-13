@@ -1219,9 +1219,9 @@ struct MachineInstallTests {
     @Test func aStopIsSaidInAFewPlainWords() {
         let host = "203.0.113.9"
         #expect(InstallError.step("Read the server", "ssh: connect to host 203.0.113.9 port 22: Connection refused")
-                    .plain(host: host) == "This Mac could not reach 203.0.113.9 over SSH.")
+                    .plain(host: host) == "203.0.113.9 refused SSH on port 22. Check that SSH runs on that port and lets this Mac in.")
         #expect(InstallError.step("Read the server", "ssh: Could not resolve hostname box: nodename nor servname provided")
-                    .plain(host: "box") == "This Mac could not reach box over SSH.")
+                    .plain(host: "box") == "This Mac could not find box. Check its address.")
         #expect(InstallError.step("Read the server", "The server answered 255.").plain(host: host)
                     == "This Mac could not reach 203.0.113.9 over SSH.")
         #expect(InstallError.step("Read the server", "root@203.0.113.9: Permission denied (publickey).").plain(host: host)

@@ -31,23 +31,10 @@ public sealed record OwnerCommand
     public static OwnerCommand Steer(long task, long attempt) => new("steer", task, attempt);
     /// <summary>Pause, stop or resume a task: POST /ui/tasks/&lt;id&gt;/control.</summary>
     public static OwnerCommand Control(long task, TaskControl action) => new("control", task, control: action);
-    /// <summary>A message in the discussion of one open Needs-you item (`need_talk`): POST /ui/needs/&lt;id&gt;/talk.</summary>
-    public static OwnerCommand NeedTalk(long need) => new("need_talk", need);
-
-    public string Route => Kind switch
-    {
-        "steer" => $"ui/tasks/{Target}/steer",
-        "control" => $"ui/tasks/{Target}/control",
-        _ => $"ui/needs/{Target}/talk",
-    };
+    public string Route => Kind == "steer" ? $"ui/tasks/{Target}/steer" : $"ui/tasks/{Target}/control";
 
     /// <summary>The hub feature that this command needs.</summary>
-    public string RequiredFeature => Kind switch
-    {
-        "steer" => "task_steering",
-        "control" => "task_controls",
-        _ => "need_talk",
-    };
+    public string RequiredFeature => Kind == "steer" ? "task_steering" : "task_controls";
 
     public string ActionName => Action switch
     {
@@ -69,7 +56,6 @@ public sealed record OwnerCommand
             "resume_check" => Core.TaskControl.ResumeCheck,
             _ => throw new OutboxException(OutboxException.Problem.InvalidRecord),
         }),
-        "need_talk" => NeedTalk(target),
         _ => throw new OutboxException(OutboxException.Problem.InvalidRecord),
     };
 }
@@ -78,6 +64,7 @@ public sealed record OwnerCommand
 /// PendingRequest). Its request id makes a repeat the same request on the hub.</summary>
 public sealed record PendingRequest
 {
+
     public Guid RequestId { get; init; }
     public Uri Hub { get; init; } = null!;
     public string Database { get; init; } = "";
@@ -148,12 +135,6 @@ public sealed record PendingRequest
                     fields["text"] = steer;
                     fields["expected_attempt"] = command.Attempt;
                     break;
-                case "need_talk":
-                    var words = Text.Trim();
-                    if (command.Target <= 0 || words.Length == 0 || words.Length > 2000)
-                        throw new OutboxException(OutboxException.Problem.InvalidRecord);
-                    fields["text"] = words;
-                    break;
                 default:
                     fields["action"] = command.ActionName;
                     fields["note"] = Text;
@@ -192,8 +173,6 @@ public sealed record PendingRequest
             return false;
         switch (command.Kind)
         {
-            case "need_talk":
-                return receipt.Need == command.Target && receipt.Talk is { } talk && talk.Any(m => m.FromOwner);
             case "steer":
                 return receipt.Steer is { } steer && steer.IsValid && steer.Task == command.Target &&
                        steer.Attempt == command.Attempt && steer.Client == Client &&
@@ -314,6 +293,9 @@ public sealed class Outbox(string file)
     public const int BodyLimit = 65_536;
     public string File { get; } = file;
 
+    /// <summary>The command kind of an outbox record that no write makes any more and that is dropped when it is read.</summary>
+    internal const string DroppedKind = "need_talk";
+
     public PendingRequest? Load()
     {
         if (!System.IO.File.Exists(File)) return null;
@@ -323,6 +305,13 @@ public sealed class Outbox(string file)
         {
             var record = JsonSerializer.Deserialize(data, CoreJson.Default.PendingRequestRecord)
                          ?? throw new OutboxException(OutboxException.Problem.InvalidRecord);
+            if (record.Command == DroppedKind)
+            {
+                // A question about a request that a build before Discuss left the product saved (owner API 1.158): its
+                // route answers 404 now, so it is dropped here, with no word to the owner, and never goes again.
+                System.IO.File.Delete(File);
+                return null;
+            }
             return PendingRequest.FromRecord(record);
         }
         catch (JsonException)

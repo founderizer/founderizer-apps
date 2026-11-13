@@ -298,6 +298,14 @@ import Testing
 
 /// **The hub's disk says how much is used, of what, and where** (the owner, 4 November 2026: "it is also not clear what
 /// Free Space means, and how much we're using, and where it is"); a hub before the load readings sends neither field.
+// The owner, 13 November 2026: "Same thing for other long actions where we actually know the progress".
+@Test func updateFleetSaysWhichAgentsRequestIsOnItsWay() {
+    #expect(FleetHealth.Warning.Act.updatingWords(1, of: 11) == "Updating 1 of 11…")
+    #expect(FleetHealth.Warning.Act.updatingWords(11, of: 11) == "Updating 11 of 11…")
+    // One agent has no count.
+    #expect(FleetHealth.Warning.Act.updatingWords(1, of: 1) == "Updating…")
+}
+
 @Test func theHubsDiskComesWithItsSizeAndItsServer() throws {
     let health = try JSONDecoder().decode(FleetHealth.self, from: Data(#"""
         {"db":"g","ok":true,"time":100,"helpers":[],"warnings":[],"hub":{"disk_free_bytes":67544813568,

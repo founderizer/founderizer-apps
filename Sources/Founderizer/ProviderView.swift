@@ -112,11 +112,11 @@ struct ProviderView: View {
     /// **Nor is another row's request that waits** (fix round 3b): an unanswered save of Tools said so in its own row
     /// and in the window's request line, and here a third time. Only this row's own switch is said here.
     private var sendBlock: String? {
-        if !matches { return "The connection changed. Open this tab again." }
-        if !store.isFresh { return "No current hub status." }
+        if !matches { return String(l10n: "The connection changed. Open this tab again.") }
+        if !store.isFresh { return String(l10n: "No current hub status.") }
         if let refusal { return refusal }
         if let pending = store.pending, !store.sending, case .agentRuntime(let name, _, _)? = pending.command, name == agent {
-            return "A saved request is waiting."
+            return String(l10n: "A saved request is waiting.")
         }
         return nil
     }
@@ -138,7 +138,7 @@ struct ProviderView: View {
                 targetRow(readiness, to: to)
                 askView(to)
             } else {
-                FormRow("The other provider", detail: "\(providerName(runtime)) cannot switch.")
+                FormRow("The other provider", detail: String(l10n: "\(providerName(runtime)) cannot switch."))
             }
         }
         .onChange(of: setup.timeline.prompt?.id) { _, _ in secret = "" }
@@ -172,12 +172,12 @@ struct ProviderView: View {
     /// Where the other provider stands, in one line and in his own words. A reason the hub gave is the hub's own
     /// sentence; a setup that runs says what it is doing and never which of its steps it is on.
     private func detailWords(_ readiness: RuntimeSwitch, to: String, machine: String) -> String? {
-        if provider.switchingFrom != nil { return "Switching…" }
-        if asked == to && !provider.isConfirmed { return "Waiting for the agent to load it…" }
-        if preparing || held.job?.state == "queued" { return "Starting the setup on \(machine)…" }
-        if held.job?.state == "needs_owner" || (setup.running && setup.timeline.prompt != nil) { return "Waiting for you" }
-        if setupRunning { return "Setting up on \(machine)…" }
-        if readiness.ready { return "Ready to switch" }
+        if provider.switchingFrom != nil { return String(l10n: "Switching…") }
+        if asked == to && !provider.isConfirmed { return String(l10n: "Waiting for the agent to load it…") }
+        if preparing || held.job?.state == "queued" { return String(l10n: "Starting the setup on \(machine)…") }
+        if held.job?.state == "needs_owner" || (setup.running && setup.timeline.prompt != nil) { return String(l10n: "Waiting for you") }
+        if setupRunning { return String(l10n: "Setting up on \(machine)…") }
+        if readiness.ready { return String(l10n: "Ready to switch") }
         // The first reason, in a few words; the others are on the row's hover (`helpWords`), not a pointer to them.
         return readiness.rowReasons(current: runtime, machine: machine, agent: agent).first
     }
@@ -188,10 +188,10 @@ struct ProviderView: View {
     /// he cannot act on belongs.
     private func warningWords(to: String, machine: String) -> String? {
         if let message = writeError ?? prepareError ?? sendBlock { return message }
-        if held.job?.state == "failed" { return "Founderizer could not set up \(providerName(to)) on \(machine)." }
+        if held.job?.state == "failed" { return String(l10n: "Founderizer could not set up \(providerName(to)) on \(machine).") }
         if !held.joined, setupStarted, !setup.running, setup.timeline.result?.status != "ok",
            setup.timeline.result != nil || setup.error != nil {
-            return "Founderizer could not set up \(providerName(to)) on \(machine)."
+            return String(l10n: "Founderizer could not set up \(providerName(to)) on \(machine).")
         }
         return readError
     }
@@ -208,7 +208,7 @@ struct ProviderView: View {
         if let error = setup.error, !held.joined { lines.append(error) }
         if let detail = held.job?.detail, held.job?.state == "failed" { lines.append(detail) }
         if readiness.ready {
-            lines.append("Switching sets the model and the reasoning back to the defaults of \(providerName(to)).")
+            lines.append(String(l10n: "Switching sets the model and the reasoning back to the defaults of \(providerName(to))."))
         }
         return lines.joined(separator: "\n")
     }
@@ -220,7 +220,7 @@ struct ProviderView: View {
                 .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("stop-provider-setup")
                 .help("Stops the setup. Set up again continues from its saved steps.")
         } else if held.job?.isOpen == true {
-            Button("Open \(held.server ?? "server")") { store.destination = .server(held.server ?? agent) }
+            Button("Open \(held.server ?? String(l10n: "server"))") { store.destination = .server(held.server ?? agent) }
                 .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("open-provider-server")
                 .help("The steps of the setup are on the server's own page.")
         } else if setupRunning {
@@ -280,7 +280,7 @@ struct ProviderView: View {
     }
 
     /// The agent's machine, as the hub names it: every line of this row says where, because the owner has four.
-    private var machineName: String { placement ?? held.server ?? "its server" }
+    private var machineName: String { placement ?? held.server ?? String(l10n: "its server") }
 
     private var setupRunning: Bool { setup.running || setup.busy || held.job?.isOpen == true || preparing }
     private var setupStarted: Bool { setup.running || setup.busy || setup.timeline.run != nil }
@@ -295,7 +295,7 @@ struct ProviderView: View {
             _ = try await HubClient().prepareServerRuntime(hub: hub, database: database, client: store.installation,
                                                            server: server, agent: agent, runtime: runtime)
         } catch let HubError.refusal(_, words) { prepareError = words }
-        catch { prepareError = "The hub has not answered. Look at the server's page before you try again." }
+        catch { prepareError = String(l10n: "The hub has not answered. Look at the server's page before you try again.") }
         await refresh()
     }
 
@@ -388,7 +388,7 @@ struct ProviderView: View {
                 machine = list?.machines.first { $0.agent == agent }
             }
             readError = nil
-        } catch { if !Task.isCancelled { readError = "No current provider reading." } }
+        } catch { if !Task.isCancelled { readError = String(l10n: "No current provider reading.") } }
     }
 
     /// One command. A receipt that changed the runtime tells the agent's Settings, which then show the new provider's
@@ -406,7 +406,7 @@ struct ProviderView: View {
             }
             await store.refresh()
         } else {
-            writeError = refusal ?? store.sendError ?? "The switch was not confirmed."
+            writeError = refusal ?? store.sendError ?? String(l10n: "The switch was not confirmed.")
         }
         await refresh()
     }

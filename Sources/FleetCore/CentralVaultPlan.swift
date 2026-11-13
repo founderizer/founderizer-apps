@@ -42,8 +42,8 @@ public struct VaultPlan: Equatable, Sendable {
     }
 
     public static let none = VaultPlan(step: .nothing)
-    static let otherKey = "The hub names another vault key than the one this Mac pinned."
-    static let otherOwner = "The central vault on the hub's server holds another Mac's owner key."
+    static let otherKey = String(l10n: "The hub names another vault key than the one this Mac pinned.")
+    static let otherOwner = String(l10n: "The central vault on the hub's server holds another Mac's owner key.")
 
     public static func of(_ reading: VaultReading?, facts: VaultFacts) -> VaultPlan {
         guard let reading, reading.fleetID != nil else { return .none }         // no vault served, or no fleet named

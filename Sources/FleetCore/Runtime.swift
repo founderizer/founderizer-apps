@@ -86,8 +86,9 @@ public enum OwnerCommand: Codable, Equatable, Sendable {
     case machineSigninCode(agent: String, code: String)
     case control(task: Int, action: ControlAction)
     case outcome(id: Int, finding: OutcomeFinding)
-    /// Owner feature `need_talk` (API 1.106): his message in the discussion of one open Needs-you item, apart from his
-    /// answer. The manager replies under the item, and the item stays open.
+    /// Owner feature `need_talk` (API 1.106): his message in the discussion of one open Needs-you item. Nothing makes
+    /// one since Discuss left the app (API 1.158): only a request that an app before 0.1.205 saved in its outbox holds
+    /// one, so the outbox still reads it, and the hub's 404 gives the request line its Discard.
     case needTalk(need: Int)
     public var requiredFeature: String {
         switch self {
@@ -155,33 +156,56 @@ public enum OwnerCommand: Codable, Equatable, Sendable {
     }
     public var label: String {
         switch self {
-        case .steer: "Guide the task"
-        case .goalState(_, _, let action): "\(action.rawValue.capitalized) the goal"
+        case .steer: String(l10n: "Guide the task")
+        case .goalState(_, _, let action):
+            switch action {
+            case .pause: String(l10n: "Pause the goal")
+            case .resume: String(l10n: "Resume the goal")
+            case .done: String(l10n: "Done the goal")
+            case .drop: String(l10n: "Drop the goal")
+            case .reopen: String(l10n: "Reopen the goal")
+            }
         // **No hub number** (the polish of 30 October 2026): "Run schedule 3" stood in the request line.
-        case .triggerState(_, _, let action): "\(action.word) schedule"
-        case .profile(let agent, _): "Edit \(agent.agentLabel) profile"
-        case .teamLines: "Edit reporting lines"
-        case .agentSettings(let agent, _): "Configure \(agent.agentLabel)"
-        case .agentActivation(let agent, _, let active): "\(active ? "Activate" : "Deactivate") \(agent.agentLabel)"
-        case .agentVault(let agent, _, let access): access == .broker ? "Give \(agent.agentLabel) vault access" :
-            "Remove vault access of \(agent.agentLabel)"
-        case .agentVaultCreate(let agent, _, let on): on ? "Let \(agent.agentLabel) save new logins" : "Stop new logins of \(agent.agentLabel)"
-        case .agentRuntime(let agent, _, let runtime): "Switch \(agent.agentLabel) to \(providerName(runtime))"
-        case .teamAccount(let id, _, let delete): "\(delete ? "Delete" : "Save") account \(id)"
-        case .agentIdentity(let agent, _): "Edit \(agent.agentLabel) identity"
-        case .ownerDevice(let device, _, let delete): "\(delete ? "Remove" : "Save") the device \(device)"
-        case .ownerDeviceCode(let device): "New code for \(device)"
-        case .newDeviceCode: "New code for a new device"
-        case .machineUpdate(let agent): "Update \(agent.agentLabel)"
-        case .machineCheck(let agent): "Check \(agent.agentLabel)"
-        case .managerStart(let agent): "Start the session of \(agent.agentLabel)"
+        case .triggerState(_, _, let action):
+            switch action {
+            case .run_now: String(l10n: "Run schedule")
+            case .check_now: String(l10n: "Check schedule")
+            case .pause: String(l10n: "Pause schedule")
+            case .resume: String(l10n: "Resume schedule")
+            case .delete: String(l10n: "Delete schedule")
+            }
+        case .profile(let agent, _): String(l10n: "Edit \(agent.agentLabel) profile")
+        case .teamLines: String(l10n: "Edit reporting lines")
+        case .agentSettings(let agent, _): String(l10n: "Configure \(agent.agentLabel)")
+        case .agentActivation(let agent, _, let active):
+            active ? String(l10n: "Activate \(agent.agentLabel)") : String(l10n: "Deactivate \(agent.agentLabel)")
+        case .agentVault(let agent, _, let access): access == .broker ? String(l10n: "Give \(agent.agentLabel) vault access") :
+            String(l10n: "Remove vault access of \(agent.agentLabel)")
+        case .agentVaultCreate(let agent, _, let on):
+            on ? String(l10n: "Let \(agent.agentLabel) save new logins") : String(l10n: "Stop new logins of \(agent.agentLabel)")
+        case .agentRuntime(let agent, _, let runtime): String(l10n: "Switch \(agent.agentLabel) to \(providerName(runtime))")
+        case .teamAccount(let id, _, let delete): delete ? String(l10n: "Delete account \(id)") : String(l10n: "Save account \(id)")
+        case .agentIdentity(let agent, _): String(l10n: "Edit \(agent.agentLabel) identity")
+        case .ownerDevice(let device, _, let delete):
+            delete ? String(l10n: "Remove the device \(device)") : String(l10n: "Save the device \(device)")
+        case .ownerDeviceCode(let device): String(l10n: "New code for \(device)")
+        case .newDeviceCode: String(l10n: "New code for a new device")
+        case .machineUpdate(let agent): String(l10n: "Update \(agent.agentLabel)")
+        case .machineCheck(let agent): String(l10n: "Check \(agent.agentLabel)")
+        case .managerStart(let agent): String(l10n: "Start the session of \(agent.agentLabel)")
         case .machineSignin(let agent, let runtime, let replace):
-            replace ? "Use another \(providerName(runtime)) account for \(agent.agentLabel)"
-                    : "Sign \(agent.agentLabel) in to \(providerName(runtime))"
-        case .machineSigninCode(let agent, _): "Send the sign-in code to \(agent.agentLabel)"
-        case .control(_, let action): "\(action.rawValue.replacingOccurrences(of: "_", with: " ").capitalized) the task"
-        case .outcome: "Set the outcome"
-        case .needTalk: "Ask about a request"
+            replace ? String(l10n: "Use another \(providerName(runtime)) account for \(agent.agentLabel)")
+                    : String(l10n: "Sign \(agent.agentLabel) in to \(providerName(runtime))")
+        case .machineSigninCode(let agent, _): String(l10n: "Send the sign-in code to \(agent.agentLabel)")
+        case .control(_, let action):
+            switch action {
+            case .pause: String(l10n: "Pause the task")
+            case .stop: String(l10n: "Stop the task")
+            case .resume: String(l10n: "Resume the task")
+            case .resume_check: String(l10n: "Resume Check the task")
+            }
+        case .outcome: String(l10n: "Set the outcome")
+        case .needTalk: String(l10n: "Ask about a request")
         }
     }
 
@@ -190,22 +214,46 @@ public enum OwnerCommand: Codable, Equatable, Sendable {
     /// item. A schedule's title is in the schedules' own reading (`schedules`), the one Behaviour draws (the polish of 30
     /// October 2026: "Run schedule 3").
     public func label(in state: HubState?, schedules: [FleetTrigger] = []) -> String {
-        func task(_ id: Int) -> String? { state?.tasks.first { $0.id == id }.map { "“\($0.title)”" } }
+        func task(_ id: Int) -> String? { state?.tasks.first { $0.id == id }.map { String(l10n: "“\($0.title)”") } }
         switch self {
         case .goalState(let id, _, let action):
-            if let goal = state?.goals?.first(where: { $0.id == id }) { return "\(action.rawValue.capitalized) “\(goal.title)”" }
+            if let goal = state?.goals?.first(where: { $0.id == id }) {
+                return switch action {
+                case .pause: String(l10n: "Pause “\(goal.title)”")
+                case .resume: String(l10n: "Resume “\(goal.title)”")
+                case .done: String(l10n: "Done “\(goal.title)”")
+                case .drop: String(l10n: "Drop “\(goal.title)”")
+                case .reopen: String(l10n: "Reopen “\(goal.title)”")
+                }
+            }
         case .outcome(let id, _):
             if let outcome = state?.outcomes?.first(where: { $0.id == id }) {
-                return "Set the outcome of " + (task(outcome.task) ?? "“\(outcome.title)”")
+                let title = task(outcome.task) ?? String(l10n: "“\(outcome.title)”")
+                return String(l10n: "Set the outcome of \(title)")
             }
         case .steer(let id, _):
-            if let title = task(id) { return "Guide \(title)" }
+            if let title = task(id) { return String(l10n: "Guide \(title)") }
         case .control(let id, let action):
-            if let title = task(id) { return "\(action.rawValue.replacingOccurrences(of: "_", with: " ").capitalized) \(title)" }
+            if let title = task(id) {
+                return switch action {
+                case .pause: String(l10n: "Pause \(title)")
+                case .stop: String(l10n: "Stop \(title)")
+                case .resume: String(l10n: "Resume \(title)")
+                case .resume_check: String(l10n: "Resume Check \(title)")
+                }
+            }
         case .triggerState(let id, _, let action):
-            if let schedule = schedules.first(where: { $0.id == id }) { return "\(action.word) “\(schedule.task.title)”" }
+            if let schedule = schedules.first(where: { $0.id == id }) {
+                return switch action {
+                case .run_now: String(l10n: "Run “\(schedule.task.title)”")
+                case .check_now: String(l10n: "Check “\(schedule.task.title)”")
+                case .pause: String(l10n: "Pause “\(schedule.task.title)”")
+                case .resume: String(l10n: "Resume “\(schedule.task.title)”")
+                case .delete: String(l10n: "Delete “\(schedule.task.title)”")
+                }
+            }
         case .needTalk(let need):
-            if let item = state?.needs.first(where: { $0.id == need }) { return "Ask about “\(item.title)”" }
+            if let item = state?.needs.first(where: { $0.id == need }) { return String(l10n: "Ask about “\(item.title)”") }
         default: break
         }
         return label
@@ -600,7 +648,7 @@ public struct TaskSteer: Decodable, Identifiable, Equatable, Sendable {
     public let client: String
     public var isValid: Bool { id > 0 && task > 0 && attempt > 0 && !text.isEmpty && text.count <= 4000 && created.isFinite }
     public func deliveryLabel(currentAttempt: Int) -> String {
-        read_at != nil ? "Read" : currentAttempt > attempt ? "Not delivered · task restarted" : "Received"
+        read_at != nil ? "Read" : currentAttempt > attempt ? String(l10n: "Not delivered · task restarted") : String(l10n: "Received")
     }
     public func matches(_ pending: PendingRequest) -> Bool {
         guard case .steer(let task, let attempt) = pending.command else { return false }

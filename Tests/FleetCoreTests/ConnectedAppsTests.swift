@@ -23,6 +23,26 @@ struct ConnectedAppsTests {
 
     // MARK: the reading
 
+    @Test func aReadWithNoAnswerLeavesTheLastReadingAndAnAnswerOfTheHubTakesItAway() {
+        // no answer, a read that was cancelled, or a fault before the hub: nothing is known about the feature
+        for code in [URLError.Code.timedOut, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .cancelled] {
+            #expect(ConnectedApps.keepsReading(after: URLError(code)))
+        }
+        #expect(ConnectedApps.keepsReading(after: CancellationError()))
+        #expect(ConnectedApps.keepsReading(after: HubError.unavailable))
+        for status in [500, 501, 502, 503, 504, 408, 429] {
+            #expect(ConnectedApps.keepsReading(after: HubError.refusal(status, "")))
+        }
+        // the hub answered: the route or the feature is not there, the caller is not the owner, or the answer is
+        // none that this app reads
+        for status in [400, 403, 404, 409, 422, 499] {
+            #expect(!ConnectedApps.keepsReading(after: HubError.refusal(status, "Connected apps are not in this release of the hub.")))
+        }
+        #expect(!ConnectedApps.keepsReading(after: HubError.invalidResponse))
+        #expect(!ConnectedApps.keepsReading(after: HubError.invalidAddress))
+        #expect(!ConnectedApps.keepsReading(after: DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "x"))))
+    }
+
     @Test func theReadingTakesTheHubsAnswer() throws {
         let read = try state(reading(connections: [connection(), connection(id: 2, name: "ChatGPT", level: "act",
                                                                              lastUsed: 2_000)]))

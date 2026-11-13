@@ -106,6 +106,7 @@ struct FormSection<Content: View, Accessory: View>: View {
     @Environment(\.cardFill) private var cardFill
     @Environment(\.stepText) private var stepText
 
+    @_disfavoredOverload
     init(_ title: String? = nil, detail: String? = nil, footer: String? = nil, lazy: Bool = false,
          @ViewBuilder content: () -> Content, @ViewBuilder accessory: () -> Accessory) {
         self.title = title; self.detail = detail; self.footer = footer; self.lazy = lazy
@@ -185,6 +186,7 @@ struct FormSection<Content: View, Accessory: View>: View {
 }
 
 extension FormSection where Accessory == EmptyView {
+    @_disfavoredOverload
     init(_ title: String? = nil, detail: String? = nil, footer: String? = nil, lazy: Bool = false,
          @ViewBuilder content: () -> Content) {
         self.init(title, detail: detail, footer: footer, lazy: lazy, content: content) { EmptyView() }
@@ -203,6 +205,7 @@ struct FormRow<Control: View>: View {
     private let control: Control
     @Environment(\.stepText) private var stepText
 
+    @_disfavoredOverload
     init(_ title: String, symbol: String? = nil, detail: String? = nil, warning: String? = nil, @ViewBuilder control: () -> Control) {
         self.title = title; self.symbol = symbol; self.mark = nil
         self.detail = detail; self.warning = warning; self.control = control()
@@ -210,6 +213,7 @@ struct FormRow<Control: View>: View {
 
     /// The same row with a drawn mark in place of a symbol — a provider's icon on an account row, for one. It
     /// stands in `RowMark`, the one column every leading mark stands in.
+    @_disfavoredOverload
     init(_ title: String, mark: some View, detail: String? = nil, warning: String? = nil, @ViewBuilder control: () -> Control) {
         self.title = title; self.symbol = nil; self.mark = AnyView(mark)
         self.detail = detail; self.warning = warning; self.control = control()
@@ -267,10 +271,12 @@ struct FormRow<Control: View>: View {
 }
 
 extension FormRow where Control == EmptyView {
+    @_disfavoredOverload
     init(_ title: String, symbol: String? = nil, detail: String? = nil, warning: String? = nil) {
         self.init(title, symbol: symbol, detail: detail, warning: warning) { EmptyView() }
     }
 
+    @_disfavoredOverload
     init(_ title: String, mark: some View, detail: String? = nil, warning: String? = nil) {
         self.init(title, mark: mark, detail: detail, warning: warning) { EmptyView() }
     }
@@ -442,6 +448,7 @@ struct FleetSegmented<Value: Hashable>: View {
     @Environment(\.onCard) private var onCard
     @Environment(\.colorSchemeContrast) private var contrast
 
+    @_disfavoredOverload
     init(_ title: String, selection: Binding<Value>, options: [FleetOption<Value>]) {
         self.title = title; self._selection = selection; self.options = options
     }
@@ -480,6 +487,7 @@ struct FormBlock<Content: View, Accessory: View>: View {
     private let accessory: Accessory
     @Environment(\.stepText) private var stepText
 
+    @_disfavoredOverload
     init(_ title: String, detail: String? = nil, @ViewBuilder content: () -> Content, @ViewBuilder accessory: () -> Accessory) {
         self.title = title; self.detail = detail; self.content = content(); self.accessory = accessory()
     }
@@ -505,6 +513,7 @@ struct FormBlock<Content: View, Accessory: View>: View {
 }
 
 extension FormBlock where Accessory == EmptyView {
+    @_disfavoredOverload
     init(_ title: String, detail: String? = nil, @ViewBuilder content: () -> Content) {
         self.init(title, detail: detail, content: content) { EmptyView() }
     }
@@ -522,6 +531,7 @@ struct FormEmpty<Action: View>: View {
     @State private var drawn = false
     @State private var said = false
 
+    @_disfavoredOverload
     init(_ text: String, symbol: String, draws: Bool = false, @ViewBuilder action: () -> Action) {
         self.text = text; self.symbol = symbol; _draws = State(initialValue: draws); self.action = action()
     }
@@ -549,6 +559,7 @@ struct FormEmpty<Action: View>: View {
 }
 
 extension FormEmpty where Action == EmptyView {
+    @_disfavoredOverload
     init(_ text: String, symbol: String, draws: Bool = false) { self.init(text, symbol: symbol, draws: draws) { EmptyView() } }
 }
 
@@ -601,6 +612,7 @@ struct PageHeader<Actions: View>: View {
     private let mark: AnyView?
     private let actions: Actions
 
+    @_disfavoredOverload
     init(_ title: String, mark: AnyView? = nil, @ViewBuilder actions: () -> Actions) {
         self.title = title; self.mark = mark; self.actions = actions()
     }
@@ -619,6 +631,7 @@ struct PageHeader<Actions: View>: View {
 }
 
 extension PageHeader where Actions == EmptyView {
+    @_disfavoredOverload
     init(_ title: String) { self.init(title) { EmptyView() } }
 }
 
@@ -628,6 +641,7 @@ struct FleetBack: View {
     private let title: String
     private let action: () -> Void
 
+    @_disfavoredOverload
     init(_ title: String, action: @escaping () -> Void) { self.title = title; self.action = action }
 
     var body: some View {
@@ -672,6 +686,7 @@ struct FleetPage<Actions: View, Content: View>: View {
     /// The page's loading lines: one draws its words at a time (`LoadingSlots`).
     @State private var loadingSlots = LoadingSlots()
 
+    @_disfavoredOverload
     init(_ title: String, back: FleetBack? = nil, mark: AnyView? = nil, fills: Bool = false, board: Bool = false,
          wide: Bool = false, @ViewBuilder content: () -> Content, @ViewBuilder actions: () -> Actions) {
         self.title = title; self.back = back; self.mark = mark; self.fills = fills; self.board = board; self.wide = wide
@@ -711,6 +726,7 @@ struct FleetPage<Actions: View, Content: View>: View {
 }
 
 extension FleetPage where Actions == EmptyView {
+    @_disfavoredOverload
     init(_ title: String, back: FleetBack? = nil, fills: Bool = false, board: Bool = false,
          @ViewBuilder content: () -> Content) {
         self.init(title, back: back, fills: fills, board: board, content: content) { EmptyView() }

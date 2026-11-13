@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
@@ -19,6 +20,7 @@ public sealed class StoreSource : IFleetSource
     {
         this.store = store;
         store.Changed += (_, change) => Changed?.Invoke(this, new FleetChange(change.After, Stopwatch.GetTimestamp()));
+        store.Notified += (_, due) => Notified?.Invoke(this, due);
     }
 
     /// <summary>The store of a normal start.</summary>
@@ -81,17 +83,36 @@ public sealed class StoreSource : IFleetSource
 
     public void SetDraft(string agent, string text) => store.SetDraft(agent, text);
 
-    public Task SendMessageAsync(string agent) => store.SendMessageAsync(agent);
+    public Task<string?> SendMessageAsync(string agent) => store.SendMessageAsync(agent);
 
     public void SetAnswerDraft(long need, string text) => store.SetAnswerDraft(need, text);
 
-    public Task AnswerAsync(long need) => store.AnswerAsync(need);
+    public Task<string?> AnswerAsync(long need) => store.AnswerAsync(need);
+
+    public Task<string?> TickAsync(long need, IReadOnlyCollection<int> choices) => store.TickAsync(need, choices);
 
     public void Press(long need, int choice) => store.Press(need, choice);
 
-    public Task ControlAsync(long task, TaskControl action) => store.ControlAsync(task, action);
+    public Task<string?> ControlAsync(long task, TaskControl action) => store.ControlAsync(task, action);
 
-    public Task GuideAsync(long task, string text) => store.GuideAsync(task, text);
+    public Task<string?> GuideAsync(long task, string text) => store.GuideAsync(task, text);
+
+    public Task RefreshAsync() => store.RefreshAsync();
+
+    public Task RetryAsync() => store.RetryAsync();
+
+    public void DiscardRefused() => store.DiscardRefused();
+
+    public Task<string?> AddFileAsync(string composer, string name, byte[] bytes, string? mime) =>
+        store.AddFileAsync(composer, name, bytes, mime);
+
+    public Task<string?> UploadAsync(string composer, Guid file) => store.UploadAsync(composer, file);
+
+    public void RemoveFile(string composer, Guid file) => store.RemoveFile(composer, file);
+
+    public Task<byte[]> FileAsync(MessageAttachment file) => store.FileAsync(file);
+
+    public event EventHandler<IReadOnlyList<Notice>>? Notified;
 
     public Task<string?> ConnectAsync(string address) => store.ConnectAsync(address);
 

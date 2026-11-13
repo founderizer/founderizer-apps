@@ -57,15 +57,15 @@ public struct InstallTarget: Equatable, Sendable {
     /// Why this machine cannot be installed as given, in the owner's own words, or nil.
     public var problem: String? {
         guard host.range(of: "^[a-zA-Z0-9]([a-zA-Z0-9.:-]{0,252}[a-zA-Z0-9])?$", options: .regularExpression) != nil else {
-            return "Enter the address or host name of the server, as you reach it over SSH."
+            return String(l10n: "Enter the address or host name of the server, as you reach it over SSH.")
         }
         guard user.range(of: "^[a-z_][a-z0-9_-]{0,31}$", options: .regularExpression) != nil else {
-            return "Enter the user you reach that server with: root, or a user that can become root."
+            return String(l10n: "Enter the user you reach that server with: root, or a user that can become root.")
         }
-        guard (1...65535).contains(port) else { return "The SSH port is between 1 and 65535." }
+        guard (1...65535).contains(port) else { return String(l10n: "The SSH port is between 1 and 65535.") }
         if let identityFile {
             guard identityFile.hasPrefix("/"), !identityFile.contains("\0"), identityFile.count <= 4096 else {
-                return "Choose the private key file you already use for that server."
+                return String(l10n: "Choose the private key file you already use for that server.")
             }
         }
         return nil
@@ -124,14 +124,18 @@ public struct SSHOptions: Equatable, Sendable {
     public var port: Int
     /// As the configuration writes them: `~/.ssh/id_vps`, `%d/.ssh/id_vps`.
     public var identityFiles: [String]
+    /// The configuration reaches this host through another one (`ProxyJump` or `ProxyCommand`), which the install's
+    /// own `ssh` to `user@hostname` does not use.
+    public var proxied: Bool
 
-    public init(hostname: String, user: String, port: Int, identityFiles: [String] = []) {
+    public init(hostname: String, user: String, port: Int, identityFiles: [String] = [], proxied: Bool = false) {
         self.hostname = hostname; self.user = user; self.port = port; self.identityFiles = identityFiles
+        self.proxied = proxied
     }
 
-    /// The four options out of `ssh -G`'s lines, or nil when it printed no host.
+    /// The four options out of `ssh -G`'s lines, and whether a proxy is set, or nil when it printed no host.
     public static func read(_ output: String) -> SSHOptions? {
-        var hostname: String?, user: String?, port: Int?, files: [String] = []
+        var hostname: String?, user: String?, port: Int?, files: [String] = [], proxied = false
         for raw in output.split(whereSeparator: \.isNewline) {
             let line = String(raw)
             guard let space = line.firstIndex(of: " ") else { continue }
@@ -141,11 +145,12 @@ public struct SSHOptions: Equatable, Sendable {
             case "user": user = user ?? value
             case "port": port = port ?? Int(value)
             case "identityfile": files.append(value)
+            case "proxyjump", "proxycommand": proxied = proxied || value.lowercased() != "none"
             default: continue
             }
         }
         guard let hostname, !hostname.isEmpty, let user, let port else { return nil }
-        return SSHOptions(hostname: hostname, user: user, port: port, identityFiles: files)
+        return SSHOptions(hostname: hostname, user: user, port: port, identityFiles: files, proxied: proxied)
     }
 
     /// An identity file's own path: `~` and `ssh`'s `%d`, `%u`, `%h`, `%r` and `%%` filled in. A path with another of its
@@ -305,30 +310,30 @@ public struct InstallPlan: Equatable, Sendable {
     public static func hub(target: InstallTarget, source: String, authKey: String?) -> InstallPlan {
         let kit = hubKit, log = hubLog
         let steps: [InstallStep] = [
-            .init(id: "read", title: ServerCheck.title, says: "Which system it is, and whether we are root there.",
+            .init(id: "read", title: ServerCheck.title, says: String(l10n: "Which system it is, and whether we are root there."),
                   action: readAction),
             // First, because the installer lets SSH in over the private network only: every step after this one
             // reaches the server at the address it gets there (`MachineInstaller.reached`).
-            .init(id: "network", title: "The private network",
-                  says: authKey == nil ? "This server is already on your private network, so no key is needed."
-                      : "Tailscale, with your key on standard input, and the address it gets.",
+            .init(id: "network", title: String(l10n: "The private network"),
+                  says: authKey == nil ? String(l10n: "This server is already on your private network, so no key is needed.")
+                      : String(l10n: "Tailscale, with your key on standard input, and the address it gets."),
                   action: authKey == nil ? .run(onNetwork) : keyedNetwork),
-            .init(id: "code", title: "The Founderizer code", says: "A copy of the code on the server, from your own download page.",
+            .init(id: "code", title: String(l10n: "The Founderizer code"), says: String(l10n: "A copy of the code on the server, from your own download page."),
                   action: .run(gitInstall + "; if test -d \(kit)/.git; then git -C \(kit) pull -q --ff-only; "
                                + "else git clone -q -- \(quote(source)) \(kit); fi; "
                                + "git -C \(kit) rev-parse --short HEAD; ls \(kit)/hub.sh")),
-            .init(id: "plan", title: "The plan", says: "Every step the install would take. It changes nothing.",
+            .init(id: "plan", title: String(l10n: "The plan"), says: String(l10n: "Every step the install would take. It changes nothing."),
                   action: .run("\(managerServer) \(callerVerifies) sh \(kit)/hub.sh --check")),
-            .init(id: "start", title: "Install the hub", says: "The installer runs on the server and writes what it does to a log.",
+            .init(id: "start", title: String(l10n: "Install the hub"), says: String(l10n: "The installer runs on the server and writes what it does to a log."),
                   action: .detach("setsid sh -c '\(managerServer) \(callerVerifies) sh \(kit)/hub.sh < /dev/null > \(log) 2>&1' "
                                   + "> /dev/null 2>&1 < /dev/null &")),
-            .init(id: "wait_claim", title: "Wait for the link code", says: "The installer makes a one-time code for this Mac.",
+            .init(id: "wait_claim", title: String(l10n: "Wait for the link code"), says: String(l10n: "The installer makes a one-time code for this Mac."),
                   action: .waitFor("tail -n 60 \(log)", mark: ClaimCode.logMark, every: 10, within: 1200)),
-            .init(id: "claim", title: "Claim the hub", says: "This Mac sends the code back, and the hub serves your pages to it alone.",
+            .init(id: "claim", title: String(l10n: "Claim the hub"), says: String(l10n: "This Mac sends the code back, and the hub serves your pages to it alone."),
                   action: .claim),
-            .init(id: "wait_ready", title: "Finish the install", says: "The security updates and the checks take some minutes.",
+            .init(id: "wait_ready", title: String(l10n: "Finish the install"), says: String(l10n: "The security updates and the checks take some minutes."),
                   action: .waitFor("tail -n 40 \(log)", mark: "READY", every: 20, within: 1800)),
-            .init(id: "verify", title: "Check the server", says: "Every check of the server.",
+            .init(id: "verify", title: String(l10n: "Check the server"), says: String(l10n: "Every check of the server."),
                   action: .verify(verifyCommand(.hub))),
         ]
         return InstallPlan(job: .hub, target: target, steps: steps, redactions: [authKey].compactMap { $0 })
@@ -420,15 +425,15 @@ public struct InstallPlan: Equatable, Sendable {
             ? NetworkSignIn.action(install: tailscaleInstall, tags: NetworkSignIn.tags(inLine: line))
             : keyedNetwork
         let steps: [InstallStep] = [
-            .init(id: "read", title: ServerCheck.title, says: "Which system it is, and whether we are root there.",
+            .init(id: "read", title: ServerCheck.title, says: String(l10n: "Which system it is, and whether we are root there."),
                   action: readAction),
-            .init(id: "network", title: "The private network",
-                  says: authKey == nil ? "Tailscale, with a sign-in link for you when this server is not on it yet."
-                      : "Tailscale, with your key on standard input, and the address it gets.",
+            .init(id: "network", title: String(l10n: "The private network"),
+                  says: authKey == nil ? String(l10n: "Tailscale, with a sign-in link for you when this server is not on it yet.")
+                      : String(l10n: "Tailscale, with your key on standard input, and the address it gets."),
                   action: network),
-            .init(id: "join", title: "Join the fleet", says: "The line your hub gave for this server, as it wrote it.",
+            .init(id: "join", title: String(l10n: "Join the fleet"), says: String(l10n: "The line your hub gave for this server, as it wrote it."),
                   action: .join(line)),
-            .init(id: "verify", title: "Check the server", says: "Every check of the server.",
+            .init(id: "verify", title: String(l10n: "Check the server"), says: String(l10n: "Every check of the server."),
                   action: .verify(verifyCommand(.linuxWorker))),
         ]
         return InstallPlan(job: .join, target: target, steps: steps, redactions: [authKey, code].compactMap { $0 })
@@ -437,8 +442,8 @@ public struct InstallPlan: Equatable, Sendable {
     /// Only the checks of one machine, and no install: `python3 fleet.py verify --json` there, over the owner's own
     /// SSH connection (PRODUCT.md 4.1). A machine answers for itself, and the app shows that answer as a checklist.
     public static func check(target: InstallTarget, machine: MachineCheckout) -> InstallPlan {
-        let step = InstallStep(id: "verify", title: "Check the server",
-                               says: "Every check of that server.",
+        let step = InstallStep(id: "verify", title: String(l10n: "Check the server"),
+                               says: String(l10n: "Every check of that server."),
                                action: .verify(verifyCommand(machine)))
         return InstallPlan(job: .join, target: target, steps: [step], redactions: [])
     }
@@ -458,26 +463,26 @@ public struct InstallPlan: Equatable, Sendable {
     public static func restart(target: InstallTarget, machine: MachineCheckout) -> InstallPlan {
         let mark = restartMark, back = bootedMark
         let steps: [InstallStep] = [
-            .init(id: "mark", title: "Mark this boot",
-                  says: "A file in the server's own /run, which only a restart clears.",
+            .init(id: "mark", title: String(l10n: "Mark this boot"),
+                  says: String(l10n: "A file in the server's own /run, which only a restart clears."),
                   action: .run("touch \(mark) && test -f \(mark) && echo marked")),
-            .init(id: "restart", title: "Restart the server",
-                  says: "The server restarts, after this connection closes.",
+            .init(id: "restart", title: String(l10n: "Restart the server"),
+                  says: String(l10n: "The server restarts, after this connection closes."),
                   action: .detach("setsid sh -c 'sleep 2; systemctl reboot || reboot' > /dev/null 2>&1 < /dev/null &")),
             // It has come back when its /run is empty (so it really booted), its units have started, and its clock
             // has caught up — or it has been up two minutes, after which whatever the checks say about the clock is
             // the truth and not a machine still looking for a time server. Without that last part the very first
             // restart of the owner's own hub reported "Clock failed" on a machine whose clock was right thirty
             // seconds later, and a page that cries wolf after a restart is worth less than no page.
-            .init(id: "back", title: "Wait for it to come back",
-                  says: "The server answers again, with its /run empty, its units started and its clock caught up.",
+            .init(id: "back", title: String(l10n: "Wait for it to come back"),
+                  says: String(l10n: "The server answers again, with its /run empty, its units started and its clock caught up."),
                   action: .waitFor("test -f \(mark) || { systemctl is-system-running 2>/dev/null "
                                    + "| grep -q -e running -e degraded && { timedatectl show -p NTPSynchronized "
                                    + "--value 2>/dev/null | grep -q yes || test \"$(cut -d. -f1 /proc/uptime)\" "
                                    + "-gt 120; } && echo \(back); }",
                                    mark: back, every: 10, within: 900)),
-            .init(id: "verify", title: "Check the server",
-                  says: "Every check again, to say where the server stands after its restart.",
+            .init(id: "verify", title: String(l10n: "Check the server"),
+                  says: String(l10n: "Every check again, to say where the server stands after its restart."),
                   action: .verify(verifyCommand(machine))),
         ]
         return InstallPlan(job: .join, target: target, steps: steps, redactions: [])
@@ -549,17 +554,17 @@ public struct InstallPlan: Equatable, Sendable {
         let steps: [InstallStep] = [
             // Not the id "read": that one is the first step of an install, and the runner reads a machine's own user
             // and system out of it.
-            .init(id: "checkout", title: "Read the checkout",
-                  says: "What Founderizer on \(who)'s server has, and whether it can move on without losing anything.",
+            .init(id: "checkout", title: String(l10n: "Read the checkout"),
+                  says: String(l10n: "What Founderizer on \(who)'s server has, and whether it can move on without losing anything."),
                   action: .run(asAgent(agent, run: read))),
-            .init(id: "move", title: "Move the checkout on",
-                  says: "It fast-forwards onto \(configRef), as Founderizer's own update does.",
+            .init(id: "move", title: String(l10n: "Move the checkout on"),
+                  says: String(l10n: "It fast-forwards onto \(configRef), as Founderizer's own update does."),
                   action: .run(asAgent(agent, run: move))),
-            .init(id: "service", title: "Restart Founderizer",
-                  says: "\(who)'s own service, which is what loads the new checkout.",
+            .init(id: "service", title: String(l10n: "Restart Founderizer"),
+                  says: String(l10n: "\(who)'s own service, which is what loads the new checkout."),
                   action: .run(asAgent(agent, run: service))),
-            .init(id: "verify", title: "Check the server",
-                  says: "Every check again, to say where the server stands after the update.",
+            .init(id: "verify", title: String(l10n: "Check the server"),
+                  says: String(l10n: "Every check again, to say where the server stands after the update."),
                   action: .verify(verifyCommand(machine))),
         ]
         return InstallPlan(job: .join, target: target, steps: steps, redactions: [])

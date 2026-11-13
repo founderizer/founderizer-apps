@@ -61,24 +61,24 @@ final class GoogleConnecting {
     private func connect(store: FleetStore, service: GoogleService, connected: () async -> Void) async {
         guard let database = store.state?.db else { running = nil; return }
         let hub = store.hub, installation = store.installation
-        busy = "Starting…"
+        busy = String(l10n: "Starting…")
         note = nil
         do {
             let loopback = try await GoogleLoopback.open()
             defer { loopback.stop() }
             let start = try await client.connect(hub: hub, database: database, client: installation,
                                                  redirectURI: loopback.redirectURI, service: service, account: nil)
-            busy = "Waiting for the sign-in in your browser…"
+            busy = String(l10n: "Waiting for the sign-in in your browser…")
             NSWorkspace.shared.open(start.url)
             let code = try await loopback.code(state: start.state)
             running = nil
-            busy = "Saving…"
+            busy = String(l10n: "Saving…")
             let email = try await client.finish(hub: hub, database: database, client: installation,
                                                 state: start.state, code: code).email
-            note = ("\(email) is connected.", false)
+            note = (String(l10n: "\(email) is connected."), false)
             await connected()
         } catch {
-            note = Task.isCancelled ? ("Connect stopped.", false) : (reason(error), true)
+            note = Task.isCancelled ? (String(l10n: "Connect stopped."), false) : (reason(error), true)
         }
         busy = nil
         running = nil
@@ -86,7 +86,7 @@ final class GoogleConnecting {
 
     private func reason(_ error: Error) -> String {
         if case HubError.refusal(_, let words) = error { return words }
-        if error is URLError { return "The hub did not answer. Look at the accounts before you try again." }
+        if error is URLError { return String(l10n: "The hub did not answer. Look at the accounts before you try again.") }
         return error.localizedDescription
     }
 }

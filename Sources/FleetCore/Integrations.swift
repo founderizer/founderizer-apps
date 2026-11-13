@@ -75,9 +75,9 @@ public struct IntegrationsSnapshot: Decodable, Sendable {
         /// the same thing, and the page said the second one only in its footer, under a row that showed a seal: he
         /// had to add the two together himself. `nil` is a hub not read yet, which is never drawn as a pass.
         public static func mark(_ app: GitHubApp?) -> (state: MarkState, words: String) {
-            guard let app else { return (.working, "Reading your hub") }
-            if app.app { return (.good, "In place") }
-            return app.problem == nil ? (.bad, "None yet") : (.bad, "Not usable")
+            guard let app else { return (.working, String(l10n: "Reading your hub")) }
+            if app.app { return (.good, String(l10n: "In place")) }
+            return app.problem == nil ? (.bad, String(l10n: "None yet")) : (.bad, String(l10n: "Not usable"))
         }
 
         /// **Whether to ask him for an App.** His hub has none that works, and Founderizer has read the hub: a
@@ -277,8 +277,8 @@ public enum GitHubAppForm {
 
     /// What this Mac says about a key the owner chose, before it travels, or nil when it may go.
     public static func problem(appID: String, key: String) -> String? {
-        if GitHubAppForm.appID(appID) == nil { return "The App ID is the number at the top of your App's page." }
-        if !isPrivateKey(key) { return "Choose the .pem file GitHub downloaded when you generated the key." }
+        if GitHubAppForm.appID(appID) == nil { return String(l10n: "The App ID is the number at the top of your App's page.") }
+        if !isPrivateKey(key) { return String(l10n: "Choose the .pem file GitHub downloaded when you generated the key.") }
         return nil
     }
 }

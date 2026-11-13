@@ -72,7 +72,7 @@ struct RoleRow: View {
 
     /// What the agent is told about such a person, from the hub.
     private var means: String? {
-        roles.first { $0.role == role }.map { "The agent is told: \($0.means)" }
+        roles.first { $0.role == role }.map { String(l10n: "The agent is told: \($0.means)") }
     }
 
     static func symbol(_ role: String) -> String {
@@ -90,10 +90,10 @@ struct RoleRow: View {
     /// no line of ours: its name says it.
     static func line(_ role: String) -> String? {
         switch role {
-        case "customer": "Answers only what you allow"
-        case "employee": "Answers about the work, takes requests"
-        case "supervisor": "Watches the state and progress of work"
-        case "deputy": "Decides for you in this conversation"
+        case "customer": String(l10n: "Answers only what you allow")
+        case "employee": String(l10n: "Answers about the work, takes requests")
+        case "supervisor": String(l10n: "Watches the state and progress of work")
+        case "deputy": String(l10n: "Decides for you in this conversation")
         default: nil
         }
     }
@@ -114,7 +114,7 @@ struct PersonAgentsCard: View {
     var saving: SaveState?
     var disabled = false
     /// The card's heading, or nil where the page's own title already says it.
-    var heading: String? = "Can talk to"
+    var heading: String? = String(l10n: "Can talk to")
     var retry: () -> Void = {}
     /// **All access, or only these, on each ticked row where the hub gives one** (feature `person_scope`; the owner's
     /// yes of 11 November 2026 to its mockup): what the person may use of that agent, by the agent's name. A row
@@ -199,7 +199,7 @@ struct PersonAgentsCard: View {
         FleetSelect("Access with \(People.agentWord(agent))",
                     options: [FleetOption(true, "All access"), FleetOption(false, "Only these…")],
                     selection: scope.isAll) { all in chooseAccess(agent, all) } label: {
-            FleetSelectLabel(title: scope.isAll ? "All access" : scope.short ?? "Only these…")
+            FleetSelectLabel(title: scope.isAll ? String(l10n: "All access") : scope.short ?? String(l10n: "Only these…"))
         }
         .disabled(disabled)
         .accessibilityIdentifier("person-access-\(agent)")
@@ -228,8 +228,8 @@ struct ConversationDeliveryLine: View {
                 .help(words)
                 .accessibilityElement(children: .ignore).accessibilityLabel(words)
                 if delivery.canSendAgain, sentAgain != delivery.outbound {
-                    MessageAction(symbol: "arrow.clockwise", label: "Send again",
-                                  help: "Send again. The first one can still arrive.", height: 16) {
+                    MessageAction(symbol: "arrow.clockwise", label: String(l10n: "Send again"),
+                                  help: String(l10n: "Send again. The first one can still arrive."), height: 16) {
                         Task { await sendAgain() }
                     }.foregroundStyle(FleetStyle.muted).disabled(sending || !store.isFresh)
                 }

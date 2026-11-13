@@ -309,12 +309,12 @@ struct FleetView: View {
             // Only while a release of the fleet or a build of this Mac waits; it opens Settings › Updates, and leaves
             // when the update is taken.
             if store.updateWaits {
-                SidebarRow("Update", symbol: "arrow.down.circle", selected: false) { store.destination = .settings(.updates) }
+                SidebarRow(String(l10n: "Update"), symbol: "arrow.down.circle", selected: false) { store.destination = .settings(.updates) }
                     .accessibilityIdentifier("nav-update")
             }
             // Settings take the place of the connection popover. Its orange dot says what System status has to say, and
             // **while it shows, a press opens System status** (fix round 3c): it opened General, which says nothing of it.
-            SidebarRow("Settings", selected: isSettings) {
+            SidebarRow(String(l10n: "Settings"), selected: isSettings) {
                 store.destination = .settings(settingsDot == nil ? .general : .status)
             } mark: {
                 SidebarSymbol(name: "gearshape")
@@ -359,7 +359,7 @@ struct FleetView: View {
     /// own, a muted symbol whose soft circle shows only under the pointer, 8 pt apart and 14 pt from the sidebar's edge.
     private var sidebarButtons: some View {
         HStack(spacing: 8) {
-            bandButton("magnifyingglass", words: "Search") { searching = SearchRequest() }
+            bandButton("magnifyingglass", words: String(l10n: "Search")) { searching = SearchRequest() }
                 .keyboardShortcut("k", modifiers: .command)
                 .accessibilityIdentifier("sidebar-search")
             if store.state != nil {
@@ -392,10 +392,10 @@ struct FleetView: View {
     /// keep their place in the window's own points at every zoom, so the pair starts that far in, divided by the zoom.
     private var historyButtons: some View {
         HStack(spacing: 8) {
-            bandButton("arrow.left", words: "Back", enabled: store.canGoBack) { store.goBack() }
+            bandButton("arrow.left", words: String(l10n: "Back"), enabled: store.canGoBack) { store.goBack() }
                 .keyboardShortcut("[", modifiers: .command)
                 .accessibilityIdentifier("nav-back")
-            bandButton("arrow.right", words: "Forward", enabled: store.canGoForward) { store.goForward() }
+            bandButton("arrow.right", words: String(l10n: "Forward"), enabled: store.canGoForward) { store.goForward() }
                 .keyboardShortcut("]", modifiers: .command)
                 .accessibilityIdentifier("nav-forward")
         }
@@ -441,9 +441,9 @@ struct FleetView: View {
     /// another page (fix round 2): the row went while the page stayed, and no row said where he was.
     @ViewBuilder private var needsRow: some View {
         let waiting = store.state?.needsYouCount ?? 0
-        let words = waiting == 0 ? "Nothing needs you" : waiting == 1 ? "1 item needs you" : "\(waiting) items need you"
+        let words = waiting == 0 ? String(l10n: "Nothing needs you") : waiting == 1 ? String(l10n: "1 item needs you") : String(l10n: "\(waiting) items need you")
         if waiting > 0 || store.destination == .needs {
-            SidebarRow("Needs you", selected: store.destination == .needs) { store.destination = .needs } mark: {
+            SidebarRow(String(l10n: "Needs you"), selected: store.destination == .needs) { store.destination = .needs } mark: {
                 SidebarSymbol(name: "exclamationmark.bubble")
             } trailing: {
                 SidebarBadge(count: waiting, words: words)
@@ -457,14 +457,14 @@ struct FleetView: View {
     /// opens (T-32), a task's thread, so every page has one row that says where he is.
     private var tasksRow: some View {
         let selected = switch store.destination { case .activity, .task: true; default: false }
-        return SidebarRow("Tasks", symbol: "rectangle.split.3x1", selected: selected) { store.destination = .activity }
+        return SidebarRow(String(l10n: "Tasks"), symbol: "rectangle.split.3x1", selected: selected) { store.destination = .activity }
             .accessibilityIdentifier("nav-tasks")
     }
 
     /// **Agents, under Tasks** (the owner, 3 November 2026: "the usage section could be moved below tasks.. and be renamed
     /// to Agents"): every agent with its role, its server, its account and its usage on one page (`AgentsPage`).
     private var agentsRow: some View {
-        SidebarRow("Agents", symbol: AgentsPage.symbol, selected: store.destination == .agents) { store.destination = .agents }
+        SidebarRow(String(l10n: "Agents"), symbol: AgentsPage.symbol, selected: store.destination == .agents) { store.destination = .agents }
             .accessibilityIdentifier("nav-agents")
     }
 
@@ -483,8 +483,8 @@ struct FleetView: View {
         let reply = store.hasNewReply(from: agent.name)
         let selected = store.destination.agentName == agent.name
         // An old reading keeps the agent's look (fix round 2, item 2): VoiceOver hears that it is the last reading.
-        let marks = [SetupMark.words(providerSetup, subject: "The provider setup"), reply ? "New reply" : nil,
-                     presence.label, store.isFresh ? nil : "Last reading"].compactMap { $0 }
+        let marks = [SetupMark.words(providerSetup, subject: String(l10n: "The provider setup")), reply ? String(l10n: "New reply") : nil,
+                     presence.label, store.isFresh ? nil : String(l10n: "Last reading")].compactMap { $0 }
         let preview = ChatList.preview(agent.name, last: store.chatTimeline.entries(for: agent.name, limit: 1).last,
                                        tasks: store.state?.tasks ?? [])
         // **While the agent works, its line says what it does now** (`AgentActivity.actionNow`, hub 1.148; the owner, 13
@@ -511,7 +511,7 @@ struct FleetView: View {
             // 2026, of a larger blue reply dot over the violet ones: "why are they different?!?! they should all be
             // like the smaller ones").
             HStack(spacing: 6) {
-                SetupMark(setup: providerSetup, subject: "The provider setup", place: "Open Agent details, then Change… under AI provider.")
+                SetupMark(setup: providerSetup, subject: String(l10n: "The provider setup"), place: String(l10n: "Open Agent details, then Change… under AI provider."))
                 if reply { Circle().fill(FleetStyle.accent).frame(width: 6, height: 6).help("New reply in its chat") }
             }.accessibilityHidden(true)
         }
@@ -562,8 +562,8 @@ struct FleetView: View {
             } else {
                 // The strip the window used to draw said "Task · No current task" here. With no strip and no panel
                 // — both need the task — the window would be blank, so the one line it carried stays.
-                EmptyState(symbol: "folder", title: "Task not found",
-                           detail: "This hub does not list that task. Tasks has the tasks it has.", centered: true)
+                EmptyState(symbol: "folder", title: String(l10n: "Task not found"),
+                           detail: String(l10n: "This hub does not list that task. Tasks has the tasks it has."), centered: true)
             }
             // Signing a machine's runtime in: its own wizard, as adding a machine has one.
             case .signIn(let name): SignInWizard(store: store, agent: name).id("\(store.hub)/\(name)")
@@ -612,9 +612,9 @@ struct FleetView: View {
     /// that does not answer says so over it (`FleetNotices`).
     @ViewBuilder private var waitingPage: some View {
         let title: String? = switch store.destination {
-        case .activity: "Tasks"
-        case .needs: "Needs you"
-        case .agents: "Agents"
+        case .activity: String(l10n: "Tasks")
+        case .needs: String(l10n: "Needs you")
+        case .agents: String(l10n: "Agents")
         default: nil
         }
         if let title { FleetPage(title) { EmptyView() } } else { Color.clear }
@@ -728,27 +728,28 @@ struct FleetView: View {
     @ViewBuilder private func taskFacts(_ task: FleetTask) -> some View {
         // **No goal line** (the owner, 11 November 2026: "remove the screen and keep as internal tool"): a goal is the
         // Fleet Manager's own record, and the line showed the hub's code for it ("G-3").
-        if let project = task.project { DetailField(title: "Project", value: project) }
+        if let project = task.project { DetailField(title: String(l10n: "Project"), value: project) }
         // **His words, not the hub's** (T-12): the agents by their names as the sidebar writes them, the state as the
         // thread and Goals say it, and the provider by the word his Settings use. "Owner: atlas" put the agent under the
         // word that means him, and "State: input-required" the hub's own token beside the thread's "Waiting for an answer".
         // The agent's 16-point glyph before its name (D-8); the owner, who asked many a task, keeps his words alone.
-        DetailField(title: "Asked by", value: task.requester.agentLabel, agent: task.requester)
-        if let why = task.why, !why.isEmpty { DetailField(title: "Why this agent", value: why) }
+        DetailField(title: String(l10n: "Asked by"), value: task.requester.agentLabel, agent: task.requester)
+        if let why = task.why, !why.isEmpty { DetailField(title: String(l10n: "Why this agent"), value: why) }
         if let trigger = task.trigger_id {
-            DetailField(title: "Schedule", value: "\(trigger)\(task.trigger_run.map { " · run \($0)" } ?? "")")
+            DetailField(title: String(l10n: "Schedule"), value: task.trigger_run.map { String(l10n: "\(trigger) · run \($0)") } ?? "\(trigger)")
         }
-        DetailField(title: "Agent", value: task.owner.agentLabel, agent: task.owner)
-        DetailField(title: "State", value: taskStatus(task))
+        DetailField(title: String(l10n: "Agent"), value: task.owner.agentLabel, agent: task.owner)
+        DetailField(title: String(l10n: "State"), value: taskStatus(task))
         // **A row only when it says something** (D-2): "Attempt 1 · 0 restarts", "Model used · Not reported" and
         // "Result check · No result yet" stood on every task.
         if task.attempt > 1 || task.restarts > 0 {
-            DetailField(title: "Attempt", value: [task.attempt > 1 ? "Attempt \(task.attempt)" : nil,
-                                                  task.restarts > 0 ? "Restarted \(task.restarts) time\(task.restarts == 1 ? "" : "s")" : nil]
+            DetailField(title: String(l10n: "Attempt"), value: [task.attempt > 1 ? String(l10n: "Attempt \(task.attempt)") : nil,
+                                                  task.restarts > 0 ? (task.restarts == 1 ? String(l10n: "Restarted \(task.restarts) time")
+                                                                          : String(l10n: "Restarted \(task.restarts) times")) : nil]
                 .compactMap { $0 }.joined(separator: " · "))
         }
         if let runtimes = store.taskRuntimes[task.attempt], !runtimes.isEmpty {
-            DetailField(title: "AI provider", value: runtimes.sorted().map {
+            DetailField(title: String(l10n: "AI provider"), value: runtimes.sorted().map {
                 switch $0 { case "claude": "Claude Code"; case "codex": "Codex"; case "grok": "Grok Build"; default: $0 }
             }.joined(separator: ", "))
         }
@@ -756,22 +757,22 @@ struct FleetView: View {
         if !models.isEmpty {
             ForEach(models) { model in
                 VStack(alignment: .leading, spacing: 6) {
-                    DetailField(title: "Model requested", value: model.requestedModel ?? automaticChoice)
-                    DetailField(title: "Model used", value: model.model ?? "Not reported")
-                    DetailField(title: "Reasoning requested", value: model.requestedEffort.map(reasoningName) ?? automaticChoice)
-                    DetailField(title: "Reasoning used", value: model.effort.map(reasoningName) ?? "Not reported")
+                    DetailField(title: String(l10n: "Model requested"), value: model.requestedModel ?? automaticChoice)
+                    DetailField(title: String(l10n: "Model used"), value: model.model ?? String(l10n: "Not reported"))
+                    DetailField(title: String(l10n: "Reasoning requested"), value: model.requestedEffort.map(reasoningName) ?? automaticChoice)
+                    DetailField(title: String(l10n: "Reasoning used"), value: model.effort.map(reasoningName) ?? String(l10n: "Not reported"))
                     if model.differs { Label("The AI provider used other settings", systemImage: "exclamationmark.circle").font(FormMetrics.detail).foregroundStyle(.orange) }
                 }
             }
         }
-        DetailField(title: "Last activity", value: fleetDate(task.last_activity))
-        DetailField(title: "Done when", value: task.done_when)
-        if task.delivered != nil || task.accepted != nil { DetailField(title: "Result check", value: task.checkStatus) }
-        if let follows = task.follows { DetailField(title: "Follow-up to", value: store.state?.tasks.first { $0.id == follows }?.title ?? "An earlier task") }
+        DetailField(title: String(l10n: "Last activity"), value: fleetDate(task.last_activity))
+        DetailField(title: String(l10n: "Done when"), value: task.done_when)
+        if task.delivered != nil || task.accepted != nil { DetailField(title: String(l10n: "Result check"), value: task.checkStatus) }
+        if let follows = task.follows { DetailField(title: String(l10n: "Follow-up to"), value: store.state?.tasks.first { $0.id == follows }?.title ?? String(l10n: "An earlier task")) }
         if let parent = task.parent {
             // The click reaches over and under the words (`IconMetrics.reach`), and the panel does not move for it.
             Button { store.destination = .task(parent) } label: {
-                Text(store.state?.tasks.first { $0.id == parent }.map { "Parent task · \($0.title)" } ?? "Parent task").padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
+                Text(store.state?.tasks.first { $0.id == parent }.map { String(l10n: "Parent task · \($0.title)") } ?? String(l10n: "Parent task")).padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
             }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).font(FormMetrics.detail).foregroundStyle(FleetStyle.link)
                 .opensTask(parent, store: store)
         }
@@ -963,7 +964,7 @@ struct FleetView: View {
     @ViewBuilder private var pendingBar: some View {
         if let pending = store.pending {
             VStack(alignment: .leading, spacing: 8) {
-                Text(pending.refusal.map(Self.notSent) ?? "Not sent")
+                Text(pending.refusal.map(Self.notSent) ?? String(l10n: "Not sent"))
                     .font(FormMetrics.detailTitle).foregroundStyle(.orange).textSelection(.enabled)
                 if pending.refusal == nil {
                     Text("Your hub did not confirm it. Sending it again does not send it twice.").font(FormMetrics.detail)
@@ -1006,8 +1007,9 @@ struct FleetView: View {
     /// status ("Hub refused the request (409): …"), as the phone says it.
     private static func notSent(_ refusal: String) -> String {
         let words = (HubError.refusalWords(in: refusal) ?? refusal).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let last = words.last else { return "Not sent" }
-        return "Not sent: " + words.prefix(1).uppercased() + words.dropFirst() + (".!?".contains(last) ? "" : ".")
+        guard let last = words.last else { return String(l10n: "Not sent") }
+        let sentence = words.prefix(1).uppercased() + words.dropFirst() + (".!?".contains(last) ? "" : ".")
+        return String(l10n: "Not sent: \(sentence)")
     }
 
 }
@@ -1071,7 +1073,7 @@ struct FleetNotices: View {
                     .buttonStyle(FleetOutlineButtonStyle())
             }.accessibilityIdentifier("notice-connection")
         } else if store.staleNoticeShows {
-            BandNotice("This reading of your fleet is old. Refresh it before you send.", symbol: "clock.arrow.circlepath") {
+            BandNotice(String(l10n: "This reading of your fleet is old. Refresh it before you send."), symbol: "clock.arrow.circlepath") {
                 Button("Refresh") { Task { await store.refresh() } }
                     .buttonStyle(FleetOutlineButtonStyle())
             }.accessibilityIdentifier("notice-stale")

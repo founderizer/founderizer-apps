@@ -16,13 +16,20 @@ using Windows.UI;
 namespace Founderizer.Windows.Pages;
 
 /// <summary>The panel at the right of a chat (AgentStatusPanel), as pictures 1 and 2 draw it: a card with the agent's mark
-/// at 48, its role and the name under it; then "Runs on", with the provider's logo and name and the machine. The usage,
-/// the limit and the manager's warning wait for their pictures.</summary>
+/// at 48, its role and the name under it; "Usage" with a card of its windows while it has a reading (picture 7 of the second
+/// set: each window's length, a bar of 4 on a quiet track, its share, and when it resets); then "Runs on", with the
+/// provider's logo and name and the machine.</summary>
 internal sealed class AgentPanelView : Grid
 {
     private readonly AgentGlyph mark = new() { Side = 48 };
     private readonly TextBlock label = Look.Words("", semibold: true, wrap: false);
     private readonly TextBlock under = Look.Words("", 12, 16, Look.Muted, wrap: false);
+    private readonly TextBlock limit = Look.Words("", 12, 16, Look.Orange);
+    private readonly TextBlock warning = Look.Words("", 12, 16, Look.Orange);
+    private readonly TextBlock usageHeading = Look.Words("", semibold: true, wrap: false);
+    private readonly StackPanel usageRows = new();
+    private readonly Border usage;
+    private ValueList<UsageRow> shownUsage = ValueList<UsageRow>.Empty;
     private readonly TextBlock runsOn = Look.Words("Runs on", semibold: true, wrap: false);
     private readonly Border runs;
     private readonly Grid providerRow;
@@ -35,7 +42,7 @@ internal sealed class AgentPanelView : Grid
 
     public AgentPanelView()
     {
-        Width = 380;
+        Widths.FollowPanel(this);
 
         var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { label, under } };
         var who = new StackPanel
@@ -52,6 +59,15 @@ internal sealed class AgentPanelView : Grid
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Child = who,
+        };
+        usageHeading.Margin = new Thickness(2, 18, 0, 10);
+        usage = new Border
+        {
+            Background = Look.ChromeBrush,
+            BorderBrush = Look.Line,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Child = usageRows,
         };
         runsOn.Margin = new Thickness(2, 18, 0, 10);
         providerRow = Row(logo, provider);
@@ -70,7 +86,7 @@ internal sealed class AgentPanelView : Grid
             BorderBrush = Look.Line,
             BorderThickness = new Thickness(1, 0, 0, 0),
             Padding = new Thickness(16),
-            Child = new StackPanel { Children = { card, runsOn, runs } },
+            Child = new StackPanel { Children = { card, limit, warning, usageHeading, usage, runsOn, runs } },
         });
     }
 
@@ -80,6 +96,25 @@ internal sealed class AgentPanelView : Grid
         label.Text = panel.Label;
         under.Text = panel.Under ?? "";
         under.Visibility = panel.Under is null ? Visibility.Collapsed : Visibility.Visible;
+        // The agent's usage limit and the manager's warning, in orange under its card (the Mac's panel lines).
+        limit.Text = panel.LimitWords ?? "";
+        limit.Margin = new Thickness(2, 10, 2, 0);
+        limit.Visibility = panel.LimitWords is null ? Visibility.Collapsed : Visibility.Visible;
+        warning.Text = panel.Warning ?? "";
+        warning.Margin = new Thickness(2, 10, 2, 0);
+        warning.Visibility = panel.Warning is null ? Visibility.Collapsed : Visibility.Visible;
+        usageHeading.Text = panel.UsageHeading;
+        usageHeading.Visibility = usage.Visibility = panel.ShowsUsage && panel.Usage.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (panel.Usage != shownUsage)
+        {
+            shownUsage = panel.Usage;
+            usageRows.Children.Clear();
+            for (int i = 0; i < panel.Usage.Count; i++)
+            {
+                if (i > 0) usageRows.Children.Add(new Border { Height = 1, Background = Look.Line });
+                usageRows.Children.Add(UsageView(panel.Usage[i]));
+            }
+        }
         if (panel.Runtime != shownRuntime)
         {
             shownRuntime = panel.Runtime;
@@ -92,6 +127,50 @@ internal sealed class AgentPanelView : Grid
         rule.Visibility = panel.Provider is not null && panel.Machine is not null ? Visibility.Visible : Visibility.Collapsed;
         bool any = panel.Provider is not null || panel.Machine is not null;
         runsOn.Visibility = runs.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>One usage window (AllowanceMeter and ResetLine): its length, the bar (white at 70 % below 80 %, orange
+    /// from 80 %, red when full, muted on an old reading), its share, and the time it resets under the bar.</summary>
+    private static Grid UsageView(UsageRow row)
+    {
+        var grid = new Grid { Padding = new Thickness(16, 10, 16, 10), ColumnSpacing = 12 };
+        // The length's column is 28 wide ("5h", "7d"), and wider for a longer label ("Window", another language).
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = 28 });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.Children.Add(Look.Words(row.Label, wrap: false));
+        var fill = row.Level switch
+        {
+            UsageLevel.Full => Look.Rgb(0xFF, 0x45, 0x3A),
+            UsageLevel.High => Look.OrangeColor,
+            UsageLevel.Old => Look.MutedColor,
+            _ => Look.White(0.7),
+        };
+        var track = new Grid { Height = 4, CornerRadius = new CornerRadius(2), Background = Look.Brush(Look.White(0.10)) };
+        track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Clamp(row.Percent, 0, 100), GridUnitType.Star) });
+        track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100 - Math.Clamp(row.Percent, 0, 100), GridUnitType.Star) });
+        track.Children.Add(new Border { CornerRadius = new CornerRadius(2), Background = Look.Brush(fill) });
+        var bar = new StackPanel { Padding = new Thickness(0, 8, 0, 0), Children = { track } };
+        if (row.Resets is { } resets)
+        {
+            var mark = Icons.Of(Icons.Refresh, Look.Muted, 11);
+            mark.VerticalAlignment = VerticalAlignment.Center;
+            bar.Children.Add(new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 3,
+                Margin = new Thickness(0, 4, 0, 0),
+                Children = { mark, Look.Words(resets, 12, 16, Look.Muted, wrap: false) },
+            });
+        }
+        Grid.SetColumn(bar, 1);
+        grid.Children.Add(bar);
+        // The share in Windows' own form of a percentage for the PC's language: the library gives the number only.
+        var share = Look.Words((row.Percent / 100.0).ToString("P0", System.Globalization.CultureInfo.CurrentCulture), wrap: false);
+        Grid.SetColumn(share, 2);
+        grid.Children.Add(share);
+        ToolTipService.SetToolTip(grid, row.Hover);
+        return grid;
     }
 
     private static Grid Row(FrameworkElement icon, TextBlock words)

@@ -28,6 +28,7 @@ namespace Founderizer.Windows;
 public sealed partial class MainWindow : Window
 {
     private readonly IFleetSource source;
+    private readonly PageServices services;
     private readonly History history;
     private readonly ObservableCollection<AgentRowView> rows = new();
     private readonly UISettings settings = new();
@@ -40,12 +41,25 @@ public sealed partial class MainWindow : Window
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? clock;
     /// <summary>The page that the content area shows now, or null for a page of a later slice.</summary>
     private IPageView? page;
+    /// <summary>The line over the page that shows now (the page's own, or the window's over a page with no panel).</summary>
+    private LineBand? band;
+    /// <summary>The request line of a write that waits (the page's own over its composer, or the window's at its foot).</summary>
+    private PendingBarView? bar;
+    /// <summary>The first read runs: the pane's line waits a second before it shows (the screens' timing).</summary>
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? readingTimer;
+    /// <summary>The content area shows the waiting page (nothing) while the first read runs.</summary>
+    private bool waitingPage;
+    /// <summary>The search card over the whole window (Ctrl+K and the magnifier).</summary>
+    private readonly SearchCard search;
+    private readonly WindowsNotices notices;
+    private TaskbarCount? taskbar;
     /// <summary>The request that Needs you brings to hand when it opens from a task's orange line.</summary>
     private long? needToOpen;
 
     public MainWindow(IFleetSource source, Page? asked)
     {
         this.source = source;
+        services = new PageServices(source, Go, OpenNeed, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
         InitializeComponent();
         NeedsIcon.Content = Icons.Of(Icons.NeedsYou);
         TasksIcon.Content = Icons.Of(Icons.Tasks);
@@ -66,6 +80,20 @@ public sealed partial class MainWindow : Window
         bar.ButtonPressedBackgroundColor = Color.FromArgb(0x0A, 255, 255, 255);
         bar.ButtonPressedForegroundColor = Color.FromArgb(255, 0xE6, 0xE6, 0xE6);
         if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
+        // The least window (picture 11, the Mac's 960 by 560), in the screen's own pixels at the window's scale; the
+        // pane and the panel give up width before the chat below 1440.
+        Root.Loaded += (_, _) =>
+        {
+            LeastSize();
+            Content.XamlRoot.Changed += (_, _) => LeastSize();
+        };
+        Root.SizeChanged += (_, e) => Widths.For(e.NewSize.Width);
+        Widths.Changed += () =>
+        {
+            PaneColumn.Width = new GridLength(Widths.Pane);
+            Canvas.SetLeft(SearchButton, Widths.Pane - 48);
+            Passthrough();
+        };
         TitleBar.SizeChanged += (_, _) => Passthrough();
         TitleBar.Loaded += (_, _) => Passthrough();
 
@@ -85,13 +113,40 @@ public sealed partial class MainWindow : Window
 
         // The store reads only while the window is in front (StoreSettings): shown and not minimized.
         VisibilityChanged += (_, _) => Front();
-        AppWindow.Changed += (_, e) => { if (e.DidPresenterChange) Front(); };
+        AppWindow.Changed += (_, e) =>
+        {
+            if (e.DidPresenterChange) Front();
+            if (e.DidSizeChange || e.DidPresenterChange) LeastSize();
+        };
         Closed += async (_, _) => await source.DisposeAsync();
         Front();
 
         // Back and Forward from the keyboard and the mouse's side buttons, as Windows' apps take them. WinUI would show
         // the keys in a tooltip wherever the pointer rests over the window ("Alt+Left"): no picture has that tooltip.
         Root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+        notices = new WindowsNotices(source, DispatcherQueue, () => state, OpenNotice);
+        Root.Loaded += async (_, _) =>
+        {
+            taskbar = new TaskbarCount(WinRT.Interop.WindowNative.GetWindowHandle(this), CountBadge, words => CountWords.Text = words);
+            _ = taskbar.Show(Screens.TaskbarCount(state));
+            if (await WindowsNotices.MarkFile(TitleMark, AppFolders.Root) is { } mark) notices.Start(mark);
+        };
+        Closed += (_, _) => notices.Stop();
+        search = new SearchCard(() => state, Go, () =>
+        {
+            Passthrough();
+            PageHost.Focus(FocusState.Programmatic);
+        });
+        Grid.SetRowSpan(search, 2);
+        Grid.SetColumnSpan(search, 2);
+        Root.Children.Add(search);
+        // Ctrl+K on the Search button: Windows writes the key's own name in its tooltip, beside the library's word.
+        var ctrlK = new KeyboardAccelerator { Key = VirtualKey.K, Modifiers = VirtualKeyModifiers.Control };
+        ctrlK.Invoked += (_, e) => { OpenSearch(); e.Handled = true; };
+        SearchButton.KeyboardAccelerators.Add(ctrlK);
+        SearchButton.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Auto;
+        ToolTipService.SetToolTip(SearchButton, new SearchModel().Placeholder);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchButton, new SearchModel().Placeholder);
         Root.KeyboardAccelerators.Add(Accelerator(VirtualKey.Left, (_, e) => { GoBack(); e.Handled = true; }));
         Root.KeyboardAccelerators.Add(Accelerator(VirtualKey.Right, (_, e) => { GoForward(); e.Handled = true; }));
         Root.PointerPressed += (_, e) =>
@@ -118,6 +173,7 @@ public sealed partial class MainWindow : Window
             clock.Tick += (_, _) =>
             {
                 ShowPane();
+                ShowLine();
                 page?.Show(state, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
             };
         }
@@ -131,6 +187,20 @@ public sealed partial class MainWindow : Window
         var accelerator = new KeyboardAccelerator { Key = key, Modifiers = VirtualKeyModifiers.Menu };
         accelerator.Invoked += invoked;
         return accelerator;
+    }
+
+    /// <summary>Windows keeps the window's outer frame at its least size, and the frame is a little larger than the
+    /// window's content (its edges for resizing): the least size takes the frame's own part, read while the window is
+    /// not maximized.</summary>
+    private (int Width, int Height) frame = (0, 0);
+
+    private void LeastSize()
+    {
+        if (AppWindow.Presenter is not OverlappedPresenter presenter || Content?.XamlRoot is not { } root) return;
+        if (presenter.State == OverlappedPresenterState.Restored)
+            frame = (Math.Max(0, AppWindow.Size.Width - AppWindow.ClientSize.Width), Math.Max(0, AppWindow.Size.Height - AppWindow.ClientSize.Height));
+        presenter.PreferredMinimumWidth = (int)Math.Ceiling(Widths.LeastWidth * root.RasterizationScale) + frame.Width;
+        presenter.PreferredMinimumHeight = (int)Math.Ceiling(Widths.LeastHeight * root.RasterizationScale) + frame.Height;
     }
 
     /// <summary>The buttons in the title bar take the pointer; the rest of it moves the window.</summary>
@@ -176,6 +246,11 @@ public sealed partial class MainWindow : Window
         }
         var was = pane;
         ShowPane();
+        search.Show();
+        notices.Prune(next);
+        if (taskbar is not null) _ = taskbar.Show(Screens.TaskbarCount(next));
+        if (WaitingPage(next) != waitingPage) ShowPage();
+        ShowLine();
         page?.Show(next, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
         var now = pane;
         Readings.ChangeShown(arrived, () => Shown(was, now));
@@ -217,7 +292,30 @@ public sealed partial class MainWindow : Window
             while (rows.Count > next.Agents.Count) rows.RemoveAt(rows.Count - 1);
         }
         pane = next;
+        ShowReading(next.Reading);
         Passthrough();
+    }
+
+    /// <summary>"Reading the hub…" in the pane, one second after the first read began, while it runs.</summary>
+    private void ShowReading(bool reading)
+    {
+        if (!reading)
+        {
+            readingTimer?.Stop();
+            ReadingLine.Visibility = Visibility.Collapsed;
+            return;
+        }
+        ReadingLine.Text = pane.ReadingWords;
+        ReadingLine.Shimmer = settings.AnimationsEnabled;
+        if (ReadingLine.Visibility == Visibility.Visible || readingTimer?.IsRunning == true) return;
+        if (readingTimer is null)
+        {
+            readingTimer = DispatcherQueue.CreateTimer();
+            readingTimer.Interval = TimeSpan.FromSeconds(1);
+            readingTimer.IsRepeating = false;
+            readingTimer.Tick += (_, _) => { if (pane.Reading) ReadingLine.Visibility = Visibility.Visible; };
+        }
+        readingTimer.Start();
     }
 
     private int IndexOf(string name, int from)
@@ -237,17 +335,22 @@ public sealed partial class MainWindow : Window
         source.OpenTask(current.Kind == PageKind.Task ? current.Task : null);
         long? chosen = needToOpen;
         needToOpen = null;
-        page = current.Kind switch
+        // While the first read runs, the pages of the fleet wait: the content area is empty (the Mac's waitingPage).
+        waitingPage = WaitingPage(state);
+        page = waitingPage ? null : current.Kind switch
         {
-            PageKind.Chat => new ChatPage(current.Agent!, source),
-            PageKind.Needs => new NeedsPage(source, Go, chosen),
+            PageKind.Chat => new ChatPage(current.Agent!, services),
+            PageKind.Needs => new NeedsPage(services, chosen),
             PageKind.Tasks => new BoardPage(Go, OpenNeed),
-            PageKind.Task => new TaskPage(current.Task!.Value, source),
+            PageKind.Task => new TaskPage(current.Task!.Value, services),
             PageKind.Settings => new SettingsPage(source, Go, () => history.Start(Page.AddThisPc)),
             PageKind.AddThisPc => new AddThisPcPage(source),
             _ => null,
         };
-        PageHost.Content = page?.View ?? new Grid();
+        band = page?.Band ?? new LineBand(services);
+        bar = page?.Bar ?? new PendingBarView(services);
+        PageHost.Content = page is null ? new Grid() : page.Band is null ? Banded.Wrap(page.View, band, page.Bar is null ? bar : null) : page.View;
+        ShowLine();
         page?.Show(state, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
         if (page is ChatPage chat) Readings.ScrollWhenAsked(chat.Scroll);
         string name = current.Kind switch
@@ -263,6 +366,18 @@ public sealed partial class MainWindow : Window
         ShowPane();
     }
 
+    private bool WaitingPage(StoreState s) =>
+        s.ReadsTheHub && history.Current.Kind is PageKind.Chat or PageKind.Needs or PageKind.Tasks or PageKind.Task;
+
+    /// <summary>The line over the page (Screens.Line): it comes and goes with the reading, and with the clock, since a
+    /// reading turns old by itself.</summary>
+    private void ShowLine()
+    {
+        var now = DateTimeOffset.UtcNow;
+        band?.Show(Screens.Line(state, now, history.Current));
+        bar?.Show(Screens.PendingBar(state, now));
+    }
+
     private static void Show(UIElement fill, UIElement bar, bool on) =>
         fill.Visibility = bar.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
 
@@ -270,6 +385,14 @@ public sealed partial class MainWindow : Window
     {
         homeChosen = true;
         history.Go(page);
+    }
+
+    /// <summary>A press on a notification: the window to the front, and Needs you at its request when it still stands.</summary>
+    private void OpenNotice(long? need)
+    {
+        if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter) presenter.Restore();
+        Activate();
+        if (need is { } id) OpenNeed(id);
     }
 
     /// <summary>A task's orange line: Needs you opens with that request at hand.</summary>
@@ -281,6 +404,22 @@ public sealed partial class MainWindow : Window
 
     private void GoBack() => history.GoBack();
     private void GoForward() => history.GoForward();
+
+    /// <summary>The search card, while the pane offers Search (a hub's reading). While it is open, the title bar takes
+    /// no drag: a press on the dim closes the card.</summary>
+    private void OpenSearch()
+    {
+        if (!pane.ShowsSearch || search.IsOpen) return;
+        if (Content?.XamlRoot is { } root)
+        {
+            double scale = root.RasterizationScale;
+            InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough,
+                [new RectInt32(0, 0, (int)Math.Round(TitleBar.ActualWidth * scale), (int)Math.Round(TitleBar.ActualHeight * scale))]);
+        }
+        search.Open();
+    }
+
+    private void Search_Click(object sender, RoutedEventArgs e) => OpenSearch();
 
     private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
     private void Forward_Click(object sender, RoutedEventArgs e) => GoForward();

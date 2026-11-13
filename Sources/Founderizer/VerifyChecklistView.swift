@@ -9,7 +9,7 @@ import SwiftUI
 struct VerifyChecklistView: View {
     let checklist: VerifyChecklist
     /// What the rows are about, for the footer: "this machine", or the machine's name.
-    var subject: String = "this server"
+    var subject: String = String(l10n: "this server")
     var footer: String?
 
     var body: some View {
@@ -33,16 +33,16 @@ struct VerifyChecklistView: View {
     /// **Its state in his words** (fix round 3, item 49): the installers' last line names each check by its id ("NOT
     /// READY: runtime_signed_in"), which is not his; the rows under it name the checks by their titles.
     private var state: String {
-        checklist.checks.isEmpty ? "Not checked" : checklist.isReady ? "Ready" : "Not ready"
+        checklist.checks.isEmpty ? String(l10n: "Not checked") : checklist.isReady ? String(l10n: "Ready") : String(l10n: "Not ready")
     }
 
     private var header: String {
-        guard let at = checklist.readAt else { return "Checks" }
-        return "Checks · \(fleetDate(at))"
+        guard let at = checklist.readAt else { return String(l10n: "Checks") }
+        return String(l10n: "Checks · \(fleetDate(at))")
     }
 
     private func word(_ check: VerifyCheck) -> String {
-        check.failed ? "Failed" : check.warned ? "Warning" : "Ready"
+        check.failed ? String(l10n: "Failed") : check.warned ? String(l10n: "Warning") : String(l10n: "Ready")
     }
 
     private func tint(_ check: VerifyCheck) -> Color {

@@ -56,7 +56,7 @@ final class AgentSettingsModel {
             return true
         } catch {
             if first, let start { await store?.settle(since: start) }
-            if !Task.isCancelled { readError = "The settings could not be read. Check the connection." }
+            if !Task.isCancelled { readError = String(l10n: "The settings could not be read. Check the connection.") }
             return false
         }
     }
@@ -142,23 +142,23 @@ final class AgentSettingsModel {
     private func send(_ edit: AgentSettingEdit, store: FleetStore) async -> SaveState {
         let can = store.state?.agents.first { $0.name == agent }?.can ?? []
         var sent: (sha256: String, line: ReportingLine)?
-        var words = "Not saved."
+        var words = String(l10n: "Not saved.")
         for _ in 0..<3 {
-            guard await readTeam(), let team, let line else { return .failed(readError ?? "Not saved.") }
+            guard await readTeam(), let team, let line else { return .failed(readError ?? String(l10n: "Not saved.")) }
             // The same team.json after a 409: it was for another reason.
             if let sent, team.sha256 == sent.sha256 { return .failed(words) }
             if edit.isSaved(in: line, can: can) { return .saved }
             if let sent, AgentSettingEdit.changed(edit.field, from: sent.line, to: line) { return .changedElsewhere }
             let request: (command: OwnerCommand, payload: String)
             do { request = try edit.request(agent: agent, team: team, can: can) }
-            catch { return .failed((error as? SettingProblem)?.words ?? "Not saved.") }
+            catch { return .failed((error as? SettingProblem)?.words ?? String(l10n: "Not saved.")) }
             sent = (team.sha256, line)
             var result = await store.save(request.command, note: request.payload, queue: false)
             if case .unconfirmed(let id) = result {
                 unanswered = (edit.field, id)
                 // Its row says it, so the window's request line leaves it out on this part (`pendingInItsRow`).
                 store.pendingInItsRow = (id, agent, .settings)
-                set(.failed("The hub has not answered. Try again sends the same request."), for: edit.field)
+                set(.failed(String(l10n: "The hub has not answered. Try again sends the same request.")), for: edit.field)
                 result = await store.answer(to: id)
                 unanswered = nil
                 if store.pendingInItsRow?.id == id { store.pendingInItsRow = nil }
@@ -170,7 +170,7 @@ final class AgentSettingsModel {
                 return .saved
             case .conflict(let reason): words = reason
             case .refused(let reason): return .failed(reason)
-            case .unconfirmed: return .failed("The hub has not answered.")
+            case .unconfirmed: return .failed(String(l10n: "The hub has not answered."))
             case .behind: return .behind
             }
         }
@@ -263,7 +263,7 @@ struct AgentSetupView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
-                EmptyState(symbol: "person.slash", title: "No agent \(agent.agentLabel)", detail: "This hub does not list the agent.")
+                EmptyState(symbol: "person.slash", title: String(l10n: "No agent \(agent.agentLabel)"), detail: String(l10n: "This hub does not list the agent."))
             }
         } actions: {
             more
@@ -308,7 +308,7 @@ struct AgentSetupView: View {
                         Text(warning).font(FormMetrics.detail).foregroundStyle(.orange).lineLimit(1)
                             .textSelection(.enabled).accessibilityIdentifier("settings-server-warning")
                     }
-                    Button(machine?.machine ?? "Open") { store.destination = .server(machine?.machine ?? agent) }
+                    Button(machine?.machine ?? String(l10n: "Open")) { store.destination = .server(machine?.machine ?? agent) }
                         .buttonStyle(FleetOutlineButtonStyle())
                         .help("Its server: versions, network, security, updates and the server check")
                         .accessibilityIdentifier("settings-server")
@@ -323,10 +323,10 @@ struct AgentSetupView: View {
                 switch item {
                 case .signIn: nil
                 // A kept reading that this visit reads again is not old yet.
-                case .staleReading: machineHeld ? nil : "No current server reading"
-                case .updateFailed: "Founderizer update failed"
-                case .checkFailed: "Server check failed"
-                case .restart: "Restart needed"
+                case .staleReading: machineHeld ? nil : String(l10n: "No current server reading")
+                case .updateFailed: String(l10n: "Founderizer update failed")
+                case .checkFailed: String(l10n: "Server check failed")
+                case .restart: String(l10n: "Restart needed")
                 }
             }
         return words.isEmpty ? nil : words.joined(separator: " · ")
@@ -341,12 +341,12 @@ struct AgentSetupView: View {
         let open = changeOpen(state)
         let switching = providerSwitching(state)
         return FormRow("AI provider", mark: ProviderIcon(runtime: state.runtime, size: 18),
-                       warning: switching ? "Switching to \(providerName(state.runtime))…" : nil) {
+                       warning: switching ? String(l10n: "Switching to \(providerName(state.runtime))…") : nil) {
             HStack(spacing: FleetSpace.actions) {
                 Text(providerWords(state)).foregroundStyle(FleetStyle.muted).lineLimit(1)
                 if features.contains("agent_setup") {
                     if !open {
-                        SetupMark(setup: setup, subject: "The provider setup", place: "Select Change on the AI provider row to see it.")
+                        SetupMark(setup: setup, subject: String(l10n: "The provider setup"), place: String(l10n: "Select Change on the AI provider row to see it."))
                     }
                     Button(open ? "Hide" : "Change") { changing = !open }
                         .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("change-provider")
@@ -420,7 +420,7 @@ struct AgentSetupView: View {
             // window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item 33): it is said once.
             if !store.hubNoticeShows { FormRow("Settings not read", warning: model.readError) }
         } else {
-            LoadingLine("Reading the settings…")
+            LoadingLine(String(l10n: "Reading the settings…"))
         }
     }
 
@@ -466,7 +466,7 @@ struct AgentSetupView: View {
     /// year, are not rows of the card; an agent in setup has no Deactivate, as its setup is what makes it active.
     @ViewBuilder private var more: some View {
         let items = AgentMenu.items(agent, store: store)
-        let title = "More \(agent.agentLabel) actions"
+        let title = String(l10n: "More \(agent.agentLabel) actions")
         FleetSelect(title, options: items.map { item in
             // A line between two groups: a section with no words (`FleetSelect`).
             FleetOption(item.action, item.title, mark: .symbol(item.symbol),
@@ -502,7 +502,7 @@ struct AgentSetupView: View {
     @ViewBuilder private func nameRow() -> some View {
         let job = renameJob
         let problem = nameProblem(newName)
-        FormRow("Name", warning: renameError ?? problem ?? (job?.state == "failed" ? job?.detail ?? "The rename stopped." : nil)) {
+        FormRow("Name", warning: renameError ?? problem ?? (job?.state == "failed" ? job?.detail ?? String(l10n: "The rename stopped.") : nil)) {
             if renaming || job?.isOpen == true {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
@@ -516,7 +516,7 @@ struct AgentSetupView: View {
                               prompt: Text(verbatim: "")) {
                         Text("Agent name")
                     }
-                        .fieldPlaceholder("Agent name", shows: typed.isEmpty)
+                        .fieldPlaceholder(String(l10n: "Agent name"), shows: typed.isEmpty)
                         .fleetField(focus: $renameFocus).frame(width: 180).onSubmit { saveIdentity() }
                         .accessibilityIdentifier("settings-name")
                     identityButtons
@@ -542,7 +542,7 @@ struct AgentSetupView: View {
                           prompt: Text(verbatim: "")) {
                     Text("Role")
                 }
-                    .fieldPlaceholder("Role", shows: typed.isEmpty)
+                    .fieldPlaceholder(String(l10n: "Role"), shows: typed.isEmpty)
                     .fleetField().frame(width: 180).onSubmit { saveIdentity() }
                     .accessibilityIdentifier("settings-role")
                 // The Name row's buttons, unseen, so the two fields stand in one column.
@@ -576,7 +576,7 @@ struct AgentSetupView: View {
     private var nameChanged: Bool { newName.map { $0 != agent } ?? false }
     private var roleProblem: String? {
         guard let role = typedRole else { return nil }
-        return role.count > 60 || role.contains("\n") ? "Use one line of up to 60 characters." : nil
+        return role.count > 60 || role.contains("\n") ? String(l10n: "Use one line of up to 60 characters.") : nil
     }
     private var canSaveIdentity: Bool {
         (nameChanged || roleChanged) && nameProblem(newName) == nil && roleProblem == nil && !savingRole && !renaming
@@ -606,9 +606,9 @@ struct AgentSetupView: View {
                 await model.readTeam()
                 return true
             case .refused(let words), .conflict(let words): roleError = words
-            default: roleError = "The hub has not answered yet. Look at the role before you try again."
+            default: roleError = String(l10n: "The hub has not answered yet. Look at the role before you try again.")
             }
-        } catch { roleError = "The hub has not answered. Look at the role before you try again." }
+        } catch { roleError = String(l10n: "The hub has not answered. Look at the role before you try again.") }
         return false
     }
 
@@ -632,7 +632,7 @@ struct AgentSetupView: View {
                 } catch let HubError.refusal(status, words) {
                     if status == 409, attempt == 0, words.contains("team.json changed") { continue }
                     setRenameError(words); return
-                } catch { setRenameError("The hub has not answered. Look at the agent's name before you try again."); return }
+                } catch { setRenameError(String(l10n: "The hub has not answered. Look at the agent's name before you try again.")); return }
             }
         }
     }
@@ -678,7 +678,7 @@ struct AgentSetupView: View {
                                                          role: line.role, reportsTo: nil)
                 await model.readServers()
             } catch let HubError.refusal(_, words) { setRenameError(words) }
-            catch { setRenameError("The hub has not answered. Try again.") }
+            catch { setRenameError(String(l10n: "The hub has not answered. Try again.")) }
         }
     }
 
@@ -695,7 +695,7 @@ struct AgentSetupView: View {
         if let models = machine?.models, models.isFor(configuredRuntime) {
             let supported = current == nil && effort == nil ||
                 models.supports(AgentSettingsInput(model: current ?? followed(nil, nil).model, effort: effort, can: []), at: time)
-            let reported = line.reported_model.map { "Last used: \($0.model ?? "not reported") · \($0.effort.map(reasoningName) ?? "default reasoning"), \(fleetDate($0.at))" }
+            let reported = line.reported_model.map { String(l10n: "Last used: \($0.model ?? String(l10n: "not reported")) · \($0.effort.map(reasoningName) ?? String(l10n: "default reasoning")), \(fleetDate($0.at))") }
             FormRow("Model", detail: reported, warning: failure) {
                 HStack(spacing: 10) {
                     mark(.model)
@@ -704,15 +704,15 @@ struct AgentSetupView: View {
                         if next != current { model.save(.model(next, effort: models.effort(effort, with: next)), store: store) }
                     }), options: Self.modelOptions(models, current: current, default: followed(nil, effort).model))
                         .accessibilityIdentifier("setup-model")
-                        .help("New sessions use this. A desktop task uses the desktop model.\n"
-                              + "Options read \(fleetDate(models.read_at)).")
+                        .help(String(l10n: "New sessions use this. A desktop task uses the desktop model.") + "\n"
+                              + String(l10n: "Options read \(fleetDate(models.read_at))."))
                 }
             }
             if models.other_names {
                 FormRow("Full model name") {
                     TextField(text: Binding(get: { naming ? modelName : typed ?? current ?? "" }, set: { modelName = $0 }),
                               prompt: Text(verbatim: "")) { Text("Leave empty for the default") }
-                        .fieldPlaceholder("Leave empty for the default", shows: (naming ? modelName : typed ?? current ?? "").isEmpty)
+                        .fieldPlaceholder(String(l10n: "Leave empty for the default"), shows: (naming ? modelName : typed ?? current ?? "").isEmpty)
                         .fleetField(focus: $naming).frame(width: 240).accessibilityIdentifier("setup-model-name")
                         .onChange(of: naming) { _, focused in
                             if focused { modelName = current ?? "" } else { saveName(models, current: current, effort: effort) }
@@ -720,7 +720,7 @@ struct AgentSetupView: View {
                         .onSubmit { saveName(models, current: current, effort: effort) }
                 }
             }
-            FormRow("Reasoning", warning: supported ? nil : "Check this server, or select an available model and reasoning.") {
+            FormRow("Reasoning", warning: supported ? nil : String(l10n: "Check this server, or select an available model and reasoning.")) {
                 FleetSelect("Reasoning", selection: Binding(get: { effort ?? "" }, set: { level in
                     let next = level.isEmpty ? nil : level
                     if next != effort { model.save(.model(current, effort: next), store: store) }
@@ -729,8 +729,9 @@ struct AgentSetupView: View {
             }
         } else {
             // Without a machine reading yet, the saved values only.
-            FormRow("Model", warning: machine.map { $0.models?.ok == true ? "No model list for \(configuredRuntime.map(providerName) ?? "its provider") yet." :
-                        $0.models?.error ?? "Model options are not reported. Check this server." }) {
+            FormRow("Model", warning: machine.map { $0.models?.ok == true ?
+                        configuredRuntime.map { String(l10n: "No model list for \(providerName($0)) yet.") } ?? String(l10n: "No model list for its provider yet.") :
+                        $0.models?.error ?? String(l10n: "Model options are not reported. Check this server.") }) {
                 value(current ?? automaticChoice)
             }
             FormRow("Reasoning") { value(effort.map(reasoningName) ?? automaticChoice) }
@@ -741,8 +742,8 @@ struct AgentSetupView: View {
     /// (Opus)"), else the runtime's own; the offered models; and a saved model that is not offered.
     private static func modelOptions(_ models: RuntimeModels, current: String?, default chosen: String? = nil) -> [FleetOption<String>] {
         [first(chosen.map { name in models.options.first { $0.model == name }?.display_name ?? name })] +
-            models.options.map { FleetOption($0.model, $0.display_name, subtitle: $0.default ? "The provider's default" : nil) } +
-            (current.map { name in models.options.contains { $0.model == name } ? [] : [FleetOption(name, name, subtitle: "Not offered now")] } ?? [])
+            models.options.map { FleetOption($0.model, $0.display_name, subtitle: $0.default ? String(l10n: "The provider's default") : nil) } +
+            (current.map { name in models.options.contains { $0.model == name } ? [] : [FleetOption(name, name, subtitle: String(l10n: "Not offered now"))] } ?? [])
     }
 
     /// The rows of a reasoning select: the owner's default ("Default (High)") or the runtime's own, the levels that
@@ -750,7 +751,7 @@ struct AgentSetupView: View {
     private static func effortOptions(_ models: RuntimeModels, model: String?, current: String?, default chosen: String? = nil) -> [FleetOption<String>] {
         let levels = models.efforts(for: model)
         return [first(chosen.map(reasoningName))] + levels.map { FleetOption($0, reasoningName($0)) } +
-            (current.map { levels.contains($0) ? [] : [FleetOption($0, reasoningName($0), subtitle: "Not offered for this model")] } ?? [])
+            (current.map { levels.contains($0) ? [] : [FleetOption($0, reasoningName($0), subtitle: String(l10n: "Not offered for this model"))] } ?? [])
     }
 
     /// The first row of a model or reasoning select, which follows the owner's Settings: "Default (Opus)" with his
@@ -778,7 +779,7 @@ struct AgentSetupView: View {
         let supported = models?.isCurrent(at: time) == true && models?.supportsScreen(gets, at: time) == true
         Group {
             if let models, models.ok {
-                FormRow("Desktop model", detail: line.reported_screen_model.map { "Last used: \($0.model ?? "not reported"), \(fleetDate($0.at))" },
+                FormRow("Desktop model", detail: line.reported_screen_model.map { String(l10n: "Last used: \($0.model ?? String(l10n: "not reported")), \(fleetDate($0.at))") },
                         warning: model.states[.screen]?.failure) {
                     HStack(spacing: 10) {
                         mark(.screen)
@@ -793,7 +794,7 @@ struct AgentSetupView: View {
                     }
                 }
                 FormRow("Desktop reasoning", warning: supported || screen == ScreenSettingsInput() ? nil :
-                            "Check this server, or select an available desktop model and reasoning.") {
+                            String(l10n: "Check this server, or select an available desktop model and reasoning.")) {
                     FleetSelect("Desktop reasoning", selection: Binding(get: { screen.effort ?? "" }, set: { level in
                         let next = level.isEmpty ? nil : level
                         if next != screen.effort { model.save(.screen(ScreenSettingsInput(model: screen.model, effort: next)), store: store) }
@@ -803,7 +804,7 @@ struct AgentSetupView: View {
                         .accessibilityIdentifier("setup-screen-effort")
                 }
             } else {
-                FormRow("Desktop model", warning: models?.error ?? "Check this server to read its desktop model options.") {
+                FormRow("Desktop model", warning: models?.error ?? String(l10n: "Check this server to read its desktop model options.")) {
                     value(screen.model ?? automaticChoice)
                 }
                 FormRow("Desktop reasoning") { value(screen.effort.map(reasoningName) ?? automaticChoice) }
@@ -820,7 +821,7 @@ struct AgentSetupView: View {
         switch await store.save(.agentActivation(agent: agent, sha256: team.sha256, active: active)) {
         case .saved, .behind: break       // .behind: only with queue false
         case .conflict(let words), .refused(let words): error = words
-        case .unconfirmed: error = "The hub has not answered. The request line at the bottom of the window can try again."
+        case .unconfirmed: error = String(l10n: "The hub has not answered. The request line at the bottom of the window can try again.")
         }
         await model.readTeam()
         await model.readMachines()
@@ -845,7 +846,7 @@ struct SaveMark: View {
     let state: SaveState?
     let retry: () -> Void
     /// The owner's words for `.behind`, 26 October 2026: on hover, and nowhere else.
-    static let behind = "A saved request waits. Check it below."
+    static let behind = String(l10n: "A saved request waits. Check it below.")
 
     var body: some View {
         Group {
@@ -853,7 +854,7 @@ struct SaveMark: View {
             case .saving?:
                 // **Nothing for a save that answers inside a second, then the moving words** (B-MOT-19, the one loading
                 // look): a spinner and "Saving…" came at once for every save, and most answer in milliseconds.
-                Held { ShimmeringWords(text: "Saving…") }
+                Held { ShimmeringWords(text: String(l10n: "Saving…")) }
             case .saved?:
                 Label("Saved", systemImage: "checkmark").foregroundStyle(FleetStyle.muted)
             case .failed(let reason)?:

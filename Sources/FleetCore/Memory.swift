@@ -131,9 +131,9 @@ public enum LessonNews: Hashable, Sendable {
     /// The words behind the mark: its hover text and its accessibility label.
     public var words: String {
         switch self {
-        case .deadEnd: return "Dead end"
-        case .stale: return "Stale"
-        case .contradicted(let times): return times > 1 ? "Contradicted \(times) times" : "Contradicted"
+        case .deadEnd: return String(l10n: "Dead end")
+        case .stale: return String(l10n: "Stale")
+        case .contradicted(let times): return times > 1 ? String(l10n: "Contradicted \(times) times") : String(l10n: "Contradicted")
         }
     }
 }

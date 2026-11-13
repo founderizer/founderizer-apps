@@ -80,7 +80,7 @@ struct StateMark: View {
 
     /// What a reader hears off the mark itself, without opening anything.
     private var spoken: String {
-        let next: String? = act.map { "Press for \($0.words)." } ?? whoActs
+        let next: String? = act.map { String(l10n: "Press for \($0.words).") } ?? whoActs
         let parts: [String] = [detail, next].compactMap { $0 }
         return parts.joined(separator: " ")
     }

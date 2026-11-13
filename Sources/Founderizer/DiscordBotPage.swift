@@ -76,7 +76,7 @@ struct DiscordBotPage: View {
                 switch page {
                 case .token: paste
                 case .connecting:
-                    SetupStep(title: "Connecting \(name)'s bot", waits: true) { mark }
+                    SetupStep(title: String(l10n: "Connecting \(name)'s bot"), waits: true) { mark }
                         .accessibilityIdentifier("discord-connecting")
                 case .invite: inviting
                 case .done: done
@@ -98,19 +98,19 @@ struct DiscordBotPage: View {
     /// What he does in the Developer Portal, before the paste: a new bot of the agent's name, not public, and its token;
     /// for Fix token and Change token, a new token of the bot he has.
     private var steps: SetupSteps {
-        let portal = "Open the [Developer Portal](\(Self.portal.absoluteString))"
+        let portal = String(l10n: "Open the [Developer Portal](\(Self.portal.absoluteString))")
         return adding
-            ? SetupSteps([portal, "New Application › name it \(name) › Bot", "Turn off Public Bot, then Reset Token",
-                          "Copy the token"])
-            : SetupSteps([portal, "Open \(name)'s application › Bot › Reset Token", "Copy the token"])
+            ? SetupSteps([portal, String(l10n: "New Application › name it \(name) › Bot"), String(l10n: "Turn off Public Bot, then Reset Token"),
+                          String(l10n: "Copy the token")])
+            : SetupSteps([portal, String(l10n: "Open \(name)'s application › Bot › Reset Token"), String(l10n: "Copy the token")])
     }
 
     private var paste: some View {
-        SetupStep(title: adding ? "Add a Discord bot for \(name)" : "Paste the bot's token") { mark } content: {
+        SetupStep(title: adding ? String(l10n: "Add a Discord bot for \(name)") : String(l10n: "Paste the bot's token")) { mark } content: {
             steps
             // Its placeholder in the muted words that read, with the cursor in it too (fix rounds 2 and 3, item 58 and 3).
             SecureField(text: $token, prompt: Text(verbatim: "")) { Text("Bot token") }
-                .fieldPlaceholder("Bot token", shows: token.isEmpty)
+                .fieldPlaceholder(String(l10n: "Bot token"), shows: token.isEmpty)
                 .setupField(focus: $focused)
                 .onSubmit { Task { await save() } }
                 // A paste arrives in one change of many characters, and a token is never typed by hand.
@@ -133,9 +133,9 @@ struct DiscordBotPage: View {
     /// Why the bot did not connect: after this page's send, or before it when Fix token opened the page.
     private var refusal: String? {
         switch progress {
-        case .refused(let reason): return "\(reason) · Paste it again"
+        case .refused(let reason): return String(l10n: "\(reason) · Paste it again")
         case .paste where !adding && bot?.isEnabled == true && ["error", "logged_out", "missing_token"].contains(bot?.state):
-            return bot?.state == "missing_token" ? "No token" : ChatApps.shortReason(bot?.error)
+            return bot?.state == "missing_token" ? String(l10n: "No token") : ChatApps.shortReason(bot?.error)
         default: return nil
         }
     }
@@ -143,7 +143,7 @@ struct DiscordBotPage: View {
     // MARK: two — the server
 
     private var inviting: some View {
-        SetupStep(title: "Add \(botName) to your server") { mark } content: {
+        SetupStep(title: String(l10n: "Add \(botName) to your server")) { mark } content: {
             Button("Invite to server") { invite() }
                 .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("discord-invite")
@@ -156,7 +156,7 @@ struct DiscordBotPage: View {
     /// ticked. Opened again on a bot that is connected, no step is this page's to tick: Change token and Invite to
     /// server are under Done, in the words of the card's own menu.
     private var done: some View {
-        SetupStep(title: "\(botName) is connected") { mark } content: {
+        SetupStep(title: String(l10n: "\(botName) is connected")) { mark } content: {
             if sentAt != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(stepsDone, id: \.self) { step in
@@ -173,8 +173,8 @@ struct DiscordBotPage: View {
                 .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("discord-done")
             if sentAt == nil {
-                SetupLink("Change token") { changing = true }.accessibilityIdentifier("discord-change-token")
-                if canInvite { SetupLink("Invite to server") { invite() }.accessibilityIdentifier("discord-invite-again") }
+                SetupLink(String(l10n: "Change token")) { changing = true }.accessibilityIdentifier("discord-change-token")
+                if canInvite { SetupLink(String(l10n: "Invite to server")) { invite() }.accessibilityIdentifier("discord-invite-again") }
             }
         }
         .accessibilityIdentifier("discord-connected")
@@ -182,8 +182,8 @@ struct DiscordBotPage: View {
 
     /// The steps of this page that were done, in their own titles.
     private var stepsDone: [String] {
-        guard adding else { return ["Paste the token"] }
-        return ["Make the bot", "Paste the token"] + (invited ? ["Add it to your server"] : [])
+        guard adding else { return [String(l10n: "Paste the token")] }
+        return [String(l10n: "Make the bot"), String(l10n: "Paste the token")] + (invited ? [String(l10n: "Add it to your server")] : [])
     }
 
     private func invite() {
@@ -198,7 +198,7 @@ struct DiscordBotPage: View {
         guard store.isFresh, !sending, let db = store.state?.db else { return }
         let pasted = BotToken(pasted: token)
         token = ""
-        guard let pasted else { problem = "Not a bot token · Copy it again"; return }
+        guard let pasted else { problem = String(l10n: "Not a bot token · Copy it again"); return }
         sending = true; problem = nil
         defer { sending = false }
         do {
@@ -209,8 +209,8 @@ struct DiscordBotPage: View {
             sentAt = at
             await refresh()
         } catch {
-            problem = error is URLError ? "No answer from the hub · Paste it again if the bot does not connect"
-                : "\(ChatAppWords.reason(error)) Paste it again."
+            problem = error is URLError ? String(l10n: "No answer from the hub · Paste it again if the bot does not connect")
+                : String(l10n: "\(ChatAppWords.reason(error)) Paste it again.")
         }
     }
 }

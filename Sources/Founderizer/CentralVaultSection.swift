@@ -215,7 +215,7 @@ final class CentralVaultModel {
             update = VaultTries.failed(after: updateFor == program ? update : nil, at: Date().timeIntervalSince1970, reason: says)
         case .otherOwner:
             update = VaultTries.failed(after: updateFor == program ? update : nil, at: Date().timeIntervalSince1970,
-                                       reason: "The central vault on the hub's server holds another Mac's owner key.")
+                                       reason: String(l10n: "The central vault on the hub's server holds another Mac's owner key."))
         }
         updateFor = program
     }
@@ -255,7 +255,7 @@ final class CentralVaultModel {
         while working { _ = try await store.nap(2) }
         working = true
         defer { working = false }
-        guard store.hub == hub, let database = store.state?.db else { throw Stop("Founderizer has no current status of the hub.") }
+        guard store.hub == hub, let database = store.state?.db else { throw Stop(String(l10n: "Founderizer has no current status of the hub.")) }
         let machine: String
         if let own = reading?.hub?.machine {
             machine = own
@@ -274,13 +274,13 @@ final class CentralVaultModel {
     private func installed(_ store: FleetStore, own: Bool, program release: String? = nil) async -> Outcome {
         do {
             guard store.hub == hub, store.isFresh, let database = store.state?.db else {
-                throw Stop("Founderizer has no current status of the hub.")
+                throw Stop(String(l10n: "Founderizer has no current status of the hub."))
             }
-            guard let reading = try await VaultClient().reading(hub: hub, database: database) else { throw Stop("This hub has no central vault.") }
-            guard let fleet = reading.fleetID else { throw Stop("The hub did not say which fleet this is.") }
+            guard let reading = try await VaultClient().reading(hub: hub, database: database) else { throw Stop(String(l10n: "This hub has no central vault.")) }
+            guard let fleet = reading.fleetID else { throw Stop(String(l10n: "The hub did not say which fleet this is.")) }
             let key = try OwnerKeychain.key(fleet: fleet) ?? OwnerKeychain.make(fleet: fleet)
             guard let program = CentralVaultRemote.install(ownerKey: key.publicKey, keepOwner: own) else {
-                throw Stop("Founderizer cannot write the install for this owner key.")
+                throw Stop(String(l10n: "Founderizer cannot write the install for this owner key."))
             }
             let machine: String
             if let own = reading.hub?.machine {
@@ -294,12 +294,12 @@ final class CentralVaultModel {
             switch CentralVaultRemote.installed(answer.output) {
             case .installed(let vaultKey, let printed)?:
                 guard printed == fleet else {
-                    throw Stop("The vault on \(machine) belongs to the fleet \(printed), and the hub is \(fleet). Founderizer pinned nothing.")
+                    throw Stop(String(l10n: "The vault on \(machine) belongs to the fleet \(printed), and the hub is \(fleet). Founderizer pinned nothing."))
                 }
                 recipient = vaultKey
             case .otherOwner?: return .otherOwner
-            case .refused(let says)?: throw Stop("The install on \(machine) stopped: \(says)")
-            case nil: throw Stop(Self.unread(answer, machine: machine, what: "the install's answer"))
+            case .refused(let says)?: throw Stop(String(l10n: "The install on \(machine) stopped: \(says)"))
+            case nil: throw Stop(Self.unread(answer, machine: machine, what: String(l10n: "the install's answer")))
             }
             // The key the machine printed is the pin. Nothing is sealed to the vault before the hub names that same key.
             CentralVaultPins.pin(recipient, hub: hub, fleet: fleet)
@@ -310,8 +310,8 @@ final class CentralVaultModel {
                    fresh.central?.recipient == recipient, release == nil || fresh.central?.source == release { return .done }
                 try await store.nap(5)
             }
-            throw Stop(release == nil ? "The hub has not read the vault on \(machine) with the key its install printed."
-                                      : "The hub has not read the vault on \(machine) with the program of its release.")
+            throw Stop(release == nil ? String(l10n: "The hub has not read the vault on \(machine) with the key its install printed.")
+                                      : String(l10n: "The hub has not read the vault on \(machine) with the program of its release."))
         } catch {
             return .stopped(Self.words(error))
         }
@@ -323,7 +323,7 @@ final class CentralVaultModel {
         do {
             guard store.hub == hub, store.isFresh, let database = store.state?.db, let fleet = reading?.fleetID,
                   let key = OwnerKeychain.key(fleet: fleet) else {
-                throw Stop("Founderizer has no current status of the hub, or no owner key for it.")
+                throw Stop(String(l10n: "Founderizer has no current status of the hub, or no owner key for it."))
             }
             let code = try RecoveryKeychain.kept(fleet: fleet)
             let statement = OwnerStatement.recovery(fleet: fleet, recipient: code.recipient)
@@ -344,13 +344,13 @@ final class CentralVaultModel {
         do {
             guard store.hub == hub, store.isFresh, let database = store.state?.db, let fleet = reading?.fleetID,
                   let key = OwnerKeychain.key(fleet: fleet) else {
-                throw Stop("Founderizer has no current status of the hub, or no owner key for it.")
+                throw Stop(String(l10n: "Founderizer has no current status of the hub, or no owner key for it."))
             }
             guard let machine = reading?.machines.first(where: { $0.machine == name }), let reported = machine.broker_recipient,
-                  machine.canBeTrusted else { throw Stop("The hub reports no vault key for \(name) now.") }
+                  machine.canBeTrusted else { throw Stop(String(l10n: "The hub reports no vault key for \(name) now.")) }
             var target = try await self.target(name, database: database)
             guard await MacNetwork.device(of: target.host) == name else {
-                throw Stop("This Mac's Tailscale does not say that \(target.host) is \(name). Founderizer pinned nothing.")
+                throw Stop(String(l10n: "This Mac's Tailscale does not say that \(target.host) is \(name). Founderizer pinned nothing."))
             }
             let mac = try await HubClient().servers(hub: hub, database: database).servers.first(where: { $0.name == name })?.kind == "mac"
             if mac { target.becomeRoot = false }
@@ -358,10 +358,10 @@ final class CentralVaultModel {
             let answer = try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target, program: program),
                                                   timeout: 120)
             guard let found = CentralVaultRemote.brokerKey(in: answer.output) else {
-                throw Stop(Self.unread(answer, machine: name, what: "its vault key"))
+                throw Stop(Self.unread(answer, machine: name, what: String(l10n: "its vault key")))
             }
             guard found == reported else {
-                throw Stop("The vault key on \(name) is not the one the hub reports for it. Founderizer pinned nothing.")
+                throw Stop(String(l10n: "The vault key on \(name) is not the one the hub reports for it. Founderizer pinned nothing."))
             }
             let statement = OwnerStatement.pin(fleet: fleet, machine: name, recipient: found)
             _ = try await VaultClient().pin(hub: hub, database: database, client: store.installation, statement: statement,
@@ -395,10 +395,10 @@ final class CentralVaultModel {
             fleets = MachineReach.of(machine, in: try await HubClient().machines(hub: hub, database: database).machines)
         }
         guard let known = fleets?.onRecord else {
-            throw Stop("The fleet has no SSH connection to \(machine) on record. Record one on its page in Servers.")
+            throw Stop(String(l10n: "The fleet has no SSH connection to \(machine) on record. Record one on its page in Servers."))
         }
         let target = InstallTarget(host: known.address, user: known.user, port: known.port, becomeRoot: known.user != "root")
-        guard target.isValid else { throw Stop(target.problem ?? "The fleet's record of \(machine) is not a connection.") }
+        guard target.isValid else { throw Stop(target.problem ?? String(l10n: "The fleet's record of \(machine) is not a connection.")) }
         return target
     }
 
@@ -406,10 +406,10 @@ final class CentralVaultModel {
     /// (the vault's steps check it strictly), or the machine's own last line.
     private static func unread(_ answer: LocalShell.Answer, machine: String, what: String) -> String {
         if answer.lines.contains(where: { $0.contains("Host key verification failed") }) {
-            return "This Mac does not know the host key of \(machine) yet. Connect to it once with ssh from Terminal."
+            return String(l10n: "This Mac does not know the host key of \(machine) yet. Connect to it once with ssh from Terminal.")
         }
         // Plain words only (T-35): the machine's own last line was appended to this one.
-        return "Founderizer could not read \(what) on \(machine)."
+        return String(l10n: "Founderizer could not read \(what) on \(machine).")
     }
 
     private static func words(_ error: Error) -> String {
@@ -434,7 +434,7 @@ struct CentralVaultSection: View {
                 }
                 ForEach(model.plan.servers) { server in
                     FormRow(server.machine, symbol: "server.rack") {
-                        control(row: server.machine, reason: server.reason, words: "Try again") { model.retry(server: server.machine, store) }
+                        control(row: server.machine, reason: server.reason, words: String(l10n: "Try again")) { model.retry(server: server.machine, store) }
                     }.accessibilityIdentifier("vault-server-\(server.machine)")
                 }
             }
@@ -444,9 +444,9 @@ struct CentralVaultSection: View {
     @ViewBuilder private func vaultControl(_ need: VaultNeed) -> some View {
         switch need {
         case .retry(_, let reason):
-            control(row: "vault", reason: reason, words: "Try again") { model.retry(store) }
+            control(row: "vault", reason: reason, words: String(l10n: "Try again")) { model.retry(store) }
         case .setUp(let reason):
-            control(row: "vault", reason: model.takeOverProblem ?? reason, words: "Set up") { model.takeOver(store) }
+            control(row: "vault", reason: model.takeOverProblem ?? reason, words: String(l10n: "Set up")) { model.takeOver(store) }
                 .help("Take the vault over on this Mac. Its owner key becomes this Mac's.")
         }
     }
@@ -488,7 +488,7 @@ struct CentralHeldRow: View {
                 FormRow("Servers", symbol: "server.rack") {
                     HStack(spacing: 14) {
                         ForEach(marks, id: \.machine) { mark in
-                            let words = mark.holds ? "\(mark.machine) holds it" : "On its way to \(mark.machine)"
+                            let words = mark.holds ? String(l10n: "\(mark.machine) holds it") : String(l10n: "On its way to \(mark.machine)")
                             HStack(spacing: 5) {
                                 Image(systemName: mark.holds ? "checkmark.circle.fill" : "clock")
                                     .foregroundStyle(mark.holds ? Color.green.opacity(0.85) : FleetStyle.muted)

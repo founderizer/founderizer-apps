@@ -5,7 +5,7 @@
 #   vm.sh run 'powershell -NoProfile -File C:\fz\readings\cpu-at-rest.ps1 -Seconds 60'
 param([int]$Seconds = 60)
 $ErrorActionPreference = 'Stop'
-$app = Get-Process Founderizer
+$app = Get-Process Founderizer.App
 $dwm = Get-Process dwm
 $appBefore, $dwmBefore = $app.TotalProcessorTime, $dwm.TotalProcessorTime
 $clock = [Diagnostics.Stopwatch]::StartNew()

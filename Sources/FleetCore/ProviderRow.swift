@@ -15,7 +15,7 @@ public struct ProviderRow: Equatable, Sendable {
     public let title: String
     public let answer: Answer
 
-    public static let atTheMac = "Open the installer on that Mac."
+    public static let atTheMac = String(l10n: "Open the installer on that Mac.")
 
     public init(name: String, runtime: MachineStatus.Runtime?, reading: MachineStatus) {
         let desktop = reading.security.desktop, onMac = desktop != nil, app = onMac && name == "codex"
@@ -24,17 +24,17 @@ public struct ProviderRow: Equatable, Sendable {
         let needed = (name == "claude" ? reading.needs?.browser : reading.needs?.chatgpt) ?? true
         self.name = name
         title = app ? "ChatGPT" : providerName(name)
-        let words = [runtime?.version.flatMap { app || $0.isEmpty ? nil : $0 } ?? (app ? nil : "Version not reported"),
-                     signedIn.map { $0 ? "Signed in" : "Not signed in" } ?? "Sign-in not reported"]
+        let words = [runtime?.version.flatMap { app || $0.isEmpty ? nil : $0 } ?? (app ? nil : String(l10n: "Version not reported")),
+                     signedIn.map { $0 ? String(l10n: "Signed in") : String(l10n: "Not signed in") } ?? String(l10n: "Sign-in not reported")]
             .compactMap { $0 }.joined(separator: " · ")
         if signedIn == true {
             answer = .mark(.good, words: words, whoActs: nil)
         } else if !needed, signedIn == false {
-            answer = .notSetUp(onMac ? "Not set up. \(Self.atTheMac)" : "Not set up")
+            answer = .notSetUp(onMac ? String(l10n: "Not set up. \(Self.atTheMac)") : String(l10n: "Not set up"))
         } else if signedIn == nil {
             answer = .mark(.unknown, words: words, whoActs: nil)
         } else {
-            answer = .mark(.bad, words: words, whoActs: onMac ? Self.atTheMac : "Signing in is your own step: the Sign in card below takes it.")
+            answer = .mark(.bad, words: words, whoActs: onMac ? Self.atTheMac : String(l10n: "Signing in is your own step: the Sign in card below takes it."))
         }
     }
 }

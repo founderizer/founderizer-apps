@@ -110,21 +110,21 @@ public struct OwnerDevice: Decodable, Identifiable, Equatable, Sendable {
     public func words(now: Double) -> (words: String, attention: Bool) {
         let when = last_contact.map { Servers.age($0, now: now) } ?? ""
         switch last_answer {
-        case "device_not_enrolled": return ("It reached the hub \(when), without a key.", true)
-        case "device_key_required": return ("It reached the hub \(when) and sent no key.", true)
-        case "device_key_mismatch": return ("It sent a key that is not this device's, \(when).", true)
-        case "device_not_allowed": return ("It asked \(when) for a page that stays on this Mac.", false)
-        case "key_not_expected": return ("It sent a key where the hub expects none, \(when).", false)
-        case .some: return ("The hub refused its last request, \(when).", true)
+        case "device_not_enrolled": return (String(l10n: "It reached the hub \(when), without a key."), true)
+        case "device_key_required": return (String(l10n: "It reached the hub \(when) and sent no key."), true)
+        case "device_key_mismatch": return (String(l10n: "It sent a key that is not this device's, \(when)."), true)
+        case "device_not_allowed": return (String(l10n: "It asked \(when) for a page that stays on this Mac."), false)
+        case "key_not_expected": return (String(l10n: "It sent a key where the hub expects none, \(when)."), false)
+        case .some: return (String(l10n: "The hub refused its last request, \(when)."), true)
         case .none: break
         }
         if !key {
-            if let open = openCode(now: now) { return ("A code is open · \(OwnerDevices.left(open, now: now))", false) }
+            if let open = openCode(now: now) { return (String(l10n: "A code is open · \(OwnerDevices.left(open, now: now))"), false) }
             // Only a hub that reports contacts can say that the device never arrived.
-            return (reportsContact && last_contact == nil ? "No key yet · it has not reached the hub" : "No key yet", true)
+            return (reportsContact && last_contact == nil ? String(l10n: "No key yet · it has not reached the hub") : String(l10n: "No key yet"), true)
         }
-        guard let last_seen else { return ("Has its key · no read yet", false) }
-        return ("Last read \(Servers.age(last_seen, now: now))", false)
+        guard let last_seen else { return (String(l10n: "Has its key · no read yet"), false) }
+        return (String(l10n: "Last read \(Servers.age(last_seen, now: now))"), false)
     }
 
     /// **The same fact as one mark.** The owner, 20 October 2026: "not even sentences, just a check or a cross, and
@@ -136,18 +136,18 @@ public struct OwnerDevice: Decodable, Identifiable, Equatable, Sendable {
     public func mark(now: Double) -> (state: MarkState, words: String, detail: String) {
         let said = words(now: now).words
         switch last_answer {
-        case "device_not_enrolled": return (.bad, "No key", said)
-        case "device_key_required": return (.bad, "No key sent", said)
-        case "device_key_mismatch": return (.bad, "Wrong key", said)
-        case "device_not_allowed": return (.warn, "One page refused", said)
-        case "key_not_expected": return (.warn, "Key not expected", said)
-        case .some: return (.bad, "Refused", said)
+        case "device_not_enrolled": return (.bad, String(l10n: "No key"), said)
+        case "device_key_required": return (.bad, String(l10n: "No key sent"), said)
+        case "device_key_mismatch": return (.bad, String(l10n: "Wrong key"), said)
+        case "device_not_allowed": return (.warn, String(l10n: "One page refused"), said)
+        case "key_not_expected": return (.warn, String(l10n: "Key not expected"), said)
+        case .some: return (.bad, String(l10n: "Refused"), said)
         case .none: break
         }
         if !key {
-            return openCode(now: now) != nil ? (.working, "Code open", said) : (.bad, "No key yet", said)
+            return openCode(now: now) != nil ? (.working, String(l10n: "Code open"), said) : (.bad, String(l10n: "No key yet"), said)
         }
-        return (.good, last_seen == nil ? "Has its key" : "Reaching the hub", said)
+        return (.good, last_seen == nil ? String(l10n: "Has its key") : String(l10n: "Reaching the hub"), said)
     }
 }
 
@@ -199,9 +199,9 @@ public enum OwnerDevices {
     /// How long an enrollment code still works, in a few words.
     public static func left(_ until: Double, now: Double) -> String {
         let seconds = until - now
-        if seconds <= 0 { return "expired" }
-        if seconds < 90 { return "\(Int(seconds.rounded(.up))) seconds left" }
-        return "\(Int((seconds / 60).rounded(.up))) minutes left"
+        if seconds <= 0 { return String(l10n: "expired") }
+        if seconds < 90 { return String(l10n: "\(Int(seconds.rounded(.up))) seconds left") }
+        return String(l10n: "\(Int((seconds / 60).rounded(.up))) minutes left")
     }
 
     /// What the picture of a code carries: the hub and the code, so that a scanner on the device needs nothing else.
@@ -270,19 +270,19 @@ public struct OwnerDeviceInput: Codable, Equatable, Sendable {
     public func problem(existing: [OwnerDevice], limit: Int) -> String? {
         let value = normalized
         guard OwnerDevices.isName(value.device) else {
-            return "Use a name of 2 to 31 characters: a-z, 0-9 and -, starting with a letter."
+            return String(l10n: "Use a name of 2 to 31 characters: a-z, 0-9 and -, starting with a letter.")
         }
         guard !existing.contains(where: { $0.device == value.device }) else {
-            return "A device with this name is in Founderizer. Open it instead, or use another name."
+            return String(l10n: "A device with this name is in Founderizer. Open it instead, or use another name.")
         }
-        guard OwnerDevices.label(value.label) != nil else { return "Give a label of 1 to 40 characters on one line." }
+        guard OwnerDevices.label(value.label) != nil else { return String(l10n: "Give a label of 1 to 40 characters on one line.") }
         guard OwnerDevices.isAddress(value.address) else {
-            return "Give the device's own address on your private network, for example 100.84.1.20."
+            return String(l10n: "Give the device's own address on your private network, for example 100.84.1.20.")
         }
         guard !existing.contains(where: { $0.address == value.address }) else {
-            return "Another device has this address. Each device needs its own."
+            return String(l10n: "Another device has this address. Each device needs its own.")
         }
-        guard existing.count < limit else { return "Founderizer takes \(limit) devices. Remove one before you add another." }
+        guard existing.count < limit else { return String(l10n: "Founderizer takes \(limit) devices. Remove one before you add another.") }
         return nil
     }
 

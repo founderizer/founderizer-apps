@@ -181,7 +181,7 @@ internal sealed class WindowsTailscale : ITailscaleStatus
                 UnionChoice = 1,       // WTD_CHOICE_FILE
                 File = fileHandle.AddrOfPinnedObject(),
                 StateAction = 0,
-                ProvFlags = 0x10,      // WTD_CACHE_ONLY_URL_RETRIEVAL: no download while it checks
+                ProvFlags = 0x10,      // WTD_REVOCATION_CHECK_NONE
             };
             var action = new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE"); // WINTRUST_ACTION_GENERIC_VERIFY_V2
             return WinVerifyTrust(new IntPtr(-1), ref action, ref data) == 0;

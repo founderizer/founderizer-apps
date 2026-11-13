@@ -31,10 +31,10 @@ public enum MachineConnection: Equatable, Sendable {
     /// The one word the page says.
     public var words: String {
         switch self {
-        case .connected: return "Connected"
-        case .notConnected: return "Not answering"       // the app's one word for it (T-25, fix round 2)
-        case .unknown: return "Not known"
-        case .waiting: return "Reading…"
+        case .connected: return String(l10n: "Connected")
+        case .notConnected: return String(l10n: "Not answering")       // the app's one word for it (T-25, fix round 2)
+        case .unknown: return String(l10n: "Not known")
+        case .waiting: return String(l10n: "Reading…")
         }
     }
 
@@ -42,14 +42,14 @@ public enum MachineConnection: Equatable, Sendable {
     public func says(_ machine: String, now: Double) -> String {
         switch self {
         case .connected(let lastSeen):
-            guard let lastSeen, lastSeen > 0 else { return "Founderizer on \(machine) reports to the hub." }
-            return "Founderizer on \(machine) reported \(activityAge(lastSeen, now: now).lowercased())."
+            guard let lastSeen, lastSeen > 0 else { return String(l10n: "Founderizer on \(machine) reports to the hub.") }
+            return String(l10n: "Founderizer on \(machine) reported \(activityAge(lastSeen, now: now).lowercased()).")
         case .notConnected(let says):
-            return says ?? "The hub has heard nothing from \(machine)."
+            return says ?? String(l10n: "The hub has heard nothing from \(machine).")
         case .unknown:
-            return "Founderizer cannot reach your hub, so it cannot say whether \(machine) is connected."
+            return String(l10n: "Founderizer cannot reach your hub, so it cannot say whether \(machine) is connected.")
         case .waiting:
-            return "Founderizer is asking the hub about \(machine)."
+            return String(l10n: "Founderizer is asking the hub about \(machine).")
         }
     }
 

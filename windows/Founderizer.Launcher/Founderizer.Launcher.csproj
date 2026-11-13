@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The launcher of Founderizer for Windows (~/dev/founderizer-plans/windows-app-release-design.md, section 5):
+    Founderizer.exe at the top of %LOCALAPPDATA%\Programs\Founderizer, which the Start menu entry starts. It starts the
+    build that "current" names, or a checked "next" build and goes back when that build ends before its first good
+    start, and with - -uninstall it removes the install. Each build carries it.
+
+    The same program with a build inside is the setup (-p:BuildZip=<the build's zip>): it puts that build in place for
+    the user, with the Start menu entry and the entry of Windows' list of installed apps, and starts it. No step needs an
+    administrator, and neither draws anything: what they did is in update.log.
+
+    One file, self-contained and trimmed, so that it costs each build about ten megabytes and not seventy.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <AssemblyName>Founderizer</AssemblyName>
+    <RootNamespace>Founderizer.Launcher</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RuntimeIdentifiers>win-arm64;win-x64</RuntimeIdentifiers>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>true</PublishTrimmed>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Founderizer.Install/Founderizer.Install.csproj" />
+  </ItemGroup>
+
+  <!-- The setup: this program with one build's zip inside. -->
+  <ItemGroup Condition="'$(BuildZip)' != ''">
+    <EmbeddedResource Include="$(BuildZip)" LogicalName="build.zip" />
+  </ItemGroup>
+</Project>

@@ -11,7 +11,7 @@ enum AppsGroup: String, CaseIterable, Hashable {
         case .github: "GitHub"
         case .drive: "Google Drive"
         case .gmail: "Gmail"
-        case .mcp: "MCP servers"
+        case .mcp: String(l10n: "MCP servers")
         }
     }
 
@@ -73,10 +73,10 @@ struct AppsPage: View {
         } else if offered && reading == nil {
             if failed || !store.isFresh {
                 if !store.hubNoticeShows {
-                    FormSection { FormRow("Founderizer cannot read the resources now.", detail: "It reads again when the hub answers.") }
+                    FormSection { FormRow("Founderizer cannot read the resources now.", detail: String(l10n: "It reads again when the hub answers.")) }
                 }
             } else {
-                LoadingLine("Reading the resources…")
+                LoadingLine(String(l10n: "Reading the resources…"))
             }
         } else {
             FormSection { ForEach(groups, id: \.self) { row($0) } }
@@ -112,9 +112,9 @@ struct AppsPage: View {
         guard let reading else { return nil }
         let held = reading.resources.filter { $0.kind == group.kind }.count
         switch group {
-        case .github: return held == 0 ? "No repositories" : held == 1 ? "1 repository" : "\(held) repositories"
-        case .drive, .gmail: return held == 0 ? "No accounts" : held == 1 ? "1 account" : "\(held) accounts"
-        case .mcp: return held == 0 ? "None" : "\(held)"
+        case .github: return held == 0 ? String(l10n: "No repositories") : held == 1 ? String(l10n: "1 repository") : String(l10n: "\(held) repositories")
+        case .drive, .gmail: return held == 0 ? String(l10n: "No accounts") : held == 1 ? String(l10n: "1 account") : String(l10n: "\(held) accounts")
+        case .mcp: return held == 0 ? String(l10n: "None") : "\(held)"
         }
     }
 
@@ -241,10 +241,10 @@ struct AppsSettings: View {
     @ViewBuilder private var waiting: some View {
         if unread || store.connectionError != nil {
             if !store.hubNoticeShows {
-                FormSection { FormRow("Founderizer cannot read the resources now.", detail: "It reads again when the hub answers.") }
+                FormSection { FormRow("Founderizer cannot read the resources now.", detail: String(l10n: "It reads again when the hub answers.")) }
             }
         } else {
-            LoadingLine("Reading the resources…")
+            LoadingLine(String(l10n: "Reading the resources…"))
         }
     }
 
@@ -313,7 +313,7 @@ struct AppsSettings: View {
         // The list brings its own room over it (`AccessSettings.lead`), and none while it draws nothing (margins row 20).
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: FleetSpace.inside) {
-                heading("MCP servers") {
+                heading(String(l10n: "MCP servers")) {
                     Image(systemName: "puzzlepiece.extension").font(IconMetrics.symbol(13)).foregroundStyle(FleetStyle.text)
                 } accessory: {
                     if !hasGitHub && !hasGoogle { lastReading }

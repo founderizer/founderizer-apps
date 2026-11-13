@@ -42,7 +42,7 @@ final class RepositoryPicking {
     }
     /// A write that got no answer can still have arrived: the words of the request line for a write the hub did not
     /// confirm (`FleetView`). They hold here too, since the next Add sends only what the agent still does not hold.
-    static let unanswered = "Your hub did not confirm it. Sending it again does not send it twice."
+    static let unanswered = String(l10n: "Your hub did not confirm it. Sending it again does not send it twice.")
 
     /// The hub has the list and the agent's own list to show its result in.
     static func offered(_ store: FleetStore) -> Bool {
@@ -73,7 +73,7 @@ final class RepositoryPicking {
         } catch {
             guard store.hub == hub, store.state?.db == database, (store.reading(Self.listName) as RepositoryList?) == nil
             else { return }
-            if case HubError.refusal(_, let words) = error { unread = words } else { unread = "Founderizer cannot read GitHub now." }
+            if case HubError.refusal(_, let words) = error { unread = words } else { unread = String(l10n: "Founderizer cannot read GitHub now.") }
         }
     }
 
@@ -128,7 +128,7 @@ final class RepositoryPicking {
                 words = Self.unanswered
                 break
             } catch {
-                words = "The hub did not take this change. Try again."
+                words = String(l10n: "The hub did not take this change. Try again.")
                 break
             }
         }
@@ -163,7 +163,7 @@ struct RepositoryPickerPlus: View {
             ProgressView().controlSize(.small).frame(width: IconMetrics.side, height: IconMetrics.side)
                 .padding(.trailing, FormMetrics.rowInset)
         } else if reading != nil, store.isFresh {
-            IconButton(symbol: "plus", words: "Give \(agent.agentLabel) repositories") { model.show(store: store, agent: agent) }
+            IconButton(symbol: "plus", words: String(l10n: "Give \(agent.agentLabel) repositories")) { model.show(store: store, agent: agent) }
                 .disabled(model.openFor == agent)
                 // In the column of the rows' −, which stand the rows' inset in from the card's edge.
                 .padding(.trailing, FormMetrics.rowInset)
@@ -184,7 +184,7 @@ struct RepositorySearch: View {
             Image(systemName: "magnifyingglass").font(IconMetrics.symbol(14)).foregroundStyle(FleetStyle.muted).frame(width: 22)
                 .padding(.trailing, 4).accessibilityHidden(true)
             TextField(text: $text, prompt: Text(verbatim: "")) { Text("Search") }
-                .fieldPlaceholder("Search", shows: text.isEmpty).fleetField()
+                .fieldPlaceholder(String(l10n: "Search"), shows: text.isEmpty).fleetField()
                 .accessibilityIdentifier(identifier)
         }.padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 10)
     }
@@ -236,7 +236,7 @@ struct RepositoryPickerCard: View {
             } else if let unread = model.unread {
                 line(unread)
             } else {
-                LoadingLine("Reading GitHub…").padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 10)
+                LoadingLine(String(l10n: "Reading GitHub…")).padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 10)
             }
             if let said = model.said { line(said).accessibilityIdentifier("agent-github-said") }
             HStack(spacing: 8) {

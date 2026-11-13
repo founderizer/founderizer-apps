@@ -21,13 +21,13 @@ public enum GoogleService: String, CaseIterable, Identifiable, Sendable {
     /// What one level gives an agent, in words; nil is no access.
     public func words(_ level: GoogleLevel?) -> String {
         switch (self, level) {
-        case (.drive, .read?): "Searches and reads the files"
-        case (.drive, .write?): "Also makes and changes files that nobody else sees"
-        case (.drive, .writeShared?): "Also changes shared files and folders"
-        case (.gmail, .read?): "Searches and reads the email"
-        case (.gmail, .write?): "Also drafts, labels, archives and trashes"
-        case (.gmail, .send?): "Also sends email from this account"
-        default: "No access"
+        case (.drive, .read?): String(l10n: "Searches and reads the files")
+        case (.drive, .write?): String(l10n: "Also makes and changes files that nobody else sees")
+        case (.drive, .writeShared?): String(l10n: "Also changes shared files and folders")
+        case (.gmail, .read?): String(l10n: "Searches and reads the email")
+        case (.gmail, .write?): String(l10n: "Also drafts, labels, archives and trashes")
+        case (.gmail, .send?): String(l10n: "Also sends email from this account")
+        default: String(l10n: "No access")
         }
     }
 }
@@ -38,10 +38,10 @@ public enum GoogleLevel: String, Codable, CaseIterable, Sendable {
 
     public var title: String {
         switch self {
-        case .read: "Read"
-        case .write: "Write"
-        case .writeShared: "Write shared"
-        case .send: "Send"
+        case .read: String(l10n: "Read")
+        case .write: String(l10n: "Write")
+        case .writeShared: String(l10n: "Write shared")
+        case .send: String(localized: "Send (a Google level)", defaultValue: "Send", bundle: Localized.bundle, locale: Localized.digits)
         }
     }
     /// Write shared and Send reach other people as the owner, without asking.
@@ -64,7 +64,7 @@ public struct GoogleChange: Equatable, Sendable {
 
 public enum Google {
     public static let feature = "google"
-    public static let reachesOthers = "Reaches other people, as you, without asking."
+    public static let reachesOthers = String(l10n: "Reaches other people, as you, without asking.")
 
     /// The address that the browser comes back to: the listener of this Connect.
     public static func redirectURI(port: UInt16) -> String { "http://127.0.0.1:\(port)/" }
@@ -101,9 +101,9 @@ public struct GoogleSnapshot: Decodable, Sendable {
 
         /// Why the hub cannot use this account for one service, in words; nil when it can.
         public func reason(for service: GoogleService) -> String? {
-            if problem != nil { return "The saved access of \(email) stopped working. Connect it again." }
-            if !connected { return "\(email) is not connected. Connect it again." }
-            if !(scopes ?? []).contains(service.scope) { return "\(email) does not allow \(service.title). Connect it again." }
+            if problem != nil { return String(l10n: "The saved access of \(email) stopped working. Connect it again.") }
+            if !connected { return String(l10n: "\(email) is not connected. Connect it again.") }
+            if !(scopes ?? []).contains(service.scope) { return String(l10n: "\(email) does not allow \(service.title). Connect it again.") }
             return nil
         }
     }
@@ -135,7 +135,7 @@ public struct GoogleSnapshot: Decodable, Sendable {
     public func reason(agent: String, _ service: GoogleService) -> String? {
         guard let grant = grant(agent: agent, service) else { return nil }
         return google?.accounts.first { $0.email == grant.account }.map { $0.reason(for: service) }
-            ?? "\(grant.account) is not connected. Connect it again."
+            ?? String(l10n: "\(grant.account) is not connected. Connect it again.")
     }
 
     /// The write after a Connect of one service: the agent gets it from `account`, at its level when it had the service,
@@ -189,9 +189,9 @@ public enum GoogleConnectError: LocalizedError, Equatable, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .wrongState: "This answer is not for this Connect. Start Connect again."
-        case .timeLimit: "No answer came within 10 minutes. Start Connect again."
-        case .denied(let reason): "The access was not given (\(reason)). Start Connect again."
+        case .wrongState: String(l10n: "This answer is not for this Connect. Start Connect again.")
+        case .timeLimit: String(l10n: "No answer came within 10 minutes. Start Connect again.")
+        case .denied(let reason): String(l10n: "The access was not given (\(reason)). Start Connect again.")
         }
     }
 }
@@ -233,18 +233,18 @@ public struct GoogleAnswer: Equatable, Sendable {
 
     /// What the listener does with one request line, for the `state` that the hub gave.
     public static func to(_ requestLine: String, state expected: String) -> GoogleAnswer {
-        let wrong = GoogleAnswer(status: 400, page: "This answer is not for the Connect that Founderizer started. Start Connect again in Founderizer.",
+        let wrong = GoogleAnswer(status: 400, page: String(l10n: "This answer is not for the Connect that Founderizer started. Start Connect again in Founderizer."),
                                  end: .failure(.wrongState))
         switch GoogleCallback.parse(requestLine) {
         case .other:
-            return GoogleAnswer(status: 404, page: "Not found.", end: nil)
+            return GoogleAnswer(status: 404, page: String(l10n: "Not found."), end: nil)
         case .code(let code, let state):
             guard state == expected else { return wrong }
-            return GoogleAnswer(status: 200, page: "Founderizer is connected. You can close this tab.", end: .success(code))
+            return GoogleAnswer(status: 200, page: String(l10n: "Founderizer is connected. You can close this tab."), end: .success(code))
         case .error(let error, let state):
             guard state == expected else { return wrong }
             let failure = GoogleConnectError.denied(error)
-            return GoogleAnswer(status: 200, page: (failure.errorDescription ?? "") + " You can close this tab.", end: .failure(failure))
+            return GoogleAnswer(status: 200, page: String(l10n: "\(failure.errorDescription ?? "") You can close this tab."), end: .failure(failure))
         }
     }
 

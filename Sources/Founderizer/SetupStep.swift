@@ -29,9 +29,6 @@ enum SetupMetrics {
     static let fieldHeight: CGFloat = 34
     /// The space between the mark, the title and what is under them.
     static let gap: CGFloat = 18
-    /// A mark and a one-line title, with the gap between them: what stands in the middle of a setup page.
-    @MainActor static let head: CGFloat = mark + gap
-        + NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: title, weight: .semibold))
     /// The line of Back at a page's top left, on which the × of a wizard that fills the window stands (`SetupClose`).
     @MainActor static let backLine: CGFloat = NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: text))
 }
@@ -46,19 +43,34 @@ enum SetupMetrics {
 struct SetupPage<Back: View, Step: View>: View {
     @ViewBuilder var back: () -> Back
     @ViewBuilder var step: () -> Step
+    /// The step's own height: a step taller than its page keeps its way on at the window's bottom (`SetupAction`).
+    @State private var stepHeight: CGFloat = 0
 
     var body: some View {
         GeometryReader { window in
+            // The step scrolls when it and its room over and under it do not fit in the page.
+            let scrolls = stepHeight + 2 * Self.margin + FleetSpace.lights > window.size.height
             ScrollView {
                 step()
                     .environment(\.setupRoom, window.size.height - 128)
-                    // **The mark stands at one place on every step and at every window height** (T-36): the step's top
-                    // is where a mark and a one-line title stand in the middle of the window, and what is under the
-                    // title hangs below it and scrolls. Centred as a whole, a tall step lifted its mark 61 pt in a
-                    // 1000-pt window and a two-line title 13 pt.
-                    .padding(.top, Self.markTop(window.size.height)).padding(.bottom, 64)
+                    .environment(\.setupScrolls, scrolls)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stepHeight = $0 }
+                    // **The whole step stands in the middle of the window** (the owner, 13 November 2026, of "A VPS for
+                    // your fleet": "why is the wizard so below and not centered?? ... I think it gets worse as the
+                    // screens progress"): its mark, its title and what is under them, as one block, with as much room
+                    // over it as under it. The page starts under the band of the window's buttons (`FleetSpace.lights`),
+                    // so the room under it counts that band too, and the block's middle is the window's. A step taller
+                    // than its page starts 64 pt down and scrolls. Before, the mark and a one-line title stood in the
+                    // middle and what was under the title hung below it: the VPS page's centre was 154 pt under the
+                    // window's, and every page with more under its title stood lower.
+                    // While it scrolls, its way on stands at the window's bottom (`SetupActionBar`, 86 pt high with its
+                    // fade): the step keeps the button's place, and 40 pt under it bring its last row just over the fade.
+                    .padding(.top, Self.margin).padding(.bottom, scrolls ? 40 : Self.margin + FleetSpace.lights)
                     .fleetColumn()
-                    .frame(maxWidth: .infinity, minHeight: window.size.height, alignment: .top)
+                    .frame(maxWidth: .infinity, minHeight: window.size.height, alignment: .center)
+            }
+            .overlayPreferenceValue(SetupActionKey.self, alignment: .bottom) { action in
+                if scrolls, let action { SetupActionBar(action: action.view) }
             }
         }
         .overlay(alignment: .topLeading) {
@@ -66,13 +78,66 @@ struct SetupPage<Back: View, Step: View>: View {
         }
     }
 
-    /// Where the mark stands in a page of this height: a mark and a one-line title in its middle, and never closer
-    /// than 64 points to its top.
-    static func markTop(_ height: CGFloat) -> CGFloat { max(64, (height - SetupMetrics.head) / 2) }
+    /// The least room over a step, which keeps it clear of Back's line, and under it.
+    static var margin: CGFloat { 64 }
 }
 
 extension SetupPage where Back == EmptyView {
     init(@ViewBuilder step: @escaping () -> Step) { self.init(back: { EmptyView() }, step: step) }
+}
+
+/// **A step's way on, which stays in view** (the owner, 13 November 2026, of "Choose what to import": "Build all four
+/// and review all other pages for the same issues!!", after "I have to scroll down!"). Under the step's content while
+/// the step fits in its page; while it scrolls, at the window's bottom over the list (`SetupActionBar`), and the step
+/// keeps its room, so the last row scrolls up above it. Only one copy is drawn, so its keyboard shortcut is pressed once.
+struct SetupAction<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+    @Environment(\.setupScrolls) private var scrolls
+    /// Its height under the content, which the step keeps for it while it stands at the bottom.
+    @State private var height: CGFloat = 34
+
+    init(@ViewBuilder content: @escaping () -> Content) { self.content = content }
+
+    var body: some View {
+        if scrolls {
+            // Content that draws nothing (a button that only shows while it can be pressed) leaves no bar.
+            Color.clear.frame(height: height)
+                .preference(key: SetupActionKey.self,
+                            value: height > 0 ? SetupActionView(view: AnyView(VStack(spacing: SetupMetrics.gap) { content() })) : nil)
+        } else {
+            VStack(spacing: SetupMetrics.gap) { content() }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        }
+    }
+}
+
+/// The way on that a step gives its page while it scrolls.
+struct SetupActionView { let view: AnyView }
+
+struct SetupActionKey: PreferenceKey {
+    static var defaultValue: SetupActionView? { nil }
+    static func reduce(value: inout SetupActionView?, nextValue: () -> SetupActionView?) { value = value ?? nextValue() }
+}
+
+/// The way on at the window's bottom: on the page's own ground, with the list fading out under it, at the step's sizes.
+private struct SetupActionBar: View {
+    let action: AnyView
+
+    var body: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [FleetStyle.canvas.opacity(0), FleetStyle.canvas], startPoint: .top, endPoint: .bottom)
+                .frame(height: 28).allowsHitTesting(false)
+            action
+                .font(SetupMetrics.textFont)
+                .environment(\.fleetButtonText, SetupMetrics.text)
+                .environment(\.stepText, SetupMetrics.text)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: SetupMetrics.width)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 24)
+                .background(FleetStyle.canvas)
+        }
+    }
 }
 
 /// **One step: its mark, its title and its one way on, and nothing else.** A step that waits for the machine has no
@@ -108,12 +173,11 @@ struct SetupStep<Mark: View, Content: View>: View {
     }
 }
 
-/// **The mark and the title stand still from one page to the next.** On a setup page the page puts the step's top where
-/// the mark stands (`SetupPage.markTop`) and what is under the title hangs below, so a page with a button, the page that
-/// waits after it and a two-line title keep the mark in one place, and only the words change.
-/// Outside a setup page the step is centred on its mark and title.
+/// **The mark, the title and what is under them, one under the other.** On a setup page the step is one block, which
+/// the page puts in the middle of the window (`SetupPage`). Outside a setup page the step is centred on its mark and
+/// title.
 private struct SetupColumn: Layout {
-    /// The height the page has for its step (`setupRoom`): set on a setup page, which places the step itself; nil
+    /// The height the page has for its step (`setupRoom`): set on a setup page, which places the step as a whole; nil
     /// elsewhere.
     var room: CGFloat?
 
@@ -142,8 +206,8 @@ private struct SetupColumn: Layout {
     /// The room under the title.
     private func below(_ rest: CGSize) -> CGFloat { rest.height > 0 ? rest.height + SetupMetrics.gap : 0 }
 
-    /// The room over the mark: none on a setup page, which places the step's top at the mark's place; elsewhere as
-    /// much as under the title, so that the title stands in the middle.
+    /// The room over the mark: none on a setup page, which centres the step as a whole; elsewhere as much as under the
+    /// title, so that the title stands in the middle.
     private func above(_ head: CGSize, _ rest: CGSize) -> CGFloat {
         room == nil ? below(rest) : 0
     }
@@ -152,6 +216,8 @@ private struct SetupColumn: Layout {
 extension EnvironmentValues {
     /// The height a setup page has for its step, which `SetupColumn` keeps a tall step inside.
     @Entry var setupRoom: CGFloat? = nil
+    /// The setup page's step is taller than the page and scrolls: its way on stands at the window's bottom.
+    @Entry var setupScrolls = false
     /// The page is a wizard that fills the window (`FleetStore.fillsWindow`): its × closes it, so its first page needs
     /// no Back.
     @Entry var fillsWindow = false
@@ -245,10 +311,15 @@ struct SetupPhases: View {
     }
 
     private var spoken: String {
-        guard current < names.count else { return "All \(names.count) steps are done." }
-        let left = minutesLeft.map { ". About \(max(1, $0)) minutes left" } ?? ""
-        let doing = status.map { ". \($0)" } ?? ""
-        return "Step \(current + 1) of \(names.count): \(names[current])\(doing)\(left)."
+        guard current < names.count else { return String(l10n: "All \(names.count) steps are done.") }
+        let step = current + 1, count = names.count, name = names[current]
+        switch (status, minutesLeft) {
+        case (nil, nil): return String(l10n: "Step \(step) of \(count): \(name).")
+        case let (doing?, nil): return String(l10n: "Step \(step) of \(count): \(name). \(doing).")
+        case let (nil, left?): return String(l10n: "Step \(step) of \(count): \(name). About \(max(1, left)) minutes left.")
+        case let (doing?, left?):
+            return String(l10n: "Step \(step) of \(count): \(name). \(doing). About \(max(1, left)) minutes left.")
+        }
     }
 }
 
@@ -408,7 +479,7 @@ struct CodeField: View {
 
     var body: some View {
         TextField(text: $code, prompt: Text(verbatim: "")) { Text("Paste the code") }
-            .fieldPlaceholder("Paste the code", shows: code.isEmpty)
+            .fieldPlaceholder(String(l10n: "Paste the code"), shows: code.isEmpty)
             .setupField(focus: $focused, wrong: wrong)
             .onSubmit { if MachineLogin.code(code) != nil { send() } }
             // A paste arrives in one change of many characters; a hand types one at a time.
@@ -462,7 +533,7 @@ struct ChatSettingUp: View {
 
     var body: some View {
         SetupPage {
-            SetupStep(title: "Setting up \(agent.agentLabel)", waits: true) {
+            SetupStep(title: String(l10n: "Setting up \(agent.agentLabel)"), waits: true) {
                 AgentGlyph(name: agent, size: SetupMetrics.mark)
             }
         }

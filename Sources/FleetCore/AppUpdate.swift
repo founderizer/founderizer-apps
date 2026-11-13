@@ -180,42 +180,42 @@ extension AppUpdate {
     public static func readManifest(_ data: Data, channel: String) throws -> AppManifest {
         guard data.count <= 64 * 1024,
               let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw AppUpdateUntrusted("The channel did not answer with a build this app could read.")
+            throw AppUpdateUntrusted(String(l10n: "The channel did not answer with a build this app could read."))
         }
         guard let version = raw["version"] as? String,
               version.range(of: "^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,40}$", options: .regularExpression) != nil else {
-            throw AppUpdateUntrusted("The channel's answer has no version name.")
+            throw AppUpdateUntrusted(String(l10n: "The channel's answer has no version name."))
         }
         guard let build = whole(raw["build"]), (1...2_000_000_000).contains(build) else {
-            throw AppUpdateUntrusted("The channel's answer has no build number.")
+            throw AppUpdateUntrusted(String(l10n: "The channel's answer has no build number."))
         }
         guard let address = raw["url"] as? String, address.utf8.count <= 400, let url = URL(string: address),
               AppManifest.isOurs(url, channel: channel), url.pathExtension.lowercased() == "zip" else {
-            throw AppUpdateUntrusted("The channel's answer points the download somewhere that is not ours.")
+            throw AppUpdateUntrusted(String(l10n: "The channel's answer points the download somewhere that is not ours."))
         }
         guard let sha256 = raw["sha256"] as? String,
               sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else {
-            throw AppUpdateUntrusted("The channel's answer carries no checksum for the download.")
+            throw AppUpdateUntrusted(String(l10n: "The channel's answer carries no checksum for the download."))
         }
         guard let size = whole(raw["size"]), (1...maximumDownload).contains(size) else {
-            throw AppUpdateUntrusted("The channel's answer gives the download no believable size.")
+            throw AppUpdateUntrusted(String(l10n: "The channel's answer gives the download no believable size."))
         }
         let minimum = raw["minimum"] as? String
         if let minimum, !minimum.isEmpty,
            minimum.range(of: "^[0-9]{1,3}(\\.[0-9]{1,3}){0,2}$", options: .regularExpression) == nil {
-            throw AppUpdateUntrusted("The channel's answer names a macOS version this app cannot read.")
+            throw AppUpdateUntrusted(String(l10n: "The channel's answer names a macOS version this app cannot read."))
         }
         let notes = raw["notes"] as? String
         if let notes, !notes.isEmpty,
            !(URL(string: notes).map { AppManifest.isOurs($0, channel: channel) } ?? false) {
-            throw AppUpdateUntrusted("The channel's answer points its notes somewhere that is not ours.")
+            throw AppUpdateUntrusted(String(l10n: "The channel's answer points its notes somewhere that is not ours."))
         }
         let hold = raw["hold"] ?? false
         guard let held = hold as? Bool else {
-            throw AppUpdateUntrusted("The channel's answer does not say whether this build is held.")
+            throw AppUpdateUntrusted(String(l10n: "The channel's answer does not say whether this build is held."))
         }
         guard let signature = raw["signature"] as? String, (1...200).contains(signature.utf8.count) else {
-            throw AppUpdateUntrusted("The channel's answer carries no signature.")
+            throw AppUpdateUntrusted(String(l10n: "The channel's answer carries no signature."))
         }
         return AppManifest(version: version, build: build, url: address, sha256: sha256, size: size,
                            minimumSystem: (minimum?.isEmpty ?? true) ? nil : minimum,
@@ -226,18 +226,16 @@ extension AppUpdate {
     public static func check(_ data: Data, keys: [Data], channel: String) throws -> AppManifest {
         let manifest = try readManifest(data, channel: channel)
         guard !keys.isEmpty else {
-            throw AppUpdateUntrusted("This build of Founderizer carries no release key, so it refuses every "
-                                     + "update. That is the safe state: an app that cannot check an update takes none.")
+            throw AppUpdateUntrusted(String(l10n: "This build of Founderizer carries no release key, so it refuses every update. That is the safe state: an app that cannot check an update takes none."))
         }
         guard let signature = Data(base64Encoded: manifest.signature), signature.count == 64 else {
-            throw AppUpdateUntrusted("The channel's signature is not a signature.")
+            throw AppUpdateUntrusted(String(l10n: "The channel's signature is not a signature."))
         }
         let text = signedText(manifest)
         guard keys.contains(where: { key in
             (try? Curve25519.Signing.PublicKey(rawRepresentation: key))?.isValidSignature(signature, for: text) == true
         }) else {
-            throw AppUpdateUntrusted("This build is not signed by the release key Founderizer ships with. "
-                                     + "Nothing was downloaded.")
+            throw AppUpdateUntrusted(String(l10n: "This build is not signed by the release key Founderizer ships with. Nothing was downloaded."))
         }
         return manifest
     }
@@ -371,13 +369,10 @@ public struct AppUpdateChannel: Sendable {
     public func read(installed: AppVersion?,
                      system: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion) async -> AppUpdateReading {
         guard let site = URL(string: channel), site.scheme == "https", site.host != nil else {
-            return AppUpdateReading(status: 0, says: "This fleet names a release channel that is not an HTTPS "
-                                    + "address, so Founderizer asked nothing.")
+            return AppUpdateReading(status: 0, says: String(l10n: "This fleet names a release channel that is not an HTTPS address, so Founderizer asked nothing."))
         }
         guard !keys.isEmpty else {
-            return AppUpdateReading(status: 0, says: "This build of Founderizer carries no release key, so it "
-                                    + "refuses every update. That is the safe state: an app that cannot check an "
-                                    + "update takes none.")
+            return AppUpdateReading(status: 0, says: String(l10n: "This build of Founderizer carries no release key, so it refuses every update. That is the safe state: an app that cannot check an update takes none."))
         }
         var headers = ["Accept": "application/json"]
         if let fleet { headers[AppUpdate.fleetHeader] = fleet }
@@ -387,14 +382,13 @@ public struct AppUpdateChannel: Sendable {
         do { answer = try await fetch(address, headers) } catch {
             // The page's button is Check for updates (24 October 2026); it was a refresh mark, which is what
             // this line used to point at.
-            return AppUpdateReading(status: 0, says: "Founderizer could not reach our channel. Nothing changed on "
-                                    + "this Mac, and it asks again by itself.", unreachable: true)
+            return AppUpdateReading(status: 0, says: String(l10n: "Founderizer could not reach our channel. Nothing changed on this Mac, and it asks again by itself."), unreachable: true)
         }
         guard answer.status == 200 else { return refusal(answer.status) }
         let manifest: AppManifest
         do { manifest = try AppUpdate.check(answer.body, keys: keys, channel: channel) }
         catch let refused as AppUpdateUntrusted { return AppUpdateReading(status: answer.status, says: refused.says) }
-        catch { return AppUpdateReading(status: answer.status, says: "The channel answered something this app could not read.") }
+        catch { return AppUpdateReading(status: answer.status, says: String(l10n: "The channel answered something this app could not read.")) }
         return reading(manifest, status: answer.status, installed: installed, system: system)
     }
 
@@ -403,28 +397,25 @@ public struct AppUpdateChannel: Sendable {
                  system: OperatingSystemVersion) -> AppUpdateReading {
         if manifest.hold {
             return AppUpdateReading(status: status,
-                                    says: "Founderizer \(manifest.version) is held by us. No Mac takes a held build.",
+                                    says: String(l10n: "Founderizer \(manifest.version) is held by us. No Mac takes a held build."),
                                     manifest: manifest)
         }
         guard let installed else {
             return AppUpdateReading(status: status,
-                                    says: "Founderizer cannot tell which build it is, so it offers none. Download "
-                                    + "the app again from our download page.", manifest: manifest)
+                                    says: String(l10n: "Founderizer cannot tell which build it is, so it offers none. Download the app again from our download page."), manifest: manifest)
         }
         guard manifest.build > installed.build else {
             return AppUpdateReading(status: status,
-                                    says: "Founderizer \(installed.name) is the newest build. Nothing to install.",
+                                    says: String(l10n: "Founderizer \(installed.name) is the newest build. Nothing to install."),
                                     manifest: manifest, current: true)
         }
         if let needed = manifest.minimumSystem, !AppUpdateChannel.meets(needed, system: system) {
             return AppUpdateReading(status: status,
-                                    says: "Founderizer \(manifest.version) needs macOS \(needed), and this Mac "
-                                    + "runs \(AppUpdateChannel.systemLine(system)). Update macOS first.",
+                                    says: String(l10n: "Founderizer \(manifest.version) needs macOS \(needed), and this Mac runs \(AppUpdateChannel.systemLine(system)). Update macOS first."),
                                     manifest: manifest)
         }
         return AppUpdateReading(status: status,
-                                says: "Founderizer \(manifest.version) is ready to install. "
-                                + "This Mac runs \(installed.name).", manifest: manifest, offered: true)
+                                says: String(l10n: "Founderizer \(manifest.version) is ready to install. This Mac runs \(installed.name)."), manifest: manifest, offered: true)
     }
 
     /// What our side refusing means, in the owner's own words. A refusal of our channel is not a broken app and must
@@ -436,25 +427,19 @@ public struct AppUpdateChannel: Sendable {
                 // Not a lapse: this Mac has not been told which fleet it drives, so our side has nothing to look
                 // up. A Mac that has just downloaded the app is in exactly this state, and has nothing to update.
                 return AppUpdateReading(status: status,
-                                        says: "Founderizer does not know which fleet this Mac drives yet, so our "
-                                        + "channel has nothing to answer about. Link your fleet, or take the "
-                                        + "newest build from our download page.")
+                                        says: String(l10n: "Founderizer does not know which fleet this Mac drives yet, so our channel has nothing to answer about. Link your fleet, or take the newest build from our download page."))
             }
             // What the channel answered, in a few plain words (T-35, fix round 2), and no word of a subscription:
             // Founderizer has none. Only today's channel answers this, to a fleet whose hub holds no token.
-            return AppUpdateReading(status: status, says: "Our channel refused this fleet (\(status)). Nothing "
-                                    + "changed on this Mac.", refused: true)
+            return AppUpdateReading(status: status, says: String(l10n: "Our channel refused this fleet (\(status)). Nothing changed on this Mac."), refused: true)
         case 404:
-            return AppUpdateReading(status: status, says: "No build of Founderizer is published yet.")
+            return AppUpdateReading(status: status, says: String(l10n: "No build of Founderizer is published yet."))
         case 503:
-            return AppUpdateReading(status: status, says: "Our channel could not answer with a build it had "
-                                    + "checked itself, so it sent none. Nothing was downloaded.", unreachable: true)
+            return AppUpdateReading(status: status, says: String(l10n: "Our channel could not answer with a build it had checked itself, so it sent none. Nothing was downloaded."), unreachable: true)
         case 500...599:
-            return AppUpdateReading(status: status, says: "Our channel had an error (\(status)). Nothing changed on "
-                                    + "this Mac, and it asks again by itself.", unreachable: true)
+            return AppUpdateReading(status: status, says: String(l10n: "Our channel had an error (\(status)). Nothing changed on this Mac, and it asks again by itself."), unreachable: true)
         default:
-            return AppUpdateReading(status: status, says: "Our channel refused this Mac (\(status)). Nothing "
-                                    + "changed here.")
+            return AppUpdateReading(status: status, says: String(l10n: "Our channel refused this Mac (\(status)). Nothing changed here."))
         }
     }
 
@@ -537,17 +522,17 @@ public enum AppUpdateWords {
     /// With no reading at all yet, nothing: the version at the row's right is all there is to say.
     public static func state(_ reading: AppUpdateReading?) -> String? {
         guard let reading else { return nil }
-        if reading.offered, let manifest = reading.manifest { return "Update available: \(manifest.version)" }
-        if reading.current { return "Up to date" }
+        if reading.offered, let manifest = reading.manifest { return String(l10n: "Update available: \(manifest.version)") }
+        if reading.current { return String(l10n: "Up to date") }
         return reading.says
     }
 
     /// The version at the row's right: the name, and no build number.
-    public static func version(_ running: AppVersion?) -> String { running?.name ?? "Unknown build" }
+    public static func version(_ running: AppVersion?) -> String { running?.name ?? String(l10n: "Unknown build") }
 
     /// The row's warning when reads have failed for long, or nil.
     public static func failing(since: Date?, now: Date) -> String? {
         guard let since, now.timeIntervalSince(since) >= AppUpdatePolicy.long else { return nil }
-        return "Our channel has not answered since \(since.formatted(date: .abbreviated, time: .omitted))."
+        return String(l10n: "Our channel has not answered since \(since.formatted(date: .abbreviated, time: .omitted)).")
     }
 }
