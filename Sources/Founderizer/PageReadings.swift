@@ -221,8 +221,7 @@ extension PagePrefetch {
     /// The readings of the pages that a sidebar row opens, in the order they are read. The machines' readings come
     /// second: every agent's chat panel and setup draws from them.
     @MainActor static let fleet: [PagePrefetch] = [
-        ServersPage.prefetch, AgentStatusPanel.prefetch, HealthView.prefetch, DevicesSection.prefetch, UpdatesPage.prefetch,
-        UpdatesPage.channelPrefetch,
+        ServersPage.prefetch, AgentStatusPanel.prefetch, HealthView.prefetch, DevicesSection.prefetch, UpdatesSection.prefetch,
         AgentPage.prefetch, TeamEditor.prefetch, TriggersView.prefetch, PeoplePage.prefetch,
         PeoplePage.rolesPrefetch, KnowledgePage.prefetch, AccessSettings.prefetch, AppsSettings.prefetch,
         SecretsPage.prefetch, SettingsPage.defaultsPrefetch, RepositoryPicking.prefetch,

@@ -6,7 +6,7 @@ import Foundation
 /// at its default, the hub's Linux kernel starts each answer after the pause from a window of 10 packets again, and the
 /// state took 6 round trips. With the value 0 it takes one: on the owner's hub a whole read of the state took 0.60 s
 /// before and 0.375 s after (10 November 2026). A hub installed from release 2026.11.293 gets the value from its
-/// installer (`hub.sh` step 15, `hubsetup.py tcp`). A release does not run code as root, so a hub installed before that
+/// installer (the TCP step of `hub.sh`, `hubsetup.py tcp`). A release does not run code as root, so a hub installed before that
 /// release gets the value only from a root run. This Mac makes that run once on the hub's own machine, over the owner's
 /// own SSH connection, from root's own clone at the hub's signed release, as the central vault's install does
 /// (`CentralVaultRemote`). Nothing of it is on a page.

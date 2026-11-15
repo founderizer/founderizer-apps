@@ -72,7 +72,7 @@
                                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,10,0,0" Visibility="Collapsed" />
                         <ContentControl x:Name="NeedsIcon" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12,10,0,0" IsTabStop="False" />
                         <TextBlock Text="Needs you" Margin="48,0,0,0" VerticalAlignment="Center" FontSize="14" Foreground="{StaticResource TextBrush}" />
-                        <Border Background="{StaticResource BadgeBrush}" CornerRadius="8" MinWidth="18" Height="16" Padding="6,0"
+                        <Border x:Name="NeedsPill" Background="{StaticResource BadgeBrush}" CornerRadius="8" MinWidth="18" Height="16" Padding="6,0"
                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,12,0">
                             <TextBlock x:Name="NeedsCount" AutomationProperties.AutomationId="NeedsCount" FontSize="12" LineHeight="16" LineStackingStrategy="BlockLineHeight"
                                        FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}" />
@@ -129,7 +129,7 @@
                                                    LineStackingStrategy="BlockLineHeight" Margin="0,1,0,0" Foreground="{StaticResource MutedBrush}" />
                                     </Grid>
                                     <local:CountLinePanel Margin="48,27,12,0" VerticalAlignment="Top">
-                                        <marks:ShimmerText Text="{x:Bind Line, Mode=OneWay}" Shimmer="{x:Bind LineMoves, Mode=OneWay}" />
+                                        <marks:ShimmerText Text="{x:Bind Line, Mode=OneWay}" Shimmer="{x:Bind LineMoves, Mode=OneWay}" Orange="{x:Bind NeedsYou, Mode=OneWay}" />
                                         <TextBlock Text="{x:Bind LineCount, Mode=OneWay}" FontSize="12" LineHeight="16"
                                                    LineStackingStrategy="BlockLineHeight" Foreground="{StaticResource MutedBrush}" />
                                     </local:CountLinePanel>

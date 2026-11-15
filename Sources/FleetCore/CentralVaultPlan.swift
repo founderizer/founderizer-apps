@@ -30,11 +30,24 @@ public struct VaultPlan: Equatable, Sendable {
     /// A re-sign never gives up: after its sixth failure in a row its server row shows, and it is tried again each hour.
     /// The first trust of a server keeps its own rule: six tries, then the owner's Retry.
     public static let retryEvery: Double = 3600
+    /// This Mac signs no pin while its clock and the hub's clock differ by more than this: its pins would be dated ahead
+    /// of each broker's clock, or be old at once (package 4, the clock guard).
+    public static let clockSkew: Double = 3600
+    static let clockWords = String(l10n: "This Mac's clock and the hub's clock differ by more than an hour.")
+
+    /// Why this Mac signs no pin now, or nil: its clock and the hub's clock of its last state read (`hubTime`, read at
+    /// this Mac's `readAt`) differ by more than `clockSkew`. Each due machine counts it as a failed try, and after six the
+    /// server's row shows it; the pin is signed at its next try once the clocks agree.
+    public static func clockProblem(hubTime: Double?, readAt: Double?) -> String? {
+        guard let hubTime, let readAt else { return nil }
+        return abs(hubTime - readAt) > clockSkew ? clockWords : nil
+    }
 
     public let step: VaultStep
     /// The Founderizer Vault row, when the vault itself needs the owner.
     public let vault: VaultNeed?
-    /// The servers the automatic trust gave up on, in the hub's order.
+    /// The servers the automatic trust gave up on, and the servers that the owner removed on this Mac and the hub names
+    /// again, in the hub's order.
     public let servers: [VaultServerNeed]
 
     public init(step: VaultStep, vault: VaultNeed? = nil, servers: [VaultServerNeed] = []) {
@@ -44,6 +57,7 @@ public struct VaultPlan: Equatable, Sendable {
     public static let none = VaultPlan(step: .nothing)
     static let otherKey = String(l10n: "The hub names another vault key than the one this Mac pinned.")
     static let otherOwner = String(l10n: "The central vault on the hub's server holds another Mac's owner key.")
+    static let removedHere = String(l10n: "You removed this server on this Mac, so Founderizer does not trust its vault by itself. Select Try again to trust it.")
 
     public static func of(_ reading: VaultReading?, facts: VaultFacts) -> VaultPlan {
         guard let reading, reading.fleetID != nil else { return .none }         // no vault served, or no fleet named
@@ -60,12 +74,17 @@ public struct VaultPlan: Equatable, Sendable {
         guard facts.keyHeld, let pin = facts.pin else { return VaultPlan(step: .takeOver, vault: .setUp(nil)) }
         guard pin == recipient else { return VaultPlan(step: .takeOver, vault: .setUp(otherKey)) }
         // Each server whose vault key is not pinned as it reports it now, unless this session's own pin of that very
-        // key is still on its way into the hub's next reading (the hub reads the vault's status once a minute).
-        let open = reading.machines.filter { $0.canBeTrusted && !$0.isTrusted && facts.confirmedPins[$0.machine] != $0.broker_recipient }
+        // key is still on its way into the hub's next reading (the hub reads the vault's status once a minute). A
+        // server that the owner removed on this Mac gets no pin again, whatever the hub's reading says (`VaultRemovals`).
+        let open = reading.machines.filter {
+            $0.canBeTrusted && !$0.isTrusted && !facts.removed.contains($0.machine)
+                && facts.confirmedPins[$0.machine] != $0.broker_recipient
+        }
         // Each trusted server whose kept pin is missing or `pinRefresh` old, from a hub that says when its kept pin was
-        // signed: its key is read and signed again, by the same step, at most once a day after a success.
+        // signed: its key is read and signed again, by the same step, at most once a day after a success. Never a server
+        // that the owner removed on this Mac.
         let stale = reading.machines.filter { machine in
-            machine.isTrusted && machine.keptPinKnown
+            machine.isTrusted && machine.keptPinKnown && !facts.removed.contains(machine.machine)
                 && (machine.kept_pin_at.map { facts.now - Double($0) > Self.pinRefresh } ?? true)
                 && facts.now - (facts.signedAt[machine.machine] ?? 0) >= Self.resignWait
         }
@@ -74,6 +93,15 @@ public struct VaultPlan: Equatable, Sendable {
         let listed = reading.machines.filter { opened.contains($0.machine) || resigned.contains($0.machine) }
         let gaveUp = listed.compactMap { machine in
             facts.servers[machine.machine].flatMap { $0.givenUp ? VaultServerNeed(machine: machine.machine, reason: $0.reason) : nil }
+        }
+        // A server that the owner removed on this Mac and that the hub names again as one that can be trusted (another
+        // Mac or the owner's MCP tool added it again): its row, with its own reason, and never a step by itself. Try
+        // again on that row is the owner's own act on this Mac, which clears the mark (`CentralVaultModel.retry`). The
+        // rows in the hub's order.
+        let marked = Set(reading.machines.filter { $0.canBeTrusted && facts.removed.contains($0.machine) }.map(\.machine))
+        let rows = reading.machines.compactMap { machine -> VaultServerNeed? in
+            marked.contains(machine.machine) ? VaultServerNeed(machine: machine.machine, reason: Self.removedHere)
+                : gaveUp.first { $0.machine == machine.machine }
         }
         let due = listed.filter { machine in
             guard let tries = facts.servers[machine.machine] else { return true }
@@ -84,13 +112,13 @@ public struct VaultPlan: Equatable, Sendable {
         var vault: VaultNeed?
         if central.recovery == nil && facts.confirmedRecovery == nil {
             if let tries = facts.recovery, tries.givenUp { vault = .retry(.recover, tries.reason) }
-            else if facts.recovery?.isDue(at: facts.now) ?? true { return VaultPlan(step: .recover, servers: gaveUp) }
+            else if facts.recovery?.isDue(at: facts.now) ?? true { return VaultPlan(step: .recover, servers: rows) }
         }
         // The vault runs another program than the hub's release: the install's root step again brings it up to date.
         if reading.programBehind, facts.update?.isDue(at: facts.now) ?? true {
-            return VaultPlan(step: .update, vault: vault, servers: gaveUp)
+            return VaultPlan(step: .update, vault: vault, servers: rows)
         }
-        return VaultPlan(step: due.isEmpty ? .nothing : .trust(due), vault: vault, servers: gaveUp)
+        return VaultPlan(step: due.isEmpty ? .nothing : .trust(due), vault: vault, servers: rows)
     }
 }
 
@@ -172,13 +200,17 @@ public struct VaultFacts: Equatable, Sendable {
     public var servers: [String: VaultTries]
     /// The tries of the update to the program the hub names now: the next release's program starts them again.
     public var update: VaultTries?
+    /// The machines of this fleet that the owner removed on this Mac (`VaultRemovals`): none of them gets a pin.
+    public var removed: Set<String>
     public var now: Double
 
     public init(keyHeld: Bool, pin: String?, hubOnRecord: Bool, otherOwner: Bool = false, confirmedRecovery: String? = nil,
                 confirmedPins: [String: String] = [:], signedAt: [String: Double] = [:], install: VaultTries? = nil,
-                recovery: VaultTries? = nil, servers: [String: VaultTries] = [:], update: VaultTries? = nil, now: Double) {
+                recovery: VaultTries? = nil, servers: [String: VaultTries] = [:], update: VaultTries? = nil,
+                removed: Set<String> = [], now: Double) {
         self.keyHeld = keyHeld; self.pin = pin; self.hubOnRecord = hubOnRecord; self.otherOwner = otherOwner
         self.confirmedRecovery = confirmedRecovery; self.confirmedPins = confirmedPins; self.signedAt = signedAt
-        self.install = install; self.recovery = recovery; self.servers = servers; self.update = update; self.now = now
+        self.install = install; self.recovery = recovery; self.servers = servers; self.update = update
+        self.removed = removed; self.now = now
     }
 }

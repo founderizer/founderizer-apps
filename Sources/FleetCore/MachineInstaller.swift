@@ -51,15 +51,20 @@ public enum InstallError: LocalizedError, Equatable, Sendable {
     /// line `ssh` or the machine printed ("ssh: connect to host 203.0.113.9 port 22: Connection refused"), which is not
     /// his. So it says why when this Mac can tell — the server could not be reached, or it did not take his key — or
     /// the installer's own reason, and else where it stopped. The line keeps the machine's words on its hover. Every
-    /// other stop is in this app's own words already. `host` is the server's address as he typed it.
-    public func plain(host: String) -> String {
+    /// other stop is in this app's own words already. `host` is the server's address as he typed it, or its address on
+    /// the private network once the install reached it there. **A connection to that address on the private network
+    /// that nothing answered** is what a policy does that does not let this Mac in, so the line names that connection
+    /// and the policy (`FleetReach.dropped`; `place`: where his policy file is kept, as the key's step read it).
+    public func plain(host: String, place: PolicyPlace? = PolicyPlace.kept()) -> String {
         guard case .step(let title, let says) = self else { return errorDescription ?? String(l10n: "The install stopped.") }
         let said = says.lowercased(), server = host.isEmpty ? String(l10n: "the server") : host
         if let mark = InstallPlan.stopMarks.first(where: says.contains),
            let reason = says.components(separatedBy: mark).last?.trimmingCharacters(in: .whitespaces), !reason.isEmpty {
             return reason.prefix(1).uppercased() + reason.dropFirst()
         }
-        if InstallError.unreached(said) { return ServerCheck.unreached(server, said: said) }
+        if InstallError.unreached(said) {
+            return FleetReach.dropped(said, host: host, place: place) ?? ServerCheck.unreached(server, said: said)
+        }
         if InstallError.keyRefused(said) { return ServerCheck.keyRefused(server) }
         if InstallError.ownWords.contains(says) { return says }
         return String(l10n: "It stopped at “\(title)”.")
@@ -82,7 +87,7 @@ public enum InstallError: LocalizedError, Equatable, Sendable {
     /// The lines this app gives a step that failed: already his words.
     static let ownWords = [InstallPlan.hubSystems, InstallPlan.joinSystems,
                            String(l10n: "It did not answer which user this is."), MachineInstaller.notOnYourNetwork,
-                           NetworkSignIn.notApproved, NetworkSignIn.notStarted,
+                           NetworkSignIn.notApproved, NetworkSignIn.notStarted, MachineInstaller.notThisMacs,
                            String(l10n: "The hub refused the link code."), String(l10n: "The join did not reach the checks of this server.")]
 }
 
@@ -107,6 +112,22 @@ public actor MachineInstaller {
     /// Whether the root steps feed `sudo -S` the password: set by the check, which read a `sudo` that asks for one.
     private var feedsSudo = false
     private let claim: @Sendable (String, URL) async throws -> Void
+    private let readHub: @Sendable (URL) async -> HubRead
+    /// How many times an install asks for the server's checks while `ssh` does not reach the server at all, and the
+    /// seconds between two.
+    static let verifyTries = 3
+    private let verifyPause: Double
+    /// The hub served this Mac its pages while the install waited for a link code: this Mac owns it already, from an
+    /// earlier run of this install, and the claim step has no code to send.
+    private var ownedHub: URL?
+    /// The reads of the hub in a row that it refused, while the install waits for a link code.
+    private var hubRefusals = 0
+    /// The installer's log said that it made no link code, at a read of this wait: the hub has its owner.
+    private var installerMadeNoCode = false
+    /// The words of the hub installer's own line for a hub that has its owner and gets no new code (`hubsetup.py`
+    /// `cmd_claim`). Only a second sign beside the hub's own refusal: alone it decides nothing, and an installer that
+    /// says it in other words leaves the wait as it was.
+    static let noCodeMade = "no code was made"
     private var lastOutput = ""
     /// Where the install reaches the machine: the address the owner gave, until the network step puts the machine on
     /// the private network, and from then on its address there. Both installers let SSH in over that network only
@@ -114,17 +135,52 @@ public actor MachineInstaller {
     /// connection that is kept for the machine.
     public private(set) var reached: InstallTarget
 
-    /// `ssh` and `claim` are given in the tests, so the whole path is proved without a machine. `sudoPassword` is the
-    /// password `PasswordOnce` kept for a `sudo` that asks for one.
+    /// What a read of the hub from this Mac said, while the install waits for the hub installer's link code.
+    public enum HubRead: Equatable, Sendable {
+        /// The hub served this Mac its state: this Mac is its owner.
+        case serves
+        /// Something answered this read with 403. A hub says so to a computer that is not its owner's, and also to
+        /// its owner's Mac while that Mac's read carries a key that the hub does not take (a key from before, for
+        /// one read: the next read carries the key that waits). So one refusal alone decides nothing.
+        case refuses
+        /// Nothing that says either: no answer, the claim's own listener (404, or 503 while a hub is away for a
+        /// claim), a hub that starts.
+        case silent
+    }
+
+    /// `ssh`, `claim` and `readHub` are given in the tests, so the whole path is proved without a machine.
+    /// `sudoPassword` is the password `PasswordOnce` kept for a `sudo` that asks for one. `claim` stays the first of
+    /// the two closures: a closure after the call's bracket is the claim, as before `readHub`.
     public init(plan: InstallPlan, authKey: String, ssh: String = "/usr/bin/ssh", sudoPassword: PasswordOnce.Password? = nil,
-                claim: (@Sendable (String, URL) async throws -> Void)? = nil) {
+                claim: (@Sendable (String, URL) async throws -> Void)? = nil,
+                readHub: (@Sendable (URL) async -> HubRead)? = nil, verifyPause: Double = 10) {
+        self.verifyPause = verifyPause
         self.plan = plan
         self.authKey = authKey
         self.ssh = ssh
         self.sudoPassword = sudoPassword
         self.reached = plan.target
+        self.readHub = readHub ?? { hub in await MachineInstaller.readHub(at: hub) }
         self.claim = claim ?? { code, url in try await MachineInstaller.sendClaim(code: code, to: url) }
     }
+
+    /// **One read of the hub's state from this Mac**, as the app reads its fleet (with this Mac's key for that hub,
+    /// `OwnerMacKey`). The claim's listener serves only the claim and counts no try for another path, so this read
+    /// harms no claim that waits.
+    public static func readHub(at hub: URL) async -> HubRead {
+        do {
+            _ = try await HubClient().stateReading(at: hub)
+            return .serves
+        } catch HubError.refusal(403, _) {
+            return .refuses
+        } catch {
+            return .silent
+        }
+    }
+
+    /// The stop of an install whose hub has its owner and does not serve this Mac: the app's own sentence for a hub
+    /// that refuses this Mac's read.
+    static let notThisMacs = String(l10n: "Your hub answered, and it does not serve its pages to this Mac.")
 
     /// Runs the whole install and answers with the machine's own checklist. `report` is called for each step as it
     /// starts and as it ends, so the screen follows the install without asking.
@@ -136,8 +192,15 @@ public actor MachineInstaller {
                 let lines = try await perform(step, report: report)
                 if step.id == "network", let address = InstallPlan.privateAddress(in: lines) { reached.host = address }
                 if case .verify = step.action {
-                    guard let checklist = VerifyChecklist.read(output: lines.joined(separator: "\n"),
-                                                               readAt: Date().timeIntervalSince1970) else {
+                    let output = lines.joined(separator: "\n")
+                    guard let checklist = VerifyChecklist.read(output: output, readAt: Date().timeIntervalSince1970) else {
+                        // In an install, text that holds no list of checks is the server's own error (a program that
+                        // stopped with its words, a shell that found no folder): the stop names this step and keeps
+                        // that line behind it, as each other step does, so that the cause can be read. No output, and
+                        // a list that this app cannot read, are `noChecklist`. A machine's own check says what it said.
+                        if plan.installs, let last = lines.last, !VerifyChecklist.holdsList(output) {
+                            throw InstallError.step(step.title, last)
+                        }
                         throw InstallError.noChecklist
                     }
                     report(InstallProgress(step: step.id, title: step.title, says: step.says, state: .done,
@@ -157,6 +220,32 @@ public actor MachineInstaller {
     }
 
     private func lastLines() -> [String] { Array(lines(of: lastOutput).suffix(12)) }
+
+    /// **Whether this Mac owns the hub already**, read from the hub itself at the address that the network step gave
+    /// it on the private network, at the hub's own port. True: the claim step sends nothing. Before the network step
+    /// gave an address there, nothing is asked.
+    ///
+    /// **A refusal stops the install only with two signs together**: the installer's own line that it made no code
+    /// (`log`, the lines of this read of its log; the sign stays once it was read), and the hub's refusal at two
+    /// reads in a row. One refusal can be this Mac's own hub (`HubRead.refuses`), and a 403 with no word of the
+    /// installer can be another program on that port of a new server: both leave the wait as it was before.
+    private func ownsTheHub(_ step: InstallStep, log: [String]) async throws -> Bool {
+        if log.contains(where: { $0.contains(Self.noCodeMade) }) { installerMadeNoCode = true }
+        guard ClaimCode.isPrivateAddress(reached.host),
+              let hub = URL(string: "http://\(reached.host):\(FleetOnTailscale.hubPort)") else { return false }
+        switch await readHub(hub) {
+        case .serves:
+            ownedHub = hub
+            return true
+        case .refuses:
+            hubRefusals += 1
+            if installerMadeNoCode, hubRefusals >= 2 { throw InstallError.step(step.title, MachineInstaller.notThisMacs) }
+            return false
+        case .silent:
+            hubRefusals = 0
+            return false
+        }
+    }
 
     private func perform(_ step: InstallStep, report: @Sendable (InstallProgress) -> Void) async throws -> [String] {
         switch step.action {
@@ -182,14 +271,52 @@ public actor MachineInstaller {
             return try await ssh(program, title: step.title, timeout: 120)
         case .waitFor(let program, let mark, let every, let within):
             return try await wait(program, mark: mark, every: every, within: within, step: step, report: report)
+        case .waitForClaim(let program, let every, let within):
+            return try await wait(program, mark: ClaimCode.logMark, every: every, within: within, step: step,
+                                  forClaim: true, report: report)
         case .signIn(let start, let check, let every, let within):
             return try await signIn(start, check: check, every: every, within: within, step: step, report: report)
         case .claim:
+            // This Mac owns the hub already (the wait for its code read it so): no code was made, and none is sent
+            // in this run. The line names the hub's address as the line of a claim does, because the app reads the
+            // address there for its connection; no page shows it.
+            if let ownedHub { return [String(l10n: "This Mac claimed the hub at \(ownedHub.host ?? "").")] }
             guard let found = ClaimCode.found(in: lastOutput) else { throw InstallError.noClaimCode }
             try await claim(found.code, found.claim)
             return [String(l10n: "This Mac claimed the hub at \(found.claim.host ?? "").")]
         case .verify(let program):
-            return try await ssh(program, title: step.title, timeout: 1800, allowFailure: true)
+            return try await verify(program, step: step)
+        }
+    }
+
+    /// **The server's checks, the last step.** `fleet.py verify` ends with 1 when a check failed, which is an answer:
+    /// its status is not read (`run` reads the checks out of what it printed). **`ssh`'s own end (255) with no checks
+    /// is no answer of the server.** It was read as "the server did not answer its checks", with `ssh`'s own words
+    /// lost (a user's report of 15 November 2026: an install that stopped at this step with no cause to read). So in
+    /// an install (`InstallPlan.installs`) such an end stops the step with `ssh`'s own line, as each other step does.
+    ///
+    /// **Only a connection that never began is tried again** (`InstallError.unreached`: `ssh` did not reach the
+    /// server, so the checks did not start): `verifyTries` times in all. A connection that broke after it began, a
+    /// key that the server did not take, and a step that this Mac ended after its whole time are not: the checks may
+    /// still run on the server, and a second run beside them proves nothing. `ssh` that ended with no line at all is
+    /// no checks, as before. The check of a machine's own page asks one time and says what it said before.
+    private func verify(_ program: String, step: InstallStep) async throws -> [String] {
+        var left = Self.verifyTries
+        while true {
+            let answer = try await remote(program, stdin: nil, timeout: 1800, runs: .root)
+            let text = redact(answer.output)
+            lastOutput = text
+            let said = lines(of: text)
+            // `ssh` that ended with no line says nothing of a connection (a connection that fails prints why): that
+            // is no checks, as before.
+            guard plan.installs, answer.status == 255, let last = said.last,
+                  VerifyChecklist.read(output: said.joined(separator: "\n")) == nil else { return said }
+            let line = said.last(where: InstallError.keyRefused) ?? last
+            left -= 1
+            guard left > 0, !InstallError.keyRefused(line), InstallError.unreached(line.lowercased()) else {
+                throw InstallError.step(step.title, line)
+            }
+            try await Task.sleep(nanoseconds: UInt64(verifyPause * 1_000_000_000))
         }
     }
 
@@ -227,10 +354,15 @@ public actor MachineInstaller {
     /// Reads the installer's log until it prints `mark`. Each read that finds the installer at a new step of its own
     /// ("Founderizer step 14: security updates") says so as this step's line, which the first run's status line reads
     /// (`InstallPhases.status`).
+    ///
+    /// `forClaim`: the wait for the link code (`InstallStep.Action.waitForClaim`). A read with no code asks the hub
+    /// itself whether this Mac owns it already, and the wait then ends with no code.
     private func wait(_ program: String, mark: String, every: Double, within: Double, step: InstallStep,
-                      report: @Sendable (InstallProgress) -> Void) async throws -> [String] {
+                      forClaim: Bool = false, report: @Sendable (InstallProgress) -> Void) async throws -> [String] {
         let deadline = Date().addingTimeInterval(within)
         var said: String?
+        // The two signs of a hub that refuses this Mac are of this wait alone.
+        if forClaim { hubRefusals = 0; installerMadeNoCode = false }
         while Date() < deadline {
             let lines = try await ssh(program, title: step.title, timeout: 120, allowFailure: true)
             let text = lines.joined(separator: "\n")
@@ -238,6 +370,7 @@ public actor MachineInstaller {
                 throw InstallError.step(step.title, stop)
             }
             if text.contains(mark) { return lines }
+            if forClaim, try await ownsTheHub(step, log: lines) { return lines }
             if let now = lines.last(where: { InstallPhases.installerStep($0) != nil }), now != said {
                 said = now
                 report(InstallProgress(step: step.id, title: step.title, says: step.says, state: .running, lines: [now]))
@@ -324,7 +457,20 @@ public actor MachineInstaller {
     /// The claim's one refusal of this Mac's own: the address is not on the owner's private network, so nothing is sent.
     public static let notOnYourNetwork = String(l10n: "The installer printed an address that is not on your own network.")
 
-    public static func sendClaim(code: String, to url: URL) async throws {
+    ///
+    /// **The same call carries the SHA-256 of this Mac's key for that hub** (`OwnerMacKey`), in a header beside the
+    /// code: the key is made here and never sent. The installer keeps the SHA-256 with the owner's address, so the
+    /// hub that starts next asks each call from this Mac's address for the key, and a VM or a container on this Mac is
+    /// not the owner.
+    ///
+    /// The key waits in its own file from before the call (`OwnerMacKey.keepWaiting`), so an answer that is lost
+    /// loses no key: the listener can hold its SHA-256 already, and this Mac's next read of the hub carries the key
+    /// that waits. A claim that is made again sends the key that waits, and a claim that the listener refused takes
+    /// none away. The key becomes this Mac's when the installer says that it kept the SHA-256; an installer from
+    /// before the key says nothing, and the key that waited then goes. A Mac that cannot write the file claims with
+    /// no key: its hub then knows it by its address until the app registers one. `home`, `session`: for a test.
+    public static func sendClaim(code: String, to url: URL, home: URL? = OwnerMacKey.home,
+                                 session: URLSession? = nil) async throws {
         guard url.scheme == "http", let host = url.host, ClaimCode.isPrivateAddress(host),
               url.path == "/claim" else {
             throw InstallError.step(String(l10n: "Claim the hub"), notOnYourNetwork)
@@ -334,12 +480,28 @@ public actor MachineInstaller {
         request.timeoutInterval = 30
         request.setValue("text/plain", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data(code.utf8)
+        // The hub is the claim's address without its path.
+        var parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        parts?.path = ""
+        var key: String?
+        // The claim's address is a number of the private network (the check above), so nothing is looked up here.
+        if let hub = parts?.url, let made = OwnerMacKey.waiting(hub: hub, home: home) ?? (try? OwnerMacKey.make()),
+           (try? OwnerMacKey.keepWaiting(made, hub: hub, home: home)) != nil {
+            key = made
+            request.setValue(OwnerMacKey.digest(made), forHTTPHeaderField: OwnerMacKey.claimHeader)
+        }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 30
-        let (data, answer) = try await URLSession(configuration: configuration).data(for: request)
+        let (data, answer) = try await (session ?? URLSession(configuration: configuration)).data(for: request)
         let said = String(decoding: data.prefix(300), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         guard let http = answer as? HTTPURLResponse, http.statusCode == 200 else {
             throw InstallError.step(String(l10n: "Claim the hub"), said.isEmpty ? String(l10n: "The hub refused the link code.") : said)
+        }
+        guard let key, let hub = parts?.url else { return }
+        if http.value(forHTTPHeaderField: OwnerMacKey.claimKept)?.trimmingCharacters(in: .whitespaces) == "kept" {
+            OwnerMacKey.promote(key, hub: hub, home: home)
+        } else {
+            OwnerMacKey.forgetWaiting(key, hub: hub, home: home)
         }
     }
 }

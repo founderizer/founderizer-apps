@@ -75,6 +75,15 @@ public interface IFleetSource : IAsyncDisposable
     /// <summary>The bytes of a file of a message.</summary>
     Task<byte[]> FileAsync(MessageAttachment file);
 
+    /// <summary>"View outputs" or "Reload outputs": the store reads the open task's checked outputs (CheckedOutputsModel).</summary>
+    Task ListOutputsAsync();
+
+    /// <summary>"View" on a checked output: the store reads and checks it, and the page shows it opened.</summary>
+    Task ViewOutputAsync(ArtifactFile file);
+
+    /// <summary>"Close": the opened file and the list go.</summary>
+    void CloseOutputs();
+
     /// <summary>The notifications that are due, once each, also while the window is behind (the store's Notified).</summary>
     event EventHandler<IReadOnlyList<Notice>>? Notified;
 

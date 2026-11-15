@@ -35,7 +35,7 @@ struct ChatAgentPill: View {
 struct ManagerView: View {
     @Bindable var store: FleetStore
     let agent: String
-    @State private var followsLatest = true
+    @State private var end = ChatEnd()
     @State private var visibleCount = 60
     /// The newest reply when the chat drew first: a reply after it arrives while he looks, and fades in.
     @State private var shownUpTo: Int?
@@ -46,6 +46,8 @@ struct ManagerView: View {
     /// His message to this agent as the outbox saved it, kept from the frame it went until the reading that holds the
     /// hub's copy (`WordsOnTheirWay`): the store lets the request go with its receipt, a round trip before that reading.
     @State private var sent: PendingRequest?
+    /// His answer in words to a request of this agent, kept in the same way: it is his message in this chat.
+    @State private var answerSent: PendingRequest?
     /// The gap between chat entries. A reply's footer takes its height from it, and every other entry gets the same
     /// height below it, so each gap stays 28 points.
     private static let entrySpacing: CGFloat = 28, footer = AgentReply.footer(compact: false)
@@ -60,17 +62,33 @@ struct ManagerView: View {
         if case .report = next { gap -= 3 }
         return gap
     }
+    /// The entry that stands right under the row at `index`, or nil at the chat's end and over a request's card.
+    private static func entry(after index: Int, in rows: [ChatPart]) -> ChatEntry? {
+        guard index + 1 < rows.count, case .entry(let next) = rows[index + 1] else { return nil }
+        return next
+    }
     /// Over the first message: the room the pill over the conversation stands in.
     private static let topInset: CGFloat = 26 + ChatAgentPill.bottom
+    /// **The room under the chat's last row, over the composer** (the owner, 15 November 2026, with a picture of the
+    /// Claude desktop chat: "increase the space between the last message received and the text input so it breathes
+    /// more, like it happens in claude code"): the last words stood 39 points over the composer, and stand 127 over it
+    /// now, as that chat's do. It is a row of the chat, over the row that the chat scrolls to, so the chat opens with
+    /// it and keeps it when a reply comes (`threadRows`).
+    private static let endRoom: CGFloat = 88
     private var entries: [ChatEntry] { store.chatTimeline.entries(for: agent, limit: visibleCount) }
     /// His message to this agent on its way, until the reading holds the hub's copy (fix round 3, item 11).
     private var requestOnItsWay: PendingRequest? { store.messageOnItsWay(to: agent, kept: sent) }
-    /// **The chat as it draws: the hub's entries, and his message on its way at their end** (fix round 3, item 11), from
-    /// the frame he sent it, under the request's id, which the hub's copy keeps, so that copy takes its place where it
-    /// stands. A message of files alone comes with the hub's copy, its files with it.
+    /// His answer in his own words to a request of this agent, on its way, until the reading holds the hub's copy: his
+    /// message in this chat, as the hub writes it (`ChatRequestPlaces.inTime`).
+    private var answerOnItsWay: PendingRequest? { store.answerInWordsOnItsWay(toOneOf: mine, kept: answerSent) }
+    /// **The chat as it draws: the hub's entries, and his words on their way at their end** (fix round 3, item 11), a
+    /// message or an answer that he wrote to a request, from the frame he sent it, under the request's id, which the
+    /// hub's copy keeps, so that copy takes its place where it stands. Words of files alone come with the hub's copy,
+    /// its files with it.
     private var drawn: [ChatEntry] {
-        guard let request = requestOnItsWay, !request.text.isEmpty else { return entries }
-        return entries + [.message(OwnerMessage(onItsWay: request))]
+        let going = [requestOnItsWay, answerOnItsWay].compactMap { $0 }.filter { !$0.text.isEmpty }
+        guard !going.isEmpty else { return entries }
+        return entries + going.sorted { $0.createdAt < $1.createdAt }.map { .message(OwnerMessage(onItsWay: $0)) }
     }
     /// **What this agent asked him and still waits for** (the owner's yes of 28 October 2026, D-7): the request's card
     /// itself, at the column's width, so he answers in the chat where the agent told him about it ("It is in Needs
@@ -79,13 +97,15 @@ struct ManagerView: View {
         store.openNeeds.filter { $0.by == agent }.sorted { ($0.raised, $0.id) < ($1.raised, $1.id) }
     }
 
-    /// **Every request of this agent, waiting or answered, stands right after the agent's message that told him about
-    /// it** (D-7 item 1, the lead's call of 29 October 2026; `ChatRequestPlaces`): under "It is in Needs you.", as the
-    /// mockup draws it, so his next message and the agent's next line stand under the card. A waiting card stood at the
-    /// end of the chat, and his next message went above it. One that no message told him about waits at the end; an
-    /// answered one folds to two lines where it stood (D-7 item 2), and his answer, which it shows, is no second
-    /// bubble — or, told by no message, it takes his answer's place. The hub writes every answer as his message to the
-    /// agent that asked (`kind` "answer").
+    /// **Every request of this agent, waiting or answered, stands where it was raised** (the owner, 14 November 2026:
+    /// "Cards during a thread should appear wherever in the conversation they were requested, not all at the bottom of
+    /// the conversation!"; `ChatRequestPlaces.inTime`): right after the agent's message that told him about it ("It is
+    /// in Needs you.", D-7 item 1), else at its own time among the messages, so what came after it stands under it.
+    /// Every waiting request that no message told him about stood at the end of the chat, under the newest reply. An
+    /// answered one folds where it stands (D-7 item 2). **What he answers in his own words is his message in the
+    /// chat** ("When I reply to a card, the conversation should follow!"), at its time, with the agent's reply under
+    /// it; an option that he pressed is no second bubble, because its card shows it. The hub writes every answer as
+    /// his message to the agent that asked (`kind` "answer").
     private var mine: [OwnerNeed] { (store.state?.needs ?? []).filter { $0.by == agent } }
 
     /// What this chat is waiting for, or nil. Every part of it is already read: the hub's own answer about the
@@ -110,74 +130,75 @@ struct ManagerView: View {
                     let whole = entries.count >= store.chatTimeline.count(for: agent)
                     let held = drawn
                     let needs = mine
-                    let places = ChatRequestPlaces.of(needs: needs, in: held, whole: whole)
+                    let places = ChatRequestPlaces.inTime(needs: needs, in: held, whole: whole)
                     let byID = Dictionary(needs.map { ($0.id, $0) }) { first, _ in first }
-                    let shown = held.filter { !places.hidden.contains($0.id) }
-                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, entry in
-                        if let time = ChatStamp.time(of: entry, after: index > 0 ? shown[index - 1] : nil) {
+                    // **One list of rows, the entries and the cards, each under its own id** (`ChatPart`): a card keeps
+                    // its view, with the cursor in its answer, when an entry that comes moves it to another place.
+                    let rows = places.rows(of: held)
+                    // A card counts for the marks of a day or an hour as a message does, by the time it was raised.
+                    let times = ChatRequestPlaces.times(of: rows, raised: byID.mapValues(\.raised))
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        if let time = ChatStamp.time(times[index], after: index > 0 ? times[index - 1] : nil) {
                             ChatStamp(time: time)
                         }
-                        switch entry {
-                        case .message(let message):
-                            if let id = places.inPlaceOf[entry.id], let need = byID[id] {
-                                requestCard(need)
-                            } else {
-                                messageRow(message).padding(.bottom, Self.gap(under: message,
-                                                                              before: index + 1 < shown.count ? shown[index + 1] : nil,
-                                                                              keepsFiles: store.supportsKeptFiles))
-                            }
+                        switch row {
+                        case .request(let id):
+                            if let need = byID[id] { requestCard(need, spoken: places.spoken.contains(id)) }
+                        case .entry(.message(let message)):
+                            // The room under his message is counted to the row under it: a reply, or a card.
+                            messageRow(message).padding(.bottom, Self.gap(under: message, before: Self.entry(after: index, in: rows),
+                                                                          keepsFiles: store.supportsKeptFiles))
                         // **A reply that arrives while he looks fades in where it stands** (T-20): 0.2 s, opacity
                         // only. It took the waiting line's place in one frame. Not on the first paint, and not for
                         // the earlier messages he asks for.
-                        case .report(let report): reportRow(report).id(entry.id)
+                        case .entry(.report(let report)): reportRow(report).id(row.id)
                             .transition(shownUpTo.map { report.id > $0 } == true
                                         ? ReplyArrival.transition(taking: lineShowing && places.atEnd.isEmpty ? lastWaiting : nil,
                                                                   agent: agent)
                                         : .identity)
                         }
-                        // The requests this message told him about, in the order they were raised.
-                        ForEach(places.after[entry.id] ?? [], id: \.self) { id in
-                            if let need = byID[id] { requestCard(need) }
-                        }
-                    }
-                    ForEach(places.atEnd, id: \.self) { id in
-                        if let need = byID[id] { requestCard(need) }
                     }
                     // What the owner is waiting for, under his last message and above nothing: one muted line,
                     // in the place the answer will take.
                     if let waiting { ChatWaitingLine(waiting: waiting, agent: agent).padding(.bottom, Self.footer) }
+                    Color.clear.frame(height: Self.endRoom)
                     Color.clear.frame(height: 1).id("latest")
                 }.threadRows(top: Self.topInset)
             }
-            .onScrollPhaseChange { oldPhase, phase, context in
-                if phase == .interacting || phase == .tracking { followsLatest = false }
-                else if phase == .idle && oldPhase != .animating {
-                    followsLatest = context.geometry.contentSize.height - context.geometry.visibleRect.maxY < 100
-                }
-            }
+            .keepsEnd($end, room: Self.endRoom)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             // Text that scrolls up fades under the pill instead of running under it (T-20).
             .topFade(56)
             .onAppear { shownUpTo = store.state?.reports.lazy.filter { $0.chatAgent == agent }.map(\.id).max() ?? 0 }
             .onChange(of: store.chatTimeline.count(for: agent)) { oldCount, newCount in
-                if !followsLatest && newCount > oldCount { visibleCount += newCount - oldCount }
+                if !end.followsLatest && newCount > oldCount { visibleCount += newCount - oldCount }
             }
             // His message on its way is the newest entry from the frame it went, and the hub's copy, which takes its
             // place, may bring its files under it.
             .onChange(of: drawn.last) { _, _ in
-                if followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
+                if end.followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
             }
             .onChange(of: store.pending?.requestID, initial: true) { _, _ in
                 if let request = store.messageOnItsWay(to: agent) { sent = request }
+                // **The chat follows the answer that he writes to a request** (the owner, 14 November 2026: "When I
+                // reply to a card, the conversation should follow!"): his words stand at the chat's end, also when
+                // he wrote them in a card further up, and the agent's reply comes under them.
+                if let request = store.answerInWordsOnItsWay(toOneOf: mine) {
+                    if answerSent?.requestID != request.requestID {
+                        end.followsLatest = true
+                        proxy.scrollTo("latest", anchor: .bottom)
+                    }
+                    answerSent = request
+                }
             }
             // A match of the search card: the chat draws back to it and shows it in its middle.
             .onChange(of: store.chatFocus, initial: true) { _, focus in reveal(focus, proxy) }
             .onChange(of: requests.map(\.id)) { _, _ in
-                if followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
+                if end.followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
             }
             // The line appears and goes under his last message, so the view follows it as it does a reply.
             .onChange(of: waiting?.says) { _, _ in
-                if followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
+                if end.followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
             }
             .onChange(of: waiting, initial: true) { _, now in
                 lineShowing = now != nil
@@ -201,8 +222,8 @@ struct ManagerView: View {
             // The agent of this conversation stands over it, and stays there while it scrolls.
             .overlay(alignment: .top) { ChatAgentPill(agent: agent) }
             .overlay(alignment: .bottomTrailing) {
-                if !followsLatest {
-                    Button("Latest", systemImage: "arrow.down") { proxy.scrollTo("latest", anchor: .bottom); followsLatest = true }
+                if end.showsLatest {
+                    Button("Latest", systemImage: "arrow.down") { proxy.scrollTo("latest", anchor: .bottom); end.followsLatest = true }
                         .buttonStyle(.plain).font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
                         .padding(9).background(FleetStyle.surface, in: Capsule()).padding(12)
                 }
@@ -223,15 +244,17 @@ struct ManagerView: View {
         let all = store.chatTimeline.entries(for: agent, limit: .max)
         guard let from = all.firstIndex(where: { $0.created >= focus.at }) else { return }
         visibleCount = max(visibleCount, MessageSearch.drawn(count: all.count, index: from))
-        followsLatest = false
+        end.followsLatest = false
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(50))
             proxy.scrollTo(focus.entry, anchor: .center)
             // A chat that opens stands at its end, and the scroll view's first idle phase there sets `followsLatest`
             // to true again within those 50 ms. This scroll starts no phase that would correct it, so the next entry
             // pulled the chat to its end, away from the match, and Latest did not show (a real window, 13 November
-            // 2026). So the chat stops following here, after the scroll, until he scrolls or presses Latest.
-            followsLatest = false
+            // 2026). So the chat stops following here, after the scroll, until he scrolls or presses Latest. **A match
+            // that stands at the chat's end takes nothing from there** (`ChatEnd`; the owner, 14 November 2026): the
+            // chat still follows, and Latest does not show over a chat with nothing under it.
+            end.followsLatest = false
         }
     }
 
@@ -239,9 +262,10 @@ struct ManagerView: View {
         SentMessageView(store: store, message: message).id("message-\(message.id)")
     }
 
-    /// A request's card in the chat, at the column's width, waiting or folded.
-    private func requestCard(_ need: OwnerNeed) -> some View {
-        NeedRequestCard(store: store, need: need).padding(.bottom, Self.footer).id("need-\(need.id)")
+    /// A request's card in the chat, at the column's width, waiting or folded. `spoken`: his answer stands in the chat
+    /// as his own message, so the folded card does not say it again.
+    private func requestCard(_ need: OwnerNeed, spoken: Bool) -> some View {
+        NeedRequestCard(store: store, need: need, spoken: spoken).padding(.bottom, Self.footer).id("need-\(need.id)")
     }
 
     /// A reply, with its delivery icons when it went to a channel. **A message that the agent wrote first
@@ -281,6 +305,13 @@ extension FleetStore {
     /// His answer to `need` on its way, or `kept`, the one a card saw go, once the hub confirmed it.
     func answerOnItsWay(to need: OwnerNeed, kept: PendingRequest? = nil) -> PendingRequest? {
         WordsOnTheirWay.answer(to: need, pending: pending, kept: kept, receipt: lastReceipt, hub: hub, database: state?.db)
+    }
+
+    /// His answer in his own words to one of `needs`, an agent's requests, on its way, or `kept`, the one that agent's
+    /// chat saw go, once the hub confirmed it: his message in that chat.
+    func answerInWordsOnItsWay(toOneOf needs: [OwnerNeed], kept: PendingRequest? = nil) -> PendingRequest? {
+        WordsOnTheirWay.answerInWords(toOneOf: needs, pending: pending, kept: kept, receipt: lastReceipt, hub: hub,
+                                      database: state?.db, messages: state?.messages ?? [])
     }
 
     /// The chat's field: his draft, and nothing while it is his message on its way, so the field empties in the frame
@@ -335,10 +366,10 @@ private struct SentMessageView: View {
             }
     }
 
-    /// Its time, Copy and Edit, under the pointer only.
+    /// How long ago he sent it (`messageAge`), Copy and Edit, under the pointer only.
     private var footer: some View {
         HStack(spacing: 10) {
-            Text(messageTime(message.created))
+            Text(messageAge(message.created))
                 .help("\(fleetDate(message.created)) · \(message.read_at == nil ? String(l10n: "Received, not read yet") : String(localized: "Read (a message)", defaultValue: "Read", bundle: Localized.bundle, locale: Localized.digits))"
                       + (message.edited.map { " · " + String(l10n: "Edited \(messageTime($0))") } ?? ""))
             MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: String(l10n: "Copy message")) {
@@ -364,7 +395,7 @@ struct TaskView: View {
     let state: HubState
     let hub: URL
     let isFresh: Bool
-    @State private var followsLatest = true
+    @State private var end = ChatEnd()
     @State private var latestActivity = 0
     /// Why the thread's last read failed, in the hub's words.
     @State private var readError: String?
@@ -483,7 +514,7 @@ struct TaskView: View {
                     if threadEvents {
                         // Its "Activity is unavailable" not while the window's notice says the outage
                         // (`FleetStore.hubNoticeShows`; fix round 3, item 33).
-                        RuntimeActivity(activity: activity ?? TaskActivity(), error: store.hubNoticeShows ? nil : readError, task: task.id, attempt: task.attempt, stoppedAttempt: state.stoppedAttempt(of: task.id), terminal: task.isTerminal, isFresh: isFresh, followsLatest: $followsLatest,
+                        RuntimeActivity(activity: activity ?? TaskActivity(), error: store.hubNoticeShows ? nil : readError, task: task.id, attempt: task.attempt, stoppedAttempt: state.stoppedAttempt(of: task.id), terminal: task.isTerminal, isFresh: isFresh, followsLatest: $end.followsLatest,
                                         steers: state.steers?.filter { $0.task == task.id } ?? [],
                                         notes: notes, permissions: permissions,
                                         childRequest: $store.childThreadRequest)
@@ -543,30 +574,25 @@ struct TaskView: View {
                     Color.clear.frame(height: 1).id("latest-task")
                 }.threadRows(top: FleetSpace.underBand)
             }
-            .onScrollPhaseChange { oldPhase, phase, context in
-                if phase == .interacting || phase == .tracking { followsLatest = false }
-                else if phase == .idle && oldPhase != .animating {
-                    followsLatest = context.geometry.contentSize.height - context.geometry.visibleRect.maxY < 100
-                }
-            }
+            .keepsEnd($end)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             // Its rows fade as they leave at the top, over the room the thread leaves above its first row (T-20): its first
             // row stands 14 pt under the band, level with the first thing of every pane (the margins of 30 October 2026,
             // row 28, and its review: it stood 26 pt under it, 12 under the panel's head beside it).
             .topFade(FleetSpace.underBand)
             .onChange(of: latestActivity) { _, _ in
-                if followsLatest { proxy.scrollTo("latest-task", anchor: .bottom) }
+                if end.followsLatest { proxy.scrollTo("latest-task", anchor: .bottom) }
             }
             .onChange(of: task.state) { _, _ in
-                if followsLatest { proxy.scrollTo("latest-task", anchor: .bottom) }
+                if end.followsLatest { proxy.scrollTo("latest-task", anchor: .bottom) }
             }
             .onChange(of: state.steers?.last(where: { $0.task == task.id })?.id) { _, _ in
-                if followsLatest { proxy.scrollTo("latest-task", anchor: .bottom) }
+                if end.followsLatest { proxy.scrollTo("latest-task", anchor: .bottom) }
             }
             .overlay(alignment: .bottomTrailing) {
-                if !followsLatest {
+                if end.showsLatest {
                     Button("Latest", systemImage: "arrow.down") {
-                        proxy.scrollTo("latest-task", anchor: .bottom); followsLatest = true
+                        proxy.scrollTo("latest-task", anchor: .bottom); end.followsLatest = true
                     }.buttonStyle(.plain).font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
                         .padding(9).background(FleetStyle.surface, in: Capsule()).padding(12)
                         .accessibilityIdentifier("task-latest")
@@ -657,6 +683,10 @@ private struct ReplyArrival: ViewModifier {
     }
 }
 
+/// What `keepsEnd` reads of a scroll: whether it stands at its end (0 points under it, or `ChatEnd.near`), how long the
+/// chat is and how high its room.
+private struct EndMeasure: Equatable { let under: Double, chat: Double, room: Double }
+
 extension View {
     /// **The rows of a chat or a task thread end at their last row**, one rule for both (T-06, fix round of 28 October
     /// 2026): each opens at its end in one frame by the scroll's own bottom anchor, and later follows its newest row by
@@ -665,6 +695,30 @@ extension View {
     /// 40, and a chat's last message stood 26 points higher over its composer when it opened than after a reply. So the
     /// rows keep room over their first row only, and the column of prose.
     func threadRows(top: CGFloat) -> some View { padding(.top, top).chatColumn() }
+
+    /// **The scroll of a chat or a task thread says where it stands** (`ChatEnd`): its phases say that he took the
+    /// view in hand and where it came to rest, and its own measure says whether it stands at its end now, by whatever
+    /// way it came there and whatever took it from there. The measure is asked only when the answer changes, or the
+    /// chat's length or its room, not at each point of a scroll. `room` is the empty room that the rows keep under
+    /// their last row (`ManagerView.endRoom`): it is no part of the chat, so the measure is of the rows over it, and
+    /// "Latest" shows when 100 points of messages stand under the view, as it did before the chat had that room.
+    func keepsEnd(_ end: Binding<ChatEnd>, room: CGFloat = 0) -> some View {
+        func under(_ geometry: ScrollGeometry) -> Double { geometry.contentSize.height - room - geometry.visibleRect.maxY }
+        func keep(_ change: (inout ChatEnd) -> Void) {
+            var now = end.wrappedValue
+            change(&now)
+            if now != end.wrappedValue { end.wrappedValue = now }
+        }
+        return onScrollPhaseChange { oldPhase, phase, context in
+            if phase == .interacting || phase == .tracking { keep { $0.taken() } }
+            else if phase == .idle { keep { $0.rested(under: under(context.geometry), jumped: oldPhase == .animating) } }
+        }
+        .onScrollGeometryChange(for: EndMeasure.self) {
+            EndMeasure(under: ChatEnd.isEnd(under($0)) ? 0 : ChatEnd.near, chat: $0.contentSize.height, room: $0.containerSize.height)
+        } action: { old, now in
+            keep { $0.stands(under: now.under, moved: old.chat == now.chat && old.room == now.room) }
+        }
+    }
 
     /// **What scrolls under the top edge fades out over `height` points** (T-20): clear at the edge, whole at that
     /// depth. A message ran under the opaque pill of an agent's chat and was cut by it; Grok Bot fades its messages

@@ -670,9 +670,11 @@ struct SecretEntryView: View {
             centralLogin = reference
         }
         do {
+            // A replace keeps the entry's site, and the hub gives no site from an address then: it sends none.
             try await Self.register(reference, title: replacing?.entry.title ?? title, kind: kind,
-                                    variable: replacing != nil ? replacing?.entry.env : variable, value: value, hub: context.hub,
-                                    database: context.db, installation: store.installation)
+                                    variable: replacing != nil ? replacing?.entry.env : variable,
+                                    address: replacing == nil ? SecretCommand.address(for: login, features: store.state?.ui_features) : nil,
+                                    value: value, hub: context.hub, database: context.db, installation: store.installation)
         } catch {
             // The hub takes no new secret while the central vault does not answer: nothing was sent.
             if case HubError.refusal(503, _) = error { central = nil; phase = .noVault; return }
@@ -842,11 +844,13 @@ extension SecretEntryView {
     /// another password manager (`SecretImportView`) both make, so that there is one rule for it: the fingerprints of
     /// the value, made here from the salts that the hub gives for this reference, and the catalog entry under it. The
     /// hub takes the same reference again, so a save that it did not confirm goes under the same one. The value does
-    /// not leave this call.
-    static func register(_ reference: String, title: String, kind: LoginSecret.Kind, variable: String?, value: Data, hub: URL,
-                         database: String, installation: String) async throws {
+    /// not leave this call. `address`: an API key's address for the hub's table of well-known services, as
+    /// `SecretCommand.address(for:features:)` gives it, or nil.
+    static func register(_ reference: String, title: String, kind: LoginSecret.Kind, variable: String?, address: String? = nil,
+                         value: Data, hub: URL, database: String, installation: String) async throws {
         let salts = try await HubClient().secretSalts(hub: hub, database: database, login: reference)
         _ = try await SecretsClient().add(hub: hub, database: database, client: installation, login: reference, title: title,
-                                          kind: kind, variable: variable, fingerprints: SecretFingerprint.of(value, salts: salts))
+                                          kind: kind, variable: variable, address: address,
+                                          fingerprints: SecretFingerprint.of(value, salts: salts))
     }
 }

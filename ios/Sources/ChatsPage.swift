@@ -49,7 +49,7 @@ struct ChatsPage: View {
             }
             // Nothing of this hub was ever read and its read is on its way: after a second, the one loading line.
             if store.readsTheHub {
-                LoadingLine("Reading the hub…")
+                LoadingLine(String(l10n: "Reading the hub…"))
                     .listRowSeparator(.hidden)
                     .brandRows(cards: false)
                     .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
@@ -156,16 +156,55 @@ struct ChatsPage: View {
 
     /// **The line under an agent's name: what it does now while it works** (hub 1.148; the owner, 13 November 2026, to
     /// the picture of this line in the Mac's sidebar: "Yes, build it"), in the agent's own words for its command or the
-    /// hub's plain words for a tool; else the last line of its conversation, as before.
-    private func line(of agent: MobileAgent, _ state: AgentState) -> String {
-        if state == .working, let action = store.snapshot?.action(of: agent.name) { return action }
-        return lastLine(agent.last)
+    /// hub's plain words for a tool; else a request that waits for him when its card is the newest thing in the chat,
+    /// its title in orange (`needsYou`, `waitingRequest`); else the last line of its conversation, as before.
+    private func line(of agent: MobileAgent, _ state: AgentState) -> (text: String, needsYou: Bool) {
+        if state == .working, let action = store.snapshot?.action(of: agent.name) { return (action, false) }
+        if let request = request(of: agent) { return (request.title, true) }
+        return (lastLine(agent.last), false)
+    }
+
+    /// The request whose card is the newest thing in this agent's chat and that waits for him, or nil.
+    private func request(of agent: MobileAgent) -> OwnerNeed? {
+        Self.waitingRequest(agent: agent.name, last: agent.last,
+                            items: store.hasRead(chat: agent.name) ? store.items(for: agent.name) : nil,
+                            open: store.openNeeds, answered: store.answeredNeeds)
+    }
+
+    /// **The time at the row's end: the conversation's last line, or the waiting card that is its line** (the card's,
+    /// or the reply over it when that came later, as the chat's own marks of time count a card).
+    private func rowTime(of agent: MobileAgent) -> Double? {
+        if let request = request(of: agent) { return max(request.raised, agent.last?.ts ?? 0) }
+        return agent.last?.ts
+    }
+
+    /// **The request that waits for him when its card is the newest thing in the agent's chat** (the owner, 14 November
+    /// 2026: "why does the preview not show the card if the card is the latest element on the chat?", his "Yes, build
+    /// it" to its title in orange on the Mac's sidebar, and "Yes, iPhone too"; the Mac's `ChatList.waitingRequest`).
+    /// A chat that this phone holds up to its newest line places its cards as its page draws them (`ChatPage.places`),
+    /// so a card under the agent's reply of its turn ("It is in Needs you.") is still the newest thing. A chat that it
+    /// has not read yet, or whose newest line came since, has only that line here: the newest waiting request is the
+    /// line when it was raised after it, until the background read of that chat brings its items. A request that he
+    /// answered with an option leaves his answer as the last line, as his written words do.
+    static func waitingRequest(agent: String, last: MobilePreview?, items: [MobileChatItem]?, open: [OwnerNeed],
+                               answered: [OwnerNeed]) -> OwnerNeed? {
+        let mine = open.filter { $0.by == agent }
+        guard let newest = mine.max(by: { ($0.raised, $0.id) < ($1.raised, $1.id) }) else { return nil }
+        if let items, let held = items.last, held.ts >= last?.ts ?? 0 {
+            let ids = Set(mine.map(\.id))
+            let requests = mine + answered.filter { $0.by == agent && !ids.contains($0.id) }
+            let rows = ChatPage.rows(items, needs: requests, places: ChatPage.places(of: requests, in: items, agent: agent))
+            guard case .request(let need, _, _)? = rows.last, need.isOpen else { return nil }
+            return need
+        }
+        return newest.raised >= last?.ts ?? 0 ? newest : nil
     }
 
     private func row(_ agent: MobileAgent) -> some View {
         let unread = store.hasNewReply(from: agent.name)
         let state = state(of: agent)
-        let line = line(of: agent, state)
+        let (line, needsYou) = line(of: agent, state)
+        let rowTime = rowTime(of: agent)
         // **At the accessibility text sizes the mark stands beside the name** (margins pass, fault 13): centred on the
         // row, it stood beside the preview's lines, about 100 points under the name.
         return HStack(alignment: typeSize.isAccessibilitySize ? .top : .center, spacing: 12) {
@@ -182,16 +221,16 @@ struct ChatsPage: View {
                 heading {
                     Text(agentName(agent.name)).font(.headline)
                     if typeSize.isAccessibilitySize {
-                        if agent.last != nil || unread {
+                        if rowTime != nil || unread {
                             HStack(spacing: 6) {
-                                if let last = agent.last { time(last) }
+                                if let rowTime { time(rowTime) }
                                 if unread { unreadMark }
                             }
                         }
                     } else {
                         Spacer(minLength: 6)
                         if unread { unreadMark }
-                        if let last = agent.last { time(last) }
+                        if let rowTime { time(rowTime) }
                     }
                 }
                 // One line, as a list of conversations gives: the row is the name and the mark, and the words
@@ -202,8 +241,9 @@ struct ChatsPage: View {
                 // keeps its place and its height, clear, and the moving words stand over it, cut where it is cut.
                 // Still with Reduce Motion and at the accessibility text sizes, where the line wraps.
                 let moves = state == .working && !reduceMotion && !typeSize.isAccessibilitySize
+                // A request that waits for him is its title in the orange of words that ask him to act (`Brand.warning`).
                 Text(line)
-                    .font(.subheadline).foregroundStyle(Brand.muted)
+                    .font(.subheadline).foregroundStyle(needsYou ? Brand.warning : Brand.muted)
                     .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -227,9 +267,9 @@ struct ChatsPage: View {
     private func spoken(_ agent: MobileAgent) -> String {
         let state = state(of: agent)
         var parts = [agentName(agent.name), state.words]
-        if let last = agent.last { parts.append(ChatList.time(last.ts, now: store.hubNow)) }
-        if store.hasNewReply(from: agent.name) { parts.append("Unread reply") }
-        parts.append(line(of: agent, state))
+        if let rowTime = rowTime(of: agent) { parts.append(ChatList.time(rowTime, now: store.hubNow)) }
+        if store.hasNewReply(from: agent.name) { parts.append(String(l10n: "Unread reply")) }
+        parts.append(line(of: agent, state).text)
         return parts.joined(separator: ", ")
     }
 
@@ -237,8 +277,8 @@ struct ChatsPage: View {
     /// rule since 13 November 2026, when the owner asked for "this relative time label on the side menu too"): the time
     /// of day for today, "Yesterday", the weekday within the last week, else the date in numbers. It was the time of
     /// day alone, so a line of yesterday evening read "20:51" beside one of this morning.
-    private func time(_ last: MobilePreview) -> some View {
-        Text(ChatList.time(last.ts, now: store.hubNow)).font(.subheadline).foregroundStyle(Brand.muted)
+    private func time(_ ts: Double) -> some View {
+        Text(ChatList.time(ts, now: store.hubNow)).font(.subheadline).foregroundStyle(Brand.muted)
     }
 
     /// A reply he has not read: the one violet dot.
@@ -257,8 +297,8 @@ struct ChatsPage: View {
     /// as its bubble draws them, the owner's as an agent's (the Mac's list does the same).
     private func lastLine(_ last: MobilePreview?) -> String {
         // No full stop: an empty line in the Mac's form (fix round 2, item 35).
-        guard let last else { return "No messages yet" }
-        let text = last.isFromAgent ? MessageBlock.plain(last.preview) : "You: " + MessageBlock.plain(last.preview)
+        guard let last else { return String(l10n: "No messages yet") }
+        let text = last.isFromAgent ? MessageBlock.plain(last.preview) : String(l10n: "You: \(MessageBlock.plain(last.preview))")
         return text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
     }
 }
@@ -278,7 +318,7 @@ private struct NoHubWords: View {
                 .font(.body)
                 .foregroundStyle(Brand.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            TextAction(title: "See a sample fleet", font: .body) { store.startSample() }
+            TextAction(title: String(l10n: "See a sample fleet"), font: .body) { store.startSample() }
                 .padding(.top, 10)
                 .accessibilityIdentifier("see-sample")
         }

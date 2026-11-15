@@ -70,11 +70,20 @@ public static class WindowsUpdate
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             timeout.CancelAfter(TimeSpan.FromSeconds(30));
-            using var answer = await http.SendAsync(request, timeout.Token);
+            using var answer = http is HttpClient client
+                ? await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
+                : await http.SendAsync(request, timeout.Token);
             status = (int)answer.StatusCode;
-            if (answer.Content.Headers.ContentLength > AppManifest.AnswerLimit)
+            // At most one byte more than an answer may hold is read, also from an answer with no length.
+            await using var stream = await answer.Content.ReadAsStreamAsync(timeout.Token);
+            var held = new MemoryStream();
+            var buffer = new byte[8192];
+            int read;
+            while ((read = await stream.ReadAsync(buffer, timeout.Token)) > 0 && held.Length <= AppManifest.AnswerLimit)
+                held.Write(buffer, 0, read);
+            if (held.Length > AppManifest.AnswerLimit)
                 return new UpdateReading { Status = status, Says = "The channel did not answer with a build this app could read." };
-            body = await answer.Content.ReadAsByteArrayAsync(timeout.Token);
+            body = held.ToArray();
         }
         catch (Exception e) when (e is HttpRequestException or IOException or OperationCanceledException && !cancel.IsCancellationRequested)
         {
@@ -216,7 +225,12 @@ public static class BuildDownload
         start.CancelAfter(TimeSpan.FromSeconds(120));
         try
         {
-            answer = await http.SendAsync(request, start.Token);
+            // At the headers: an HttpClient reads the whole body before it returns by default, and a stop in the middle
+            // then came out here as a download that never started (the release proof of 14 November 2026). The body is
+            // read below, with its size limit, its checksum and its words.
+            answer = http is HttpClient client
+                ? await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, start.Token)
+                : await http.SendAsync(request, start.Token);
         }
         catch (Exception e) when (e is HttpRequestException or IOException or OperationCanceledException && !cancel.IsCancellationRequested)
         {

@@ -19,8 +19,10 @@ namespace Founderizer.Windows.Fleet;
 /// notification for the app, its header with the product's mark and name, the asking agent as its title and the
 /// request's title as its text, and no buttons. The store says which are due, once each, also while the window is
 /// behind (OwnerStore.Notified); a shown one goes when its request is no longer open; a press opens Needs you at that
-/// request (Screens.NoticeTarget), or only brings the window to the front. The manager's warning (a notice with no
-/// request) waits for the owner's word, so none is shown.</summary>
+/// request (Screens.NoticeTarget), or only brings the window to the front. A press while the app is closed makes Windows
+/// start it: the start reads the press (the Windows App SDK's activation of the kind AppNotification) and opens that
+/// request once the store has a reading. The manager's warning (a notice with no request) waits for the owner's word,
+/// so none is shown.</summary>
 internal sealed class WindowsNotices
 {
     private readonly DispatcherQueue ui;
@@ -28,6 +30,7 @@ internal sealed class WindowsNotices
     private readonly Action<long?> open;
     private readonly Dictionary<string, Notice> shown = new();
     private bool registered;
+    private IDictionary<string, string>? waiting;
 
     public WindowsNotices(IFleetSource source, DispatcherQueue ui, Func<StoreState> state, Action<long?> open)
     {
@@ -37,9 +40,10 @@ internal sealed class WindowsNotices
         source.Notified += (_, due) => ui.TryEnqueue(() => Show(due));
     }
 
-    /// <summary>Registers the app with Windows' notifications, with its name and the product's mark (a picture that the
-    /// window drew of it, in the app's own folder, <paramref name="mark"/>).</summary>
-    public void Start(string mark)
+    /// <summary>Registers the app with Windows' notifications as the window opens: a press goes to this app while it runs
+    /// (the handler comes before Register, so that Windows starts no second app for it), and a start that a press
+    /// made opens its request.</summary>
+    public void Register()
     {
         AppNotificationManager.Default.NotificationInvoked += Invoked;
         try
@@ -52,6 +56,41 @@ internal sealed class WindowsNotices
             Readings.Note("notifications: not registered: " + e.Message);
             return;
         }
+        // A press while the app is closed starts the launcher of an install (the build that is current then), or this
+        // program when it runs from no install.
+        try
+        {
+            var program = Update.Updater.ThisInstall() is { } install ? install.Folder.Launcher : Environment.ProcessPath;
+            if (program is not null && Install.WindowsEntries.PointActivator(program) is { } before)
+                Readings.Note($"notifications: a press while the app is closed starts {program} (it named {before})");
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException or System.Security.SecurityException)
+        {
+            Readings.Note("notifications: the program of a press was not written: " + e.Message);
+        }
+        try
+        {
+            var started = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
+            if (started.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.AppNotification &&
+                started.Data is AppNotificationActivatedEventArgs press)
+            {
+                // Its request opens with the store's next state that has a reading (Prune), after the window chose
+                // its first page, so that the first page does not cover it.
+                Readings.Note("started by a notification");
+                waiting = press.Arguments;
+            }
+        }
+        catch (COMException e)
+        {
+            Readings.Note("notifications: the start's kind was not read: " + e.Message);
+        }
+    }
+
+    /// <summary>The header's name and the product's mark (a picture that the window drew of it, in the app's own folder,
+    /// <paramref name="mark"/>).</summary>
+    public void Header(string mark)
+    {
+        if (!registered) return;
         // Windows takes the header's name and picture of an app that is not packaged from its identity's key in the
         // user's part of the registry. (Register's own name and picture refuse a file's address: ERROR_INVALID_NAME.)
         try
@@ -100,9 +139,15 @@ internal sealed class WindowsNotices
         }
     }
 
-    /// <summary>Takes away the shown notifications whose request is no longer open.</summary>
+    /// <summary>Takes away the shown notifications whose request is no longer open; opens the request of a press that
+    /// started the app, once the store has a reading.</summary>
     public void Prune(StoreState s)
     {
+        if (waiting is { } press && s.Fleet is not null)
+        {
+            waiting = null;
+            Pressed(press);
+        }
         if (shown.Count == 0 || s.Hub is not { } hub || s.Fleet is not { } fleet) return;
         var open = Notifications.Open(hub, fleet);
         foreach (var gone in shown.Keys.Where(tag => !open.Contains(tag)).ToList())
@@ -122,9 +167,15 @@ internal sealed class WindowsNotices
         ui.TryEnqueue(() => Pressed(args.Arguments));
 
     /// <summary>A press on a notification: Needs you at its request while the reading still lists it, else only the
-    /// window to the front.</summary>
+    /// window to the front. Before the store's first reading (a start that the press made), it waits for that reading.</summary>
     public void Pressed(IDictionary<string, string> arguments)
     {
+        if (state().Fleet is null && arguments.ContainsKey("need"))
+        {
+            waiting = arguments;
+            Readings.Note("notification pressed: waits for the first reading");
+            return;
+        }
         long? target = null;
         if (arguments.TryGetValue("need", out var text) && long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var need) &&
             arguments.TryGetValue("context", out var context))

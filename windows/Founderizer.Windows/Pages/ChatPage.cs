@@ -68,6 +68,10 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
     private readonly PendingBarView bar;
     private readonly ThreadList thread;
     private readonly Button latest;
+    private readonly FrameworkElement voidMark;
+    private readonly ShimmerText loadLine = new();
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer loadTimer;
+    private bool loading;
     private readonly TextBlock note = Look.Words("", 12, 16, Look.Muted);
     private readonly Border pill;
     private readonly AgentGlyph pillMark = new() { Side = 22, VerticalAlignment = VerticalAlignment.Center };
@@ -77,9 +81,6 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
     private StoreState state = new();
     private DateTimeOffset now;
     private bool loaded;
-    private int settle;
-    /// <summary>The plus's words: the library's ComposerModel has none, so the answer box's (AnswerBoxModel.PlusHover).</summary>
-    private const string PlusWords = "Send a picture, a PDF, a ZIP or a text file with this message";
 
     // The scroll reading of slice 1.3 scrolls the whole long chat, end to start: all its items show at once there.
     private int shown = Proofs.Variable("FOUNDERIZER_READING") == "long-chat" ? int.MaxValue : Screens.EarlierStep;
@@ -93,7 +94,9 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        thread = new ThreadList(this, new Thickness(0, 70, 0, 12));
+        // The room over the composer (the owner, 15 November 2026: "increase the space between the last message received
+        // and the text input"): the Mac's 88 under the chat's last row (ManagerView.endRoom).
+        thread = new ThreadList(this, new Thickness(0, 70, 0, 12), endRoom: 88);
         thread.Scroll.Margin = new Thickness(0, 0, 0, 64);
 
         // The top of the chat fades out under the pill: the canvas from 0 to 20, then to clear at 72 (topFade).
@@ -145,25 +148,40 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
         latest.VerticalAlignment = VerticalAlignment.Bottom;
         latest.Margin = new Thickness(0, 0, 0, 76);
         latest.Visibility = Visibility.Collapsed;
-        latest.Click += (_, _) => thread.Scroll.ChangeView(null, thread.Scroll.ScrollableHeight, null, false);
-        thread.Scroll.ViewChanged += (_, _) => latest.Visibility = thread.AtEnd || thread.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        latest.Click += (_, _) => thread.Latest();
+        // Only while the chat stands away from its end, and nothing brings it there (FleetCore's ChatEnd).
+        thread.EndChanged += () => latest.Visibility = thread.End.ShowsLatest && thread.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         note.MaxWidth = 692;
         note.Margin = new Thickness(23.5 + 2, 0, 23.5, 58);
         note.VerticalAlignment = VerticalAlignment.Bottom;
         note.Visibility = Visibility.Collapsed;
 
-        var chat = new Grid { Children = { thread.Scroll, fade, shadow, pill, latest, bar, note, composer } };
+        // A chat with no message: the product's mark, muted, in the middle of the room between the pill and the
+        // composer (picture 5a of the third set, the Mac's ManagerView); a chat not read yet: "Reading…" in its first
+        // place after a second, shimmering (picture 5b, the iPhone's LoadingLine), and no mark.
+        voidMark = Marks.ProductMark.Muted(96);
+        voidMark.HorizontalAlignment = HorizontalAlignment.Center;
+        voidMark.VerticalAlignment = VerticalAlignment.Center;
+        voidMark.Margin = new Thickness(0, 80, 0, 64);
+        voidMark.Visibility = Visibility.Collapsed;
+        loadLine.HorizontalAlignment = HorizontalAlignment.Left;
+        var loadPlace = new Grid
+        {
+            MaxWidth = 692,
+            Margin = new Thickness(23.5, 70, 23.5, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+            Children = { loadLine },
+        };
+        loadLine.Visibility = Visibility.Collapsed;
+        loadTimer = DispatcherQueue.CreateTimer();
+        loadTimer.Interval = TimeSpan.FromSeconds(1);
+        loadTimer.IsRepeating = false;
+        loadTimer.Tick += (_, _) => loadLine.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
+        var chat = new Grid { Children = { thread.Scroll, voidMark, loadPlace, fade, shadow, pill, latest, bar, note, composer } };
         Children.Add(Banded.Wrap(chat, band));
         SetColumn(panel, 1);
         Children.Add(panel);
 
-        // The chat opens at its end, and stays there while new rows come, unless he scrolled up.
-        thread.Scroll.LayoutUpdated += (_, _) =>
-        {
-            if (settle <= 0) return;
-            settle--;
-            thread.ToEnd();
-        };
     }
 
     public FrameworkElement View => this;
@@ -183,13 +201,27 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
         now = at;
         var model = Screens.Chat(next, agent, at, ScreenContext.Local, reduceMotion, shown);
         bar.Show(Screens.PendingBar(next, at));
+        voidMark.Visibility = model.Empty ? Visibility.Visible : Visibility.Collapsed;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(voidMark, model.Empty ? model.EmptyWords : "");
+        loadLine.Text = model.LoadingWords;
+        loadLine.Shimmer = !reduceMotion;
+        if (model.Loading != loading)
+        {
+            loading = model.Loading;
+            if (loading) loadTimer.Start();
+            else
+            {
+                loadTimer.Stop();
+                loadLine.Visibility = Visibility.Collapsed;
+            }
+        }
         pillMark.Mark = model.PillMark;
         pillWords.Text = model.Label;
         panel.Show(model.Panel);
 
         composer.Visibility = model.Composer.ShowsField ? Visibility.Visible : Visibility.Collapsed;
         composer.Show(model.Composer.Placeholder, model.Composer.ShowsPlus, model.Composer.CanSend);
-        composer.Hovers(PlusWords, model.Composer.SendHover);
+        composer.Hovers(model.Composer.PlusHover, model.Composer.SendHover);
         ((TextBlock)((Border)latest.Content).Child).Text = model.LatestWords;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(latest, model.LatestWords);
         note.Text = model.Composer.Note ?? "";
@@ -200,9 +232,7 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
         composer.Tint(tint.Fill, tint.Ink);
         if (!loaded) composer.Load(model.Composer.Draft);
 
-        bool atEnd = !loaded || thread.AtEnd;
-        thread.Show(Rows(model, next, at));
-        if (atEnd && thread.Count > 0) settle = loaded ? 2 : 6;
+        thread.Show(Rows(model, next, at), opening: !loaded);
         loaded = true;
     }
 

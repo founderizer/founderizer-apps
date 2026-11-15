@@ -165,8 +165,7 @@ internal sealed class AgentPanelView : Grid
         }
         Grid.SetColumn(bar, 1);
         grid.Children.Add(bar);
-        // The share in Windows' own form of a percentage for the PC's language: the library gives the number only.
-        var share = Look.Words((row.Percent / 100.0).ToString("P0", System.Globalization.CultureInfo.CurrentCulture), wrap: false);
+        var share = Look.Words(row.ShareWords, wrap: false);
         Grid.SetColumn(share, 2);
         grid.Children.Add(share);
         ToolTipService.SetToolTip(grid, row.Hover);

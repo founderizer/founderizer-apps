@@ -154,9 +154,9 @@ enum DeviceKeyError: LocalizedError {
         switch self {
         // The number is the keychain's own, and it is the one fact that tells these apart: -128 is the owner
         // saying no, -25293 is the check failing, -25308 is the screen not being available to ask on.
-        case .notProven(let status): "The key stays locked: this phone did not prove that you are here (\(status))."
-        case .unreadable: "The saved key cannot be read."
-        case .keychain(let status): "The keychain refused the key (\(status))."
+        case .notProven(let status): String(l10n: "The key stays locked: this phone did not prove that you are here (\(Int(status))).")
+        case .unreadable: String(l10n: "The saved key cannot be read.")
+        case .keychain(let status): String(l10n: "The keychain refused the key (\(Int(status))).")
         }
     }
 }

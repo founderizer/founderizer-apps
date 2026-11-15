@@ -319,6 +319,128 @@ struct SecretTests {
         #expect(throws: HubError.self) { try SecretCommand.grant(requestID: id, database: "db", login: reference, agent: "Studio", grant: .use) }
     }
 
+    /// `POST /ui/secrets/import` (feature `secrets_import`): an import's entries in one command, each as Add secret
+    /// sends one, with no value and no salt; and each entry's answer, in the order of the list.
+    @Test func anImportSendsItsEntriesInOneCommandAndReadsAnAnswerForEach() throws {
+        let id = UUID(), print = SecretFingerprint(kind: "password", hash: hex, len: 21)
+        let key = SecretImportEntry(login: reference, title: "EXAMPLE_API_KEY", kind: .apiKey, variable: "EXAMPLE_API_KEY",
+                                    fingerprints: [print])
+        let login = SecretImportEntry(login: "bws://21111111-2222-4333-8444-55555555555b", title: "shop.example.test · owner",
+                                      kind: .login, variable: nil, fingerprints: [])
+        let body = try #require(try JSONSerialization.jsonObject(with: SecretCommand.importAll(
+            requestID: id, database: "db", entries: [key, login])) as? [String: Any])
+        #expect(Set(body.keys) == ["request_id", "db", "secrets"] && body["request_id"] as? String == id.uuidString.lowercased())
+        let sent = try #require(body["secrets"] as? [[String: Any]])
+        #expect(sent.count == 2 && Set(sent[0].keys) == ["login", "title", "kind", "env", "fingerprints"])
+        #expect(sent[0]["env"] as? String == "EXAMPLE_API_KEY" && sent[1]["env"] == nil && sent[1]["kind"] as? String == "login")
+        let bad = SecretImportEntry(login: reference, title: "PATH", kind: .apiKey, variable: "PATH", fingerprints: [])
+        let many = (0...SecretCommand.importMax).map { n in
+            SecretImportEntry(login: String(format: "bws://%08x-2222-4333-8444-55555555555b", n), title: "site\(n).test · owner",
+                              kind: .login, variable: nil, fingerprints: [])
+        }
+        let folded = SecretImportEntry(login: reference, title: "acme.example.test · a\nb", kind: .login, variable: nil, fingerprints: [])
+        #expect(SecretCommand.isValid(key) && SecretCommand.isValid(login) && !SecretCommand.isValid(bad) && !SecretCommand.isValid(folded))
+        for entries in [[], [bad], [folded], [key, key], many] {
+            #expect(throws: HubError.self) { try SecretCommand.importAll(requestID: id, database: "db", entries: entries) }
+        }
+        #expect(throws: Never.self) { try SecretCommand.importAll(requestID: id, database: "db", entries: Array(many.dropLast())) }
+        // The answers: nil for an entry that the hub took, its words for one that it refused, and no receipt at all for
+        // one of another command, another client or an answer that does not fit its entry.
+        func receipt(_ results: String, request: UUID, client: String) throws -> SecretImportReceipt {
+            try JSONDecoder().decode(SecretImportReceipt.self, from: Data("""
+            {"ok": true, "request_id": "\(request.uuidString.lowercased())", "client": "\(client)", "changed": true,
+             "results": \(results)}
+            """.utf8))
+        }
+        let took = #"{"login": "\#(reference)", "stored": 1, "known": 0, "changed": true}"#
+        let refused = #"{"login": "\#(login.login)", "error": "The list already has an API key named X.", "status": 409}"#
+        #expect(try SecretsClient.answers(receipt("[\(took), \(refused)]", request: id, client: "mac-1"), for: [key, login],
+                                          requestID: id, client: "mac-1")
+                == [nil, "The list already has an API key named X."])
+        let unnamed = #"{"login": null, "error": "an entry is an object", "status": 400}"#
+        #expect(try SecretsClient.answers(receipt("[\(took), \(unnamed)]", request: id, client: "mac-1"), for: [key, login],
+                                          requestID: id, client: "mac-1") == [nil, "an entry is an object"])
+        let otherRefused = #"{"login": "\#(reference)", "error": "x", "status": 409}"#
+        let wrongLogin = #"{"login": "\#(login.login)", "stored": 1, "known": 0, "changed": true}"#
+        let wrongCount = #"{"login": "\#(reference)", "stored": 2, "known": 0, "changed": true}"#
+        for (results, request, client) in [("[\(took)]", id, "mac-1"), ("[\(took), \(refused)]", UUID(), "mac-1"),
+                                            ("[\(took), \(refused)]", id, "mac-2"), ("[\(wrongLogin), \(refused)]", id, "mac-1"),
+                                            ("[\(wrongCount), \(refused)]", id, "mac-1"), ("[\(took), \(otherRefused)]", id, "mac-1")] {
+            #expect(throws: HubError.self) {
+                try SecretsClient.answers(receipt(results, request: request, client: client), for: [key, login], requestID: id,
+                                          client: "mac-1")
+            }
+        }
+    }
+
+    /// Feature `key_table` (UI-API 1.174): a save sends an API key's address only to a hub that names the feature, only
+    /// for an API key, and only as the scheme, the host and the port of an https address (C40): a path can be a secret,
+    /// as a query and a fragment can. A hub without the feature refuses the field, so it gets none.
+    @Test func aKeysAddressGoesOnlyToAHubWithTheTableOnlyForAKeyAndWithNoPath() throws {
+        func key(_ url: String) -> LoginSecret {
+            var value = LoginSecret()
+            value.kind = .apiKey; value.env = "EXAMPLE_API_KEY"; value.password = "sk-synthetic-CANARY-9d2f"; value.url = url
+            return value
+        }
+        #expect(SecretCommand.keyTableFeature == "key_table")
+        #expect(key(" https://api.example.test/v1/chat?project=p1#part ").tableAddress == "https://api.example.test")
+        #expect(key("https://example.test/account/api-tokens/").tableAddress == "https://example.test")
+        #expect(key("https://api.example.test:8443/v1").tableAddress == "https://api.example.test:8443")
+        #expect(key("https://api.example.test?").tableAddress == "https://api.example.test")
+        #expect(key("https://api.example.test/#").tableAddress == "https://api.example.test")
+        // A path can be a secret (a webhook, an invite link, a bot's API): no part of it goes.
+        let hook = key("https://hooks.example.test/services/T0000/B0000/synthetic-CANARY-path")
+        #expect(hook.tableAddress == "https://hooks.example.test")
+        for url in ["", "   ", "api.example.test", "ftp://api.example.test", "http://api.example.test/v1"] {
+            #expect(key(url).tableAddress == nil)               // the table reads only https
+        }
+        #expect(login().tableAddress == nil)                    // a login's sign-in address selects no row of the table
+        let table = ["secrets", SecretCommand.keyTableFeature]
+        #expect(SecretCommand.address(for: key("https://api.example.test/v1?x=1"), features: table) == "https://api.example.test")
+        #expect(SecretCommand.address(for: hook, features: table)?.contains("CANARY") == false)
+        for features in [nil, [], ["secrets", "secrets_import"]] as [[String]?] {
+            #expect(SecretCommand.address(for: key("https://api.example.test/v1"), features: features) == nil)
+        }
+        #expect(SecretCommand.address(for: login(), features: table) == nil)
+        #expect(SecretCommand.address(for: key(""), features: table) == nil)
+        // The two commands carry the field only when there is one, and never for a login, nor with a path, a query, a
+        // fragment, a user part or a scheme other than https.
+        let id = UUID(), print = SecretFingerprint(kind: "password", hash: hex, len: 21)
+        let added = try #require(try JSONSerialization.jsonObject(with: SecretCommand.add(
+            requestID: id, database: "db", login: reference, title: "EXAMPLE_API_KEY", kind: .apiKey, variable: "EXAMPLE_API_KEY",
+            address: "https://api.example.test:8443", fingerprints: [print])) as? [String: Any])
+        #expect(added["address"] as? String == "https://api.example.test:8443")
+        let none = try #require(try JSONSerialization.jsonObject(with: SecretCommand.add(
+            requestID: id, database: "db", login: reference, title: "EXAMPLE_API_KEY", kind: .apiKey, variable: "EXAMPLE_API_KEY",
+            fingerprints: [print])) as? [String: Any])
+        #expect(!none.keys.contains("address"))
+        for (kind, variable, title, address) in [
+            (LoginSecret.Kind.login, nil, "shop.example.test · owner", "https://shop.example.test"),
+            (.apiKey, "EXAMPLE_API_KEY", "EXAMPLE_API_KEY", "https://api.example.test/v1"),
+            (.apiKey, "EXAMPLE_API_KEY", "EXAMPLE_API_KEY", "https://api.example.test/"),
+            (.apiKey, "EXAMPLE_API_KEY", "EXAMPLE_API_KEY", "https://api.example.test?x=1"),
+            (.apiKey, "EXAMPLE_API_KEY", "EXAMPLE_API_KEY", "https://api.example.test#part"),
+            (.apiKey, "EXAMPLE_API_KEY", "EXAMPLE_API_KEY", "http://api.example.test"),
+            (.apiKey, "EXAMPLE_API_KEY", "EXAMPLE_API_KEY", "https://owner@api.example.test"),
+            (.apiKey, "EXAMPLE_API_KEY", "EXAMPLE_API_KEY", "")] as [(LoginSecret.Kind, String?, String, String)] {
+            #expect(throws: HubError.self) {
+                try SecretCommand.add(requestID: id, database: "db", login: reference, title: title, kind: kind, variable: variable,
+                                      address: address, fingerprints: [])
+            }
+            #expect(!SecretCommand.isValid(SecretImportEntry(login: reference, title: title, kind: kind, variable: variable,
+                                                             address: address, fingerprints: [])))
+        }
+        let withAddress = SecretImportEntry(login: reference, title: "EXAMPLE_API_KEY", kind: .apiKey, variable: "EXAMPLE_API_KEY",
+                                            address: "https://api.example.test", fingerprints: [print])
+        let plain = SecretImportEntry(login: "bws://21111111-2222-4333-8444-55555555555b", title: "OTHER_API_KEY", kind: .apiKey,
+                                      variable: "OTHER_API_KEY", fingerprints: [print])
+        #expect(SecretCommand.isValid(withAddress) && SecretCommand.isValid(plain))
+        let body = try #require(try JSONSerialization.jsonObject(with: SecretCommand.importAll(
+            requestID: id, database: "db", entries: [withAddress, plain])) as? [String: Any])
+        let sent = try #require(body["secrets"] as? [[String: Any]])
+        #expect(sent.count == 2 && sent[0]["address"] as? String == "https://api.example.test" && !sent[1].keys.contains("address"))
+    }
+
     @Test func saltsReceiptsAndTheCatalogAreChecked() throws {
         func salts(_ fields: [String: String]) throws -> SecretSalts { try JSONDecoder().decode(SecretSalts.self, from: JSONSerialization.data(withJSONObject: fields)) }
         let good = try salts(["login": reference, "password": String(repeating: "1", count: 32), "totp": String(repeating: "2", count: 32)])

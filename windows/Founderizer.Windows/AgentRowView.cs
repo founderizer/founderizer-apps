@@ -30,6 +30,10 @@ public sealed class AgentRowView : INotifyPropertyChanged
     private bool lineMoves;
     public bool LineMoves { get => lineMoves; private set => Set(ref lineMoves, value); }
 
+    /// <summary>The line is the title of a request that waits for him: orange and whole (the Mac's 0.1.224).</summary>
+    public bool NeedsYou { get => needsYou; private set => Set(ref needsYou, value); }
+    private bool needsYou;
+
     private bool selected;
     public bool Selected
     {
@@ -85,6 +89,7 @@ public sealed class AgentRowView : INotifyPropertyChanged
         Time = row.Time ?? "";
         Mark = row.Mark;
         LineMoves = row.LineMoves;
+        NeedsYou = row.NeedsYou;
         Selected = row.Selected;
     }
 

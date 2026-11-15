@@ -181,13 +181,20 @@ import Testing
 /// The kinds the hub raises that had no title of his: each says its thing in his words, never the hub's kind in Title
 /// Case ("Timers Stalled"; fix round 2, T-37), in seven words at most.
 @Test func everyWarningKindHasATitleInHisWords() {
-    for kind in ["allowance_spent", "timers_stalled", "vault_behind", "tasks_stuck", "circles_stuck", "reports_undecided"] {
+    for kind in ["allowance_spent", "timers_stalled", "vault_behind", "tasks_stuck", "circles_stuck", "reports_undecided",
+                 "vault_pin_ends", "vault_pin_ended"] {
         let title = FleetHealth.Warning(kind: kind, detail: "x", agent: "mini").title
         #expect(title != kind.replacingOccurrences(of: "_", with: " ").capitalized)
         #expect(title.split(separator: " ").count <= 7)
     }
     #expect(FleetHealth.Warning(kind: "allowance_spent", detail: "x", agent: "nova").title == "Nova reached its usage limit")
     #expect(FleetHealth.Warning(kind: "timers_stalled", detail: "x").title == "The hub's timers stopped")
+    // Package 4 of the vault's gates (C5): the owner's trust in a server's vault, in the Secrets page's own word.
+    #expect(FleetHealth.Warning(kind: "vault_pin_ends", detail: "x", agent: "mini").title == "The trust in Mini's vault ends soon")
+    #expect(FleetHealth.Warning(kind: "vault_pin_ends", detail: "x").title == "The trust in a server's vault ends soon")
+    #expect(FleetHealth.Warning(kind: "vault_pin_ended", detail: "x", agent: "mini").title == "The trust in Mini's vault has ended")
+    #expect(FleetHealth.Warning(kind: "vault_pin_ended", detail: "x").title == "The trust in a server's vault has ended")
+    #expect(FleetHealth.Warning(kind: "vault_pin_ends", detail: "x", agent: "vps").act == .openMachine("vps"))
 }
 
 /// One block for one agent's server, saying each fact once: a server that sent no status beside a helper that is

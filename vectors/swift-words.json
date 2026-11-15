@@ -1,5 +1,5 @@
 {
-  "about" : "Words that FleetCore makes: AgentNames.label and under with the roles of team.json, String.capitalized, MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and activityAge in UTC with two locales, and AgentNames.matches (Search) for each typed text.",
+  "about" : "Words that FleetCore makes: AgentNames.label and under with the roles of team.json, String.capitalized, MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and activityAge in UTC with two locales, AgentNames.matches (Search) for each typed text, and the runs of MessageBlock.inline for each inline text, FleetTask.checkStatus, TaskWords.waitingFor and waiting, and the Tasks board's Ended lane of each period (HubState.activity, EndedTasks) in UTC.",
   "ages" : [
     {
       "locale" : "en_GB",
@@ -180,6 +180,1863 @@
       "now" : 1794582720,
       "time" : 1794582750,
       "words" : "Just now"
+    }
+  ],
+  "checks" : [
+    {
+      "requester" : "owner",
+      "words" : "No result yet"
+    },
+    {
+      "delivered" : 10,
+      "requester" : "owner",
+      "words" : "Waiting for your check"
+    },
+    {
+      "accepted" : 1,
+      "delivered" : 10,
+      "requester" : "owner",
+      "words" : "Accepted by you"
+    },
+    {
+      "accepted" : 0,
+      "delivered" : 10,
+      "requester" : "owner",
+      "words" : "Not accepted by you"
+    },
+    {
+      "requester" : "manager",
+      "words" : "No result yet"
+    },
+    {
+      "delivered" : 10,
+      "requester" : "manager",
+      "words" : "Waiting for Manager's check"
+    },
+    {
+      "accepted" : 1,
+      "delivered" : 10,
+      "requester" : "manager",
+      "words" : "Accepted by Manager"
+    },
+    {
+      "accepted" : 0,
+      "delivered" : 10,
+      "requester" : "manager",
+      "words" : "Not accepted by Manager"
+    },
+    {
+      "requester" : "web-dev",
+      "words" : "No result yet"
+    },
+    {
+      "delivered" : 10,
+      "requester" : "web-dev",
+      "words" : "Waiting for Web-Dev's check"
+    },
+    {
+      "accepted" : 1,
+      "delivered" : 10,
+      "requester" : "web-dev",
+      "words" : "Accepted by Web-Dev"
+    },
+    {
+      "accepted" : 0,
+      "delivered" : 10,
+      "requester" : "web-dev",
+      "words" : "Not accepted by Web-Dev"
+    }
+  ],
+  "ended" : {
+    "lanes" : [
+      {
+        "count" : 9,
+        "days" : [
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  1,
+                  2
+                ],
+                "title" : "Answer the support tickets"
+              },
+              {
+                "ids" : [
+                  5
+                ],
+                "title" : "An idea that was dropped"
+              },
+              {
+                "ids" : [
+                  6,
+                  7,
+                  8
+                ],
+                "title" : "CRM tickets waiting for iris"
+              },
+              {
+                "ids" : [
+                  9
+                ],
+                "title" : "Daily report"
+              }
+            ],
+            "start" : 1794528000
+          }
+        ],
+        "failed" : [
+          3,
+          4
+        ],
+        "period" : "today",
+        "rest" : 7
+      },
+      {
+        "count" : 17,
+        "days" : [
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  1,
+                  2
+                ],
+                "title" : "Answer the support tickets"
+              },
+              {
+                "ids" : [
+                  5
+                ],
+                "title" : "An idea that was dropped"
+              },
+              {
+                "ids" : [
+                  6,
+                  7,
+                  8
+                ],
+                "title" : "CRM tickets waiting for iris"
+              },
+              {
+                "ids" : [
+                  9
+                ],
+                "title" : "Daily report"
+              }
+            ],
+            "start" : 1794528000
+          },
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  10
+                ],
+                "title" : "Answer the support tickets"
+              },
+              {
+                "ids" : [
+                  12
+                ],
+                "title" : "CRM tickets waiting for iris: TCK-4"
+              }
+            ],
+            "start" : 1794441600
+          },
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  13,
+                  14
+                ],
+                "title" : "Daily report"
+              },
+              {
+                "ids" : [
+                  15
+                ],
+                "title" : "Write the release notes"
+              },
+              {
+                "ids" : [
+                  16
+                ],
+                "title" : "Write the release notes"
+              },
+              {
+                "ids" : [
+                  17
+                ],
+                "title" : "Check the backups"
+              }
+            ],
+            "start" : 1794096000
+          }
+        ],
+        "failed" : [
+          3,
+          4,
+          11
+        ],
+        "period" : "week",
+        "rest" : 14
+      },
+      {
+        "count" : 20,
+        "days" : [
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  1,
+                  2
+                ],
+                "title" : "Answer the support tickets"
+              },
+              {
+                "ids" : [
+                  5
+                ],
+                "title" : "An idea that was dropped"
+              },
+              {
+                "ids" : [
+                  6,
+                  7,
+                  8
+                ],
+                "title" : "CRM tickets waiting for iris"
+              },
+              {
+                "ids" : [
+                  9
+                ],
+                "title" : "Daily report"
+              }
+            ],
+            "start" : 1794528000
+          },
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  10
+                ],
+                "title" : "Answer the support tickets"
+              },
+              {
+                "ids" : [
+                  12
+                ],
+                "title" : "CRM tickets waiting for iris: TCK-4"
+              }
+            ],
+            "start" : 1794441600
+          },
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  13,
+                  14
+                ],
+                "title" : "Daily report"
+              },
+              {
+                "ids" : [
+                  15
+                ],
+                "title" : "Write the release notes"
+              },
+              {
+                "ids" : [
+                  16
+                ],
+                "title" : "Write the release notes"
+              },
+              {
+                "ids" : [
+                  17
+                ],
+                "title" : "Check the backups"
+              }
+            ],
+            "start" : 1794096000
+          },
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  18
+                ],
+                "title" : "Renew the shop's certificate"
+              },
+              {
+                "ids" : [
+                  20
+                ],
+                "title" : "Monthly invoices"
+              }
+            ],
+            "start" : 1792800000
+          }
+        ],
+        "failed" : [
+          3,
+          4,
+          11,
+          19
+        ],
+        "period" : "month",
+        "rest" : 16
+      },
+      {
+        "count" : 23,
+        "days" : [
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  1,
+                  2
+                ],
+                "title" : "Answer the support tickets"
+              },
+              {
+                "ids" : [
+                  5
+                ],
+                "title" : "An idea that was dropped"
+              },
+              {
+                "ids" : [
+                  6,
+                  7,
+                  8
+                ],
+                "title" : "CRM tickets waiting for iris"
+              },
+              {
+                "ids" : [
+                  9
+                ],
+                "title" : "Daily report"
+              }
+            ],
+            "start" : 1794528000
+          },
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  10
+                ],
+                "title" : "Answer the support tickets"
+              },
+              {
+                "ids" : [
+                  12
+                ],
+                "title" : "CRM tickets waiting for iris: TCK-4"
+              }
+            ],
+            "start" : 1794441600
+          },
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  13,
+                  14
+                ],
+                "title" : "Daily report"
+              },
+              {
+                "ids" : [
+                  15
+                ],
+                "title" : "Write the release notes"
+              },
+              {
+                "ids" : [
+                  16
+                ],
+                "title" : "Write the release notes"
+              },
+              {
+                "ids" : [
+                  17
+                ],
+                "title" : "Check the backups"
+              }
+            ],
+            "start" : 1794096000
+          },
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  18
+                ],
+                "title" : "Renew the shop's certificate"
+              },
+              {
+                "ids" : [
+                  20
+                ],
+                "title" : "Monthly invoices"
+              }
+            ],
+            "start" : 1792800000
+          },
+          {
+            "groups" : [
+              {
+                "ids" : [
+                  21
+                ],
+                "title" : "Monthly invoices"
+              },
+              {
+                "ids" : [
+                  22
+                ],
+                "title" : "Move the mail server"
+              }
+            ],
+            "start" : 1789344000
+          }
+        ],
+        "failed" : [
+          3,
+          4,
+          11,
+          19,
+          23
+        ],
+        "period" : "all",
+        "rest" : 18
+      }
+    ],
+    "now" : 1794582720,
+    "tasks" : [
+      {
+        "accepted" : 1,
+        "created" : 1794578520,
+        "id" : 1,
+        "last_activity" : 1794579120,
+        "owner" : "wren",
+        "started" : 1794578820,
+        "state" : "completed",
+        "title" : "Answer the support tickets"
+      },
+      {
+        "created" : 1794574920,
+        "id" : 2,
+        "last_activity" : 1794575520,
+        "owner" : "wren",
+        "started" : 1794575220,
+        "state" : "completed",
+        "title" : "Answer the support tickets"
+      },
+      {
+        "created" : 1794571320,
+        "id" : 3,
+        "last_activity" : 1794571920,
+        "owner" : "pax",
+        "started" : 1794571620,
+        "state" : "failed",
+        "title" : "Deploy the site"
+      },
+      {
+        "accepted" : 0,
+        "created" : 1794567720,
+        "id" : 4,
+        "last_activity" : 1794568320,
+        "owner" : "theo",
+        "started" : 1794568020,
+        "state" : "completed",
+        "title" : "Fix the build"
+      },
+      {
+        "created" : 1794564120,
+        "id" : 5,
+        "last_activity" : 1794564720,
+        "owner" : "wren",
+        "started" : 1794564420,
+        "state" : "canceled",
+        "title" : "An idea that was dropped"
+      },
+      {
+        "created" : 1794560520,
+        "id" : 6,
+        "last_activity" : 1794561120,
+        "owner" : "wren",
+        "started" : 1794560820,
+        "state" : "completed",
+        "title" : "CRM tickets waiting for iris: TCK-1",
+        "trigger_id" : 9
+      },
+      {
+        "accepted" : 1,
+        "created" : 1794556920,
+        "id" : 7,
+        "last_activity" : 1794557520,
+        "owner" : "wren",
+        "started" : 1794557220,
+        "state" : "completed",
+        "title" : "CRM tickets waiting for iris: TCK-2",
+        "trigger_id" : 9
+      },
+      {
+        "created" : 1794553320,
+        "id" : 8,
+        "last_activity" : 1794553920,
+        "owner" : "wren",
+        "started" : 1794553620,
+        "state" : "completed",
+        "title" : "CRM tickets waiting for iris: TCK-3",
+        "trigger_id" : 9
+      },
+      {
+        "created" : 1794549720,
+        "id" : 9,
+        "last_activity" : 1794550320,
+        "owner" : "manager",
+        "started" : 1794550020,
+        "state" : "completed",
+        "title" : "Daily report",
+        "trigger_id" : 10
+      },
+      {
+        "created" : 1794510120,
+        "id" : 10,
+        "last_activity" : 1794510720,
+        "owner" : "wren",
+        "started" : 1794510420,
+        "state" : "completed",
+        "title" : "Answer the support tickets"
+      },
+      {
+        "created" : 1794502920,
+        "id" : 11,
+        "last_activity" : 1794503520,
+        "owner" : "manager",
+        "started" : 1794503220,
+        "state" : "rejected",
+        "title" : "Plan the first quarter"
+      },
+      {
+        "created" : 1794499320,
+        "id" : 12,
+        "last_activity" : 1794499920,
+        "owner" : "wren",
+        "started" : 1794499620,
+        "state" : "completed",
+        "title" : "CRM tickets waiting for iris: TCK-4",
+        "trigger_id" : 9
+      },
+      {
+        "created" : 1794150120,
+        "id" : 13,
+        "last_activity" : 1794150720,
+        "owner" : "manager",
+        "started" : 1794150420,
+        "state" : "completed",
+        "title" : "Daily report",
+        "trigger_id" : 10
+      },
+      {
+        "created" : 1794146520,
+        "id" : 14,
+        "last_activity" : 1794147120,
+        "owner" : "manager",
+        "started" : 1794146820,
+        "state" : "completed",
+        "title" : "Daily report",
+        "trigger_id" : 10
+      },
+      {
+        "accepted" : 1,
+        "created" : 1794142920,
+        "id" : 15,
+        "last_activity" : 1794143520,
+        "owner" : "theo",
+        "started" : 1794143220,
+        "state" : "completed",
+        "title" : "Write the release notes"
+      },
+      {
+        "created" : 1794139320,
+        "id" : 16,
+        "last_activity" : 1794139920,
+        "owner" : "pax",
+        "started" : 1794139620,
+        "state" : "completed",
+        "title" : "Write the release notes"
+      },
+      {
+        "created" : 1794135720,
+        "id" : 17,
+        "owner" : "pax",
+        "state" : "completed",
+        "title" : "Check the backups"
+      },
+      {
+        "accepted" : 1,
+        "created" : 1792854120,
+        "id" : 18,
+        "last_activity" : 1792854720,
+        "owner" : "pax",
+        "started" : 1792854420,
+        "state" : "completed",
+        "title" : "Renew the shop's certificate"
+      },
+      {
+        "created" : 1792850520,
+        "id" : 19,
+        "last_activity" : 1792851120,
+        "owner" : "pax",
+        "started" : 1792850820,
+        "state" : "failed",
+        "title" : "Renew the shop's certificate"
+      },
+      {
+        "created" : 1792846920,
+        "id" : 20,
+        "last_activity" : 1792847520,
+        "owner" : "manager",
+        "started" : 1792847220,
+        "state" : "completed",
+        "title" : "Monthly invoices",
+        "trigger_id" : 11
+      },
+      {
+        "created" : 1789398120,
+        "id" : 21,
+        "last_activity" : 1789398720,
+        "owner" : "manager",
+        "started" : 1789398420,
+        "state" : "completed",
+        "title" : "Monthly invoices",
+        "trigger_id" : 11
+      },
+      {
+        "created" : 1789394520,
+        "id" : 22,
+        "last_activity" : 1789395120,
+        "owner" : "pax",
+        "started" : 1789394820,
+        "state" : "canceled",
+        "title" : "Move the mail server"
+      },
+      {
+        "accepted" : 0,
+        "created" : 1789311720,
+        "id" : 23,
+        "last_activity" : 1789312320,
+        "owner" : "manager",
+        "started" : 1789312020,
+        "state" : "completed",
+        "title" : "Set up the fleet"
+      },
+      {
+        "created" : 1794580320,
+        "id" : 24,
+        "last_activity" : 1794580920,
+        "owner" : "wren",
+        "started" : 1794580620,
+        "state" : "working",
+        "title" : "Answer today's support tickets"
+      }
+    ]
+  },
+  "inline" : [
+    {
+      "runs" : [
+        {
+          "bold" : true,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "bold"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " and "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : true,
+          "struck" : false,
+          "text" : "italic"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " and "
+        },
+        {
+          "bold" : false,
+          "code" : true,
+          "italic" : false,
+          "struck" : false,
+          "text" : "code"
+        }
+      ],
+      "text" : "**bold** and *italic* and `code`"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "a "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/docs",
+          "struck" : false,
+          "text" : "link"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " b"
+        }
+      ],
+      "text" : "a [link](https://example.com/docs) b"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/a",
+          "struck" : false,
+          "text" : "https://example.com/a"
+        }
+      ],
+      "text" : "<https://example.com/a>"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "write to "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "mailto:help@example.com",
+          "struck" : false,
+          "text" : "mailto:help@example.com"
+        }
+      ],
+      "text" : "write to <mailto:help@example.com>"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "javascript:alert(1)",
+          "struck" : false,
+          "text" : "script"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " stays words"
+        }
+      ],
+      "text" : "[script](javascript:alert(1)) stays words"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : true,
+          "text" : "gone"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " and kept"
+        }
+      ],
+      "text" : "~~gone~~ and kept"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : true,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "bold"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " and "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : true,
+          "struck" : false,
+          "text" : "italic"
+        }
+      ],
+      "text" : "__bold__ and _italic_"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : true,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com",
+          "struck" : false,
+          "text" : "a bold link"
+        }
+      ],
+      "text" : "**[a bold link](https://example.com)**"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "*not italic*"
+        }
+      ],
+      "text" : "\\*not italic\\*"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "the alt words"
+        }
+      ],
+      "text" : "![the alt words](https://example.com/a.png)"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "snake_case_word stays"
+        }
+      ],
+      "text" : "snake_case_word stays"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "fish & chips & peas"
+        }
+      ],
+      "text" : "fish & chips &amp; peas"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : true,
+          "italic" : false,
+          "struck" : false,
+          "text" : "**not bold**"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " here"
+        }
+      ],
+      "text" : "`**not bold**` here"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "**unclosed bold"
+        }
+      ],
+      "text" : "**unclosed bold"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "plain words only"
+        }
+      ],
+      "text" : "plain words only"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "Use "
+        },
+        {
+          "bold" : false,
+          "code" : true,
+          "italic" : false,
+          "struck" : false,
+          "text" : "npm test"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " and see "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/docs",
+          "struck" : false,
+          "text" : "the docs"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " or "
+        },
+        {
+          "bold" : true,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "bold "
+        },
+        {
+          "bold" : true,
+          "code" : false,
+          "italic" : true,
+          "struck" : false,
+          "text" : "mixed"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " text."
+        }
+      ],
+      "text" : "Use `npm test` and see [the docs](https://example.com/docs) or **bold _mixed_** text."
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "Open "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/settings",
+          "struck" : false,
+          "text" : "https://example.com/settings"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " and press "
+        },
+        {
+          "bold" : true,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "Save"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "."
+        }
+      ],
+      "text" : "Open https://example.com/settings and press **Save**."
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "See "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/settings",
+          "struck" : false,
+          "text" : "https://example.com/settings"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "."
+        }
+      ],
+      "text" : "See https://example.com/settings."
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "Open ("
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/a_(b)",
+          "struck" : false,
+          "text" : "https://example.com/a_(b)"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : ") now"
+        }
+      ],
+      "text" : "Open (https://example.com/a_(b)) now"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "Go to "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "http://www.example.com",
+          "struck" : false,
+          "text" : "www.example.com"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " today"
+        }
+      ],
+      "text" : "Go to www.example.com today"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "Mail "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "mailto:ops@example.com",
+          "struck" : false,
+          "text" : "ops@example.com"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " now"
+        }
+      ],
+      "text" : "Mail ops@example.com now"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "Open "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "http://localhost:8080/x",
+          "struck" : false,
+          "text" : "http://localhost:8080/x"
+        }
+      ],
+      "text" : "Open http://localhost:8080/x"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "ftp://example.com/x",
+          "struck" : false,
+          "text" : "ftp://example.com/x"
+        }
+      ],
+      "text" : "ftp://example.com/x"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/a?b=1&c=2",
+          "struck" : false,
+          "text" : "https://example.com/a?b=1&c=2"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : ", then"
+        }
+      ],
+      "text" : "https://example.com/a?b=1&c=2, then"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "Run "
+        },
+        {
+          "bold" : false,
+          "code" : true,
+          "italic" : false,
+          "struck" : false,
+          "text" : "curl https://example.com"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " then open "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/done",
+          "struck" : false,
+          "text" : "https://example.com/done"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "!"
+        }
+      ],
+      "text" : "Run `curl https://example.com` then open https://example.com/done!"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : true,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com",
+          "struck" : false,
+          "text" : "https://example.com"
+        }
+      ],
+      "text" : "**https://example.com**"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "x "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/a_b_c",
+          "struck" : false,
+          "text" : "https://example.com/a_b_c"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "_ y"
+        }
+      ],
+      "text" : "x https://example.com/a_b_c_ y"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "Write to "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "mailto:ops@example.com",
+          "struck" : false,
+          "text" : "mailto:ops@example.com"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "."
+        }
+      ],
+      "text" : "Write to mailto:ops@example.com."
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "xhttps://example.com and WWW.example.com"
+        }
+      ],
+      "text" : "xhttps://example.com and WWW.example.com"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "HTTPS://Example.com/A",
+          "struck" : false,
+          "text" : "HTTPS://Example.com/A"
+        }
+      ],
+      "text" : "HTTPS://Example.com/A"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "a "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/a(b(c)d)e",
+          "struck" : false,
+          "text" : "https://example.com/a(b(c)d)e"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : ") b"
+        }
+      ],
+      "text" : "a https://example.com/a(b(c)d)e) b"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "https://ex_ample.com/x and "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://a.b_c.d.com/x",
+          "struck" : false,
+          "text" : "https://a.b_c.d.com/x"
+        }
+      ],
+      "text" : "https://ex_ample.com/x and https://a.b_c.d.com/x"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "mailto:a.b@example.com",
+          "struck" : false,
+          "text" : "a.b@example.com"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : ". and user@localhost and 1@2.3"
+        }
+      ],
+      "text" : "a.b@example.com. and user@localhost and 1@2.3"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "Use "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/x",
+          "struck" : false,
+          "text" : "https://example.com/x"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "& then"
+        }
+      ],
+      "text" : "Use https://example.com/x&amp; then"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/a&amp;b",
+          "struck" : false,
+          "text" : "https://example.com/a&amp;b"
+        }
+      ],
+      "text" : "https://example.com/a&amp;b"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "Visit "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/a*b",
+          "struck" : false,
+          "text" : "https://example.com/a*b"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "* now"
+        }
+      ],
+      "text" : "Visit https://example.com/a*b* now"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/**x",
+          "struck" : false,
+          "text" : "https://example.com/**x"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "**"
+        }
+      ],
+      "text" : "https://example.com/**x**"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : true,
+          "link" : "https://example.com",
+          "struck" : false,
+          "text" : "https://example.com"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " and "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : true,
+          "link" : "http://www.example.com",
+          "struck" : false,
+          "text" : "www.example.com"
+        }
+      ],
+      "text" : "*https://example.com* and _www.example.com_"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com",
+          "struck" : true,
+          "text" : "https://example.com"
+        }
+      ],
+      "text" : "~~https://example.com~~"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : true,
+          "link" : "mailto:ops@example.com",
+          "struck" : false,
+          "text" : "ops@example.com"
+        }
+      ],
+      "text" : "_ops@example.com_"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "a:"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "mailto:b@example.com",
+          "struck" : false,
+          "text" : "b@example.com"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " and xmailto:"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "mailto:ops@x.com",
+          "struck" : false,
+          "text" : "ops@x.com"
+        }
+      ],
+      "text" : "a:b@example.com and xmailto:ops@x.com"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "http://www",
+          "struck" : false,
+          "text" : "www"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : ". example"
+        }
+      ],
+      "text" : "www. example"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "("
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "http://www.example.com/a(b)",
+          "struck" : false,
+          "text" : "www.example.com/a(b)"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : ")"
+        }
+      ],
+      "text" : "(www.example.com/a(b))"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "http://www.example.com",
+          "struck" : false,
+          "text" : "www.example.com"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "<b>"
+        }
+      ],
+      "text" : "www.example.com<b>"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "www.ex_ample.com and "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "http://www.a_b.example.com",
+          "struck" : false,
+          "text" : "www.a_b.example.com"
+        }
+      ],
+      "text" : "www.ex_ample.com and www.a_b.example.com"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "ops@example.-com and ops@@example.com and "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "mailto:-ops@example.com",
+          "struck" : false,
+          "text" : "-ops@example.com"
+        }
+      ],
+      "text" : "ops@example.-com and ops@@example.com and -ops@example.com"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/",
+          "struck" : false,
+          "text" : "https://example.com/"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "\""
+        }
+      ],
+      "text" : "https://example.com/&quot;"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "the address:"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com",
+          "struck" : false,
+          "text" : "https://example.com"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " and foo_"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com",
+          "struck" : false,
+          "text" : "https://example.com"
+        }
+      ],
+      "text" : "the address:https://example.com and foo_https://example.com"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "https:// and https:/example.com and http://*example.com and https://-example.com"
+        }
+      ],
+      "text" : "https:// and https:/example.com and http://*example.com and https://-example.com"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/other",
+          "struck" : false,
+          "text" : "https://example.com"
+        }
+      ],
+      "text" : "[https://example.com](https://example.com/other)"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "mailto:news.www@example.com",
+          "struck" : false,
+          "text" : "news.www@example.com"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : " and "
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "mailto:wow@example.com",
+          "struck" : false,
+          "text" : "wow@example.com"
+        }
+      ],
+      "text" : "news.www@example.com and wow@example.com"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "mailto:ops@example.com",
+          "struck" : false,
+          "text" : "ops@example.com"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "/x"
+        }
+      ],
+      "text" : "ops@example.com/x"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : true,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : "see "
+        },
+        {
+          "bold" : true,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/a",
+          "struck" : false,
+          "text" : "https://example.com/a"
+        }
+      ],
+      "text" : "**see https://example.com/a**"
+    },
+    {
+      "runs" : [
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "link" : "https://example.com/a.b?c",
+          "struck" : false,
+          "text" : "https://example.com/a.b?c"
+        },
+        {
+          "bold" : false,
+          "code" : false,
+          "italic" : false,
+          "struck" : false,
+          "text" : ". d"
+        }
+      ],
+      "text" : "https://example.com/a.b?c. d"
     }
   ],
   "made_by" : "app/Tests/FleetCoreTests/WordsVectorsTests.swift",
@@ -993,6 +2850,40 @@
       "now" : 1794582720,
       "time" : 1794582750,
       "words" : "3:12 PM"
+    }
+  ],
+  "waits" : [
+    {
+      "requester" : "owner",
+      "words" : "Waiting for you"
+    },
+    {
+      "requester" : "manager",
+      "words" : "Waiting for Manager"
+    },
+    {
+      "requester" : "web-dev",
+      "words" : "Waiting for Web-Dev"
+    },
+    {
+      "requester" : "manager",
+      "waiting_on" : "juno",
+      "words" : "Waiting on Juno"
+    },
+    {
+      "requester" : "owner",
+      "waiting_on" : "Q-1",
+      "words" : "Waiting for you"
+    },
+    {
+      "requester" : "web-dev",
+      "waiting_on" : "N-2",
+      "words" : "Waiting for Web-Dev"
+    },
+    {
+      "requester" : "manager",
+      "waiting_on" : "its screen",
+      "words" : "Waiting for Manager"
     }
   ]
 }

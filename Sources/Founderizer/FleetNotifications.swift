@@ -54,7 +54,7 @@ final class FleetNotifications: NSObject, UNUserNotificationCenterDelegate {
         let signature = context + "|" + (warning ?? "") + "|" + state.needs.map { "\($0.id):\($0.isOpen):\($0.by)" }.joined(separator: ",")
         guard signature != lastSnapshot else { return }
         lastSnapshot = signature
-        let new = ledger.observe(context: context, needs: state.needs)
+        let new = ledger.observe(context: context, needs: state.needs, manager: state.managerName)
         let newWarning = ledger.observeWarning(context: context, warning: state.manager_warning)
         if let data = try? JSONEncoder().encode(ledger) { UserDefaults.standard.set(data, forKey: "notificationLedger") }
         var open = Set(state.needs.filter(\.isOpen).map { "\(context)/\($0.id)" })
@@ -71,7 +71,7 @@ final class FleetNotifications: NSObject, UNUserNotificationCenterDelegate {
             // needs your answer." for every request.
             if let need = state.needs.first(where: { $0.id == id }) {
                 content.title = need.by.agentLabel
-                content.body = need.title.isEmpty ? need.why : need.title
+                content.body = need.title.isEmpty ? need.why : need.shownTitle
             } else {
                 content.title = String(l10n: "Founderizer needs you")
                 content.body = String(l10n: "The manager needs your answer.")

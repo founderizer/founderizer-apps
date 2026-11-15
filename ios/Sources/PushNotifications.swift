@@ -140,7 +140,7 @@ enum NeedPress {
         let client = MobileClient()
         let key: String?
         do { key = try DeviceKey().pressKey() } catch {
-            return await tell(named ?? "Answer not sent", "This phone could not read its key. Open Founderizer to answer.",
+            return await tell(named ?? String(l10n: "Answer not sent"), String(l10n: "This phone could not read its key. Open Founderizer to answer."),
                               need: need)
         }
         let database: String
@@ -153,7 +153,7 @@ enum NeedPress {
             // owner feature door_calls: the yes to a door call is signed with this phone's own key, as in the app
             approval = read.snapshot.needs.first { $0.id == need }.flatMap { DeviceSigningKey().approval(for: $0, choice: choice) }
         } catch {
-            return await tell(named ?? "Answer not sent", words(error, need: need), need: need)
+            return await tell(named ?? String(l10n: "Answer not sent"), words(error, need: need), need: need)
         }
         let request = PendingRequest(hub: hub, database: database, client: MobileStore.installationLabel(),
                                      needID: need, choice: choice, approval: approval,
@@ -163,30 +163,30 @@ enum NeedPress {
         } catch MobileError.noAnswer {
             // The answer may have arrived. Sending it again could not make a second answer, but it is the owner's
             // call: the app shows whether the item is still open.
-            await tell(named ?? "Answer not confirmed",
-                       "Your hub did not answer. Open Founderizer to see whether it is answered.", need: need)
+            await tell(named ?? String(l10n: "Answer not confirmed"),
+                       String(l10n: "Your hub did not answer. Open Founderizer to see whether it is answered."), need: need)
         } catch {
-            await tell(named ?? "Answer not sent", words(error, need: need), need: need)
+            await tell(named ?? String(l10n: "Answer not sent"), words(error, need: need), need: need)
         }
     }
 
     /// Why an answer did not go, in the owner's words, with the next step where there is one.
     static func words(_ error: any Error, need: Int) -> String {
         // A failure of the phone itself says only where to go on: its system words are no news to the owner.
-        guard let error = error as? MobileError else { return "Open Founderizer to answer." }
+        guard let error = error as? MobileError else { return String(l10n: "Open Founderizer to answer.") }
         switch error {
         case .refusal(409, _, let message) where message.contains("already answered"):
-            return "Already answered."
+            return String(l10n: "Already answered.")
         case .refusal(409, _, let message) where message.contains("generation"):
-            return "The hub's records changed after the ping. Open Founderizer and answer there."
+            return String(l10n: "The hub's records changed after the ping. Open Founderizer and answer there.")
         case .refusal(404, _, _):
-            return "This request is no longer on the hub."
+            return String(l10n: "This request is no longer on the hub.")
         case .refusal(_, let auth?, _):
             return MobileError.authWords(auth)
         case .noAnswer:
-            return "Your hub did not answer. Open Founderizer to answer."
+            return String(l10n: "Your hub did not answer. Open Founderizer to answer.")
         default:
-            return "\(error.localizedDescription) Open Founderizer to answer."
+            return String(l10n: "\(error.localizedDescription) Open Founderizer to answer.")
         }
     }
 

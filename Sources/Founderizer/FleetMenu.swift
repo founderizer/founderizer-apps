@@ -606,6 +606,7 @@ private final class FleetMenuPanel: NSPanel {
     /// The menu's keys. A key with ⌘ closes it and goes on to the window, as with a macOS menu; every other key stays
     /// in the menu, so nothing is typed into the page under it.
     private static func key(_ event: NSEvent) -> Bool {
+        guard !AppFront.holdsKeys else { return false }     // no key after a front from outside (`AppFront`)
         guard let open = shown else { return false }
         let model = open.model
         if event.modifierFlags.contains(.command) { close(); return false }
@@ -660,6 +661,7 @@ private final class FleetMenuPanel: NSPanel {
     private static func open(_ event: NSEvent) -> Bool {
         guard event.type == .rightMouseDown || event.modifierFlags.contains(.control), !FleetMenu.isOpen,
               let window = event.window, let frameView = window.contentView?.superview else { return false }
+        guard AppFront.reaches(event) else { return false }     // a click that the hold drops opens no menu
         var view = frameView.hitTest(event.locationInWindow)
         while let candidate = view {
             if let menu = candidate.menu(for: event) {

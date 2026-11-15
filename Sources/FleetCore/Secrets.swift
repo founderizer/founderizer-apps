@@ -49,6 +49,22 @@ public struct LoginSecret: Equatable, Sendable {
     /// The variable name of an API key, for the catalog; nil for a login.
     public var variable: String? { kind == .apiKey ? trimmed.env : nil }
 
+    /// An API key's service address as the hub's table of well-known services reads it (owner feature `key_table`,
+    /// UI-API 1.174): only the scheme, the host and the port of an https address (the manager's choice C40), because a
+    /// path can be a secret (a webhook, a share or invite link, a bot's API), as a query and a fragment can. nil for a
+    /// login, whose sign-in address never selects a row, for a key with no address, and for an address that is not
+    /// https, which the table does not read.
+    public var tableAddress: String? {
+        let address = trimmed.url
+        guard kind == .apiKey, Self.isAddress(address), var parts = URLComponents(string: address), parts.scheme == "https" else {
+            return nil
+        }
+        parts.percentEncodedPath = ""
+        parts.query = nil
+        parts.fragment = nil
+        return parts.string
+    }
+
     /// Why a vault cannot read this secret, or nil. No text repeats a value.
     public var problem: String? {
         let fields = trimmed
@@ -410,18 +426,74 @@ public struct SecretReceipt: Decodable, Sendable {
 public enum SecretGrant: String, Equatable, Sendable { case use, read }
 
 extension SecretCommand {
+    /// The owner feature of the hub's table of well-known services (UI-API 1.174): `add` and each entry of `importAll`
+    /// can carry an API key's `address`. A hub without it refuses the field.
+    public static let keyTableFeature = "key_table"
+
+    /// The `address` that a save sends with a secret: only to a hub that names `key_table`, only for an API key, and
+    /// with no path, no query and no fragment: only the scheme, the host and the port of an https address
+    /// (`LoginSecret.tableAddress`, C40). nil otherwise, and then the command has no such field.
+    public static func address(for secret: LoginSecret, features: [String]?) -> String? {
+        features?.contains(keyTableFeature) == true ? secret.tableAddress : nil
+    }
+
+    /// An address that a command carries (C40): an https address of a host and an optional port only, with no user
+    /// part, no path, no query and no fragment, as `LoginSecret.tableAddress` gives it.
+    static func isTableAddress(_ address: String) -> Bool {
+        guard let parts = URLComponents(string: address) else { return false }
+        return parts.scheme == "https" && parts.host?.isEmpty == false && parts.user == nil && parts.password == nil
+            && parts.percentEncodedPath.isEmpty && parts.query == nil && parts.fragment == nil
+    }
+
     /// `POST /ui/secrets/add`: after the writer made the item, its fingerprints and its catalog entry in one command.
-    /// No value and no salt is in it. `variable` for an API key only.
+    /// No value and no salt is in it. `variable` for an API key only, and `address` (feature `key_table`) too.
     public static func add(requestID: UUID, database: String, login: String, title: String, kind: LoginSecret.Kind, variable: String?,
-                           fingerprints items: [SecretFingerprint]) throws -> Data {
+                           address: String? = nil, fingerprints items: [SecretFingerprint]) throws -> Data {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard LoginSecret.isReference(login), (1...LoginSecret.maxLabel).contains(title.unicodeScalars.count), !title.contains(where: \.isNewline),
               (kind == .apiKey) == (variable != nil), variable.map({ LoginSecret.isVariable($0) && !LoginSecret.isReserved($0) }) ?? true,
-              items.isEmpty || SecretFingerprint.areValid(items) else { throw HubError.invalidResponse }
+              items.isEmpty || SecretFingerprint.areValid(items),
+              address.map({ kind == .apiKey && isTableAddress($0) }) ?? true else { throw HubError.invalidResponse }
         var body: [String: Any] = ["request_id": requestID.uuidString.lowercased(), "db": database, "login": login, "title": title,
                                    "kind": kind.rawValue, "fingerprints": items.map { ["kind": $0.kind, "hash": $0.hash, "len": $0.len] as [String: Any] }]
         body["env"] = variable
+        body["address"] = address
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    }
+
+    /// Whether the hub takes this entry, by the rules of `add`: a reference, a title of one line of 1 to 60
+    /// characters, a variable for an API key only and one that a session does not set itself, valid fingerprints, and
+    /// an address for an API key only, of a host and an optional port with no path, no query and no fragment.
+    /// An import sends only such entries, so one item that breaks a rule stops no other one.
+    public static func isValid(_ entry: SecretImportEntry) -> Bool {
+        let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return LoginSecret.isReference(entry.login) && (1...LoginSecret.maxLabel).contains(title.unicodeScalars.count)
+            && !title.contains(where: \.isNewline) && (entry.kind == .apiKey) == (entry.variable != nil)
+            && (entry.variable.map { LoginSecret.isVariable($0) && !LoginSecret.isReserved($0) } ?? true)
+            && (entry.fingerprints.isEmpty || SecretFingerprint.areValid(entry.fingerprints))
+            && (entry.address.map { entry.kind == .apiKey && isTableAddress($0) } ?? true)
+    }
+
+    /// The owner feature of `POST /ui/secrets/import`: the hub step of many items in one command and one commit.
+    public static let importFeature = "secrets_import"
+    /// The most entries of one import command: the catalog's own room.
+    public static let importMax = 256
+
+    /// `POST /ui/secrets/import` (feature `secrets_import`): the hub step of an import, each entry as `add` sends one,
+    /// in one command. No value and no salt is in it.
+    public static func importAll(requestID: UUID, database: String, entries: [SecretImportEntry]) throws -> Data {
+        guard (1...importMax).contains(entries.count), Set(entries.map(\.login)).count == entries.count,
+              entries.allSatisfy(isValid) else { throw HubError.invalidResponse }
+        let items: [[String: Any]] = entries.map { entry in
+            let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            var item: [String: Any] = ["login": entry.login, "title": title, "kind": entry.kind.rawValue,
+                                       "fingerprints": entry.fingerprints.map { ["kind": $0.kind, "hash": $0.hash, "len": $0.len] as [String: Any] }]
+            item["env"] = entry.variable
+            item["address"] = entry.address
+            return item
+        }
+        return try JSONSerialization.data(withJSONObject: ["request_id": requestID.uuidString.lowercased(), "db": database,
+                                                           "secrets": items], options: [.sortedKeys])
     }
 
     /// `POST /ui/secrets/grant`: one agent's grant of one secret. nil takes the grant back.
@@ -442,6 +514,41 @@ public struct SecretAddReceipt: Decodable, Sendable {
     public let login: String
     public let stored: Int
     public let known: Int
+    public let changed: Bool
+}
+
+/// One entry of an import's hub step: what `SecretCommand.add` sends for one item.
+public struct SecretImportEntry: Equatable, Sendable {
+    public let login: String
+    public let title: String
+    public let kind: LoginSecret.Kind
+    public let variable: String?
+    /// An API key's address for the hub's table (feature `key_table`, `SecretCommand.address(for:features:)`), or nil.
+    public let address: String?
+    public let fingerprints: [SecretFingerprint]
+
+    public init(login: String, title: String, kind: LoginSecret.Kind, variable: String?, address: String? = nil,
+                fingerprints: [SecretFingerprint]) {
+        self.login = login; self.title = title; self.kind = kind; self.variable = variable; self.address = address
+        self.fingerprints = fingerprints
+    }
+}
+
+/// The receipt of `POST /ui/secrets/import`: one answer for each entry, in the order of the list. An entry that the
+/// hub took has `stored`, `known` and `changed`; one that it refused has `error` and `status`.
+public struct SecretImportReceipt: Decodable, Sendable {
+    public struct Answer: Decodable, Sendable {
+        public let login: String?
+        public let stored: Int?
+        public let known: Int?
+        public let changed: Bool?
+        public let error: String?
+        public let status: Int?
+    }
+    public let ok: Bool
+    public let request_id: String
+    public let client: String
+    public let results: [Answer]
     public let changed: Bool
 }
 
@@ -467,6 +574,8 @@ public struct SecretGrantReceipt: Decodable, Sendable {
 /// secret: the hub's receipt is the record, and the same click again gives the same result.
 public final class SecretsClient: Sendable {
     private let session: URLSession
+    /// The import's one command: up to 256 entries, each with its fingerprints, before one commit at the hub.
+    private let slow: URLSession
 
     public init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -477,14 +586,45 @@ public final class SecretsClient: Sendable {
         configuration.timeoutIntervalForRequest = 20      // a change commits team.json at the hub
         configuration.timeoutIntervalForResource = 30
         session = URLSession(configuration: configuration)
+        configuration.timeoutIntervalForRequest = 60
+        configuration.timeoutIntervalForResource = 120
+        slow = URLSession(configuration: configuration)
+    }
+
+    /// The hub step of an import's items (feature `secrets_import`): their fingerprints and their catalog entries in
+    /// one command and one commit. Each entry's answer, in the order of `entries`: nil when the hub took it, else the
+    /// hub's words for its refusal, so that one refusal stops no other entry.
+    public func importAll(hub: URL, database: String, client: String, entries: [SecretImportEntry]) async throws -> [String?] {
+        let id = UUID()
+        let body = try SecretCommand.importAll(requestID: id, database: database, entries: entries)
+        let receipt = try JSONDecoder().decode(SecretImportReceipt.self,
+                                               from: await command("ui/secrets/import", hub: hub, client: client, body: body, on: slow))
+        return try Self.answers(receipt, for: entries, requestID: id, client: client)
+    }
+
+    /// Each entry's answer of an import's receipt, in the order of `entries`: nil when the hub took it, else its words.
+    /// A receipt of another command or another client, or an answer that does not fit its entry, is no receipt.
+    public static func answers(_ receipt: SecretImportReceipt, for entries: [SecretImportEntry], requestID: UUID,
+                               client: String) throws -> [String?] {
+        guard receipt.ok, receipt.request_id == requestID.uuidString.lowercased(), receipt.client == client,
+              receipt.results.count == entries.count else { throw HubError.invalidResponse }
+        return try zip(entries, receipt.results).map { entry, answer in
+            if let error = answer.error {
+                guard answer.login == nil || answer.login == entry.login else { throw HubError.invalidResponse }
+                return String(error.prefix(500))
+            }
+            guard answer.login == entry.login, let stored = answer.stored, let known = answer.known, stored >= 0, known >= 0,
+                  stored + known == entry.fingerprints.count else { throw HubError.invalidResponse }
+            return nil
+        }
     }
 
     /// The hub step of a made item: its fingerprints, then its catalog entry, in one command and one commit.
     public func add(hub: URL, database: String, client: String, login: String, title: String, kind: LoginSecret.Kind, variable: String?,
-                    fingerprints: [SecretFingerprint]) async throws -> SecretAddReceipt {
+                    address: String? = nil, fingerprints: [SecretFingerprint]) async throws -> SecretAddReceipt {
         let id = UUID()
         let body = try SecretCommand.add(requestID: id, database: database, login: login, title: title, kind: kind, variable: variable,
-                                         fingerprints: fingerprints)
+                                         address: address, fingerprints: fingerprints)
         let receipt = try JSONDecoder().decode(SecretAddReceipt.self, from: await command("ui/secrets/add", hub: hub, client: client, body: body))
         guard receipt.ok, receipt.request_id == id.uuidString.lowercased(), receipt.client == client, receipt.login == login,
               receipt.stored >= 0, receipt.known >= 0, receipt.stored + receipt.known == fingerprints.count else { throw HubError.invalidResponse }
@@ -505,7 +645,7 @@ public final class SecretsClient: Sendable {
     private func read(_ url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else {
             let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String ?? "Unexpected HTTP response."
@@ -515,13 +655,13 @@ public final class SecretsClient: Sendable {
         return data
     }
 
-    private func command(_ route: String, hub: URL, client: String, body: Data) async throws -> Data {
+    private func command(_ route: String, hub: URL, client: String, body: Data, on chosen: URLSession? = nil) async throws -> Data {
         var request = URLRequest(url: hub.appendingPathComponent(route))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(client, forHTTPHeaderField: "X-Fleet-Client")
         request.httpBody = body
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await (chosen ?? session).hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else {

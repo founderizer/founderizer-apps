@@ -116,8 +116,21 @@ public struct ChatAppsSnapshot: Decodable, Sendable {
         public let invite_url: String?
         public let status_at: Double?
         public let link: Link?
+        /// When a message last came in on this account (hub time); nil when none ever did.
+        public let last_event: Double?
 
         public var isEnabled: Bool { enabled != false }
+        /// **No phone holds this WhatsApp number now**: it is not connected, the bridge knows no number for it, and the
+        /// hub's link of it is not a phone's. A linked number whose bridge starts again keeps its link in the hub, so it
+        /// is never read as this while it reconnects.
+        public var holdsNoPhone: Bool {
+            app == "whatsapp" && state != "connected" && user == nil && name == nil && link?.state != "linked"
+        }
+        /// **A WhatsApp number that no phone ever linked**: no phone holds it, and no message ever came in on it. The
+        /// app wrote the account to ask for a QR code, and nobody scanned one. It is no number of the owner's, so its
+        /// card offers Connect, which takes this account (the owner, 14 November 2026: "it says remove number when I
+        /// haven't entered or linked any"). A number that worked and lost its link has had a message.
+        public var neverLinked: Bool { holdsNoPhone && last_event == nil }
         /// The Invite to server link, only as a Discord address.
         public var inviteURL: URL? { ChatApps.safeLink(invite_url, hosts: ["discord.com"]) }
         /// On and connected (Discord) or linked (WhatsApp), in the bridge's last report.
@@ -160,12 +173,9 @@ public struct ChatAppsSnapshot: Decodable, Sendable {
         return own.first(where: \.isConnected) ?? own.first(where: \.isEnabled) ?? own.first
     }
 
-    /// A channel of this agent needs the owner: its card is orange. A number whose QR code waits for a scan does not.
+    /// A channel of this agent needs the owner: its card is orange. The sidebar's dot and the card read the same state.
     public func needsOwner(_ agent: String, serverTime: Double?) -> Bool {
-        ChatApps.apps.contains { app in
-            ChannelCard(app: app, agent: agent, in: self, linking: channel(app, of: agent)?.link?.state == "waiting",
-                        serverTime: serverTime).needsOwner
-        }
+        ChatApps.apps.contains { app in ChannelCard(app: app, agent: agent, in: self, serverTime: serverTime).needsOwner }
     }
 
     /// The bridge's dot in Settings: online while it calls the hub, offline after three minutes without a call.
@@ -185,14 +195,13 @@ public struct ChatAppsSnapshot: Decodable, Sendable {
     }
 }
 
-/// One card of an agent's Channels page (CHAT-APPS.md 17.2): the agent's own WhatsApp number or Discord bot, one
-/// status, at most one main action, and the other actions for the card's "…" menu.
+/// One card of an agent's Channels (CHAT-APPS.md 17.2 and 18): the agent's own WhatsApp number or Discord bot, one
+/// status, at most one main action, and the other actions for the card's "…" menu. A channel that is not connected is
+/// its mark, its name and Connect, for both apps, and a number that no phone ever linked is not connected.
 public struct ChannelCard: Equatable, Sendable {
     public enum Kind: Equatable, Sendable {
-        /// No number, or no bot.
+        /// Not connected: no number or no bot, or a number that no phone ever linked.
         case none
-        /// WhatsApp: the QR code shows in the card until the phone links.
-        case linking
         /// The bridge has not reported the account yet, or it connects.
         case connecting
         case connected
@@ -204,8 +213,10 @@ public struct ChannelCard: Equatable, Sendable {
         case off
     }
 
-    public enum Action: String, Equatable, Sendable { case addNumber, linkAgain, addBot, fixToken, turnOn }
-    public enum MenuItem: String, Equatable, Sendable { case invite, changeToken, unlink, remove }
+    public enum Action: String, Equatable, Sendable { case connect, linkAgain, fixToken, turnOn }
+    /// `linkMe` is the owner's own link (Link my phone, Link my Discord): only in `menu(for:)`, while they have no ID
+    /// of the app.
+    public enum MenuItem: String, Equatable, Sendable { case linkMe, invite, changeToken, unlink, remove }
 
     public let app: String
     public let account: ChatAppsSnapshot.Account?
@@ -214,27 +225,31 @@ public struct ChannelCard: Equatable, Sendable {
     public let action: Action?
     public let menu: [MenuItem]
 
-    /// `linking`: the page shows the number's QR code (the owner asked for it, or the hub's link waits for a scan).
-    public init(app: String, agent: String, in snapshot: ChatAppsSnapshot?, linking: Bool, serverTime: Double?) {
+    public init(app: String, agent: String, in snapshot: ChatAppsSnapshot?, serverTime: Double?) {
         self.app = app
         let account = snapshot?.channel(app, of: agent)
         self.account = account
         let whatsApp = app == "whatsapp"
+        // Its words are for a reader of the screen (the card's accessibility value): the card draws its mark, its name
+        // and Connect, and no status.
+        let none = ChatStateWords(words: String(l10n: "Not connected"), tone: .off)
         guard let account else {
-            kind = .none; action = whatsApp ? .addNumber : .addBot; menu = []
-            status = ChatStateWords(words: whatsApp ? String(l10n: "No number") : String(l10n: "No bot"), tone: .off)
+            kind = .none; action = .connect; menu = []; status = none
             return
         }
+        // Turned off comes first: the bridge does not run such an account, so Connect could not work on it.
         guard account.isEnabled else {
             kind = .off; action = .turnOn; menu = [.remove]
             status = ChatStateWords(words: String(l10n: "Turned off"), tone: .off)
             return
         }
+        guard !account.neverLinked else {
+            kind = .none; action = .connect; menu = []; status = none
+            return
+        }
         let reason = ChatApps.clean(account.link?.error) ?? ChatApps.clean(account.error)
         var kind: Kind, action: Action?, menu: [MenuItem] = [.remove], status: ChatStateWords
         switch (whatsApp, account.state) {
-        case (true, _) where linking && account.state != "connected":
-            kind = .linking; status = ChatStateWords(words: String(l10n: "Linking"), tone: .waiting)
         case (_, "connected"):
             kind = .connected; status = ChatStateWords(words: String(l10n: "Connected"), tone: .good)
             menu = whatsApp ? [.unlink, .remove] : (account.inviteURL == nil ? [] : [.invite]) + [.changeToken, .remove]
@@ -252,7 +267,7 @@ public struct ChannelCard: Equatable, Sendable {
             status = ChatStateWords(words: String(l10n: "Unlinked"), tone: .problem, detail: reason)
         }
         // A bridge report older than three minutes is the last reading, never a current state.
-        if kind != .linking, let serverTime, let at = account.status_at, serverTime - at > ChatApps.statusAge {
+        if let serverTime, let at = account.status_at, serverTime - at > ChatApps.statusAge {
             status.readingAt = at
             if status.tone == .good { status = ChatStateWords(words: status.words, tone: .waiting, detail: status.detail, readingAt: at) }
         }
@@ -269,10 +284,15 @@ public struct ChannelCard: Equatable, Sendable {
     /// Orange: the owner has something to do.
     public var needsOwner: Bool { status.tone == .problem }
 
-    /// The first time for an app: the owner has no ID there yet, and this card's account can take the owner's code.
-    /// The card then first shows "Link your WhatsApp" (or Discord).
+    /// The owner has no ID of this app yet, and this card's account can take the owner's code: the channel's steps
+    /// then ask for it ("Write to <agent> from your phone"), and the card's menu has Link my phone (or Link my Discord).
     public func asksForOwnerLink(_ people: PeopleSnapshot?) -> Bool {
         kind == .connected && people.map { $0.handles(of: app).isEmpty } == true
+    }
+
+    /// The card's "…" menu: the owner's own link first, only while it is still to do.
+    public func menu(for people: PeopleSnapshot?) -> [MenuItem] {
+        (asksForOwnerLink(people) ? [.linkMe] : []) + menu
     }
 }
 
@@ -625,12 +645,6 @@ public enum ChatApps {
         max(0, expires - (serverTime + now.timeIntervalSince(readAt)))
     }
 
-    /// A countdown as minutes and seconds: "9:41".
-    public static func countdown(_ seconds: Double) -> String {
-        let total = max(0, Int(seconds.rounded(.up)))
-        return "\(total / 60):" + String(format: "%02d", total % 60)
-    }
-
     /// A Discord error in one or two words; the full text goes to the hover text. Close code 4004 is a refused token.
     public static func shortReason(_ error: String?) -> String {
         let text = (error ?? "").lowercased()
@@ -638,7 +652,7 @@ public enum ChatApps {
     }
 
     /// A reason from the bridge without spaces at its ends, and with an end mark; nil for none.
-    static func clean(_ text: String?) -> String? {
+    public static func clean(_ text: String?) -> String? {
         let value = (text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }
         return value.hasSuffix(".") ? value : value + "."
@@ -868,7 +882,7 @@ public final class ChatAppsClient: Sendable {
     }
 
     private func fetch(_ request: URLRequest) async throws -> Data {
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else {

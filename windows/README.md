@@ -97,6 +97,52 @@ renamed or removed without a word to the screens lane.
     `Waiting`, `PeriodLabel`, `AgentLabel` and their hovers, `EndedGroup.Mark`, `UsageRow.Hover`,
     `AgentPanel.UsageHeading`, `ControlsModel.PauseWords`, `StopWords`, `ResumeWords`, `SettingsModel.LastReadingLabel`,
     and `Screens.Line(state, now, page)` (no Settings button on Settings).
+  - the words that a screen must not write itself (the rule of the lane "Localization": each a whole sentence of
+    the library): `OptionsModel.SendingWords` (the pressed option's "Sending…", after a second),
+    `ComposerModel.PlusHover` (the plus's hover, as the answer box's), `Screens.TaskbarWords(state)` (the taskbar
+    count for assistive apps, the Mac's "1 item needs you" and "N items need you"; null with no count),
+    `UsageRow.ShareWords` ("42%", as both apps write a share), `ChatModel.EmptyWords` (what an assistive app says for
+    the empty chat's mark: "No messages with <role> yet") and `ChatModel.LoadingWords` ("Reading…", a chat's first
+    read, after a second), and `ResultModel.OutputLabel` and `HowLabel`. The empty chat and its first read wait for
+    their pictures before a screen draws them.
+  - the time at the end of an agent's row (`AgentRow.Time`) is the time of its chat's last message
+    (`ChatLine.LastTime`, FleetCore's `ChatList.lastTime` since 14 November 2026), also while the line names a task;
+    none before the first message;
+  - "Latest" and following the end (FleetCore's `ChatEnd`): each chat view and each task's thread keeps one `ChatEnd`
+    from its first drawing. Give it the scroll's own measure: `Taken()` when he takes the view in hand (a drag, a
+    wheel, a touch that moves it), `Stands(under, moved)` each time the view's offset, its content's height or its
+    room changes (`under`: the points of content below the view's bottom edge; `moved`: the offset changed while the
+    content's height and the room stayed), and `Rested(under, jumped)` when a scroll ends (`jumped`: the view made that
+    scroll itself, to its newest row or to a jump). Go to the newest row when one comes only while `FollowsLatest`;
+    draw "Latest" (`ChatModel.LatestWords`) only while `ShowsLatest`; set `FollowsLatest = true` when "Latest" is
+    pressed, and false before and after a jump that takes the view from its end. The end is under `ChatEnd.Near` (100);
+  - the third set (windows-app-pictures-3.md, the owner's "Yes, as shown" of 14 November 2026):
+    - an ended task's result (`TaskPageModel.Result`): `ResultModel.What`, the check as a row that folds and stands
+      folded as the page opens (`CheckOpensFolded`; its title `Check`), and inside it `OutputLabel`/`Output`,
+      `HowLabel`/`How`, `Note` and `CheckedAt`; `ResultModel.Outputs` only for an accepted result (its states are in
+      "The fourth set" below; `HasEffect` is gone: the button has its effect);
+    - a task that waits: `WaitingLabel`, `WaitingValue`, `WaitingAgent`, and the state word in `Controls.StateWord` and
+      the panel's State (`TaskWords.WaitingFor`, one sentence with its slot, as FleetCore's);
+    - a reply in Markdown: `ChatRow.Blocks` (`MessageBlock`: heading, paragraph, item with its marker and level, code,
+      quote, rule, table), each with `MessageBlock.Runs` (its inline marks; a code block is one run of code) and a
+      table's `RowRuns`;
+    - a chat with no message (`ChatModel.Empty`, `EmptyWords`) and at its first read (`Loading`, `LoadingWords`, after
+      a second; no empty mark while the chat is not read);
+  - a request's card where it was raised (the Mac's rule of 14 November 2026, `ChatPlaces.InTime`): `ChatModel.Rows`
+    holds each card at its own time, his answer in his own words as his message (also on its way), and a pressed
+    option as no bubble; a card whose answer is his message folds to its title (`RequestCard.Spoken`,
+    `ShowsAnswerLine`), and words that he wrote have no check (`RequestCard.ShowsCheck`, `RequestStep.ShowsCheck`;
+    `RequestCard.FoldedWords` for an assistive app); an hour's or a day's mark counts a card at the time it was raised.
+    A request raised before the chat's oldest item stands only while the PC holds the chat's whole history
+    (`ChatPageState.Whole`: its first read gave fewer than `StoreState.ChatFirstPage` items);
+  - the inline marks of a reply as runs: `InlineMarks.Runs(text)` gives each `InlineRun` (`Text`, `Bold`, `Italic`,
+    `Struck`, `Code`, `Link`), read as FleetCore's `MessageBlock.inline` reads them (the Mac's MessageText draws those
+    runs); their words joined are always `InlineMarks.Plain(text)`. `Link` is only an http, https or mailto address
+    (`InlineMarks.OpensInBrowser`); any other link is its words with no link. A bare address is a link too, as
+    Apple's reader on the Mac makes one (the autolinks of GitHub's Markdown, measured on 15 November 2026): an http,
+    https or ftp address, a `www.` address (to http) and an email address (to mailto), without a final `.`, `,`,
+    `_` or other mark that ends a sentence, with its balanced parentheses, and never in inline code or in a link's
+    words. The cases are in `swift-words.json` (`inline`).
 - **The picked files** (the iPhone's StagedFile): `state.Staged[composer]` holds each `StagedFile` (`RequestId`, `Name`,
   `Mime`, `Size`, `File` once the hub holds it, `Failure`, `IsOnHub`), in the order he picked them, between starts;
   `state.Uploading` the ones that go up now. While a file of a composer waits, its Send is off (`ComposerModel.CanSend`,
@@ -119,6 +165,96 @@ renamed or removed without a word to the screens lane.
   `BuildDownload.NewClient()` is the client of both. The screens give the rest (`~/dev/founderizer-plans/
   windows-app-release-design.md`, sections 4 and 5): the publisher check, the unpack, the launcher and the swap. No
   element shows an update before the owner's yes to it.
+- **The fourth set** (the owner's "Yes, as shown" of 14 November 2026 to `~/dev/founderizer-plans/
+  windows-app-pictures-4.md`; the Mac's rules at `origin/main` of that day):
+  - **The checked outputs** (pictures 1a to 1e; the Mac's `ArtifactSection`): `ResultModel.Outputs` is a
+    `CheckedOutputsModel`: `Heading`, the button `ViewWords` ("View outputs", or "Reload outputs" once listed) that calls
+    `store.ListOutputsAsync()`, `Enabled` (the reading is current and no read runs; the button and each View),
+    `ConnectionWords` in orange while the reading is not current, `Loading` ("Loading checked outputs…" or "Loading and
+    verifying output…") with `CancelWords` that call `store.CloseOutputs()`, `Error` in orange (the Mac's sentences
+    of `OutputException`, or "Hub refused the request (413): …" with the hub's words), `NoFilesWords` for a result with
+    no file, `Files` (each `OutputFileRow`: `Path`, `IsImage` for the picture's mark or the text's, `ViewWords`, and
+    `ViewName` for an assistive app; View calls `store.ViewOutputAsync(row.File)`), and `Opened`
+    (`OpenedOutputModel`: `Path` in semibold and `CloseWords`, which call `store.CloseOutputs()`; `Text` in the code
+    font in a scroll `TextHeight` high, or `EmptyWords` when `EmptyText`; or `Picture`, the verified bytes, with `Width`
+    and `Height`, drawn from a thumbnail of at most `ThumbnailMost` pixels and at most `PictureMaxHeight` high, named
+    `PictureName` for an assistive app; then the fold `Download`, "Verified download · 149 bytes", which opens on
+    `Facts`: Snapshot commit, SHA-256 and Type). The store reads and checks each file as the Mac does (`HubClient
+    .TaskArtifactsAsync`, `TaskArtifactAsync`: the hub, task and commit headers, the type, the size, the SHA-256, strict
+    UTF-8, a PNG or JPEG of at most 16,384 a side and 40 million pixels); a list that changed takes the list with it; the
+    section clears when its task's page closes, and holds only "Output discarded because the hub state is stale." when
+    the reading turns old.
+  - **The steps of a task** (pictures 2a and 2b; the Mac's `RuntimeActivity`, in full since the owner's words of
+    14 November 2026, "it needs to match the mac"): `TaskPageModel.Thread` replaces `Notes` under what the task asks
+    (`Notes` stays, the notes alone, until the window reads `Thread`). Each `ThreadRowModel` has its `Key` and `Kind`:
+    `Steps` (`StepsModel`: `Symbol`, `Title` "8 steps" or the step that runs, `Status` "1 failed" (`Orange`), "Step 8 ·
+    Running" or none, and its `Rows`), `Message` and `Note` (both `Words`, a `NoteRow`, drawn as the agent's reply),
+    `Error` (`Text` in orange with the error's mark), `Truncated` (`Text`, muted), `Permission` (picture 2c:
+    `PermissionRowModel`: the hand, `Title` the tool, `Status` "Waiting" in orange, and opened `Input` in the code font,
+    then `Reason` once decided) and `Guidance` (`SteerRowModel`: his words in his bubble, `Line` "Guidance · Attempt 1 ·
+    Read" under it, muted, and `Hover`). A thought is a step of its run, as on the Mac. Each step is a `StepRowModel`
+    with its `Kind`: `Tool` (its `Symbol`, `Title`, `Status`, `Orange` and a chevron; opened, `FullTitle` in the code
+    font, `Locations`, `Output` in the code font, `Script` with the fold `ScriptResultTitle` over `ScriptResult`, and for
+    a child agent `ChildLines` and `OpenChildWords`, which opens `Screens.ChildThread(state, task, row.Child, …)`),
+    `Thought` ("Thinking", its `Text` opened), `Plan` ("Plan", its `Plan` steps opened), and in a child agent's thread
+    also `Message`, `Error` and `Truncated`. `StepSymbol` names each mark: `Read`, `Search`, `Edit`, `Execute`,
+    `Fetch`, `Other`, `Thought`, `Subagent`, `Plan`, and `Steps` for a run with no step that runs. A child agent's
+    thread (`ChildThreadModel`) takes the task thread's place: `BackWords` (one level up), `Title`, `AttemptWords`, its
+    `Rows`, and `WaitingWords` while it has none. Over the thread: `ActivityError` (orange: its last read failed; leave
+    it out while the window's line over the page shows) and `OfflineWords` (orange: the reading is not current). The
+    page shows the last `StepWords.ShownAtOnce` (80) rows, `EarlierWords` shows 80 more, and rows that come while he
+    reads further up add to what shows (`ThreadTopRows` grows). Under the thread while the task runs: `LivePlan`, the
+    steps of the plan of the work that runs (`PlanStep`: its words, done muted, running, or to do). The panel: the fact
+    "AI provider" after Attempt, then for each model of the attempt "Model requested", "Model used", "Reasoning
+    requested", "Reasoning used", and a `Fact` with `Warning` ("The AI provider used other settings", orange, no label);
+    after the facts, `TaskPageModel.ParentTask` ("Parent task · <title>" in the link's colour; a press opens
+    `ParentTaskModel.Id`) and `Subtasks` (`Heading`, each `SubtaskRow` with its `Title` on two lines at most and its
+    `Status` muted under it; a press opens `Id`), from the task read (owner API 1.163) or the reading's heads;
+    `TaskPageModel.ChildAgents` (`Heading`, at most 20 `ChildAgentRow`s with their `State` mark, name, arrow and
+    `Hover`; a row opens its thread; `MoreWords` past 20); and `TaskPageModel.ChangedFiles` (`Heading`, each
+    `ChangedFileRow` with `Path`, `Action`, `Added` "+4" in green and `Removed` "−1" in orange, then `Footer`). On a
+    current reading of a hub that offers `thread_events`, `Screens.Task` stays null until the first read of the task's
+    record has every page, so the thread and the panel come in one frame, as the Mac's. The store reads the open task's
+    record every 3 seconds while it is not behind (`OpenTask`), until a read after the task ended brings no more; the
+    task read brings the guidance (owner API 1.162).
+  - **A request that waits, as an agent's line** (the Mac's Founderizer 0.1.224, `ChatList.waitingRequest`): when the
+    card of a request that waits for him is the newest thing in the agent's chat (the chat's own places, over its newest
+    `ChatLine.RowReads` items), `AgentRow.Line` is its title with `NeedsYou` true: draw it in orange, whole, with no
+    " · +N" count, and `AgentRow.Time` is the card's (`ChatLine.RequestTime`). While the agent works, the line of its work
+    wins and `NeedsYou` is false. The status dot does not change. The search card's agent rows say the same line with
+    `SearchAgentRow.NeedsYou`. A chat that the store has not read yet keeps the hub's last line until its read.
+  - **A parked task** (picture 3 as the Mac draws it): its card stands in Waiting with `TaskCardRow.Why` "Until 16:00"
+    (`Screens.Parked`), while no hold of the owner's and no usage limit holds it; its mark is no work now; its page says
+    its state word, as the Mac's does. A task in state working whose session does no work now while subtasks of it are
+    open stands in Waiting too, and its card's `Why` and `Hover` say "Waiting for" and their agents (the Mac's
+    Founderizer 0.1.220; `Activity.SubtaskWaits`, owner API 1.162 gives each head its `parent`).
+- **The Ended lane of every ended task** (the owner's "Yes, as the Mac" of 14 November 2026; owner API 1.166): with a
+  hub that offers `mobile_ended`, the store reads `GET /ui/mobile/ended` (`HubClient.EndedAsync`) at its first pass
+  and again whenever the reading's `MobileSnapshot.EndedMark` is not the `Mark` of the read that it holds
+  (`StoreState.Ended`), and `Screens.Board` counts and opens every ended task of its period from it, as the Mac does:
+  `LaneModel.Count`, `EndedModel.Failed`, `RestWords` and `Days`, with the runs of one schedule as one row
+  (`MobileTaskHead.TriggerId`). Nothing changes for the window: the lane has the same models. With an older hub the
+  lane is the 20 newest ended tasks of the reading, as before. The pane's Needs-you count, the agent filter, Search
+  and a task's parent and follow-up title read the same heads (`StoreState.AllTasks()`).
+- **The Mac's request card of Founderizer 0.1.239** (app commit `95811d21b`; the owner, 15 November 2026: "the task
+  itself need to be very clear and also formatted like the chat messages (links, code format etc)" and "apply the
+  style of the hover time (relative too)"). **Names beside the present ones**: the window keeps drawing the present
+  fields, the look of the approved pictures, until the owner says yes to a picture of this card.
+  - `OwnerNeed.TaskInFront` (`Kind` and `DoorCall` both null): the task stands on the front of the card.
+  - `RequestCard.Body` and `RequestStep.Body`, a `RequestBody`. The reason is `WhyBlocks`, whole while `Short` or open,
+    else `FoldedWhy` drawn with `InlineMarks.Runs` in at most three lines. The task on the front is `Task` and
+    `TaskBlocks`, under the reason, with a message's room between them. A command is a `Kinds.Code` block: on a card,
+    a well in the canvas's colour; on the request at hand, a step's code size; in both, the chat's copy icon.
+  - The link is `MoreClosed`, `MoreOpen` and `MoreChevron`, or null when nothing stands behind it. A card with no
+    details says Show all. Behind the link stand `DetailsBlocks` and the task that stays there, `TodoBehind` and
+    `TodoBehindBlocks` under `TodoLabel`. The door's script (`DetailsIsScript`) is the one code block of the hub's own
+    details: it wraps and has no copy icon, and its text has its own fence, so give it no second one.
+  - The request at hand stands in the middle by `CentredClosed` and `CentredOpen`; a card reads from its edge.
+  - `ChatRow.AgeWords` ("5 min ago", or the state of his message on its way), and its hover `AgeHover` (the exact date
+    and time of a reply, or the present `TimeHover` of his message). While `AgeMoves` is true, read the words again
+    when the footer shows, with `Screens.MessageAge(row.Time, now, context)`.
+  - The room over the composer is the window's own measure: the Mac's `ManagerView.endRoom`, 88 points under the last
+    row, which "Latest" leaves out of its measure.
 - An element that needs a hub feature asks the model, which reads `ui_features` (`state.Offers(...)`): the
   task's controls (`task_controls`) and its guidance (`task_steering`), the plus of the files
   (`attachments`), the chat of an agent other than the manager (`direct_chat`).

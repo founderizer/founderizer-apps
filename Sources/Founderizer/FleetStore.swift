@@ -1,5 +1,6 @@
 import AppKit
 import FleetCore
+import FleetOwnerAPI
 import Foundation
 import Observation
 
@@ -25,7 +26,13 @@ enum Destination: Hashable {
     /// key page of Turn on for the connected apps (`ConnectAppKeyStep`), a page of Settings › Servers too.
     case needs, activity, agents, addAgent, server(String), addServer, task(Int), agent(String),
          agentDetail(String, AgentTab), signIn(String), agentRule(String, ProfileSectionID?), settings(SettingsTab),
-         app(AppsGroup), connectKey
+         app(AppsGroup), connectKey,
+         /// The page of a later change of the fleet's shape, on the step where he let go of the slider of Settings ›
+         /// Servers (`ShapeChangePage`): a wizard that fills the window.
+         shapeChange(ServersStep)
+
+    /// The page of a later change of the fleet's shape.
+    var isShapeChange: Bool { if case .shapeChange = self { true } else { false } }
 
     /// The agent whose page shows, or nil on every other page.
     var agentName: String? {
@@ -39,7 +46,7 @@ enum Destination: Hashable {
     var settingsTab: SettingsTab? {
         switch self {
         case .settings(let tab): tab
-        case .server, .addServer, .connectKey: .servers
+        case .server, .addServer, .connectKey, .shapeChange: .servers
         case .app: .apps
         default: nil
         }
@@ -49,7 +56,7 @@ enum Destination: Hashable {
     /// over it (`pageNotices`).
     var ownsSidebar: Bool {
         switch self {
-        case .agentDetail, .agentRule, .settings, .server, .addServer, .app, .connectKey: true
+        case .agentDetail, .agentRule, .settings, .server, .addServer, .app, .connectKey, .shapeChange: true
         default: false
         }
     }
@@ -240,12 +247,43 @@ final class FleetStore {
         return model
     }
 
+    /// This Mac's step on the hub's own server for "1 server" (`HubShareModel`), one for each hub address and
+    /// generation: it takes a minute or more and goes on whatever page shows, and a second step cannot start beside
+    /// the first.
+    @ObservationIgnored private var hubShares: [String: HubShareModel] = [:]
+    func hubShare() -> HubShareModel {
+        let database = state?.db ?? ""
+        let key = "\(hub.absoluteString)|\(database)"
+        if let model = hubShares[key] { return model }
+        let model = HubShareModel(hub: hub, database: database)
+        hubShares[key] = model
+        return model
+    }
+
     /// The owner's access key on this hub's servers, put there by itself: one model for each hub address.
     @ObservationIgnored private var accessModels: [URL: OwnerAccessModel] = [:]
     func accessModel() -> OwnerAccessModel {
         if let model = accessModels[hub] { return model }
         let model = OwnerAccessModel(hub: hub)
         accessModels[hub] = model
+        return model
+    }
+
+    /// This Mac's key for this hub, registered by itself (`OwnerMacKey`): one model for each hub address.
+    @ObservationIgnored private var keyModels: [URL: OwnerKeyModel] = [:]
+    func keyModel() -> OwnerKeyModel {
+        if let model = keyModels[hub] { return model }
+        let model = OwnerKeyModel(hub: hub)
+        keyModels[hub] = model
+        return model
+    }
+
+    /// The join's hardening of this hub's Linux servers, put right by itself: one model for each hub address.
+    @ObservationIgnored private var hardeningModels: [URL: ServerHardeningModel] = [:]
+    func hardeningModel() -> ServerHardeningModel {
+        if let model = hardeningModels[hub] { return model }
+        let model = ServerHardeningModel(hub: hub)
+        hardeningModels[hub] = model
         return model
     }
 
@@ -289,7 +327,10 @@ final class FleetStore {
     /// own is a screen that nobody checks. The names of the pages that became sections of Settings (servers, devices,
     /// updates, mcps, subscription) still open them there.
     static var asked: Destination? {
-        switch UserDefaults.standard.string(forKey: "openPage") {
+        // Only a word of this start's arguments, never a kept setting: a kept one (`defaults write`) opened each
+        // start of the app on a chosen page, also on one that acts when it opens, and so went around the rules of
+        // `setup_show`. The other lane did the same for `firstRunStep` on 15 November 2026.
+        switch UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["openPage"] as? String {
         case "settings": return .settings(.general)
         // `app.<github|drive|gmail|mcp>`: one app's page of Settings › Apps; its MCP servers were once a section, `mcps`.
         case "settings.mcps", "mcps": return .app(.mcp)
@@ -303,7 +344,8 @@ final class FleetStore {
         case "servers", "devices": return .settings(.servers)
         // `server.<name>`: one server's page, which no sidebar row opens on its own.
         case let page? where page.hasPrefix("server."): return .server(String(page.dropFirst("server.".count)))
-        case "updates", "updates.subscription": return .settings(.updates)
+        // Settings › Updates is gone (15 November 2026): its versions and its switch are in General.
+        case "updates", "updates.subscription": return .settings(.general)
         // `task.<id>`: the thread of one task. It is no sidebar row, so nothing else opens it on its own — and it
         // was the one screen of the app nobody could look at without a task to click to.
         case let page? where page.hasPrefix("task."): return Int(page.dropFirst("task.".count)).map { .task($0) }
@@ -322,6 +364,83 @@ final class FleetStore {
     /// The first-run wizard holds the window, after the hub it installed has answered. It is set and cleared by
     /// the wizard itself, and never kept: a later start of the app begins with no hold.
     var firstRunHolds = false
+    /// **What the first run shows, for the owner's own agent** (`setup_state` on the link, `SetupChannel.swift`): its
+    /// page by a fixed name, its title, whether its work runs. The window's wizard keeps it current; `.none` when no
+    /// first run shows. Typed values only, never a value of a field.
+    var setupSnapshot = SetupFirstRun.none
+    /// **The first run's build at a provider, and Add server's** (`setup_diagnosis`), kept by their writer, because both
+    /// can be in work at one time: nil while that model told nothing (`SetupChannel.reports`).
+    var firstRunBuild: ReachFacts.BuildFacts?
+    var addServerBuild: ReachFacts.BuildFacts?
+    /// **The page that each wizard shows now, by its fixed name** (`setup_state`'s `place`): Add server, Add agent, an
+    /// agent's setup and a sign-in each write their own when their page changes and clear it when they go.
+    var wizardPages = WizardPages()
+    /// **A page of the first run that the owner's own agent asked to see** (`setup_show`): the window's wizard takes it
+    /// and writes its outcome; the link then clears it.
+    var setupAsk: SetupAsk?
+    /// **A text of the owner's own agent for the report form** (`prepare_problem_report`, `LinkTools.showReport`): the
+    /// form takes it and says how. `openReportWindow` opens that window from outside a view; the main window's view
+    /// sets it, as it sets `notifications.showWindow`.
+    var reportAsk: ReportAsk?
+    @ObservationIgnored var openReportWindow: (() -> Void)?
+    /// **The hub's address had answered this Mac in an earlier start of the app.** Only then can a setup be one that
+    /// an earlier start left unfinished (`welcomeCovers`): a first run of this start went through the welcome page
+    /// already.
+    @ObservationIgnored private var startedWithFleet = false
+    /// A program for the welcome page's second way is on this Mac (`AgentPrograms`), read one time, when the page
+    /// could first show: without one that page has only the way that leads to the page behind it.
+    @ObservationIgnored private lazy var offersAgent = !AgentPrograms.found().isEmpty
+    /// **The welcome page of an unfinished setup was passed in this start of the app**: by the end of one of its two
+    /// ways (`passWelcome`), when the owner left the manager's page (`WelcomeRules.leaves`), when an install or a
+    /// build of a server ran (`watchWork`), when the manager got its server, or by another hub's address. It is only
+    /// ever set, so the page never comes back in the same start,
+    /// whatever comes after (a second sign of `founderizer-cli guide` too).
+    private(set) var welcomePassed = false
+    /// "Set it up yourself" on that welcome page, and the sign that the owner's own agent started the guide: the
+    /// window goes on to the manager's setup, where the setup stands.
+    func passWelcome() { welcomePassed = true }
+    /// **An install or a build of a server that runs passes the welcome page for this start of the app**, at the
+    /// moment it starts, with the window open or closed: the page never stands in front of work (`coversSetup`), and
+    /// it must not come in front of the manager's setup when that work ends, or when the owner opens the manager
+    /// after work that they did in this start. It watches the install of this hub and Add server's build until one of
+    /// them runs; another hub's address passes the page by itself (`connect`).
+    private func watchWork() {
+        guard startedWithFleet, !welcomePassed else { return }
+        withObservationTracking {
+            _ = (installModel().running, AddServerView.builds)
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, !self.welcomePassed else { return }
+                if self.installModel().running || AddServerView.builds { self.welcomePassed = true } else { self.watchWork() }
+            }
+        }
+    }
+    /// The manager's own page, where its setup shows in place of its chat; nil while no reading names a manager.
+    private var managerPage: Destination? {
+        state?.agents.first { $0.role == "manager" }.map { .agent($0.name) }
+    }
+    /// **An unfinished setup opens on the welcome page** (the owner, 14 November 2026, of a new user whose manager's
+    /// server did not install and whom an updated app showed "Manager's server" with no way to the prompt for their
+    /// own agent: "yes there should be always a way to see it"). In each start of the app, the first time that the
+    /// window would show the setup of a manager that has no server yet, it shows the welcome page in front of it
+    /// (`WelcomeRules.coversSetup`, which decides). It reads the reading that the window draws, also the one that this
+    /// Mac kept: a hub that does not answer at the start is the case that the page's second way helps with. A page
+    /// asked for with a launch argument (`-openPage`, `-firstRunStep`) shows as asked.
+    var welcomeCovers: Bool {
+        // The common cases first, with no other read: a start with no fleet, a page that was passed, and a manager
+        // that has its server.
+        guard startedWithFleet, !welcomePassed, let state,
+              let manager = state.agents.first(where: { $0.role == "manager" }), !manager.placed else { return false }
+        let asked = FleetStore.asked != nil || FirstRunModel.asked != nil
+        func covers(runs: Bool) -> Bool {
+            WelcomeRules.coversSetup(hadFleet: startedWithFleet, passed: welcomePassed || asked, offersAgent: offersAgent,
+                                     unplaced: !manager.placed,
+                                     setupFills: destination == .agent(manager.name) && fillsWindow(destination),
+                                     runs: runs)
+        }
+        // The models of the work are read only for a page that would show: a read of the install's model makes it.
+        return covers(runs: false) && covers(runs: installModel().running || AddServerView.builds)
+    }
     /// The first option of a Needs-you item for his phone (API 1.95) asked for the Add device picture: the Devices
     /// group of Settings › Servers makes its code at once, as its own Add device does, and clears this.
     var addDeviceAsked = false
@@ -330,8 +449,15 @@ final class FleetStore {
             // The first page the app chose for itself is no step he can go back to; a step of Back or Forward is not
             // one he opened.
             if homeChosen, !stepping { history.went(from: oldValue, to: destination) }
+            // The owner left the manager's page: the welcome page in front of its setup is passed for this start
+            // (`WelcomeRules.leaves`; before `homeChosen` is set, so the app's own first page passes nothing).
+            if startedWithFleet, !welcomePassed,
+               WelcomeRules.leaves(chosen: homeChosen, fromManager: oldValue == managerPage,
+                                   changed: destination != oldValue) { welcomePassed = true }
             homeChosen = true
             if destination != oldValue { childThreadRequest = nil; keptUnread = nil }
+            // A chat that `setup_show` just opened keeps its mark; every other change of page ends it (`ShownPage`).
+            if shown.chat != nil { shown.went(to: destination.agentTab == .chat ? destination.agentName : nil) }
             markRepliesSeen()
             // The launch's first read reads the pages; a page chosen before it needs no read of its own.
             if launched { prefetch(fleet: PagePrefetch.fleet, agent: PagePrefetch.agent) }
@@ -339,6 +465,29 @@ final class FleetStore {
     }
     /// The app has its first page: the one asked for, the one `home` chose from a reading, or one he went to first.
     @ObservationIgnored private var homeChosen = FleetStore.asked != nil
+
+    /// **What a `setup_show` that changed the page leaves open until the owner acts in the app's main window**
+    /// (`ShownPage` in FleetOwnerAPI, which has the rules and their tests; the plan "The app's pages and actions for
+    /// the owner's own agent", part 2): one change of page for each click of the owner that reached the app, and the
+    /// chat that a show opened does not count as read until the owner acted with that chat still on the page. The
+    /// link reads it for `setup_state`'s `show`, and the app's watch reads its number of the latest show.
+    private(set) var shown = ShownPage()
+    /// `setup_show`'s change of page (`SetupChannel.showPlace`, after its rules): through `destination`, so that Back
+    /// returns to the page before and the sidebar's row follows. It marks no chat as read.
+    func show(_ page: Destination) {
+        guard page != destination else { return }
+        shown.shows(page.agentTab == .chat ? page.agentName : nil)
+        destination = page
+    }
+    /// The app handled a click or a key of the owner in its main window (`AppFront.ownerHandled`). `ShownPage.handled`
+    /// has the rule: a click that reached the app frees the next show; a click or a key that reached it marks the
+    /// chat that a show opened as read, when it still shows; a click that the app dropped, and an event that began
+    /// before the latest show, do nothing.
+    func ownerHandled(_ act: ShownPage.Act) {
+        guard shown.waitsForOwner || shown.chat != nil else { return }
+        let chat = destination.agentTab == .chat ? destination.agentName : nil
+        if shown.handled(act, showing: chat) { markRepliesSeen() }
+    }
 
     /// **The pages he opened, for Back and Forward** (the owner, 3 November 2026: "2 buttons to go back and forth between
     /// pages while navigating the app, like in codex"), as a browser keeps them (`PageHistory`).
@@ -368,7 +517,7 @@ final class FleetStore {
     func fillsWindow(_ page: Destination) -> Bool {
         guard let state else { return false }
         switch page {
-        case .addServer, .addAgent: return true
+        case .addServer, .addAgent, .shapeChange: return true
         case .agent(let name):
             return AgentSetupFlow.fillsWindow(state.agents.first { $0.name == name }, adding: isAdding(name),
                                               features: state.ui_features ?? [], placing: placing(name),
@@ -412,7 +561,7 @@ final class FleetStore {
         let page = history.leave(from: wizard) { self.canOpen($0) && !self.fillsWindow($0) }
         let home = FleetStore.home(state)
         stepping = true
-        destination = page ?? (wizard == .addServer ? .settings(.servers) : fillsWindow(home) ? .agents : home)
+        destination = page ?? (wizard == .addServer || wizard.isShapeChange ? .settings(.servers) : fillsWindow(home) ? .agents : home)
         stepping = false
     }
 
@@ -748,6 +897,43 @@ final class FleetStore {
     private func placingKey(_ agent: String, database: String) -> String { "\(hub.absoluteString)|\(database)|\(agent)" }
     /// This Mac saw the agent with no server on this hub generation, and has not seen it run since.
     func placing(_ agent: String) -> Bool { state.map { unplaced.contains(placingKey(agent, database: $0.db)) } ?? false }
+    /// **The first setup of a manager that the installer placed** (a fleet on one server, which this Mac's first run
+    /// just installed): the hub never showed it with no server, so this Mac puts it on the same list itself. Its setup
+    /// then fills the window and shows its steps until it runs, as for a manager that gets its first server.
+    func noteFirstSetup(of agent: String) {
+        guard let database = state?.db else { return }
+        unplaced.insert(placingKey(agent, database: database))
+    }
+    /// **He went on from "Name your manager" in the manager's own setup**, on this run of the app and for this hub
+    /// generation: the page of the fleet's servers is next, until the hub keeps a step (`ManagerSetupStart`). Back on
+    /// that page takes it away.
+    private var namedManagers: Set<String> = []
+    var managerNamed: Bool { state.map { namedManagers.contains("\(hub.absoluteString)|\($0.db)") } ?? false }
+    func noteManagerNamed(_ named: Bool) {
+        guard let database = state?.db else { return }
+        let key = "\(hub.absoluteString)|\(database)"
+        if named { namedManagers.insert(key) } else { namedManagers.remove(key) }
+    }
+    /// **A manager that gets its name in its own setup** (`HubClient.nameManager`): the page that shows it goes to its
+    /// new name in the same step as the reading that has that name (`notePlacing`), so that no chat of an agent that is
+    /// not there shows between the two. The note is for this hub and this generation, and a reading of another one
+    /// does nothing with it. nil takes the note away: after a rename that the hub refused, and when he goes on with
+    /// the name that the manager has.
+    @ObservationIgnored private var renamedManager: (hub: URL, database: String, was: String, now: String)?
+    func noteRenamed(from was: String, to now: String?) {
+        guard let now, let database = state?.db else { renamedManager = nil; return }
+        renamedManager = (hub, database, was, now)
+    }
+    /// The same page of the agent under its new name: its chat, a part of its details, its sign-in, a rule's editor.
+    private static func renamed(_ page: Destination, was: String, now: String) -> Destination? {
+        switch page {
+        case .agent(was): .agent(now)
+        case .agentDetail(was, let tab): .agentDetail(now, tab)
+        case .signIn(was): .signIn(now)
+        case .agentRule(was, let rule): .agentRule(now, rule)
+        default: nil
+        }
+    }
     /// **The setup takes the place of this agent's chat and of its Runs on** (`AgentSetupFlow.shows`).
     func setupShows(_ agent: String) -> Bool {
         AgentSetupFlow.shows(state?.agents.first { $0.name == agent }, features: state?.ui_features ?? [], placing: placing(agent))
@@ -766,6 +952,14 @@ final class FleetStore {
     /// An agent with no server goes on the list, and one that runs leaves it. One that has its server needs no joined
     /// server any more.
     private func notePlacing(_ fresh: HubState) {
+        // The reading that has a manager under its new name, and no more under its old one (`noteRenamed`).
+        if let renamed = renamedManager, renamed.hub == hub, renamed.database == fresh.db,
+           fresh.agents.contains(where: { $0.name == renamed.now }),
+           !fresh.agents.contains(where: { $0.name == renamed.was }) {
+            shown.renamed(from: renamed.was, to: renamed.now)       // a chat that `setup_show` opened stays not read
+            if let page = Self.renamed(destination, was: renamed.was, now: renamed.now) { destination = page }
+            renamedManager = nil
+        }
         guard fresh.ui_features?.contains(AgentSetupFlow.serverFeature) == true else { return }
         for agent in fresh.agents {
             let key = placingKey(agent.name, database: fresh.db)
@@ -917,6 +1111,9 @@ final class FleetStore {
         default: break
         }
     }
+    /// The newest write of a reading that went away from the window's work (`writeReading`), for `forgetFleet`, which
+    /// removes a fleet's readings also when such a write is still on its way.
+    @ObservationIgnored private var lastWrite: Task<Void, Never>?
     /// The observer of the app's quit, which writes the newest reading.
     @ObservationIgnored private var quitting: NSObjectProtocol?
 
@@ -967,7 +1164,7 @@ final class FleetStore {
                 try? data.write(to: file, options: [.atomic])
             }
         }
-        if now { write() } else { Task.detached(priority: .utility, operation: write) }
+        if now { write() } else { lastWrite = Task.detached(priority: .utility, operation: write) }
     }
 
     init() {
@@ -1000,6 +1197,7 @@ final class FleetStore {
         stagedDirectory = support.appendingPathComponent("Founderizer/staged")
         readingsFolder = support.appendingPathComponent("Founderizer")
         hubAnsweredBefore = Self.answeredHubs.contains(hub.absoluteString)
+        startedWithFleet = hubAnsweredBefore
         if let kept = UserDefaults.standard.data(forKey: "stagedFiles"),
            let files = try? JSONDecoder().decode([String: [StagedFile]].self, from: kept) {
             staged = files
@@ -1036,6 +1234,10 @@ final class FleetStore {
                                                           queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.writeReading(now: true) }
         }
+        // The link's answers come from this store (`SetupChannel`, which listens from the app's start).
+        SetupChannel.shared.attach(self)
+        // Work that runs in this start passes the welcome page of an unfinished setup (`welcomeCovers`).
+        watchWork()
     }
 
     /// **The state is current** (`StateReading.isCurrent`). A reading this Mac kept from an earlier launch is current
@@ -1102,8 +1304,13 @@ final class FleetStore {
                     self.vaultModel().tick(store: self)
                     // The door's access file, from this Mac's own Tailscale, by itself and with nothing on a page.
                     self.doorModel().tick(store: self)
+                    // This Mac's own key for the hub, which a VM or a container on this Mac does not have: registered
+                    // over the SSH connection to the hub's server, with nothing on a page while it works.
+                    self.keyModel().tick(store: self)
                     // The owner's access key on each Linux server, his way back after a lost Mac, with nothing on a page.
                     self.accessModel().tick(store: self)
+                    // The join's hardening of each Linux server, put right again as root, with nothing on a page.
+                    self.hardeningModel().tick(store: self)
                     self.releasesTick()
                     wait = self.untilRead
                 }
@@ -1112,16 +1319,32 @@ final class FleetStore {
         }
     }
 
-    /// **The sidebar's Update row stands only while an update waits** (D-4): a release of the fleet that the hub offers
-    /// to take, or a build of this app that installs itself or waits for its press. Nothing else marks it.
+    /// **An update waits for his press** (D-4): a release of the fleet that the hub offers to take, or a build of this
+    /// app that installs itself or waits for its press. Nothing else marks it.
     var updateWaits: Bool {
         // A release that waits only for running work, with automatic updates on, waits for nothing of his: the hub
-        // takes it at the first moment no turn runs (fix round 3, item 20).
+        // takes it at the first moment no turn runs (fix round 3, item 20; `ReleaseState.waitsForPress`).
         // Until this launch reads the releases, the reading kept with the fleet's, while it is of this hub generation.
         let releases = reading("releases") as ReleaseState? ?? keptReleases.reading(of: state?.db)
-        let fleet = releases.map { $0.stand.take != nil && !($0.stand.waiting && $0.automatic) } ?? false
+        let fleet = releases?.waitsForPress != nil
         // Until this launch's own read of our channel decides, the build of this app kept with the fleet's (`buildWaits`).
         return fleet || updates.buildWaits
+    }
+
+    /// **The sidebar's Update stands** (`UpdateBanner`; the owner, 15 November 2026: "if I had an update available I
+    /// wanted to see a button above the settings one"): while an update waits for his press, while his press goes on —
+    /// this Mac's build going in, the fleet's run that a press started. A press that stopped leaves its update waiting,
+    /// so the Update stands with Try again.
+    var updateShows: Bool { updateWaits || updates.pressed != nil || fleetUpdateWords != nil }
+
+    /// **What the sidebar's Update says of the fleet's update while a press of it goes on**, or nil: what a press that
+    /// waits for running work waits for, then Updating… until the run ends. A run that a press started — his, or one
+    /// of this Mac's before the app started again for its own build — goes on in the hub, so the releases reading says
+    /// it after a restart of the app too: its row is `updating` and not automatic.
+    var fleetUpdateWords: String? {
+        if let words = UpdatesModel.of(self).working { return words }
+        guard let run = (reading("releases") as ReleaseState?)?.newestRun, run.isRunning, !run.automatic else { return nil }
+        return String(l10n: "Updating…")
     }
 
     /// When the fleet's release was last read for the Update row.
@@ -1152,12 +1375,79 @@ final class FleetStore {
             let next = try HubClient.address(addressText)
             guard !sending else { return }
             if next != hub { childThreadRequest = nil; cancelEdit(); endProviderSetups(); state = nil; chatTimeline = ChatTimeline(); lastSuccess = nil; lastReceipt = nil; stopWatching(); stateToken = nil }
+            // Another hub is not the fleet that this start of the app opened on (`welcomeCovers`).
+            if next != hub { welcomePassed = true }
             hub = next
+            // A connect is the owner's own ask (the first run's own search never asks for a hub that "Start again"
+            // left): that hub is passed over no more.
+            StartAgain.LeftHubs.forget(next)
             hubAnsweredBefore = Self.answeredHubs.contains(next.absoluteString)
             UserDefaults.standard.set(next.absoluteString, forKey: "hubAddress")
             connectionError = nil; failedReads = 0; readsFail = false; staleNoticeStood = false; readHeld = false
             await refresh()
         } catch { lastReadError = error; connectionError = HubReach.words(error, hub: nil).line }
+    }
+
+    /// **The app forgets this fleet** (the last step of "Start again", `StartAgain.run`; the owner's "Yes, build it"
+    /// of 15 November 2026): what it keeps by this hub's address goes, in memory, in its settings and in its own
+    /// folder, and the store is as on a Mac that was never given a hub, so the window is the first run on its welcome
+    /// page. It asks the hub nothing. `hubServerDeleted`: the run deleted the hub's own server, so this Mac's key for
+    /// that hub goes too; a hub that stays alive keeps it, and the first run passes over that hub's address until the
+    /// owner connects to it himself (`StartAgain.LeftHubs`).
+    ///
+    /// **Never touched here**: a provider's token, the key of the private network, the app's own SSH key, the owner's
+    /// own key, the backup's folder and its settings, the installation id and the app's own settings.
+    ///
+    /// `fleet` is the hub that the page of "Start again" read: when the store is at another hub by now, nothing is
+    /// forgotten.
+    func forgetFleet(_ fleet: URL, hubServerDeleted: Bool) {
+        guard fleet == hub else { return }
+        let old = hub, address = old.absoluteString
+        // In memory first: a value that this store writes itself would come back with its next write.
+        childThreadRequest = nil; cancelEdit(); endProviderSetups(); stopWatching()
+        state = nil; chatTimeline = ChatTimeline(); lastSuccess = nil; lastReceipt = nil; stateToken = nil
+        unwrittenReading = nil; unwrittenKept = [:]
+        keptHealth = KeptReading(); keptReleases = KeptReading()
+        let bar = "\(address)|"
+        unplaced = unplaced.filter { !$0.hasPrefix(bar) }
+        adding = adding.filter { !$0.hasPrefix(bar) }
+        joinedFor = joinedFor.filter { !$0.key.hasPrefix(bar) }
+        pins[address] = nil
+        if seenContext.hasPrefix("\(address)\n") { seenContext = ""; seenReplies = [:] }
+        // This hub's install model, also under the address of no hub: a first run's install is kept under both
+        // (`keepInstall`), and the address of no hub is this store's address again after this step. None runs now.
+        installModels[old] = nil
+        if let none = try? HubClient.address(HubClient.defaultAddress) { installModels[none] = nil }
+        firstRunBuild = nil; addServerBuild = nil
+        // The models that this store keeps for this hub: none of them writes for it again.
+        vaultModels[old] = nil; connectSwitches[old] = nil; accessModels[old] = nil; keyModels[old] = nil
+        hardeningModels[old] = nil; doorModels[old] = nil
+        checksModels = checksModels.filter { !$0.key.hasPrefix(bar) }
+        if let waiting = pending, waiting.hub == old, !sending {
+            try? outbox.clear(matching: waiting.requestID)
+            pending = nil
+        }
+        // In the app's own folder: the kept readings of this hub, and its records of installs and builds.
+        let readings = StartAgain.readingFiles(of: old, in: readingsFolder)
+        for file in readings { try? FileManager.default.removeItem(at: file) }
+        // A write of a reading that is on its way lands after this line: its files go once it ended.
+        if let late = lastWrite {
+            Task.detached(priority: .utility) {
+                await late.value
+                for file in readings { try? FileManager.default.removeItem(at: file) }
+            }
+        }
+        BuildRecords.shared.remove { $0.hub == address }
+        InstallRecords.shared.remove { $0.hub == address }
+        // In the app's settings: every value under this hub's address.
+        StartAgain.forgetKept(hub: old, hubServerDeleted: hubServerDeleted)
+        if hubServerDeleted { StartAgain.forgetMacKey(hub: old) } else { StartAgain.LeftHubs.note(old) }
+        // As on a Mac that was never given a hub.
+        hub = (try? HubClient.address(HubClient.defaultAddress)) ?? old
+        addressText = ""
+        hubAnsweredBefore = false; startedWithFleet = false; firstRunHolds = false
+        connectionError = nil; lastReadError = nil; failedReads = 0; readsFail = false; staleNoticeStood = false; readHeld = false
+        history = PageHistory(); homeChosen = false
     }
 
     /// Reads the fleet's state. **A call while a read is on its way is never dropped**: that read runs once more when
@@ -1189,6 +1479,11 @@ final class FleetStore {
             var timeline = chatTimeline
             if timeline.update(messages: fresh.messages, reports: fresh.reports) { chatTimeline = timeline }
             notePlacing(fresh)
+            // A manager that has its server is no setup that an earlier start left unfinished: the welcome page in
+            // front of it is passed for this start, whatever a later reading says.
+            if startedWithFleet, !welcomePassed, fresh.agents.first(where: { $0.role == "manager" })?.placed == true {
+                welcomePassed = true
+            }
             noteAdded(fresh)
             state = fresh
             chooseHome()
@@ -1544,7 +1839,9 @@ final class FleetStore {
         let context = "\(hub.absoluteString)\n\(state.db)"
         var seen = seenContext == context ? seenReplies : [:]
         if seenContext != context { for agent in state.agents { seen[agent.name] = Self.newestReply(agent.name, in: state) } }
-        if case .agent(let name) = destination, name != keptUnread { seen[name] = Self.newestReply(name, in: state) }
+        if case .agent(let name) = destination, name != keptUnread, shown.countsAsRead(name) {
+            seen[name] = Self.newestReply(name, in: state)
+        }
         keep(seen, context: context)
     }
 

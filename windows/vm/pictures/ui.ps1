@@ -2,18 +2,22 @@
 # (vm.sh desktop), and then it prints which page is open and whether Back and Forward can be pressed. No person is
 # needed. One of:
 #   -Invoke <name>               presses the button of that name (a row of the pane, a card, an option, Back, Pause)
-#   -Click <name>                the same with the mouse, as a person presses it: no keyboard focus frame shows after
+#   -Click <name>                the same with the mouse, as a person presses it (a name "#Id" is an automation id,
+#                                for two buttons of one name: "#CloseOutput"): no keyboard focus frame shows after
 #                                it, so a picture taken next is the window at rest. The pointer then rests on the
-#                                empty middle of the title bar, where nothing shows a hover or a tooltip.
+#                                empty middle of the title bar, where nothing shows a hover or a tooltip. An item of
+#                                an open menu of that name comes first (one shows only while its menu is open), then a
+#                                button, then a link in a message's words.
 #   -Field <name> -Type <words>  writes the words into the field of that name (its placeholder, or the start of it)
 #                                and presses Enter (with -NoEnter not: a whole code sends itself)
 #   -Read <id>                   prints the words of the element with that automation id (TaskState, NeedsCount)
-#   -Has <words>                 prints whether an element with those words shows (a message, a card's title)
+#   -Has <words>                 prints whether an element with those words shows in view (a message, a card's title)
+#   -HasStart <words>            the same for an element whose words start with them (a many-line output, an error)
 # With none of them it only prints.
 #
 #   vm.sh desktop '& C:\fz\setup\ui.ps1 -Click "Tasks"'
 #   vm.sh desktop '& C:\fz\setup\ui.ps1 -Field "Message Fleet Manager" -Type "Which order is it?"'
-param([string]$Invoke, [string]$Click, [string]$Field, [string]$Type, [switch]$NoEnter, [string]$Read, [string]$Has)
+param([string]$Invoke, [string]$Click, [string]$Field, [string]$Type, [switch]$NoEnter, [string]$Read, [string]$Has, [string]$HasStart)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms
@@ -46,7 +50,11 @@ function Named([string]$name, $type) {
     $both = New-Object System.Windows.Automation.AndCondition((Condition $A::NameProperty $name), (Condition $A::ControlTypeProperty $type))
     $window.FindFirst($Scope::Descendants, $both)
 }
-function Button([string]$name) { Named $name $Types::Button }
+# A name that starts with "#" is an automation id: the outputs' Close (#CloseOutput) beside the window's own Close.
+function Button([string]$name) {
+    if ($name.StartsWith('#')) { return $window.FindFirst($Scope::Descendants, (Condition $A::AutomationIdProperty $name.Substring(1))) }
+    Named $name $Types::Button
+}
 
 $did = 'at start'
 if ($Invoke) {
@@ -56,8 +64,10 @@ if ($Invoke) {
     $did = "pressed $Invoke"
 }
 elseif ($Click) {
-    $button = Button $Click
-    if (-not $button) { throw "no button named $Click" }
+    $button = Named $Click $Types::MenuItem
+    if (-not $button) { $button = Button $Click }
+    if (-not $button) { $button = Named $Click $Types::Hyperlink }
+    if (-not $button) { throw "no menu item, button or link named $Click" }
     # A button that is not enabled takes no press (a write waits for its receipt): wait for it, up to 30 seconds.
     $waited = [Diagnostics.Stopwatch]::StartNew()
     while (-not $button.Current.IsEnabled -and $waited.Elapsed.TotalSeconds -lt 30) { Start-Sleep -Milliseconds 200 }
@@ -99,7 +109,15 @@ if ($Read) {
 }
 if ($Has) {
     $element = $window.FindFirst($Scope::Descendants, (Condition $A::NameProperty $Has))
-    'shows "{0}": {1}' -f $Has, [bool]$element
+    # In view only: a list keeps the views that it recycled in its tree.
+    'shows "{0}": {1}' -f $Has, [bool]($element -and -not $element.Current.IsOffscreen)
+}
+if ($HasStart) {
+    $found = $false
+    foreach ($e in $window.FindAll($Scope::Descendants, [System.Windows.Automation.Condition]::TrueCondition)) {
+        if (-not $e.Current.IsOffscreen -and $e.Current.Name.StartsWith($HasStart)) { $found = $true; break }
+    }
+    'shows words that start "{0}": {1}' -f $HasStart, $found
 }
 $page = $window.FindFirst($Scope::Descendants, (Condition $A::AutomationIdProperty 'Page'))
 '{0,-18} page: {1,-18} Back: {2,-5} Forward: {3}' -f $did, $page.Current.Name, (Button 'Back').Current.IsEnabled,

@@ -18,12 +18,12 @@ struct ActivityTests {
 
     private func task(_ id: Int, _ state: String, owner: String = "vps", created: Double = ActivityTests.now - 60, started: Double? = nil,
                       last: Double? = nil, waitingOn: String? = nil, accepted: Int? = nil, title: String? = nil,
-                      schedule: Int? = nil, parked: Double? = nil) -> [String: Any] {
+                      schedule: Int? = nil, parked: Double? = nil, parent: Int? = nil, works: Bool? = nil) -> [String: Any] {
         var row: [String: Any] = ["id": id, "title": title ?? "Task \(id)", "details": "", "done_when": "Checked", "needs": "none",
                                   "goal": "", "owner": owner, "requester": "manager", "state": state, "created": created,
                                   "attempt": 1, "restarts": 0, "nudge_level": 0, "stop_sent": 0]
         row["started"] = started; row["last_activity"] = last; row["waiting_on"] = waitingOn; row["accepted"] = accepted
-        row["trigger_id"] = schedule; row["parked_until"] = parked
+        row["trigger_id"] = schedule; row["parked_until"] = parked; row["parent"] = parent; row["works"] = works
         return row
     }
 
@@ -123,6 +123,47 @@ struct ActivityTests {
         ]).activity(agent: nil, period: .all, calendar: Self.utc)
         #expect(ids(board, .waiting) == [1])
         #expect(ids(board, .inProgress) == [2])
+    }
+
+    /// A lead's task whose session does no work now waits for its open subtasks, and names their agents; it is work again
+    /// while its session works, and a task with no open subtask, or from a hub that does not say, stays as it was.
+    @Test func aTaskWhoseSessionRestsWhileItsSubtasksAreOpenWaitsForThem() throws {
+        let start = Self.now - 600
+        let state = try hub([
+            task(1, "working", owner: "manager", started: start, last: start, works: false),             // waits for 2 and 3
+            task(2, "working", owner: "vps", started: start, last: start + 60, parent: 1, works: false),
+            task(3, "submitted", owner: "studio", created: start + 30, parent: 1),
+            task(4, "completed", owner: "studio", started: start, last: start + 90, parent: 1),            // over: no wait
+            task(5, "working", owner: "manager", started: start, last: start, works: true),              // checks a result
+            task(6, "working", owner: "vps", started: start, last: start, parent: 5),
+            task(7, "working", owner: "manager", started: start, last: start, works: false),             // no open subtask
+            task(8, "completed", owner: "vps", started: start, last: start, parent: 7),
+            task(9, "working", owner: "manager", started: start, last: start),                           // a hub that does not say
+            task(10, "working", owner: "vps", started: start, last: start, parent: 9),
+        ])
+        let board = state.activity(agent: nil, period: .all, calendar: Self.utc)
+        #expect(Set(ids(board, .waiting)) == [1, 3])
+        #expect(Set(ids(board, .inProgress)) == [2, 5, 6, 7, 9, 10])
+        #expect(state.subtaskWaits == [1: ["vps", "studio"]])                       // the one that moved last first
+        #expect(HubState.subtaskWords(["vps", "studio"]) == "Waiting for Vps, Studio")
+        #expect(HubState.subtaskWords(["web-dev"]) == "Waiting for Web-Dev")
+    }
+
+    /// A hold, a question, a reminder and an unknown outcome keep their own column and words over the wait for subtasks.
+    @Test func aTaskThatWaitsForSubtasksKeepsWhatHoldsItFirst() throws {
+        let start = Self.now - 600
+        let holds: [[String: Any]] = [["id": 1, "task": 1, "kind": "pause", "state": "paused", "attempt": 1]]
+        let board = try hub([
+            task(1, "working", owner: "manager", started: start, last: start, works: false),             // paused
+            task(2, "working", owner: "vps", started: start, last: start, parent: 1),
+            task(3, "working", owner: "manager", started: start, last: start, parked: Self.now + 600, works: false),
+            task(4, "working", owner: "vps", started: start, last: start, parent: 3),
+            task(5, "completed", owner: "manager", started: start, last: start, works: false),           // over
+            task(6, "working", owner: "vps", started: start, last: start, parent: 5),
+        ], holds: holds).activity(agent: nil, period: .all, calendar: Self.utc)
+        #expect(Set(ids(board, .waiting)) == [1, 3])
+        #expect(ids(board, .done) == [5])
+        #expect(Set(ids(board, .inProgress)) == [2, 4, 6])
     }
 
     @Test func aTaskThatWaitsForTheOwnerSaysWhatForAndStandsFirstInWaiting() throws {

@@ -19,7 +19,7 @@ Mac, and a device route is all that the PC reaches.
 | --- | --- | --- |
 | `direct_chat` | built | `MobileSnapshot.CanChat`, `Screens.UnavailableWords`; a message to an agent with `recipient` |
 | `corrections` | waits | the request's `replaces_request_id` is built; no picture of step 1 shows Correct, so the store has no correction yet |
-| `thread_events` | waits (1.4) | `GET /ui/tasks/<id>/events`, the task's thread; the iPhone does not read it |
+| `thread_events` | built | `GET /ui/tasks/<id>/events` every 3 seconds for the open task (`HubClient.TaskEventsAsync`), the Mac's whole thread (`TaskThread.cs`, `Screens.Task` `Thread`); the iPhone does not read it |
 | `task_controls` | built | `OwnerCommand.Control`, `POST /ui/tasks/<id>/control`, with its receipt |
 | `limit_holds` | built | the agents' `limit`: "Usage limit" in a chat's waiting line, a task's page and the panel |
 | `liveness` | built | `MobileAgent.HelperIsRecent` |
@@ -34,8 +34,8 @@ Mac, and a device route is all that the PC reaches.
 | `leads` | waits (2.2) | |
 | `browser_desktop` | waits (step 2) | |
 | `machine_check` | waits (2.1) | |
-| `file_changes` | waits (step 2) | part of a task's thread |
-| `subagents` | waits (step 2) | part of a task's thread |
+| `file_changes` | built | the latest completed report of each path from the task's record (`ActivityTimeline.ChangedFiles`, `ChangedFilesModel`); the panel's "Changed files" (`Pages/TasksPages.cs` `ChangedFiles`, fourth set, 2a) |
+| `subagents` | built | the child agents of the record (`ActivityTimeline.ChildAgents`, `ChildAgentsModel`, `Screens.ChildThread`); a step's child rows and "Open agent thread" (`Pages/TaskRows.cs`), the panel's "Child agents" (`Pages/TasksPages.cs` `ChildAgentsView`) and the child agent's thread with "Back" (`ChildHeadRowView`) |
 | `vault_isolation` | waits (2.3) | |
 | `triggers` | waits (2.4) | wake-up rules |
 | `trigger_checks` | waits (2.4) | |
@@ -65,6 +65,8 @@ Mac, and a device route is all that the PC reaches.
 | `responsibilities` | waits (step 2) | duties |
 | `server_prepare` | waits (2.1) | |
 | `mobile` | built | `GET /ui/mobile` with its ETag, the chat and task pages, enrollment with the PC's `kind` (owner API 1.149), the devices list with each device's `kind`; the key kept between starts (`FileKeyStore` through the screens' `IKeyProtection`) and Forget the key |
+| `mobile_ended` | built | `GET /ui/mobile/ended` (owner API 1.166): every ended task with its schedule, read when `ended_mark` of `GET /ui/mobile` moves (`HubClient.EndedAsync`, `StoreState.Ended`); the Ended lane counts and opens all ended tasks of its period with FleetCore's schedule groups (`EndedLaneTests` against `swift-words.json`) |
+| `secrets_import` | waits (step 2) | an import of secrets in one command, a setup page of the Mac; no device route |
 | `attachments` | built | `OwnerStore.AddFileAsync` keeps a picked file's bytes in the store's folder, then sends it up with its own number before its message (the iPhone's StagedFile: it stays between starts, `UploadAsync` sends one that did not go again, `RemoveFile` takes it out); `FileAsync` reads one back with its size and SHA-256 checked (the device routes since `afb3188de`); the twin's `files` test |
 | `resource_grants` | waits (2.3) | |
 | `machine_signin` | waits (2.2) | |
@@ -114,7 +116,10 @@ Mac, and a device route is all that the PC reaches.
 | `secret_compare` | waits (2.3) | |
 | `default_models` | waits (2.2) | |
 | `web_hosts` | waits (2.2) | |
+| `hub_shared` | waits (2.1) | the hub's own server that takes agents (owner API 1.168): the hub install's word `FLEET_HUB_SERVER=shared` and `hub_shared` of `GET /ui/servers`, which is no device route; no app turns it on yet |
 | `chat_waits` | built | `MobileAgent.WaitsSince` |
+| `diagnostics` | waits | `GET /ui/diagnostics`, the hub's own faults and refused calls (UI-API.md 1.167), for the Mac's Report a problem; the Windows app has no Report a problem yet (lane "Bug reports") |
+| `owner_key` | waits (2.1) | the owner's computer sends its own key with its address (owner API 1.169); a PC at the device level calls with its device key, which the hub's device rule takes as before, so step 1 needs nothing; the key file, the claim's header and `POST /ui/owner/key` are the first run of an owner with only Windows |
 | `central_vault` | waits (2.3) | |
 | `kept_pins` | waits (2.3) | the Mac signs each machine's kept pin again with the owner's key; a PC holds no owner key in step 1 |
 | `secret_replace` | waits (2.3) | Add secret puts a new value under a key that the list has, with the owner's signed statement |

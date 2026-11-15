@@ -409,15 +409,21 @@ public actor VaultBroker {
         do { named = try await hub.confirmRead(as: caller) } catch {
             return ["ok": false, "v": 2, "error": ((error as? VaultFailure) ?? .hub).rawValue]
         }
-        var env: [String: String] = [:], missing: [String] = []
+        var env: [String: String] = [:], missing: [String] = [], logins: [String] = []
         for item in named {
             do {
                 let secret = try value(String(item.login.dropFirst(6)))
+                // C11: a login's value never reaches a session. This rule is for a session's read only: a login that
+                // an agent holds as "Uses it" goes out in a request (`call`) as before.
+                if secret.loginShaped { logins.append(item.env); missing.append(item.env); continue }
                 try await hub.protect(secret, read: item, as: caller)
                 env[item.env] = secret.password
             } catch { missing.append(item.env) }
         }
-        return ["ok": true, "v": 2, "env": env, "missing": missing]
+        // `logins`, only when there is one, names the variables of `missing` that C11 left out (`vault.py` `read`)
+        var reply: [String: Any] = ["ok": true, "v": 2, "env": env, "missing": missing]
+        if !logins.isEmpty { reply["logins"] = logins }
+        return reply
     }
 
     /// True when this vault's own journal has the creation that the hub names for a sign-in (`created_by`), with the

@@ -2,70 +2,6 @@ import AppKit
 import FleetCore
 import SwiftUI
 
-/// What an agent asks the owner, on the request's card in a chat (`NeedRequestCard`), read as blocks: lines run
-/// together into a paragraph, and a line that begins with a number or a dash becomes a row of its own, so a list of
-/// steps reads as a list and not as a wall. Its words are a message's 14 points. The request at hand on Needs you
-/// draws the same words as a message does (`NeedStep`, `MessageText`).
-struct NeedBody: View {
-    let text: String
-    /// How many blocks to show; nil shows every one.
-    var limit: Int?
-    /// The most lines of each block, for a folded card whose one paragraph is long; nil shows every line.
-    var lines: Int?
-
-    struct Block: Identifiable { let id: Int; let marker: String?; let text: String }
-
-    static func blocks(of text: String) -> [Block] {
-        var out: [Block] = []
-        for raw in text.components(separatedBy: "\n") {
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty { continue }
-            if let found = marker(of: line) {
-                out.append(Block(id: out.count, marker: found.0, text: found.1))
-            } else if let last = out.last, last.marker == nil {
-                out[out.count - 1] = Block(id: last.id, marker: nil, text: last.text + " " + line)
-            } else {
-                out.append(Block(id: out.count, marker: nil, text: line))
-            }
-        }
-        return out
-    }
-
-    /// "1." or "2)" or "-" at the start of a line, and what follows it.
-    private static func marker(of line: String) -> (String, String)? {
-        if let first = line.first, "-•*".contains(first), line.count > 2, Array(line)[1] == " " {
-            return ("•", String(line.dropFirst(2)))
-        }
-        let digits = line.prefix { $0.isNumber }
-        guard !digits.isEmpty, digits.count <= 2 else { return nil }
-        let rest = line.dropFirst(digits.count)
-        guard let separator = rest.first, separator == "." || separator == ")" else { return nil }
-        return (String(digits) + ".", rest.dropFirst().trimmingCharacters(in: .whitespaces))
-    }
-
-    var body: some View {
-        let shown = limit.map { Array(Self.blocks(of: text).prefix($0)) } ?? Self.blocks(of: text)
-        let spacing: CGFloat = 3
-        // **Its words in the size of the place it stands in** (fix round 2): a message's 14 in a chat; they took the
-        // page's 12.5, a size of their own beside the chat's 14.
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(shown) { block in
-                if let marker = block.marker {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(marker).font(ChatStyle.title)
-                            .foregroundStyle(FleetStyle.muted).frame(minWidth: 18, alignment: .trailing)
-                        Text(block.text).lineSpacing(spacing).textSelection(.enabled).lineLimit(lines)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                } else {
-                    Text(block.text).lineSpacing(spacing).textSelection(.enabled).lineLimit(lines)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }.font(ChatStyle.font)
-    }
-}
-
 /// One offered answer, as a target: a row that lifts under the pointer and dims on the press. **Neutral grey** (the
 /// owner's yes of 28 October 2026, D-8): it was violet, the colour that now has one job — a link, the focus, the
 /// selected tab and the brand's mark — and the rows of a request read as a list of choices without it.
@@ -501,10 +437,16 @@ struct NeedAnswerGiven: View {
 ///
 /// **An answered request folds to two lines** (the owner's yes of 28 October 2026, D-7): its title and "✓ Correos",
 /// the rest on a click, as Grok Bot folds a question card it answered. An answered one took as much room as an open
-/// one.
+/// one. **The check is for an option that he pressed** (the owner, 14 November 2026: "when I typed a custom answer
+/// instead of choosign one of the suggested ones, do not show the CHECK animation because it is misleading"): words
+/// that he wrote can ask something back or say no, so they stand with no check, and where they are his own message
+/// in the chat (`spoken`) the card folds to its title alone.
 struct NeedRequestCard: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
+    /// His answer stands in the chat as his own message (`ChatRequestPlaces.spoken`): the folded card does not say it
+    /// a second time.
+    var spoken = false
     @State private var expanded = false
     /// His answer as the outbox saved it, kept from the frame it went until the reading says the request is answered
     /// (`WordsOnTheirWay`): the store lets the request go with its receipt, a round trip before that reading.
@@ -520,26 +462,34 @@ struct NeedRequestCard: View {
 
     /// What it needs from him. A secret request's is the hub's one sentence about its form, which is right below it.
     private var todo: String { need.asksForSecret ? "" : need.todo }
+    /// **His task stands on the card, under the reason** (the owner, 15 November 2026: "the task itself need to be
+    /// very clear"; `OwnerNeed.taskInFront`): it stood behind Details, under "What it needs from you". An item with a
+    /// door call keeps its words there, and so does a conversation's item.
+    private var task: String { need.taskInFront ? todo : "" }
 
     private var hasMore: Bool {
-        need.details != nil || !short || !todo.isEmpty
+        need.details != nil || !short || (!todo.isEmpty && task.isEmpty)
     }
     /// **A short card** (the owner's yes of 9 November 2026): an item from a hub with `need_talk` has a why of one or two
     /// sentences, shown whole, and its long part behind Details. An older item keeps Show all.
     private var short: Bool { need.details != nil || need.why.count <= NeedTalk.why }
     /// The request's title, folded or whole, **without its number** (D-2, the owner's yes of 28 October 2026): "N-3" is
     /// the hub's bookkeeping, and the agents' own words name a request by what it asks.
-    private var heading: String { need.title }
-    /// **The card's words in the sizes of the chat it stands in** (fix round 2): its title and its body (`NeedBody`) take
-    /// the chat's 14 points, the title medium; its small lines are 12, where they were 11 and 11.5, and its body took
-    /// the page's 12.5: sizes of their own in the chat's column. Its option rows keep 13, the size of a button's words
-    /// (D-8 item 10).
+    private var heading: String { need.shownTitle }
+    /// **The card's words in the sizes of the chat it stands in** (fix round 2): its title and its body take the chat's
+    /// 14 points, the title medium; its small lines are 12, where they were 11 and 11.5, and its body took the page's
+    /// 12.5: sizes of their own in the chat's column. Its option rows keep 13, the size of a button's words (D-8 item
+    /// 10). **Its body is drawn as a message is** (`MessageText`; the owner, 15 November 2026: "formatted like the
+    /// chat messages (links, code format etc)"): a link is a link, code is code with its copy icon, and steps are a
+    /// list. It was plain text, so a command stood in a sentence with its backticks.
     private var titleFont: Font { ChatStyle.title }
     /// What he answered, in the folded card's second line: his words or the option he pressed.
     private var answerWords: String {
         let answer = (onItsWay?.text ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return answer.isEmpty ? String(l10n: "Answered") : answer
     }
+    /// He answered in his own words, on their way or as the reading has them: no option that he pressed or ticked.
+    private var inWords: Bool { onItsWay?.answersInWords ?? need.answeredInWords }
 
     var body: some View {
         Group {
@@ -548,7 +498,9 @@ struct NeedRequestCard: View {
                     folded.padding(FormMetrics.rowInset).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.buttonStyle(.plain)
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("\(need.title), answered: \(answerWords)")
+                    // Words that stand in the chat as his own message are read there, not here a second time.
+                    .accessibilityLabel(inWords && spoken ? Text("\(need.shownTitle), answered")
+                                        : Text("\(need.shownTitle), answered: \(answerWords)"))
                     .accessibilityHint("Shows the whole request")
                     .accessibilityIdentifier("need-folded-\(need.id)")
             } else {
@@ -574,15 +526,18 @@ struct NeedRequestCard: View {
         }
     }
 
-    /// The two lines of an answered request: its title, medium (`titleFont`), and what he answered with a check, 12
-    /// points muted.
+    /// The two lines of an answered request: its title, medium (`titleFont`), and what he answered, 12 points muted:
+    /// the option that he pressed with a check, and words that he wrote with none. Words that stand in the chat as his
+    /// own message (`spoken`) are not said here again, and the card is its title.
     private var folded: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(heading).font(titleFont).foregroundStyle(FleetStyle.text).lineLimit(1)
-            HStack(spacing: 5) {
-                Image(systemName: "checkmark").font(IconMetrics.symbol(10, weight: .semibold))
-                Text(answerWords).lineLimit(1)
-            }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+            if !(inWords && spoken) {
+                HStack(spacing: 5) {
+                    if !inWords { Image(systemName: "checkmark").font(IconMetrics.symbol(10, weight: .semibold)) }
+                    Text(answerWords).lineLimit(1)
+                }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+            }
         }
     }
 
@@ -598,20 +553,29 @@ struct NeedRequestCard: View {
                 }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
             }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach)
 
-            // **An older long card folds to three lines** (the owner, 9 November 2026: "MUCH better so they are shorter"):
-            // its one long paragraph showed whole under the two-block fold. Show all opens the rest.
-            NeedBody(text: need.why, limit: expanded || short ? nil : 1, lines: expanded || short ? nil : 3)
+            // The reason and the task are two parts of one message: a message's room between them.
+            VStack(alignment: .leading, spacing: ChatStyle.blockSpacing) {
+                if expanded || short {
+                    MessageText(text: need.why, chat: true, card: true)
+                } else {
+                    // **An older long card folds to three lines** (the owner, 9 November 2026: "MUCH better so they
+                    // are shorter"): the start of its reason, until Show all opens the rest.
+                    Text(MessageBlock.inline(need.why.components(separatedBy: .newlines).joined(separator: " ")))
+                        .font(ChatStyle.font).lineSpacing(ChatStyle.lineSpacing).tint(FleetStyle.link)
+                        .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                }
+                if !task.isEmpty { MessageText(text: task, chat: true, card: true) }
+            }
             if expanded, let details = need.details {
                 // **The door's card shows its script line for line** (API 1.125, review point 5.6): one code block, as
                 // the request at hand on Needs you draws it, which this Mac hashes before it signs Run it once
-                // (`DoorCall.checked`). NeedBody joins lines into one paragraph, and two lines of a script are two
-                // commands.
-                if need.door_script != nil { MessageText(text: details, chat: true, script: true) } else { NeedBody(text: details) }
+                // (`DoorCall.checked`).
+                MessageText(text: details, chat: true, script: need.door_script != nil, card: true)
             }
-            if expanded, !todo.isEmpty {
+            if expanded, !todo.isEmpty, task.isEmpty {
                 Text("What it needs from you").font(FormMetrics.detailTitle)
                     .foregroundStyle(FleetStyle.muted).padding(.top, 2)
-                NeedBody(text: todo)
+                MessageText(text: todo, chat: true, card: true)
             }
             if hasMore {
                 HStack(spacing: 10) {

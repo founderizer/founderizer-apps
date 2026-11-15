@@ -45,7 +45,7 @@ public static partial class Screens
         if (p.Command is not { } command) return p.Text;
         string? title = null;
         if (p.Hub == s.Hub && s.Fleet is { } fleet && fleet.Db == p.Database)
-            title = Activity.AllTasks(fleet).FirstOrDefault(t => t.Id == command.Target)?.Title;
+            title = Activity.AllTasks(fleet, s.EndedTasks).FirstOrDefault(t => t.Id == command.Target)?.Title;
         return CommandWords.Name(command, title);
     }
 
@@ -62,10 +62,13 @@ public static partial class Screens
         var compare = (culture ?? CultureInfo.CurrentCulture).CompareInfo;
         const CompareOptions loose = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace | CompareOptions.IgnoreWidth;
         var agents = (fleet?.Agents ?? []).Where(a => words.Length == 0 || s.Names.Matches(a.Name, words, culture))
-            .Select(a => new SearchAgentRow(a.Name, s.Names.Label(a.Name), ChatLine.Preview(a.Name, a.Last, fleet!.Tasks),
-                                            MarkLook.Of(s.MarkOf(a.Name), s.StatusOf(a.Name, now).MarkState, moves: false)))
+            .Select(a => Screens.WaitingRequest(s, a).Need is { } request
+                ? new SearchAgentRow(a.Name, s.Names.Label(a.Name), request.Title,
+                                     MarkLook.Of(s.MarkOf(a.Name), s.StatusOf(a.Name, now).MarkState, moves: false)) { NeedsYou = true }
+                : new SearchAgentRow(a.Name, s.Names.Label(a.Name), ChatLine.Preview(a.Name, a.Last, fleet!.Tasks),
+                                     MarkLook.Of(s.MarkOf(a.Name), s.StatusOf(a.Name, now).MarkState, moves: false)))
             .ToList();
-        var all = fleet is null ? [] : Activity.AllTasks(fleet).OrderByDescending(t => t.ActivityTime()).ThenByDescending(t => t.Id).ToList();
+        var all = fleet is null ? [] : s.AllTasks().OrderByDescending(t => t.ActivityTime()).ThenByDescending(t => t.Id).ToList();
         IEnumerable<MobileTaskHead> found;
         if (words.Length == 0) found = all.Take(20);
         else
@@ -141,6 +144,11 @@ public static partial class Screens
         var count = fleet.Needs.Count(n => n.IsOpen) + (Notifications.Episode(fleet.ManagerWarning) is null ? 0 : 1);
         return count == 0 ? null : count.ToString(CultureInfo.InvariantCulture);
     }
+
+    /// <summary>The count on the taskbar icon for assistive apps, in the words of the Mac's Needs you row; null with no
+    /// count.</summary>
+    public static string? TaskbarWords(StoreState s) =>
+        TaskbarCount(s) is { } count ? NeedsWords.Count(int.Parse(count, CultureInfo.InvariantCulture)) : null;
 
     /// <summary>Where a click on a notification goes (FleetStore.openNotification): Needs you at that request, while the
     /// reading is of the same hub and generation and still lists it; else nowhere (the window still comes to the front).</summary>
@@ -292,7 +300,11 @@ public sealed record PendingBarModel
     public ValueList<BarAction> Actions { get; init; } = ValueList<BarAction>.Empty;
 }
 
-public sealed record SearchAgentRow(string Name, string Label, string? Line, MarkLook Mark);
+public sealed record SearchAgentRow(string Name, string Label, string? Line, MarkLook Mark)
+{
+    /// <summary>The line is a request that waits for him, in orange, as on the agent's row in the pane.</summary>
+    public bool NeedsYou { get; init; }
+}
 
 public sealed record SearchTaskRow(long Id, string Title, TaskMark Mark);
 

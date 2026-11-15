@@ -13,6 +13,9 @@ struct MessageText: View, Equatable {
     /// The script of the door's card (API 1.125, `DoorCall.checked`): its code block wraps and does not scroll
     /// sideways, so that the end of a long line is on screen before he signs Run it once.
     var script = false
+    /// The text stands on a card (a request's card in a chat): a code block is a well in the canvas's colour there,
+    /// because the fill of a code block is the card's own fill.
+    var card = false
     /// Code in a line of a step's words: a little under the words' 15 points, as the chat's code is under its 14.
     private static let stepCode = Font.system(size: 13.5, design: .monospaced)
 
@@ -94,7 +97,9 @@ struct MessageText: View, Equatable {
                         Rectangle().fill(FleetStyle.muted.opacity(0.4)).frame(width: 2)
                         Text(block.formatted).foregroundStyle(FleetStyle.muted).lineSpacing(lines)
                     }
-                case .code: CodeBlock(text: block.text, chat: chat, wraps: script)
+                case .code: CodeBlock(text: block.text, font: chat ? ChatStyle.code : step && !script ? Self.stepCode : FormMetrics.code,
+                                      spacing: chat ? 5 : 4, fill: card ? FleetStyle.canvas : FleetStyle.surface,
+                                      wraps: script, copies: (chat || step) && !script)
                 case .rule: Rule().padding(.vertical, 4)
                 case .table:
                     Grid(alignment: .topLeading, horizontalSpacing: 18, verticalSpacing: 7) {
@@ -125,32 +130,41 @@ struct MessageText: View, Equatable {
 ///
 /// **In a chat, a copy icon at its top right while the pointer is over it** (the owner's yes of 28 October 2026, D-7,
 /// as Grok Bot and ChatGPT put one on their code): one click copies the code alone — Vps's `open https://…` without the
-/// sentence around it — where the message's own Copy takes all of its words.
+/// sentence around it — where the message's own Copy takes all of its words. **A request at hand on Needs you has the
+/// same icon** (the owner, 15 November 2026, of a request's task: "formatted like the chat messages (links, code
+/// format etc)"): the command of his task is what he copies there.
 private struct CodeBlock: View {
     let text: String
-    let chat: Bool
+    /// The code's font where it stands: a chat's, a step's or a form's.
+    let font: Font
+    let spacing: CGFloat
+    /// What it is filled with: the surface on the canvas, and the canvas on a card (`MessageText.card`).
+    var fill = FleetStyle.surface
     /// The script of the door's card: a long line wraps, so its end is on screen (`MessageText.script`).
     var wraps = false
+    /// The copy icon shows under the pointer. Never over a wrapped script, where it would cover the end of its first
+    /// row.
+    var copies = false
     @State private var hovered = false
     @State private var copied = false
 
     var body: some View {
         Group {
             if wraps {
-                Text(verbatim: text).font(chat ? ChatStyle.code : FormMetrics.code).lineSpacing(chat ? 5 : 4)
+                Text(verbatim: text).font(font).lineSpacing(spacing)
                     .fixedSize(horizontal: false, vertical: true).padding(12)
             } else {
                 ScrollView(.horizontal) {
-                    Text(verbatim: text).font(chat ? ChatStyle.code : FormMetrics.code).lineSpacing(chat ? 5 : 4)
+                    Text(verbatim: text).font(font).lineSpacing(spacing)
                         .fixedSize(horizontal: true, vertical: false).padding(12)
                 }
                 .sidewaysFade()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+        .background(fill, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
         .overlay(alignment: .topTrailing) {
-            if chat && !wraps {     // over a wrapped script, the icon would cover the end of its first row
+            if copies && !wraps {
                 // A one-line block is 41 points high, so the 28-point icon 6 points in from its corner stands in its
                 // middle; a longer block keeps it at its top.
                 IconButton(symbol: copied ? "checkmark" : "square.on.square", words: String(l10n: "Copy code"), size: 12) {
@@ -281,6 +295,12 @@ func messageTime(_ timestamp: Double) -> String {
     return days > 0 && days < 7 ? date.formatted(.dateTime.weekday(.wide).hour().minute()) : date.formatted(date: .abbreviated, time: .shortened)
 }
 
+/// **The time under the pointer, in a message's footer: how long ago** (the owner, 15 November 2026, with the hover row
+/// of the Claude desktop chat, "2 minutes ago": "apply the style of the hover time (relative too)"), in the app's own
+/// words of an age (`activityAge`: "Just now", "5 min ago", "3 h ago", "2 days ago", then the date). It was the clock
+/// time. The exact date and time are its hover (`fleetDate`). It is read when the footer shows, by this Mac's clock.
+func messageAge(_ timestamp: Double) -> String { activityAge(timestamp, now: Date().timeIntervalSince1970) }
+
 func copyMessage(_ text: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
@@ -307,7 +327,7 @@ struct MessageAction: View {
     }
 }
 
-/// An agent's reply with its hover footer below it on the left: Copy, then its time when the hub reported one. The
+/// An agent's reply with its hover footer below it on the left: Copy, then how long ago it came (`messageAge`). The
 /// footer has its own space in the reply, hidden until hover, so hover never resizes a message or moves the scroll.
 /// The text keeps its own selection and menu.
 struct AgentReply: View {
@@ -335,7 +355,7 @@ struct AgentReply: View {
                 MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: String(l10n: "Copy message"), height: row) {
                     copyMessage(text); copied = true
                 }
-                if let time { Text(messageTime(time)).help(fleetDate(time)) }
+                if let time { Text(messageAge(time)).help(fleetDate(time)) }
             }.font(ChatStyle.detail).foregroundStyle(FleetStyle.muted).frame(height: row)
                 .padding(.top, Self.footer(compact: compact) - row - gap)
                 .opacity(hovered ? 1 : 0).allowsHitTesting(hovered)

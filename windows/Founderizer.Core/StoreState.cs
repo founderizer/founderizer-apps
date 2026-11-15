@@ -153,15 +153,79 @@ public sealed record ChatPageState
 {
     public required string Agent { get; init; }
     public ValueList<MobileChatItem> Items { get; init; } = ValueList<MobileChatItem>.Empty;
+    /// <summary>The items are the chat's whole history: its first read gave fewer than a page (StoreState.ChatFirstPage),
+    /// and every read since joined on. A request raised before the oldest item stands at the chat's start only then.</summary>
+    public bool Whole { get; init; }
 }
 
-/// <summary>One task's page that the store holds: the task in full, its notes so far, its holds and outcomes.</summary>
+/// <summary>One task's page that the store holds: the task in full, its notes so far, its holds and outcomes, the
+/// permissions that its thread shows, and its record as far as this device read it.</summary>
 public sealed record TaskPageState
 {
     public required FleetTask Task { get; init; }
     public ValueList<ProgressNote> Notes { get; init; } = ValueList<ProgressNote>.Empty;
     public ValueList<TaskHold> Holds { get; init; } = ValueList<TaskHold>.Empty;
     public ValueList<TaskOutcome> Outcomes { get; init; } = ValueList<TaskOutcome>.Empty;
+    /// <summary>The permissions that wait or were refused (owner API 1.161; empty from an older hub).</summary>
+    public ValueList<TaskPermission> Permissions { get; init; } = ValueList<TaskPermission>.Empty;
+    /// <summary>The owner's guidance of the task (owner API 1.162; empty from an older hub).</summary>
+    public ValueList<TaskSteer> Steers { get; init; } = ValueList<TaskSteer>.Empty;
+    /// <summary>The heads of its subtasks by id, and of its parent (owner API 1.163); null from an older hub, whose
+    /// page takes them from the reading's heads.</summary>
+    public ValueList<MobileTaskHead>? Subtasks { get; init; }
+    public MobileTaskHead? ParentTask { get; init; }
+    /// <summary>The task's record (GET /ui/tasks/&lt;id&gt;/events), once its first read has every page; null before.</summary>
+    public TaskActivity? Activity { get; init; }
+    /// <summary>Why the last read of the record failed: the hub's own sentence, else "Activity is unavailable.
+    /// Retrying…"; null once a read answers.</summary>
+    public string? ActivityError { get; init; }
+}
+
+/// <summary>The AI provider that one attempt of a task ran on (a top-level `session` event).</summary>
+public sealed record AttemptRuntime(long Attempt, string Runtime);
+
+/// <summary>What a task's record says, as the screens draw it (the Mac's TaskActivity): its top rows as they show, the AI
+/// providers of each attempt, the files that completed tools changed, and the newest event read.</summary>
+public sealed record TaskActivity
+{
+    public long Cursor { get; init; }
+    public ValueList<ShownRow> TopRows { get; init; } = ValueList<ShownRow>.Empty;
+    public ValueList<AttemptRuntime> Runtimes { get; init; } = ValueList<AttemptRuntime>.Empty;
+    public ValueList<FileChange> ChangedFiles { get; init; } = ValueList<FileChange>.Empty;
+    /// <summary>Every row, the child agents' too, for a child's thread and for the rows that a call's agent wrote.</summary>
+    public ValueList<ActivityRow> Rows { get; init; } = ValueList<ActivityRow>.Empty;
+    public ImmutableHashSet<long> KeptScripts { get; init; } = ImmutableHashSet<long>.Empty;
+    public ValueList<ModelUse> Models { get; init; } = ValueList<ModelUse>.Empty;
+    public ValueList<PlanEntry> Plan { get; init; } = ValueList<PlanEntry>.Empty;
+    public ValueList<TaskChild> Children { get; init; } = ValueList<TaskChild>.Empty;
+
+    public static TaskActivity Of(ActivityTimeline timeline, long cursor) => new()
+    {
+        Cursor = cursor,
+        Rows = ValueList.Of(timeline.Rows),
+        KeptScripts = timeline.KeptScripts.ToImmutableHashSet(),
+        Models = ValueList.Of(timeline.Models),
+        Plan = ValueList.Of(timeline.Plan),
+        Children = ValueList.Of(ActivityTimeline.ChildAgents(timeline.Rows)),
+        TopRows = ValueList.Of(timeline.TopRows),
+        Runtimes = ValueList.Of(timeline.Runtimes.OrderBy(r => r.Key)
+                                    .SelectMany(r => r.Value.Select(runtime => new AttemptRuntime(r.Key, runtime)))),
+        ChangedFiles = ValueList.Of(timeline.ChangedFiles),
+    };
+}
+
+/// <summary>The checked outputs of the open task's accepted result (the Mac's ArtifactPreview): the list once read, the
+/// file opened and its verified content, the words while a read runs, and the last error.</summary>
+public sealed record OutputsState
+{
+    public long Task { get; init; }
+    public ValueList<ArtifactFile> Files { get; init; } = ValueList<ArtifactFile>.Empty;
+    /// <summary>The list was read: "Reload outputs", and the line for a result with no file.</summary>
+    public bool Listed { get; init; }
+    public ArtifactContent? Opened { get; init; }
+    /// <summary>"Loading checked outputs…" or "Loading and verifying output…", with Cancel.</summary>
+    public string? Loading { get; init; }
+    public string? Error { get; init; }
 }
 
 /// <summary>The store's whole state at one moment, immutable: what the screens draw from, through the models of
@@ -204,6 +268,17 @@ public sealed record StoreState
     /// <summary>The chats as far as this device read them, by agent.</summary>
     public ImmutableDictionary<string, ChatPageState> Chats { get; init; } = ImmutableDictionary<string, ChatPageState>.Empty;
     public ImmutableDictionary<long, TaskPageState> TaskPages { get; init; } = ImmutableDictionary<long, TaskPageState>.Empty;
+    /// <summary>The checked outputs of the open task, or null: nothing pressed, or another task.</summary>
+    public OutputsState? Outputs { get; init; }
+    /// <summary>Every ended task (GET /ui/mobile/ended, owner API 1.166), read again when the reading's `ended_mark` is
+    /// not its mark; null before its first read and from a hub without `mobile_ended`.</summary>
+    public EndedReading? Ended { get; init; }
+
+    /// <summary>The ended heads to count and open beside the reading's own, from this generation only.</summary>
+    public IReadOnlyList<MobileTaskHead>? EndedTasks => Ended is { } ended && Fleet is { } fleet && ended.Db == fleet.Db ? ended.Tasks : null;
+
+    /// <summary>Every task head that the device holds (Activity.AllTasks with the ended read).</summary>
+    public IReadOnlyList<MobileTaskHead> AllTasks() => Fleet is { } fleet ? Activity.AllTasks(fleet, EndedTasks) : [];
     /// <summary>The one write that waits for its receipt, or that the hub refused and waits for the owner.</summary>
     public PendingRequest? Pending { get; init; }
     /// <summary>A confirmed message that its chat has not read back yet: its bubble stays until then.</summary>
@@ -261,6 +336,9 @@ public sealed record StoreState
     public bool ShowsCurrent(DateTimeOffset now) => IsFresh(now) || (FirstReadWaits && Fleet is not null && ReadError is null);
 
     public bool ReadsAgain => Refreshing && Fleet is not null && ReadError is null;
+
+    /// <summary>The items of a chat's first read (the hub's MOBILE_CHAT): the newest 30, then only newer ones.</summary>
+    public const int ChatFirstPage = 30;
 
     public bool CanWrite(DateTimeOffset now) => AnswersWrites(now) && !Sending && Pending is null && StorageError is null;
 
@@ -508,7 +586,7 @@ public sealed record StoreChange
     /// <summary>The rows whose data changed between two states.</summary>
     private static StoreChange Rows(StoreState before, StoreState after)
     {
-        var fleet = !ReferenceEquals(before.Fleet, after.Fleet);
+        var fleet = !ReferenceEquals(before.Fleet, after.Fleet) || !ReferenceEquals(before.Ended, after.Ended);
         var agents = new HashSet<string>();
         var chats = new HashSet<string>();
         var needs = new HashSet<long>();
@@ -518,8 +596,8 @@ public sealed record StoreChange
             Differ(before.Fleet?.Agents ?? [], after.Fleet?.Agents ?? [], a => a.Name, agents);
             Differ((before.Fleet?.Needs ?? []).Concat(before.Fleet?.AnsweredNeeds ?? []).ToList(),
                    (after.Fleet?.Needs ?? []).Concat(after.Fleet?.AnsweredNeeds ?? []).ToList(), n => n.Id, needs);
-            var oldTasks = before.Fleet is null ? [] : Activity.AllTasks(before.Fleet);
-            var newTasks = after.Fleet is null ? [] : Activity.AllTasks(after.Fleet);
+            var oldTasks = before.AllTasks();
+            var newTasks = after.AllTasks();
             Differ(oldTasks, newTasks, t => t.Id, tasks);
             if (!(before.Fleet?.Holds ?? []).SequenceEqual(after.Fleet?.Holds ?? []) ||
                 !(before.Fleet?.Outcomes ?? []).SequenceEqual(after.Fleet?.Outcomes ?? []))

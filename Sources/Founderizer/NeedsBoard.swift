@@ -204,7 +204,7 @@ struct NeedsBoard: View {
             // ended in another way.
             if !his.contains(chosen), let left = needs.first(where: { $0.id == chosen }), !left.isOpen, !left.asksForSecret {
                 endedAtHand = chosen
-            } else if let next, let title = needs.first(where: { $0.id == next })?.title {
+            } else if let next, let title = needs.first(where: { $0.id == next })?.shownTitle {
                 // VoiceOver's focus was on what he pressed, which left: it hears what stands there now.
                 AccessibilityNotification.Announcement(title).post()
             }
@@ -221,7 +221,8 @@ struct NeedsBoard: View {
     }
 
     /// **His answer to `need` goes: the request stays at hand for a moment, and then leaves** (`settling`).
-    /// - At once: the answer stands where he gave it, with a check that draws itself (`NeedAnswered`).
+    /// - At once: the answer stands where he gave it (`NeedAnswered`): an option that he pressed with a check that
+    ///   draws itself, and words that he wrote with no check.
     /// - After 0.3 s: the agent took it (`took`).
     /// - After 0.78 s: the request leaves the lane, as it did in the frame of the answer before, and the next one comes.
     /// **An answer that waits for the hub shows no answer yet, so nothing settles** (review of 11 November 2026): a
@@ -294,7 +295,7 @@ struct NeedsBoard: View {
         return VStack(alignment: .leading, spacing: FleetSpace.inside) {
             // The heading of a lane of the Tasks board (`ActivityBoard.lane`): 2 points in, in the 28-point heading row.
             HStack(spacing: 6) {
-                Text("Open").font(FormMetrics.heading).foregroundStyle(FleetStyle.text)
+                Text(String(localized: "Open (a lane)", defaultValue: "Open", bundle: Localized.bundle, locale: Localized.digits)).font(FormMetrics.heading).foregroundStyle(FleetStyle.text)
                 Text("\(lane.open.count + tasks.count)").font(FormMetrics.detail).monospacedDigit().foregroundStyle(FleetStyle.muted)
                     .rolls(lane.open.count + tasks.count)
             }.frame(minHeight: FormMetrics.headingRow).padding(.leading, 2)
@@ -351,14 +352,14 @@ struct NeedsBoard: View {
             .padding(.horizontal, EndedRow.inset).frame(minHeight: EndedRow.height).contentShape(Rectangle())
         }
         .buttonStyle(FleetRowButtonStyle())
-        .accessibilityValue(showsEnded ? "Open" : "Closed").accessibilityIdentifier("needs-ended-more")
+        .accessibilityValue(showsEnded ? String(localized: "Open (a state)", defaultValue: "Open", bundle: Localized.bundle, locale: Localized.digits) : String(l10n: "Closed")).accessibilityIdentifier("needs-ended-more")
         if showsEnded {
             ForEach(lane.ended, id: \.key) { day in
                 Text(ActivityBoard.dayWords(day.start, now: now)).font(FormMetrics.detailTitle).foregroundStyle(FleetStyle.muted)
                     .padding(.leading, EndedRow.inset).frame(minHeight: FormMetrics.headingRow, alignment: .bottomLeading)
                     .accessibilityAddTraits(.isHeader)
                 ForEach(day.needs, id: \.endedKey) { need in
-                    EndedRow(title: need.title, owner: need.by, selected: endedAtHand == need.id) { endedAtHand = need.id }
+                    EndedRow(title: need.shownTitle, owner: need.by, selected: endedAtHand == need.id) { endedAtHand = need.id }
                         .accessibilityIdentifier("needs-ended-\(need.id)")
                 }
             }
@@ -500,7 +501,7 @@ private struct NeedCard: View {
         let waiting = NeedsLane.waitWords(waits)
         Button(action: open) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(need.title).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(2).multilineTextAlignment(.leading)
+                Text(need.shownTitle).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(2).multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 6) {
                     // The glyph with its dot, as everywhere it stands for the agent (D-8 item 2).
@@ -520,9 +521,9 @@ private struct NeedCard: View {
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
-        .help(waits.isEmpty ? need.title : "\(need.title)\n\(waiting)")
+        .help(waits.isEmpty ? need.shownTitle : "\(need.shownTitle)\n\(waiting)")
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel([need.title, need.by.agentLabel, waits.isEmpty ? nil : waiting].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel([need.shownTitle, need.by.agentLabel, waits.isEmpty ? nil : waiting].compactMap { $0 }.joined(separator: ", "))
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         // The element stands for the button, so it has the button's press (`ActivityCard`).
         .accessibilityAction(.default, open)
@@ -575,13 +576,24 @@ private struct NeedStep: View {
     /// A reason of one or two sentences, shown whole (`NeedTalk.why`); a longer one, of a request for a key or of an
     /// item from before the rule, shows its first three lines until Show all.
     private var short: Bool { need.details != nil || need.why.count <= NeedTalk.why }
-    private var hasMore: Bool { need.details != nil || !short || !todo.isEmpty }
+    /// **His task stands on the step, under the reason** (the owner, 15 November 2026: "the task itself need to be
+    /// very clear"; `OwnerNeed.taskInFront`): it stood behind Details, under "What it needs from you". An item with a
+    /// door call keeps its words there, and so does a conversation's item.
+    private var task: String { need.taskInFront ? todo : "" }
+    private var hasMore: Bool { need.details != nil || !short || (!todo.isEmpty && task.isEmpty) }
+    /// One paragraph, or nothing: a text that can stand in the middle, as a step's line does.
+    private static func oneParagraph(_ text: String) -> Bool {
+        let blocks = MessageBlock.parse(text)
+        return blocks.isEmpty || (blocks.count == 1 && blocks[0].kind == .paragraph)
+    }
     /// A reason of one paragraph stands in the middle, as a step's line does; a list or several paragraphs read from
-    /// their leading edge.
+    /// their leading edge. **The reason and the task under it read from one edge**: a task of steps, of a command or
+    /// of several paragraphs takes the reason to the leading edge with it, also the start of a long reason, which
+    /// stands in the middle with a task of one paragraph or with none.
     private var centred: Bool {
-        guard need.why.count <= NeedTalk.why else { return false }
-        let blocks = MessageBlock.parse(need.why)
-        return blocks.count == 1 && blocks[0].kind == .paragraph
+        guard Self.oneParagraph(task) else { return false }
+        if !short && !expanded { return true }
+        return need.why.count <= NeedTalk.why && Self.oneParagraph(need.why)
     }
 
     var body: some View {
@@ -589,12 +601,13 @@ private struct NeedStep: View {
             // The step's mark is its subject, not a status: the glyph draws no dot here (`SetupStep`).
             AgentGlyph(name: need.by, size: SetupMetrics.mark, jumps: took).environment(\.glyphDots, false)
             from.padding(.top, 14)
-            Text(need.title).font(SetupMetrics.titleFont).foregroundStyle(FleetStyle.text)
+            Text(need.shownTitle).font(SetupMetrics.titleFont).foregroundStyle(FleetStyle.text)
                 .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                 .accessibilityAddTraits(.isHeader).padding(.top, 14)
             why.padding(.top, 12)
+            if !task.isEmpty { taskWords.padding(.top, 12) }
             if hasMore { moreLink.padding(.top, 10) }
-            if expanded, need.details != nil || !todo.isEmpty { more.padding(.top, 14) }
+            if expanded, need.details != nil || (!todo.isEmpty && task.isEmpty) { more.padding(.top, 14) }
             answers.padding(.top, 24)
         }
         .frame(maxWidth: SetupMetrics.cardsWidth)
@@ -626,8 +639,17 @@ private struct NeedStep: View {
             // The start of a long reason, on three lines, until Show all.
             Text(MessageBlock.inline(need.why.components(separatedBy: .newlines).joined(separator: " ")))
                 .font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text).lineSpacing(5).tint(FleetStyle.link)
-                .lineLimit(3).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                .lineLimit(3).multilineTextAlignment(centred ? .center : .leading).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
         }
+    }
+
+    /// What he does, as a message draws it: a command in its code block, with its copy icon, a page as its link, and
+    /// steps as a list.
+    private var taskWords: some View {
+        MessageText(text: task, step: true).foregroundStyle(FleetStyle.text)
+            .multilineTextAlignment(centred ? .center : .leading)
+            .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
     }
 
     /// Details, with its chevron, where the reason shows whole and the link opens what stands under it; Show all and
@@ -643,7 +665,7 @@ private struct NeedStep: View {
                 }
             }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
         }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).font(SetupMetrics.textFont).foregroundStyle(FleetStyle.link)
-            .accessibilityValue(expanded ? "Open" : "Closed").accessibilityIdentifier("need-more-\(need.id)")
+            .accessibilityValue(expanded ? String(localized: "Open (a state)", defaultValue: "Open", bundle: Localized.bundle, locale: Localized.digits) : String(l10n: "Closed")).accessibilityIdentifier("need-more-\(need.id)")
     }
 
     /// The long part of the request and what it needs from him: read from their leading edge, as a text is.
@@ -653,7 +675,7 @@ private struct NeedStep: View {
             if let details = need.details {
                 MessageText(text: details, step: true, script: need.door_script != nil).foregroundStyle(FleetStyle.text)
             }
-            if !todo.isEmpty {
+            if !todo.isEmpty, task.isEmpty {
                 Text("What it needs from you").font(.system(size: SetupMetrics.text, weight: .medium)).foregroundStyle(FleetStyle.muted)
                 MessageText(text: todo, step: true).foregroundStyle(FleetStyle.text)
             }
@@ -665,7 +687,8 @@ private struct NeedStep: View {
     private var answers: some View {
         VStack(spacing: 18) {
             if ended {
-                NeedAnswered(store: store, need: need, words: onItsWay?.text, draws: settles)
+                NeedAnswered(store: store, need: need, words: onItsWay?.text,
+                             inWords: onItsWay?.answersInWords ?? need.answeredInWords, draws: settles)
                     // His answer moves up from where he gave it, as the other answers go.
                     .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: answerTop)), removal: .opacity))
             } else {
@@ -688,13 +711,18 @@ private struct NeedStep: View {
     }
 }
 
-/// What he answered, under a request that ended: a check and his words, or the option he pressed, whole, as the folded
-/// card of an answered request says it on one line (`NeedRequestCard`); and the files that went with them.
+/// What he answered, under a request that ended: the option he pressed with a check, or his words, whole, as the folded
+/// card of an answered request says it on one line (`NeedRequestCard`); and the files that went with them. **Words that
+/// he wrote have no check** (the owner, 14 November 2026: "when I typed a custom answer instead of choosign one of the
+/// suggested ones, do not show the CHECK animation because it is misleading"): they can ask something back or say no,
+/// and a check said yes to the request.
 private struct NeedAnswered: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
     /// His words on their way, before the reading has them.
     let words: String?
+    /// He answered in his own words: no check stands before them, and none draws itself.
+    var inWords = false
     /// He answered a moment ago, here: the check draws itself, white, and then goes quiet (`NeedsBoard.hold`).
     var draws = false
     @Environment(\.colorSchemeContrast) private var contrast
@@ -711,7 +739,7 @@ private struct NeedAnswered: View {
         let answer = (words ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                check
+                if !inWords { check }
                 Text(answer.isEmpty ? "Answered" : answer).font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text)
                     .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             }
@@ -814,6 +842,7 @@ struct PageKeys: NSViewRepresentable {
 
         /// Escape in a field of this window, with no text of an input method in the making: the cursor leaves the field.
         private func leavesField(_ event: NSEvent) -> Bool {
+            guard !AppFront.holdsKeys else { return false }     // no key after a front from outside, as `mine`
             guard event.keyCode == 53, let window, event.window === window, window.isKeyWindow, window.attachedSheet == nil,
                   !FleetMenu.isOpen, event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
                   let field = window.firstResponder as? NSTextView, !field.hasMarkedText() else { return false }
@@ -823,6 +852,9 @@ struct PageKeys: NSViewRepresentable {
 
         /// The key is one that a page may take.
         private func mine(_ event: NSEvent) -> Bool {
+            // After a front from outside the app takes no key until the owner's click (`AppFront`): this watch and
+            // that one have no fixed order, so this one asks.
+            guard !AppFront.holdsKeys else { return false }
             guard let window, event.window === window, window.isKeyWindow, window.attachedSheet == nil, !FleetMenu.isOpen,
                   event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return false }
             // A field has the cursor (its editor is the first responder): the key is its.

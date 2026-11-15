@@ -13,15 +13,15 @@ struct TasksPage: View {
     var body: some View {
         List {
             if store.readsTheHub {
-                Section { LoadingLine("Reading the hub…").listRowBackground(Color.clear) }
+                Section { LoadingLine(String(l10n: "Reading the hub…")).listRowBackground(Color.clear) }
             }
             if !store.openHolds.isEmpty || !store.openOutcomes.isEmpty { stopped }
             if !store.openTasks.isEmpty {
-                Section { rows(store.openTasks) } header: { GroupHeading("Open") }
+                Section { rows(store.openTasks) } header: { GroupHeading(String(localized: "Open (a lane)", defaultValue: "Open", bundle: Localized.bundle, locale: Localized.digits)) }
                 .brandRows()
             }
             if !store.endedTasks.isEmpty {
-                Section { rows(store.endedTasks) } header: { GroupHeading("Ended") }
+                Section { rows(store.endedTasks) } header: { GroupHeading(String(l10n: "Ended")) }
                 .brandRows()
             }
         }
@@ -51,19 +51,19 @@ struct TasksPage: View {
             ForEach(store.openHolds) { hold in
                 MarkColumn {
                     DetailRow(title: [store.head(hold.task)?.title, hubWords(hold.kind)].compactMap { $0 }.joined(separator: " · "),
-                              detail: hold.detail ?? "The hub holds this task.",
+                              detail: hold.detail ?? String(l10n: "The hub holds this task."),
                               value: hubWords(hold.state), valueColor: Brand.warning)
                 }
             }
             ForEach(store.openOutcomes) { outcome in
                 MarkColumn {
                     DetailRow(title: outcome.title,
-                              detail: outcome.note ?? "The outcome of this action is not known.",
-                              value: "Not known", valueColor: Brand.warning)
+                              detail: outcome.note ?? String(l10n: "The outcome of this action is not known."),
+                              value: String(l10n: "Not known"), valueColor: Brand.warning)
                 }
             }
         } header: {
-            GroupHeading("Work that stopped")
+            GroupHeading(String(l10n: "Work that stopped"))
         }
         .brandRows()
     }

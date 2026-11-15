@@ -34,10 +34,13 @@ struct TeamEditor: View {
     var body: some View {
         FleetPage("Reporting lines") {
             if original != nil {
-                Group {
-                    // No footer that explains the page (D-2).
+                // **The lines as a graph** (`ReportingGraph`; the owner's "Yes, build it" of 14 November 2026 to its
+                // three pictures): one card, and no footer that explains the page (D-2). It was a form row for each
+                // agent, with a select for its role and one for the agent it reports to.
+                if let original {
                     FormSection {
-                        ForEach(input.lines.indices, id: \.self) { index in member(index) }
+                        ReportingGraph(input: $input, original: original, allowsLeads: allowsLeads, state: store.state,
+                                       isFresh: store.isFresh)
                     }
                 }
                 if let problem { Text(problem).font(FormMetrics.detail).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
@@ -99,89 +102,6 @@ struct TeamEditor: View {
     /// unavailable then, and never "Reading the reporting lines…" for as long as the hub is down.
     private var failure: String? { error ?? (original == nil && store.connectionError != nil ? Self.unavailable : nil) }
     private static let unavailable = String(l10n: "Team settings are unavailable. Check the connection, then refresh.")
-
-    /// One agent: its role, and the manager or lead that it reports to. The manager reports to the owner.
-    @ViewBuilder private func member(_ index: Int) -> some View {
-        let line = input.lines[index]
-        let tasks = original?.open_tasks[line.agent] ?? 0
-        // **Each agent's glyph, with its dot, before its name** (the owner, 30 October 2026: "Yes, in all agent lists"), as
-        // the sidebar and the item cards draw an agent: the names begin 50 points in, in both layouts of a row.
-        if line.role == "manager" {
-            FormRow(line.agent.agentLabel, mark: AgentGlyph(name: line.agent, size: GlyphSize.inline)) {
-                Text("Manager · reports to you").foregroundStyle(FleetStyle.muted)
-            }
-        } else {
-            let detail = tasks > 0 ? (tasks == 1 ? String(l10n: "1 open task · role locked") : String(l10n: "\(tasks) open tasks · role locked")) : nil
-            // **Nothing is cut in a narrow window, and a row is as high as its words** (T-17): the name, its line and
-            // the role with its "reports to" stand side by side only while each fits on its own one line; otherwise
-            // the role and "reports to" go on a line of their own under the name, and no word stands one letter a
-            // line. Beside the controls the row's line wrapped in half the room left, and the row kept the height of
-            // a wrap it did not draw: 103–113 pt at 960, with about 30 pt of blank over and under its words.
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 0) {
-                    RowMark { AgentGlyph(name: line.agent, size: GlyphSize.inline) }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(line.agent.agentLabel).font(FormMetrics.title).foregroundStyle(FleetStyle.text)
-                        if let detail { Text(detail).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
-                    }.fixedSize().padding(.vertical, 10)
-                    Spacer(minLength: 16)
-                    lines(index).fixedSize().padding(.vertical, 8)
-                }
-                .font(FormMetrics.text).padding(.horizontal, FormMetrics.rowInset)
-                .frame(minHeight: detail == nil ? FormMetrics.row : FormMetrics.twoLineRow)
-                .accessibilityElement(children: .contain)
-                VStack(alignment: .leading, spacing: 0) {
-                    FormRow(line.agent.agentLabel, mark: AgentGlyph(name: line.agent, size: GlyphSize.inline), detail: detail)
-                    // Under the name, where it begins, as a form row puts a control that does not fit beside its title.
-                    lines(index).padding(.leading, FormMetrics.rowInset + FormMetrics.markColumn + FormMetrics.markGap)
-                        .padding(.trailing, FormMetrics.rowInset).padding(.bottom, 11)
-                }
-            }
-        }
-    }
-
-    /// The agent's role and the agent it reports to.
-    private func lines(_ index: Int) -> some View {
-        let line = input.lines[index]
-        let tasks = original?.open_tasks[line.agent] ?? 0
-        return HStack(spacing: 8) {
-            // A role that cannot change now is its value, as plain row text: never a select that does nothing.
-            if allowsLeads && tasks == 0 {
-                FleetSelect("\(line.agent.agentLabel) role", selection: $input.lines[index].role, options: [
-                    FleetOption("worker", "Worker", mark: .symbol("person")),
-                    FleetOption("lead", "Lead", subtitle: String(l10n: "Gives tasks to the agents that report to it"), mark: .symbol("person.2")),
-                ])
-            } else {
-                Text(line.role == "lead" ? "Lead" : "Worker").foregroundStyle(FleetStyle.muted)
-            }
-            Text("reports to").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).fixedSize()
-            // **One width for every "reports to" select of the card, the widest** (margins row 25): each one stands
-            // over one select of each choice of the card, drawn hidden, so "reports to" ends at one x in every row, as
-            // a column does, from the first frame. Nova's "Atlas" put it 23 points right of the others' "Manager".
-            ZStack(alignment: .leading) {
-                ForEach(reportsSamples, id: \.self) { sample in reportsTo(sample).hidden().accessibilityHidden(true) }
-                reportsTo(index)
-            }
-        }
-    }
-
-    /// The agent a line reports to. A manager or lead that is no longer one shows as the placeholder, so the owner
-    /// chooses again.
-    private func reportsTo(_ index: Int) -> some View {
-        let line = input.lines[index]
-        return FleetSelect("\(line.agent.agentLabel) reports to", selection: $input.lines[index].reports_to,
-                           options: input.lines.filter { $0.agent != line.agent && ["manager", "lead"].contains($0.role) }.map {
-            FleetOption(Optional($0.agent), $0.agent.agentLabel, subtitle: $0.role.capitalized,
-                        mark: .agent($0.agent, state: store.state, isFresh: store.isFresh))
-        }, placeholder: line.reports_to.map { String(l10n: "\($0.agentLabel) · choose a lead") } ?? String(l10n: "Choose a lead"))
-    }
-
-    /// The first line of each choice that the card's "reports to" selects show: one select of each, drawn hidden under
-    /// every one of them (`lines`), gives each the width of the widest. Lines that report to one agent show one label.
-    private var reportsSamples: [Int] {
-        var seen = Set<String?>()
-        return input.lines.indices.filter { input.lines[$0].role != "manager" && seen.insert(input.lines[$0].reports_to).inserted }
-    }
 
     /// Reads team.json. The first reading of a page that opened at `start` waits until a loading line that showed has
     /// stood half a second (`FleetStore.settle`).

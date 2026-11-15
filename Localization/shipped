@@ -1,2 +1,5 @@
 # The languages that the builds of the apps carry, one code on each line (README.md in this folder).
-# Empty until the owner's yes to the pictures of the pages in that language: a build then has no table at all.
+# A language goes in only after the owner's yes to the pictures of the pages in that language. The iPhone build
+# carries every language of the table, so a language that is not here has no words in the table (l10n.py check).
+# Spanish: the owner's "Yes, as shown" of 14 November 2026 to the pictures of the main Mac and iPhone pages.
+es

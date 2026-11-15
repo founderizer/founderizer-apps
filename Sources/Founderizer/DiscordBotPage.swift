@@ -13,7 +13,10 @@ import SwiftUI
 ///      The steps stand over the field because they come before the paste (the owner, 10 November 2026), so the page
 ///      of how that stood before it, with Open Developer Portal, is gone.
 ///   2. **Add Mia to your server**: Invite to server.
-///   3. **Mia is connected**: the steps done, and Done, back to the Channels list, whose card says Connected.
+///   3. For a new bot, the steps that both apps share (`ChannelFollowSteps`; the owner's "Yes, build it" of 14 November
+///      2026 to their mock): "Write to Mia from your Discord", "Who else can write to Mia?" and "Mia is on Discord",
+///      with Done, back to the Channels list, whose card says Connected. A hub that does not serve the people keeps the
+///      page before them: **Mia is connected**, the steps done, and Done.
 ///
 /// Opened from the card of a bot that is connected (Change token), the page is the bot's connected state, with
 /// Change token and Invite to server under it; Fix token opens on the token step. Save adds the account
@@ -23,10 +26,12 @@ import SwiftUI
 struct DiscordBotPage: View {
     @Bindable var store: FleetStore
     let agent: String
-    /// Add bot (true), or Fix token and Change token of the agent's bot (false).
+    /// Connect, for an agent with no bot (true), or Fix token and Change token of the agent's bot (false).
     let adding: Bool
     /// The agent's bot in the Channels page's last reading; nil until Save adds it.
     let bot: ChatAppsSnapshot.Account?
+    /// The hub serves the people: a new bot's steps go on to the ones that both apps share.
+    var follows = false
     /// Adds the bot to team.json, or gives the bot that the agent has: its account ID.
     let addBot: () async throws -> String
     let refresh: () async -> Void
@@ -39,6 +44,8 @@ struct DiscordBotPage: View {
     @State private var invited = false
     /// On a bot that is connected, he asked to change its token.
     @State private var changing = false
+    /// The steps that both apps share showed: they stay, whatever the bridge says of the bot while it connects again.
+    @State private var following = false
     @FocusState private var focused: Bool
     private let client = ChatAppsClient()
     private static let portal = URL(string: "https://discord.com/developers/applications")!
@@ -68,22 +75,30 @@ struct DiscordBotPage: View {
     }
 
     var body: some View {
-        // Back to the channels stands at the page's top left, where every setup page has it.
-        SetupPage {
-            SetupBack(action: close).keyboardShortcut(.cancelAction).accessibilityIdentifier("discord-back")
-        } step: {
-            Group {
-                switch page {
-                case .token: paste
-                case .connecting:
-                    SetupStep(title: String(l10n: "Connecting \(name)'s bot"), waits: true) { mark }
-                        .accessibilityIdentifier("discord-connecting")
-                case .invite: inviting
-                case .done: done
+        Group {
+            if following || (adding && follows && page == .done) {
+                // A new bot that is connected and on his server: the owner's own link, who else, and the end.
+                ChannelFollowSteps(store: store, app: "discord", agent: agent, flow: true, refresh: refresh, close: close)
+            } else {
+                // Back to the channels stands at the page's top left, where every setup page has it.
+                SetupPage {
+                    SetupBack(action: close).keyboardShortcut(.cancelAction).accessibilityIdentifier("discord-back")
+                } step: {
+                    Group {
+                        switch page {
+                        case .token: paste
+                        case .connecting:
+                            SetupStep(title: String(l10n: "Connecting \(name)'s bot"), waits: true) { mark }
+                                .accessibilityIdentifier("discord-connecting")
+                        case .invite: inviting
+                        case .done: done
+                        }
+                    }.animation(.easeInOut(duration: 0.18), value: page)
                 }
-            }.animation(.easeInOut(duration: 0.18), value: page)
+                .foregroundStyle(FleetStyle.text)
+            }
         }
-        .foregroundStyle(FleetStyle.text)
+        .onChange(of: adding && follows && page == .done, initial: true) { _, now in if now { following = true } }
         // The token never outlives the page.
         .onDisappear { token = "" }
     }

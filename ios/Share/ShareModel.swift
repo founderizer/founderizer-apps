@@ -86,7 +86,7 @@ final class ShareModel {
         AgentNames.shared.read(members.map { ($0.name, $0.title) })
         team = members.map(\.name)
         agents = members.filter(\.takesMessage).map(\.name)
-        listProblem = agents.isEmpty ? "No agents yet" : nil
+        listProblem = agents.isEmpty ? String(l10n: "No agents yet") : nil
     }
 
     /// The app left no agents (it has not read its hub since this build): the sheet reads the hub itself, with this
@@ -150,7 +150,7 @@ final class ShareModel {
                     case nil: break
                     }
                 } catch {
-                    refusal = refusal ?? ((error as? LocalizedError)?.errorDescription ?? "A file did not open.")
+                    refusal = refusal ?? ((error as? LocalizedError)?.errorDescription ?? String(l10n: "A file did not open."))
                 }
             }
         }
@@ -200,7 +200,7 @@ final class ShareModel {
                 return
             }
             if !files.isEmpty, !features.contains("attachments") {
-                sendNote = ("This hub needs an update before it takes files.", true)
+                sendNote = (String(l10n: "This hub needs an update before it takes files."), true)
                 return
             }
             // A hub installed again since the files went up numbers everything from the start: nothing of the old
@@ -235,13 +235,13 @@ final class ShareModel {
                 // The hub does not say which words are a login: the words go from this phone, as the app's do.
                 pending = nil
                 text = ""
-                sendNote = ("The hub refused registered login text. The text is gone from this phone.", true)
+                sendNote = (String(l10n: "The hub refused registered login text. The text is gone from this phone."), true)
             } else if let error = error as? MobileError, error.isDefinitive {
                 pending = nil
                 sendNote = (error.notSentWords, true)
             } else if messageWent {
                 // One failure, one way on: Send again keeps the number, so it never sends twice.
-                sendNote = ("Your hub did not confirm it. Sending it again does not send it twice.", true)
+                sendNote = (String(l10n: "Your hub did not confirm it. Sending it again does not send it twice."), true)
             } else {
                 sendNote = (Self.words(error), true)
             }
@@ -253,14 +253,14 @@ final class ShareModel {
     private func phoneKey() async throws -> String? {
         if keyTaken { return key }
         let holder = DeviceKey()
-        if holder.has { key = try await holder.key(reason: "Founderizer uses this phone's own key to reach the hub.") }
+        if holder.has { key = try await holder.key(reason: String(l10n: "Founderizer uses this phone's own key to reach the hub.")) }
         keyTaken = true
         return key
     }
 
     /// An error in the app's own words.
     static func words(_ error: Error) -> String {
-        (error as? LocalizedError)?.errorDescription ?? "Your hub did not answer. Check that its server is on."
+        (error as? LocalizedError)?.errorDescription ?? String(l10n: "Your hub did not answer. Check that its server is on.")
     }
 }
 

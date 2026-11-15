@@ -26,6 +26,17 @@ enum AppsGroup: String, CaseIterable, Hashable {
     }
 
     var service: GoogleService? { self == .drive ? .drive : self == .gmail ? .gmail : nil }
+
+    /// The apps that this hub has, for its features: the rows of Settings, Apps, and `setup_state`'s `places`.
+    static func available(features: [String]) -> [AppsGroup] {
+        allCases.filter { group in
+            switch group {
+            case .github: features.contains(Integrations.feature)
+            case .drive, .gmail: features.contains(Google.feature)
+            case .mcp: features.contains(MCP.feature)
+            }
+        }
+    }
 }
 
 /// Settings › Apps, the page: **one row for each app, and each app has its own page** (the owner, 10 November 2026:
@@ -40,15 +51,7 @@ struct AppsPage: View {
     @State private var opened = ContinuousClock.now
 
     private var features: [String] { store.state?.ui_features ?? [] }
-    private var groups: [AppsGroup] {
-        AppsGroup.allCases.filter { group in
-            switch group {
-            case .github: features.contains(Integrations.feature)
-            case .drive, .gmail: features.contains(Google.feature)
-            case .mcp: features.contains(MCP.feature)
-            }
-        }
-    }
+    private var groups: [AppsGroup] { AppsGroup.available(features: features) }
     private var offered: Bool { features.contains(ResourceList.feature) }
     private var reading: ResourceList? { store.reading(AccessSettings.name(nil)) }
     private var failed: Bool { store.reading(AccessSettings.name(nil) + ".failed") ?? false }

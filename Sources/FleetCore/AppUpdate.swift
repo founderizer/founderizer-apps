@@ -491,7 +491,7 @@ public enum AppUpdatePolicy {
     /// After one, two and three reads in a row that failed, the next one comes this much sooner; then `every` again.
     /// A release makes our site restart, and a read in those minutes fails.
     public static let retries: [TimeInterval] = [60, 300, 900]
-    /// How long reads may fail before the Updates page says so. A failure shorter than this is not news.
+    /// How long reads may fail before Settings › General says so. A failure shorter than this is not news.
     public static let long: TimeInterval = 24 * 3600
     /// How long the app is in the background before it restarts itself onto a new build.
     public static let away: TimeInterval = 120
@@ -511,10 +511,19 @@ public enum AppUpdatePolicy {
         guard automatic, published, offered, !busy, let awaySince else { return false }
         return now.timeIntervalSince(awaySince) >= away
     }
+
+    /// **Whether the first run holds a build that waits** (the owner's yes of 14 November 2026: a fix reaches a Mac in
+    /// the setup without a press, and never stops an install). Before any hub answered this Mac, a build goes in only
+    /// while the setup's first page shows with no install begun (`setupAtRest`). From the claim of an install until he
+    /// leaves the setup's last screens (`wizardHolds`), none goes in: the restart would take those screens away.
+    public static func setupHolds(beforeHub: Bool, setupAtRest: Bool, wizardHolds: Bool) -> Bool {
+        wizardHolds || (beforeHub && !setupAtRest)
+    }
 }
 
-/// **The words of the "Founderizer for Mac" row** (the Updates page), as few as the facts allow (the owner, 28 October
-/// 2026: "instead of showing this, it should say 'Update available'. Also build number is not needed"). A read that did
+/// **The words of the "Founderizer for Mac" row** (General's Updates; the Updates page until 15 November 2026), as few
+/// as the facts allow (the owner, 28 October 2026: "instead of showing this, it should say 'Update available'. Also
+/// build number is not needed"). A read that did
 /// not reach the channel is not news: the row keeps the last state it knew, and says that reads fail only once they
 /// have failed for `AppUpdatePolicy.long`.
 public enum AppUpdateWords {
@@ -529,6 +538,38 @@ public enum AppUpdateWords {
 
     /// The version at the row's right: the name, and no build number.
     public static func version(_ running: AppVersion?) -> String { running?.name ?? String(l10n: "Unknown build") }
+
+    /// **The window of Founderizer › Check for Updates…** (the owner's yes of 14 November 2026 to its picture): the
+    /// system's small window, with a title, one line, and Update and Restart only while there is a build to take.
+    public struct Check: Equatable, Sendable {
+        public let title: String
+        public let line: String
+        /// It offers Update and Restart and Later; otherwise OK alone.
+        public let offers: Bool
+
+        public init(title: String, line: String, offers: Bool) {
+            self.title = title
+            self.line = line
+            self.offers = offers
+        }
+    }
+
+    /// What that window says about one read of the channel. A build that this Mac cannot put in place is named with the
+    /// reason and no button; every read that offers nothing and is not the newest says the channel's own line, under the
+    /// version that runs.
+    public static func check(_ reading: AppUpdateReading, running: AppVersion?, cannotReplace: String?) -> Check {
+        let have = version(running)
+        if reading.offered, let manifest = reading.manifest {
+            let title = String(l10n: "Founderizer \(manifest.version) is ready")
+            if let cannotReplace { return Check(title: title, line: cannotReplace, offers: false) }
+            return Check(title: title, line: String(l10n: "You have \(have)."), offers: true)
+        }
+        if reading.current {
+            return Check(title: String(l10n: "Founderizer is up to date"), line: String(l10n: "You have \(have)."), offers: false)
+        }
+        return Check(title: running.map { String(l10n: "You have Founderizer \($0.name)") } ?? "Founderizer",
+                     line: reading.says, offers: false)
+    }
 
     /// The row's warning when reads have failed for long, or nil.
     public static func failing(since: Date?, now: Date) -> String? {

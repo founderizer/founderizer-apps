@@ -26,14 +26,17 @@ internal static class Look
     public static readonly Color LinkColor = Rgb(0x8F, 0x88, 0xFF);
     public static readonly Color Accent = Rgb(0x63, 0x5B, 0xFF);
     public static readonly Color OrangeColor = Rgb(0xFF, 0x9F, 0x0A);
+    public static readonly Color GreenColor = Rgb(0x30, 0xD1, 0x58);
     public static readonly Color Ink = Rgb(0x11, 0x12, 0x13);
 
-    private static SolidColorBrush? text, muted, link, orange, line, cardEdge, surface, chrome, rail, canvas, own, select;
+    private static SolidColorBrush? text, muted, link, orange, green, line, cardEdge, surface, chrome, rail, canvas, own, select;
 
     public static SolidColorBrush Text => text ??= new(TextColor);
     public static SolidColorBrush Muted => muted ??= new(MutedColor);
     public static SolidColorBrush Link => link ??= new(LinkColor);
     public static SolidColorBrush Orange => orange ??= new(OrangeColor);
+    /// <summary>Lines added to a file (the panel's changed files, the Mac's .green).</summary>
+    public static SolidColorBrush Green => green ??= new(GreenColor);
     /// <summary>The hairline between parts: white at 6.5 %.</summary>
     public static SolidColorBrush Line => line ??= new(White(0.065));
     /// <summary>A card's edge: white at 8 %.</summary>

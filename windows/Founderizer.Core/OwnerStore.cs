@@ -47,6 +47,15 @@ public sealed class OwnerStore : IAsyncDisposable
     private readonly Dictionary<string, double> chatsReadAt = new();
     private readonly Dictionary<string, double> chatCursor = new();
     private readonly Dictionary<long, long> taskCursor = new();
+    /// <summary>The record of each task as far as this device read it, with the newest event read (the events loop).</summary>
+    private readonly Dictionary<long, (ActivityTimeline Timeline, long Cursor)> timelines = new();
+    private readonly object eventsGate = new();
+    private CancellationTokenSource? eventsCancel;
+    private (Uri Hub, string Database, long Task, bool Over)? eventsKey;
+    private readonly object outputsGate = new();
+    private CancellationTokenSource? outputsCancel;
+    private long outputsOperation;
+    private bool outputsWereFresh;
     private readonly Dictionary<long, CancellationTokenSource> pressWaits = new();
     private string? key;
     private string? etag;
@@ -109,6 +118,7 @@ public sealed class OwnerStore : IAsyncDisposable
             frontLoop?.Cancel();
             frontLoop = null;
             chatsCancel?.Cancel();
+            StopEvents();
             Update(x => x with { Front = false });
         }
     }
@@ -230,8 +240,14 @@ public sealed class OwnerStore : IAsyncDisposable
         MarkRepliesSeen();
     }
 
-    /// <summary>The task whose page a screen shows now, or null.</summary>
-    public void OpenTask(long? task) => Update(x => x with { OpenTask = task });
+    /// <summary>The task whose page a screen shows now, or null. The checked outputs of another task go (the Mac's section
+    /// clears as it disappears), and the record of this one is read every 3 seconds while it is open.</summary>
+    public void OpenTask(long? task)
+    {
+        if (State.OpenTask != task) EndOutputs(null);
+        Update(x => x with { OpenTask = task });
+        AgeChanged();
+    }
 
     // ---------------------------------------------------------------- the read
 
@@ -263,6 +279,7 @@ public sealed class OwnerStore : IAsyncDisposable
                 await Holding(requested, () => ReadSnapshotAsync(requested));
                 if (State.Hub != requested || State.Fleet?.Db is not { } database) return;
                 Follow();
+                if (!behind) await ReadEndedAsync(requested, database);
                 if (early != database && !behind)
                 {
                     if (State.OpenChat is { } chat) await Holding(requested, () => ReadChatAsync(chat, requested, database));
@@ -302,6 +319,7 @@ public sealed class OwnerStore : IAsyncDisposable
             lastReadUptime = clock.Uptime;
             Update(x => x with { FirstReadWaits = false });
             WatchTheAge();
+            AgeChanged();
         }
     }
 
@@ -322,6 +340,7 @@ public sealed class OwnerStore : IAsyncDisposable
             {
                 await clock.Delay(due + TimeSpan.FromMilliseconds(5), cancel.Token);
                 Raise(byClock: true);
+                AgeChanged();
             }
             catch (OperationCanceledException) { }
         });
@@ -388,6 +407,10 @@ public sealed class OwnerStore : IAsyncDisposable
         chatsReadAt.Clear();
         chatCursor.Clear();
         taskCursor.Clear();
+        Update(x => x.Ended is null ? x : x with { Ended = null });
+        StopEvents();
+        lock (timelines) timelines.Clear();
+        EndOutputs(null);
         keptDatabase = null;
         Remove("chats.json");
         Update(x => x with
@@ -414,7 +437,10 @@ public sealed class OwnerStore : IAsyncDisposable
         Update(x =>
         {
             var held = x.Items(agent).ToList();
-            if (since is null && page.Items.Count > 0 && held.Count > 0 && page.Items[0].Ts > held[^1].Ts) held = [];
+            var gap = since is null && page.Items.Count > 0 && held.Count > 0 && page.Items[0].Ts > held[^1].Ts;
+            if (gap) held = [];
+            var wasWhole = x.Chats.TryGetValue(agent, out var before) && before.Whole;
+            var whole = since is null ? page.Items.Count < StoreState.ChatFirstPage || (wasWhole && !gap) : wasWhole;
             var latest = new Dictionary<string, MobileChatItem>();
             foreach (var item in page.Items) latest[item.Id] = item;
             var items = held.Select(i => latest.TryGetValue(i.Id, out var newer) ? newer : i).ToList();
@@ -424,8 +450,9 @@ public sealed class OwnerStore : IAsyncDisposable
             var delivered = x.Delivered;
             if (delivered is not null && (delivered.Recipient ?? "manager") == agent && Holds(delivered, read)) delivered = null;
             var list = ValueList.Of(read);
-            changed = !x.Chats.TryGetValue(agent, out var old) || !old.Items.Equals(list) && !SameItems(old.Items, list);
-            return changed ? x with { Chats = x.Chats.SetItem(agent, new ChatPageState { Agent = agent, Items = list }), Delivered = delivered }
+            changed = !x.Chats.TryGetValue(agent, out var old) || old.Whole != whole ||
+                      !old.Items.Equals(list) && !SameItems(old.Items, list);
+            return changed ? x with { Chats = x.Chats.SetItem(agent, new ChatPageState { Agent = agent, Items = list, Whole = whole }), Delivered = delivered }
                            : x with { Delivered = delivered };
         });
         if (changed) KeepChats();
@@ -452,6 +479,12 @@ public sealed class OwnerStore : IAsyncDisposable
                     Notes = ValueList.Of(notes.OrderBy(n => n.Id)),
                     Holds = ValueList.Of(page.Holds),
                     Outcomes = ValueList.Of(page.Outcomes),
+                    Permissions = ValueList.Of(page.Permissions ?? []),
+                    Steers = ValueList.Of(page.Steers ?? []),
+                    Subtasks = page.Subtasks is { } subtasks ? ValueList.Of(subtasks) : null,
+                    ParentTask = page.ParentTask,
+                    Activity = old?.Activity ?? KeptActivity(id),
+                    ActivityError = old?.ActivityError,
                 }),
             };
         });
@@ -480,6 +513,235 @@ public sealed class OwnerStore : IAsyncDisposable
             }
         });
     }
+
+    /// <summary>GET /ui/mobile/ended when the reading's `ended_mark` is not the mark of the ended read that the store
+    /// holds (owner API 1.166), so the Ended lane counts and opens every ended task as the Mac's does. A hub without
+    /// `mobile_ended` keeps the lane on the reading's 20 newest. A failure is quiet: the lane keeps what it had, and the
+    /// next pass tries again.</summary>
+    private async Task ReadEndedAsync(Uri requested, string database)
+    {
+        var s = State;
+        if (s.Fleet is not { EndedMark: { } mark } fleet || !fleet.Offers("mobile_ended") ||
+            s.Ended is { } held && held.Db == database && held.Mark == mark) return;
+        try
+        {
+            var reading = await client.EndedAsync(requested, key, database);
+            if (State.Hub != requested || State.Fleet?.Db != database) return;
+            Update(x => x with { Ended = reading });
+        }
+        catch (Exception e) when (e is HubException or IOException) { }
+    }
+
+    // ---------------------------------------------------------------- the steps and the checked outputs
+
+    /// <summary>The reading may have turned old or current, the open task changed, or the window came to the front: the
+    /// events loop starts, keeps or stops, and checked outputs that the store holds go when the reading turns old.</summary>
+    private void AgeChanged()
+    {
+        FollowEvents();
+        var s = State;
+        var fresh = s.IsFresh(clock.Now);
+        bool turnedOld;
+        lock (outputsGate)
+        {
+            turnedOld = outputsWereFresh && !fresh;
+            outputsWereFresh = fresh;
+        }
+        if (turnedOld && s.OpenTask is { } task && s.TaskPages.TryGetValue(task, out var page) && page.Task.Accepted == 1)
+            EndOutputs(new OutputsState { Task = task, Error = OutputWords.Discarded });
+    }
+
+    /// <summary>The record of the open task is read while the window is not behind, the reading is current and the hub
+    /// keeps a thread's events (`thread_events`), as the Mac's TaskView.readActivity: every 3 seconds, until a read after
+    /// the task ended brings no more.</summary>
+    private void FollowEvents()
+    {
+        var s = State;
+        (Uri, string, long, bool)? want = !disposed && !behind && s.OpenTask is { } task && s.Hub is { } hub &&
+                                          s.Fleet?.Db is { } database && s.Offers("thread_events") && s.IsFresh(clock.Now)
+            ? (hub, database, task, TaskIsOver(s, task)) : null;
+        lock (eventsGate)
+        {
+            if (want == eventsKey) return;
+            eventsCancel?.Cancel();
+            eventsCancel = null;
+            eventsKey = want;
+            if (want is not { } at) return;
+            var cancel = eventsCancel = new CancellationTokenSource();
+            _ = Task.Run(() => ReadEventsAsync(at, cancel.Token));
+        }
+    }
+
+    private void StopEvents()
+    {
+        lock (eventsGate)
+        {
+            eventsCancel?.Cancel();
+            eventsCancel = null;
+            eventsKey = null;
+        }
+    }
+
+    private static bool TaskIsOver(StoreState s, long task) =>
+        s.TaskPages.TryGetValue(task, out var page) ? page.Task.IsTerminal
+        : s.AllTasks().FirstOrDefault(t => t.Id == task)?.IsTerminal == true;
+
+    private TaskActivity? KeptActivity(long task)
+    {
+        lock (timelines) return timelines.TryGetValue(task, out var kept) ? TaskActivity.Of(kept.Timeline, kept.Cursor) : null;
+    }
+
+    /// <summary>The first read keeps nothing until it has every page (in pages of the hub's most); each later read asks
+    /// for 200 after the newest event, and one that brings nothing keeps nothing. A failure tries again in 3 seconds; one
+    /// in the first read keeps what came, so the thread shows.</summary>
+    private async Task ReadEventsAsync((Uri Hub, string Database, long Task, bool Over) at, CancellationToken cancel)
+    {
+        ActivityTimeline? building;
+        long built = 0;
+        lock (timelines) building = timelines.ContainsKey(at.Task) ? null : new ActivityTimeline();
+        while (!cancel.IsCancellationRequested)
+        {
+            try
+            {
+                long cursor;
+                if (building is not null) cursor = built;
+                else lock (timelines) cursor = timelines.TryGetValue(at.Task, out var kept) ? kept.Cursor : 0;
+                var page = await client.TaskEventsAsync(at.Hub, key, at.Database, at.Task, cursor,
+                                                        building is not null ? TaskEventPage.Most : 200, cancel);
+                if (cancel.IsCancellationRequested || State.Hub != at.Hub || State.Fleet?.Db != at.Database) return;
+                ActivityFailed(at.Task, null);
+                if (building is not null)
+                {
+                    building.Append(page.Events);
+                    built = page.Next;
+                    if (page.More) continue;
+                    KeepActivity(at.Task, building, built);
+                    building = null;
+                }
+                else
+                {
+                    var changed = false;
+                    lock (timelines)
+                    {
+                        if (timelines.TryGetValue(at.Task, out var kept))
+                        {
+                            var fresh = page.Events.Where(e => e.Id > kept.Cursor).ToList();
+                            kept.Timeline.Append(fresh);
+                            timelines[at.Task] = (kept.Timeline, Math.Max(kept.Cursor, page.Next));
+                            changed = fresh.Count > 0;
+                        }
+                    }
+                    if (changed) PublishActivity(at.Task);
+                }
+                if (page.More) continue;
+                if (TaskIsOver(State, at.Task)) return;
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception e) when (e is HubException or IOException)
+            {
+                if (cancel.IsCancellationRequested) return;
+                ActivityFailed(at.Task, StepWords.Said(e) ?? StepWords.Unavailable);
+                if (building is not null)
+                {
+                    KeepActivity(at.Task, building, built);
+                    building = null;
+                }
+            }
+            try { await clock.Delay(TimeSpan.FromSeconds(3), cancel); }
+            catch (OperationCanceledException) { return; }
+        }
+    }
+
+    /// <summary>The words of the last failed read of a task's record, or null once one answers.</summary>
+    private void ActivityFailed(long task, string? words) =>
+        Update(x => x.TaskPages.TryGetValue(task, out var page) && page.ActivityError != words
+            ? x with { TaskPages = x.TaskPages.SetItem(task, page with { ActivityError = words }) } : x);
+
+    private void KeepActivity(long task, ActivityTimeline timeline, long cursor)
+    {
+        lock (timelines) timelines[task] = (timeline, cursor);
+        PublishActivity(task);
+    }
+
+    private void PublishActivity(long task)
+    {
+        var activity = KeptActivity(task);
+        Update(x => activity is not null && x.TaskPages.TryGetValue(task, out var page)
+            ? x with { TaskPages = x.TaskPages.SetItem(task, page with { Activity = activity }) } : x);
+    }
+
+    /// <summary>"View outputs" or "Reload outputs" (ArtifactPreview.list): everything held goes, then the list of the open
+    /// task's checked files is read.</summary>
+    public async Task ListOutputsAsync()
+    {
+        var s = State;
+        if (s.OpenTask is not { } task || s.Hub is not { } hub || s.Fleet?.Db is not { } database) return;
+        var (operation, cancel) = BeginOutputs(new OutputsState { Task = task, Loading = OutputWords.LoadingList });
+        try
+        {
+            var list = await client.TaskArtifactsAsync(hub, key, database, task, cancel);
+            Outputs(operation, o => o with { Files = ValueList.Of(list.Artifacts), Listed = true, Loading = null });
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception e) when (e is OutputException or HubException or IOException)
+        {
+            Outputs(operation, o => o with { Error = e.Message, Loading = null });
+        }
+    }
+
+    /// <summary>"View" on a file (ArtifactPreview.view): the list stays; the file is read and verified. A list that changed
+    /// or a response of another hub, generation, task or revision takes the list with it.</summary>
+    public async Task ViewOutputAsync(ArtifactFile file)
+    {
+        var s = State;
+        if (s.OpenTask is not { } task || s.Hub is not { } hub || s.Fleet?.Db is not { } database) return;
+        var held = s.Outputs is { } o && o.Task == task ? o : new OutputsState { Task = task };
+        var (operation, cancel) = BeginOutputs(held with { Opened = null, Error = null, Loading = OutputWords.LoadingFile });
+        try
+        {
+            var content = await client.TaskArtifactAsync(hub, key, database, task, file, cancel);
+            Outputs(operation, o => o with { Opened = content, Loading = null });
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception e) when (e is OutputException or HubException or IOException)
+        {
+            var list = e is OutputException { Kind: OutputException.Problem.Stale or OutputException.Problem.Identity };
+            Outputs(operation, o => list ? o with { Error = e.Message, Loading = null, Files = ValueList<ArtifactFile>.Empty, Listed = false }
+                                         : o with { Error = e.Message, Loading = null });
+        }
+    }
+
+    /// <summary>Close, or Cancel while a read runs (ArtifactPreview.clear): everything held goes.</summary>
+    public void CloseOutputs() => EndOutputs(null);
+
+    private (long Operation, CancellationToken Cancel) BeginOutputs(OutputsState state)
+    {
+        CancellationTokenSource cancel;
+        long operation;
+        lock (outputsGate)
+        {
+            outputsCancel?.Cancel();
+            cancel = outputsCancel = new CancellationTokenSource();
+            operation = ++outputsOperation;
+        }
+        Update(x => x with { Outputs = state });
+        return (operation, cancel.Token);
+    }
+
+    private void EndOutputs(OutputsState? state)
+    {
+        lock (outputsGate)
+        {
+            outputsCancel?.Cancel();
+            outputsCancel = null;
+            outputsOperation++;
+        }
+        Update(x => x.Outputs == state ? x : x with { Outputs = state });
+    }
+
+    /// <summary>An answer of output read <paramref name="operation"/>, kept only while it is the newest.</summary>
+    private void Outputs(long operation, Func<OutputsState, OutputsState> change) =>
+        Update(x => Interlocked.Read(ref outputsOperation) == operation && x.Outputs is { } o ? x with { Outputs = change(o) } : x);
 
     // ---------------------------------------------------------------- the wait
 
@@ -1453,6 +1715,8 @@ public sealed class OwnerStore : IAsyncDisposable
         ageWatch?.Cancel();
         frontLoop?.Cancel();
         chatsCancel?.Cancel();
+        StopEvents();
+        EndOutputs(null);
         StopWatching();
         lock (pressWaits) foreach (var wait in pressWaits.Values) wait.Cancel();
         if (chatsReading is not null) { try { await chatsReading; } catch (Exception) { } }

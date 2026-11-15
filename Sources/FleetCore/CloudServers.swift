@@ -823,6 +823,217 @@ public struct CloudServers: Sendable {
         return left
     }
 
+    // MARK: - Deleting what this app made, one thing at a time ("Start again")
+
+    /// A provider's own id of a server, a firewall or a key, as it may stand in a path: digits, or letters, digits and
+    /// hyphens (Vultr's), the whole of it (a pattern's `$` also stands before a last line end).
+    static func isID(_ id: String) -> Bool {
+        (1...64).contains(id.utf8.count) && id.utf8.allSatisfy { byte in
+            (0x30...0x39).contains(byte) || (0x41...0x5A).contains(byte) || (0x61...0x7A).contains(byte) || byte == 0x2D
+        }
+    }
+
+    /// **Deletes one server by the provider's own id of it, and nothing else**: never "the server of this name" and
+    /// never "the servers with this label". At Hetzner a deletion is an action, which is read until it ends: one that
+    /// ends with an error says so in Hetzner's words, and one that still runs after every read is settled by one read
+    /// of the server itself.
+    ///
+    /// **A 404 is not the same as a deletion**, and the answer says which it was (`CloudDeletion`): the provider has
+    /// no server of this id for this token. That is a server that is gone, and it is also a server of another project
+    /// or account than the token's. The caller decides with what else it knows (`StartAgain.isAlive`).
+    ///
+    /// `accepted` is called at the moment the provider takes the deletion, before the wait for its end: a wait that
+    /// is cut off (the page closed) or that ends with an error leaves a server that the provider is deleting, and the
+    /// caller knows that from then on.
+    @discardableResult
+    public func deleteServer(id: String, accepted: (@Sendable () -> Void)? = nil) async throws -> CloudDeletion {
+        guard Self.isID(id) else { throw CloudError.notUnderstood(provider) }
+        let call = try heldCall()
+        let answer = try await call.answer("DELETE", provider.serverPath(id))
+        if answer.status == 404 { return .notThere(call.failure(answer)) }
+        guard answer.ok else { throw call.failure(answer) }
+        accepted?()
+        guard let action = (answer.object["action"] as? [String: Any])?["id"] as? Int else { return .deleted }
+        for _ in 0..<Self.waitReads {
+            let state = try await read("actions/\(action)", call)?["action"] as? [String: Any]
+            switch state?["status"] as? String {
+            case "success": return .deleted
+            case "error":
+                let error = state?["error"] as? [String: Any]
+                throw CloudError.refused(provider, (error?["message"] as? String) ?? (error?["code"] as? String) ?? "error")
+            default: try await pause(Self.waitStep)
+            }
+        }
+        let left = try await call.answer("GET", provider.serverPath(id))
+        guard left.status == 404 else { throw left.ok ? CloudError.notUnderstood(provider) : call.failure(left) }
+        return .deleted
+    }
+
+    /// **Whether a firewall's name is one that this app gave the firewall of a server of this name** (`firewallName`):
+    /// the same start, then exactly six characters of a to z and 0 to 9, and nothing more. So the firewall of
+    /// `worker-1` is never taken for the firewall of `worker-10` or of a server whose name only starts so.
+    static func isFirewallName(_ candidate: String, ofServer name: String, at provider: CloudProvider) -> Bool {
+        let model = firewallName(name, at: provider)
+        let start = String(model.dropLast(6))
+        guard candidate.count == model.count, candidate.hasPrefix(start) else { return false }
+        return candidate.dropFirst(start.count).allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) }
+    }
+
+    /// **The firewalls that this app made for a server of this name**, from the provider's own list: by the exact form
+    /// of their name (`isFirewallName`), and at Hetzner only with the label that this app gives its firewalls there.
+    /// Each comes with the servers that it stands in front of now, where the provider's list names them. A provider's
+    /// list is read whole (Hetzner and Akamai page by page).
+    public func firewalls(ofServer name: String) async throws -> [CloudFirewall] {
+        guard Self.isName(name) else { return [] }
+        let call = try heldCall()
+        func mine(_ candidate: String?) -> Bool {
+            candidate.map { Self.isFirewallName($0, ofServer: name, at: provider) } ?? false
+        }
+        switch provider {
+        case .hetzner:
+            var found: [CloudFirewall] = [], page = 1
+            for _ in 0..<20 {
+                let listed = try await call.send("GET", "firewalls", query: [
+                    URLQueryItem(name: "label_selector", value: "founderizer"), URLQueryItem(name: "per_page", value: "50"),
+                    URLQueryItem(name: "page", value: String(page))])
+                for firewall in (listed["firewalls"] as? [[String: Any]]) ?? [] {
+                    guard let id = firewall["id"] as? Int, mine(firewall["name"] as? String),
+                          (firewall["labels"] as? [String: Any])?["founderizer"] != nil else { continue }
+                    let uses = (firewall["applied_to"] as? [[String: Any]]) ?? []
+                    let servers = uses.compactMap { (($0["server"] as? [String: Any])?["id"] as? Int).map(String.init) }
+                    found.append(CloudFirewall(id: String(id), servers: servers, other: servers.count != uses.count))
+                }
+                let pages = (listed["meta"] as? [String: Any])?["pagination"] as? [String: Any]
+                guard let next = pages?["next_page"] as? Int, next > page else { break }
+                page = next
+            }
+            return found
+        case .digitalOcean:
+            let listed = try await call.send("GET", "firewalls", query: [URLQueryItem(name: "per_page", value: "200")])
+            return ((listed["firewalls"] as? [[String: Any]]) ?? []).compactMap { firewall in
+                guard mine(firewall["name"] as? String), let id = firewall["id"] as? String else { return nil }
+                // A firewall whose list of droplets the answer does not give is not known to be free.
+                guard let droplets = firewall["droplet_ids"] as? [Any] else { return CloudFirewall(id: id, servers: [], other: true) }
+                let servers = droplets.compactMap { ($0 as? Int).map(String.init) }
+                return CloudFirewall(id: id, servers: servers,
+                                     other: servers.count != droplets.count || !((firewall["tags"] as? [Any]) ?? []).isEmpty)
+            }
+        case .vultr:
+            // Vultr's list gives only how many servers a group stands in front of, not which: a group with one, or
+            // with a count that the answer does not give, is in use.
+            let listed = try await call.send("GET", "firewalls", query: [URLQueryItem(name: "per_page", value: "500")])
+            return ((listed["firewall_groups"] as? [[String: Any]]) ?? []).compactMap { group in
+                guard mine(group["description"] as? String), let id = group["id"] as? String else { return nil }
+                return CloudFirewall(id: id, servers: [], other: group["instance_count"] as? Int != 0)
+            }
+        case .akamai:
+            var found: [CloudFirewall] = [], page = 1
+            for _ in 0..<20 {
+                let listed = try await call.send("GET", "networking/firewalls", query: [
+                    URLQueryItem(name: "page_size", value: "100"), URLQueryItem(name: "page", value: String(page))])
+                for firewall in (listed["data"] as? [[String: Any]]) ?? [] {
+                    guard let id = firewall["id"] as? Int, mine(firewall["label"] as? String) else { continue }
+                    // The devices of the firewall, by its own list: a Linode by its id, anything else as another use.
+                    let devices = (try await call.send("GET", "networking/firewalls/\(id)/devices",
+                                                       query: [URLQueryItem(name: "page_size", value: "500")])["data"]
+                        as? [[String: Any]])
+                    guard let devices else { found.append(CloudFirewall(id: String(id), servers: [], other: true)); continue }
+                    let servers = devices.compactMap { device -> String? in
+                        guard let entity = device["entity"] as? [String: Any], entity["type"] as? String == "linode",
+                              let linode = entity["id"] as? Int else { return nil }
+                        return String(linode)
+                    }
+                    found.append(CloudFirewall(id: String(id), servers: servers, other: servers.count != devices.count))
+                }
+                guard let pages = listed["pages"] as? Int, page < pages else { break }
+                page += 1
+            }
+            return found
+        }
+    }
+
+    /// **Deletes the firewalls that this app made for a server of this name, after this run deleted that server.**
+    /// `deleted` are the provider's ids of the servers that the run deleted.
+    ///
+    /// - **Hetzner** refuses to delete a firewall that a server still uses (`resource_in_use`, Hetzner's own
+    ///   document), and is asked again as `remove` asks (`deleteFirewall`): one that stays in use is the call's error.
+    /// - **DigitalOcean and Akamai** delete a firewall that is in use. There a firewall that stands in front of any
+    ///   server but the deleted ones, or that something else uses, is another server's firewall now: it stays, and
+    ///   it is not asked.
+    /// - **Vultr** says only how many servers a group has, and this app does not rely on a refusal of Vultr's: a
+    ///   group that still has a server is read again while the server's own deletion can still run, a counted number
+    ///   of times, and one that has a server after them stays, and is not asked.
+    ///
+    /// Every firewall that may go is asked, also after one that failed: the first error is the call's.
+    public func deleteFirewalls(ofServer name: String, deleted: Set<String>) async throws {
+        var found = try await firewalls(ofServer: name)
+        if provider == .vultr {
+            var reads = 1
+            while reads < Self.removeReads, found.contains(where: { !$0.isFree(of: deleted) }) {
+                try await pause(Self.waitStep)
+                found = try await firewalls(ofServer: name)
+                reads += 1
+            }
+        }
+        var failed: Error?
+        for firewall in found {
+            if provider != .hetzner, !firewall.isFree(of: deleted) { continue }
+            do { try await deleteFirewall(id: firewall.id) } catch { if failed == nil { failed = error } }
+        }
+        if let failed { throw failed }
+    }
+
+    /// **Deletes one firewall by its id.** One that is gone (404) is deleted already. One that a server's deletion
+    /// still holds is asked again, `removeReads` times, as `remove` asks; one that is still held after them is a
+    /// server's that stays, and the call says so in the provider's words.
+    public func deleteFirewall(id: String) async throws {
+        guard Self.isID(id) else { throw CloudError.notUnderstood(provider) }
+        let call = try heldCall()
+        var last: CloudCall.Answer?
+        for _ in 0..<Self.removeReads {
+            let answer = try await call.answer("DELETE", provider.firewallPath(id))
+            if answer.ok || answer.status == 404 { return }
+            last = answer
+            let inUse = answer.code == "resource_in_use"
+                || ([.vultr, .akamai].contains(provider) && ![401, 403].contains(answer.status))
+            guard inUse else { break }
+            try await pause(Self.waitStep)
+        }
+        throw last.map(call.failure) ?? CloudError.notUnderstood(provider)
+    }
+
+    /// **Deletes this app's own SSH key at the provider**, found by its fingerprint as `createServer` finds it (at
+    /// Vultr by the key itself). No such key there: nothing is deleted. Akamai keeps no key of its own: a Linode
+    /// takes the key's text when it is made.
+    public func deleteKey(publicKey: String) async throws {
+        guard let key = SSHPublicKey(publicKey) else { throw CloudError.notAPublicKey }
+        guard provider != .akamai else { return }
+        let call = try heldCall()
+        let path: String
+        switch provider {
+        case .hetzner:
+            let listed = try await call.send("GET", "ssh_keys", query: [URLQueryItem(name: "fingerprint", value: key.fingerprint)])
+            guard let id = ((listed["ssh_keys"] as? [[String: Any]]) ?? [])
+                .first(where: { $0["fingerprint"] as? String == key.fingerprint })?["id"] as? Int else { return }
+            path = "ssh_keys/\(id)"
+        case .digitalOcean:
+            let found = try await call.answer("GET", "account/keys/\(key.fingerprint)")
+            if found.status == 404 { return }
+            guard found.ok, let id = (found.object["ssh_key"] as? [String: Any])?["id"] as? Int else {
+                throw found.ok ? CloudError.notUnderstood(provider) : call.failure(found)
+            }
+            path = "account/keys/\(id)"
+        case .vultr:
+            let listed = try await call.send("GET", "ssh-keys", query: [URLQueryItem(name: "per_page", value: "500")])
+            guard let id = ((listed["ssh_keys"] as? [[String: Any]]) ?? [])
+                .first(where: { Self.sameKey($0["ssh_key"] as? String, key) })?["id"] as? String, Self.isID(id) else { return }
+            path = "ssh-keys/\(id)"
+        case .akamai: return
+        }
+        let answer = try await call.answer("DELETE", path)
+        guard answer.ok || answer.status == 404 else { throw call.failure(answer) }
+    }
+
     /// A JSON value that is there and not null.
     static func isSet(_ value: Any?) -> Bool { value != nil && !(value is NSNull) }
 }
@@ -942,6 +1153,32 @@ public enum CloudProvider: String, CaseIterable, Codable, Sendable {
               token.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil else { throw CloudError.notAToken(self) }
         return token
     }
+}
+
+/// How a call to delete a server ended, when it did not fail (`CloudServers.deleteServer`).
+public enum CloudDeletion: Equatable, Sendable {
+    /// The provider took the deletion.
+    case deleted
+    /// The provider has no server of this id for this token (404), with its answer as this app's error: the server
+    /// is gone, or it is in another project or account than the token's.
+    case notThere(CloudError)
+}
+
+/// One firewall that this app made for a server, as the provider's list gives it (`CloudServers.firewalls`).
+public struct CloudFirewall: Equatable, Sendable {
+    /// The provider's own id of it.
+    public let id: String
+    /// The provider's ids of the servers that it stands in front of now, where the list names them.
+    public let servers: [String]
+    /// Something that the list does not name by a server's id uses it: a label or a tag that applies it, a device
+    /// that is no server, a list of its servers that the answer did not give, or, at Vultr, a count of servers that
+    /// is not zero.
+    public let other: Bool
+
+    public init(id: String, servers: [String], other: Bool) { self.id = id; self.servers = servers; self.other = other }
+
+    /// Nothing uses it but the servers that a run deleted.
+    public func isFree(of deleted: Set<String>) -> Bool { !other && Set(servers).isSubset(of: deleted) }
 }
 
 /// What a server is for, which says the smallest type that fits it.

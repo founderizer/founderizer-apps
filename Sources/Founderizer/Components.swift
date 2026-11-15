@@ -224,10 +224,14 @@ struct ChatRow<Mark: View, Trailing: View>: View {
     /// subtitle text on the sidebar task item should animate like the Thinking label, while the agent is Thinking"):
     /// the same band of light over the same words in the same place (`ShimmeringWords`). Still with Reduce Motion.
     private let working: Bool
-    /// **When the row's line is from, at the end of the name's line**, as a chat app writes it (`ChatList.time`; the
-    /// owner, 13 November 2026: "maybe I would like this relative time label on the side menu too"): muted, in the
-    /// line's own size. The row's marks (a setup that runs, the unread dot) then stand under it, at the end of the
-    /// line. A row with no line has no time, and its marks stay in the row's middle.
+    /// **The line is a request that waits for him, in orange** (`ChatList.waitingRequest`; the owner's "Yes, build it"
+    /// of 14 November 2026): orange is what waits for him (D-8), and here it is words, as on the Tasks board.
+    private let needsYou: Bool
+    /// **When the chat's last message is from, at the end of the name's line**, as a chat app writes it
+    /// (`ChatList.lastTime`, `ChatList.time`; the owner, 13 November 2026: "maybe I would like this relative time
+    /// label on the side menu too"): muted, in the line's own size. The row's marks (a setup that runs, the unread
+    /// dot) then stand under it, at the end of the line. A row with no line has no time, and neither has the row of
+    /// a chat with no message yet; their marks stay in the row's middle.
     private let time: String?
     private let action: () -> Void
     private let mark: Mark
@@ -235,11 +239,11 @@ struct ChatRow<Mark: View, Trailing: View>: View {
     @State private var hovered = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(_ title: String, preview: String?, selected: Bool, emphasized: Bool, working: Bool = false,
+    init(_ title: String, preview: String?, selected: Bool, emphasized: Bool, working: Bool = false, needsYou: Bool = false,
          time: String? = nil, action: @escaping () -> Void, @ViewBuilder mark: () -> Mark,
          @ViewBuilder trailing: () -> Trailing) {
         self.title = title; self.preview = preview; self.selected = selected; self.emphasized = emphasized
-        self.working = working; self.time = preview == nil ? nil : time
+        self.working = working; self.needsYou = needsYou; self.time = preview == nil ? nil : time
         self.action = action; self.mark = mark(); self.trailing = trailing()
     }
 
@@ -752,13 +756,15 @@ extension ChatRow {
     /// **While the agent works, the same line moves** (`working`): the still line keeps its place and its words for
     /// VoiceOver, clear, and the moving words stand over it in its own room, cut where it is cut. So a row neither
     /// moves nor changes its height when its agent's work starts or ends.
+    ///
+    /// **A request that waits for him is its title in orange** (`needsYou`), whole: it has no count of tasks.
     @ViewBuilder func previewLine(_ preview: String) -> some View {
-        let parts = Self.splitCount(preview)
+        let parts: (text: String, count: String?) = needsYou ? (preview, nil) : Self.splitCount(preview)
         let still = HStack(spacing: 0) {
             Text(parts.text).lineLimit(1).truncationMode(.tail)
             if let count = parts.count { Text(count).lineLimit(1).fixedSize() }
         }
-        .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+        .font(FormMetrics.detail).foregroundStyle(needsYou ? Color.orange : FleetStyle.muted)
         if working && !reduceMotion {
             still.opacity(0).overlay(alignment: .leading) {
                 ShimmeringWords(text: parts.text, tail: parts.count, fits: true).accessibilityHidden(true)

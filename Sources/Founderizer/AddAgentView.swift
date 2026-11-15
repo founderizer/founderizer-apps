@@ -1,6 +1,7 @@
 import AppKit
 import FleetCore
 import FleetMark
+import FleetOwnerAPI
 import Observation
 import SwiftUI
 
@@ -104,8 +105,7 @@ final class AddAgentModel {
         Servers.agentProblem(name: key, server: selected, existing: team?.lines.map(\.agent) ?? [])
     }
 
-    /// The agent on the chosen server with `runtime`, the AI he pressed (or chose in Add server for a new server's
-    /// first agent).
+    /// The agent on the chosen server with `runtime`, the AI he pressed.
     func start(store: FleetStore, runtime chosen: String) async {
         guard !busy, problem == nil, let server, let database = store.state?.db else { return }
         busy = true; error = nil
@@ -179,6 +179,8 @@ struct AddAgentView: View {
     let addServer: () -> Void
     /// The agent is added and its own setup page opens next: "Adding <Name>" stays until then.
     @State private var handingOff = false
+    /// This view's own mark for the page that it tells the store (`WizardPages.tell`, `gone`).
+    @State private var placeMark = UUID()
 
     var body: some View {
         Group {
@@ -194,12 +196,21 @@ struct AddAgentView: View {
         }
         // Its first page, the servers (or the hub's line that it cannot add agents): Esc closes the wizard there.
         .preference(key: SetupFirstPage.self, value: model.receipt == nil && !model.picked && !model.busy && !handingOff)
+        .onChange(of: placeStep, initial: true) { _, now in store.wizardPages.tell(addAgent: now, by: placeMark) }
+        .onDisappear { store.wizardPages.gone(placeMark) }
         .task(id: "\(store.hub)/\(store.state?.db ?? "")") {
             while !Task.isCancelled {
                 if model.receipt == nil { await model.read(store: store) }
                 do { try await store.nap(10) } catch { return }
             }
         }
+    }
+
+    /// The step by its fixed name (`AppPlace`, `setup_state`'s `place`): nil on the hub's line that it cannot add agents.
+    private var placeStep: AppPlace.AddAgentStep? {
+        guard store.state?.ui_features?.contains(Servers.feature) == true else { return nil }
+        if model.receipt != nil || model.busy || handingOff { return .progress }
+        return model.picked ? .name : .server
     }
 
     /// **Add agent is two centred steps under one mark and one title** (D-3 of 28 October 2026, and the owner's yes of

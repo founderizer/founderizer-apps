@@ -443,6 +443,7 @@ struct PasteAttachments: ViewModifier {
         watch = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             // The monitor runs on the main thread, before the menu sees the key.
             let taken = MainActor.assumeIsolated { () -> Bool in
+                guard !AppFront.holdsKeys else { return false }     // no key after a front from outside (`AppFront`)
                 // Cmd+V alone. Caps Lock does not count, and Cmd+Shift+V (paste as text) stays the text field's.
                 let keys = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                     .subtracting([.capsLock, .function, .numericPad])

@@ -199,7 +199,7 @@ public final class LiveChangesClient: Sendable {
         var request = URLRequest(url: parts.url!)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let key, !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
-        let (data, response) = try await Self.session.data(for: request)
+        let (data, response) = try await Self.session.hubData(for: request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         if response.statusCode == 409 { return .generationChanged }
         guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, HubClient.words(in: data)) }

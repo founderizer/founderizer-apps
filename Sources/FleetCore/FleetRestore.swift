@@ -735,7 +735,7 @@ extension HubClient {
         configuration.timeoutIntervalForResource = 900
         let transfer = URLSession(configuration: configuration)
         defer { transfer.finishTasksAndInvalidate() }
-        let (data, response) = try await transfer.upload(for: request, fromFile: file)
+        let (data, response) = try await transfer.upload(for: OwnerMacKey.authorized(request), fromFile: file)
         guard let http = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard http.statusCode == 200 else {
             throw HubError.refusal(http.statusCode, HubClient.words(in: data))

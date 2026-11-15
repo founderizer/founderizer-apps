@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import FleetCore
 
-// Round 3 (CHAT-APPS.md 17): the cards of an agent's Channels page, the account that a card shows and that Add number
-// or Add bot writes, the sidebar's dot, the owner's link step and the Discord page's answer.
+// Round 3 (CHAT-APPS.md 17 and 18): the cards of an agent's Channels, the account that a card shows and that Connect
+// writes, a number that no phone ever linked, the sidebar's dot, the owner's link step and the Discord page's answer.
 
 private func json(_ object: Any) throws -> Data { try JSONSerialization.data(withJSONObject: object) }
 
@@ -11,6 +11,13 @@ private func number(_ fields: [String: Any] = [:]) -> [String: Any] {
     ["id": "whatsapp-studio", "app": "whatsapp", "label": "Studio", "agents": ["studio"], "enabled": true, "state": "connected",
      "user": "34900123210:7@s.whatsapp.net", "name": "+34900123210", "error": NSNull(), "invite_url": NSNull(), "status_at": 990.0,
      "link": ["state": "linked", "expires": NSNull(), "error": NSNull()]].merging(fields) { _, new in new }
+}
+
+/// A number that worked and lost its link, as the bridge reports it: it forgets the number when the phone logs it out
+/// (`channels.py` `on_state`), and a message came in on it once.
+private func lost(_ fields: [String: Any] = [:]) -> [String: Any] {
+    number(["state": "logged_out", "user": NSNull(), "name": NSNull(), "last_event": 900.0,
+            "link": ["state": "logged_out", "expires": NSNull(), "error": NSNull()]].merging(fields) { _, new in new })
 }
 
 private func bot(_ fields: [String: Any] = [:]) -> [String: Any] {
@@ -23,8 +30,8 @@ private func list(_ accounts: [[String: Any]]) throws -> ChatAppsSnapshot {
     try JSONDecoder().decode(ChatAppsSnapshot.self, from: json(["db": "db", "paused": false, "bridge_seen": 995.0, "accounts": accounts]))
 }
 
-private func card(_ app: String, _ accounts: [[String: Any]], linking: Bool = false, time: Double = 1000) throws -> ChannelCard {
-    ChannelCard(app: app, agent: "studio", in: try list(accounts), linking: linking, serverTime: time)
+private func card(_ app: String, _ accounts: [[String: Any]], time: Double = 1000) throws -> ChannelCard {
+    ChannelCard(app: app, agent: "studio", in: try list(accounts), serverTime: time)
 }
 
 private func people(_ handles: [[String: Any]]) throws -> PeopleSnapshot {
@@ -32,27 +39,45 @@ private func people(_ handles: [[String: Any]]) throws -> PeopleSnapshot {
 }
 
 struct WhatsAppCardTests {
-    @Test func noNumberOffersAddNumber() throws {
+    @Test func noNumberOffersConnect() throws {
         let empty = try card("whatsapp", [])
-        #expect(empty.kind == .none && empty.status == ChatStateWords(words: "No number", tone: .off))
-        #expect(empty.action == .addNumber && empty.menu.isEmpty && empty.title == "WhatsApp" && !empty.needsOwner)
+        #expect(empty.kind == .none && empty.status == ChatStateWords(words: "Not connected", tone: .off))
+        #expect(empty.action == .connect && empty.menu.isEmpty && empty.title == "WhatsApp" && !empty.needsOwner)
         // Another agent's number is not this agent's.
         #expect(try card("whatsapp", [number(["id": "whatsapp-vps", "agents": ["vps"]])]).kind == .none)
         // Before the first reading, too.
-        #expect(ChannelCard(app: "whatsapp", agent: "studio", in: nil, linking: false, serverTime: nil).kind == .none)
+        #expect(ChannelCard(app: "whatsapp", agent: "studio", in: nil, serverTime: nil).kind == .none)
     }
 
-    @Test func linkingShowsTheQRCodeWithoutAMainButton() throws {
-        // Right after Add number: the bridge has not reported the number yet.
-        let added = try card("whatsapp", [number(["state": NSNull(), "status_at": NSNull(), "link": NSNull(), "name": NSNull()])], linking: true)
-        #expect(added.kind == .linking && added.status == ChatStateWords(words: "Linking", tone: .waiting))
-        #expect(added.action == nil && added.menu == [.remove] && !added.needsOwner)
-        // The bridge reports a never linked number as logged out while its code waits.
-        let waiting = try card("whatsapp", [number(["state": "logged_out", "link": ["state": "waiting", "expires": 1020.0, "error": NSNull()]])],
-                               linking: true)
-        #expect(waiting.kind == .linking)
-        // A linked number is never in Linking.
-        #expect(try card("whatsapp", [number()], linking: true).kind == .connected)
+    /// The owner, 14 November 2026: "it says remove number when I haven't entered or linked any". The app writes the
+    /// number's account to ask for its QR code; while no phone ever linked it, the card is the one of no number.
+    @Test func aNumberThatNoPhoneEverLinkedIsNoNumber() throws {
+        let never: [String: Any] = ["user": NSNull(), "name": NSNull()]
+        for left in [number(never.merging(["state": NSNull(), "status_at": NSNull(), "link": NSNull()]) { _, new in new }),
+                     number(never.merging(["state": "logged_out", "link": ["state": "logged_out", "expires": NSNull(),
+                                                                         "error": "the QR code was not scanned in time"]]) { _, new in new }),
+                     number(never.merging(["state": "connecting", "link": ["state": "waiting", "expires": 1020.0, "error": NSNull()]]) { _, new in new }),
+                     number(never.merging(["state": "error", "error": "wa-link is not running.", "link": NSNull()]) { _, new in new })] {
+            let shown = try card("whatsapp", [left])
+            #expect(shown.kind == .none && shown.action == .connect && shown.menu.isEmpty && !shown.needsOwner && shown.title == "WhatsApp")
+            #expect(shown.menu(for: try people([])).isEmpty)
+            #expect(try !list([left]).needsOwner("studio", serverTime: 1000))
+        }
+        // A number that had a message worked once: it lost its link, and Remove number is true of it.
+        let gone = try card("whatsapp", [lost()])
+        #expect(gone.kind == .unlinked && gone.action == .linkAgain && gone.menu == [.remove] && gone.needsOwner)
+        // A phone linked it and nobody wrote yet: while the bridge starts again it knows no number, and the hub's link
+        // still says linked. It is no "never linked" number, so Back from its steps never takes it away.
+        for state in ["connecting", "error"] {
+            let again = number(never.merging(["state": state, "link": ["state": "linked", "expires": NSNull(), "error": NSNull()]]) { _, new in new })
+            #expect(try !list([again]).accounts[0].holdsNoPhone && !list([again]).accounts[0].neverLinked)
+            #expect(try card("whatsapp", [again]).kind != .none)
+        }
+        // Turned off comes first: Connect could not work on an account that the bridge does not run.
+        let off = try card("whatsapp", [number(never.merging(["enabled": false, "state": NSNull(), "link": NSNull()]) { _, new in new })])
+        #expect(off.kind == .off && off.action == .turnOn)
+        // A bot is never "never linked": a token went in for it.
+        #expect(try card("discord", [bot(["state": "missing_token", "user": NSNull(), "name": NSNull()])]).kind == .failed)
     }
 
     @Test func linkedShowsTheNumberConnectedWithUnlinkAndRemove() throws {
@@ -66,13 +91,13 @@ struct WhatsAppCardTests {
     }
 
     @Test func unlinkedIsOrangeWithLinkAgain() throws {
-        let out = try card("whatsapp", [number(["state": "logged_out", "link": ["state": "logged_out", "expires": NSNull(),
-                                                                                 "error": "the QR code was not scanned in time"]])])
+        let out = try card("whatsapp", [lost(["link": ["state": "logged_out", "expires": NSNull(),
+                                                       "error": "the QR code was not scanned in time"]])])
         #expect(out.kind == .unlinked && out.status.words == "Unlinked" && out.status.tone == .problem)
         #expect(out.status.detail == "the QR code was not scanned in time." && out.action == .linkAgain && out.menu == [.remove])
         #expect(out.needsOwner && out.title == "WhatsApp")
-        // A code that waits after the owner cancelled it on the page: Unlinked, with Link again.
-        let cancelled = try card("whatsapp", [number(["state": "connecting", "link": ["state": "waiting", "expires": 1020.0, "error": NSNull()]])])
+        // A number that worked, whose new code waits for a scan after he left its steps: Unlinked, with Link again.
+        let cancelled = try card("whatsapp", [lost(["state": "connecting", "link": ["state": "waiting", "expires": 1020.0, "error": NSNull()]])])
         #expect(cancelled.kind == .unlinked && cancelled.action == .linkAgain)
         #expect(try card("whatsapp", [number(["state": "error", "error": "stream replaced", "link": NSNull()])]).status.detail == "stream replaced.")
     }
@@ -86,9 +111,9 @@ struct WhatsAppCardTests {
 }
 
 struct DiscordCardTests {
-    @Test func noBotOffersAddBot() throws {
+    @Test func noBotOffersConnect() throws {
         let empty = try card("discord", [])
-        #expect(empty.kind == .none && empty.status.words == "No bot" && empty.action == .addBot && empty.menu.isEmpty)
+        #expect(empty.kind == .none && empty.status.words == "Not connected" && empty.action == .connect && empty.menu.isEmpty)
     }
 
     @Test func connectingHasASpinnerAndNoMainButton() throws {
@@ -140,28 +165,41 @@ struct ChannelAttentionTests {
     @Test func theSidebarDotShowsWhileACardIsOrange() throws {
         #expect(try !list([number(), bot()]).needsOwner("studio", serverTime: 1000))
         #expect(try list([number(), bot(["state": "missing_token"])]).needsOwner("studio", serverTime: 1000))
-        #expect(try list([number(["state": "logged_out", "link": NSNull()])]).needsOwner("studio", serverTime: 1000))
-        // A code that waits for the scan, another agent's problem, or no channel at all: no dot.
-        #expect(try !list([number(["state": "logged_out", "link": ["state": "waiting", "expires": 1020.0, "error": NSNull()]])])
-            .needsOwner("studio", serverTime: 1000))
+        #expect(try list([lost()]).needsOwner("studio", serverTime: 1000))
+        // The dot and the card say the same: a number that worked and waits for a new scan is orange in both.
+        #expect(try list([lost(["link": ["state": "waiting", "expires": 1020.0, "error": NSNull()]])]).needsOwner("studio", serverTime: 1000))
+        // Another agent's problem, or no channel at all: no dot.
         #expect(try !list([bot(["id": "discord-vps", "agents": ["vps"], "state": "missing_token"])]).needsOwner("studio", serverTime: 1000))
         #expect(try !list([]).needsOwner("studio", serverTime: 1000))
     }
 
-    @Test func theOwnerLinkStepShowsOnceTheCardIsConnectedAndTheOwnerHasNoID() throws {
+    @Test func theOwnersOwnLinkIsToDoOnceTheCardIsConnectedAndTheOwnerHasNoID() throws {
         let linked = try card("whatsapp", [number()])
         #expect(linked.asksForOwnerLink(try people([])))
         #expect(!linked.asksForOwnerLink(try people([["app": "whatsapp", "id": "123@lid", "alias": NSNull(), "name": NSNull(), "linked": 900.0]])))
         // An ID of the other app does not count.
         #expect(linked.asksForOwnerLink(try people([["app": "discord", "id": "4242", "alias": NSNull(), "name": "sam", "linked": 900.0]])))
         // Not before the number is linked, and not without the hub's people list.
-        #expect(try !card("whatsapp", [number(["state": "logged_out"])]).asksForOwnerLink(try people([])))
+        #expect(try !card("whatsapp", [lost()]).asksForOwnerLink(try people([])))
         #expect(!linked.asksForOwnerLink(nil))
+    }
+
+    /// Link my phone and Link my Discord stand first in a connected card's menu, only while the link is to do.
+    @Test func theMenuHasTheOwnersOwnLinkWhileItIsToDo() throws {
+        let phone = try card("whatsapp", [number()]), robot = try card("discord", [bot()])
+        #expect(phone.menu(for: try people([])) == [.linkMe, .unlink, .remove])
+        #expect(robot.menu(for: try people([])) == [.linkMe, .invite, .changeToken, .remove])
+        let mine: [[String: Any]] = [["app": "whatsapp", "id": "123@lid", "alias": NSNull(), "name": NSNull(), "linked": 900.0]]
+        #expect(phone.menu(for: try people(mine)) == [.unlink, .remove])
+        #expect(robot.menu(for: try people(mine)) == [.linkMe, .invite, .changeToken, .remove])
+        // Without the hub's people list, and on a card that is not connected, the menu is the card's own.
+        #expect(phone.menu(for: nil) == [.unlink, .remove])
+        #expect(try card("whatsapp", [lost()]).menu(for: try people([])) == [.remove])
     }
 }
 
 struct ChannelAccountTests {
-    @Test func addNumberAndAddBotWriteTheAgentsOwnAccount() throws {
+    @Test func connectWritesTheAgentsOwnAccount() throws {
         let taken = Set(try list([number(["id": "whatsapp-vps", "agents": ["vps"]]), bot()]).accounts.map(\.id))
         let added = ChatApps.agentAccount(app: "whatsapp", agent: "studio", taken: taken)
         #expect(added.id == "whatsapp-studio" && added.account == ChatAccountInput(app: "whatsapp", label: "Studio", agents: ["studio"]))

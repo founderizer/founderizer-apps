@@ -3,7 +3,9 @@
 # Windows Setup runs it once, from the setup disc, at the first sign-in of the
 # local user "builder" (autounattend.xml, FirstLogonCommands). It:
 #   1. installs the virtio drivers on the disc (from UTM's guest tools, signed by Microsoft);
-#   2. installs Windows' own OpenSSH server, key only, reachable only from the host;
+#   2. installs Windows' own OpenSSH server, key only, reachable only from the host; lets no connection to
+#      Tailscale's addresses leave by any card but Tailscale's own; and reaches the host at 10.0.2.2 only on the
+#      ports of its test servers (58440 to 58459);
 #   3. keeps the display and the VM awake, with no lock;
 #   4. replaces the throwaway password of the answer file with a random one that
 #      never leaves the VM, and makes the user sign in by itself at each start;
@@ -82,6 +84,25 @@ try {
             -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 | Out-Null
     }
     Set-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -RemoteAddress $hostAddress -Profile Any -Enabled True
+    # QEMU's user network carries out through the Mac what the VM's own Tailscale does not: a call to an address of
+    # the owner's private network would leave with the Mac's own address there, which the hub knows as the owner's
+    # Mac (proved on 14 November 2026: with Tailscale down, an owner page with no key answered 200). So nothing
+    # leaves for Tailscale's addresses by this card or any other card that is here now; Tailscale's own card, which
+    # comes later, is not one of them (README.md, "The owner's private network").
+    $cards = @(Get-NetAdapter | Where-Object { $_.InterfaceDescription -notlike 'Tailscale*' } | ForEach-Object Name)
+    Remove-NetFirewallRule -Name 'fz-tailscale-range-only-through-tailscale' -ErrorAction SilentlyContinue
+    New-NetFirewallRule -Name 'fz-tailscale-range-only-through-tailscale' `
+        -DisplayName 'Founderizer VM: the Tailscale range only through Tailscale' -Direction Outbound -Action Block `
+        -Profile Any -RemoteAddress '100.64.0.0/10', 'fd7a:115c:a1e0::/48' -InterfaceAlias $cards | Out-Null
+    # The same network gives the VM every service that listens on the host's loopback, at 10.0.2.2: the VM's own
+    # tools need only the test servers, which bind to 58440 to 58459 (the test channel 58443, a scratch hub from
+    # 58444). SSH comes in from the host and its answers go back on that connection, which no outbound rule stops.
+    foreach ($rule in 'fz-host-only-test-ports-tcp', 'fz-host-no-udp') { Remove-NetFirewallRule -Name $rule -ErrorAction SilentlyContinue }
+    New-NetFirewallRule -Name 'fz-host-only-test-ports-tcp' -DisplayName 'Founderizer VM: the host only on its test ports' `
+        -Direction Outbound -Action Block -Profile Any -RemoteAddress $hostAddress -Protocol TCP `
+        -RemotePort '1-58439', '58460-65535' | Out-Null
+    New-NetFirewallRule -Name 'fz-host-no-udp' -DisplayName 'Founderizer VM: no UDP to the host' `
+        -Direction Outbound -Action Block -Profile Any -RemoteAddress $hostAddress -Protocol UDP | Out-Null
     Set-Service -Name sshd -StartupType Automatic
     Start-Service sshd
 

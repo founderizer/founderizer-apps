@@ -601,17 +601,22 @@ struct MobileChatTests {
         #expect(shown(after: 0.2) == 1 && shown(after: 3) == 1)
     }
 
-    @Test("A request card stands under the agent's reply that told him about it, by the Mac's rule")
-    func aRequestUnderTheReplyThatToldHim() throws {
+    @Test("A request card stands under the agent's reply of the turn in which it was raised, by the Mac's rule")
+    func aRequestUnderTheReplyOfItsTurn() throws {
         let asked = try item(#"{"kind": "message", "ts": 10, "id": "ABC-1", "text": "Publish it?", "client": "founderizer-ios/1/x"}"#)
-        let told = try item(#"{"kind": "report", "ts": 30, "id": 7, "text": "It is in Needs you."}"#)
+        let told = try item(#"{"kind": "report", "ts": 30, "id": 7, "text": "It is in Needs you.", "in_reply_to": "abc-1"}"#)
         let next = try item(#"{"kind": "message", "ts": 50, "id": "ABC-2", "text": "Done.", "client": "founderizer-ios/1/x"}"#)
         let need = try JSONDecoder().decode(OwnerNeed.self, from: Data(#"{"id": 3, "by": "manager", "title": "Publish now?", "why": "", "todo": "", "raised": 20, "answer": null, "answered": null}"#.utf8))
         let entries = ChatPage.entries([asked, told, next], agent: "manager")
         // The phone's ids are the Mac's, so the places name the phone's own items.
         #expect(entries.map(\.id) == [asked.id, told.id, next.id])
         // Raised in the agent's turn: under "It is in Needs you.", and his next message under the card.
-        #expect(ChatRequestPlaces.of(needs: [need], in: entries, whole: false).after == [told.id: [3]])
+        #expect(ChatRequestPlaces.inTime(needs: [need], in: entries, whole: false).after == [told.id: [3]])
+        // The hub's own messages have an event, and the ones that this phone knows he wrote as an answer have none.
+        guard case .message(let hubs) = entries[0],
+              case .message(let his) = try #require(ChatPage.entries([asked], agent: "manager", written: ["abc-1"]).first)
+        else { Issue.record("not messages"); return }
+        #expect(hubs.event_id != 0 && his.event_id == 0)
     }
 
     @Test("A message names the request it answers, keeps it between launches, and an older hub's names none")
@@ -630,53 +635,80 @@ struct MobileChatTests {
         #expect(message.kind == "answer" && message.need_id == 3)
     }
 
-    @Test("An answered card folds where it stood, and his answer is no second bubble")
-    func anAnsweredCard() throws {
-        func need(_ id: Int, raised: Double, answered: Double?) throws -> OwnerNeed {
+    @Test("A card stands where it was raised: a pressed option is no second bubble, and written words are his message")
+    func aCardWhereItWasRaised() throws {
+        func need(_ id: Int, raised: Double, answered: Double?, options: Bool = false, chosen: Int? = nil) throws -> OwnerNeed {
             let answer = answered == nil ? "null" : #""Correos""#
             let time = answered.map { "\($0)" } ?? "null"
-            return try JSONDecoder().decode(OwnerNeed.self, from: Data(#"{"id": \#(id), "by": "iris", "title": "Which courier?", "why": "", "todo": "", "raised": \#(raised), "answer": \#(answer), "answered": \#(time)}"#.utf8))
+            let offered = options ? #"["Correos", "SEUR"]"# : "null"
+            let pressed = chosen.map { "\($0)" } ?? "null"
+            return try JSONDecoder().decode(OwnerNeed.self, from: Data(#"{"id": \#(id), "by": "iris", "title": "Which courier?", "why": "", "todo": "", "raised": \#(raised), "answer": \#(answer), "answered": \#(time), "options": \#(offered), "chosen": \#(pressed)}"#.utf8))
         }
-        func rows(_ items: [MobileChatItem], _ needs: [OwnerNeed]) -> [String] {
-            ChatPage.rows(items, needs: needs, places: ChatPage.places(of: needs, in: items, agent: "iris")).map(\.id)
+        func placed(_ items: [MobileChatItem], _ needs: [OwnerNeed], written: Set<String> = []) -> [ChatPage.Row] {
+            ChatPage.rows(items, needs: needs, places: ChatPage.places(of: needs, in: items, agent: "iris", written: written))
+        }
+        func rows(_ items: [MobileChatItem], _ needs: [OwnerNeed], written: Set<String> = []) -> [String] {
+            placed(items, needs, written: written).map(\.id)
         }
         let asked = try item(#"{"kind": "message", "ts": 10, "id": "a", "text": "Ship it?", "client": "founderizer-ios/1/x"}"#)
-        let told = try item(#"{"kind": "report", "ts": 30, "id": 7, "text": "It is in Needs you."}"#)
+        let told = try item(#"{"kind": "report", "ts": 30, "id": 7, "text": "It is in Needs you.", "in_reply_to": "a"}"#)
         let answer = try item(#"{"kind": "message", "ts": 40, "id": "b", "text": "Correos", "client": "founderizer-ios/1/x", "answer_to": 3}"#)
         let thanks = try item(#"{"kind": "report", "ts": 45, "id": 8, "text": "Booked with Correos."}"#)
 
-        // Told by a message: the card stands under it, his answer is not drawn, and the agent's next line stands under
-        // the card, in a run of its own.
-        #expect(try rows([asked, told, answer, thanks], [need(3, raised: 20, answered: 40)])
+        // He pressed an option: the card stands under the reply of its turn, his answer is not drawn, and the agent's
+        // next line stands under the card, in a run of its own.
+        #expect(try rows([asked, told, answer, thanks], [need(3, raised: 20, answered: 40, options: true, chosen: 0)])
                 == ["run-message-a", "run-report-7", "request-3", "run-report-8"])
-        // While it waits, the same place, and his answer, which the chat holds before the fleet's read says it, once.
-        #expect(try rows([asked, told, answer], [need(3, raised: 20, answered: nil)])
+        // He wrote the words: the card stands in the same place, folded to its title, and his words are his message
+        // under it, with the agent's line under them.
+        let spoken = try placed([asked, told, answer, thanks], [need(3, raised: 20, answered: 40)])
+        #expect(spoken.map(\.id) == ["run-message-a", "run-report-7", "request-3", "run-message-b", "run-report-8"])
+        if case .request(_, _, let says) = spoken[2] { #expect(says) } else { Issue.record("no card") }
+
+        // While the reading still has the request open (the open chat reads before the fleet): a pressed option's
+        // words are no bubble over the card, and words that he wrote on this phone are his message at once, also when
+        // they are an option's own words.
+        #expect(try rows([asked, told, answer], [need(3, raised: 20, answered: nil, options: true)])
                 == ["run-message-a", "run-report-7", "request-3"])
+        #expect(try rows([asked, told, answer], [need(3, raised: 20, answered: nil, options: true)], written: ["b"])
+                == ["run-message-a", "run-report-7", "request-3", "run-message-b"])
 
-        // Told by no message: the card takes his answer's place, between his messages around it.
+        // Told by no message: the card stands at its own time, between his messages around it, and not at the end.
         let after = try item(#"{"kind": "message", "ts": 50, "id": "c", "text": "And thanks.", "client": "founderizer-ios/1/x"}"#)
-        let inPlace = try need(3, raised: 35, answered: 40)
-        let placed = ChatPage.rows([asked, answer, after], needs: [inPlace],
-                                   places: ChatPage.places(of: [inPlace], in: [asked, answer, after], agent: "iris"))
-        #expect(placed.map(\.id) == ["run-message-a", "request-3", "run-message-c"])
-        // Thirty seconds after his message before it: no mark for the day or the hour over it.
-        if case .request(_, let stamp) = placed[1] { #expect(stamp == nil) } else { Issue.record("no card") }
-        // Told by no message and still waiting at the end, with his answer in the chat already (the open chat reads
-        // before the fleet): the answer is no bubble over the card. The fleet's read puts the card in its place.
-        let waiting = try need(3, raised: 35, answered: nil)
-        let early = ChatPage.rows([asked, answer], needs: [waiting],
-                                  places: ChatPage.places(of: [waiting], in: [asked, answer], agent: "iris"))
-        #expect(early.map(\.id) == ["run-message-a", "request-3"])
-        if case .run(let run) = early[0] { #expect(run.items.map(\.id) == [asked.id]) } else { Issue.record("no run") }
-        #expect(try rows([asked, answer], [need(3, raised: 35, answered: 40)]) == ["run-message-a", "request-3"])
+        let between = try placed([asked, after], [need(3, raised: 35, answered: nil)])
+        #expect(between.map(\.id) == ["run-message-a", "request-3", "run-message-c"])
+        // Twenty-five seconds after his message before it: no mark for the day or the hour over it, and it says its
+        // own answer when it has one.
+        if case .request(_, let stamp, let says) = between[1] { #expect(stamp == nil && !says) } else { Issue.record("no card") }
+        // Answered in words: it folds where it stands, and his words stand at their time, in his run.
+        #expect(try rows([asked, answer, after], [need(3, raised: 35, answered: 40)])
+                == ["run-message-a", "request-3", "run-message-b"])
 
-        // Answered after everything the chat holds, and told by no message (his message stands before its raise): at
-        // the end, where his answer comes with the chat's next read, as it stood while it waited.
+        // Nothing came after it: at the chat's end, with its own mark when it was raised a day after the row over it.
         let first = try item(#"{"kind": "report", "ts": 5, "id": 6, "text": "Starting."}"#)
-        #expect(try rows([first, asked], [need(4, raised: 35, answered: 60)]) == ["run-report-6", "run-message-a", "request-4"])
         #expect(try rows([first, asked], [need(4, raised: 35, answered: nil)]) == ["run-report-6", "run-message-a", "request-4"])
-        // Answered before the newest item the chat holds, and raised before all of them: not drawn, as on the Mac.
+        let late = try placed([asked], [need(6, raised: 172_810, answered: nil)])
+        if case .request(_, let stamp, _) = try #require(late.last) { #expect(stamp == 172_810) } else { Issue.record("no card") }
+
+        // The phone holds the newest pages only. A waiting request that is older than all of them stands over them,
+        // with no item at all it stands alone, and an answered one that old is not drawn.
+        #expect(try rows([told, after], [need(5, raised: 1, answered: nil)]) == ["request-5", "run-report-7", "run-message-c"])
+        #expect(try rows([], [need(5, raised: 1, answered: nil)]) == ["request-5"])
         #expect(try rows([told, after], [need(5, raised: 1, answered: 20)]) == ["run-report-7", "run-message-c"])
+        // An answered one that old, whose answer the phone holds: an option that he pressed shows as its folded card
+        // where the answer is, and words that he wrote are his message there, with no card.
+        let old = try item(#"{"kind": "message", "ts": 40, "id": "e", "text": "Correos", "client": "founderizer-ios/1/x", "answer_to": 5}"#)
+        #expect(try rows([told, old, thanks], [need(5, raised: 1, answered: 40, options: true, chosen: 0)])
+                == ["run-report-7", "request-5", "run-report-8"])
+        #expect(try rows([told, old], [need(5, raised: 1, answered: 40, options: true, chosen: 0)])
+                == ["run-report-7", "request-5"])
+        #expect(try rows([told, old, thanks], [need(5, raised: 1, answered: 40)])
+                == ["run-report-7", "run-message-e", "run-report-8"])
+        // Two of them: in the order of his answers, whatever the order in which they were raised.
+        let earlier = try item(#"{"kind": "message", "ts": 35, "id": "f", "text": "SEUR", "client": "founderizer-ios/1/x", "answer_to": 6}"#)
+        #expect(try rows([told, earlier, old, thanks], [need(5, raised: 1, answered: 40, options: true, chosen: 0),
+                                                       need(6, raised: 2, answered: 35, options: true, chosen: 1)])
+                == ["run-report-7", "request-6", "request-5", "run-report-8"])
     }
 
     @Test("An answered card folds from the open card's height to the two lines', with no step where it begins or ends")
@@ -792,5 +824,35 @@ struct MobileChatTests {
     @Test("Each provider has its real logo on the phone")
     func providerLogos() {
         for runtime in ["claude", "codex", "grok"] { #expect(ProviderLogo.image(runtime) != nil) }
+    }
+
+    /// The owner, 14 November 2026: "why does the preview not show the card if the card is the latest element on the
+    /// chat?", his yes to its title in orange on the Mac, and "Yes, iPhone too".
+    @Test("A waiting card that is the newest thing in a chat is its row's line, as on the Mac")
+    func aWaitingCardIsTheRowsLine() throws {
+        func need(_ id: Int, raised: Double, by agent: String = "iris", answered: Double? = nil) throws -> OwnerNeed {
+            let answer = answered == nil ? "null" : #""Yes""#
+            let time = answered.map { "\($0)" } ?? "null"
+            return try JSONDecoder().decode(OwnerNeed.self, from: Data(#"{"id": \#(id), "by": "\#(agent)", "title": "Request \#(id)", "why": "", "todo": "", "raised": \#(raised), "answer": \#(answer), "answered": \#(time)}"#.utf8))
+        }
+        func last(_ ts: Double, side: String = "agent") throws -> MobilePreview {
+            try JSONDecoder().decode(MobilePreview.self, from: Data(#"{"ts": \#(ts), "side": "\#(side)", "preview": "Synthetic"}"#.utf8))
+        }
+        let asked = try item(#"{"kind": "message", "ts": 10, "id": "a", "text": "Ship it?", "client": "founderizer-ios/1/x"}"#)
+        let told = try item(#"{"kind": "report", "ts": 30, "id": 7, "text": "It is in Needs you.", "in_reply_to": "a"}"#)
+        let later = try item(#"{"kind": "report", "ts": 50, "id": 8, "text": "Something else."}"#)
+        let open = [try need(3, raised: 20), try need(4, raised: 5, by: "vps")]
+
+        // A chat that the phone holds: the card under the reply of its turn is the newest thing, and a later line is not.
+        #expect(ChatsPage.waitingRequest(agent: "iris", last: try last(30), items: [asked, told], open: open, answered: [])?.id == 3)
+        #expect(ChatsPage.waitingRequest(agent: "iris", last: try last(50), items: [asked, told, later], open: open, answered: []) == nil)
+        // An answered request, or another agent's, is no line of this row.
+        #expect(ChatsPage.waitingRequest(agent: "iris", last: try last(30), items: [asked, told], open: [],
+                                         answered: [try need(3, raised: 20, answered: 40)]) == nil)
+        #expect(ChatsPage.waitingRequest(agent: "vps", last: nil, items: nil, open: open, answered: [])?.id == 4)
+        // A chat that it has not read, or whose newest line came since: the request raised after its last line.
+        #expect(ChatsPage.waitingRequest(agent: "iris", last: try last(15, side: "owner"), items: nil, open: open, answered: [])?.id == 3)
+        #expect(ChatsPage.waitingRequest(agent: "iris", last: try last(30), items: nil, open: open, answered: []) == nil)
+        #expect(ChatsPage.waitingRequest(agent: "iris", last: try last(50), items: [asked], open: open, answered: []) == nil)
     }
 }

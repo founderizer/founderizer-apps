@@ -57,6 +57,11 @@ public struct HubState: Decodable, Sendable {
         db == request.database && steers?.contains(where: { $0.matches(request) }) == true
     }
 
+    /// **The manager's name**: the agent with the role `manager`. A new hub's installer can give it a name of its
+    /// owner's choice (`hub.sh --manager-name`), so no line finds the manager by the word `manager`; that word is the
+    /// answer only for a reading with no manager in it.
+    public var managerName: String { agents.first { $0.role == "manager" }?.name ?? "manager" }
+
     public func supportsChat(with agent: String) -> Bool {
         (agent == "manager" || ui_features?.contains("direct_chat") == true) &&
             agents.first(where: { $0.name == agent })?.direct_chat != false &&
@@ -503,6 +508,18 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// every other item. The card shows it under Script, and the Mac computes the call's hash from it before it signs
     /// Run it once (`DoorCall.checked`).
     public let door_script: String?
+    /// API 1.160: the title of the task that asked for the run, on the door's card only, and nil on a card whose
+    /// task the hub does not know. The apps show it after the title (`shownTitle`). No signature covers it and
+    /// nothing decides by it, because an agent names its task itself; before the Mac signs, it holds these words
+    /// to the rule of the card's other words (`DoorCall.checked`: no backtick).
+    public let door_task: String?
+    /// The item's title as the owner reads it. On the door's card it is `title`, which the Mac signs under, then
+    /// the task that asked ("Run one root script on web-1? · Read the logs"): two cards on one server read as two
+    /// things (the owner's "Yes, as shown" of 14 November 2026).
+    public var shownTitle: String {
+        guard let task = door_task, !task.isEmpty else { return title }
+        return title + " · " + task
+    }
     /// Owner feature `door_setup` (API 1.94): the GitHub account that the item's first option makes a private App in,
     /// with GitHub's manifest flow (`GitHubManifestFlow`), and nil on every other item. The option's words are the
     /// answer, as for any other item.
@@ -525,7 +542,8 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
         func same(_ a: String?, _ b: String?) -> Bool { (a == nil) == (b == nil) && (a ?? "").utf8.elementsEqual((b ?? "").utf8) }
         return id == other.id && same(title, other.title) && same(why, other.why) && same(todo, other.todo)
             && same(details, other.details) && same(door_call, other.door_call) && same(door_host, other.door_host)
-            && same(door_script, other.door_script) && same(github_app, other.github_app)
+            && same(door_script, other.door_script) && same(door_task, other.door_task)
+            && same(github_app, other.github_app)
             && add_device == other.add_device && (options ?? []).count == (other.options ?? []).count
             && zip(options ?? [], other.options ?? []).allSatisfy { same($0, $1) }
     }
@@ -535,6 +553,14 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// An item that asks for a key or a login. It takes no answer in words: the hub refuses one, because a key typed
     /// into an answer is in the agent's conversation before anything can mask it. Its secure form answers it.
     public var asksForSecret: Bool { kind == "secret" }
+
+    /// **The task of the item stands on the front of its card, under the reason** (the owner, 15 November 2026:
+    /// "manager tasks need to be super specific ... the task itself need to be very clear"): the words that an agent
+    /// wrote as what he does (`todo`), which stood behind Details. Not the hub's own sentence of a secret request or
+    /// of a conversation's item, which says where the answer goes. **And not an item with a door call**, the door's
+    /// card of a run among them: his yes there signs a call by its hash, and he runs nothing, so no command of the
+    /// agent's own words stands on the front of that card with a copy icon, as if it were the call.
+    public var taskInFront: Bool { kind == nil && door_call == nil }
 
     /// An answer that goes into a conversation carries no file: the window a person talks to can open none, so the
     /// hub refuses one. Such a request therefore offers no file at all, rather than taking one and being refused. A

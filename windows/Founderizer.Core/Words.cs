@@ -147,6 +147,19 @@ public sealed partial record MessageBlock(MessageBlock.Kinds Kind, string Text, 
 
     public IReadOnlyList<IReadOnlyList<string>> Rows => Cells ?? [];
 
+    /// <summary>The block's words as runs with their inline marks (<see cref="InlineMarks.Runs"/>): a code block's lines
+    /// are one run of code, and a rule has none.</summary>
+    public IReadOnlyList<InlineRun> Runs => Kind switch
+    {
+        Kinds.Code => Text.Length == 0 ? [] : [new InlineRun(Text, false, false, false, true, null)],
+        Kinds.Rule or Kinds.Table => [],
+        _ => InlineMarks.Runs(Text),
+    };
+
+    /// <summary>A table's cells as runs, row by row, the header first.</summary>
+    public IReadOnlyList<IReadOnlyList<IReadOnlyList<InlineRun>>> RowRuns =>
+        Rows.Select(row => (IReadOnlyList<IReadOnlyList<InlineRun>>)row.Select(InlineMarks.Runs).ToList()).ToList();
+
     /// <summary>The blocks of one text, in order (MessageBlock.parse, rule for rule).</summary>
     public static IReadOnlyList<MessageBlock> Parse(string text)
     {
@@ -330,6 +343,9 @@ public sealed partial record MessageBlock(MessageBlock.Kinds Kind, string Text, 
 /// read a block's inline marks before they show its plain words (Swift's AttributedString with inline-only syntax). A
 /// mark that does not close stays as it is. It covers the marks that agents write; a rare form of CommonMark (nested
 /// brackets in a link's words, a run of three or more delimiters) can read differently.</summary>
+/// <summary>One run of a text's inline marks: its words, and what it is.</summary>
+public sealed record InlineRun(string Text, bool Bold, bool Italic, bool Struck, bool Code, string? Link);
+
 public static partial class InlineMarks
 {
     public static string Plain(string text)
@@ -343,8 +359,12 @@ public static partial class InlineMarks
             return "\uE002" + (codes.Count - 1) + "\uE003";
         });
         protectedText = Image().Replace(protectedText, "$1");
-        protectedText = Link().Replace(protectedText, "$1");
-        protectedText = AutoLink().Replace(protectedText, "$1");
+        // A link's words hold no bare address: they are marked while the addresses are read, and no longer after that.
+        protectedText = Link().Replace(protectedText, "$1");
+        protectedText = AutoLink().Replace(protectedText, "$1");
+        var bare = new List<string>();
+        protectedText = BareAddresses(protectedText, '', '', (_, words) => Kept(bare, words))
+            .Replace("", "").Replace("", "");
         string before;
         do
         {
@@ -357,8 +377,316 @@ public static partial class InlineMarks
         protectedText = Coded().Replace(protectedText, m => codes[int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)]);
         protectedText = Escaped().Replace(protectedText,
                                          m => ((char)int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)).ToString());
-        return System.Net.WebUtility.HtmlDecode(protectedText.Replace("&<", "&\uE004<")).Replace("&\uE004<", "&<");
+        protectedText = System.Net.WebUtility.HtmlDecode(protectedText.Replace("&<", "&\uE004<")).Replace("&\uE004<", "&<");
+        return Restored(protectedText, bare);
     }
+
+    /// <summary>The text's runs, each with its marks (the Mac's MessageText draws MessageBlock.inline's runs): bold,
+    /// italic, struck, inline code, and a link, whose address is only http, https or mailto (any other is its words with
+    /// no link). The same steps as <see cref="Plain"/>, so the runs' words joined are always <c>Plain(text)</c>; in the
+    /// rare text where a mark changes what a later step reads, the text is one run with no mark.</summary>
+    public static IReadOnlyList<InlineRun> Runs(string text)
+    {
+        var marked = Escape().Replace(text, m => "\uE000" + (int)m.Groups[1].Value[0] + "\uE001");
+        var codes = new List<string>();
+        marked = Code().Replace(marked, m =>
+        {
+            codes.Add(m.Groups[2].Value);
+            return "\uE002" + (codes.Count - 1) + "\uE003";
+        });
+        var links = new List<string>();
+        string LinkTo(string address, string words)
+        {
+            links.Add(address);
+            return "\uE018" + (links.Count - 1) + "\uE019" + words + "\uE01A";
+        }
+        marked = Image().Replace(marked, "$1");
+        marked = LinkAddress().Replace(marked, m => LinkTo(m.Groups[2].Value, m.Groups[1].Value));
+        marked = AutoLink().Replace(marked, m => LinkTo(m.Groups[1].Value, m.Groups[1].Value));
+        var bare = new List<string>();
+        marked = BareAddresses(marked, '\uE018', '\uE01A', (address, words) => LinkTo(address, Kept(bare, words)));
+        string before;
+        do
+        {
+            before = marked;
+            marked = Strong().Replace(marked, "\uE010$2\uE011");
+            marked = Struck().Replace(marked, "\uE012$1\uE013");
+            marked = StarEmphasis().Replace(marked, "\uE014$1\uE015");
+            marked = UnderscoreEmphasis().Replace(marked, "\uE014$1\uE015$2");
+        } while (marked != before);
+        // An email address is read after the emphasis, in the words that are left (the reader's own order).
+        marked = EmailAddresses(marked, LinkTo);
+        marked = Coded().Replace(marked, m => "\uE016" + codes[int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)] + "\uE017");
+        marked = Escaped().Replace(marked, m => ((char)int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)).ToString());
+        marked = System.Net.WebUtility.HtmlDecode(marked.Replace("&<", "&\uE004<")).Replace("&\uE004<", "&<");
+        marked = Restored(marked, bare);
+
+        var runs = new List<InlineRun>();
+        var words = new StringBuilder();
+        int bold = 0, italic = 0, struck = 0, code = 0;
+        var open = new Stack<string?>();
+        void Emit()
+        {
+            if (words.Length == 0) return;
+            var link = open.Count > 0 ? open.Peek() : null;
+            var run = new InlineRun(words.ToString(), bold > 0, italic > 0, struck > 0, code > 0, link);
+            if (runs.Count > 0 && runs[^1] with { Text = run.Text } == run) runs[^1] = runs[^1] with { Text = runs[^1].Text + run.Text };
+            else runs.Add(run);
+            words.Clear();
+        }
+        for (var i = 0; i < marked.Length; i++)
+        {
+            var c = marked[i];
+            switch (c)
+            {
+                case '\uE010': Emit(); bold++; break;
+                case '\uE011': Emit(); bold--; break;
+                case '\uE012': Emit(); struck++; break;
+                case '\uE013': Emit(); struck--; break;
+                case '\uE014': Emit(); italic++; break;
+                case '\uE015': Emit(); italic--; break;
+                case '\uE016': Emit(); code++; break;
+                case '\uE017': Emit(); code--; break;
+                case '\uE018':
+                    Emit();
+                    var end = marked.IndexOf('\uE019', i);
+                    var address = links[int.Parse(marked.AsSpan(i + 1, end - i - 1), CultureInfo.InvariantCulture)];
+                    open.Push(OpensInBrowser(address) ? address : null);
+                    i = end;
+                    break;
+                case '\uE01A': Emit(); if (open.Count > 0) open.Pop(); break;
+                default: words.Append(c); break;
+            }
+        }
+        Emit();
+        var plain = Plain(text);
+        if (string.Concat(runs.Select(r => r.Text)) != plain || bold != 0 || italic != 0 || struck != 0 || code != 0)
+            return plain.Length == 0 ? [] : [new InlineRun(plain, false, false, false, false, null)];
+        return runs;
+    }
+
+    /// <summary>A link's address that the PC's browser may open: http, https or mailto, with something after it.</summary>
+    public static bool OpensInBrowser(string address) =>
+        Uri.TryCreate(address, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeMailto);
+
+    /// <summary>The words of a bare address, kept out of the emphasis and the entities: the reader takes them as they
+    /// are written, so `https://example.com/**x**` is no bold and `&amp;` in it stays `&amp;`.</summary>
+    private static string Kept(List<string> kept, string words)
+    {
+        kept.Add(words);
+        return "" + (kept.Count - 1).ToString(CultureInfo.InvariantCulture) + "";
+    }
+
+    private static string Restored(string marked, List<string> kept) =>
+        kept.Count == 0 ? marked : KeptWords().Replace(marked, m => kept[int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)]);
+
+    /// <summary>The bare addresses of a text as the Mac's reader of inline Markdown links them: Apple's swift-cmark, with
+    /// the autolinks of GitHub's Markdown (its <c>url_match</c>, <c>www_match</c> and <c>autolink_delim</c>), measured on a
+    /// Mac on 15 November 2026. An address of http, https or ftp (any case, its scheme not after a letter), and one that
+    /// starts with "www." (after a space, "*", "_", "~" or "(", or at the start), whose host is not empty and has no "_"
+    /// in its last two parts. It runs to a space or "&lt;"; then a final "?", "!", ".", ",", ":", "*", "_", "~", "'" or
+    /// """, an entity, and a ")" with no "(" of its own leave it. A "www." address goes to http. The words of a link
+    /// hold none: <paramref name="open"/> and <paramref name="close"/> mark them.</summary>
+    private static string BareAddresses(string marked, char open, char close, Func<string, string, string> make)
+    {
+        StringBuilder? result = null;
+        var copied = 0;
+        var depth = 0;
+        for (var i = 0; i < marked.Length; i++)
+        {
+            var c = marked[i];
+            if (c == open) { depth++; continue; }
+            if (c == close) { depth--; continue; }
+            if (depth > 0) continue;
+            int start, end;
+            string address;
+            if (c == ':' && Url(marked, i, out start, out end)) address = marked[start..end];
+            else if (c == 'w' && Www(marked, i, out end)) { start = i; address = "http://" + marked[i..end]; }
+            else continue;
+            if (start < copied) continue;
+            result ??= new StringBuilder(marked.Length + 16);
+            result.Append(marked, copied, start - copied).Append(make(address, marked[start..end]));
+            copied = end;
+            i = end - 1;
+        }
+        return result is null ? marked : result.Append(marked, copied, marked.Length - copied).ToString();
+    }
+
+    private static bool Url(string s, int colon, out int start, out int end)
+    {
+        start = end = 0;
+        if (s.Length - colon < 4 || s[colon + 1] != '/' || s[colon + 2] != '/') return false;
+        var rewind = 0;
+        while (colon - rewind - 1 >= 0 && char.IsAsciiLetter(s[colon - rewind - 1])) rewind++;
+        start = colon - rewind;
+        var scheme = s[start..colon].ToLowerInvariant();
+        var host = colon + 3;
+        if (scheme is not ("http" or "https" or "ftp") || host >= s.Length || !IsHostChar(s, host)) return false;
+        var domain = Domain(s, host, allowShort: true);
+        if (domain == 0) return false;
+        var linkEnd = host + domain;
+        while (linkEnd < s.Length && !IsSpace(s[linkEnd]) && s[linkEnd] != '<' && !IsMark(s[linkEnd])) linkEnd++;
+        var length = Delim(s, colon, linkEnd - colon);
+        if (length == 0) return false;
+        end = colon + length;
+        return true;
+    }
+
+    private static bool Www(string s, int w, out int end)
+    {
+        end = 0;
+        if (w > 0 && "*_~(".IndexOf(s[w - 1]) < 0 && !IsSpace(s[w - 1])) return false;
+        if (s.Length - w < 4 || string.CompareOrdinal(s, w, "www.", 0, 4) != 0) return false;
+        var domain = Domain(s, w, allowShort: false);
+        if (domain == 0) return false;
+        var linkEnd = w + domain;
+        while (linkEnd < s.Length && !IsSpace(s[linkEnd]) && s[linkEnd] != '<' && !IsMark(s[linkEnd])) linkEnd++;
+        var length = Delim(s, w, linkEnd - w);
+        if (length == 0) return false;
+        end = w + length;
+        return true;
+    }
+
+    /// <summary>check_domain: how far the host goes from <paramref name="from"/>, or 0 for a host with "_" in one of its
+    /// last two parts, or with no "." when a short host is not taken.</summary>
+    private static int Domain(string s, int from, bool allowShort)
+    {
+        var size = s.Length - from;
+        int i, dots = 0, before = 0, last = 0;
+        for (i = 1; i < size - 1; i++)
+        {
+            if (s[from + i] == '\\' && i < size - 2) i++;
+            var c = s[from + i];
+            if (c == '_') last++;
+            else if (c == '.') { before = last; last = 0; dots++; }
+            else if (!IsHostChar(s, from + i) && c != '-') break;
+        }
+        if (before > 0 || last > 0) return 0;
+        return allowShort || dots > 0 ? i : 0;
+    }
+
+    /// <summary>autolink_delim: the length of the link in <paramref name="length"/> characters from
+    /// <paramref name="from"/>, without what ends a sentence.</summary>
+    private static int Delim(string s, int from, int length)
+    {
+        int opening = 0, closing = 0;
+        for (var i = 0; i < length; i++)
+        {
+            var c = s[from + i];
+            if (c == '<') { length = i; break; }
+            if (c == '(') opening++;
+            else if (c == ')') closing++;
+        }
+        while (length > 0)
+        {
+            switch (s[from + length - 1])
+            {
+                case ')':
+                    if (closing <= opening) return length;
+                    closing--;
+                    length--;
+                    break;
+                case '?' or '!' or '.' or ',' or ':' or '*' or '_' or '~' or '\'' or '"':
+                    length--;
+                    break;
+                case ';':
+                    var entity = length - 2;
+                    while (entity > 0 && char.IsAsciiLetter(s[from + entity])) entity--;
+                    if (entity < length - 2 && s[from + entity] == '&') length = entity;
+                    else length--;
+                    break;
+                default:
+                    return length;
+            }
+        }
+        return length;
+    }
+
+    /// <summary>The email addresses of the words that the emphasis left, as the reader's autolinks read them after it:
+    /// letters and digits of ASCII, ".", "+", "-" and "_" before one "@" (and "mailto:" before them, not after a letter or
+    /// a digit), and after it a host with a "." between two letters or digits, which ends on a letter or a ".". It goes
+    /// to mailto, and loses what ends a sentence as an address does.</summary>
+    private static string EmailAddresses(string marked, Func<string, string, string> make)
+    {
+        StringBuilder? result = null;
+        var copied = 0;
+        var depth = 0;
+        for (var i = 0; i < marked.Length; i++)
+        {
+            var c = marked[i];
+            if (c == '') { depth++; continue; }
+            if (c == '') { depth--; continue; }
+            if (depth > 0 || c != '@') continue;
+            var rewind = 0;
+            var mailto = true;
+            while (i - rewind - 1 >= copied)
+            {
+                var p = marked[i - rewind - 1];
+                if (char.IsAsciiLetterOrDigit(p) || p is '.' or '+' or '-' or '_') { rewind++; continue; }
+                if (p == ':' && Protocol(marked, i - rewind - 1, copied)) { mailto = false; rewind++; continue; }
+                break;
+            }
+            if (rewind == 0) continue;
+            int at = 0, dots = 0, k;
+            for (k = 0; i + k < marked.Length; k++)
+            {
+                var q = marked[i + k];
+                if (char.IsAsciiLetterOrDigit(q)) continue;
+                if (q == '@') at++;
+                else if (q == '.' && i + k < marked.Length - 1 && char.IsAsciiLetterOrDigit(marked[i + k + 1])) dots++;
+                else if (q != '-' && q != '_') break;
+            }
+            if (k < 2 || at != 1 || dots == 0 || (!char.IsAsciiLetter(marked[i + k - 1]) && marked[i + k - 1] != '.')) continue;
+            var length = Delim(marked, i, k);
+            if (length == 0) continue;
+            var start = i - rewind;
+            var words = marked[start..(i + length)];
+            result ??= new StringBuilder(marked.Length + 16);
+            result.Append(marked, copied, start - copied).Append(make(mailto ? "mailto:" + words : words, words));
+            copied = i + length;
+            i = copied - 1;
+        }
+        return result is null ? marked : result.Append(marked, copied, marked.Length - copied).ToString();
+    }
+
+    /// <summary>validate_protocol for "mailto:" whose colon is at <paramref name="colon"/>: the word before it, not after
+    /// a letter or a digit.</summary>
+    private static bool Protocol(string s, int colon, int floor)
+    {
+        const string protocol = "mailto:";
+        var from = colon + 1 - protocol.Length;
+        if (from < floor || string.CompareOrdinal(s, from, protocol, 0, protocol.Length) != 0) return false;
+        return from == floor || !char.IsAsciiLetterOrDigit(s[from - 1]);
+    }
+
+    /// <summary>is_valid_hostchar: not a space and not punctuation (ASCII's, and Unicode's of the P categories). The
+    /// second half of a pair of surrogates is part of its character. The library's own marks end a host.</summary>
+    private static bool IsHostChar(string s, int i)
+    {
+        var c = s[i];
+        if (IsMark(c)) return false;
+        if (char.IsLowSurrogate(c)) return true;
+        if (c < 128) return c is not (' ' or '\t' or '\n' or '\f' or '\r') && !char.IsPunctuation(c) && !char.IsSymbol(c);
+        var category = char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1])
+            ? CharUnicodeInfo.GetUnicodeCategory(char.ConvertToUtf32(c, s[i + 1])) : CharUnicodeInfo.GetUnicodeCategory(c);
+        return category is not (UnicodeCategory.SpaceSeparator or UnicodeCategory.ConnectorPunctuation
+            or UnicodeCategory.DashPunctuation or UnicodeCategory.OpenPunctuation or UnicodeCategory.ClosePunctuation
+            or UnicodeCategory.InitialQuotePunctuation or UnicodeCategory.FinalQuotePunctuation
+            or UnicodeCategory.OtherPunctuation);
+    }
+
+    /// <summary>cmark_isspace: the spaces of ASCII.</summary>
+    private static bool IsSpace(char c) => c is ' ' or '\t' or '\n' or '\v' or '\f' or '\r';
+
+    /// <summary>A mark of this reader's own (the private-use characters that hold a code span, an escape or a link).</summary>
+    private static bool IsMark(char c) => c is >= '' and <= '';
+
+    [GeneratedRegex(@"(\d+)")]
+    private static partial Regex KeptWords();
+
+    [GeneratedRegex(@"\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))*)(?:\s+""[^""]*"")?\)")]
+    private static partial Regex LinkAddress();
 
     [GeneratedRegex(@"\\([!-/:-@\[-`{-~])")]
     private static partial Regex Escape();
@@ -372,10 +700,11 @@ public static partial class InlineMarks
     [GeneratedRegex(@"\uE002(\d+)\uE003")]
     private static partial Regex Coded();
 
-    [GeneratedRegex(@"!\[([^\]]*)\]\([^)\s]*(?:\s+""[^""]*"")?\)")]
+    // A link's address may hold balanced parentheses, one level deep, as CommonMark reads it ("javascript:alert(1)").
+    [GeneratedRegex(@"!\[([^\]]*)\]\((?:[^()\s]|\([^()\s]*\))*(?:\s+""[^""]*"")?\)")]
     private static partial Regex Image();
 
-    [GeneratedRegex(@"\[([^\]]+)\]\([^)\s]*(?:\s+""[^""]*"")?\)")]
+    [GeneratedRegex(@"\[([^\]]+)\]\((?:[^()\s]|\([^()\s]*\))*(?:\s+""[^""]*"")?\)")]
     private static partial Regex Link();
 
     [GeneratedRegex(@"<((?:https?|mailto):[^>\s]+)>")]
@@ -441,14 +770,31 @@ public static partial class ChatLine
         return last.Side == "agent" ? words : "You: " + words;
     }
 
-    /// <summary>When that line is from (ChatList.previewTime), or null with no line.</summary>
-    public static double? PreviewTime(string agent, MobilePreview? last, IEnumerable<MobileTaskHead> tasks)
+    /// <summary>How many of a chat's newest items a row reads to find where its newest card stands (ChatList.rowReads).</summary>
+    public const int RowReads = 20;
+
+    /// <summary>The request that waits for him when its card is the newest thing in the agent's chat (ChatList.waitingRequest,
+    /// the Mac's rule of 14 November 2026, Founderizer 0.1.224): its title is then the row's line, in orange, and the row's
+    /// time is the card's. The card's place is the chat's own (<see cref="ChatPlaces.InTime"/>), so a card under the
+    /// agent's reply of its turn is still the newest thing. <paramref name="items"/>: the chat's newest items, oldest
+    /// first; <paramref name="whole"/>: they are its whole chat.</summary>
+    public static OwnerNeed? WaitingRequest(string agent, IReadOnlyList<MobileChatItem> items, bool whole, IEnumerable<OwnerNeed> needs)
     {
-        var heads = tasks as IReadOnlyCollection<MobileTaskHead> ?? tasks.ToList();
-        if (DoingNow(agent, heads) is not null && MovedAt(agent, heads) is { } moved && moved >= (last?.Ts ?? 0))
-            return moved;
-        return Preview(agent, last, []) is null ? null : last?.Ts;
+        var mine = needs.Where(n => n.By == agent).ToList();
+        if (!mine.Any(n => n.IsOpen)) return null;
+        return ChatPlaces.InTime(mine, items, whole).Rows(items).LastOrDefault() is { Need: { } id }
+            ? mine.FirstOrDefault(n => n.Id == id && n.IsOpen) : null;
     }
+
+    /// <summary>The time of a row whose line is a waiting request's (ChatList.requestTime): when its card came, or the
+    /// reply over it when that came later.</summary>
+    public static double RequestTime(OwnerNeed need, MobileChatItem? last) => Math.Max(need.Raised, last?.Ts ?? 0);
+
+    /// <summary>The time at the end of an agent's row (ChatList.lastTime): the time of the last message of its chat,
+    /// his or the agent's, also while the line names what the agent is doing; null before the first message. It was the
+    /// last move of the agent's open tasks while the line named one (the owner, 14 November 2026: "last message is from
+    /// Thursday but on the sidebar it says 8:09 today").</summary>
+    public static double? LastTime(MobilePreview? last) => Preview("", last, []) is null ? null : last?.Ts;
 
     /// <summary>What a message of Markdown says, on one line (ChatList.plain): the words it shows, without the marks of
     /// its headings, lists, quotes, emphasis, code and links. Null when nothing is left.</summary>
@@ -525,4 +871,30 @@ public static class CommandWords
         (_, _, null) => "Resume Check the task",
         (_, _, { } t) => $"Resume Check \u201c{t}\u201d",
     };
+}
+
+/// <summary>How many things need him, as the Mac's Needs you row says it (FleetView.needsRow): one whole sentence for
+/// each count.</summary>
+public static class NeedsWords
+{
+    public static string Count(int count) => count switch
+    {
+        0 => "Nothing needs you",
+        1 => "1 item needs you",
+        _ => $"{count} items need you",
+    };
+}
+
+/// <summary>The hover of a composer's plus, the same for a chat and for an answer (AttachButton.words).</summary>
+public static class AttachWords
+{
+    public static string PlusHover(int staged) => staged < MessageAttachment.PerMessage
+        ? "Send a picture, a PDF, a ZIP or a text file with this message"
+        : $"A message carries at most {MessageAttachment.PerMessage} files";
+}
+
+/// <summary>A usage window's share as both apps write it under its bar ("\(n)%", AgentStatusPanel and AgentPage).</summary>
+public static class ShareWords
+{
+    public static string Of(int percent) => $"{percent}%";
 }

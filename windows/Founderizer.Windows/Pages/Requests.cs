@@ -107,7 +107,7 @@ internal sealed class AnswerParts
         {
             int choice = i;
             string label = model.Labels[i];
-            var row = Row(label, model.Kind == OptionsKind.Ticks);
+            var row = Row(label, model.Kind == OptionsKind.Ticks, model.SendingWords);
             row.Click += (_, _) =>
             {
                 switch (model.Kind)
@@ -160,7 +160,7 @@ internal sealed class AnswerParts
             rows[i].Sending.Visibility = on && shown.WaitingPress == i ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private Button Row(string label, bool tick)
+    private Button Row(string label, bool tick, string sendingWords)
     {
         var words = Look.Words(label, step ? 15 : 14, 20);
         var square = new Border
@@ -175,7 +175,7 @@ internal sealed class AnswerParts
         check.HorizontalAlignment = HorizontalAlignment.Center;
         check.VerticalAlignment = VerticalAlignment.Center;
         square.Child = check;
-        var sending = Look.Words("Sending…", 12, 16, Look.Muted, wrap: false);
+        var sending = Look.Words(sendingWords, 12, 16, Look.Muted, wrap: false);
         sending.VerticalAlignment = VerticalAlignment.Center;
         sending.Visibility = Visibility.Collapsed;
         var line = new Grid { ColumnSpacing = 10 };
@@ -219,21 +219,24 @@ internal sealed class RequestCardView : Grid
     private readonly StackPanel stack = new() { Spacing = 10 };
     private readonly TextBlock title = Look.Words("", semibold: true);
     private readonly ContentControl why = new() { IsTabStop = false, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly ContentControl task = new() { IsTabStop = false, HorizontalContentAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 11, 0, 0) };
     private readonly TextBlock todoLabel = Look.Words("", 12, 16, Look.Muted, semibold: true);
-    private readonly TextBlock todo = Blocks.Selectable("");
+    private readonly ContentControl todo = new() { IsTabStop = false, HorizontalContentAlignment = HorizontalAlignment.Stretch };
     private readonly ContentControl details = new() { IsTabStop = false, HorizontalContentAlignment = HorizontalAlignment.Stretch };
     private readonly Grid links = new();
     private readonly TextBlock more = Look.Words("", 12, 16, Look.Link, wrap: false);
+    private readonly ContentControl moreChevron = new() { IsTabStop = false, VerticalAlignment = VerticalAlignment.Center };
     private readonly Button moreButton;
     private readonly StackPanel from = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
     private readonly AgentGlyph fromMark = new() { Side = 16, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock fromWords = Look.Words("", 12, 16, Look.Muted, wrap: false);
     private readonly StackPanel answered = new() { Orientation = Orientation.Horizontal, Spacing = 5, Margin = new Thickness(0, -6, 0, 0) };
     private readonly TextBlock answeredWords = Look.Words("", 12, 16, Look.Muted, wrap: false);
+    private readonly FrameworkElement answeredCheck = Icons.Of(Icons.Check, Look.Muted, 12);
     private readonly AnswerParts parts;
     private RequestCard? card;
     private bool canSend;
-    private string shownWhy = "";
+    private string shownWhy = "", shownTask = "", shownTodo = "", shownDetails = "";
     private bool shownWhole;
 
     public RequestCardView(IAnswers answers)
@@ -246,7 +249,7 @@ internal sealed class RequestCardView : Grid
             Style = (Style)Application.Current.Resources["QuietButtonStyle"],
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center,
-            Content = more,
+            Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3, Children = { more, moreChevron } },
         };
         moreButton.Click += (_, _) =>
         {
@@ -258,17 +261,17 @@ internal sealed class RequestCardView : Grid
         from.Children.Add(fromMark);
         from.Children.Add(fromWords);
         todoLabel.Margin = new Thickness(0, 2, 0, 0);
-        var check = Icons.Of(Icons.Check, Look.Muted, 12);
-        check.VerticalAlignment = VerticalAlignment.Center;
-        answered.Children.Add(check);
+        answeredCheck.VerticalAlignment = VerticalAlignment.Center;
+        answered.Children.Add(answeredCheck);
         answered.Children.Add(answeredWords);
 
         stack.Children.Add(title);
         stack.Children.Add(answered);
         stack.Children.Add(why);
+        stack.Children.Add(task);
+        stack.Children.Add(details);
         stack.Children.Add(todoLabel);
         stack.Children.Add(todo);
-        stack.Children.Add(details);
         stack.Children.Add(links);
         stack.Children.Add(from);
         stack.Children.Add(parts.Options);
@@ -290,35 +293,53 @@ internal sealed class RequestCardView : Grid
         canSend = sendable;
         title.Text = next.Title;
         bool folded = next.Folded;
-        answered.Visibility = folded ? Visibility.Visible : Visibility.Collapsed;
+        // His answer in his own words is his message bubble (the Mac's rule of 14 November 2026): the card then folds to
+        // its title, with no answer line and no check; a pressed option keeps both.
+        answered.Visibility = folded && next.ShowsAnswerLine ? Visibility.Visible : Visibility.Collapsed;
+        answeredCheck.Visibility = next.ShowsCheck ? Visibility.Visible : Visibility.Collapsed;
         answeredWords.Text = next.AnswerWords;
-        bool whole = answers.IsOpen(next.Id, "more") && next.MoreOpen is not null;
-        if (next.Why != shownWhy || whole != shownWhole)
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(this, folded ? next.FoldedWords : "");
+        // The Mac's card of Founderizer 0.1.239 (NeedRequestCard; the owner, 15 November 2026: "the task itself need to
+        // be very clear and also formatted like the chat messages (links, code format etc)"): the reason and the task are
+        // message text, a message's room apart (21), and the link shows only when something stands behind it.
+        var b = next.Body;
+        bool whole = answers.IsOpen(next.Id, "more") && b.MoreClosed is not null;
+        if (b.Why != shownWhy || whole != shownWhole)
         {
-            shownWhy = next.Why;
+            shownWhy = b.Why;
             shownWhole = whole;
-            if (next.Short || whole) why.Content = Blocks.Of(MessageBlock.Parse(next.Why), next.Why);
+            if (b.Short || whole) why.Content = Blocks.Of(b.WhyBlocks, b.Why, card: true, copies: true);
             else
             {
-                var block = Blocks.Selectable(InlineMarks.Plain(next.Why));
+                // The start of a long reason, with its inline marks, in three lines, until Show all.
+                var block = Blocks.Marked(b.FoldedWhy);
                 block.MaxLines = 3;
                 block.TextTrimming = TextTrimming.CharacterEllipsis;
                 why.Content = block;
             }
         }
         why.Visibility = folded ? Visibility.Collapsed : Visibility.Visible;
-        bool todoShows = !folded && whole && next.Todo is not null;
-        todoLabel.Text = next.TodoLabel;
-        todo.Text = next.Todo ?? "";
-        todoLabel.Visibility = todo.Visibility = todoShows ? Visibility.Visible : Visibility.Collapsed;
-        bool detailsShow = !folded && whole && next.Details is not null;
+        bool taskShows = !folded && b.Task is not null;
+        task.Visibility = taskShows ? Visibility.Visible : Visibility.Collapsed;
+        if (taskShows && b.Task != shownTask) { shownTask = b.Task!; task.Content = Blocks.Of(b.TaskBlocks, b.Task!, card: true, copies: true); }
+        // Behind the link: the details (a door's script is one fenced block from the hub already, door_script_details),
+        // then a task that stays behind it (a door call, a conversation's item), under its label.
+        bool detailsShow = !folded && whole && b.Details is not null;
         details.Visibility = detailsShow ? Visibility.Visible : Visibility.Collapsed;
-        if (detailsShow) details.Content = next.DetailsIsCode
-            ? Blocks.Of(MessageBlock.Parse("```\n" + next.Details + "\n```"), next.Details!)
-            : Blocks.Of(MessageBlock.Parse(next.Details!), next.Details!);
-        more.Text = (whole ? next.MoreOpen : next.MoreClosed) ?? "";
+        if (detailsShow && b.Details != shownDetails)
+        {
+            shownDetails = b.Details!;
+            details.Content = Blocks.Of(b.DetailsBlocks, b.Details!, script: b.DetailsIsScript, card: true, copies: true);
+        }
+        bool todoShows = !folded && whole && b.TodoBehind is not null;
+        todoLabel.Text = b.TodoLabel;
+        todoLabel.Visibility = todo.Visibility = todoShows ? Visibility.Visible : Visibility.Collapsed;
+        if (todoShows && b.TodoBehind != shownTodo) { shownTodo = b.TodoBehind!; todo.Content = Blocks.Of(b.TodoBehindBlocks, b.TodoBehind!, card: true, copies: true); }
+        more.Text = (whole ? b.MoreOpen : b.MoreClosed) ?? "";
+        moreChevron.Content = Icons.Of(whole ? Icons.ChevronDown : Icons.ChevronRight, Look.Link, 12);
+        moreChevron.Visibility = b.MoreChevron ? Visibility.Visible : Visibility.Collapsed;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(moreButton, more.Text);
-        moreButton.Visibility = folded || next.MoreClosed is null ? Visibility.Collapsed : Visibility.Visible;
+        moreButton.Visibility = folded || b.MoreClosed is null ? Visibility.Collapsed : Visibility.Visible;
         links.Visibility = moreButton.Visibility;
         from.Visibility = folded ? Visibility.Collapsed : Visibility.Visible;
         fromMark.Mark = next.Mark;
@@ -340,16 +361,19 @@ internal sealed class RequestStepView : StackPanel
     private readonly TextBlock fromWords = Look.Words("", 12, 16, Look.Muted, wrap: false);
     private readonly FrameworkElement hourglass = Icons.Of(Icons.Hourglass, Look.Orange);
     private readonly TextBlock title = Look.Words("", 20, 28, semibold: true);
-    private readonly TextBlock why = Look.Words("", 15, 23);
+    private readonly ContentControl why = new() { IsTabStop = false, HorizontalContentAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 12, 0, 0) };
+    private readonly ContentControl task = new() { IsTabStop = false, HorizontalContentAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 12, 0, 0) };
     private readonly Button details;
     private readonly TextBlock detailsWords = Look.Words("", 15, 20, Look.Link, wrap: false);
     private readonly ContentControl chevron = new() { IsTabStop = false, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel more = new() { Spacing = 12, Margin = new Thickness(0, 14, 0, 0) };
     private readonly StackPanel answered = new() { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 18, 0, 0) };
     private readonly TextBlock answeredWords = Look.Words("", 15, 20, Look.Muted, wrap: false);
+    private readonly FrameworkElement answeredCheck = Icons.Of(Icons.Check, Look.Muted, 12);
     private readonly AnswerParts parts;
     private RequestStep? step;
     private bool canSend;
+    private string shownWhy = "", shownTask = "";
 
     public RequestStepView(IAnswers answers)
     {
@@ -360,9 +384,7 @@ internal sealed class RequestStepView : StackPanel
         title.FontFamily = Look.Display;
         title.TextAlignment = TextAlignment.Center;
         title.Margin = new Thickness(0, 14, 0, 0);
-        why.TextAlignment = TextAlignment.Center;
-        why.Margin = new Thickness(0, 12, 0, 0);
-        why.IsTextSelectionEnabled = true;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(title, "NeedAtHand");
 
         var from = new StackPanel
         {
@@ -396,11 +418,11 @@ internal sealed class RequestStepView : StackPanel
         Children.Add(from);
         Children.Add(title);
         Children.Add(why);
+        Children.Add(task);
         Children.Add(details);
         Children.Add(more);
-        var check = Icons.Of(Icons.Check, Look.Muted, 12);
-        check.VerticalAlignment = VerticalAlignment.Center;
-        answered.Children.Add(check);
+        answeredCheck.VerticalAlignment = VerticalAlignment.Center;
+        answered.Children.Add(answeredCheck);
         answered.Children.Add(answeredWords);
         Children.Add(answered);
         Children.Add(parts.Options);
@@ -417,33 +439,55 @@ internal sealed class RequestStepView : StackPanel
         ToolTipService.SetToolTip(hourglass, next.Waits ? next.WaitWords : null);
         hourglass.IsHitTestVisible = next.Waits;
         title.Text = next.Title;
-        why.Text = next.Short ? InlineMarks.Plain(next.Why) : next.ShortWhy;
-        why.MaxLines = next.Short ? 0 : 3;
-        why.TextTrimming = next.Short ? TextTrimming.None : TextTrimming.CharacterEllipsis;
-        why.TextAlignment = next.Centred ? TextAlignment.Center : TextAlignment.Left;
-        bool open = answers.IsOpen(next.Id, "more") && next.MoreClosed is not null;
-        detailsWords.Text = (open ? next.MoreOpen ?? next.MoreClosed : next.MoreClosed) ?? "";
+        // The Mac's request at hand of Founderizer 0.1.239 (NeedStep): the reason and the task as message text in the
+        // step's one size, the task under the reason; both in the middle as a step's line, or from the leading edge when
+        // the task is a list, a command or several paragraphs (CentredClosed, CentredOpen); a long reason opens in place.
+        var b = next.Body;
+        bool open = answers.IsOpen(next.Id, "more") && b.MoreClosed is not null;
+        bool centred = open ? b.CentredOpen : b.CentredClosed;
+        var whyKey = (b.Short || open ? "whole\u001f" : "start\u001f") + centred + "\u001f" + b.Why;
+        if (whyKey != shownWhy)
+        {
+            shownWhy = whyKey;
+            if (b.Short || open) why.Content = Blocks.Of(b.WhyBlocks, b.Why, measure: Blocks.Measure.Step, copies: true, centred: centred);
+            else
+            {
+                // The start of a long reason, with its inline marks, in three lines, until Show all.
+                var start = Blocks.Marked(b.FoldedWhy, size: 15, lineHeight: 23, codeSize: 13.5);
+                start.MaxLines = 3;
+                start.TextTrimming = TextTrimming.CharacterEllipsis;
+                start.TextAlignment = centred ? TextAlignment.Center : TextAlignment.Left;
+                why.Content = start;
+            }
+        }
+        task.Visibility = b.Task is null ? Visibility.Collapsed : Visibility.Visible;
+        var taskKey = centred + "\u001f" + b.Task;
+        if (b.Task is { } words && taskKey != shownTask)
+        {
+            shownTask = taskKey;
+            task.Content = Blocks.Of(b.TaskBlocks, words, measure: Blocks.Measure.Step, copies: true, centred: centred);
+        }
+        detailsWords.Text = (open ? b.MoreOpen ?? b.MoreClosed : b.MoreClosed) ?? "";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(details, detailsWords.Text);
-        details.Visibility = next.MoreClosed is null ? Visibility.Collapsed : Visibility.Visible;
+        details.Visibility = b.MoreClosed is null ? Visibility.Collapsed : Visibility.Visible;
         chevron.Content = Icons.Of(open ? Icons.ChevronDown : Icons.ChevronRight, Look.Link, 12);
-        chevron.Visibility = next.MoreChevron ? Visibility.Visible : Visibility.Collapsed;
+        chevron.Visibility = b.MoreChevron ? Visibility.Visible : Visibility.Collapsed;
         more.Children.Clear();
         if (open)
         {
-            if (!next.Short) more.Children.Add(Blocks.Of(MessageBlock.Parse(next.Why), next.Why));
-            if (next.Todo is { } need)
+            // Behind the link, from the leading edge: the details (a door's script wraps), then a task that stays there.
+            if (b.Details is { } text)
+                more.Children.Add(Blocks.Of(b.DetailsBlocks, text, script: b.DetailsIsScript, measure: Blocks.Measure.Step, copies: true));
+            if (b.TodoBehind is { } behind)
             {
-                more.Children.Add(Look.Words(next.TodoLabel, 15, 23, Look.Muted, semibold: true));
-                more.Children.Add(Blocks.Selectable(need, size: 15, lineHeight: 23));
+                more.Children.Add(Look.Words(b.TodoLabel, 15, 23, Look.Muted, semibold: true));
+                more.Children.Add(Blocks.Of(b.TodoBehindBlocks, behind, measure: Blocks.Measure.Step, copies: true));
             }
-            if (next.Details is { } text)
-                more.Children.Add(next.DetailsIsCode
-                    ? Blocks.Of(MessageBlock.Parse("```\n" + text + "\n```"), text)
-                    : Blocks.Selectable(text, size: 15, lineHeight: 23));
         }
         more.Visibility = more.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         // An ended request at hand (he chose it among the answered ones): his answer with a check, and nothing to press.
         answered.Visibility = next.Ended ? Visibility.Visible : Visibility.Collapsed;
+        answeredCheck.Visibility = next.ShowsCheck ? Visibility.Visible : Visibility.Collapsed;
         answeredWords.Text = next.AnswerWords;
         parts.Options.Visibility = parts.Box.Visibility = next.Ended ? Visibility.Collapsed : Visibility.Visible;
         if (!next.Ended) parts.Show(next.Id, next.Options, next.Answer, sendable);

@@ -73,7 +73,7 @@ struct ReadChat: View {
     let entries: [ReadChatEntry]
     /// What stands under the newest entry: the reading's own line.
     var footer: AnyView? = nil
-    @State private var followsLatest = true
+    @State private var end = ChatEnd()
 
     /// Between two runs of messages, and over a line in the middle.
     private static let runGap: CGFloat = 18
@@ -101,15 +101,10 @@ struct ReadChat: View {
             // What scrolls up fades under the name over it instead of being cut by it, as an agent's chat fades under its
             // pill (`topFade`).
             .topFade(24)
-            .onScrollPhaseChange { oldPhase, phase, context in
-                if phase == .interacting || phase == .tracking { followsLatest = false }
-                else if phase == .idle && oldPhase != .animating {
-                    followsLatest = context.geometry.contentSize.height - context.geometry.visibleRect.maxY < 100
-                }
-            }
+            .keepsEnd($end)
             // A message that comes while he reads the newest stands under it, and the chat follows it there.
             .onChange(of: entries.last?.id) { _, _ in
-                if followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
+                if end.followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
             }
         }
     }
@@ -229,7 +224,7 @@ struct ReadBubble: View {
     }
 
     @ViewBuilder private var time: some View {
-        if let created = message.created { Text(messageTime(created)).help(fleetDate(created)) }
+        if let created = message.created { Text(messageAge(created)).help(fleetDate(created)) }
     }
 }
 

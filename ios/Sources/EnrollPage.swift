@@ -1,3 +1,4 @@
+import FleetCore
 import SwiftUI
 
 /// Add this phone: the owner makes a one-time code in the Mac app and types it here, or scans the Mac's picture of it
@@ -49,7 +50,7 @@ struct EnrollPage: View {
                     Task { await add() }
                 }
             } header: {
-                GroupHeading("The code")
+                GroupHeading(String(l10n: "The code"))
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     // Where the Mac keeps its devices since D-4: a group of Settings' Servers.
@@ -68,9 +69,9 @@ struct EnrollPage: View {
                     // came for the one frame before it went, which moved the footer. It shows only for a code that went
                     // and may go again: never for a refused one (COPY).
                     ZStack(alignment: .leading) {
-                        TextAction(title: "Try again", font: .footnote) {}.hidden().accessibilityHidden(true)
+                        TextAction(title: String(l10n: "Try again"), font: .footnote) {}.hidden().accessibilityHidden(true)
                         if canSend, sent == MobileClient.normalizedCode(code), !MobileError.refusedCode(problem) {
-                            TextAction(title: "Try again", font: .footnote) { Task { await add() } }
+                            TextAction(title: String(l10n: "Try again"), font: .footnote) { Task { await add() } }
                                 .accessibilityIdentifier("enroll-send")
                         }
                     }

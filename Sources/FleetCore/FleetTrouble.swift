@@ -159,7 +159,11 @@ extension FleetTrouble {
     public static func read(connectionError: String?, storageError: String?, isFresh: Bool, state: HubState?,
                             health: FleetHealth?, machines: [MachineStatus], servers: [ServerEntry],
                             checklists: [String: VerifyChecklist], at time: Double,
-                            connectStop: (stop: ConnectStop, turn: ConnectTurn)? = nil) -> FleetTrouble {
+                            connectStop: (stop: ConnectStop, turn: ConnectTurn)? = nil,
+                            leaving: Set<String> = []) -> FleetTrouble {
+        // `leaving`: warning kinds that the caller says in a place of its own, so that one fact is said once (Report
+        // a problem's "Last error" and "Hub errors" rows carry `hub_fault`, the lane "Bug reports").
+        let warnings = (health?.warnings ?? []).filter { !leaving.contains($0.kind) }
         var findings: [Trouble] = []
 
         // ---- this Mac and the hub
@@ -196,7 +200,7 @@ extension FleetTrouble {
         // `hub/<kind>`, so the rows of three agents shared one, and the screen named Mini three times and Scout and Echo
         // never.
         var ids: Set<String> = []
-        for block in FleetHealth.blocks(health?.warnings ?? []) {
+        for block in FleetHealth.blocks(warnings) {
             // No `machine`, although some of them name an agent: a hub warning is not a `verify` check of that
             // machine, and `TroublePrompt` tells an agent to go and read one. System status carries the Open button.
             var id = "hub/\(block.first.kind)" + (block.agent.map { "/\($0)" } ?? "")
@@ -209,7 +213,7 @@ extension FleetTrouble {
         // ---- each machine, as its own helper and the hub report it
         // **A helper that is silent is one row with its own name, in the words System status has for it** ("Mini is
         // not answering", "Silent since 23:06."), and none where the hub's own warning about it is already a row.
-        let told = Set((health?.warnings ?? []).filter { $0.kind == "helper_offline" }.compactMap(\.agent))
+        let told = Set(warnings.filter { $0.kind == "helper_offline" }.compactMap(\.agent))
         for helper in (health?.helpers ?? []).filter(\.offline) where !told.contains(helper.agent) {
             findings.append(Trouble(id: "\(helper.agent)/offline", title: String(l10n: "\(helper.agent.agentLabel) is not answering"),
                                     says: helper.last_seen.map { String(l10n: "Silent since \(since($0, now: time)).") }

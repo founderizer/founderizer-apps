@@ -36,19 +36,45 @@ public enum ChatList {
         }
     }
 
+    /// **The request that waits for him when its card is the newest thing in the agent's chat** (the owner, 14 November
+    /// 2026: "why does the preview not show the card if the card is the latest element on the chat?", and his "Yes,
+    /// build it" to its title in orange): its title is then the row's line, in orange, over what the agent's last
+    /// message or a task of it says (`preview`), and the time of the row is the card's. Only what he still has to
+    /// answer: a card that he answered with an option has his answer as the chat's last message ("You: …"), and his
+    /// written words are his own message. The card's place is the chat's own (`ChatRequestPlaces.inTime`), so a card
+    /// under the agent's reply of its turn ("It is in Needs you.") is still the newest thing. `entries`: the newest
+    /// entries of its chat, oldest first; `whole`: they are its whole chat.
+    public static func waitingRequest(_ agent: String, entries: [ChatEntry], whole: Bool, needs: [OwnerNeed]) -> OwnerNeed? {
+        let mine = needs.filter { $0.by == agent }
+        guard mine.contains(where: \.isOpen) else { return nil }
+        let places = ChatRequestPlaces.inTime(needs: mine, in: entries, whole: whole)
+        guard case .request(let id)? = places.rows(of: entries).last else { return nil }
+        return mine.first { $0.id == id && $0.isOpen }
+    }
+
+    /// How many of a chat's newest entries a row reads to find where its newest card stands: enough for the agent's
+    /// message that his question led to, which the card stands under (`ChatRequestPlaces.inTime`).
+    public static let rowReads = 20
+
+    /// The time of a row whose line is a waiting request's: when its card came, or the reply over it when that came
+    /// later, as the chat's own marks of time count a card (`ChatRequestPlaces.times`).
+    public static func requestTime(_ need: OwnerNeed, last: ChatEntry?) -> Double {
+        max(need.raised, last?.created ?? 0)
+    }
+
     /// When an agent's open tasks last moved, or nil with none.
     private static func moved(_ agent: String, tasks: [FleetTask]) -> Double? {
         tasks.filter { $0.owner == agent && !$0.isTerminal }.map { $0.last_activity ?? $0.started ?? $0.created }.max()
     }
 
-    /// **When the line under an agent's name is from**: the time of what `preview` shows, which is the last move of
-    /// its open tasks where the line says what it is doing, else the time of its last message. Nil with no line.
-    public static func previewTime(_ agent: String, last: ChatEntry?, tasks: [FleetTask]) -> Double? {
-        if AgentActivity.doingNow(agent, tasks: tasks) != nil, let moved = moved(agent, tasks: tasks),
-           moved >= last?.created ?? 0 {
-            return moved
-        }
-        return preview(agent, last: last, tasks: []) == nil ? nil : last?.created
+    /// **The time at the end of an agent's row is the time of the last message of its chat**, his or the agent's, as
+    /// a chat app writes it and as the iPhone's list does. Also while the line under the name says what the agent is
+    /// doing, as a chat app keeps a conversation's time beside "typing…". It was the last move of the agent's open
+    /// tasks while the line named one, and a task moves when its session starts again, so on the morning after a
+    /// restart every row said that minute over a chat whose last message was two days old (the owner, 14 November
+    /// 2026: "last message is from Thursday but on the sidebar it says 8:09 today"). Nil before the first message.
+    public static func lastTime(_ last: ChatEntry?) -> Double? {
+        preview("", last: last, tasks: []) == nil ? nil : last?.created
     }
 
     /// **That time as a chat app writes it at the end of a conversation's row** (the owner, 13 November 2026, with

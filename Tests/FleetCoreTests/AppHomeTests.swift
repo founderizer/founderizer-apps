@@ -194,6 +194,34 @@ struct AppHomeTests {
         #expect(holds(same) == "theirs")
     }
 
+    // MARK: the disk image that is ejected
+
+    /// What `hdiutil info -plist` prints, with one image for each of these mount points (nil: an entity with none).
+    private func hdiutilInfo(_ mounts: [String?]) throws -> Data {
+        let images: [[String: Any]] = mounts.map { mount in
+            var entity: [String: Any] = ["content-hint": "Apple_HFS", "dev-entry": "/dev/disk9s1"]
+            if let mount { entity["mount-point"] = mount }
+            return ["image-path": "/Users/someone/Downloads/Founderizer.dmg",
+                    "system-entities": [["content-hint": "GUID_partition_scheme", "dev-entry": "/dev/disk9"], entity]]
+        }
+        return try PropertyListSerialization.data(fromPropertyList: ["framework": "727", "images": images],
+                                                  format: .xml, options: 0)
+    }
+
+    @Test func aVolumeThatHdiutilListsIsADiskImage() throws {
+        let info = try hdiutilInfo(["/Volumes/Other", "/Volumes/Founderizer"])
+        #expect(AppHome.isDiskImage(volume: "/Volumes/Founderizer", hdiutilInfo: info))
+        #expect(AppHome.isDiskImage(volume: "/Volumes/Founderizer/", hdiutilInfo: info))
+    }
+
+    @Test func aVolumeThatNoImageHoldsIsNeverEjected() throws {
+        // A read-only drive of the customer's own, and a second mount whose name only begins the same way.
+        let info = try hdiutilInfo(["/Volumes/Founderizer 1", nil])
+        #expect(!AppHome.isDiskImage(volume: "/Volumes/Founderizer", hdiutilInfo: info))
+        #expect(!AppHome.isDiskImage(volume: "/Volumes/Backup", hdiutilInfo: try hdiutilInfo([])))
+        #expect(!AppHome.isDiskImage(volume: "/Volumes/Founderizer", hdiutilInfo: Data("not a list".utf8)))
+    }
+
     // MARK: the address of no hub
 
     @Test func theAddressOfNoHubIsKnownInEachSpelling() throws {

@@ -204,18 +204,25 @@ public enum OwnerDevices {
         return String(l10n: "\(Int((seconds / 60).rounded(.up))) minutes left")
     }
 
-    /// What the picture of a code carries: the hub and the code, so that a scanner on the device needs nothing else.
-    /// Fleet Mobile takes a typed code today (MOBILE-APP.md 6.5, step 2), and this is the same two facts for the
-    /// scanner that comes with a later phase.
+    /// What the picture of a code carries: the hub and the code, so that the phone's camera needs nothing else, as the
+    /// link `https://founderizer.com/enroll#hub=…&code=…` (the owner's choice of 13 November 2026: one picture for a
+    /// phone that has the iPhone app and one that does not). The app opens it through its associated domain, from
+    /// iPhone 1.1; a phone without the app opens it in Safari, and the website's `/enroll` sends it to the App Store.
+    /// The values ride in the fragment, which a browser never sends, so the website never gets the code or the hub's
+    /// address. The app still opens `fleet://enroll?…`, the form of every Mac before this one.
     /// `bind` (owner feature `door_calls`): a one-time value that only the picture carries, which the phone never
     /// sends to the hub. The phone binds its own signing key to it (`DeviceBinding`), so this Mac can certify that key
     /// and the hub cannot slip in a key of its own.
     public static func enrollPayload(hub: URL, code: String, bind: String? = nil) -> String {
-        var parts = URLComponents()
-        parts.scheme = "fleet"
-        parts.host = "enroll"
-        parts.queryItems = [.init(name: "hub", value: hub.absoluteString), .init(name: "code", value: code)] +
+        var values = URLComponents()
+        values.queryItems = [.init(name: "hub", value: hub.absoluteString), .init(name: "code", value: code)] +
             (bind.map { [.init(name: "bind", value: $0)] } ?? [])
+        var parts = URLComponents()
+        parts.scheme = "https"
+        parts.host = "founderizer.com"
+        parts.path = "/enroll"
+        // A query and a fragment allow the same characters, so the query's own encoding is a valid fragment.
+        parts.percentEncodedFragment = values.percentEncodedQuery
         return parts.url?.absoluteString ?? code
     }
 

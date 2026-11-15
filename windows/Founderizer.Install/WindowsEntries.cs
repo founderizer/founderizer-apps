@@ -92,6 +92,25 @@ public static partial class WindowsEntries
     /// <summary>The key of the app's identity, where Windows keeps its notifications' name, picture and activator.</summary>
     public const string IdentityKey = @"Software\Classes\AppUserModelId\" + AppId;
 
+    /// <summary>The program that Windows starts for a press on one of the app's notifications while the app is closed:
+    /// the activator that the Windows App SDK registered (its LocalServer32), with <paramref name="program"/> in place of
+    /// the program that registered it, and its own arguments kept. The SDK keeps the program that registered first, so
+    /// after an update it named a build whose folder is gone; an installed app names its launcher, which starts the
+    /// current build as the Start menu does. Returns the program that it named before, or null when nothing changed.</summary>
+    public static string? PointActivator(string program)
+    {
+        using var identity = Registry.CurrentUser.OpenSubKey(IdentityKey);
+        if (identity?.GetValue("CustomActivator") is not string activator || !Guid.TryParse(activator, out var id)) return null;
+        using var server = Registry.CurrentUser.OpenSubKey(@"Software\Classes\CLSID\" + id.ToString("B") + @"\LocalServer32", writable: true);
+        if (server?.GetValue(null) is not string line || !line.StartsWith('"')) return null;
+        int end = line.IndexOf('"', 1);
+        if (end < 0) return null;
+        var before = line[1..end];
+        if (string.Equals(before, program, StringComparison.OrdinalIgnoreCase)) return null;
+        server.SetValue(null, "\"" + program + "\"" + line[(end + 1)..]);
+        return before;
+    }
+
     /// <summary>Removes both entries, when they are this install's, and the app's registration with Windows'
     /// notifications (its identity's key and the activator that the Windows App SDK registered under it).</summary>
     public static void Remove(InstallFolder folder)

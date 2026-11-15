@@ -13,6 +13,13 @@
 #   vm.sh picture [file.png]  a picture of the Windows desktop, taken in the VM
 #   vm.sh screen [file.png]   a picture of the VM's display, taken by QEMU (also before Windows runs)
 #   vm.sh keys <key...>       press keys through QEMU (QEMU key names: ret, spc, esc, ...)
+#   vm.sh type                types one line that it reads on its input (letters, digits and "-") through QEMU's
+#                             keyboard, into what has the focus: a code goes in as a person types it, in no
+#                             argument, no file and no log
+#   vm.sh hold                before a proof run: take the VM for FZ_VM_USER (refused while another user has it), pause
+#                             Windows' updates for a day and make the next 18 hours its active hours, so that Windows
+#                             restarts in none of them; refuse while a restart waits
+#   vm.sh release             after the run: Windows' updates and active hours as they were, and the VM free again
 #
 # Settings, each with a default:
 #   FZ_VM_DIR       the VM's folder, outside any repository ($HOME/VMs/founderizer-windows)
@@ -23,6 +30,7 @@
 #   FZ_VM_SCREEN    the size of the VM's screen, as the display driver offers it (2880x1800: 1440 x 900 at 200%,
 #                   the size of the approved pictures of the Windows app)
 #   FZ_VM_WINDOWS_ISO, FZ_VM_TOOLS_ISO           the downloads that create uses
+#   FZ_VM_USER      who takes the VM with hold, until release: a session's name (unknown)
 set -euo pipefail
 # Every file, folder and socket that vm.sh or QEMU makes is the user's alone.
 umask 077
@@ -389,6 +397,66 @@ create_vm() {
     say "Windows is installed, and $user is signed in"
 }
 
+# A proof run must not lose Windows in its middle: Windows Update restarted the VM at 02:28 UTC on 14 November 2026
+# (MoUsoCoreWorker, then TrustedInstaller), with the user signed in, past NoAutoRebootWithLoggedOnUsers. The hold
+# uses Windows' own pause of updates (what Settings > Windows Update > Pause writes) and its active hours, in which
+# Windows restarts for no update. It never restarts Windows itself: a restart also ends a Tailscale sign-in that waits.
+# Who uses the VM, since when: one line in the VM's folder on the Mac, which hold writes and release removes. A second
+# user's hold reads it and refuses, so that two sessions do not run builds or pictures in the VM at once.
+in_use="$dir/in-use"
+take_vm() {
+    local who="${FZ_VM_USER:-unknown}"
+    if [ -f "$in_use" ] && [ "$(cut -f1 "$in_use")" != "$who" ]; then
+        die "the VM is in use by $(cut -f1 "$in_use") since $(cut -f2 "$in_use"); release it there first (vm.sh release)"
+    fi
+    printf '%s\t%s\n' "$who" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$in_use"
+}
+hold_updates() {
+    take_vm
+    vm_ps "$(cat <<'PS'
+$ux = 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings'
+$mark = 'HKLM:\SOFTWARE\Founderizer\UpdateHold'
+$waits = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired',
+           'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') | Where-Object { Test-Path $_ }
+if ($waits) { 'a restart of Windows waits for an update (' + ($waits -join ', ') + '): restart the VM before the run, then hold'; exit 3 }
+New-Item -Path $ux -Force | Out-Null
+if (-not (Test-Path $mark)) {
+    New-Item -Path $mark -Force | Out-Null
+    $before = Get-ItemProperty $ux -ErrorAction SilentlyContinue
+    foreach ($name in 'ActiveHoursStart', 'ActiveHoursEnd') {
+        if ($null -ne $before.$name) { Set-ItemProperty $mark $name $before.$name -Type DWord }
+    }
+}
+$now = (Get-Date).ToUniversalTime()
+$from = $now.ToString('yyyy-MM-ddTHH:mm:ssZ'); $until = $now.AddDays(1).ToString('yyyy-MM-ddTHH:mm:ssZ')
+foreach ($name in 'PauseUpdatesStartTime', 'PauseFeatureUpdatesStartTime', 'PauseQualityUpdatesStartTime') { Set-ItemProperty $ux $name $from }
+foreach ($name in 'PauseUpdatesExpiryTime', 'PauseFeatureUpdatesEndTime', 'PauseQualityUpdatesEndTime') { Set-ItemProperty $ux $name $until }
+$hour = (Get-Date).Hour
+Set-ItemProperty $ux ActiveHoursStart $hour -Type DWord
+Set-ItemProperty $ux ActiveHoursEnd (($hour + 18) % 24) -Type DWord
+'updates paused until ' + $until + '; active hours ' + $hour + ':00 to ' + (($hour + 18) % 24) + ':00 (the VM''s time)'
+PS
+)"
+}
+release_updates() {
+    rm -f "$in_use"
+    vm_ps "$(cat <<'PS'
+$ux = 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings'
+$mark = 'HKLM:\SOFTWARE\Founderizer\UpdateHold'
+foreach ($name in 'PauseUpdatesStartTime', 'PauseFeatureUpdatesStartTime', 'PauseQualityUpdatesStartTime',
+                  'PauseUpdatesExpiryTime', 'PauseFeatureUpdatesEndTime', 'PauseQualityUpdatesEndTime') {
+    Remove-ItemProperty $ux $name -ErrorAction SilentlyContinue
+}
+$before = Get-ItemProperty $mark -ErrorAction SilentlyContinue
+foreach ($name in 'ActiveHoursStart', 'ActiveHoursEnd') {
+    if ($null -ne $before.$name) { Set-ItemProperty $ux $name $before.$name -Type DWord } else { Remove-ItemProperty $ux $name -ErrorAction SilentlyContinue }
+}
+Remove-Item $mark -ErrorAction SilentlyContinue
+'updates and active hours as before the hold'
+PS
+)"
+}
+
 command="${1:-}"
 [ $# -gt 0 ] && shift
 case "$command" in
@@ -398,6 +466,7 @@ case "$command" in
     status)
         if running; then
             printf 'running, pid %s\n' "$(cat "$run_dir/qemu.pid")"
+            [ -f "$in_use" ] && printf 'in use by %s since %s\n' "$(cut -f1 "$in_use")" "$(cut -f2 "$in_use")"
             vm_ps '"Windows up since " + (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToString("u")' 2>/dev/null || echo "SSH does not answer yet"
         else
             echo "stopped"
@@ -444,5 +513,34 @@ PY
             qmp "{\"execute\":\"send-key\",\"arguments\":{\"keys\":[{\"type\":\"qcode\",\"data\":\"$name\"}]}}" >/dev/null
             sleep 0.2
         done ;;
-    *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+    type)
+        # The line comes on the input and goes from here to QEMU's socket; the program's own text is in its argument.
+        python3 -I -c '
+import json, socket, sys
+line = sys.stdin.readline().strip()
+if not all(c.isascii() and (c.isalnum() or c == "-") for c in line):
+    sys.exit("type takes letters, digits and \"-\" only")
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect(sys.argv[1])
+f = s.makefile("rw")
+json.loads(f.readline())
+def send(command):
+    f.write(json.dumps(command) + "\n"); f.flush()
+    while True:
+        reply = json.loads(f.readline())
+        if "return" in reply or "error" in reply:
+            return reply
+send({"execute": "qmp_capabilities"})
+for c in line:
+    keys = [{"type": "qcode", "data": "minus" if c == "-" else c.lower()}]
+    if c.isupper():
+        keys.insert(0, {"type": "qcode", "data": "shift"})
+    if "error" in send({"execute": "send-key", "arguments": {"keys": keys}}):
+        sys.exit("QEMU refused a key")
+    __import__("time").sleep(0.12)
+print(f"typed {len(line)} characters")
+' "$qmp_socket" ;;
+    hold) hold_updates ;;
+    release) release_updates ;;
+    *) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

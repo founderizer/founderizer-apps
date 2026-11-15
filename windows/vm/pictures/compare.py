@@ -7,6 +7,13 @@ It writes the two crops side by side (approved left, built right) and prints, fo
 of the colour channels (0 to 255) and the share of pixels that differ by more than 24 in a channel. A region is four
 numbers in the pictures' own pixels; the default regions are the frame of the approved pictures at scale 2: the title
 bar, the pane, and the content area's corner. Python's standard library only.
+
+A mean hides a small element that is in one picture and not in the other (a pill of 30 pixels in a pane of a million
+pixels moves the mean by 0.1). So each region also gets its largest solid patch of difference: the pixels that differ
+by more than 16 in a channel (a grey pill on a grey row differs by about 20), of which only those stay whose eight neighbours differ too (text drawn a little
+differently differs along its edges, one or two pixels wide, and goes), joined to their four neighbours. A missing
+pill, button, dot or line of other words is a solid patch and stays; its size in pixels and its box are printed, and
+each patch of 100 pixels or more is listed, so that a person looks at each.
 """
 import struct
 import sys
@@ -64,6 +71,36 @@ def save(path, width, height, rows):
                            + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b""))
 
 
+def solid_patches(marks, x0, y0):
+    """The solid patches of a region's marks (one int of bits a row), largest first: (pixels, (x0, y0, x1, y1))."""
+    height = len(marks)
+    solid = []
+    for y in range(height):
+        row = marks[y]
+        if y == 0 or y == height - 1 or not row:
+            solid.append(0)
+            continue
+        across = [r & (r << 1) & (r >> 1) for r in (marks[y - 1], row, marks[y + 1])]
+        solid.append(across[0] & across[1] & across[2])
+    left = {(x, y) for y, row in enumerate(solid) if row for x in range(row.bit_length()) if row >> x & 1}
+    patches = []
+    while left:
+        start = left.pop()
+        stack, size = [start], 0
+        xs, ys = [start[0], start[0]], [start[1], start[1]]
+        while stack:
+            x, y = stack.pop()
+            size += 1
+            xs[0], xs[1], ys[0], ys[1] = min(xs[0], x), max(xs[1], x), min(ys[0], y), max(ys[1], y)
+            for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if n in left:
+                    left.remove(n)
+                    stack.append(n)
+        patches.append((size, (x0 + xs[0], y0 + ys[0], x0 + xs[1] + 1, y0 + ys[1] + 1)))
+    patches.sort(reverse=True)
+    return patches
+
+
 def main():
     if len(sys.argv) < 4:
         raise SystemExit(__doc__)
@@ -79,14 +116,27 @@ def main():
         x0, y0, x1, y1 = region[:4]
         name = region[4] if len(region) > 4 else f"{x0},{y0}-{x1},{y1}"
         total, far, count = 0, 0, 0
+        marks = []
         for y in range(y0, y1):
             ra, rb = a[y], b[y]
+            bits = 0
             for x in range(x0 * 3, x1 * 3, 3):
                 d = max(abs(ra[x] - rb[x]), abs(ra[x + 1] - rb[x + 1]), abs(ra[x + 2] - rb[x + 2]))
                 total += abs(ra[x] - rb[x]) + abs(ra[x + 1] - rb[x + 1]) + abs(ra[x + 2] - rb[x + 2])
                 far += d > 24
+                if d > 16:
+                    bits |= 1 << (x // 3 - x0)
                 count += 1
+            marks.append(bits)
         print(f"{name}: mean difference {total / (3 * count):.2f} of 255, pixels far apart {100 * far / count:.2f}%")
+        patches = solid_patches(marks, x0, y0)
+        if patches:
+            size, box = patches[0]
+            listed = [p for p in patches if p[0] >= 100]
+            print(f"  largest solid patch of difference: {size} pixels at {box[0]},{box[1]}-{box[2]},{box[3]}; "
+                  f"{len(listed)} of 100 pixels or more" + "".join(f"\n    {p[0]} at {p[1][0]},{p[1][1]}-{p[1][2]},{p[1][3]}" for p in listed[:12]))
+        else:
+            print("  largest solid patch of difference: none")
     # Side by side: the left 1000 pixels of each picture, the approved one on the left.
     crop, gap = min(1000, w1), 16
     rows = [a[y][:crop * 3] + b"\x80\x80\x80" * gap + b[y][:crop * 3] for y in range(h1)]

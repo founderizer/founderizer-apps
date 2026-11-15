@@ -23,8 +23,17 @@ struct ReportProblemView: View {
     @State private var model = ReportProblemModel()
     @State private var text = ""
     @AppStorage("reportEmail") private var email = ""
+    /// The text that the owner's own agent put into the box (`prepare_problem_report`), while the box still holds it
+    /// whole (`ProblemReport.AgentDraft`): the report then says, as one more fact, that an agent wrote it.
+    @State private var draft = ProblemReport.AgentDraft()
 
-    private var report: ProblemReport { ProblemReport(text: text, email: email, facts: model.facts) }
+    /// **Every fact that goes, and so every fact that shows**: the rows under "Sent with it" and the report read this
+    /// one list, so that no fact can go that the owner did not see.
+    private var facts: [ProblemReport.Fact] {
+        model.facts + (draft.isAgents ? [ProblemReport.writtenByAgent] : [])
+    }
+
+    private var report: ProblemReport { ProblemReport(text: text, email: email, facts: facts) }
 
     var body: some View {
         FleetPage("Report a problem") {
@@ -49,13 +58,13 @@ struct ReportProblemView: View {
                     // A short value is the row's own control at the right. A long one — the checks, an error —
                     // takes the width and wraps: a value cut off with an ellipsis is a value he did not read,
                     // and nothing may leave this Mac that he has not read.
-                    ForEach(model.facts.filter { $0.value.count <= 48 }) { fact in
+                    ForEach(facts.filter { $0.value.count <= 48 }) { fact in
                         FormRow(fact.name) {
                             Text(fact.value).foregroundStyle(FleetStyle.muted).textSelection(.enabled)
                                 .multilineTextAlignment(.trailing)
                         }
                     }
-                    ForEach(model.facts.filter { $0.value.count > 48 }) { fact in
+                    ForEach(facts.filter { $0.value.count > 48 }) { fact in
                         FormBlock(fact.name) {
                             Text(fact.value).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                                 .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
@@ -90,7 +99,27 @@ struct ReportProblemView: View {
         .ignoresSafeArea(.container, edges: .top)
         .windowButtonsCentred(inBand: FleetSpace.lights)
         .task { await model.read(store: store) }
-        .onChange(of: text) { _, _ in model.copied = false }
+        .onChange(of: text) { _, now in
+            model.copied = false
+            draft.changed(to: now)
+        }
+        .onChange(of: store.reportAsk?.id, initial: true) { _, _ in take(store.reportAsk) }
+    }
+
+    /// **A text of the owner's own agent** (`prepare_problem_report`): it goes into the box only when the box is
+    /// free for it (`ProblemReport.AgentDraft.isFree`: empty, the agent's text of before unchanged, or the unchanged
+    /// text of a report that was sent). Text that the owner wrote or changed is never written over: the ask is
+    /// answered with that, and nothing changes.
+    private func take(_ ask: ReportAsk?) {
+        guard let ask, ask.outcome == nil else { return }
+        guard draft.isFree(box: text, sent: model.reference == nil ? nil : model.sentText) else {
+            store.reportAsk?.outcome = .ownText
+            return
+        }
+        model.newDraft()
+        text = ask.text
+        draft.took(ask.text)
+        store.reportAsk?.outcome = .shown
     }
 
     /// What Founderizer can see, and nothing that is right. While it reads for the first time, one line says so, as
@@ -172,6 +201,9 @@ final class ReportProblemModel {
     private(set) var reading = true
     private(set) var sending = false
     private(set) var reference: String?
+    /// The text of the report that `reference` is for: an agent's new text may take its place only while the box
+    /// still holds exactly this.
+    private(set) var sentText: String?
     private(set) var failure: String?
     /// The system's own words for a send that got no answer: behind the line, never in it.
     private(set) var cause: String?
@@ -206,14 +238,19 @@ final class ReportProblemModel {
         self.screen = screen
         let hub = store.hub, client = HubClient()
         var health: FleetHealth?, machines: [MachineStatus] = [], servers: [ServerEntry] = [], releases: ReleaseState?
+        var diagnostics: HubDiagnostics?
         if let database = store.state?.db {
+            // The hub's own faults and refused calls, only from a hub that has the route (UI-API.md 1.167).
+            let readsFaults = store.state?.ui_features?.contains(HubDiagnostics.feature) == true
             async let releaseRead = try? client.releases(hub: hub, database: database)
             async let healthRead = try? client.health(hub: hub, database: database)
             async let machineRead = try? client.machines(hub: hub, database: database)
             async let serverRead = try? client.servers(hub: hub, database: database)
+            async let faultRead = readsFaults ? try? client.diagnostics(hub: hub, database: database) : nil
             let (gotReleases, gotHealth, gotMachines, gotServers) = await (releaseRead, healthRead, machineRead, serverRead)
             releases = gotReleases; health = gotHealth
             machines = gotMachines?.machines ?? []; servers = gotServers?.servers ?? []
+            diagnostics = await faultRead
         }
         channel = releases?.channel
         fleet = releases?.entitlement.fleet
@@ -225,20 +262,31 @@ final class ReportProblemModel {
             if case .stopped(let stop, let turn) = store.connectSwitch().run { return (stop, turn) }
             return nil
         }()
+        let macError = store.connectionError
+            ?? store.storageError.map { [$0, store.storageCause].compactMap { $0 }.joined(separator: " ") }
+            // the hub's own words of the stop, which no row of the page shows
+            ?? connectStop.map { [$0.stop.words, $0.stop.said].filter { !$0.isEmpty }.joined(separator: " ") }
+        // The hub's own faults (C0 and E3, the owner's yes of 14 November 2026 to their pictures): one fault, while this
+        // Mac has no error of its own, is the "Last error"; more, or a refused call, is the "Hub errors" row. Where a
+        // row says them, the hub's warning about them (E1) is no block and no Checks line here: one error, said once.
+        let hubRows = diagnostics?.rows(macHasItsOwnError: macError != nil) ?? (lastError: nil, hubErrors: nil)
+        let said = HubDiagnostics.said(hubRows)
         let found = FleetTrouble.read(connectionError: store.connectionError, storageError: store.storageError,
                                       isFresh: store.isFresh, state: store.state, health: health,
                                       machines: machines, servers: servers, checklists: checklists,
                                       at: health?.time ?? store.state?.time ?? Date().timeIntervalSince1970,
-                                      connectStop: connectStop)
+                                      connectStop: connectStop, leaving: said)
         trouble = found
         facts = ProblemReport.facts(app: ProblemReport.appVersion(), system: ProblemReport.systemVersion(),
                                     fleet: fleet, hub: ProblemReport.hubRelease(releases, revision: revision),
-                                    screen: screen,
-                                    trouble: store.connectionError
-                                        ?? store.storageError.map { [$0, store.storageCause].compactMap { $0 }.joined(separator: " ") }
-                                        // the hub's own words of the stop, which no row of the page shows
-                                        ?? connectStop.map { [$0.stop.words, $0.stop.said].filter { !$0.isEmpty }.joined(separator: " ") })
+                                    screen: screen, trouble: macError ?? hubRows.lastError)
+            + (hubRows.hubErrors.map { [ProblemReport.Fact(name: "Hub errors", value: $0)] } ?? [])
             + [ProblemReport.Fact(name: "Checks", value: found.reportLine)]
+    }
+
+    /// A new text in the box: what an earlier send left (its reference, its failure) is gone.
+    func newDraft() {
+        reference = nil; sentText = nil; failure = nil; cause = nil; copied = false
     }
 
     func copyPrompt(for finding: Trouble) {
@@ -258,6 +306,7 @@ final class ReportProblemModel {
         defer { sending = false }
         do {
             reference = try await ProblemReportClient().send(report, channel: channel, fleet: fleet).reference
+            sentText = report.text
         } catch {
             // A send that failed leaves the words where they are and says the other way out, which never needs us.
             // Our own words for a refusal stand in the line; the system's words for no answer are behind it.

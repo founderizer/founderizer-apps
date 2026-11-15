@@ -1,3 +1,4 @@
+import FleetCore
 import SwiftUI
 
 /// Fleet Mobile: the owner's phone app for the agents. It reaches the hub only over Tailscale, reads the owner routes
@@ -55,7 +56,7 @@ struct MobileRoot: View {
                         }
                 }
             } label: {
-                TabMark("Chats", symbol: "message")
+                TabMark(String(l10n: "Chats"), symbol: "message")
             }
 
             Tab(value: MobileTab.needs) {
@@ -63,7 +64,7 @@ struct MobileRoot: View {
                     NeedsPage(store: store)
                 }
             } label: {
-                TabMark("Needs you", symbol: "exclamationmark.bubble")
+                TabMark(String(l10n: "Needs you"), symbol: "exclamationmark.bubble")
             }
             .badge(store.needsYouCount)
 
@@ -73,7 +74,7 @@ struct MobileRoot: View {
                         .navigationDestination(for: Int.self) { TaskPage(store: store, id: $0) }
                 }
             } label: {
-                TabMark("Tasks", symbol: "checklist")
+                TabMark(String(l10n: "Tasks"), symbol: "checklist")
             }
         }
         .onChange(of: store.openChat) { _, _ in store.markRepliesSeen() }

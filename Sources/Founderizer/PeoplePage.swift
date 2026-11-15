@@ -17,9 +17,12 @@ struct PeoplePage: View {
     @Bindable var store: FleetStore
     /// One agent's page: the people who may reach that agent, and nobody else. nil is the fleet's own list.
     var agent: String?
-    /// **A group of the agent's People** (D-5): the people who can talk to it under their heading, read-only — a person
-    /// is added in Settings › People, the one editor of the kind — and the empty card when there is nobody (the owner,
-    /// 3 November 2026, of an agent's groups: "show like an empty card or something, like in other places of the app").
+    /// **A group of the agent's People** (D-5): the people who can talk to it under their heading, and the empty card
+    /// when there is nobody (the owner, 3 November 2026, of an agent's groups: "show like an empty card or something,
+    /// like in other places of the app"). **Its heading has a +** (the owner's "Yes, build it" of 14 November 2026 to
+    /// the mock of the channels, after "I need an entire experience, including choosing who each can talk to"): each
+    /// person of the fleet who cannot write to this agent yet, and New person, as the + of a Can use group gives what
+    /// the fleet already holds. A person's own page stays the editor of everything else about them.
     var grouped = false
     /// The person or the conversation that shows, kept by the part around this group, which shows it in its own place
     /// (`AgentPeoplePart`): nil keeps it here.
@@ -39,6 +42,8 @@ struct PeoplePage: View {
         nonmutating set { if let routeBinding { routeBinding.wrappedValue = newValue } else { ownRoute = newValue } }
     }
     @State private var problem: String?
+    /// The + of an agent's People writes.
+    @State private var giving = false
     /// When this visit began: a line about a kept reading waits a second for the read that is on its way (`Held`).
     @State private var opened = ContinuousClock.now
     private let client = PeopleClient()
@@ -168,15 +173,67 @@ struct PeoplePage: View {
             FormSection("People") {
                 if offered, let value = reading.value, value.hasPeople {
                     ForEach(people) { row($0) }
-                    // The words of the agent's other empty groups ("No secrets", "No number"): no "yet" on an agent's page.
+                    // The words of the agent's other empty groups ("No secrets", "No files"): no "yet" on an agent's page.
                     if people.isEmpty { FormEmpty("No people", symbol: "person.2") }
                 }
+            } accessory: {
+                give
             }
             if offered, reading.value == nil {
                 if case .loading = reading, store.connectionError == nil { LoadingLine(String(l10n: "Reading the people…")) } else { readingRow }
             }
             statusLine
         }
+    }
+
+    /// What the + of an agent's People gives.
+    private enum Give: Hashable { case person(Int), new }
+
+    /// **The + on the heading of an agent's People**: each person of the fleet who cannot write to this agent yet, with
+    /// what they are to him, and New person, which opens Add person with this agent. One choice gives the person this
+    /// agent, with the write of "Can talk to" on their own page. It is there while the hub answers; a refusal is the
+    /// line under the group, in the hub's words.
+    @ViewBuilder private var give: some View {
+        if let agent, offered, reading.value?.hasPeople == true {
+            if giving {
+                ProgressView().controlSize(.small).frame(width: IconMetrics.side, height: IconMetrics.side)
+                    .padding(.trailing, FormMetrics.rowInset)
+            } else if canWrite {
+                let others = (reading.value?.peopleList ?? []).filter { !$0.agentNames.contains(agent) }
+                let options = others.map { FleetOption(Give.person($0.id), $0.name, detail: $0.roleWord, mark: .symbol("person.crop.circle")) }
+                    + [FleetOption(Give.new, String(l10n: "New person"), mark: .symbol("plus"))]
+                let words = String(l10n: "Let a person write to \(People.agentWord(agent))")
+                FleetSelect(words, options: options) { choice in
+                    switch choice {
+                    case .new: Task { await add() }
+                    case .person(let id):
+                        if let person = others.first(where: { $0.id == id }) { Task { await give(person, agent) } }
+                    }
+                } label: {
+                    Image(systemName: "plus").font(IconMetrics.symbol(13)).foregroundStyle(FleetStyle.muted)
+                }
+                .buttonStyle(FleetIconButtonStyle(rest: true))
+                .help(words)
+                // In the column of the rows' chevrons, which stand the rows' inset in from the card's edge.
+                .padding(.trailing, FormMetrics.rowInset)
+                .accessibilityIdentifier("people-give")
+            }
+        }
+    }
+
+    /// One more agent on a person's list: this one.
+    private func give(_ person: PeopleSnapshot.Person, _ agent: String) async {
+        guard canWrite, let db = store.state?.db else { return }
+        giving = true; problem = nil
+        defer { giving = false }
+        var input = PersonInput(person)
+        input.agents = (person.agentNames + [agent]).sorted()
+        do {
+            _ = try await client.change(hub: store.hub, database: db, client: store.installation, person: person, to: input)
+        } catch {
+            problem = People.reason(error)
+        }
+        await read()
     }
 
     private var page: some View {

@@ -26,6 +26,17 @@ struct NeedTalkTests {
         #expect(try need(["multi": true, "options": ["Only one"]]).combines == false)     // one option is no choice
     }
 
+    /// The owner, 15 November 2026: "the task itself need to be very clear". The words an agent wrote as his task stand
+    /// on the card; the hub's own sentences and the words of an item with a door call stay behind Details.
+    @Test func theTaskOfAnAgentsItemStandsInFrontAndTheHubsOwnSentencesDoNot() throws {
+        #expect(try need().taskInFront)
+        #expect(try need(["details": "The facts."]).taskInFront)
+        #expect(try need(["kind": "secret"]).taskInFront == false)             // the sentence about its secure form
+        #expect(try need(["kind": "question", "conversation": 4]).taskInFront == false)    // where the answer goes
+        #expect(try need(["door_call": String(repeating: "a", count: 64), "door_host": "web-1"]).taskInFront == false)
+        #expect(try need(["door_call": String(repeating: "a", count: 64)]).taskInFront == false)  // his yes signs a hash
+    }
+
     @Test func theTickedOptionsTravelAsIndexesInOrderAndTheirWordsStayHere() throws {
         let request = PendingRequest(hub: hub, database: "db", client: "mac", needID: 7, choices: [2, 0, 2],
                                      text: "Mia moves them; Retire the copies")

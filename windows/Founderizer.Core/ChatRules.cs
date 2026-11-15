@@ -7,6 +7,12 @@ namespace Founderizer.Core;
 /// <summary>Where each request of an agent stands in its chat (FleetCore's ChatRequestPlaces, read over the device's
 /// chat items as the iPhone's ChatPage.places reads it): right after the agent's message that told the owner about it,
 /// else a waiting one at the end and an answered one in the place of his answer.</summary>
+/// <summary>One row of a chat: an item, or the card of a request.</summary>
+public sealed record ChatPart(MobileChatItem? Item, long? Need)
+{
+    public string Id => Item?.Id ?? "need-" + Need;
+}
+
 public sealed record ChatPlaces
 {
     /// <summary>The cards that stand right after an item, by the item's id ("report-17"), in the order raised.</summary>
@@ -17,6 +23,93 @@ public sealed record ChatPlaces
     public IReadOnlyDictionary<string, long> InPlaceOf { get; init; } = new Dictionary<string, long>();
     /// <summary>His answer messages that are not drawn: their card shows them.</summary>
     public IReadOnlySet<string> Hidden { get; init; } = new HashSet<string>();
+    /// <summary>The cards that stand right before an item, by the item's id, in the order raised (<see cref="InTime"/>).</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<long>> Before { get; init; } = new Dictionary<string, IReadOnlyList<long>>();
+    /// <summary>The requests whose answer stands in the chat as his own message (<see cref="InTime"/>): their card folds to
+    /// its title.</summary>
+    public IReadOnlySet<long> Spoken { get; init; } = new HashSet<long>();
+
+    /// <summary>Where each request of an agent stands in its chat: where it was raised (FleetCore's
+    /// ChatRequestPlaces.inTime, the Mac's rule of 14 November 2026: "Cards during a thread should appear wherever in the
+    /// conversation they were requested, not all at the bottom of the conversation!"). Under everything that came before
+    /// it was raised and over everything that came after, at the chat's end only while nothing came after it; over its
+    /// card, only the agent's reply of the turn in which it was raised (its first message after it, which answers a message
+    /// of his older than the request). What he answers in his own words is his message at its time, and the card folds to
+    /// its title (<see cref="Spoken"/>); an option that he pressed is no bubble (<see cref="Hidden"/>). A request raised
+    /// before the oldest item stands only when the items are the chat's whole history.</summary>
+    public static ChatPlaces InTime(IReadOnlyList<OwnerNeed> needs, IReadOnlyList<MobileChatItem> items, bool whole)
+    {
+        var before = new Dictionary<string, List<long>>();
+        var after = new Dictionary<string, List<long>>();
+        var atEnd = new List<long>();
+        var hidden = new HashSet<string>();
+        var spoken = new HashSet<long>();
+        var drawn = new List<(OwnerNeed Need, int Split)>();
+        foreach (var need in needs.OrderBy(n => n.Raised).ThenBy(n => n.Id))
+        {
+            var split = items.Count;
+            for (var i = 0; i < items.Count; i++) if (items[i].Ts >= need.Raised) { split = i; break; }
+            var shows = split > 0 || whole;
+            if (shows) drawn.Add((need, split));
+            if (items.FirstOrDefault(i => i.Kind == "message" && i.AnswerTo == need.Id) is not { } answer) continue;
+            // While the reading has the request open, the answer is his words on their way, or a press: its words say which.
+            var inWords = need.IsOpen ? answer.OnItsWay || !need.Offers(answer.Text) : need.AnsweredInWords;
+            if (!inWords) hidden.Add(answer.Id);
+            else if (shows) spoken.Add(need.Id);
+        }
+        foreach (var (need, split) in drawn)
+        {
+            if (TurnReply(split, items) is { } reply) (after.TryGetValue(reply, out var list) ? list : after[reply] = []).Add(need.Id);
+            else if (items.Skip(split).FirstOrDefault(i => !hidden.Contains(i.Id)) is { } next)
+                (before.TryGetValue(next.Id, out var list) ? list : before[next.Id] = []).Add(need.Id);
+            else atEnd.Add(need.Id);
+        }
+        return new ChatPlaces
+        {
+            Before = before.ToDictionary(p => p.Key, p => (IReadOnlyList<long>)p.Value),
+            After = after.ToDictionary(p => p.Key, p => (IReadOnlyList<long>)p.Value),
+            AtEnd = atEnd,
+            Hidden = hidden,
+            Spoken = spoken,
+        };
+    }
+
+    /// <summary>The agent's reply of the turn in which a request was raised, whose first later item is
+    /// <c>items[split]</c>: that item, when it is the agent's and answers a message of his that stands before it.</summary>
+    private static string? TurnReply(int split, IReadOnlyList<MobileChatItem> items)
+    {
+        if (split >= items.Count || items[split] is not { Kind: "report", InReplyTo: { } asked }) return null;
+        var his = items.Take(split).Any(i => i.Kind == "message" && string.Equals(i.Key, asked, StringComparison.OrdinalIgnoreCase));
+        return his ? items[split].Id : null;
+    }
+
+    /// <summary>The chat's rows in order (ChatRequestPlaces.rows): each item that is drawn, and each request's card in its
+    /// place, under one id.</summary>
+    public IReadOnlyList<ChatPart> Rows(IReadOnlyList<MobileChatItem> items)
+    {
+        var rows = new List<ChatPart>();
+        foreach (var item in items)
+        {
+            foreach (var need in Before.GetValueOrDefault(item.Id) ?? []) rows.Add(new ChatPart(null, need));
+            if (!Hidden.Contains(item.Id)) rows.Add(new ChatPart(item, null));
+            foreach (var need in After.GetValueOrDefault(item.Id) ?? []) rows.Add(new ChatPart(null, need));
+        }
+        rows.AddRange(AtEnd.Select(need => new ChatPart(null, need)));
+        return rows;
+    }
+
+    /// <summary>The time of each row for the marks of a day or an hour (ChatRequestPlaces.times): an item's own, a card's
+    /// when it was raised, and never earlier than the row over it.</summary>
+    public static IReadOnlyList<double> Times(IReadOnlyList<ChatPart> rows, IReadOnlyDictionary<long, double> raised)
+    {
+        var times = new List<double>();
+        foreach (var row in rows)
+        {
+            var own = row.Item is { } item ? item.Ts : raised.GetValueOrDefault(row.Need ?? 0);
+            times.Add(Math.Max(own, times.Count == 0 ? 0 : times[^1]));
+        }
+        return times;
+    }
 
     /// <summary>The places of <paramref name="needs"/> (this agent's requests, waiting and answered) among its chat's
     /// items, oldest first. The device holds a chat's newest pages only (`whole` false): a request older than every item

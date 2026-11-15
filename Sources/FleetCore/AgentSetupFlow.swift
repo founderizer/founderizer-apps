@@ -10,6 +10,12 @@ import Foundation
 /// starts there. Nor is the confirmation he first asked for (the owner, 26 October 2026: "why does it ask for
 /// confirmation when it's all done? it should just activate it").
 public enum AgentSetupPage: Equatable, Sendable {
+    /// **Its name**, for a manager with no server on a hub that can rename it (`ManagerSetupStart`): "Name your
+    /// manager", the first run's page, for a fleet whose first run did not ask.
+    case name
+    /// **The fleet's servers**, after its name: the slider of the first run. With "1 server" the page then waits while
+    /// the hub's own server is made ready for the manager.
+    case servers
     /// **Where it runs**, for the manager of a new fleet, which has no server yet (hub feature `manager_server`; the
     /// owner, 4 November 2026: "The agent is done BY AGENT and here we're setting the fleet, no servers yet"): a VPS or a
     /// Mac that joins for it. Its provider comes next, and a press there gives it both.

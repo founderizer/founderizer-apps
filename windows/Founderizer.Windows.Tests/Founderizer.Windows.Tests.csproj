@@ -26,6 +26,9 @@
     <Compile Include="../Founderizer.Windows/Proofs.cs" Link="Linked/Proofs.cs" />
     <Compile Include="../Founderizer.Windows/Fleet/WindowsParts.cs" Link="Linked/WindowsParts.cs" />
     <Compile Include="../Founderizer.Windows/Navigation/History.cs" Link="Linked/History.cs" />
+    <Compile Include="../Founderizer.Windows/Navigation/PaneMarks.cs" Link="Linked/PaneMarks.cs" />
+    <Compile Include="../Founderizer.Windows/Pages/EndedRows.cs" Link="Linked/EndedRows.cs" />
+    <Compile Include="../Founderizer.Windows/Pages/ThreadRows.cs" Link="Linked/ThreadRows.cs" />
     <Compile Include="../Founderizer.Windows/Update/ReleaseChannel.cs" Link="Linked/ReleaseChannel.cs" />
     <EmbeddedResource Include="../Founderizer.Windows/Sample/SampleFleet.json" LogicalName="Founderizer.Windows.Sample.SampleFleet.json" />
   </ItemGroup>

@@ -68,6 +68,30 @@ extension VaultCallerTests {
         #expect(try await Self.read([Self.apiKey: key]) == ["ok": false, "v": 2, "error": VaultFailure.hub.rawValue])
     }
 
+    /// C11: a value with the shape of a login (a user name or an authenticator seed) never reaches a session. Its
+    /// variable is in `missing` and in `logins`, and its fingerprint does not go to the hub, as nothing of it is given.
+    @Test func aValueWithALoginsShapeNeverReachesASession() async throws {
+        let key = "sk-synthetic-READ-0123456789"
+        FakeHub.reset(answer: Self.reading(Self.named([(Self.apiKey, "SHOP_API_KEY"), (Self.shortKey, "SEED_KEY"),
+                                                        (Self.goneKey, "PLAIN_KEY")])))
+        let values: [String: Data] = [
+            Self.apiKey: try JSONSerialization.data(withJSONObject: ["username": "pilot-b", "password": key]),
+            Self.shortKey: try JSONSerialization.data(withJSONObject: ["username": "", "password": key + "-2", "totp": "JBSWY3DPEHPK3PXP"]),
+            Self.goneKey: try JSONSerialization.data(withJSONObject: ["username": "", "password": key + "-3"])]
+        let reply = await VaultBroker.read(as: VaultCaller(agent: "studio", key: Self.readKey), hub: try Self.readHub()) { id in
+            try VaultSecret(data: values["bws://" + id]!)
+        }
+        #expect(NSDictionary(dictionary: reply) == ["ok": true, "v": 2, "env": ["PLAIN_KEY": key + "-3"],
+                                                   "missing": ["SHOP_API_KEY", "SEED_KEY"], "logins": ["SHOP_API_KEY", "SEED_KEY"]])
+        #expect(FakeHub.seen.map(\.route) == ["/helper/vault/studio/read", "/helper/vault/studio/fingerprints"])
+        // a field that is there and not empty counts, whatever its type
+        let shapes: [([String: Any], Bool)] = [(["password": "x", "username": 7], true), (["password": "x", "username": " "], true),
+                                               (["password": "x", "username": NSNull()], false), (["password": "x", "username": ""], false)]
+        for (object, shaped) in shapes {
+            #expect(try VaultSecret(data: JSONSerialization.data(withJSONObject: object)).loginShaped == shaped)
+        }
+    }
+
     @Test func anAPIKeyIsALoginWithAnEmptyUserNameAndAValueWithoutAnAddressIsOnlyRead() throws {
         let key = "sk-synthetic-READ-0123456789"
         let served = try JSONSerialization.data(withJSONObject: ["username": "", "password": key, "url": "https://api.example.test/v1"])

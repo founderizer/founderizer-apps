@@ -13,7 +13,9 @@ namespace Founderizer.Core.Tests;
 ///
 /// app_decode.py gives: FLEET_E2E_HUB and FLEET_E2E_DB; FLEET_E2E_DEVICE_CODE, a code for the device at this process's
 /// address; FLEET_E2E_TASKS, the tasks to read (the first two are working, attempt 1); FLEET_E2E_NEEDS, two open items;
-/// FLEET_E2E_KNOWLEDGE, an owner knowledge file. The first step enrolls with the code, as a new PC does.</summary>
+/// FLEET_E2E_KNOWLEDGE, an owner knowledge file; FLEET_E2E_EVENTS, a task with a record and a permission that waits;
+/// FLEET_E2E_PARKED, a task that its agent parked; FLEET_E2E_OUTPUTS, an accepted result that names a text, a PNG and a
+/// JPEG; FLEET_E2E_SUBTASK, a subtask of the task with a record. The first step enrolls with the code, as a new PC does.</summary>
 [TestClass]
 [TestCategory("HubDecode")]
 public sealed class HubDecodeTwin
@@ -110,6 +112,168 @@ public sealed class HubDecodeTwin
         {
             var page = await Read(c => c.TaskAsync(Hub, key, Database, id));
             await Read(c => c.TaskAsync(Hub, key, Database, id, page.Cursor));
+        }
+    }
+
+    /// <summary>Owner API 1.161: the task read has the permission that waits, with the fields of the Mac's row.</summary>
+    [TestMethod]
+    public async Task mobile_task_permissions()
+    {
+        var key = Key();
+        var page = await Read(c => c.TaskAsync(Hub, key, Database, Ids("EVENTS")[0]));
+        var permission = page.Permissions!.Single();
+        Assert.AreEqual(("Bash", null, true), (permission.Tool, permission.Decision, permission.NeedsReading));
+        StringAssert.Contains(permission.Input, "https://help.example.com/api/tickets/1");
+        Assert.AreEqual(0, (await Read(c => c.TaskAsync(Hub, key, Database, Ids("OUTPUTS")[0]))).Permissions!.Count);
+    }
+
+    /// <summary>Owner API 1.162: the task read has the owner's guidance, as GET /ui/state gives it.</summary>
+    [TestMethod]
+    public async Task mobile_task_steers()
+    {
+        var key = Key();
+        var task = Ids("EVENTS")[0];
+        var page = await Read(c => c.TaskAsync(Hub, key, Database, task));
+        var words = "Guidance from the decode twin, " + Guid.NewGuid();
+        await Read(c => c.CommandAsync(PendingRequest.New(Hub, Database, Client, words, command: OwnerCommand.Steer(task, page.Task.Attempt)), key));
+        var steer = (await Read(c => c.TaskAsync(Hub, key, Database, task))).Steers!.Single(g => g.Text == words);
+        Assert.AreEqual((task, page.Task.Attempt, Client), (steer.Task, steer.Attempt, steer.Client));
+        Assert.IsTrue(steer.IsValid);
+    }
+
+    /// <summary>Owner API 1.162: each head names the task it is a subtask of; 1.163: the task read has the heads of its
+    /// subtasks and of its parent.</summary>
+    [TestMethod]
+    public async Task mobile_parent()
+    {
+        var key = Key();
+        var heads = (await Snapshot(key)).Snapshot.Tasks;
+        Assert.AreEqual(Ids("EVENTS")[0], heads.Single(t => t.Id == Ids("SUBTASK")[0]).Parent);
+        Assert.IsNull(heads.Single(t => t.Id == Ids("EVENTS")[0]).Parent);
+        // Owner API 1.163: the task read has the heads of its subtasks and of its parent.
+        var lead = await Read(c => c.TaskAsync(Hub, key, Database, Ids("EVENTS")[0]));
+        Assert.AreEqual(Ids("SUBTASK")[0], lead.Subtasks!.Single().Id);
+        Assert.IsNull(lead.ParentTask);
+        var child = await Read(c => c.TaskAsync(Hub, key, Database, Ids("SUBTASK")[0]));
+        Assert.AreEqual((Ids("EVENTS")[0], 0), (child.ParentTask!.Id, child.Subtasks!.Count));
+    }
+
+    /// <summary>Owner API 1.166: the device reads every ended task when the mark of GET /ui/mobile says so, and its Ended
+    /// lane of each period equals the lane of every task of GET /ui/state, which the Mac counts from (the lane's rule is
+    /// FleetCore's by EndedLaneTests); "Last 7 days" holds more than the 20 of `recent`.</summary>
+    [TestMethod]
+    public async Task mobile_ended()
+    {
+        var key = Key();
+        var fleet = (await Snapshot(key)).Snapshot;
+        Assert.IsTrue(fleet.Offers("mobile_ended"));
+        var ended = await Read(c => c.EndedAsync(Hub, key, Database));
+        Assert.AreEqual(fleet.EndedMark, ended.Mark);
+        Assert.IsTrue(ended.Tasks.Any(t => t.TriggerId is not null), "the heads carry their schedule");
+        using var http = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(Hub, $"ui/state?db={Database}"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+        using var answer = await http.SendAsync(request);
+        Assert.AreEqual(200, (int)answer.StatusCode);
+        using var state = System.Text.Json.JsonDocument.Parse(await answer.Content.ReadAsStringAsync());
+        var every = state.RootElement.GetProperty("tasks").EnumerateArray()
+            .Select(t => System.Text.Json.JsonSerializer.Deserialize(t.GetRawText(), CoreJson.Default.MobileTaskHead)!).ToList();
+        var mac = fleet with { Tasks = every.Where(t => !t.IsTerminal).ToList(), Recent = [] };
+        var macEnded = every.Where(t => t.IsTerminal).ToList();
+        foreach (var period in new[] { ActivityPeriod.Today, ActivityPeriod.Week, ActivityPeriod.Month, ActivityPeriod.All })
+        {
+            var mine = Activity.Lanes(fleet, null, period, ScreenContext.Local, ended.Tasks)[ActivityColumn.Done];
+            var theirs = Activity.Lanes(mac, null, period, ScreenContext.Local, macEnded)[ActivityColumn.Done];
+            CollectionAssert.AreEqual(theirs.Select(t => t.Id).ToArray(), mine.Select(t => t.Id).ToArray(), period.ToString());
+            var (a, b) = (new EndedTasks(mine, ScreenContext.Local), new EndedTasks(theirs, ScreenContext.Local));
+            CollectionAssert.AreEqual(b.Days.SelectMany(d => d.Groups.Select(g => d.Start + " " + g.Title + " " + string.Join(",", g.Tasks.Select(t => t.Id)))).ToArray(),
+                                      a.Days.SelectMany(d => d.Groups.Select(g => d.Start + " " + g.Title + " " + string.Join(",", g.Tasks.Select(t => t.Id)))).ToArray(),
+                                      period + ": the rows by day");
+        }
+        var week = Activity.Lanes(fleet, null, ActivityPeriod.Week, ScreenContext.Local, ended.Tasks)[ActivityColumn.Done].Count;
+        Assert.IsTrue(week > 20, $"the week holds {week}");
+        Assert.IsTrue(Activity.Lanes(fleet, null, ActivityPeriod.Week, ScreenContext.Local)[ActivityColumn.Done].Count <= 20,
+                      "without the read, the 20 of recent");
+    }
+
+    /// <summary>Owner API 1.161: a parked task's head says until when, and the board puts it in Waiting.</summary>
+    [TestMethod]
+    public async Task mobile_parked()
+    {
+        var key = Key();
+        var snapshot = (await Snapshot(key)).Snapshot;
+        var parked = snapshot.Tasks.Single(t => t.Id == Ids("PARKED")[0]);
+        Assert.IsTrue(parked.ParkedUntil > snapshot.Time, "parked until a time to come");
+        Assert.AreEqual(ActivityColumn.Waiting, parked.Column(held: false));
+        Assert.IsTrue(snapshot.Tasks.Where(t => t.Id != parked.Id).All(t => t.ParkedUntil is null));
+    }
+
+    /// <summary>The steps of a task (GET /ui/tasks/&lt;id&gt;/events) as a device: every task's first page decodes and
+    /// keeps the page's rules; the task with a record reads the same in pages of one; its thread, its AI provider and its
+    /// changed file are the Mac's.</summary>
+    [TestMethod]
+    public async Task task_events()
+    {
+        var key = Key();
+        foreach (var id in Ids("TASKS").Append(Ids("OUTPUTS")[0]))
+            await Read(c => c.TaskEventsAsync(Hub, key, Database, id, 0, TaskEventPage.Most));
+        var task = Ids("EVENTS")[0];
+        var whole = await Read(c => c.TaskEventsAsync(Hub, key, Database, task, 0, TaskEventPage.Most));
+        Assert.IsFalse(whole.More);
+        var timeline = new ActivityTimeline();
+        long after = 0;
+        var pages = 0;
+        while (true)
+        {
+            var from = after;
+            var page = await Read(c => c.TaskEventsAsync(Hub, key, Database, task, from, 1));
+            timeline.Append(page.Events);
+            after = page.Next;
+            pages++;
+            if (!page.More) break;
+        }
+        Assert.AreEqual(Math.Max(1, whole.Events.Count), pages, "one event in each page, and no page without one but the last");
+        Assert.AreEqual(whole.Next, after);
+        CollectionAssert.AreEqual(new[] { "claude" }, timeline.Runtimes[1].ToArray());
+        var file = timeline.ChangedFiles.Single();
+        Assert.AreEqual(("replies/make_reply.py", "modify", 4L, 1L), (file.Path, file.Action, file.Added, file.Removed));
+        var thread = ThreadEntry.Of(timeline.TopRows, [], []);
+        Assert.AreEqual(3, thread.Count, "a run of three steps, the agent's message, then the error, as the Mac's thread");
+        var steps = thread[0].Steps!;
+        Assert.AreEqual(("Edit replies/make_reply.py", "completed"), (steps[0].Row.Event.Title, steps[0].Row.Status));
+        Assert.AreEqual(("agent_thought", "The reply needs the order number."), (steps[1].Row.Event.Type, steps[1].Row.Event.Text));
+        Assert.AreEqual(("python3 replies/make_reply.py", "failed"), (steps[2].Row.Event.Title, steps[2].Row.Status));
+        Assert.AreEqual("I answered the tickets of today.", thread[1].Said!.Row.Event.Text);
+        Assert.AreEqual("An example error.", thread[2].Said!.Row.Event.Message);
+    }
+
+    /// <summary>The checked outputs as a device: the list of an accepted result, and each file with its size, SHA-256,
+    /// commit and type checked, the text as UTF-8 and each picture's size from its header; an open result is refused in
+    /// the Mac's words.</summary>
+    [TestMethod]
+    public async Task task_artifacts()
+    {
+        var key = Key();
+        var task = Ids("OUTPUTS")[0];
+        var list = await Read(c => c.TaskArtifactsAsync(Hub, key, Database, task));
+        CollectionAssert.AreEqual(new[] { "text/plain", "image/png", "image/jpeg" },
+                                  list.Artifacts.OrderBy(a => a.Path, StringComparer.Ordinal).Select(a => a.Mime).ToArray());
+        foreach (var file in list.Artifacts)
+        {
+            var content = await Read(c => c.TaskArtifactAsync(Hub, key, Database, task, file));
+            if (file.Mime == "text/plain") StringAssert.StartsWith(content.Text, "Certificate of the example shop");
+            else if (file.Mime == "image/png") Assert.AreEqual((3, 2), (content.Width, content.Height));
+            else Assert.AreEqual((640, 400), (content.Width, content.Height));
+        }
+        using var client = new HubClient();
+        try
+        {
+            await client.TaskArtifactsAsync(Hub, key, Database, Ids("TASKS")[0]);
+            Assert.Fail("an open task has no checked outputs");
+        }
+        catch (OutputException e)
+        {
+            Assert.AreEqual(OutputException.Problem.Stale, e.Kind, e.Message);
         }
     }
 
@@ -260,6 +424,65 @@ public sealed class HubDecodeTwin
             Screens.Board(store.State, ActivityPeriod.All, null, now, ScreenContext.Local);
             await store.ReadDeviceAsync();
             Assert.AreEqual(enrollment!.Device, store.State.Device?.Device);
+        }
+        finally
+        {
+            System.IO.Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task store_task_page()
+    {
+        // The store's task page against the hub: the record of the open task comes in its first read, then its thread,
+        // its AI provider and its changed file; the checked outputs of an accepted result list and open.
+        var key = Key();
+        var folder = System.IO.Directory.CreateTempSubdirectory("founderizer-twin-task-").FullName;
+        try
+        {
+            await using var store = new OwnerStore(new StoreSettings
+            {
+                Folder = folder, Keys = new MemoryKeyStore(key), ClientLabel = Client,
+            });
+            Assert.IsNull(await store.ConnectAsync(Hub.ToString()));
+            store.Unlock();
+            store.SetFront(true);
+            var task = Ids("EVENTS")[0];
+            store.OpenTask(task);
+            await store.RefreshAsync();
+            for (var i = 0; i < 100 && !(store.State.TaskPages.TryGetValue(task, out var p1) && p1.Activity is not null); i++) await Task.Delay(100);
+            var now = DateTimeOffset.UtcNow;
+            var page = Screens.Task(store.State, task, now, ScreenContext.Local);
+            Assert.IsNotNull(page, "the page shows once its record came");
+            CollectionAssert.AreEqual(new[] { ThreadRowKind.Steps, ThreadRowKind.Message, ThreadRowKind.Error },
+                                      page.Thread.Take(3).Select(r => r.Kind).ToArray());
+            Assert.AreEqual(("3 steps", "1 failed", true), (page.Thread[0].Steps!.Title, page.Thread[0].Steps!.Status, page.Thread[0].Steps!.Orange));
+            Assert.AreEqual(("Thinking", "An example error."), (page.Thread[0].Steps!.Rows[1].Title, page.Thread[2].Text));
+            var permission = page.Thread.Single(r => r.Kind == ThreadRowKind.Permission).Permission!;
+            Assert.AreEqual(("Bash", "Waiting"), (permission.Title, permission.Status));
+            Assert.AreEqual("Claude Code", page.Facts.Single(f => f.Label == "AI provider").Value);
+            Assert.AreEqual(("Modify", "+4", "−1"), (page.ChangedFiles!.Rows[0].Action, page.ChangedFiles.Rows[0].Added, page.ChangedFiles.Rows[0].Removed));
+
+            // Owner API 1.166: the store read every ended task, and the board counts them.
+            Assert.IsNotNull(store.State.Ended);
+            var lane = Screens.Board(store.State, ActivityPeriod.Week, null, DateTimeOffset.UtcNow, ScreenContext.Local)
+                .Lanes.Single(l => l.Column == ActivityColumn.Done);
+            Assert.IsTrue(lane.Count > 20, $"Ended {lane.Count}");
+
+            var outputs = Ids("OUTPUTS")[0];
+            store.OpenTask(outputs);
+            await store.RefreshAsync();
+            for (var i = 0; i < 100 && !(store.State.TaskPages.TryGetValue(outputs, out var p2) && p2.Activity is not null); i++) await Task.Delay(100);
+            await store.ListOutputsAsync();
+            var listed = Screens.Task(store.State, outputs, DateTimeOffset.UtcNow, ScreenContext.Local)!.Result!.Outputs!;
+            Assert.AreEqual(("Reload outputs", 3, null), (listed.ViewWords, listed.Files.Count, listed.Error));
+            await store.ViewOutputAsync(listed.Files.Single(f => !f.IsImage).File);
+            var opened = Screens.Task(store.State, outputs, DateTimeOffset.UtcNow, ScreenContext.Local)!.Result!.Outputs!;
+            Assert.IsNull(opened.Error, opened.Error);
+            StringAssert.StartsWith(opened.Opened!.Text, "Certificate of the example shop");
+            StringAssert.StartsWith(opened.Opened.Download, "Verified download · ");
+            store.CloseOutputs();
+            Assert.AreEqual("View outputs", Screens.Task(store.State, outputs, DateTimeOffset.UtcNow, ScreenContext.Local)!.Result!.Outputs!.ViewWords);
         }
         finally
         {

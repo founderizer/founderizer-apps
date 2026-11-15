@@ -22,8 +22,15 @@ public sealed class ShimmerText : Grid
     public static readonly DependencyProperty ShimmerProperty = DependencyProperty.Register(
         nameof(Shimmer), typeof(bool), typeof(ShimmerText), new PropertyMetadata(false, (d, _) => ((ShimmerText)d).Update()));
 
+    /// <summary>The words in orange, not muted: an agent's line that is a request waiting for him (the Mac's ChatRow
+    /// needsYou, Founderizer 0.1.224).</summary>
+    public static readonly DependencyProperty OrangeProperty = DependencyProperty.Register(
+        nameof(Orange), typeof(bool), typeof(ShimmerText), new PropertyMetadata(false, (d, e) => ((ShimmerText)d).words.Foreground =
+            (Brush)Application.Current.Resources[(bool)e.NewValue ? "OrangeBrush" : "MutedBrush"]));
+
     public string Text { get => (string)GetValue(TextProperty); set => SetValue(TextProperty, value); }
     public bool Shimmer { get => (bool)GetValue(ShimmerProperty); set => SetValue(ShimmerProperty, value); }
+    public bool Orange { get => (bool)GetValue(OrangeProperty); set => SetValue(OrangeProperty, value); }
 
     private const double Pass = 2.8, Box = 4, LightBegins = 0.4, LightEnds = 0.6;
     private static readonly UISettings Settings = new();

@@ -297,7 +297,8 @@ public enum ServerCheck {
     }
 
     /// The words of a server that SSH did not reach at all, and of one that took none of this Mac's keys and takes no
-    /// password either: the same as a stopped install's (`InstallError.plain`).
+    /// password either: the same as a stopped install's (`InstallError.plain`). A connection to an address on the
+    /// private network that nothing answered has its own line there and here (`FleetReach.dropped`).
     public static func unreached(_ server: String) -> String { String(l10n: "This Mac could not reach \(server) over SSH.") }
     public static func keyRefused(_ server: String) -> String { String(l10n: "\(server) did not take your SSH key. Choose its key.") }
     /// A server whose host key is not the one this Mac kept for it: rebuilt, or not the server it was.
@@ -384,8 +385,13 @@ extension ServerCheck {
     /// password among the ways it lets a user in, or when it hung up after too many keys before it said; a server that
     /// takes keys only stops with the install's own words for a refused key. `holdsSudoPassword` and `tailnet` are
     /// `verdict`'s.
+    ///
+    /// **The key files go once for each server and user** (the owner, 14 November 2026: "we might get locked out if we
+    /// attempt many ssh connections"): after a check in which none of them let this Mac in, a later check of the same
+    /// target in this run of the app (Try again, or the same address checked again) makes its first session only, with
+    /// the target's own key or the keys `ssh` offers by itself. A check that gets in forgets the refusal (`KeyTries`).
     public static func run(_ target: InstallTarget, job: InstallJob, holdsSudoPassword: Bool = false, tailnet: String? = nil,
-                           keys: URL = InstallTarget.keyFolder, ssh: String = "/usr/bin/ssh",
+                           keys: URL = InstallTarget.keyFolder, tries: KeyTries = .shared, ssh: String = "/usr/bin/ssh",
                            run: ShellRunner = Shell.local) async -> Result {
         var answer: LocalShell.Answer
         do {
@@ -395,7 +401,8 @@ extension ServerCheck {
                           target: target)
         }
         var reached = target
-        if answer.status == 255, InstallError.keyRefused(answer.output) {
+        let refused = answer.status == 255 && InstallError.keyRefused(answer.output)
+        if refused, !tries.refused(target) {
             let offered = await offeredKeys(target, answer: answer.output, ssh: ssh, run: run)
             for key in keyFiles(in: keys) where key != target.identityFile && !offered.contains(key) {
                 var keyed = target
@@ -405,6 +412,8 @@ extension ServerCheck {
                 break
             }
         }
+        // Only a session that got in ends the refusal: a server that did not answer at all says nothing of the keys.
+        if answer.status != 255 { tries.note(target, refused: false) } else if refused { tries.note(target, refused: true) }
         // 255 is `ssh` itself: the script ends with its own status, which is 0. Where no key file let the check in, the
         // words of the first session say why.
         if answer.status == 255 {
@@ -415,6 +424,31 @@ extension ServerCheck {
         }
         return Result(verdict: verdict(reading, job: job, sshPort: target.port, holdsSudoPassword: holdsSudoPassword,
                                        tailnet: tailnet), reading: reading, target: reached)
+    }
+
+    /// **The targets whose key files this run of the app has tried already, and none let it in** (`run`): by user,
+    /// address, port and the target's own key, in memory only. A refusal is noted only where the key files were tried,
+    /// and a target that let a check in is taken out.
+    public final class KeyTries: @unchecked Sendable {
+        public static let shared = KeyTries()
+        private let lock = NSLock()
+        private var done: Set<String> = []
+
+        public init() {}
+
+        static func key(_ target: InstallTarget) -> String {
+            "\(target.destination):\(target.port) \(target.identityFile ?? "")"
+        }
+
+        func refused(_ target: InstallTarget) -> Bool { lock.withLock { done.contains(Self.key(target)) } }
+
+        func note(_ target: InstallTarget, refused: Bool) {
+            let key = Self.key(target)
+            lock.withLock {
+                if refused { done.insert(key) } else { done.remove(key) }
+                return
+            }
+        }
     }
 
     /// **The key files that the first session already offered**, which a session of their own would only see refused
@@ -461,7 +495,9 @@ extension ServerCheck {
         }
         // An agent with many keys offers them all, and the server hangs up before it says what else it takes.
         if said.contains("too many authentication failures") { return .needsPassword(.ssh) }
-        return .stop(unreached(host, said: said))
+        // A connection to an address on the private network that nothing answered names the policy (`FleetReach`).
+        let line = said.split(whereSeparator: \.isNewline).last { $0.hasPrefix("ssh: connect to host ") }.map(String.init)
+        return .stop(line.flatMap { FleetReach.dropped($0, host: host) } ?? unreached(host, said: said))
     }
 }
 #endif

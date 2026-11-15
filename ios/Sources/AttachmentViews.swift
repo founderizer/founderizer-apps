@@ -80,7 +80,7 @@ struct AttachmentButton: View {
         for item in items.prefix(room) {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self) else {
-                    store.fileFailed("That picture did not open.")
+                    store.fileFailed(String(l10n: "That picture did not open."))
                     continue
                 }
                 let picture = try MessageAttachment.imageForSending(data)
@@ -88,7 +88,7 @@ struct AttachmentButton: View {
                     ?? "photo.\(picture.mime == "image/png" ? "png" : "jpg")"
                 await store.stage(picture.data, name: name, mime: picture.mime, for: composer)
             } catch {
-                store.fileFailed((error as? LocalizedError)?.errorDescription ?? "That picture did not open.")
+                store.fileFailed((error as? LocalizedError)?.errorDescription ?? String(l10n: "That picture did not open."))
             }
         }
     }
@@ -98,7 +98,7 @@ struct AttachmentButton: View {
     private func takeFiles(_ result: Result<[URL], Error>) async {
         guard case .success(let urls) = result else {
             if case .failure(let error) = result {
-                store.fileFailed("That file did not open.", detail: error.localizedDescription)
+                store.fileFailed(String(l10n: "That file did not open."), detail: error.localizedDescription)
             }
             return
         }
@@ -110,7 +110,7 @@ struct AttachmentButton: View {
                 continue
             }
             guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {
-                store.fileFailed("That file did not open.")
+                store.fileFailed(String(l10n: "That file did not open."))
                 continue
             }
             if mime.hasPrefix("image/"), let picture = try? MessageAttachment.imageForSending(data) {
@@ -176,7 +176,7 @@ struct AttachmentStrip: View {
                     .accessibilityLabel("Take \(file.name) out")
                 }
             }
-            Text(file.failure == nil ? file.name : "Not sent")
+            Text(file.failure == nil ? file.name : String(l10n: "Not sent"))
                 .font(.caption2).foregroundStyle(file.failure == nil ? Brand.muted : Brand.warning)
                 .lineLimit(1).truncationMode(.middle).frame(width: side, alignment: .leading)
         }
@@ -379,7 +379,7 @@ struct AttachmentGallery: View {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 try data.write(to: place, options: [.atomic, .completeFileProtection])
                 opened = place
-            } catch { store.fileFailed("This file did not open on the phone.", detail: error.localizedDescription) }
+            } catch { store.fileFailed(String(l10n: "This file did not open on the phone."), detail: error.localizedDescription) }
         }
     }
 }

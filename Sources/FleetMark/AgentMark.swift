@@ -83,6 +83,18 @@ public struct GlyphLook: Sendable {
         phase = Double(hash % 6283) / 1000
     }
 
+    /// The look of a kind in one hue of the list, with no name behind it: the marks of the first run's welcome page,
+    /// which stand for a team that does not exist yet (the owner's yes of 14 November 2026 to its moving mock). `tone`
+    /// is a place in the list of hues (0 coral, 1 amber, 2 lime, 3 mint, 4 sky, 5 blue, 6 sand, 7 orchid, 8 rose), and
+    /// one out of the list is taken modulo its length. No agent's look comes from here.
+    public init(kind: GlyphKind, tone: Int) {
+        self.kind = kind
+        self.tone = ((tone % Self.tones.count) + Self.tones.count) % Self.tones.count
+        light = Self.tones[self.tone].light
+        deep = Self.tones[self.tone].deep
+        phase = 0
+    }
+
     /// The looks of a team, in the hub's order of its agents. The first agent keeps the first look of its name. A
     /// later agent takes the next look of its name while an earlier agent has its shape or its colour. So the agents
     /// of one team differ in shape and in colour while the team is not larger than the lists, and a new agent at the

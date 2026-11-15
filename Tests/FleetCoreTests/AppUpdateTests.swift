@@ -59,6 +59,21 @@ struct AppUpdateTests {
         #expect(!kept.waits(over: nil))
     }
 
+    /// **The sidebar's Update says no version** (the owner, 14 November 2026: "no need to show the version to update
+    /// too"): Update at rest, since a click opens the window that asks (15 November 2026); the download while it comes,
+    /// Restarting… after it; Updating… or what the fleet's press waits for while it goes on; Try again after a failure.
+    @Test func theBannerSaysTheStepAndNoVersion() {
+        #expect(UpdateAsk.banner(app: nil) == "Update")
+        #expect(UpdateAsk.banner(app: nil, failed: true) == "Try again")
+        #expect(UpdateAsk.banner(app: .downloading(-1)) == "Downloading…")
+        #expect(UpdateAsk.banner(app: .downloading(0.42), failed: true) == "Downloading… 42%")
+        for step: AppUpdateInstaller.Step in [.checking, .installing, .installed] {
+            #expect(UpdateAsk.banner(app: step, fleet: "Updating…") == "Restarting…")
+        }
+        #expect(UpdateAsk.banner(app: nil, fleet: "Updating…", failed: true) == "Updating…")
+        #expect(UpdateAsk.banner(app: nil, fleet: "Waits for a task") == "Waits for a task")
+    }
+
     /// **It reads back from the file kept with the fleet's**, and a launch that kept none, or a file that is no build,
     /// gives none.
     @Test func aKeptWaitingBuildReadsBack() throws {
@@ -391,6 +406,46 @@ struct AppUpdateTests {
         #expect(AppUpdateWords.failing(since: since, now: since.addingTimeInterval(23 * 3600)) == nil)
         #expect(AppUpdateWords.failing(since: since, now: since.addingTimeInterval(24 * 3600))?
             .hasPrefix("Our channel has not answered since") == true)
+    }
+
+    /// Founderizer › Check for Updates… (the owner's yes of 14 November 2026 to its picture): "Founderizer 2026.11.1 is
+    /// ready" over "You have 2026.10.1." with Update and Restart only while this Mac can take the build; "Founderizer is
+    /// up to date"; and every other read the channel's own line under the version that runs.
+    @Test func theCheckWindowOffersUpdateAndRestartOnlyForABuildThisMacCanTake() async throws {
+        let (key, published) = pair()
+        let older = AppVersion(name: "2026.10.1", build: 12), newest = AppVersion(name: "2026.11.1", build: 42)
+        let offered = await channel(200, try Build().json(signedBy: key), key: published)
+            .read(installed: older, system: Self.sonoma)
+        #expect(AppUpdateWords.check(offered, running: older, cannotReplace: nil)
+            == .init(title: "Founderizer 2026.11.1 is ready", line: "You have 2026.10.1.", offers: true))
+        // A Mac that cannot replace the app where it stands is told why, with no button that would fail.
+        #expect(AppUpdateWords.check(offered, running: older, cannotReplace: "Move it to Applications.")
+            == .init(title: "Founderizer 2026.11.1 is ready", line: "Move it to Applications.", offers: false))
+        let current = await channel(200, try Build().json(signedBy: key), key: published)
+            .read(installed: newest, system: Self.sonoma)
+        #expect(AppUpdateWords.check(current, running: newest, cannotReplace: nil)
+            == .init(title: "Founderizer is up to date", line: "You have 2026.11.1.", offers: false))
+        var held = Build(); held.hold = true
+        let holding = await channel(200, try held.json(signedBy: key), key: published)
+            .read(installed: older, system: Self.sonoma)
+        let heldWords = AppUpdateWords.check(holding, running: older, cannotReplace: nil)
+        #expect(heldWords.title == "You have Founderizer 2026.10.1" && heldWords.line == holding.says && !heldWords.offers)
+        let away = await AppUpdateChannel(channel: Self.channel, keys: [published],
+                                          fetch: { _, _ in throw URLError(.notConnectedToInternet) })
+            .read(installed: older, system: Self.sonoma)
+        let awayWords = AppUpdateWords.check(away, running: older, cannotReplace: nil)
+        #expect(awayWords.line.contains("could not reach") && !awayWords.offers)
+    }
+
+    /// A build that waits goes in by itself during the first run only while the setup's first page shows with no install
+    /// begun, and never from the claim of an install until he leaves the setup's last screens.
+    @Test func theSetupHoldsABuildExceptOnItsFirstPageAtRest() {
+        #expect(!AppUpdatePolicy.setupHolds(beforeHub: true, setupAtRest: true, wizardHolds: false))
+        #expect(AppUpdatePolicy.setupHolds(beforeHub: true, setupAtRest: false, wizardHolds: false))
+        #expect(AppUpdatePolicy.setupHolds(beforeHub: false, setupAtRest: false, wizardHolds: true))
+        #expect(AppUpdatePolicy.setupHolds(beforeHub: true, setupAtRest: true, wizardHolds: true))
+        // A Mac whose hub answered and that shows no setup: the hub's own rules alone.
+        #expect(!AppUpdatePolicy.setupHolds(beforeHub: false, setupAtRest: false, wizardHolds: false))
     }
 
     @Test func aChannelThatIsNotHTTPSIsNotAsked() async throws {

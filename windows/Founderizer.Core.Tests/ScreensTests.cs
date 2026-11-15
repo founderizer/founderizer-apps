@@ -24,7 +24,8 @@ public sealed class ScreensTests
     private static StoreState WithChat(StoreState s, string agent, params JsonObject[] items)
     {
         var page = HubDecode.ChatPage(Encoding.UTF8.GetBytes(SampleFleet.ChatPage("gen1", agent, items).ToJsonString()), "gen1", agent);
-        return s with { Chats = s.Chats.SetItem(agent, new ChatPageState { Agent = agent, Items = ValueList.Of(page.Items) }) };
+        // A first read of fewer items than a page: the chat's whole history.
+        return s with { Chats = s.Chats.SetItem(agent, new ChatPageState { Agent = agent, Items = ValueList.Of(page.Items), Whole = page.Items.Count < StoreState.ChatFirstPage }) };
     }
 
     [TestMethod]
@@ -81,17 +82,19 @@ public sealed class ScreensTests
     }
 
     [TestMethod]
-    public void AChatStandsItsRequestsAfterTheMessageThatToldHimAndStampsItsHours()
+    public void AChatStandsItsRequestsWhereTheyWereRaisedAndStampsItsHours()
     {
         var s = WithChat(Sample(), "manager",
             SampleFleet.Message("0b5f6c8e-1111-4222-8333-444455556666", SampleFleet.Now - 540, "Can we start the spring sale on Monday?"),
             SampleFleet.Report(5, SampleFleet.Now - 480, "Yes. Marketing has the email ready, and there is a refund in Needs you."));
         var chat = Screens.Chat(s, "manager", Now, Utc);
-        CollectionAssert.AreEqual(new[] { ChatRowKind.Stamp, ChatRowKind.Message, ChatRowKind.Reply, ChatRowKind.Request, ChatRowKind.Request },
+        // The Mac's rule of 14 November 2026 (ChatRequestPlaces.inTime): both requests were raised before his message, so
+        // they stand over it at their own time, and the hour's mark is the first request's.
+        CollectionAssert.AreEqual(new[] { ChatRowKind.Stamp, ChatRowKind.Request, ChatRowKind.Request, ChatRowKind.Message, ChatRowKind.Reply },
                                   chat.Rows.Select(r => r.Kind).ToArray());
-        Assert.AreEqual("Today 15:03", chat.Rows[0].Text);
-        Assert.AreEqual("Refund an order from 45 days ago?", chat.Rows[3].Request!.Title);
-        var card = chat.Rows[3].Request!;
+        Assert.AreEqual("Today 14:32", chat.Rows[0].Text);
+        Assert.AreEqual("Refund an order from 45 days ago?", chat.Rows[1].Request!.Title);
+        var card = chat.Rows[1].Request!;
         Assert.AreEqual("From Fleet Manager · 14:32", card.From);
         Assert.AreEqual("Show all", card.MoreClosed);
         CollectionAssert.AreEqual(new[] { "Refund it", "Offer a 20% voucher", "Say no, politely" }, card.Options.Labels.ToArray());

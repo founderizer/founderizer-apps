@@ -129,7 +129,7 @@ struct ChatAppsReadTests {
         #expect(try snapshot([account(["invite_url": "https://evil.example/discord.com"])]).accounts[0].inviteURL == nil)
         // A hub that sends an account without the bridge's fields still shows the card.
         let bare = try snapshot([["id": "discord-studio", "app": "discord", "label": "Studio", "agents": ["studio"]]])
-        let card = ChannelCard(app: "discord", agent: "studio", in: bare, linking: false, serverTime: 1000)
+        let card = ChannelCard(app: "discord", agent: "studio", in: bare, serverTime: 1000)
         #expect(card.kind == .connecting && bare.accounts[0].isEnabled)
     }
 
@@ -287,13 +287,11 @@ struct ChatAppsLogicTests {
         #expect(ChatApps.label(String(repeating: "x", count: 40)) != nil && ChatApps.label(String(repeating: "x", count: 41)) == nil)
     }
 
-    @Test func theCountdownUsesTheHubsClock() {
+    @Test func aCodesTimeLeftUsesTheHubsClock() {
         let read = Date(timeIntervalSince1970: 5000)
         // The Mac's clock is 4,000 seconds behind the hub: only the hub's time counts.
         #expect(ChatApps.remaining(expires: 1600, serverTime: 1000, readAt: read, now: read.addingTimeInterval(19)) == 581)
         #expect(ChatApps.remaining(expires: 1600, serverTime: 1000, readAt: read, now: read.addingTimeInterval(700)) == 0)
-        #expect(ChatApps.countdown(581) == "9:41")
-        #expect(ChatApps.countdown(600) == "10:00" && ChatApps.countdown(0.2) == "0:01" && ChatApps.countdown(0) == "0:00")
     }
 
     @Test func aListMasksPhoneNumbers() {

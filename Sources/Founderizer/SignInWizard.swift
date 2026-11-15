@@ -1,6 +1,7 @@
 import AppKit
 import FleetCore
 import FleetMark
+import FleetOwnerAPI
 import SwiftUI
 
 /// **Signing one machine's runtime in, as the wizard of adding a machine is**: one step on a page, the page after
@@ -29,6 +30,8 @@ struct SignInWizard: View {
     let agent: String
 
     @State private var machine: MachineStatus?
+    /// This view's own mark for the page that it tells the store (`WizardPages.tell`, `gone`).
+    @State private var placeMark = UUID()
     /// The sign-in this wizard is driving: the one it started, or the one already going when it opened. An older
     /// finished sign-in is history and no page of this wizard.
     @State private var mine: Int?
@@ -40,6 +43,16 @@ struct SignInWizard: View {
     @State private var refusal: String?
 
     private enum Page { case start, link, code, done, failed }
+    /// The page by its fixed name (`AppPlace`, `setup_state`'s `place`), with no default: a new page needs a name.
+    private static func placeName(_ page: Page) -> AppPlace.SignInPage {
+        switch page {
+        case .start: .start
+        case .link: .link
+        case .code: .code
+        case .done: .done
+        case .failed: .failed
+        }
+    }
 
     private var login: MachineLogin? {
         guard let login = machine?.login, login.id == mine else { return nil }
@@ -80,6 +93,10 @@ struct SignInWizard: View {
         }
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(agent)") { await poll() }
         .onChange(of: page) { _, _ in sent = false }
+        .onChange(of: page, initial: true) { _, now in
+            store.wizardPages.tell(signIn: .init(agent: agent, page: Self.placeName(now)), by: placeMark)
+        }
+        .onDisappear { store.wizardPages.gone(placeMark) }
         .accessibilityIdentifier("sign-in-wizard")
     }
 

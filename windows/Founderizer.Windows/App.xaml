@@ -15,6 +15,7 @@
             <SolidColorBrush x:Key="CanvasBrush" Color="#FF191919" />
             <SolidColorBrush x:Key="TextBrush" Color="#FFE6E6E6" />
             <SolidColorBrush x:Key="MutedBrush" Color="#FF999999" />
+            <SolidColorBrush x:Key="OrangeBrush" Color="#FFFF9F0A" />
             <SolidColorBrush x:Key="LineBrush" Color="#11FFFFFF" />
             <SolidColorBrush x:Key="SelectedFillBrush" Color="#0FFFFFFF" />
             <SolidColorBrush x:Key="BarBrush" Color="#FF8F88FF" />

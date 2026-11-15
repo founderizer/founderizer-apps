@@ -10,7 +10,8 @@ public struct ReleaseRow: Codable, Equatable, Identifiable, Sendable {
     public let minimum: String?
     /// We stopped this release. No fleet takes a held release, because the hold is inside the signed manifest.
     public let hold: Bool
-    /// `verified`, `held`, `updating`, `done`, `kept`, `rolled_back` or `failed`.
+    /// `verified`, `held`, `updating`, `done`, `kept`, `rolled_back` or `failed`, and `passed` (owner API 1.177): a
+    /// release that no run took, whose code the fleet runs all the same, because a later release holds it.
     public let state: String
     /// Where an update run stood: `clone`, `merge`, `selftest`, `verify`, `push`, `follow` and the others of 4.3.
     public let step: String?
@@ -177,8 +178,17 @@ public struct ReleaseState: Codable, Equatable, Sendable {
               URL(string: channel)?.scheme != nil else { throw HubError.invalidResponse }
     }
 
-    /// The release the Update button takes, or nil when there is nothing to take.
-    public var offered: ReleaseRow? { releases.first { $0.isOffered } }
+    /// The release the Update button takes, or nil when there is nothing to take: the newest one that is offered and
+    /// stands above the release this fleet runs (`current`).
+    ///
+    /// **Never one under it** (the owner, 15 November 2026): releases 2026.11.482 to .488 came while turns ran, no run
+    /// took them, and they stayed `verified` under 2026.11.494, which the fleet ran; the page offered "Update to
+    /// 2026.11.488", and his press found nothing to take. A hub of owner API 1.177 marks such a release `passed`; this
+    /// holds for a hub before it too. The rows come newest first, by the order the fleet learned of them.
+    public var offered: ReleaseRow? {
+        let above = current.flatMap { run in releases.firstIndex { $0.id == run.id } } ?? releases.endIndex
+        return releases[..<above].first { $0.isOffered }
+    }
     /// The run that is going on, or the newest one that ended.
     public var newestRun: ReleaseRow? { releases.first { $0.started_at != nil } }
     /// The release this fleet runs: the newest one a run of it really reached.
@@ -187,8 +197,9 @@ public struct ReleaseState: Codable, Equatable, Sendable {
     /// revision the moment anything is written to its configuration ref — a machine that joins, a profile the owner
     /// changes. The screen then said "Your fleet has not taken one of our releases yet" about a fleet that had
     /// taken four of them (19 October 2026). What the owner asks is which of our releases he is on, and that is the
-    /// newest one applied, whatever his own commits put on top of it.
-    public var current: ReleaseRow? { releases.first { $0.applied && $0.reached != nil } }
+    /// newest one applied, whatever his own commits put on top of it. **A `passed` release counts too** (owner API
+    /// 1.177): no run took it, but the fleet runs its code, as on a new hub whose checkout came at that release.
+    public var current: ReleaseRow? { releases.first { $0.applied && $0.reached != nil || $0.state == "passed" } }
 
     /// Where this fleet stands, as the Updates screen says it: one line in the owner's own words, the release the
     /// one button would take, and the short word at the right when there is no button.
@@ -199,7 +210,7 @@ public struct ReleaseState: Codable, Equatable, Sendable {
     /// reached makes it up to date; everything else says what is missing.
     public var stand: Stand {
         if let run = newestRun, run.isRunning {
-            return Stand(says: run.summary, value: String(l10n: "Updating"))
+            return Stand(says: run.summary, value: String(l10n: "Updating"), working: true)
         }
         if let run = newestRun, run.needsOwner {
             return Stand(says: run.summary, value: String(l10n: "Did not finish"), take: offered, waiting: !idle, warn: true)
@@ -238,6 +249,18 @@ public struct ReleaseState: Codable, Equatable, Sendable {
         return Stand(says: runs, value: String(l10n: "Unknown"))
     }
 
+    /// `stand`, for a page whose press of Update the hub has taken (`pressed`): **while that run has not written its
+    /// own row yet, the row says Updating.** The run asks our channel first, for up to ten seconds, and marks the
+    /// release `updating` only then, so the white Update to … came back after the press, and a second press got "this
+    /// fleet is already checking or updating" (the review of 14 November 2026). `running` says the hub's run goes on.
+    public func stand(pressed: Bool) -> Stand {
+        if pressed, running, newestRun?.isRunning != true, let ready = offered {
+            return Stand(says: String(l10n: "This fleet is updating to \(ready.version)…"), value: String(l10n: "Updating"),
+                         working: true)
+        }
+        return stand
+    }
+
     /// Which of our releases this fleet runs, in the owner's own words. The revision under it is this app's
     /// business and not his: a screen of ours names a version, never an id.
     private var runs: String {
@@ -257,9 +280,15 @@ public struct ReleaseState: Codable, Equatable, Sendable {
         public let waiting: Bool
         /// This line is something to act on: it is drawn in orange.
         public let warn: Bool
+        /// An update run goes on now, and its value is a wait: the page draws it in the moving words of every wait
+        /// of this app. A still grey "Updating" for the two minutes of a run read as a screen that had stopped (the
+        /// owner, 14 November 2026: "clicked on Update fleet, seems stuck, not a great ux").
+        public let working: Bool
 
-        public init(says: String, value: String, take: ReleaseRow? = nil, waiting: Bool = false, warn: Bool = false) {
+        public init(says: String, value: String, take: ReleaseRow? = nil, waiting: Bool = false, warn: Bool = false,
+                    working: Bool = false) {
             self.says = says; self.value = value; self.take = take; self.waiting = waiting; self.warn = warn
+            self.working = working
         }
     }
 

@@ -87,7 +87,7 @@ final class MachineInstallModel {
             // Three words at most, as a card of a choice has them (the owner, 3 November 2026: "too much text").
             case .linux: "Linux server"
             case .mac: "Mac"
-            case .line: "Paste a line"
+            case .line: "Install by hand"
             }
         }
     }
@@ -103,7 +103,8 @@ final class MachineInstallModel {
     private var made: (name: String, kind: String, expiresAt: Double)?
     /// The first agent of a Mac that this install named: the hub adds it, so the page offers no Add agent.
     private(set) var firstAgent: String?
-    /// The AI that the owner chose for this server, nil on a hub that takes no choice.
+    /// The AI that the owner chose for a Mac that stays on, nil for a VPS, which is asked for none, and on a hub that
+    /// takes no choice.
     var ai: ServerAI?
     var host = ""
     var user = "root"
@@ -127,6 +128,9 @@ final class MachineInstallModel {
     /// The ids of the running plan's steps, in order: the installer reports a step only when it starts, and the minutes
     /// left count the steps it has not reached yet from this (`InstallPhases`).
     private(set) var planned: [String] = []
+    /// The job of the install that runs or ran last, from its start on, so that a stop before its plan says it too
+    /// (`setup_diagnosis`). `again` takes it away, so that an old job does not stand for a new page.
+    private(set) var job: InstallJob?
     /// The step that runs now and when it began, for the minutes that go down within a long step (`InstallPhases`).
     private(set) var runningStep: String?
     private(set) var runningSince = Date()
@@ -144,12 +148,32 @@ final class MachineInstallModel {
     /// no Tailscale key was given. Then the key is the one question left, and the screen asks it in the owner's own
     /// words.
     private(set) var needsNetworkKey = false
+    /// **The install's plain facts for `setup_diagnosis`** (`SetupChannel`, which reads it inside its observation): no
+    /// write. Why it stopped goes as the fixed kind (`stop`), and never as the stop's words (`failure`,
+    /// `failureDetail`), which stay with this model. It ended
+    /// with its checklist, or with its task over and no stop: a Mac's installer that said done may send no checklist.
+    var linkFacts: ReachFacts.InstallLink {
+        ReachFacts.InstallLink(way: way.rawValue, running: running, failed: failure != nil,
+                               ended: checklist != nil || (!running && failure == nil && work != nil),
+                               job: job?.rawValue, steps: steps, planned: planned,
+                               runningStep: steps.contains { $0.step == runningStep && $0.state == .running }
+                                   ? runningStep : nil,
+                               since: runningSince,
+                               stop: stop, waitsForNetwork: needsNetworkKey)
+    }
     /// What Tailscale said when this Mac tried to mint the key from the credential it holds. A credential that was
     /// ended or that expired leads to the same one question, and this is the line that says why it is being asked
     /// of a fleet that already answered it once.
     private(set) var networkFailure: String?
     /// The address this Mac claimed, after a hub install: the app connects to it by itself.
     private(set) var hubAddress: String?
+    /// **Why the install stopped, as a fixed kind** (`InstallRecord.Stop`), beside `failure`, whose words are for the
+    /// owner's eyes: nil exactly when `failure` is nil.
+    private(set) var stop: InstallRecord.Stop?
+    /// **The kept record of this install** (`InstallRecord`), written at each change of a step's state and at the end,
+    /// so that what happened can be read after this page is gone, after a restart and after an update of the app. It
+    /// stays with the model after the end for a step's report that comes late, until the next install or `again`.
+    private var log: InstallLog?
     private var work: Task<Void, Never>?
 
     var target: InstallTarget {
@@ -193,18 +217,32 @@ final class MachineInstallModel {
         }
     }
 
+    /// **The name of a new hub's manager**, which its owner typed in the first run (`FirstRunModel.hubName`); nil for
+    /// an install that did not ask, whose manager is `manager`. The first run sets it before each install of a hub.
+    var managerName: String?
+    /// **One server for all** (`FirstRunModel.oneServer`): the hub's installer gets the word for it, and the manager
+    /// runs on the hub's own server. The first run sets it before each install of a hub.
+    var oneServer = false
+    /// **The step of the first run's slider** (`FirstRunModel.serversStep`), for the hub to keep from its first install
+    /// on; nil for an install whose owner did not come through that page. The first run sets it before each install.
+    var shape: ServersStep?
+
     /// Installs the hub itself: the first machine of a fleet, which has no hub to ask for a line. The claim at its
     /// end proves this Mac's own address to that hub, and the app then connects to it.
     func installHub(store: FleetStore) {
         guard !running else { return }
         work?.cancel()      // the reading of a Mac's order before this one
         running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; checklist = nil
+        job = .hub
+        // A new hub has no address yet: its record gets one at its claim step.
+        begin(.hub, hub: nil, host: target.host)
         work = Task { [weak self] in
             guard let self else { return }
             do {
                 try await mintKey(for: "hub")
                 let plan = InstallPlan.hub(target: target, source: source.trimmingCharacters(in: .whitespaces),
-                                           authKey: authKey.isEmpty ? nil : authKey)
+                                           authKey: authKey.isEmpty ? nil : authKey, managerName: managerName,
+                                           oneServer: oneServer, shape: shape)
                 try await run(plan: plan, store: store, machine: "hub")
             } catch {
                 finish(error: error)
@@ -220,7 +258,9 @@ final class MachineInstallModel {
         let machine = Servers.asksName(store.state?.ui_features) ? name : nil
         work?.cancel()      // the reading of a Mac's order before this one
         running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; checklist = nil
+        job = .join
         server = machine; made = nil
+        begin(.join, hub: store.hub.absoluteString, host: target.host, server: machine)
         work = Task { [weak self] in
             guard let self else { return }
             do {
@@ -253,10 +293,12 @@ final class MachineInstallModel {
         guard !running, let database = store.state?.db else { return }
         guard let installer = MacInstallerClient.address(macHost), let code = ClaimCode.read(linkCode) else {
             failure = MacLinkError.notAnAddress.errorDescription; failureDetail = nil
+            stop = .cannotStart
             return
         }
         guard Servers.setsUpMacs(store.state?.ui_features) else {
             failure = String(l10n: "Your hub needs the newest Founderizer first: Settings, Updates."); failureDetail = nil
+            stop = .cannotStart
             return
         }
         // A hub with `server_names` names this Mac by its name in Tailscale at its join, so its code is made with no
@@ -267,7 +309,11 @@ final class MachineInstallModel {
         firstAgent = withAgent ? AddAgentModel.freeName(taken: Set(store.state?.agents.map(\.name) ?? [])) : nil
         work?.cancel()      // the reading of the order before this one
         running = true; failure = nil; failureDetail = nil; steps = []; planned = []; checklist = nil
+        job = .join
         server = asks ? machine : nil; made = nil
+        begin(.mac, hub: store.hub.absoluteString, host: installer.host ?? "", server: asks ? machine : nil)
+        // The link code seals the order: it is in no kept word.
+        log?.hide([code])
         work = Task { [weak self] in
             guard let self else { return }
             do {
@@ -282,6 +328,7 @@ final class MachineInstallModel {
                     throw InstallError.cannotStart(String(l10n: "The hub gave no join line. Try again."))
                 }
                 try await mintKey(for: asks ? machine : installer.host ?? "", life: PrivateNetwork.macKeyLifeSeconds)
+                log?.hide([authKey])
                 let order = MacInstallOrder(code: code, hub: store.hub.absoluteString, name: machine, line: line,
                                             authKey: authKey.isEmpty ? nil : authKey, agent: firstAgent)
                 let client = MacInstallerClient()
@@ -309,12 +356,20 @@ final class MachineInstallModel {
                     }
                     if failure != nil {
                         running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil
+                        stop = nil
+                        // The record runs again, and holds the link code again for a line that it may keep.
+                        if log?.goOn() == true { log?.hide([code]); keepRecord() }
                     }
                     if state.isDone {
                         let named = asks ? machine : await joinedName(store: store)
                         server = named
+                        // Add server for that machine on this Mac: a removal mark of it goes (package 4 of the vault's gates).
+                        if let named { store.vaultModel().added(named) }
                         checklist = state.checklist
                         running = false
+                        log?.place(server: named)
+                        log?.done()
+                        keepRecord()
                         if let answer = state.checklist, let named {
                             MachineChecks.remember(answer, machine: named, hub: store.hub)
                         }
@@ -343,6 +398,7 @@ final class MachineInstallModel {
     /// keeps the connection and the checks under it.
     private func run(plan: InstallPlan, store: FleetStore, machine: String?) async throws {
         planned = plan.steps.map(\.id)
+        log?.hide(plan.redactions)
         let installer = MachineInstaller(plan: plan, authKey: authKey, sudoPassword: sudoPassword)
         defer { sudoPassword = nil }
         let answer: VerifyChecklist
@@ -363,9 +419,21 @@ final class MachineInstallModel {
         server = machine
         checklist = answer
         running = false
+        log?.place(hub: plan.job == .hub ? claimedHub() : nil, host: reached.host, server: machine)
+        log?.done()
+        keepRecord()
         guard let machine else { return }
+        // Add server for that machine on this Mac: a removal mark of it goes (package 4 of the vault's gates).
+        store.vaultModel().added(machine)
         InstallTargets.remember(reached, machine: machine, hub: store.hub)
         MachineChecks.remember(answer, machine: machine, hub: store.hub)
+        // A server's install ran to its last step from this Mac (`InstallEnds`).
+        if plan.job == .join {
+            InstallEnds.note(machine, address: reached.host, hub: store.hub)
+            // A server that this Mac made for this hub and never saw join did join after all (`BuildRecord`): by the
+            // hub that this install began with.
+            BuildRecords.shared.noteJoined(name: machine, hub: log?.record.hub ?? store.hub.absoluteString)
+        }
         if plan.job == .hub, let claimed = claimedAddress() {
             hubAddress = claimed
             store.addressText = claimed
@@ -399,11 +467,7 @@ final class MachineInstallModel {
     /// The hub's own address, out of the claim step this install already made.
     private func claimedAddress() -> String? {
         for step in steps.reversed() where step.step == "claim" {
-            for line in step.lines {
-                guard let found = line.range(of: "[0-9]{1,3}(\\.[0-9]{1,3}){3}", options: .regularExpression),
-                      ClaimCode.isPrivateAddress(String(line[found])) else { continue }
-                return "http://\(line[found]):8765"
-            }
+            if let claimed = StartAgain.claimedHub(in: step.lines) { return claimed }
         }
         return nil
     }
@@ -412,6 +476,34 @@ final class MachineInstallModel {
         if let at = steps.firstIndex(where: { $0.step == progress.step }) { steps[at] = progress } else { steps.append(progress) }
         let now = steps.first(where: { $0.state == .running })?.step
         if now != runningStep { runningStep = now; runningSince = Date() }
+        // The kept record: a step that began or ended, never a line that it printed. A hub has its address from its
+        // claim step on, so a stop after it is kept by that address.
+        var changed = log?.note(step: progress.step, state: progress.state == .done ? .done
+                                    : progress.state == .failed ? .failed : .running) == true
+        if progress.step == "claim", progress.state == .done, log?.place(hub: claimedHub()) == true { changed = true }
+        if changed { keepRecord() }
+    }
+
+    /// A new install begins: no stop, and a new record. `server`: the name that the owner gave it, on a hub that asks
+    /// for one; else the hub names it at its join.
+    private func begin(_ kind: InstallRecord.Kind, hub: String?, host: String, server: String? = nil) {
+        stop = nil
+        var log = InstallLog(kind: kind, hub: hub, host: host)
+        log.place(server: server)
+        self.log = log
+        keepRecord()
+    }
+
+    /// Writes the record as it stands now (`InstallRecords`): one small file, and nothing when it did not change.
+    private func keepRecord() {
+        if let log { InstallRecords.shared.write(log.record) }
+    }
+
+    /// The claimed hub's address in the app's own form, only once the claim step ended well: the lines of a claim
+    /// that failed hold the hub's address too, and that hub was never this Mac's.
+    private func claimedHub() -> String? {
+        guard steps.contains(where: { $0.step == "claim" && $0.state == .done }) else { return nil }
+        return claimedAddress().map { (try? HubClient.address($0))?.absoluteString ?? $0 }
     }
 
     private func finish(error: Error) {
@@ -427,12 +519,21 @@ final class MachineInstallModel {
         }
         running = false
         authKey = ""
+        // The fixed kind of the stop, and the record's end. The page's own line is kept only where its words are this
+        // app's own (`InstallRecord.words`): never the installer's own reason, a hub's, Tailscale's or a Mac's words.
+        let kind: InstallRecord.Stop = error is NetworkKeyRefused ? .networkKeyRefused : .of(error)
+        stop = kind
+        // A server's address is the one that the install reached; a Mac's record keeps its installer's address.
+        log?.place(hub: log?.record.kind == .hub ? claimedHub() : nil, host: log?.record.kind == .mac ? nil : target.host)
+        log?.stop(kind, says: InstallRecord.words(of: error, host: target.host), waitsForNetwork: needsNetworkKey)
+        keepRecord()
     }
 
     func cancel() {
         work?.cancel(); work = nil
         running = false
         authKey = ""
+        if log?.cancel() == true { keepRecord() }
     }
 
     /// Takes a server that a check proved, or that a provider made: its address, user, port and key, and the password
@@ -446,7 +547,10 @@ final class MachineInstallModel {
         guard !running else { return }
         work?.cancel(); work = nil
         steps = []; planned = []; checklist = nil; failure = nil; failureDetail = nil; hubAddress = nil; needsNetworkKey = false; networkFailure = nil
+        job = nil
         server = nil; made = nil
+        // The record of the install that ended stays in its file; this model writes it no more.
+        stop = nil; log = nil
     }
 }
 

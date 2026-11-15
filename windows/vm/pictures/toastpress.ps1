@@ -1,5 +1,7 @@
 # toastpress.ps1: waits for the app's next notification (a new line "notification:" in its log), takes a picture of the
 # screen while Windows shows it (C:\fz\toast.png), and presses its middle with the mouse, as a person does.
+# -NoWait: presses the notification that shows now, with no log to wait for (the app was ended after it came).
+param([switch]$NoWait)
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type -TypeDefinition @'
 using System; using System.Runtime.InteropServices;
@@ -10,9 +12,11 @@ public static class FzPress {
 }
 '@
 [FzPress]::SetProcessDPIAware() | Out-Null
-$before = @(Select-String -Path C:\fz\timing.log -Pattern '^notification:').Count
-for ($i = 0; $i -lt 60; $i++) { Start-Sleep -Milliseconds 200; if (@(Select-String -Path C:\fz\timing.log -Pattern '^notification:').Count -gt $before) { break } }
-Start-Sleep -Milliseconds 900
+if (-not $NoWait) {
+    $before = @(Select-String -Path C:\fz\timing.log -Pattern '^notification:').Count
+    for ($i = 0; $i -lt 60; $i++) { Start-Sleep -Milliseconds 200; if (@(Select-String -Path C:\fz\timing.log -Pattern '^notification:').Count -gt $before) { break } }
+    Start-Sleep -Milliseconds 900
+}
 $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
 $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)

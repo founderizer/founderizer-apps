@@ -188,6 +188,15 @@ public struct InstallStep: Equatable, Sendable, Identifiable {
         case detach(String)
         /// Read this command's output every `every` seconds until it holds the mark, for at most `within` seconds.
         case waitFor(String, mark: String, every: Double, within: Double)
+        /// **The wait for the hub installer's link code** (`ClaimCode.logMark` in this command's output), read as
+        /// `waitFor` reads. A hub that has its owner makes no code (`hubsetup.py claim`: "this hub belongs to the Mac
+        /// at … already, so no code was made"), so an install that is run again after its claim waited here for its
+        /// whole time and stopped, at each try (a user's report of 15 November 2026). So each read with no code also
+        /// asks the hub itself, from this Mac (`MachineInstaller.HubRead`): a hub that serves this Mac is this Mac's
+        /// already, and the plan goes on with no code; a hub that refuses this Mac two times in a row, after the
+        /// installer itself said that it made no code, stops the install; every other answer, no answer, and the
+        /// claim's own listener leave the wait as it is.
+        case waitForClaim(String, every: Double, within: Double)
         /// Start Tailscale's own sign-in on the machine, and read `check` until the machine is on the private network.
         /// The link it prints goes to the screen as the step's lines, and the owner approves it (`NetworkSignIn`).
         case signIn(start: String, check: String, every: Double, within: Double)
@@ -212,6 +221,11 @@ public struct InstallPlan: Equatable, Sendable {
     /// The strings that are removed from every line this app shows or keeps: the Tailscale auth key and the
     /// one-time join code. The hub keeps only the code's SHA-256, and this app keeps neither.
     public let redactions: [String]
+    /// **The plan is an install** (a new hub, a server that joins): its last step, which reads the server's checks,
+    /// says why it got none, and tries again a connection that never began (`MachineInstaller.verify`,
+    /// `MachineInstaller.run`). The check, the restart and the update of a machine's own page are not, and say what
+    /// they said before.
+    public var installs = false
 
     /// The line an installer prints when it stops, in either brand. The installers are renamed in their own
     /// repository, and the two sides must never be wrong at the same time: the side that moves first widens, and
@@ -280,6 +294,12 @@ public struct InstallPlan: Equatable, Sendable {
     /// ignores it, and its manager is then signed in on the hub, as before.
     static let managerServer = "FLEET_MANAGER_SERVER=later"
 
+    /// **One server for all** (hub release 2026.11.474, owner API 1.171; the owner, 14 November 2026: "we also need
+    /// the shape htat has everything in the same server"): with this word at its first install, a hub's own server
+    /// takes agents, and the installer puts the manager there with its AI program. It stands in place of
+    /// `managerServer`: the installer refuses the two together.
+    static let oneServer = "FLEET_HUB_SERVER=shared"
+
     /// **This app's own last step is `verify`**, and it says so to the hub's installer, which then ends with no verify
     /// of its own: the self-test in it takes about a minute, and the install ran it one time for the installer and
     /// one time for this app. An installer from before ignores the word and ends with verify, as before.
@@ -307,8 +327,25 @@ public struct InstallPlan: Equatable, Sendable {
     /// `source` is the address of the Founderizer repository, which the owner's own download page gives them. The
     /// installer waits up to 30 minutes for the claim, so it runs detached with its output in a log, and this Mac
     /// claims the hub itself: the address that claim comes from is the address the hub serves the owner's pages to.
-    public static func hub(target: InstallTarget, source: String, authKey: String?) -> InstallPlan {
+    ///
+    /// `managerName` is the name that the owner gave the manager in the first run: the installer gets it as
+    /// `--manager-name`, in its plan and in its run, and gives the manager that name once. Only a name by the
+    /// installer's own rule goes into the line (`ManagerName.agentName`); with any other value, and with none, the line
+    /// is the line of before and the manager is `manager`.
+    ///
+    /// `oneServer`: the owner chose "1 server" on the slider of the first run. The installer then gets `oneServer`'s word
+    /// in place of `managerServer`'s, in its plan and in its run.
+    ///
+    /// `shape`: the step that the owner chose on that slider, which the hub keeps from its first install on (owner
+    /// feature `fleet_shape`): "2 servers" and "1 per agent" go into the line as `FLEET_SHAPE_STEP`, before the word
+    /// of the layout. "1 server" needs no such word, because `oneServer`'s word writes the step, and the installer
+    /// refuses that word with another step. An installer from before the feature does not read the word.
+    public static func hub(target: InstallTarget, source: String, authKey: String?, managerName: String? = nil,
+                           oneServer: Bool = false, shape: ServersStep? = nil) -> InstallPlan {
         let kit = hubKit, log = hubLog
+        let kept = oneServer ? nil : shape.flatMap(FleetShapeHub.installWord)
+        let layout = (kept.map { "\($0) " } ?? "") + (oneServer ? Self.oneServer : managerServer)
+        let named = managerName.flatMap { ManagerName.agentName($0) == $0 ? " --manager-name \($0)" : nil } ?? ""
         let steps: [InstallStep] = [
             .init(id: "read", title: ServerCheck.title, says: String(l10n: "Which system it is, and whether we are root there."),
                   action: readAction),
@@ -323,12 +360,12 @@ public struct InstallPlan: Equatable, Sendable {
                                + "else git clone -q -- \(quote(source)) \(kit); fi; "
                                + "git -C \(kit) rev-parse --short HEAD; ls \(kit)/hub.sh")),
             .init(id: "plan", title: String(l10n: "The plan"), says: String(l10n: "Every step the install would take. It changes nothing."),
-                  action: .run("\(managerServer) \(callerVerifies) sh \(kit)/hub.sh --check")),
+                  action: .run("\(layout) \(callerVerifies) sh \(kit)/hub.sh --check\(named)")),
             .init(id: "start", title: String(l10n: "Install the hub"), says: String(l10n: "The installer runs on the server and writes what it does to a log."),
-                  action: .detach("setsid sh -c '\(managerServer) \(callerVerifies) sh \(kit)/hub.sh < /dev/null > \(log) 2>&1' "
+                  action: .detach("setsid sh -c '\(layout) \(callerVerifies) sh \(kit)/hub.sh\(named) < /dev/null > \(log) 2>&1' "
                                   + "> /dev/null 2>&1 < /dev/null &")),
             .init(id: "wait_claim", title: String(l10n: "Wait for the link code"), says: String(l10n: "The installer makes a one-time code for this Mac."),
-                  action: .waitFor("tail -n 60 \(log)", mark: ClaimCode.logMark, every: 10, within: 1200)),
+                  action: .waitForClaim("tail -n 60 \(log)", every: 10, within: 1200)),
             .init(id: "claim", title: String(l10n: "Claim the hub"), says: String(l10n: "This Mac sends the code back, and the hub serves your pages to it alone."),
                   action: .claim),
             .init(id: "wait_ready", title: String(l10n: "Finish the install"), says: String(l10n: "The security updates and the checks take some minutes."),
@@ -336,7 +373,7 @@ public struct InstallPlan: Equatable, Sendable {
             .init(id: "verify", title: String(l10n: "Check the server"), says: String(l10n: "Every check of the server."),
                   action: .verify(verifyCommand(.hub))),
         ]
-        return InstallPlan(job: .hub, target: target, steps: steps, redactions: [authKey].compactMap { $0 })
+        return InstallPlan(job: .hub, target: target, steps: steps, redactions: [authKey].compactMap { $0 }, installs: true)
     }
 
     /// The first step of both installs: the check of the server, read again while the server is busy with its first start.
@@ -436,7 +473,8 @@ public struct InstallPlan: Equatable, Sendable {
             .init(id: "verify", title: String(l10n: "Check the server"), says: String(l10n: "Every check of the server."),
                   action: .verify(verifyCommand(.linuxWorker))),
         ]
-        return InstallPlan(job: .join, target: target, steps: steps, redactions: [authKey, code].compactMap { $0 })
+        return InstallPlan(job: .join, target: target, steps: steps, redactions: [authKey, code].compactMap { $0 },
+                           installs: true)
     }
 
     /// Only the checks of one machine, and no install: `python3 fleet.py verify --json` there, over the owner's own

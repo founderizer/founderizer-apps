@@ -53,21 +53,35 @@ internal sealed class LaneCardView : HeldView<LaneCard>
         hourglass.HorizontalAlignment = HorizontalAlignment.Right;
         hourglass.VerticalAlignment = VerticalAlignment.Center;
         hourglass.IsHitTestVisible = true;
+        // Why a task waits stands at the end of its agent's line, 4 from the role at least (the Mac's ActivityCard):
+        // "Until 16:00" for a task its agent parked, else its state word ("Waiting for Fleet Manager", "Paused").
+        why.VerticalAlignment = VerticalAlignment.Center;
+        why.HorizontalAlignment = HorizontalAlignment.Right;
+        why.TextWrapping = TextWrapping.NoWrap;
+        why.TextTrimming = TextTrimming.CharacterEllipsis;
+        why.Margin = new Thickness(4, 0, 0, 0);
         var who = new Grid
         {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+                new ColumnDefinition { Width = GridLength.Auto },
+            },
             Children =
             {
                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { mark, agent } },
                 hourglass,
             },
         };
+        Grid.SetColumn(why, 1);
+        who.Children.Add(why);
         ownerLine.Tapped += OwnerLineTapped;
         card = new Border
         {
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(14, 12, 14, 12),
-            Child = new StackPanel { Spacing = 8, Children = { title, why, ownerLine, who } },
+            Child = new StackPanel { Spacing = 8, Children = { title, ownerLine, who } },
         };
         button = new Button
         {
@@ -170,24 +184,33 @@ internal sealed class LaneView : Grid
     }
 }
 
-/// <summary>One ended row (pictures 5 and 12): the agent's mark at 16, the title cut with "…", and a red word on a red
-/// capsule for a result that did not succeed; a press opens it.</summary>
-internal sealed record EndedLine(string Key, MarkLook? Mark, string Title, string? Badge, Action Open);
-
 /// <summary>The ended part of a lane (the Mac's endedRows and restRows): the rows that always show, then the row that
-/// opens the rest ("2 more", "2 answered") with its chevron, and, opened, the rest by day under each day's heading.</summary>
+/// opens the rest ("2 more", "2 answered") with its chevron, and, opened, the rest by day under each day's heading.
+/// Both lists are virtualized and keyed, as the cards are: a new model draws again only the rows that changed, so a row
+/// keeps its view and the keyboard's focus, and the open makes only the rows near the view (a week of a busy fleet is
+/// hundreds of rows).</summary>
 internal sealed class EndedView : StackPanel
 {
-    private readonly StackPanel always = new();
+    private readonly KeyedItems<EndedLine> always = new(line => line.Key);
+    private readonly KeyedItems<EndedItem> rest = new(item => item.Key);
+    private readonly ItemsRepeater restList;
     private readonly Button more;
     private readonly TextBlock moreWords = Look.Words("", wrap: false, brush: Look.Muted);
     private readonly ContentControl chevron = new() { IsTabStop = false, VerticalAlignment = VerticalAlignment.Center };
-    private readonly StackPanel rest = new();
+    private readonly HashSet<string> opened = new();
     private bool open;
     private IReadOnlyList<(string Day, IReadOnlyList<EndedLine> Rows)> days = [];
 
-    public EndedView()
+    /// <summary><paramref name="openRow"/>: what a press on a row opens, by its id. A press on a row of several tasks
+    /// opens or closes its runs instead.</summary>
+    public EndedView(Action<long> openRow)
     {
+        void Press(EndedLine line)
+        {
+            if (line.Runs is null) { openRow(line.Id); return; }
+            if (!opened.Remove(line.Key)) opened.Add(line.Key);
+            rest.Show(Items());
+        }
         moreWords.VerticalAlignment = VerticalAlignment.Center;
         more = new Button
         {
@@ -207,9 +230,20 @@ internal sealed class EndedView : StackPanel
             open = !open;
             DrawRest();
         };
-        Children.Add(always);
+        Children.Add(new ItemsRepeater
+        {
+            Layout = new StackLayout { Spacing = 0 },
+            ItemTemplate = new ViewFactory<EndedLine, EndedLineView>(() => new EndedLineView(Press)),
+            ItemsSource = always.Items,
+        });
         Children.Add(more);
-        Children.Add(rest);
+        restList = new ItemsRepeater
+        {
+            Layout = new StackLayout { Spacing = 0 },
+            ItemTemplate = new ViewFactory<EndedItem, EndedItemView>(() => new EndedItemView(Press)),
+            ItemsSource = rest.Items,
+        };
+        Children.Add(restList);
         DrawRest();
     }
 
@@ -217,63 +251,134 @@ internal sealed class EndedView : StackPanel
 
     public void Show(IReadOnlyList<EndedLine> first, string? moreText, IReadOnlyList<(string Day, IReadOnlyList<EndedLine> Rows)> byDay)
     {
-        always.Children.Clear();
-        foreach (var line in first) always.Children.Add(Row(line));
+        always.Show(first);
         moreWords.Text = moreText ?? "";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, moreText ?? "");
         more.Visibility = moreText is null ? Visibility.Collapsed : Visibility.Visible;
         days = byDay;
-        DrawRest();
+        if (open) rest.Show(Items());
     }
 
+    /// <summary>The rest, closed: no row and no view; opened: each day's heading and its rows.</summary>
     private void DrawRest()
     {
         chevron.Content = Icons.Of(open ? Icons.ChevronDown : Icons.ChevronRight, Look.Muted, 12);
-        rest.Children.Clear();
-        rest.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        if (!open) return;
-        foreach (var (day, rows) in days)
+        if (open)
         {
-            var heading = Look.Words(day, 12, 16, Look.Muted, semibold: true, wrap: false);
-            heading.VerticalAlignment = VerticalAlignment.Bottom;
-            rest.Children.Add(new Grid { MinHeight = 28, Padding = new Thickness(10, 0, 0, 0), Children = { heading } });
-            foreach (var line in rows) rest.Children.Add(Row(line));
+            rest.Show(Items());
+            restList.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            restList.Visibility = Visibility.Collapsed;
+            rest.Items.Clear();
         }
     }
 
-    private static Button Row(EndedLine line)
+    private List<EndedItem> Items() => EndedRows.Items(days, opened);
+}
+
+/// <summary>The face of one ended row, made once and drawn again with each model of its row (the Mac's EndedRow): the
+/// red word on its capsule, or the muted note at the row's end, in the same place; a run without its mark, its muted
+/// title where the row's title begins.</summary>
+internal sealed class EndedRowFace
+{
+    private readonly AgentGlyph mark = new() { Side = 16, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock title = Look.Words("", wrap: false);
+    private readonly TextBlock note = Look.Words("", 12, 16, Look.Muted, wrap: false);
+    private readonly Border capsule;
+    private readonly TextBlock badge = Look.Words("", 12, 16, Look.Brush(Look.Rgb(0xFF, 0x6B, 0x6B)), semibold: true, wrap: false);
+    private EndedLine? line;
+
+    public Button Button { get; }
+
+    public EndedRowFace(Action<EndedLine> press)
     {
         var grid = new Grid { MinHeight = 36, Padding = new Thickness(10, 0, 10, 0), ColumnSpacing = 8 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var mark = new AgentGlyph { Side = 16, Mark = line.Mark, VerticalAlignment = VerticalAlignment.Center };
         grid.Children.Add(mark);
-        var title = Look.Words(line.Title, wrap: false);
         title.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(title, 1);
         grid.Children.Add(title);
-        if (line.Badge is { } badge)
+        capsule = new Border
         {
-            var capsule = new Border
-            {
-                CornerRadius = new CornerRadius(10),
-                Padding = new Thickness(7, 2, 7, 2),
-                Background = Look.Brush(global::Windows.UI.Color.FromArgb(41, 255, 59, 48)),
-                VerticalAlignment = VerticalAlignment.Center,
-                Child = Look.Words(badge, 12, 16, Look.Brush(Look.Rgb(0xFF, 0x6B, 0x6B)), semibold: true, wrap: false),
-            };
-            Grid.SetColumn(capsule, 2);
-            grid.Children.Add(capsule);
-        }
-        var button = new Button
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(7, 2, 7, 2),
+            Background = Look.Brush(global::Windows.UI.Color.FromArgb(41, 255, 59, 48)),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = badge,
+        };
+        Grid.SetColumn(capsule, 2);
+        grid.Children.Add(capsule);
+        note.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(note, 2);
+        grid.Children.Add(note);
+        Button = new Button
         {
             Style = (Style)Application.Current.Resources["QuietButtonStyle"],
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Content = grid,
         };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, line.Title);
-        button.Click += (_, _) => line.Open();
-        return button;
+        Button.Click += (_, _) =>
+        {
+            if (line is not null) press(line);
+        };
+    }
+
+    public void Show(EndedLine next)
+    {
+        line = next;
+        mark.Mark = next.Mark;
+        mark.Visibility = next.Indent ? Visibility.Collapsed : Visibility.Visible;
+        title.Text = next.Title;
+        title.Foreground = next.Indent ? Look.Muted : Look.Text;
+        title.Margin = new Thickness(next.Indent ? 16 : 0, 0, 0, 0);
+        badge.Text = next.Badge ?? "";
+        capsule.Visibility = next.Badge is null ? Visibility.Collapsed : Visibility.Visible;
+        note.Text = next.Badge is null ? next.Note ?? "" : "";
+        note.Visibility = next.Badge is null && next.Note is not null ? Visibility.Visible : Visibility.Collapsed;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(Button, next.Title);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(Button, next.Runs is null ? "" : next.Opened ? "Open" : "Closed");
+    }
+}
+
+/// <summary>A row that always shows: a result that he must see, or an answered request.</summary>
+internal sealed class EndedLineView : HeldView<EndedLine>
+{
+    private readonly EndedRowFace face;
+
+    public EndedLineView(Action<EndedLine> press)
+    {
+        face = new EndedRowFace(press);
+        Children.Add(face.Button);
+    }
+
+    protected override void Draw(EndedLine item) => face.Show(item);
+}
+
+/// <summary>A line of the opened rest: a day's heading, or a row.</summary>
+internal sealed class EndedItemView : HeldView<EndedItem>
+{
+    private readonly Grid heading;
+    private readonly TextBlock day = Look.Words("", 12, 16, Look.Muted, semibold: true, wrap: false);
+    private readonly EndedRowFace face;
+
+    public EndedItemView(Action<EndedLine> press)
+    {
+        day.VerticalAlignment = VerticalAlignment.Bottom;
+        heading = new Grid { MinHeight = 28, Padding = new Thickness(10, 0, 0, 0), Children = { day } };
+        face = new EndedRowFace(press);
+        Children.Add(heading);
+        Children.Add(face.Button);
+    }
+
+    protected override void Draw(EndedItem item)
+    {
+        heading.Visibility = item.Line is null ? Visibility.Visible : Visibility.Collapsed;
+        face.Button.Visibility = item.Line is null ? Visibility.Collapsed : Visibility.Visible;
+        if (item.Line is { } line) face.Show(line);
+        else day.Text = item.Day ?? "";
     }
 }

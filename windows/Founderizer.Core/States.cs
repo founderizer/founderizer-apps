@@ -105,8 +105,9 @@ public sealed record TaskMark(TaskSymbol Symbol, string Words, bool Attention, b
         if (!string.IsNullOrEmpty(task.WaitingOn)) return new(TaskSymbol.Limit, words, true, false);
         return task.State switch
         {
-            // No work now where its session's last turn ended and nothing of it runs (`works` false, hub 1.147).
-            "working" => new(TaskSymbol.Working, words, false, task.Works != false),
+            // No work now where its agent parked it until a time (`parked_until`, hub 1.161), or where its session's last
+            // turn ended and nothing of it runs (`works` false, hub 1.147).
+            "working" => new(TaskSymbol.Working, words, false, task.ParkedUntil is null && task.Works != false),
             "submitted" => new(TaskSymbol.Queued, words, false, false),
             _ => new(TaskSymbol.Ended, words, false, false),
         };

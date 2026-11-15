@@ -61,6 +61,9 @@ struct FleetSelect<Value: Hashable, Label: View>: View {
     private let title: String
     private let options: [FleetOption<Value>]
     private let selection: Value?
+    /// The rows that have a check mark besides the row of `selection`: a menu with two groups, each with its own
+    /// present value (an agent of the Reporting lines graph).
+    private let checked: Set<Value>
     private let onSelect: (Value) -> Void
     private let label: Label
     /// The zoom of the window it stands in (View › Bigger), which its list takes: the list is a window of its own.
@@ -68,11 +71,13 @@ struct FleetSelect<Value: Hashable, Label: View>: View {
     /// The control's own view, for the place of its list.
     @State private var anchor = FleetMenuAnchor.Spot()
 
-    /// A menu behind the caller's label. The row of `selection`, when there is one, has the check mark.
+    /// A menu behind the caller's label. The row of `selection`, when there is one, has the check mark, and so has each
+    /// row of `checked`.
     @_disfavoredOverload
-    init(_ title: String, options: [FleetOption<Value>], selection: Value? = nil, onSelect: @escaping (Value) -> Void,
-         @ViewBuilder label: () -> Label) {
-        self.title = title; self.options = options; self.selection = selection; self.onSelect = onSelect; self.label = label()
+    init(_ title: String, options: [FleetOption<Value>], selection: Value? = nil, checked: Set<Value> = [],
+         onSelect: @escaping (Value) -> Void, @ViewBuilder label: () -> Label) {
+        self.title = title; self.options = options; self.selection = selection; self.checked = checked
+        self.onSelect = onSelect; self.label = label()
     }
 
     var body: some View {
@@ -95,7 +100,8 @@ struct FleetSelect<Value: Hashable, Label: View>: View {
         guard let view = anchor.view, let window = view.window else { return }
         let items = options.map { option in
             FleetMenuItem(title: option.title, subtitle: option.subtitle, detail: option.detail, mark: option.mark,
-                          checked: selection != nil && option.value == selection, destructive: option.destructive,
+                          checked: selection != nil && option.value == selection || checked.contains(option.value),
+                          destructive: option.destructive,
                           section: option.section)
         }
         // The row he chose, as the list showed it, to the page's newest action (`FleetMenuAnchor.Spot`).

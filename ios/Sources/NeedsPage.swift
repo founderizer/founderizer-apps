@@ -21,9 +21,12 @@ struct NeedsPage: View {
     /// The answered items that fold away now.
     @State private var folding: Set<Int> = []
     /// **His answer to each item on the page, from the frame the hub's request for it began, and when** (the owner's
-    /// yes of 11 November 2026 to its moving picture: "Yes, build it"): the item shows it with a check that draws
-    /// itself, takes no more touch, and folds 0.78 s after it at the earliest, so that he sees his answer taken. The
-    /// store forgets the answer at the reading that folds the item; the page keeps it until the fold ends.
+    /// yes of 11 November 2026 to its moving picture: "Yes, build it"): the item shows it, an option that he pressed
+    /// with a check that draws itself, takes no more touch, and folds 0.78 s after it at the earliest, so that he sees
+    /// his answer taken. **Words that he wrote have no check** (the owner, 14 November 2026: "when I typed a custom
+    /// answer instead of choosign one of the suggested ones, do not show the CHECK animation because it is
+    /// misleading"): they stay in the field and Send goes. The store forgets the answer at the reading that folds the
+    /// item; the page keeps it until the fold ends.
     @State private var given: [Int: MobileStore.GivenAnswer] = [:]
     @State private var givenAt: [Int: ContinuousClock.Instant] = [:]
     /// An answer of his folded the items that went last: the mark of "Nothing needs you" then draws itself.
@@ -38,7 +41,7 @@ struct NeedsPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if store.readsTheHub {
-                    LoadingLine("Reading the hub…")
+                    LoadingLine(String(l10n: "Reading the hub…"))
                         .padding(.horizontal, 16).padding(.vertical, 12)
                 }
                 ForEach(shown ?? store.openNeeds) { need in
@@ -259,7 +262,8 @@ struct CrossFold: Layout {
 /// when stand over it ("From Iris · 0:08"); in the chat, the chat says it. **In a chat the card's corners are the
 /// bubble's 18 and its option rows 10** (fix round 2, item 96), so a chat with a card has three radii. **On Needs you its
 /// corners are the 26 of the cards on Tasks, a task and Settings** (the owner, 30 October 2026: "26 pt, as other pages";
-/// margins pass, fault 18). **In the chat an answered one stays, folded to two lines** (item 103; `NeedAnswered`).
+/// margins pass, fault 18). **In the chat an answered one stays, folded** (item 103; `NeedAnswered`): to two lines, or to
+/// its title alone where his answer stands in the chat as his own message (`spoken`).
 struct NeedCard: View {
     let store: MobileStore
     let need: OwnerNeed
@@ -272,6 +276,9 @@ struct NeedCard: View {
     var answerFiles: [MessageAttachment] = []
     /// His answer as Needs you keeps it until the item folds (`NeedsPage.given`); in a chat, as the store has it.
     var given: MobileStore.GivenAnswer? = nil
+    /// In a chat: his answer stands there as his own message (`ChatRequestPlaces.spoken`), so the folded card does not
+    /// say it a second time.
+    var spoken = false
 
     /// The card's shape: 26 on Needs you, as a card of the system's lists, and 18 in a chat, as a bubble.
     static func shape(onPage: Bool) -> RoundedRectangle {
@@ -294,7 +301,7 @@ struct NeedCard: View {
                 } else if need.isOpen {
                     open.padding(16)
                 } else {
-                    NeedAnswered(store: store, need: need, files: answerFiles)
+                    NeedAnswered(store: store, need: need, files: answerFiles, spoken: spoken)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -326,7 +333,7 @@ struct NeedCard: View {
 
     private var open: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(need.title).font(.headline)
+            Text(need.shownTitle).font(.headline)
                 .fixedSize(horizontal: false, vertical: true)
             openRows
         }
@@ -345,7 +352,7 @@ struct NeedCard: View {
             // one line coming over the first, with its "…" where the words do not fit. The lines under the first fade
             // in 0.1 s, faster than the 0.25 s of the row that cuts them, so it cuts only words that have nearly gone.
             CrossFold(shown: share) {
-                Text(need.title).font(.headline).fixedSize(horizontal: false, vertical: true)
+                Text(need.shownTitle).font(.headline).fixedSize(horizontal: false, vertical: true)
                     .mask(alignment: .top) {
                         ZStack(alignment: .top) {
                             Color.black.opacity(1 - share).animation(.easeOut(duration: 0.1), value: share)
@@ -356,11 +363,16 @@ struct NeedCard: View {
                 NeedAnswered.titleLine(need).opacity(share)
             }
             .clipped()
-            // Under it: the open rows go, and the answer's line comes in its place under the question.
+            // Under it: the open rows go, and the answer's line comes in its place under the question. Where his words
+            // are his own message in the chat, no line comes, and the rows go to nothing.
             CrossFold(shown: share) {
                 openRows.padding(.top, 12)
                     .opacity(1 - share).allowsHitTesting(false).accessibilityHidden(true)
-                NeedAnswered.answerLine(need).padding(.top, 4).opacity(share)
+                if NeedAnswered.saysAnswer(need, spoken: spoken) {
+                    NeedAnswered.answerLine(need).padding(.top, 4).opacity(share)
+                } else {
+                    Color.clear.frame(height: 0)
+                }
             }
             .clipped()
         }
@@ -372,11 +384,11 @@ struct NeedCard: View {
         VStack(alignment: .leading, spacing: 12) {
             if !need.why.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 RowLine()
-                FieldRow(title: "Why", value: need.why)
+                FieldRow(title: String(l10n: "Why"), value: need.why)
             }
             if NeedOptions.asksInWords(need) {
                 RowLine()
-                FieldRow(title: "What it wants", value: need.todo)
+                FieldRow(title: String(l10n: "What it wants"), value: need.todo)
             }
             RowLine()
             if need.asksForSecret {
@@ -467,14 +479,18 @@ private struct NothingNeedsYou: View {
 }
 
 /// **An answered request folds to two lines in the chat** (fix round 2, item 103; D-7 item 2, as the Mac's
-/// `NeedRequestCard` folds it): its title, as the open card's, and what he answered with a check ("✓ Correos"), in the
-/// card's small type and its quiet colour; the rest on a tap — the request, "Answered", and his answer with its files —
-/// and a tap on its title folds it again. It was gone from the chat once answered, and his answer stood as a bubble
-/// with nothing to say what it answered.
+/// `NeedRequestCard` folds it): its title, as the open card's, and what he answered, in the card's small type and its
+/// quiet colour; the rest on a tap — the request, "Answered", and his answer with its files — and a tap on its title
+/// folds it again. **The check is for an option that he pressed** ("✓ Correos"; the owner, 14 November 2026: "when I
+/// typed a custom answer instead of choosign one of the suggested ones, do not show the CHECK animation because it is
+/// misleading"): words that he wrote can ask something back or say no, so they stand with no check, and where they
+/// are his own message in the chat (`spoken`) the card folds to its title alone, as the Mac's does.
 private struct NeedAnswered: View {
     let store: MobileStore
     let need: OwnerNeed
     let files: [MessageAttachment]
+    /// His answer stands in the chat as his own message: the folded card does not say it a second time.
+    var spoken = false
     @State private var expanded = false
 
     private var answer: String { need.answer?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" }
@@ -482,16 +498,20 @@ private struct NeedAnswered: View {
     private var answerWords: String { Self.words(of: need) }
     static func words(of need: OwnerNeed) -> String {
         let answer = need.answer?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return answer.isEmpty ? "Answered" : answer
+        return answer.isEmpty ? String(l10n: "Answered") : answer
     }
 
     /// The folded card's first line: the question on one line. Its fold draws the same line (`NeedCard`).
-    static func titleLine(_ need: OwnerNeed) -> some View { Text(need.title).font(.headline).lineLimit(1) }
+    static func titleLine(_ need: OwnerNeed) -> some View { Text(need.shownTitle).font(.headline).lineLimit(1) }
 
-    /// The folded card's second line: what he answered, with a check ("✓ Correos").
+    /// The folded card has its second line: not where his own words stand in the chat as his message.
+    static func saysAnswer(_ need: OwnerNeed, spoken: Bool) -> Bool { !(need.answeredInWords && spoken) }
+
+    /// The folded card's second line: what he answered, an option that he pressed with a check ("✓ Correos"), and
+    /// words that he wrote with none.
     static func answerLine(_ need: OwnerNeed) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: "checkmark").font(.caption.weight(.semibold))
+            if !need.answeredInWords { Image(systemName: "checkmark").font(.caption.weight(.semibold)) }
             Text(verbatim: words(of: need)).lineLimit(1)
         }
         .font(.caption).foregroundStyle(Brand.muted)
@@ -512,7 +532,7 @@ private struct NeedAnswered: View {
         VStack(alignment: .leading, spacing: 12) {
             Button { expanded = false } label: {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(need.title).font(.headline)
+                    Text(need.shownTitle).font(.headline)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
@@ -526,18 +546,18 @@ private struct NeedAnswered: View {
             .accessibilityIdentifier("need-fold-\(need.id)")
             if !need.why.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 RowLine()
-                FieldRow(title: "Why", value: need.why)
+                FieldRow(title: String(l10n: "Why"), value: need.why)
             }
             if NeedOptions.asksInWords(need) {
                 RowLine()
-                FieldRow(title: "What it wants", value: need.todo)
+                FieldRow(title: String(l10n: "What it wants"), value: need.todo)
             }
             if !answer.isEmpty || !files.isEmpty {
                 RowLine()
                 if answer.isEmpty {
                     Text("Your answer").font(.caption).foregroundStyle(Brand.muted)
                 } else {
-                    FieldRow(title: "Your answer", value: answer)
+                    FieldRow(title: String(l10n: "Your answer"), value: answer)
                 }
                 if !files.isEmpty { AttachmentGallery(store: store, files: files, alignment: .leading) }
             }
@@ -548,7 +568,7 @@ private struct NeedAnswered: View {
         Button { expanded = true } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Self.titleLine(need)
-                Self.answerLine(need)
+                if Self.saysAnswer(need, spoken: spoken) { Self.answerLine(need) }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -557,7 +577,9 @@ private struct NeedAnswered: View {
         .buttonStyle(.plain)
         .foregroundStyle(Color.primary)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(need.title), answered: \(answerWords)")
+        // Words that stand in the chat as his own message are read there, not here a second time.
+        .accessibilityLabel(Self.saysAnswer(need, spoken: spoken) ? Text("\(need.shownTitle), answered: \(answerWords)")
+                            : Text("\(need.shownTitle), answered"))
         .accessibilityHint("Shows the whole request")
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("need-folded-\(need.id)")
@@ -663,10 +685,11 @@ struct NeedOptions: View {
 struct NeedAnswerBox: View {
     let store: MobileStore
     let need: OwnerNeed
-    /// His words went: they stay in the field until the item folds, Send becomes a check that draws itself, and the
-    /// check then goes quiet.
+    /// His words went: they stay in the field until the item folds, and Send goes, as it does whenever nothing can go.
+    /// **No check takes its place** (the owner, 14 November 2026: "when I typed a custom answer instead of choosign one
+    /// of the suggested ones, do not show the CHECK animation because it is misleading"): Send became a check that
+    /// drew itself, over words that can ask something back or say no.
     var sent: String? = nil
-    @State private var quiet = false
     @FocusState private var focused: Bool
     /// One line of the field, so "+" and Send stand on its centre at every text size.
     @ScaledMetric(relativeTo: .body) private var line: CGFloat = 22
@@ -685,7 +708,7 @@ struct NeedAnswerBox: View {
         let composer = MobileStore.stageKey(need: need.id)
         let files = store.readyFiles(for: composer)
         let waiting = store.filesAreWaiting(for: composer)
-        let canSend = taken == nil && store.canWrite && !waiting && trimmed.count <= MobileStore.textLimit
+        let canSend = sent == nil && taken == nil && store.canWrite && !waiting && trimmed.count <= MobileStore.textLimit
             && (!trimmed.isEmpty || !files.isEmpty)
         VStack(alignment: .leading, spacing: 8) {
             AttachmentStrip(store: store, composer: composer)
@@ -707,29 +730,13 @@ struct NeedAnswerBox: View {
                 .padding(.trailing, 6)
                 .accessibilityIdentifier("answer-\(need.id)")
                 // The keyboard goes with the answer, before the item folds (item 95): it does not carry the page.
-                Group {
-                    if sent != nil {
-                        DrawnMark(symbol: "checkmark").font(.footnote.weight(.bold))
-                            .foregroundStyle(quiet ? Brand.muted : Brand.surface)
-                            .frame(width: 36, height: 36)
-                            .background(quiet ? AnyShapeStyle(.quaternary) : AnyShapeStyle(Brand.accent), in: Circle())
-                            .accessibilityElement(children: .ignore).accessibilityLabel("Answer sent")
-                            .task {
-                                try? await Task.sleep(for: .milliseconds(520))
-                                withAnimation(.easeOut(duration: 0.5)) { quiet = true }
-                            }
-                    } else {
-                        SendButton(enabled: canSend, label: "Send answer", side: 36) {
-                            focused = false
-                            await store.send(needID: need.id)
-                        }
-                        .accessibilityIdentifier("send-answer-\(need.id)")
-                    }
+                SendButton(enabled: canSend, label: String(l10n: "Send answer"), side: 36) {
+                    focused = false
+                    await store.send(needID: need.id)
                 }
+                .accessibilityIdentifier("send-answer-\(need.id)")
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .frame(height: line + 28)
-                // A refused answer gives Send back: the check of his next answer starts violet again.
-                .onChange(of: sent == nil) { _, none in if none { quiet = false } }
             }
             // "+" concentric with the capsule's round end, as Send is and as in a chat (margins pass, fault 6).
             .padding(.leading, 3).padding(.trailing, 7)
@@ -757,7 +764,7 @@ struct NeedSecretNote: View {
     var body: some View {
         // The key in the column of a task's mark (margins pass, fault 11).
         MarkedLine(symbol: "key.horizontal",
-                   words: "Type it in Founderizer on your Mac: it goes straight into the vault, and no agent sees it.")
+                   words: String(l10n: "Type it in Founderizer on your Mac: it goes straight into the vault, and no agent sees it."))
             .font(.callout)
             .padding(.vertical, 4)
             .accessibilityIdentifier("secret-need-\(need.id)")
@@ -789,7 +796,7 @@ struct NeedFooter: View {
             // Only a wait that takes a second says so (items 76 and 95), so its words never come once the hub took
             // the answer; words that came stay, and the item folds them away. They went at the receipt, with their
             // room, one read before the fold.
-            Held(comes: !taken) { ComposerNote(words: "Sending…").padding(.top, Self.above) }
+            Held(comes: !taken) { ComposerNote(words: String(l10n: "Sending…")).padding(.top, Self.above) }
                 .accessibilityIdentifier("waiting-answer")
         } else if let pending = store.pending, pending.needID == need.id {
             stoppedLine(pending)
@@ -803,7 +810,7 @@ struct NeedFooter: View {
             // request waits for its receipt." stood under every other item for each send, the hub's books in words.
             // A send that answers inside a second shows nothing that blinks away.
             Held {
-                ComposerNote(words: other.needID == nil ? "Sending your message…" : "Sending your other answer…")
+                ComposerNote(words: other.needID == nil ? String(l10n: "Sending your message…") : String(l10n: "Sending your other answer…"))
                     .padding(.top, Self.above)
             }
         }
@@ -823,11 +830,11 @@ struct NeedFooter: View {
             if let refusal = request.refusal {
                 ComposerNote(words: refusal, isWarning: true)
                 // Each action only while it can act, never grey (review B2i).
-                TextAction(title: "Discard", font: .caption) { store.discardRefused() }
+                TextAction(title: String(l10n: "Discard"), font: .caption) { store.discardRefused() }
             } else {
-                ComposerNote(words: "Not sent", isWarning: true)
+                ComposerNote(words: String(l10n: "Not sent"), isWarning: true)
                 if store.canRetry {
-                    TextAction(title: "Try again", font: .caption) { Task { await store.retry() } }
+                    TextAction(title: String(l10n: "Try again"), font: .caption) { Task { await store.retry() } }
                 }
             }
         }
@@ -840,15 +847,15 @@ struct NeedFooter: View {
         if let words = store.storageError { return (words, true) }
         if let words = store.fileError { return (words, true) }
         if waiting {
-            return (store.uploading.isEmpty ? "A file did not go up. Send it again, or take it out." : "Sending a file…",
+            return (store.uploading.isEmpty ? String(l10n: "A file did not go up. Send it again, or take it out.") : String(l10n: "Sending a file…"),
                     store.uploading.isEmpty)
         }
         // The Mac's words over the limit, and one number format near it, as the chat's composer says them.
         if count > MobileStore.textLimit {
-            return ("Use no more than \(MobileStore.textLimit.formatted()) characters.", true)
+            return (String(l10n: "Use no more than \(MobileStore.textLimit.formatted()) characters."), true)
         }
         if count > MobileStore.textLimit - 500 {
-            return ("\(count.formatted()) of \(MobileStore.textLimit.formatted()) characters", false)
+            return (String(l10n: "\(count.formatted()) of \(MobileStore.textLimit.formatted()) characters"), false)
         }
         // No line while the hub does not answer: the line over the page says it once (D-2).
         return nil

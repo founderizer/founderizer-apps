@@ -46,7 +46,7 @@ struct TaskPage: View {
                     }
                 } else if store.head(id) != nil {
                     Section {
-                        LoadingLine("Reading the task…")
+                        LoadingLine(String(l10n: "Reading the task…"))
                             .listRowBackground(Color.clear)
                     }
                 }
@@ -65,7 +65,7 @@ struct TaskPage: View {
             await store.refresh()
         }
         .refreshable { await store.refresh() }
-        .navigationTitle(store.head(id)?.title ?? "Task")
+        .navigationTitle(store.head(id)?.title ?? String(l10n: "Task"))
         .navigationBarTitleDisplayMode(.inline)
         .hubBanner(store)
     }
@@ -92,7 +92,8 @@ struct TaskPage: View {
             // and its page said its agent's limit in orange. **Its end only** (the lead's call on item 32): the head
             // over it says "Usage limit", and the line said it again with the year.
             if !task.isTerminal, let limit = store.agent(task.owner)?.limit {
-                fact("Until \(comingTime(limit.until, now: store.hubNow))\(limit.reset_known ? "" : " (estimate)")",
+                fact(limit.reset_known ? String(l10n: "Until \(comingTime(limit.until, now: store.hubNow))")
+                         : String(l10n: "Until \(comingTime(limit.until, now: store.hubNow)) (estimate)"),
                      symbol: "clock")
             }
         }
@@ -135,16 +136,16 @@ struct TaskPage: View {
 
     @ViewBuilder private func fields(_ task: FleetTask) -> some View {
         Section {
-            FieldRow(title: "What it asks", value: task.details)
-            FieldRow(title: "Done when", value: task.done_when)
-            if !task.goal.isEmpty { FieldRow(title: "Goal", value: task.goal) }
-            if let why = task.why, !why.isEmpty { FieldRow(title: "Why this agent", value: why) }
+            FieldRow(title: String(l10n: "What it asks"), value: task.details)
+            FieldRow(title: String(l10n: "Done when"), value: task.done_when)
+            if !task.goal.isEmpty { FieldRow(title: String(l10n: "Goal"), value: task.goal) }
+            if let why = task.why, !why.isEmpty { FieldRow(title: String(l10n: "Why this agent"), value: why) }
             // The Mac's words for the same rows: "Asked by" and "Result check".
             LabeledContent("Asked by", value: agentName(task.requester)).wholePoints()
             LabeledContent("Attempt", value: "\(task.attempt)").wholePoints()
             LabeledContent("Started", value: fleetDate(task.started)).wholePoints()
         } header: {
-            GroupHeading("The task")
+            GroupHeading(String(l10n: "The task"))
         }
         .brandRows()
     }
@@ -164,7 +165,7 @@ struct TaskPage: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } header: {
-                GroupHeading("Progress · \(notes.count)")
+                GroupHeading(String(l10n: "Progress · \(notes.count)"))
             }
             .brandRows()
         }
@@ -177,15 +178,15 @@ struct TaskPage: View {
         if !holds.isEmpty || !outcomes.isEmpty {
             Section {
                 ForEach(holds) { hold in
-                    DetailRow(title: hubWords(hold.kind), detail: hold.detail ?? "The hub holds this task.",
+                    DetailRow(title: hubWords(hold.kind), detail: hold.detail ?? String(l10n: "The hub holds this task."),
                               value: hubWords(hold.state), valueColor: Brand.warning)
                 }
                 ForEach(outcomes) { outcome in
-                    DetailRow(title: outcome.title, detail: outcome.note ?? "The outcome of this action is not known.",
-                              value: "Not known", valueColor: Brand.warning)
+                    DetailRow(title: outcome.title, detail: outcome.note ?? String(l10n: "The outcome of this action is not known."),
+                              value: String(l10n: "Not known"), valueColor: Brand.warning)
                 }
             } header: {
-                GroupHeading("Work that stopped")
+                GroupHeading(String(l10n: "Work that stopped"))
             }
             .brandRows()
         }
@@ -205,14 +206,14 @@ struct TaskPage: View {
                 Text(task.checkStatus).foregroundStyle(task.accepted == 1 ? Brand.online : Brand.muted)
             }
             .wholePoints()
-            if let what = task.what, !what.isEmpty { FieldRow(title: "What was done", value: what) }
+            if let what = task.what, !what.isEmpty { FieldRow(title: String(l10n: "What was done"), value: what) }
             // `where_` is never opened as an address: it is text (MOBILE-APP.md 10).
-            if let output = task.where_, !output.isEmpty { FieldRow(title: "Where the output is", value: output) }
-            if let how = task.how, !how.isEmpty { FieldRow(title: "How it was checked", value: how) }
-            if let note = task.check_note, !note.isEmpty { FieldRow(title: "Result check", value: note) }
-            if let outcome = task.outcome, !outcome.isEmpty { FieldRow(title: "Outcome", value: outcomeWords(outcome)) }
+            if let output = task.where_, !output.isEmpty { FieldRow(title: String(l10n: "Where the output is"), value: output) }
+            if let how = task.how, !how.isEmpty { FieldRow(title: String(l10n: "How it was checked"), value: how) }
+            if let note = task.check_note, !note.isEmpty { FieldRow(title: String(l10n: "Result check"), value: note) }
+            if let outcome = task.outcome, !outcome.isEmpty { FieldRow(title: String(l10n: "Outcome"), value: outcomeWords(outcome)) }
         } header: {
-            GroupHeading("Result")
+            GroupHeading(String(l10n: "Result"))
         }
         .brandRows()
     }
@@ -220,10 +221,10 @@ struct TaskPage: View {
     /// The hub's outcome in the state's own words (T-12): "Canceled", never the hub's "canceled".
     private func outcomeWords(_ outcome: String) -> String {
         switch outcome {
-        case "completed": "Completed"
-        case "failed": "Failed"
-        case "rejected": "Rejected"
-        case "canceled": "Canceled"
+        case "completed": String(l10n: "Completed")
+        case "failed": String(l10n: "Failed")
+        case "rejected": String(l10n: "Rejected")
+        case "canceled": String(l10n: "Canceled")
         default: outcome.capitalizedFirst
         }
     }

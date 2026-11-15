@@ -301,7 +301,7 @@ public final class VaultClient: Sendable {
         parts.queryItems = [.init(name: "db", value: database)]
         var request = URLRequest(url: parts.url!)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         if response.statusCode == 404 { return nil }
         guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
@@ -383,7 +383,7 @@ public final class VaultClient: Sendable {
         request.setValue(client, forHTTPHeaderField: "X-Fleet-Client")
         request.httpBody = try DoorModeCommand.body(requestID: requestID, database: database, host: host,
                                                     statement: statement, signature: signature)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         if let newer = DoorModeCommand.newer(status: response.statusCode, body: data) { throw newer }
@@ -405,7 +405,7 @@ public final class VaultClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(client, forHTTPHeaderField: "X-Fleet-Client")
         request.httpBody = body
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }

@@ -54,13 +54,20 @@ public struct KeychainShelf: CredentialShelf {
 /// He makes an API access token on Tailscale's Keys page (`keysPage`) and pastes it. This Mac makes what the fleet keeps
 /// out of it, in three steps, and keeps nothing of the token itself:
 ///
-///   1. **The policy file is changed only where no other tool keeps it.** A tailnet whose policy lives in a repository
+///   1. **The key needs one thing of the policy file: the tag.** Tailscale makes no credential for a tag that nobody
+///      owns, so `tag:founderizer` must stand in `tagOwners`. Only a tag that is missing from a file that this app may
+///      not write is asked of the owner: one line, and where his file is kept (`PolicyPlace`). **What the fleet's
+///      machines may reach is never asked of him here** (the owner, 13 November 2026, of the two wide grants that this
+///      step asked a working policy for: "what is this?? not good!"). A file can give the fleet its reach with rules
+///      that no reading of it sees (one device's address, a host's name, a group), so the connections themselves prove
+///      it at the install: this Mac to the new server over SSH, and the new server to the hub (`FleetReach`).
+///   2. **The policy file is changed only where no other tool keeps it.** A tailnet whose policy lives in a repository
 ///      (GitOps, Terraform) says so (`aclsExternallyManagedOn`), and such a file is never written, because the next run
-///      of that tool would undo the change: the owner gets the exact lines to add there instead.
-///   2. **What the fleet needs goes into the file, and nothing else changes** (`FleetPolicy`): `tag:founderizer` in
-///      `tagOwners` and, unless the file lets everything reach everything, the grants that let the owner's devices reach
-///      the fleet and its machines reach one another, on SSH and on the hub's port. Tailscale checks the file before it
-///      is set, and it is set against the version that was read, so a change somebody made meanwhile is not lost.
+///      of that tool would undo the change. A file that Tailscale keeps gets what it misses, and nothing else changes
+///      (`FleetPolicy`): the tag and, unless the file lets everything reach everything, the two grants of what the
+///      fleet uses. Tailscale checks the file before it is set, and it is set against the version that was read, so a
+///      change somebody made meanwhile is not lost. A file whose own tests refuse the grants gets the tag alone, and
+///      where the tag stands, a write of the grants that does not go through is no stop.
 ///   3. **The fleet key itself is an OAuth client of the owner's tailnet**: it never expires, it belongs to the tailnet
 ///      and not to a person, and it can only make keys for `tag:founderizer`, a tag that turns key expiry off for each
 ///      machine that carries it. Its id and its secret stay in this Mac's keychain.
@@ -74,8 +81,13 @@ public struct TailscaleFleetKey: Sendable {
     public static let keysPage = URL(string: "https://login.tailscale.com/admin/settings/keys")!
     /// Tailscale's own API. `-` is "the tailnet of this token", so no tailnet name is ever asked for.
     static let api = URL(string: "https://api.tailscale.com/api/v2")!
-    /// SSH, and the hub's own port.
-    public static let ports = ["tcp:22", "tcp:8765"]
+    /// What the owner's devices use of a fleet's machines: SSH, over which this Mac installs and restarts a server,
+    /// the hub's own port, and the port from which every machine fetches the fleet's code (`git://`, 9418). A Mac that
+    /// stays on is one of his devices, with no tag, and its join fetches the code as every server's does.
+    public static let ports = ["tcp:22", "tcp:8765", "tcp:9418"]
+    /// What a machine of the fleet uses of the hub: its own port, and the port of the fleet's code (join.sh stops
+    /// without it). No machine of a fleet opens SSH to another one, so that port is not in it.
+    public static let hubPorts = ["tcp:8765", "tcp:9418"]
     /// The owner's devices, as the policy names them: the people who run the tailnet. Only an Owner or an Admin can make
     /// the fleet key, and both could give themselves this reach anyway, so the line gives nobody a reach he could not.
     public static let owners = ["autogroup:owner", "autogroup:admin"]
@@ -104,35 +116,65 @@ public struct TailscaleFleetKey: Sendable {
 
     /// Prepares the owner's tailnet and keeps the fleet key, from one access token that is used here and kept nowhere.
     ///
-    /// A policy file that another tool keeps is read and never written: the answer then carries the lines to add, and the
-    /// fleet key is made only once the tag stands, because Tailscale refuses a credential for a tag that nobody owns. The
-    /// owner adds the lines and pastes a token again, and this goes on from the file as it then stands.
+    /// **Only the tag, the token and Tailscale itself can stop it.** A file with the tag in it gets the key, whoever
+    /// keeps the file and whatever its rules are: the install proves the fleet's reach by its own connections
+    /// (`FleetReach`). A policy file that another tool keeps is read and never written: when the tag is missing there,
+    /// the answer carries that one line and the place of the file, and no key is made, because Tailscale refuses a
+    /// credential for a tag that nobody owns. The owner adds the line and pastes a token again, and this goes on from
+    /// the file as it then stands.
     public func connect(accessToken: String) async throws -> FleetKeySetup {
         let token = try Self.checkedToken(accessToken)
-        let place = try await settings(token)
+        let kept = try await settings(token)
+        let place: PolicyPlace = kept.managed ? .tool(kept.link) : .tailscale
+        /// The tag is the owner's to add: this app may not write the file, or cannot see where the line belongs in it.
+        let asksForTag = FleetKeySetup(keyMade: false, wrotePolicy: false, linesToAdd: FleetPolicy.tagLine + ",", place: place)
         var wrote = false
         for attempt in 1...2 {
             let policy = try await policy(token)
-            guard let needs = FleetPolicy.needs(in: policy.text) else {
-                // A file this app cannot read is not this app's to guess at: the owner gets every line.
-                return FleetKeySetup(keyMade: false, wrotePolicy: false, linesToAdd: FleetPolicy.lines(for: .everything),
-                                     managedAt: place.link)
+            // A file this app cannot read is not this app's to guess at, and Tailscale itself knows whether the tag
+            // stands in it: it makes the key, or it refuses it in its own words, which the page then says.
+            guard let needs = FleetPolicy.needs(in: policy.text), !needs.isEmpty else { break }
+            // Another tool keeps the file, or it cannot be set against the version that was read: a tag that stands
+            // is all the fleet key needs, and a missing one is the owner's line.
+            guard !kept.managed, let etag = policy.etag else {
+                if needs.tag { return asksForTag }
+                break
             }
-            if needs.isEmpty { break }
-            guard !place.managed, let etag = policy.etag, let written = FleetPolicy.writing(needs, into: policy.text) else {
-                // Another tool keeps the file, or this app cannot place the lines in it, or could not set it against the
-                // version it read: the owner adds them. A tag that stands is all the fleet key needs.
-                if !needs.tag { try await makeKey(token) }
-                return FleetKeySetup(keyMade: !needs.tag, wrotePolicy: false, linesToAdd: FleetPolicy.lines(for: needs),
-                                     managedAt: place.link)
+            guard needs.tag else {
+                // The tag stands, so the key needs nothing of this write. The grants go in where the file takes them:
+                // a check that refuses them, a role that may not write the file and a file that changes twice
+                // meanwhile leave the file as it is, and the install's own connections say whether its rules are enough.
+                // A change meanwhile gets one more try, from the file as it is now, as every write of this step.
+                guard let written = try? await taken(needs, into: policy.text, token: token),
+                      let set = try? await set(written, etag: etag, token: token) else { break }
+                if set { wrote = true; break }
+                if attempt == 1 { continue }
+                break
             }
-            try await validate(written, token: token)
+            // No line of what it misses goes into the file: the tag is the owner's line.
+            guard let written = try await taken(needs, into: policy.text, token: token) else { return asksForTag }
             if try await set(written, etag: etag, token: token) { wrote = true; break }
             // Somebody changed the file since it was read: once more from the file as it is now, and no further.
             guard attempt == 1 else { throw FleetKeyError.policyChangedMeanwhile }
         }
         try await makeKey(token)
-        return FleetKeySetup(keyMade: true, wrotePolicy: wrote, linesToAdd: nil, managedAt: nil)
+        return FleetKeySetup(keyMade: true, wrotePolicy: wrote, linesToAdd: nil, place: place)
+    }
+
+    /// The file with what it misses, as Tailscale's own check takes it; nil when no line of it goes in. All of what it
+    /// misses first. **A file whose own check refuses the grants gets the tag alone**: an owner who wrote tests that
+    /// keep his fleet's ports closed (one who lets his own Mac in by its address, and nothing else) has said what his
+    /// machines may reach, and the install's own connections then show whether that is enough. A check that refuses
+    /// the tag's line too is said in Tailscale's own words, as before.
+    func taken(_ needs: FleetPolicy.Needs, into text: String, token: String) async throws -> String? {
+        if let whole = FleetPolicy.writing(needs, into: text) {
+            guard let refusal = try await check(whole, token: token) else { return whole }
+            guard !needs.grants.isEmpty else { throw FleetKeyError.refused(refusal) }
+        }
+        guard needs.tag, !needs.grants.isEmpty,
+              let tagged = FleetPolicy.writing(FleetPolicy.Needs(tag: true, grants: []), into: text) else { return nil }
+        if let refusal = try await check(tagged, token: token) { throw FleetKeyError.refused(refusal) }
+        return tagged
     }
 
     /// The token as Tailscale makes one, or the reason it is not one. Nothing goes to Tailscale before this.
@@ -163,19 +205,30 @@ public struct TailscaleFleetKey: Sendable {
         return (String(decoding: data, as: UTF8.self), http.value(forHTTPHeaderField: "ETag"))
     }
 
-    /// Tailscale's own check of a file, which changes nothing. An empty answer is a file it takes; one that names errors
-    /// is one it would refuse, and warnings alone are no refusal.
+    /// Tailscale's own check of a file, which changes nothing: a file that it would refuse is `FleetKeyError.refused`.
     func validate(_ text: String, token: String) async throws {
+        if let refusal = try await check(text, token: token) { throw FleetKeyError.refused(refusal) }
+    }
+
+    /// Tailscale's own check of a file, which changes nothing: nil for a file that it takes, else its words for why it
+    /// would refuse it. An empty answer is a file it takes; one that names errors (a rule it cannot read, or one of the
+    /// file's own tests that fails) is one it would refuse, and warnings alone are no refusal. A check that Tailscale
+    /// did not make at all (the token, the connection, its own failure) throws, and is no word about the file.
+    func check(_ text: String, token: String) async throws -> String? {
         var request = request("tailnet/-/acl/validate", token: token, method: "POST")
         request.setValue("application/hujson", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data(text.utf8)
         let data = try await send(request, token: token)
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let message = object["message"] as? String, !message.isEmpty else { return }
+              let message = object["message"] as? String, !message.isEmpty else { return nil }
         let found = (object["data"] as? [[String: Any]]) ?? []
         let errors = found.flatMap { ($0["errors"] as? [String]) ?? [] }
-        if errors.isEmpty, found.contains(where: { $0["warnings"] != nil }) { return }
-        throw FleetKeyError.refused(Self.hidden(([message] + errors.prefix(1)).joined(separator: ": "), token))
+        if errors.isEmpty, found.contains(where: { $0["warnings"] != nil }) { return nil }
+        // One line of Tailscale's own words, as every refusal is said (`refusal`).
+        var says = Self.hidden(([message] + errors.prefix(1)).joined(separator: ": "), token)
+            .trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ")
+        if says.count > 300 { says = String(says.prefix(300)) + "…" }
+        return says
     }
 
     /// Sets the file against the version that was read. False when somebody changed it since (412).
@@ -235,6 +288,88 @@ public struct TailscaleFleetKey: Sendable {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let key = object["key"] as? String, Self.isAuthKey(key) else { throw FleetKeyError.notUnderstood }
         return key
+    }
+
+    /// **The machine that a server which this app made became in the owner's tailnet**, as Tailscale's own list of
+    /// devices says with the fleet key: the newest authorized device that gave itself this name, carries the fleet's tag
+    /// and was made since `since` (five minutes of slack, for a clock that is off). nil when the list has none: the
+    /// server did not join. It is the first half of the proof that a server joined and that the policy keeps it from
+    /// this Mac (`FleetReach.keeps`). A device of that name from an earlier try is older, and is not it.
+    public func joined(hostname: String, since: Date) async throws -> JoinedDevice? {
+        guard let client = shelf.read().flatMap(FleetClient.init(stored:)) else { throw FleetKeyError.noFleetKey }
+        let access = try await accessToken(client)
+        let (data, http) = try await reach(request("tailnet/-/devices", token: access))
+        guard http.statusCode != 401 else { throw FleetKeyError.fleetKeyEnded }
+        guard (200...299).contains(http.statusCode) else { throw Self.refusal(data, http, hiding: access) }
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let devices = object["devices"] as? [[String: Any]] else { throw FleetKeyError.notUnderstood }
+        let wanted = hostname.lowercased()
+        guard !wanted.isEmpty else { return nil }
+        let found = devices.compactMap { device -> (made: Date, device: JoinedDevice)? in
+            // `hostname` is the name the machine gave itself, which is the one this app gave it. Its name in Tailscale
+            // can be another one: Tailscale adds "-1" where a device of the tailnet has the name already.
+            guard (device["hostname"] as? String)?.lowercased() == wanted, device["authorized"] as? Bool != false,
+                  ((device["tags"] as? [String]) ?? []).contains(Self.tag),
+                  let made = (device["created"] as? String).flatMap(Self.time), made >= since.addingTimeInterval(-300)
+            else { return nil }
+            let name = ((device["name"] as? String) ?? "").lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            let locked = !((device["tailnetLockError"] as? String) ?? "").isEmpty
+            return (made, JoinedDevice(name: name, addresses: (device["addresses"] as? [String]) ?? [], locked: locked))
+        }
+        return found.max { $0.made < $1.made }?.device
+    }
+
+    /// **The devices of the owner's tailnet, as Tailscale's own list gives them with the fleet key**, for the one
+    /// caller that removes a machine which this app made ("Start again", `StartAgain.device`). A device with no id is
+    /// left out.
+    public func devices() async throws -> [FleetDevice] {
+        guard let client = shelf.read().flatMap(FleetClient.init(stored:)) else { throw FleetKeyError.noFleetKey }
+        let access = try await accessToken(client)
+        let (data, http) = try await reach(request("tailnet/-/devices", token: access))
+        guard http.statusCode != 401 else { throw FleetKeyError.fleetKeyEnded }
+        guard (200...299).contains(http.statusCode) else { throw Self.refusal(data, http, hiding: access) }
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let devices = object["devices"] as? [[String: Any]] else { throw FleetKeyError.notUnderstood }
+        return devices.compactMap { device in
+            // Tailscale prefers a device's `nodeId` in a path; its numeric `id` is the older form of the same.
+            guard let id = [device["nodeId"] as? String, device["id"] as? String].compactMap({ $0 }).first(where: Self.isDeviceID)
+            else { return nil }
+            return FleetDevice(id: id, hostname: (device["hostname"] as? String) ?? "",
+                               name: ((device["name"] as? String) ?? "").lowercased()
+                                   .trimmingCharacters(in: CharacterSet(charactersIn: ".")),
+                               addresses: (device["addresses"] as? [String]) ?? [], tags: (device["tags"] as? [String]) ?? [],
+                               created: (device["created"] as? String).flatMap(Self.time),
+                               authorized: device["authorized"] as? Bool != false, external: device["isExternal"] as? Bool == true,
+                               connected: device["connectedToControl"] as? Bool == true)
+        }
+    }
+
+    /// **Removes one device from the tailnet by Tailscale's own id of it** (`DELETE /device/{id}`, which the scope
+    /// `devices:core` of the fleet key allows), and nothing else: never a device by its name or its address. A
+    /// device that Tailscale no longer has (404) is removed already.
+    public func deleteDevice(id: String) async throws {
+        guard Self.isDeviceID(id) else { throw FleetKeyError.notUnderstood }
+        guard let client = shelf.read().flatMap(FleetClient.init(stored:)) else { throw FleetKeyError.noFleetKey }
+        let access = try await accessToken(client)
+        let (data, http) = try await reach(request("device/\(id)", token: access, method: "DELETE"))
+        guard http.statusCode != 401 else { throw FleetKeyError.fleetKeyEnded }
+        guard (200...299).contains(http.statusCode) || http.statusCode == 404 else { throw Self.refusal(data, http, hiding: access) }
+    }
+
+    /// A device's id as it may stand in a path: letters and digits only, the whole of it (a pattern's `$` also
+    /// stands before a last line end).
+    static func isDeviceID(_ id: String) -> Bool {
+        (1...64).contains(id.utf8.count) && id.utf8.allSatisfy { byte in
+            (0x30...0x39).contains(byte) || (0x41...0x5A).contains(byte) || (0x61...0x7A).contains(byte)
+        }
+    }
+
+    /// A time as Tailscale's API writes one ("2026-11-13T21:04:05Z", with or without fractions of a second).
+    static func time(_ text: String) -> Date? {
+        let plain = ISO8601DateFormatter()
+        let fractions = ISO8601DateFormatter()
+        fractions.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return plain.date(from: text) ?? fractions.date(from: text)
     }
 
     /// A one-hour access token from the fleet key, by OAuth's client-credentials grant. Only the two statuses that OAuth
@@ -336,11 +471,193 @@ public struct FleetKeySetup: Equatable, Sendable {
     public let keyMade: Bool
     /// This app changed the owner's policy file itself.
     public let wrotePolicy: Bool
-    /// What the owner adds to his policy file himself, as policy text, because another tool keeps the file or this app
-    /// could not see where the lines belong; nil when nothing is left for him to add.
+    /// The one line that the owner adds to `tagOwners` of his policy file himself, as policy text, because another tool
+    /// keeps the file or this app could not see where the line belongs; nil when nothing is left for him to add.
     public let linesToAdd: String?
-    /// Where that other tool keeps the policy, as Tailscale names it.
-    public let managedAt: URL?
+    /// Where his policy file is kept.
+    public let place: PolicyPlace
+
+    /// What the page says over `linesToAdd`: what the file misses, and where he adds it. Nil with no line to add.
+    public var asks: String? { linesToAdd == nil ? nil : place.tagAsk }
+}
+
+/// **Where the owner's Tailscale policy file is kept**, as far as Tailscale itself says it: the place that this app
+/// names when it asks him to change that file (the owner, 13 November 2026, of "Add these lines there": the line named
+/// no place). The address of another tool's file is said as text, with no scheme and no query, and is no link.
+public enum PolicyPlace: Equatable, Sendable {
+    /// Tailscale keeps it: the Access controls page of its admin console.
+    case tailscale
+    /// Another tool keeps it (GitOps, Terraform), at this address when the tailnet's settings name one.
+    case tool(URL?)
+
+    /// The address of the other tool's file as he reads it: "github.com/example/tailnet-policy". Its host, its port and
+    /// its path only, so nothing of a link's user, query or fragment shows. The link is a setting that any admin of the
+    /// tailnet writes, and its words stand inside a sentence of this app's: so an address with anything but the plain
+    /// characters of a host and a path (a space, a percent escape, a letter outside ASCII), or one too long for a line
+    /// of a page, is none, and the words then name the tool.
+    var address: String? {
+        guard case .tool(let link?) = self, let host = link.host(percentEncoded: true), !host.isEmpty else { return nil }
+        var path = link.path(percentEncoded: true)
+        if path.hasSuffix("/") { path.removeLast() }
+        let address = host + (link.port.map { ":\($0)" } ?? "") + path
+        guard address.count <= 80,
+              address.range(of: "^[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$", options: .regularExpression) != nil
+        else { return nil }
+        return address
+    }
+
+    /// The line over the tag's line on the key's page.
+    public var tagAsk: String {
+        let tag = TailscaleFleetKey.tag
+        switch self {
+        case .tailscale:
+            return String(l10n: "Your Tailscale policy has no \(tag). Add this line to tagOwners on the Access controls page of Tailscale, then paste a key again.")
+        case .tool:
+            if let address {
+                return String(l10n: "Your Tailscale policy has no \(tag). Add this line to tagOwners in \(address), then paste a key again.")
+            }
+            return String(l10n: "Your Tailscale policy has no \(tag). Add this line to tagOwners in the file of the tool that keeps your policy, then paste a key again.")
+        }
+    }
+
+    // MARK: Kept on this Mac
+
+    private static let key = "tailscale.policy.place"
+
+    /// Keeps the place as the key's step read it, for a line of a later install. It is no secret: Tailscale shows the
+    /// same address on its Access controls page.
+    public func keep(in defaults: UserDefaults = .standard) {
+        switch self {
+        case .tailscale: defaults.set("tailscale", forKey: Self.key)
+        case .tool(let link): defaults.set(link.map { "tool " + $0.absoluteString } ?? "tool", forKey: Self.key)
+        }
+    }
+
+    /// The place as the last key's step read it; nil on a Mac whose key is from before 13 November 2026.
+    public static func kept(in defaults: UserDefaults = .standard) -> PolicyPlace? {
+        guard let value = defaults.string(forKey: key) else { return nil }
+        if value == "tailscale" { return .tailscale }
+        guard value == "tool" || value.hasPrefix("tool ") else { return nil }
+        let link = URL(string: String(value.dropFirst(5))).flatMap { $0.scheme == "https" ? $0 : nil }
+        return .tool(link)
+    }
+}
+
+/// A server of the fleet as the owner's tailnet lists it (`TailscaleFleetKey.joined`): its full name there, its
+/// addresses, and whether Tailnet Lock keeps it from its peers.
+/// One device of the owner's tailnet, as Tailscale's list of devices gives it (`TailscaleFleetKey.devices`).
+public struct FleetDevice: Equatable, Sendable {
+    /// Tailscale's own id of the device, for a path.
+    public let id: String
+    /// The name that the machine gave itself, which for a server that this app made is the name that the app gave it.
+    public let hostname: String
+    /// Its name in the tailnet, in lower case and without the last dot.
+    public let name: String
+    public let addresses: [String]
+    public let tags: [String]
+    public let created: Date?
+    public let authorized: Bool
+    /// A device that another tailnet shared in: Tailscale deletes none of those.
+    public let external: Bool
+    /// Tailscale's own word that the device recently held its connection to Tailscale (`connectedToControl`): the
+    /// machine behind it runs.
+    public let connected: Bool
+
+    public init(id: String, hostname: String, name: String = "", addresses: [String] = [], tags: [String] = [],
+                created: Date?, authorized: Bool = true, external: Bool = false, connected: Bool = false) {
+        self.id = id; self.hostname = hostname; self.name = name; self.addresses = addresses; self.tags = tags
+        self.created = created; self.authorized = authorized; self.external = external; self.connected = connected
+    }
+}
+
+public struct JoinedDevice: Equatable, Sendable {
+    public let name: String
+    public let addresses: [String]
+    public let locked: Bool
+
+    public init(name: String, addresses: [String], locked: Bool = false) {
+        self.name = name; self.addresses = addresses; self.locked = locked
+    }
+}
+
+/// **The two connections that a server of a fleet needs on the owner's private network, and the line for one that the
+/// policy does not let through.** They are proved by the connections themselves and never by a reading of the policy
+/// file: this Mac reaches the server over SSH (the wait for a server that its provider made, and the first SSH of a
+/// check and of an install), and the server reaches the hub (join.sh, whose own line names the hub's two ports). A
+/// line names what failed and asks for that reach alone, never for more, in the words of a grant's `ip` ("tcp:22").
+public enum FleetReach {
+    /// **Whether the policy keeps this server from this Mac**: the tailnet lists the server (`device`), and this Mac's
+    /// own Tailscale (`status`, its `tailscale status --json`) runs in that same tailnet and shows no device with the
+    /// server's name or one of its addresses. Tailscale shows a device only the machines that the policy lets it
+    /// reach or be reached by, so that is a server which the policy gives this Mac no way to. Each other reason why
+    /// this Mac does not see it is not the policy's: a Tailscale that is stopped, signed out or cut off from its
+    /// network here (its list of devices is then an old one), a Mac in another tailnet than the fleet key's, a server
+    /// that Tailnet Lock has not signed, and a server that this Mac does show, under any name and also offline. Read
+    /// `status` after the tailnet's list, so that a server which joined between the two reads is in it.
+    public static func keeps(_ device: JoinedDevice, from status: String) -> Bool {
+        guard !device.locked, !device.name.isEmpty, let data = status.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["BackendState"] as? String == "Running", let own = object["Self"] as? [String: Any],
+              own["Online"] as? Bool == true else { return false }
+        func full(_ node: [String: Any]) -> String {
+            ((node["DNSName"] as? String) ?? "").lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        }
+        /// The tailnet's part of a full name: what follows its first label.
+        func tailnet(_ name: String) -> String { name.split(separator: ".", maxSplits: 1).dropFirst().first.map(String.init) ?? "" }
+        guard !tailnet(device.name).isEmpty, tailnet(full(own)) == tailnet(device.name) else { return false }
+        let peers = (object["Peer"] as? [String: Any])?.values.compactMap { $0 as? [String: Any] } ?? []
+        return !peers.contains { peer in
+            full(peer) == device.name || !Set((peer["TailscaleIPs"] as? [String]) ?? []).isDisjoint(with: device.addresses)
+        }
+    }
+
+    /// The server joined, and the policy keeps it from this Mac (`keeps`). A hub is also what the app itself talks to,
+    /// so its line asks for the hub's port with SSH, and he changes his policy once. Each place has its whole
+    /// sentence, so that another language can order its words.
+    public static func hidden(_ server: String, hub: Bool = false, place: PolicyPlace? = PolicyPlace.kept()) -> String {
+        let tag = TailscaleFleetKey.tag, ports = hub ? "tcp:22, tcp:8765" : "tcp:22"
+        if let address = place?.address {
+            return String(l10n: "\(server) is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy in \(address) so that this Mac reaches \(tag) on \(ports).")
+        }
+        if case .tool = place {
+            return String(l10n: "\(server) is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy, which another tool keeps, so that this Mac reaches \(tag) on \(ports).")
+        }
+        return String(l10n: "\(server) is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy so that this Mac reaches \(tag) on \(ports).")
+    }
+
+    /// The server joined, and this Mac's Tailscale does not show it online for another reason than the policy
+    /// (`keeps` is false): the line says what is known, and where to look first.
+    public static func unseen(_ server: String) -> String {
+        String(l10n: "\(server) is on your Tailscale network, but Tailscale on this Mac does not show it online. Check that Tailscale on this Mac is connected to the same network.")
+    }
+
+    /// **The line for an SSH connection to an address on the private network that nothing answered**, or nil when
+    /// `said` is not that. Tailscale drops what its policy does not allow, so `ssh` waits and gives up: its own line
+    /// for this host ("ssh: connect to host 100.64.0.9 port 22: Operation timed out"), which names the port that the
+    /// policy must let through. A server that is off gives the same line, so the words name both: they are the words
+    /// of every server that did not answer (`ServerCheck.unreached(_:said:)`), with the policy in the place of the
+    /// server's firewall, because on the private network the policy is what lets a connection in. A server that
+    /// refused the connection or closed it did get it, an address outside the private network is no matter of the
+    /// policy, and a line of another program on the server, or for another host, is not this connection.
+    public static func dropped(_ said: String, host: String, place: PolicyPlace? = PolicyPlace.kept()) -> String? {
+        let said = said.lowercased(), start = "ssh: connect to host \(host.lowercased()) port "
+        guard ClaimCode.isPrivateAddress(host), said.hasPrefix(start), said.contains("timed out") else { return nil }
+        let port = String(said.dropFirst(start.count).prefix { $0.isNumber })
+        guard !port.isEmpty else { return nil }
+        return unreached(host, port: port, place: place)
+    }
+
+    /// A server did not answer SSH at its address on the private network, on which the policy decides what arrives.
+    static func unreached(_ server: String, port: String, place: PolicyPlace?) -> String {
+        let ports = "tcp:" + port
+        if let address = place?.address {
+            return String(l10n: "\(server) did not answer SSH on port \(port). Check that the server is on, and that your Tailscale policy in \(address) lets this Mac reach it on \(ports).")
+        }
+        if case .tool = place {
+            return String(l10n: "\(server) did not answer SSH on port \(port). Check that the server is on, and that your Tailscale policy, which another tool keeps, lets this Mac reach it on \(ports).")
+        }
+        return String(l10n: "\(server) did not answer SSH on port \(port). Check that the server is on, and that your Tailscale policy lets this Mac reach it on \(ports).")
+    }
 }
 
 public enum FleetKeyError: LocalizedError, Equatable, Sendable {
@@ -348,7 +665,8 @@ public enum FleetKeyError: LocalizedError, Equatable, Sendable {
     case notAnAccessToken
     /// Tailscale did not accept the token: it expired, or it was revoked.
     case tokenNotAccepted
-    /// The token's user has a role that may not change the policy file or make credentials.
+    /// The token's user has a role that may not make the change that was asked: the policy file, the fleet key, or a
+    /// device's tags.
     case roleCannotWrite
     /// Tailscale asks this Mac to wait.
     case rateLimited
@@ -372,7 +690,7 @@ public enum FleetKeyError: LocalizedError, Equatable, Sendable {
         case .tokenNotAccepted:
             String(l10n: "Tailscale did not accept this access token: it has expired or it was revoked. Make a new one on Tailscale's Keys page and paste it.")
         case .roleCannotWrite:
-            String(l10n: "Your role in Tailscale cannot change the policy file. Use an access token of an Owner or an Admin of the tailnet.")
+            String(l10n: "Your role in Tailscale cannot make this change. Use an access token of an Owner or an Admin of the tailnet.")
         case .rateLimited: String(l10n: "Tailscale asks this Mac to wait. Try again in a minute.")
         case .unreachable: String(l10n: "Tailscale could not be reached. Check this Mac's connection to the internet.")
         case .refused(let says): String(l10n: "Tailscale refused: \(says)")
@@ -415,8 +733,9 @@ struct FleetClient: Equatable, Sendable, CustomStringConvertible, CustomDebugStr
     var customMirror: Mirror { Mirror(self, children: ["id": id]) }
 }
 
-/// **The tailnet policy file, as far as the fleet needs it**: what it misses, the same file with those lines in it, and
-/// the lines as text for a file that this app does not write.
+/// **The tailnet policy file, as far as the fleet needs it**: what it misses, and the same file with those lines in it,
+/// for a file that this app may write. The grants it reads are for that write alone: no reading of a file says what the
+/// fleet may reach, so none is ever asked of the owner (`TailscaleFleetKey.connect`).
 ///
 /// The file is HuJSON (JSON with comments and trailing commas) and it holds the owner's own rules, so it is read as a
 /// whole only to understand it, and it is changed only by inserting bytes into it. It is never written out anew: every
@@ -442,17 +761,24 @@ enum FleetPolicy {
         /// The grants it has none of, or none that covers them.
         var grants: [Grant]
         var isEmpty: Bool { !tag && grants.isEmpty }
-        static let everything = Needs(tag: true, grants: FleetPolicy.grants)
     }
 
     /// The tag, owned by the tailnet's admins, who are the people that can make the fleet key.
     static let tagLine = "\"\(TailscaleFleetKey.tag)\": [\"autogroup:admin\"]"
-    /// The owner's devices reach the fleet, and its machines reach one another: SSH, and the hub's port.
+    /// What the fleet uses, and no more: the owner's devices reach its machines on SSH and on the hub's port, and its
+    /// machines reach the hub, which carries the fleet's tag as they do, on its own port and on the port of the fleet's
+    /// code. Until 13 November 2026 the second grant was SSH and the hub's port: no machine opens SSH to another one,
+    /// and a join stopped at the fetch of the code in a tailnet that let nothing else through.
     static let grants = [Grant(src: TailscaleFleetKey.owners, dst: [TailscaleFleetKey.tag], ip: TailscaleFleetKey.ports),
-                         Grant(src: [TailscaleFleetKey.tag], dst: [TailscaleFleetKey.tag], ip: TailscaleFleetKey.ports)]
+                         Grant(src: [TailscaleFleetKey.tag], dst: [TailscaleFleetKey.tag], ip: TailscaleFleetKey.hubPorts)]
 
-    /// What the file misses, or nil when this app cannot read it.
-    static func needs(in text: String) -> Needs? { parsed(text).map(needs) }
+    /// What the file misses, or nil when this app cannot read it. A file that names `tagOwners` twice is one of those:
+    /// which of the two a reader takes is not this app's to guess, and Tailscale itself says whether the tag stands
+    /// when the key is made.
+    static func needs(in text: String) -> Needs? {
+        guard scan(Array(text.utf8))?.twice.contains("tagowners") != true else { return nil }
+        return parsed(text).map(needs)
+    }
 
     /// Keys of the policy are read as Tailscale reads them, whatever their case.
     static func needs(_ policy: [String: Any]) -> Needs {
@@ -496,10 +822,14 @@ enum FleetPolicy {
     /// The file with what it misses inserted, and every byte it had still in it, in order; nil when this app cannot see
     /// where the lines belong, which is the one thing it will not guess at. A section that is there gets the lines at
     /// its start; one that is not is added at the start of the file's object. The result is read again before it is
-    /// given back: a file that does not then say what the fleet needs (a key written twice, say) is not sent at all.
+    /// given back: a file that then still misses a line of `needs`, because this app's two readers of it did not agree,
+    /// is not sent at all. What `needs` leaves out can still be missing: the tag alone goes into a file whose own
+    /// tests refuse the grants. **A section that the file names twice is not written into**: a line in one of them
+    /// may say nothing to the reader that takes the other, and which one the owner means is not this app's to guess.
     static func writing(_ needs: Needs, into text: String) -> String? {
         var bytes = Array(text.utf8)
         guard !needs.isEmpty, let found = scan(bytes) else { return nil }
+        if needs.tag && found.twice.contains("tagowners") || !needs.grants.isEmpty && found.twice.contains("grants") { return nil }
         var inserts: [(at: Int, text: String)] = []
         var atRoot = ""
         if needs.tag {
@@ -523,19 +853,9 @@ enum FleetPolicy {
             bytes.insert(contentsOf: Array(insert.text.utf8), at: insert.at)
         }
         let written = String(decoding: bytes, as: UTF8.self)
-        guard let after = parsed(written), Self.needs(after).isEmpty else { return nil }
+        guard let left = parsed(written).map(Self.needs), !(needs.tag && left.tag),
+              !needs.grants.contains(where: left.grants.contains) else { return nil }
         return written
-    }
-
-    /// The same lines as text, for the owner to add himself, each in the section it belongs to; nil when the file has
-    /// them all already.
-    static func lines(for needs: Needs) -> String? {
-        var sections: [String] = []
-        if needs.tag { sections.append("\"tagOwners\": {\n\t" + tagLine + ",\n},") }
-        if !needs.grants.isEmpty {
-            sections.append("\"grants\": [\n" + needs.grants.map { "\t" + $0.text + ",\n" }.joined() + "],")
-        }
-        return sections.isEmpty ? nil : sections.joined(separator: "\n")
     }
 
     // MARK: - Reading HuJSON
@@ -581,11 +901,13 @@ enum FleetPolicy {
     /// One pass over the file outside every string and comment: where its object opens (the offset just after the
     /// `{`), and where the value of each of that object's own members starts (just after its first byte), by the
     /// member's name in lower case. A `"grants"` inside a comment, a string or a nested object is none of these, which
-    /// is why the file is read here and not searched.
-    static func scan(_ bytes: [UInt8]) -> (root: Int, members: [String: (at: Int, opener: UInt8)])? {
+    /// is why the file is read here and not searched. `twice`: the members that the object names more than once, of
+    /// which `members` has the first.
+    static func scan(_ bytes: [UInt8]) -> (root: Int, members: [String: (at: Int, opener: UInt8)], twice: Set<String>)? {
         var depth = 0
         var root: Int?
         var members: [String: (at: Int, opener: UInt8)] = [:]
+        var twice: Set<String> = []
         /// A string at the object's own level, which a `:` turns into a member's name.
         var key: String?
         /// A member whose `:` was read, so its value starts next.
@@ -595,7 +917,7 @@ enum FleetPolicy {
             case .comment: break
             case .string(let range):
                 if let name = named {
-                    if members[name] == nil { members[name] = (range.lowerBound + 1, UInt8(ascii: "\"")) }
+                    if members[name] == nil { members[name] = (range.lowerBound + 1, UInt8(ascii: "\"")) } else { twice.insert(name) }
                     named = nil
                     key = nil
                 } else {
@@ -607,7 +929,7 @@ enum FleetPolicy {
                 let byte = bytes[index]
                 guard !isSpace(byte) else { return }
                 if let name = named {
-                    if members[name] == nil { members[name] = (index + 1, byte) }
+                    if members[name] == nil { members[name] = (index + 1, byte) } else { twice.insert(name) }
                     named = nil
                 }
                 switch byte {
@@ -622,7 +944,7 @@ enum FleetPolicy {
             }
         }
         guard ended, depth == 0, let root else { return nil }
-        return (root, members)
+        return (root, members, twice)
     }
 
     enum Token {

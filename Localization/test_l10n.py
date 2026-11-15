@@ -50,6 +50,13 @@ class Problems(unittest.TestCase):
         lines = [line for _, line in l10n.problems(catalog, keys, ["es"])]
         self.assertTrue(any("other values than the key: 'Sent (a ping)'" in line for line in lines))
 
+    def test_words_of_a_language_that_no_build_carries_are_a_fault(self):
+        catalog = {"strings": {"Save": {"localizations": {"es": {"stringUnit": {"value": "Guardar"}},
+                                                          "fr": {"stringUnit": {"value": "Enregistrer"}}}}}}
+        lines = [line for _, line in l10n.problems(catalog, {"Save": ["a:1"]}, ["es"])]
+        self.assertTrue(any("words in fr, which shipped does not name" in line for line in lines))
+        self.assertFalse(any("in es," in line for line in lines))
+
     def test_plural_forms_are_checked_each(self):
         plural = {"localizations": {"es": {"variations": {"plural": {
             "one": {"stringUnit": {"state": "translated", "value": "%lld tarea"}},

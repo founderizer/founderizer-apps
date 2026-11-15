@@ -148,6 +148,16 @@ final class MobileStore {
     /// itself takes its place, in one frame: it went from the screen at the receipt and came back with the next read,
     /// one or two round trips later.
     private(set) var delivered: PendingRequest?
+    /// **His answers in words that the hub confirmed and that their chat has not read back yet** (the owner, 14
+    /// November 2026: "When I reply to a card, the conversation should follow!"): each is his message in the chat of
+    /// the agent that asked, so its bubble stays from the send until that chat's read brings the message itself. A
+    /// list of their own, beside `delivered`: one slot for both let a message that he sent next take an answer's
+    /// bubble away, and an answer a message's (the review of that day).
+    private(set) var deliveredAnswers: [PendingRequest] = []
+    /// The request numbers of the answers in words that the hub took from this phone, until the hub or its generation
+    /// changes: the chat knows by them that an answer's words are his own and not a pressed option's, also when they
+    /// are an option's own words and the reading still has the request open (`ChatPage.entries`).
+    private(set) var writtenAnswers: Set<String> = []
     /// Why the Outbox cannot be used. While it is set, nothing is sent: a request that cannot be saved could be sent
     /// twice.
     private(set) var storageError: String?
@@ -257,7 +267,7 @@ final class MobileStore {
         }
         do { pending = try outbox.load() }
         catch {
-            storageError = "Cannot read the saved request. Sending is blocked."
+            storageError = String(l10n: "Cannot read the saved request. Sending is blocked.")
             storageErrorDetail = error.localizedDescription
         }
         // A refused write of the sample fleet, which a launch that ended in the sample left: the sample is not kept.
@@ -311,7 +321,7 @@ final class MobileStore {
         unlocking = true
         defer { unlocking = false }
         do {
-            key = try await deviceKey.key(reason: "Founderizer uses this phone's own key to reach the hub.")
+            key = try await deviceKey.key(reason: String(l10n: "Founderizer uses this phone's own key to reach the hub."))
             keyState = key == nil ? .none : .ready
             // A phone that enrolled before the pings has no copy for a press on a notification yet.
             if let key { try? deviceKey.keepForPress(key) }
@@ -348,9 +358,9 @@ final class MobileStore {
         guard !hasNoHub, !sample else { return nil }
         return switch keyState {
         case .none, .ready: nil
-        case .locked: "This phone's key is locked. Unlock it in Settings to read the hub."
+        case .locked: String(l10n: "This phone's key is locked. Unlock it in Settings to read the hub.")
         // The keychain's own words go to VoiceOver (`keyDetail`), not on the screen.
-        case .failed: "This phone's key did not open. Unlock it in Settings to read the hub."
+        case .failed: String(l10n: "This phone's key did not open. Unlock it in Settings to read the hub.")
         }
     }
 
@@ -366,7 +376,7 @@ final class MobileStore {
     func enroll(code: String, bind: String? = nil, read: Bool = true) async -> String? {
         enrollDetail = nil
         guard MobileClient.normalizedCode(code) != nil else {
-            return "A code is eight characters, as the Mac app shows it (XXXX-XXXX)."
+            return String(l10n: "A code is eight characters, as the Mac app shows it (XXXX-XXXX).")
         }
         do {
             // owner feature door_calls: the QR's one-time value binds a new signing key of this phone, which the Mac
@@ -389,7 +399,7 @@ final class MobileStore {
             do { try deviceKey.save(enrollment.key) }
             catch {
                 enrollDetail = error.localizedDescription
-                return "This phone could not keep its key. Make a new code."
+                return String(l10n: "This phone could not keep its key. Make a new code.")
             }
             key = enrollment.key
             keyState = .ready
@@ -401,7 +411,7 @@ final class MobileStore {
             return MobileError.enrollWords(error)
         } catch {
             enrollDetail = error.localizedDescription
-            return "The hub did not take the code."
+            return String(l10n: "The hub did not take the code.")
         }
     }
 
@@ -433,7 +443,7 @@ final class MobileStore {
         if let text = query.first(where: { $0.name == "hub" })?.value, let address = try? MobileClient.address(text),
            address != hub {
             guard !deviceKey.has else {
-                showEnrollment(code, problem: "This code is for another hub. Forget this phone's key in Settings first.",
+                showEnrollment(code, problem: String(l10n: "This code is for another hub. Forget this phone's key in Settings first."),
                                otherHub: true)
                 return
             }
@@ -495,7 +505,7 @@ final class MobileStore {
             device = nil
             Self.setIconCount(0)
             return nil
-        } catch { return ("Cannot take the key off this phone.", error.localizedDescription) }
+        } catch { return (String(l10n: "Cannot take the key off this phone."), error.localizedDescription) }
     }
 
     // MARK: The read loop
@@ -740,6 +750,8 @@ final class MobileStore {
         let read = items.sorted { ($0.ts, $0.id) < ($1.ts, $1.id) }
         chatCursor[agent] = max(page.cursor, chatCursor[agent] ?? 0)
         if let sent = delivered, (sent.recipient ?? "manager") == agent, Self.holds(sent, in: read) { delivered = nil }
+        // An answer names no agent: its message is known by its request number alone.
+        deliveredAnswers.removeAll { Self.holds($0, in: read) }
         guard chatItems[agent] != read else { return }
         chatItems[agent] = read
         keepChats()
@@ -897,7 +909,7 @@ final class MobileStore {
         guard requested == hub, pending?.requestID == request.requestID, found.held else { return }
         do { try finish(request, editedInPlace: found.inPlace) }
         catch {
-            storageError = "Cannot clear the confirmed request. Sending is blocked."
+            storageError = String(l10n: "Cannot clear the confirmed request. Sending is blocked.")
             storageErrorDetail = error.localizedDescription
         }
     }
@@ -915,6 +927,8 @@ final class MobileStore {
         chatsReading = nil
         chatsReadAt = [:]
         delivered = nil
+        deliveredAnswers = []
+        writtenAnswers = []
         answersTaken = [:]
         picturesReading?.cancel()
         picturesReading = nil
@@ -1297,10 +1311,10 @@ final class MobileStore {
             let head = head(id)
             if let outcome = openOutcomes.first(where: { $0.task == id }) {
                 return OwnerTask(id: id, title: head?.title ?? outcome.title, owner: head?.owner,
-                                 words: "Outcome not known: check it", symbol: "questionmark.circle")
+                                 words: String(l10n: "Outcome not known: check it"), symbol: "questionmark.circle")
             }
-            return OwnerTask(id: id, title: head?.title ?? "Task", owner: head?.owner,
-                             words: "Stop not confirmed", symbol: "exclamationmark.circle")
+            return OwnerTask(id: id, title: head?.title ?? String(l10n: "Task"), owner: head?.owner,
+                             words: String(l10n: "Stop not confirmed"), symbol: "exclamationmark.circle")
         }
     }
 
@@ -1458,7 +1472,7 @@ final class MobileStore {
             return
         }
         guard stagedFiles(for: composer).count < MessageAttachment.perMessage else {
-            fileFailed("A message carries at most \(MessageAttachment.perMessage) files.")
+            fileFailed(String(l10n: "A message carries at most \(MessageAttachment.perMessage) files."))
             return
         }
         guard MessageAttachment.types[mime] != nil else { fileFailed(AttachmentError.type.errorDescription); return }
@@ -1470,7 +1484,7 @@ final class MobileStore {
                               size: data.count)
         do { try write(data, of: file) }
         catch {
-            fileFailed("Cannot keep this file on the phone. Nothing was sent.", detail: error.localizedDescription)
+            fileFailed(String(l10n: "Cannot keep this file on the phone. Nothing was sent."), detail: error.localizedDescription)
             return
         }
         fileFailed(nil)
@@ -1483,7 +1497,7 @@ final class MobileStore {
     func upload(_ file: StagedFile, for composer: String) async {
         guard let snapshot, !file.isOnHub, !uploading.contains(file.requestID) else { return }
         guard let data = try? Data(contentsOf: stagedURL(file)) else {
-            change(file, in: composer) { $0.failure = "The bytes of this file are gone from the phone. Pick it again." }
+            change(file, in: composer) { $0.failure = String(l10n: "The bytes of this file are gone from the phone. Pick it again.") }
             return
         }
         uploading.insert(file.requestID)
@@ -1496,7 +1510,7 @@ final class MobileStore {
         } catch {
             if let error = error as? MobileError { authProblem = error.auth }
             change(file, in: composer) {
-                $0.failure = (error as? LocalizedError)?.errorDescription ?? "The file did not go up."
+                $0.failure = (error as? LocalizedError)?.errorDescription ?? String(l10n: "The file did not go up.")
             }
         }
     }
@@ -1592,7 +1606,7 @@ final class MobileStore {
             if file.isImage { notLoaded.insert(file.id) }
             if quietly { picturesFailed.insert(file.id); return }
             if let error = error as? MobileError { authProblem = error.auth }
-            if !file.isImage { fileFailed((error as? LocalizedError)?.errorDescription ?? "This file did not come.") }
+            if !file.isImage { fileFailed((error as? LocalizedError)?.errorDescription ?? String(l10n: "This file did not come.")) }
         }
     }
 
@@ -1761,7 +1775,7 @@ final class MobileStore {
             try outbox.save(request)
             pending = request
         } catch {
-            storageError = "Cannot save this request. Nothing was sent."
+            storageError = String(l10n: "Cannot save this request. Nothing was sent.")
             storageErrorDetail = error.localizedDescription
             return
         }
@@ -1790,7 +1804,7 @@ final class MobileStore {
             sendError = nil
             giveBack(pending)
         } catch {
-            storageError = "Cannot clear the refused request. Sending is blocked."
+            storageError = String(l10n: "Cannot clear the refused request. Sending is blocked.")
             storageErrorDetail = error.localizedDescription
         }
     }
@@ -1827,19 +1841,19 @@ final class MobileStore {
                 UserDefaults.standard.set(answers, forKey: "answerDrafts")
                 cancelCorrection()
                 do { pending = try outbox.rejectSecret(matching: request.requestID, drafts: .standard) }
-                catch { storageError = "Cannot remove the refused text from this phone. Sending is blocked." }
-                sendError = "The hub refused registered login text. The text and the drafts are gone from this phone."
+                catch { storageError = String(l10n: "Cannot remove the refused text from this phone. Sending is blocked.") }
+                sendError = String(l10n: "The hub refused registered login text. The text and the drafts are gone from this phone.")
             } else if let error = error as? MobileError, error.isDefinitive {
                 var refused = request
                 refused.refusal = error.notSentWords
                 do { try outbox.save(refused); pending = refused }
-                catch { storageError = "Cannot save the refusal. The request is kept as it was." }
+                catch { storageError = String(l10n: "Cannot save the refusal. The request is kept as it was.") }
                 sendError = error.notSentWords
                 authProblem = error.auth
             } else {
                 // One failure, one way on (T-35): the row's Try again. The number it keeps is why a second press
                 // is safe, so that is what the words say, and the number itself stays off the screen.
-                sendError = "Your hub did not confirm it. Sending it again does not send it twice."
+                sendError = String(l10n: "Your hub did not confirm it. Sending it again does not send it twice.")
             }
         }
         await refresh()
@@ -1865,6 +1879,16 @@ final class MobileStore {
             }
             clearStaged(Self.stageKey(need: needID), sent: request.attachments)
             answersTaken[needID] = TakenAnswer(request: request, files: sentFiles)
+            // **What he wrote to a request is his message in the chat of the agent that asked** (`deliveredAnswers`):
+            // its bubble stands from the send until that chat's read brings the message itself, as a message's does.
+            // An option that he pressed is no message: its card shows it.
+            if request.answersInWords {
+                writtenAnswers.insert(request.requestID.uuidString.lowercased())
+                if !request.text.isEmpty, !chatItems.values.contains(where: { Self.holds(request, in: $0) }),
+                   !deliveredAnswers.contains(where: { $0.requestID == request.requestID }) {
+                    deliveredAnswers.append(request)
+                }
+            }
         } else {
             let name = request.recipient ?? "manager"
             if draft(for: name).trimmingCharacters(in: .whitespacesAndNewlines) == request.text { setDraft("", for: name) }
@@ -1892,8 +1916,8 @@ final class MobileStore {
     /// What the waiting request is, for Settings and for the chat.
     var pendingSummary: String {
         guard let pending else { return "" }
-        if let need = pending.needID { return "Answer to item \(need)" }
+        if let need = pending.needID { return String(l10n: "Answer to item \(need)") }
         let name = agentName(pending.recipient ?? "manager")
-        return pending.replacesRequestID == nil ? "Message to \(name)" : "Correction to \(name)"
+        return pending.replacesRequestID == nil ? String(l10n: "Message to \(name)") : String(l10n: "Correction to \(name)")
     }
 }

@@ -54,6 +54,13 @@ struct FleetView: View {
             } else if firstRun {
                 FirstRunView(store: store, window: true).frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.top, FleetSpace.lights)
+            } else if store.welcomeCovers {
+                // **An unfinished setup opens on the welcome page** (`FleetStore.welcomeCovers`; the owner's yes of 14
+                // November 2026): the first run's welcome page and the page after its press, in front of the
+                // manager's setup, which its first way and the guide's sign go on to. In each start of the app it
+                // stands there until a way is taken or the owner leaves the manager's page, and then no more.
+                FirstRunView(store: store, window: true, resumes: true).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, FleetSpace.lights)
             } else if store.fillsWindow(store.destination) {
                 addingWizard
             } else {
@@ -126,6 +133,7 @@ struct FleetView: View {
         .environment(\.glyphPresence, glyphPresences)
         .ignoresSafeArea(.container, edges: .top)
         .onAppear { store.notifications.showWindow = { openWindow(id: "fleet") } }
+        .onAppear { store.openReportWindow = { openWindow(id: FounderizerApp.reportWindow) } }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await store.refresh() } }
         }
@@ -184,8 +192,9 @@ struct FleetView: View {
     /// of the agent being added, which `content` draws in place of its chat.
     @ViewBuilder private var addingPage: some View {
         switch store.destination {
-        case .addServer: AddServerView(store: store, addAgent: { openAddAgent($0) }, addFirstAgent: addFirstAgent)
+        case .addServer: AddServerView(store: store, addAgent: { openAddAgent($0) }, goOnToAddAgent: addAgentOnNewServer)
         case .addAgent: addAgentPage
+        case .shapeChange(let step): ShapeChangePage(store: store, step: step).id("\(store.hub)/shape/\(step.rawValue)")
         default: content
         }
     }
@@ -249,23 +258,16 @@ struct FleetView: View {
         store.destination = .addAgent
     }
 
-    /// Add agent pressed for the owner, for a new Linux server, with the AI that he chose: its setup page opens next.
-    /// False when the page with its button is the way on after all.
-    private func addFirstAgent(server: String, runtime: String) async -> Bool {
+    /// Add agent's second step for a server that Add server just installed: the agent's name and its AI. It opens by
+    /// itself where Add agent's New server made that server, and on Add server's own Add agent button. Nothing is added
+    /// before his press on an AI there. The servers are read first, so the step opens with the new server in its list,
+    /// and it opens only while that Add server still shows (its task ends with it). An install of Add agent that
+    /// stands (one that failed) keeps its page.
+    private func addAgentOnNewServer(_ server: String) async {
         addAgent.prepare(server: server, listed: store.state?.agents.map(\.name))
-        guard addAgent.receipt == nil else { return false }     // an install that failed stands on that page
-        await addAgent.read(store: store)
-        await addAgent.start(store: store, runtime: runtime)
-        guard let agent = addAgent.receipt?.agent, let configureAgent,
-              AgentSetupFlow.shows(store.state?.agents.first { $0.name == agent }, features: store.state?.ui_features ?? [])
-        else { return false }
-        // Add server that he closed meanwhile does not open again: the agent's row opens its setup, which fills the
-        // window as adding it does.
-        store.noteAdding(agent)
-        guard store.destination == .addServer else { return true }
-        store.addedAgent = agent
-        configureAgent(agent)
-        return true
+        if addAgent.receipt == nil { await addAgent.read(store: store) }
+        guard !Task.isCancelled, store.destination == .addServer else { return }
+        store.destination = .addAgent
     }
 
     /// Add agent, in the window: two steps, from the sidebar's plus. An install goes on while another page shows.
@@ -276,7 +278,8 @@ struct FleetView: View {
     /// **The main sidebar, the owner's map of 28 October 2026** (D-4, "the whole map"): Needs you, only while something
     /// waits, Tasks and Agents at the top (the owner, 3 November 2026: "the usage section could be moved below tasks..
     /// and be renamed to Agents"); then the agents' chats, which are the app's one list of its agents, with no heading;
-    /// at the bottom Settings, with Update over it only while an update waits. Back and Forward stand after the window's
+    /// at the bottom Settings, with Update over it only while an update waits: the white Update and Restart banner for a
+    /// build of this app (the owner's yes of 14 November 2026), and the Update row for the fleet's. Back and Forward stand after the window's
     /// own buttons, Search and Add agent at its top right, all four level with them. Navigation rows of one style
     /// (`SidebarRow`), the chats as a chat app lists them (`ChatRow`); a mark only where something is not as usual. The
     /// servers, his devices and the updates are sections of Settings: they were rows here, settings he rarely opens.
@@ -306,11 +309,11 @@ struct FleetView: View {
             // **From where the rows' marks begin to where their counts end** (the margins of 30 October 2026, row 30):
             // it began 4 pt before the one and ended 4 pt after the other.
             Rule().padding(.horizontal, 10).padding(.vertical, 8)
-            // Only while a release of the fleet or a build of this Mac waits; it opens Settings › Updates, and leaves
-            // when the update is taken.
-            if store.updateWaits {
-                SidebarRow(String(l10n: "Update"), symbol: "arrow.down.circle", selected: false) { store.destination = .settings(.updates) }
-                    .accessibilityIdentifier("nav-update")
+            // **Update** while a release of the fleet or a build of this Mac waits for his press, and while his press goes
+            // on (`UpdateBanner`, `FleetStore.updateShows`): a click opens the window that asks (`UpdateDialog`), and it
+            // leaves when the update is taken.
+            if store.updateShows {
+                UpdateBanner(store: store) { UpdateDialog.shared.press(store: store) }
             }
             // Settings take the place of the connection popover. Its orange dot says what System status has to say, and
             // **while it shows, a press opens System status** (fix round 3c): it opened General, which says nothing of it.
@@ -485,18 +488,21 @@ struct FleetView: View {
         // An old reading keeps the agent's look (fix round 2, item 2): VoiceOver hears that it is the last reading.
         let marks = [SetupMark.words(providerSetup, subject: String(l10n: "The provider setup")), reply ? String(l10n: "New reply") : nil,
                      presence.label, store.isFresh ? nil : String(l10n: "Last reading")].compactMap { $0 }
-        let preview = ChatList.preview(agent.name, last: store.chatTimeline.entries(for: agent.name, limit: 1).last,
-                                       tasks: store.state?.tasks ?? [])
+        let entries = store.chatTimeline.entries(for: agent.name, limit: ChatList.rowReads)
+        let last = entries.last
+        // **A request that waits for him and is the newest thing in its chat is the line, in orange** (`ChatList.waitingRequest`).
+        let request = ChatList.waitingRequest(agent.name, entries: entries, whole: entries.count >= store.chatTimeline.count(for: agent.name),
+                                              needs: store.state?.needs ?? [])
+        let preview = request?.title ?? ChatList.preview(agent.name, last: last, tasks: store.state?.tasks ?? [])
         // **While the agent works, its line says what it does now** (`AgentActivity.actionNow`, hub 1.148; the owner, 13
         // November 2026, to the picture of this line: "Yes, build it"): the agent's own words for its command, or the
         // hub's plain words for a tool, in place of the task's title. It moves as every line of an agent at work.
         let action = presence == .working ? AgentActivity.actionNow(agent.name, tasks: store.state?.tasks ?? []) : nil
-        // When the line is from, as a chat app writes it at the row's end (`ChatList.time`).
-        let time = ChatList.previewTime(agent.name, last: store.chatTimeline.entries(for: agent.name, limit: 1).last,
-                                        tasks: store.state?.tasks ?? [])
+        // When its chat's last message is from, or its waiting card, as a chat app writes it at the row's end (`ChatList.time`).
+        let time = (request.map { ChatList.requestTime($0, last: last) } ?? ChatList.lastTime(last))
             .map { ChatList.time($0, now: store.state?.time ?? Date().timeIntervalSince1970) }
         return ChatRow(agent.name.agentLabel, preview: action ?? preview, selected: selected, emphasized: reply,
-                       working: presence == .working, time: time) {
+                       working: presence == .working, needsYou: action == nil && request != nil, time: time) {
             openAgent(agent.name, .chat)
         } mark: {
             // **Its status dot stands on its glyph's lower right corner, as everywhere else** (the owner's yes of 28
@@ -555,7 +561,7 @@ struct FleetView: View {
             case .activity: ActivityBoard(store: store)
             case .agents: AgentsPage(store: store) { openAgent($0, .chat) }
             case .addAgent: addAgentPage
-            case .settings, .server, .addServer, .app, .connectKey: EmptyView()
+            case .settings, .server, .addServer, .app, .connectKey, .shapeChange: EmptyView()
             case .task: if let task = store.currentTask {
                 TaskView(store: store, task: task, state: store.state!, hub: store.hub, isFresh: store.isFresh)
                     .id("\(store.hub)/\(task.id)")
@@ -600,7 +606,7 @@ struct FleetView: View {
                 openAddAgent(server.name)
                 Task { await addAgent.retry(store: store, server: server, job: job) }
             }.id("\(store.hub)/\(name)"))
-        case .addServer: AnyView(AddServerView(store: store, addAgent: { openAddAgent($0) }, addFirstAgent: addFirstAgent))
+        case .addServer: AnyView(AddServerView(store: store, addAgent: { openAddAgent($0) }, goOnToAddAgent: addAgentOnNewServer))
         case .app(let group): AnyView(AppsSettings(store: store, only: group).id("\(store.hub)/app/\(group.rawValue)"))
         case .connectKey: AnyView(ConnectAppKeyPage(store: store, model: store.connectSwitch()).id("\(store.hub)/connect-key"))
         default: nil
@@ -1333,6 +1339,7 @@ private struct AgentKeys: NSViewRepresentable {
         }
 
         private func take(_ event: NSEvent) -> Bool {
+            guard !AppFront.holdsKeys else { return false }     // no key after a front from outside (`AppFront`)
             let keys = event.modifierFlags.intersection([.command, .option, .control, .shift])
             if keys == .command, let digit = event.charactersIgnoringModifiers.flatMap({ Int($0) }), (1...9).contains(digit) {
                 guard digit <= names.count else { return false }

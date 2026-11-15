@@ -331,9 +331,9 @@ struct MachineInstallTests {
         let claimed = Claimed()
         let plan = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"),
                                    source: "https://founderizer.com/fleet.git", authKey: "tskey-auth-secret-00")
-        let installer = MachineInstaller(plan: plan, authKey: "tskey-auth-secret-00", ssh: standIn.path) { code, url in
-            claimed.set(code: code, url: url)
-        }
+        let installer = MachineInstaller(plan: plan, authKey: "tskey-auth-secret-00", ssh: standIn.path,
+                                         claim: { code, url in claimed.set(code: code, url: url) },
+                                         readHub: { _ in .silent })
         let seen = Progressed()
         let checklist = try await installer.run { seen.add($0) }
         #expect(claimed.code == "7KMQ2PRJ4TVW")
@@ -385,11 +385,593 @@ struct MachineInstallTests {
         """)
         let plan = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: "https://founderizer.com/fleet.git",
                                    authKey: "tskey-auth-secret-00")
-        let installer = MachineInstaller(plan: plan, authKey: "tskey-auth-secret-00", ssh: standIn.path) { _, _ in }
+        let installer = MachineInstaller(plan: plan, authKey: "tskey-auth-secret-00", ssh: standIn.path,
+                                         claim: { _, _ in }, readHub: { _ in .silent })
         await #expect(throws: InstallError.step("Wait for the link code",
                                                 "Fleet install stopped: this machine has no /etc/os-release")) {
             try await installer.run { _ in }
         }
+    }
+
+    // ---- a hub install that is run again after its claim (a user's report of 15 November 2026)
+
+    /// What the tests of the wait for the link code give the installer in place of a read of a real hub.
+    private final class HubAsked: @unchecked Sendable {
+        private let lock = NSLock()
+        private var urls: [URL] = []
+        private let answers: [MachineInstaller.HubRead]
+        /// The answers of the reads, in order; the last one stands for every later read.
+        init(_ answers: MachineInstaller.HubRead...) { self.answers = answers }
+        func read(_ hub: URL) -> MachineInstaller.HubRead {
+            lock.lock(); defer { lock.unlock() }
+            urls.append(hub)
+            return answers[min(urls.count, answers.count) - 1]
+        }
+        var asked: [URL] { lock.lock(); defer { lock.unlock() }; return urls }
+    }
+
+    /// The hub's plan with a wait for the link code that reads every 50 ms, so that a test waits no 10 seconds.
+    private func hubPlan(waitsWithin within: Double = 20) -> InstallPlan {
+        let plan = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: "https://founderizer.com/fleet.git",
+                                   authKey: "tskey-auth-secret-00")
+        let steps = plan.steps.map { step -> InstallStep in
+            guard case .waitForClaim(let program, _, _) = step.action else { return step }
+            return InstallStep(id: step.id, title: step.title, says: step.says,
+                               action: .waitForClaim(program, every: 0.05, within: within))
+        }
+        return InstallPlan(job: plan.job, target: plan.target, steps: steps, redactions: plan.redactions,
+                           installs: plan.installs)
+    }
+
+    /// **A hub that this Mac owns already makes no link code**, and its installer says so and goes on. The install
+    /// asks the hub itself, finds that it serves this Mac, sends no claim, and ends as a first install ends: with the
+    /// hub's address in the claim step's line, where the app reads it for its connection.
+    @Test func aHubInstallThatIsRunAgainAfterItsClaimGoesOnWithNoCode() async throws {
+        let standIn = try StandInSSH("""
+        case "$program" in
+          \(Self.ubuntu)
+          *"git clone"*|*"rev-parse"*) echo 4f1c0ab; echo /root/fleet-kit/hub.sh ;;
+          *"hub.sh --check"*) echo "Founderizer step 1 of 13: base packages" ;;
+          *"tailscale ip -4"*) echo 100.64.0.9 ;;
+          *setsid*) exit 0 ;;
+          *"tail -n 60"*)
+            echo "Founderizer step 8 of 13: the owner claim"
+            echo "Founderizer: this hub belongs to the Mac at 100.64.0.5 already, so no code was made and nothing changed." ;;
+          *"tail -n 40"*) echo "READY" ;;
+          *verify*) cat <<'ANSWER'
+        \(Self.checklist)
+        ANSWER
+        ;;
+        esac
+        """)
+        let claimed = Claimed(), hub = HubAsked(.serves)
+        // The real plan, with its real times: a hub that serves this Mac ends the wait at its first read.
+        let plan = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"),
+                                   source: "https://founderizer.com/fleet.git", authKey: "tskey-auth-secret-00")
+        let installer = MachineInstaller(plan: plan, authKey: "tskey-auth-secret-00", ssh: standIn.path,
+                                         claim: { code, url in claimed.set(code: code, url: url) },
+                                         readHub: { hub.read($0) })
+        let seen = Progressed()
+        let checklist = try await installer.run { seen.add($0) }
+        #expect(checklist.checks.count == 3)
+        #expect(claimed.code == nil, "no code was made, so none is sent")
+        #expect(hub.asked.map(\.absoluteString) == ["http://100.64.0.9:8765"])
+        #expect(seen.all.filter { $0.state == .done }.map(\.step)
+                == ["read", "network", "code", "plan", "start", "wait_claim", "claim", "wait_ready", "verify"])
+        #expect(seen.all.first { $0.step == "claim" && $0.state == .done }?.lines == ["This Mac claimed the hub at 100.64.0.9."])
+        #expect(standIn.programs.filter { $0.contains("tail -n 60") }.count == 1)
+    }
+
+    /// **A hub that has its owner and does not serve this Mac**: the installer's own line says that it made no code,
+    /// and the hub refuses this Mac at two reads in a row. The install then stops with the app's own sentence, and
+    /// waits no twenty minutes for a code that never comes.
+    @Test func aHubThatHasItsOwnerAndRefusesThisMacStopsTheInstall() async throws {
+        let standIn = try StandInSSH("""
+        case "$program" in
+          \(Self.ubuntu)
+          *"rev-parse"*) echo 4f1c0ab ;;
+          *"hub.sh --check"*) echo "Founderizer step 1 of 13" ;;
+          *"tailscale ip -4"*) echo 100.64.0.9 ;;
+          *setsid*) exit 0 ;;
+          *"tail -n 60"*)
+            reads=$(cat "$dir/reads" 2>/dev/null || echo 0); reads=$((reads + 1)); printf '%s' "$reads" > "$dir/reads"
+            if [ "$reads" -eq 1 ]; then
+              echo "Founderizer: this hub belongs to the Mac at 100.64.0.5 already, so no code was made and nothing changed."
+            else
+              echo "Founderizer step 9 of 13: the services"
+            fi ;;
+        esac
+        """)
+        let claimed = Claimed(), hub = HubAsked(.refuses)
+        let installer = MachineInstaller(plan: hubPlan(), authKey: "tskey-auth-secret-00", ssh: standIn.path,
+                                         claim: { code, url in claimed.set(code: code, url: url) },
+                                         readHub: { hub.read($0) })
+        let stop = InstallError.step("Wait for the link code", "Your hub answered, and it does not serve its pages to this Mac.")
+        await #expect(throws: stop) { try await installer.run { _ in } }
+        // The second refusal stops it, also when the installer's line has left the end of its log by then.
+        #expect(claimed.code == nil && hub.asked.count == 2)
+        #expect(standIn.programs.filter { $0.contains("tail -n 60") }.count == 2)
+        // The page says the sentence itself, and the kept record has it as the app's own words.
+        #expect(stop.plain(host: "100.64.0.9", place: nil) == "Your hub answered, and it does not serve its pages to this Mac.")
+        // The record has a kind of its own for it: another try from this Mac ends the same way.
+        #expect(InstallRecord.Stop.of(stop) == .hubNotOurs && InstallRecord.Stop.hubNotOurs.rawValue == "hub_not_ours")
+        #expect(InstallRecord.words(of: stop, host: "100.64.0.9") == "Your hub answered, and it does not serve its pages to this Mac.")
+    }
+
+    /// **One refusal decides nothing**: the first read of this Mac's own hub can carry a key from before, and the next
+    /// read carries the key that waits. The install goes on when the hub then serves this Mac.
+    @Test func aHubThatRefusesOneReadAndThenServesIsThisMacs() async throws {
+        let standIn = try StandInSSH("""
+        case "$program" in
+          \(Self.ubuntu)
+          *"git clone"*|*"rev-parse"*) echo 4f1c0ab; echo /root/fleet-kit/hub.sh ;;
+          *"hub.sh --check"*) echo "Founderizer step 1 of 13: base packages" ;;
+          *"tailscale ip -4"*) echo 100.64.0.9 ;;
+          *setsid*) exit 0 ;;
+          *"tail -n 60"*) echo "Founderizer: this hub belongs to the Mac at 100.64.0.5 already, so no code was made and nothing changed." ;;
+          *"tail -n 40"*) echo "READY" ;;
+          *verify*) cat <<'ANSWER'
+        \(Self.checklist)
+        ANSWER
+        ;;
+        esac
+        """)
+        let claimed = Claimed(), hub = HubAsked(.refuses, .serves)
+        let installer = MachineInstaller(plan: hubPlan(), authKey: "tskey-auth-secret-00", ssh: standIn.path,
+                                         claim: { code, url in claimed.set(code: code, url: url) },
+                                         readHub: { hub.read($0) })
+        let checklist = try await installer.run { _ in }
+        #expect(checklist.checks.count == 3 && claimed.code == nil && hub.asked.count == 2)
+    }
+
+    /// **A refusal with no word of the installer stops nothing**: on a new server another program can answer on that
+    /// port. The wait goes on as before, and the code that then shows is sent. A refusal after a read with no answer
+    /// counts from one again.
+    @Test func aRefusalWithNoWordOfTheInstallerLeavesTheWaitAsItWas() async throws {
+        let standIn = try StandInSSH("""
+        case "$program" in
+          \(Self.ubuntu)
+          *"git clone"*|*"rev-parse"*) echo 4f1c0ab; echo /root/fleet-kit/hub.sh ;;
+          *"hub.sh --check"*) echo "Founderizer step 1 of 13: base packages" ;;
+          *"tailscale ip -4"*) echo 100.64.0.9 ;;
+          *setsid*) exit 0 ;;
+          *"tail -n 60"*)
+            reads=$(cat "$dir/reads" 2>/dev/null || echo 0); reads=$((reads + 1)); printf '%s' "$reads" > "$dir/reads"
+            if [ "$reads" -gt 4 ]; then
+              echo 'Founderizer: FLEET_CLAIM=7KMQ-2PRJ-4TVW sh -c "$(curl -fsS http://100.64.0.9:8765/claim)"'
+            else
+              echo "Founderizer step 8 of 13: the owner claim"
+            fi ;;
+          *"tail -n 40"*) echo "READY" ;;
+          *verify*) cat <<'ANSWER'
+        \(Self.checklist)
+        ANSWER
+        ;;
+        esac
+        """)
+        let claimed = Claimed(), hub = HubAsked(.refuses, .refuses, .refuses, .refuses)
+        let installer = MachineInstaller(plan: hubPlan(), authKey: "tskey-auth-secret-00", ssh: standIn.path,
+                                         claim: { code, url in claimed.set(code: code, url: url) },
+                                         readHub: { hub.read($0) })
+        _ = try await installer.run { _ in }
+        #expect(claimed.code == "7KMQ2PRJ4TVW" && hub.asked.count == 4)
+
+        // With the installer's word: refused, no answer, refused is no two refusals in a row, so nothing stops, and
+        // the wait ends on what the log then shows.
+        let again = try StandInSSH("""
+        case "$program" in
+          \(Self.ubuntu)
+          *"git clone"*|*"rev-parse"*) echo 4f1c0ab; echo /root/fleet-kit/hub.sh ;;
+          *"hub.sh --check"*) echo "Founderizer step 1 of 13: base packages" ;;
+          *"tailscale ip -4"*) echo 100.64.0.9 ;;
+          *setsid*) exit 0 ;;
+          *"tail -n 60"*)
+            reads=$(cat "$dir/reads" 2>/dev/null || echo 0); reads=$((reads + 1)); printf '%s' "$reads" > "$dir/reads"
+            if [ "$reads" -gt 3 ]; then
+              echo 'Founderizer: FLEET_CLAIM=7KMQ-2PRJ-4TVW sh -c "$(curl -fsS http://100.64.0.9:8765/claim)"'
+            else
+              echo "Founderizer: this hub belongs to the Mac at 100.64.0.5 already, so no code was made and nothing changed."
+            fi ;;
+          *"tail -n 40"*) echo "READY" ;;
+          *verify*) cat <<'ANSWER'
+        \(Self.checklist)
+        ANSWER
+        ;;
+        esac
+        """)
+        let broken = HubAsked(.refuses, .silent, .refuses), sent = Claimed()
+        let waits = MachineInstaller(plan: hubPlan(), authKey: "tskey-auth-secret-00", ssh: again.path,
+                                     claim: { code, url in sent.set(code: code, url: url) },
+                                     readHub: { broken.read($0) })
+        _ = try await waits.run { _ in }
+        #expect(sent.code == "7KMQ2PRJ4TVW" && broken.asked.count == 3)
+    }
+
+    /// The installer's own stop comes before any read of the hub: its line is the reason, and nothing is asked.
+    @Test func aStopOfTheInstallerComesBeforeAnyReadOfTheHub() async throws {
+        let standIn = try StandInSSH("""
+        case "$program" in
+          \(Self.ubuntu)
+          *"rev-parse"*) echo 4f1c0ab ;;
+          *"hub.sh --check"*) echo "Founderizer step 1 of 13" ;;
+          *"tailscale ip -4"*) echo 100.64.0.9 ;;
+          *setsid*) exit 0 ;;
+          *"tail -n 60"*) echo "Founderizer install stopped: the owner claim did not finish: the line above says why." ;;
+        esac
+        """)
+        let hub = HubAsked(.serves)
+        let installer = MachineInstaller(plan: hubPlan(), authKey: "tskey-auth-secret-00", ssh: standIn.path,
+                                         claim: { _, _ in }, readHub: { hub.read($0) })
+        await #expect(throws: InstallError.step("Wait for the link code", "Founderizer install stopped: the owner claim did not finish: the line above says why.")) {
+            try await installer.run { _ in }
+        }
+        #expect(hub.asked.isEmpty)
+    }
+
+    /// **A first install is as before**: while nothing says that the hub is this Mac's (no answer, or the claim's own
+    /// listener), the wait goes on, and the code that then shows is sent.
+    @Test func aFirstInstallStillWaitsForItsCodeAndSendsIt() async throws {
+        let standIn = try StandInSSH("""
+        case "$program" in
+          \(Self.ubuntu)
+          *"git clone"*|*"rev-parse"*) echo 4f1c0ab; echo /root/fleet-kit/hub.sh ;;
+          *"hub.sh --check"*) echo "Founderizer step 1 of 13: base packages" ;;
+          *"tailscale ip -4"*) echo 100.64.0.9 ;;
+          *setsid*) exit 0 ;;
+          *"tail -n 60"*)
+            reads=$(cat "$dir/reads" 2>/dev/null || echo 0); reads=$((reads + 1)); printf '%s' "$reads" > "$dir/reads"
+            if [ "$reads" -gt 2 ]; then
+              echo 'Founderizer: FLEET_CLAIM=7KMQ-2PRJ-4TVW sh -c "$(curl -fsS http://100.64.0.9:8765/claim)"'
+            else
+              echo "Founderizer step 8 of 13: the owner claim"
+            fi ;;
+          *"tail -n 40"*) echo "READY" ;;
+          *verify*) cat <<'ANSWER'
+        \(Self.checklist)
+        ANSWER
+        ;;
+        esac
+        """)
+        let claimed = Claimed(), hub = HubAsked(.silent)
+        let installer = MachineInstaller(plan: hubPlan(), authKey: "tskey-auth-secret-00", ssh: standIn.path,
+                                         claim: { code, url in claimed.set(code: code, url: url) },
+                                         readHub: { hub.read($0) })
+        let seen = Progressed()
+        _ = try await installer.run { seen.add($0) }
+        #expect(claimed.code == "7KMQ2PRJ4TVW")
+        #expect(claimed.url?.absoluteString == "http://100.64.0.9:8765/claim")
+        // The hub was asked at each read that had no code, and never after the code showed.
+        #expect(hub.asked.count == 2)
+        #expect(seen.all.filter { $0.state == .done }.map(\.step)
+                == ["read", "network", "code", "plan", "start", "wait_claim", "claim", "wait_ready", "verify"])
+        #expect(seen.all.first { $0.step == "claim" && $0.state == .done }?.lines == ["This Mac claimed the hub at 100.64.0.9."])
+    }
+
+    /// A hub that says nothing either way leaves the wait its whole time, and the stop of before.
+    @Test func aWaitWithNoCodeAndNoAnswerEndsAsBefore() async throws {
+        let standIn = try StandInSSH("""
+        case "$program" in
+          \(Self.ubuntu)
+          *"rev-parse"*) echo 4f1c0ab ;;
+          *"hub.sh --check"*) echo "Founderizer step 1 of 13" ;;
+          *"tailscale ip -4"*) echo 100.64.0.9 ;;
+          *setsid*) exit 0 ;;
+          *"tail -n 60"*) echo "Founderizer step 8 of 13: the owner claim" ;;
+        esac
+        """)
+        let hub = HubAsked(.silent)
+        let installer = MachineInstaller(plan: hubPlan(waitsWithin: 0.3), authKey: "tskey-auth-secret-00", ssh: standIn.path,
+                                         claim: { _, _ in }, readHub: { hub.read($0) })
+        await #expect(throws: InstallError.timedOut("Wait for the link code")) { try await installer.run { _ in } }
+        // At least the first look asks the hub; how many looks fit in the time is no rule of the wait.
+        #expect(hub.asked.count >= 1)
+    }
+
+    /// Before the server has an address on the private network, no hub is asked: the app reads a hub only there.
+    @Test func noHubIsAskedAtAnAddressOffThePrivateNetwork() async throws {
+        let standIn = try StandInSSH("""
+        case "$program" in
+          *"tail -n 60"*) echo "Founderizer step 8 of 13: the owner claim" ;;
+        esac
+        """)
+        let hub = HubAsked(.serves)
+        let wait = InstallStep(id: "wait_claim", title: "Wait for the link code", says: "",
+                               action: .waitForClaim("tail -n 60 /root/fleet-install.log", every: 0.05, within: 0.3))
+        let plan = InstallPlan(job: .hub, target: InstallTarget(host: "198.51.100.7"), steps: [wait], redactions: [])
+        let installer = MachineInstaller(plan: plan, authKey: "", ssh: standIn.path, claim: { _, _ in },
+                                         readHub: { hub.read($0) })
+        await #expect(throws: InstallError.timedOut("Wait for the link code")) { try await installer.run { _ in } }
+        #expect(hub.asked.isEmpty)
+    }
+
+    /// **The read of the hub itself**: a hub that serves its state to this Mac is this Mac's; a 403 is a hub of another
+    /// owner; the claim's own listener (404), a body that is no state, and no listener at all say nothing.
+    @Test func theReadOfTheHubTellsThreeAnswersApart() async throws {
+        func read(_ status: String, _ body: String) async throws -> MachineInstaller.HubRead {
+            let server = try OneAnswer(status: status) { _ in body }
+            return await MachineInstaller.readHub(at: URL(string: "http://127.0.0.1:\(server.port)")!)
+        }
+        let state = """
+        {"schema_version": 1, "db": "db", "time": 1000.0, "tasks": [], "notes": [], "needs": [], "permissions": [],
+         "agents": [{"name": "juno", "role": "manager", "runtime": "claude", "can": []}], "messages": [], "reports": []}
+        """
+        #expect(try await read("200 OK", state) == .serves)
+        #expect(try await read("403 Forbidden", #"{"error": "owner only"}"#) == .refuses)
+        #expect(try await read("404 Not Found", "Founderizer: this is the hub installer, and it serves only the claim.\n") == .silent)
+        #expect(try await read("503 Service Unavailable", "Founderizer: the hub is away for an owner claim.\n") == .silent)
+        #expect(try await read("200 OK", "{}") == .silent)
+        // A port on which nothing listens: the listener of a server that just closed.
+        let gone = try OneAnswer(status: "200 OK") { _ in state }
+        _ = await MachineInstaller.readHub(at: URL(string: "http://127.0.0.1:\(gone.port)")!)
+        #expect(await MachineInstaller.readHub(at: URL(string: "http://127.0.0.1:\(gone.port)")!) == .silent)
+    }
+
+    // ---- the last step of an install, when no checks come
+
+    /// A server that joins, already on the private network, whose checks answer as `verify` says.
+    private func joining(verify: String) throws -> StandInSSH {
+        try StandInSSH("""
+        case "$program" in
+          \(Self.ubuntu)
+          *fleet-machine-name=*) echo "fleet-machine-name=worker-9"; echo "fleet-on-network"; echo "100.90.1.2" ;;
+          *FLEET_JOIN*) echo "Fleet: this machine is the server worker-9" ;;
+          *verify*)
+            asked=$(cat "$dir/asked" 2>/dev/null || echo 0); asked=$((asked + 1)); printf '%s' "$asked" > "$dir/asked"
+            \(verify)
+          ;;
+        esac
+        """)
+    }
+
+    private func joinPlan() -> InstallPlan {
+        InstallPlan.join(target: InstallTarget(host: "198.51.100.7", user: "root", identityFile: "/Users/me/.ssh/id_ed25519"),
+                         line: Self.hubLine, code: "7KMQ2PRJ4TVW", authKey: nil)
+    }
+
+    private func asked(_ standIn: StandInSSH) -> Int {
+        Int((try? String(contentsOf: standIn.folder.appendingPathComponent("asked"), encoding: .utf8)) ?? "") ?? 0
+    }
+
+    /// **A connection that never began is tried again** at the last step of an install: `ssh` did not reach the
+    /// server, so the checks did not start, and the install ends well when they then come.
+    @Test func theChecksOfAnInstallAreAskedAgainWhenSSHItselfFailed() async throws {
+        let standIn = try joining(verify: """
+            if [ "$asked" -lt 3 ]; then
+              echo "ssh: connect to host 100.90.1.2 port 22: Connection refused" >&2; exit 255
+            fi
+            cat <<'ANSWER'
+        \(Self.checklist)
+        ANSWER
+        """)
+        #expect(joinPlan().installs && InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"),
+                                                       source: InstallPlan.defaultSource, authKey: nil).installs)
+        let checklist = try await MachineInstaller(plan: joinPlan(), authKey: "", ssh: standIn.path, verifyPause: 0.05)
+            .run { _ in }
+        #expect(checklist.checks.count == 3)
+        #expect(asked(standIn) == 3)
+    }
+
+    /// When `ssh` never reaches the server at that step, the install stops with `ssh`'s own line, as each other step
+    /// does: the page says that this Mac could not reach the server, and the kept record has that kind, in place of
+    /// "The server did not answer its checks", which said nothing of why.
+    @Test func anInstallWhoseLastStepNeverReachesTheServerSaysSo() async throws {
+        let standIn = try joining(verify: """
+            echo "ssh: connect to host 100.90.1.2 port 22: Connection refused" >&2; exit 255
+        """)
+        let installer = MachineInstaller(plan: joinPlan(), authKey: "", ssh: standIn.path, verifyPause: 0.05)
+        let stop = InstallError.step("Check the server", "ssh: connect to host 100.90.1.2 port 22: Connection refused")
+        await #expect(throws: stop) { try await installer.run { _ in } }
+        #expect(asked(standIn) == MachineInstaller.verifyTries)
+        #expect(stop.plain(host: "100.90.1.2", place: nil)
+            == ServerCheck.unreached("100.90.1.2", said: "ssh: connect to host 100.90.1.2 port 22: connection refused"))
+        #expect(InstallRecord.Stop.of(stop) == .serverUnreached)
+        #expect(InstallRecord.words(of: stop, host: "100.90.1.2") == stop.plain(host: "100.90.1.2"))
+    }
+
+    /// **Only a connection that never began is tried again.** A key that the server did not take, a connection that
+    /// broke after it began, and a step that this Mac ended after its whole time (ssh then says that a signal ended
+    /// it) stop the install at the first try, each with `ssh`'s own line: the checks may still run on the server.
+    @Test func onlyAConnectionThatNeverBeganIsTriedAgain() async throws {
+        let ends = ["root@100.90.1.2: Permission denied (publickey).",
+                    "Connection to 100.90.1.2 closed by remote host.",
+                    "client_loop: send disconnect: Broken pipe",
+                    "Killed by signal 15."]
+        for line in ends {
+            let standIn = try joining(verify: "echo '\(line)' >&2; exit 255")
+            let installer = MachineInstaller(plan: joinPlan(), authKey: "", ssh: standIn.path, verifyPause: 0.05)
+            await #expect(throws: InstallError.step("Check the server", line)) { try await installer.run { _ in } }
+            #expect(asked(standIn) == 1, "\(line)")
+        }
+        // ssh that ended with nothing printed says nothing of a connection (one that fails prints why): it is asked
+        // one time, and the stop is "no checks", as before.
+        let silent = try joining(verify: "exit 255")
+        let installer = MachineInstaller(plan: joinPlan(), authKey: "", ssh: silent.path, verifyPause: 0.05)
+        await #expect(throws: InstallError.noChecklist) { try await installer.run { _ in } }
+        #expect(asked(silent) == 1)
+        // The page's words and the record's kind for the three kinds of end.
+        #expect(InstallRecord.Stop.of(InstallError.step("Check the server", ends[0])) == .loginRefused)
+        #expect(InstallRecord.Stop.of(InstallError.step("Check the server", ends[1])) == .stepFailed)
+        #expect(InstallError.step("Check the server", ends[1]).plain(host: "100.90.1.2", place: nil)
+            == "It stopped at “Check the server”.")
+    }
+
+    /// **A server that answers with its own error and no checks says so** (in an install): the stop names the step and
+    /// keeps the program's last line behind it, as each other step does, so that the cause can be read; the record's
+    /// kind is a failed step. It is asked one time, whatever the program's status. No output at all, and a list of
+    /// checks that this app cannot read, stay "the server did not answer its checks".
+    @Test func aServerThatAnswersWithItsOwnErrorSaysSo() async throws {
+        for status in [0, 1, 127] {
+            // The lines of a Python error show source text, which has brackets of its own.
+            let standIn = try joining(verify: "echo 'Traceback (most recent call last):'; echo '    names = (conf.get(\"agents\") or [])[0]'; echo \"KeyError: 'machine'\"; exit \(status)")
+            let installer = MachineInstaller(plan: joinPlan(), authKey: "", ssh: standIn.path, verifyPause: 0.05)
+            let stop = InstallError.step("Check the server", "KeyError: 'machine'")
+            await #expect(throws: stop) { try await installer.run { _ in } }
+            #expect(asked(standIn) == 1, "status \(status)")
+            #expect(stop.plain(host: "100.90.1.2", place: nil) == "It stopped at “Check the server”.")
+            #expect(InstallRecord.Stop.of(stop) == .stepFailed)
+        }
+        // Nothing printed, and a list that is outside the shape that the app reads: no checks, as before.
+        let lists = ["exit 1",
+                     #"echo '[{"check": "Not An Id", "state": "ok", "says": "x", "fix": null}]'; exit 0"#,
+                     #"echo 'a warning first'; echo '[{"check": "disk", "state": "odd", "says": "x", "fix": null}]'; exit 1"#]
+        for verify in lists {
+            let standIn = try joining(verify: verify)
+            let installer = MachineInstaller(plan: joinPlan(), authKey: "", ssh: standIn.path, verifyPause: 0.05)
+            await #expect(throws: InstallError.noChecklist) { try await installer.run { _ in } }
+            #expect(asked(standIn) == 1, "\(verify)")
+        }
+        #expect(VerifyChecklist.holdsList("[]") && VerifyChecklist.holdsList(" [ ]\n")
+                && VerifyChecklist.holdsList("x [ {\"check\": \"disk\"} ] y"))
+        #expect(!VerifyChecklist.holdsList("") && !VerifyChecklist.holdsList("no list [here") && !VerifyChecklist.holdsList("] [")
+                && !VerifyChecklist.holdsList("an index [3] of text") && !VerifyChecklist.holdsList("x = (a or [])[0]")
+                && !VerifyChecklist.holdsList("x [ {\"a\": 1} ] y") && !VerifyChecklist.holdsList("\"check\" with no list"))
+        // Checks that came are the answer, also with ssh's own status after them.
+        let late = try joining(verify: """
+            cat <<'ANSWER'
+        \(Self.checklist)
+        ANSWER
+            exit 255
+        """)
+        let checklist = try await MachineInstaller(plan: joinPlan(), authKey: "", ssh: late.path, verifyPause: 0.05).run { _ in }
+        #expect(checklist.checks.count == 3 && asked(late) == 1)
+    }
+
+    /// A hub's own install has the same last step: a connection that never began is tried again there too.
+    @Test func aHubsInstallAsksForItsChecksAgainToo() async throws {
+        let standIn = try StandInSSH("""
+        case "$program" in
+          \(Self.ubuntu)
+          *"git clone"*|*"rev-parse"*) echo 4f1c0ab; echo /root/fleet-kit/hub.sh ;;
+          *"hub.sh --check"*) echo "Founderizer step 1 of 13: base packages" ;;
+          *"tailscale ip -4"*) echo 100.64.0.9 ;;
+          *setsid*) exit 0 ;;
+          *"tail -n 60"*) echo 'Founderizer: FLEET_CLAIM=7KMQ-2PRJ-4TVW sh -c "$(curl -fsS http://100.64.0.9:8765/claim)"' ;;
+          *"tail -n 40"*) echo "READY" ;;
+          *verify*)
+            asked=$(cat "$dir/asked" 2>/dev/null || echo 0); asked=$((asked + 1)); printf '%s' "$asked" > "$dir/asked"
+            if [ "$asked" -lt 2 ]; then
+              echo "ssh: connect to host 100.64.0.9 port 22: Connection refused" >&2; exit 255
+            fi
+            cat <<'ANSWER'
+        \(Self.checklist)
+        ANSWER
+          ;;
+        esac
+        """)
+        #expect(hubPlan().installs)
+        let installer = MachineInstaller(plan: hubPlan(), authKey: "tskey-auth-secret-00", ssh: standIn.path,
+                                         claim: { _, _ in }, readHub: { _ in .silent }, verifyPause: 0.05)
+        let checklist = try await installer.run { _ in }
+        #expect(checklist.checks.count == 3 && asked(standIn) == 2)
+    }
+
+    /// The check of a machine's own page is no install: it asks one time and says what it said before.
+    @Test func theCheckOfAMachinesOwnPageAsksOneTime() async throws {
+        let standIn = try StandInSSH("""
+        case "$program" in
+          *verify*)
+            asked=$(cat "$dir/asked" 2>/dev/null || echo 0); asked=$((asked + 1)); printf '%s' "$asked" > "$dir/asked"
+            echo "ssh: connect to host 100.90.1.2 port 22: Connection refused" >&2; exit 255 ;;
+        esac
+        """)
+        let plan = InstallPlan.check(target: InstallTarget(host: "100.90.1.2"), machine: .linuxWorker)
+        #expect(!plan.installs)
+        let installer = MachineInstaller(plan: plan, authKey: "", ssh: standIn.path, verifyPause: 0.05)
+        await #expect(throws: InstallError.noChecklist) { try await installer.run { _ in } }
+        #expect(asked(standIn) == 1)
+    }
+
+    /// **The manager's name goes to the installer** (`hub.sh --manager-name`), in its plan and in its run, and only a
+    /// name by the installer's own rule: the run's line stands in single quotes on the server, and the hub lets nobody
+    /// rename the manager, so no other words may reach it. With no name the two lines are the lines of before.
+    @Test func theInstallerGetsTheManagersName() throws {
+        func lines(_ name: String?) throws -> (plan: String, start: String) {
+            let plan = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: InstallPlan.defaultSource,
+                                       authKey: nil, managerName: name)
+            guard case .run(let check) = try #require(plan.steps.first { $0.id == "plan" }).action,
+                  case .detach(let start) = try #require(plan.steps.first { $0.id == "start" }).action
+            else { throw InstallError.step("plan", "the hub's plan has no plan step or no start step") }
+            return (check, start)
+        }
+        let plain = try lines(nil), named = try lines("juno")
+        #expect(named.plan.hasSuffix("/hub.sh --check --manager-name juno"))
+        #expect(named.start.contains("/hub.sh --manager-name juno < /dev/null > "))
+        #expect(plain.plan.hasSuffix("/hub.sh --check"))
+        #expect(!plain.start.contains("--manager-name"))
+        #expect(named.plan.replacingOccurrences(of: " --manager-name juno", with: "") == plain.plan)
+        #expect(named.start.replacingOccurrences(of: " --manager-name juno", with: "") == plain.start)
+        // A typed name is given in the installer's form by the page (`ManagerName.agentName`): no other value goes in.
+        for bad in ["Juno", " juno", "vault", "hub", "a", "juno'; reboot; '", "ana maría", String(repeating: "a", count: 27), ""] {
+            let other = try lines(bad)
+            #expect(other.plan == plain.plan && other.start == plain.start, "\(bad)")
+        }
+        // The other steps of the install are the same with a name.
+        let withName = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: InstallPlan.defaultSource,
+                                       authKey: nil, managerName: "juno")
+        let without = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: InstallPlan.defaultSource, authKey: nil)
+        #expect(withName.steps.map(\.id) == without.steps.map(\.id))
+    }
+
+    /// **One server for all**: the installer gets the word `FLEET_HUB_SERVER=shared` in place of
+    /// `FLEET_MANAGER_SERVER=later`, in its plan and in its run, because it refuses the two together. Each other step of
+    /// the install is the same, and the name goes with either word.
+    @Test func theInstallerGetsTheWordForOneServer() throws {
+        func lines(oneServer: Bool, name: String? = nil) throws -> (plan: String, start: String) {
+            let plan = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: InstallPlan.defaultSource,
+                                       authKey: nil, managerName: name, oneServer: oneServer)
+            guard case .run(let check) = try #require(plan.steps.first { $0.id == "plan" }).action,
+                  case .detach(let start) = try #require(plan.steps.first { $0.id == "start" }).action
+            else { throw InstallError.step("plan", "the hub's plan has no plan step or no start step") }
+            return (check, start)
+        }
+        let two = try lines(oneServer: false), one = try lines(oneServer: true), named = try lines(oneServer: true, name: "juno")
+        #expect(one.plan.hasPrefix("FLEET_HUB_SERVER=shared FLEET_VERIFY=caller sh ") && one.plan.hasSuffix("/hub.sh --check"))
+        #expect(one.start.contains("sh -c 'FLEET_HUB_SERVER=shared FLEET_VERIFY=caller sh "))
+        #expect(two.plan.hasPrefix("FLEET_MANAGER_SERVER=later FLEET_VERIFY=caller sh "))
+        for line in [one.plan, one.start, named.plan, named.start] { #expect(!line.contains("FLEET_MANAGER_SERVER")) }
+        for line in [two.plan, two.start] { #expect(!line.contains("FLEET_HUB_SERVER")) }
+        #expect(one.plan.replacingOccurrences(of: "FLEET_HUB_SERVER=shared", with: "FLEET_MANAGER_SERVER=later") == two.plan)
+        #expect(one.start.replacingOccurrences(of: "FLEET_HUB_SERVER=shared", with: "FLEET_MANAGER_SERVER=later") == two.start)
+        #expect(named.plan.hasSuffix("/hub.sh --check --manager-name juno"))
+        #expect(named.start.contains("/hub.sh --manager-name juno < /dev/null > "))
+        let a = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: InstallPlan.defaultSource, authKey: nil)
+        let b = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: InstallPlan.defaultSource, authKey: nil,
+                                oneServer: true)
+        #expect(a.steps.map(\.id) == b.steps.map(\.id))
+    }
+
+    /// **The hub keeps the slider's step from its first install on**: "2 servers" and "1 per agent" go into the plan
+    /// and into the run as `FLEET_SHAPE_STEP`, before the word of the layout. "1 server" has no such word, because the
+    /// word for one server writes the step and the installer refuses it with another step; and an install whose owner
+    /// did not come through the slider has the line of before.
+    @Test func theInstallerGetsTheStepOfTheSlider() throws {
+        func lines(_ shape: ServersStep?, oneServer: Bool = false, name: String? = nil) throws -> (plan: String, start: String) {
+            let plan = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: InstallPlan.defaultSource,
+                                       authKey: nil, managerName: name, oneServer: oneServer, shape: shape)
+            guard case .run(let check) = try #require(plan.steps.first { $0.id == "plan" }).action,
+                  case .detach(let start) = try #require(plan.steps.first { $0.id == "start" }).action
+            else { throw InstallError.step("plan", "the hub's plan has no plan step or no start step") }
+            return (check, start)
+        }
+        let before = try lines(nil)
+        for step in [ServersStep.two, .each] {
+            let word = "FLEET_SHAPE_STEP=\(step.rawValue) "
+            let kept = try lines(step)
+            #expect(kept.plan == word + before.plan)
+            #expect(kept.plan.hasPrefix("\(word)FLEET_MANAGER_SERVER=later FLEET_VERIFY=caller sh "))
+            #expect(kept.start.contains("sh -c '\(word)FLEET_MANAGER_SERVER=later FLEET_VERIFY=caller sh "))
+            #expect(kept.start.replacingOccurrences(of: word, with: "") == before.start)
+            #expect(try lines(step, name: "juno").plan.hasSuffix("/hub.sh --check --manager-name juno"))
+            // "1 server" was the choice: its own word alone, whatever step comes with it.
+            let one = try lines(step, oneServer: true)
+            #expect(!one.plan.contains("FLEET_SHAPE_STEP") && !one.start.contains("FLEET_SHAPE_STEP"))
+        }
+        let one = try lines(.one, oneServer: true)
+        #expect(one.plan.hasPrefix("FLEET_HUB_SERVER=shared FLEET_VERIFY=caller sh "))
+        #expect(!one.plan.contains("FLEET_SHAPE_STEP") && !one.start.contains("FLEET_SHAPE_STEP"))
+        // The step "one" without the word for one server is no line that the installer takes: it gets no step.
+        #expect(try lines(.one).plan == before.plan)
+        #expect(try lines(.one).start == before.start)
     }
 
     @Test func aHubWithNoKeyMustAlreadyBeOnTheNetworkOrTheKeyIsAsked() async throws {

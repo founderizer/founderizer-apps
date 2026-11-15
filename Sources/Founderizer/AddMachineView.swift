@@ -1,16 +1,22 @@
 import AppKit
 import FleetCore
 import FleetMark
+import FleetOwnerAPI
 import SwiftUI
 
 /// Add a machine, as the wizard of the first run is: **one decision on a page**, and the page after it asks only
 /// what that decision needs (PRODUCT.md 2 and P3).
 ///
 ///   1. **How it joins**, as three cards and nothing else: a VPS, which this Mac installs over its own SSH connection;
-///      a Mac mini or Studio that stays on, whose own installer waits there for a link code; or one line the owner
-///      pastes on the machine himself.
-///   2. **Which AI runs there**, the owner's one choice, as cards with the providers' logos, for a Linux server and a Mac
-///      alike: its first agent runs on it, and a Mac's sitting shows only what it needs.
+///      a Mac mini or Studio that stays on, whose own installer waits there for a link code; or Install by hand, one
+///      line the owner pastes on the machine himself, for a server that this Mac cannot reach over SSH.
+///   2. **Which AI runs on a Mac**, the owner's one choice, as cards with the providers' logos: that Mac's sitting shows
+///      only what it needs. **A VPS is asked for no AI and gets no agent by itself** (the owner, 13 November 2026: "on
+///      the step about AI provider when adding a server... I think we should move that step to AFTER we have the
+///      server, so it has less friction?"): its install puts no AI on it, so the page asked only for the runtime of an
+///      agent that Add server then added, also on a server that he wanted for an agent he has. A VPS joins empty. The
+///      AI is asked where an agent is placed on it: Add agent asks for it with the agent's name, and an agent that
+///      moves there keeps its own.
 ///   3. **A Mac that stays on** first says where its installer comes from and to open it, with the one thing to answer
 ///      in Apple's own setup: without that answer, automatic login is not available and a restart stops at a password.
 ///   4. **The machine**: only what that way needs. **A VPS takes the first run's own pages** (the onboarding the owner
@@ -22,6 +28,9 @@ import SwiftUI
 ///   5. **The install**, in the same rows as the hub's install (`MachineInstallRun`): each step with its state, the
 ///      last lines the machine printed, and its own checks at the end. Nothing to press while it runs, except
 ///      Tailscale's own link for a server that is not on the private network.
+///   6. **A VPS that is installed** shows its two ways on and nothing else (`ServerInstalled`): Add agent, for a new
+///      agent there, and Open server. Where Add agent's New server opened this wizard, it goes on to Add agent for the
+///      new server by itself.
 ///
 /// The hub itself is not added here: a fleet with no hub has no line to give, so `FirstRunView` installs the first
 /// machine and claims it.
@@ -34,8 +43,9 @@ struct AddServerView: View {
     @Bindable var store: FleetStore
     /// Add agent, on the new server by its name; nil while the fleet has not named it.
     let addAgent: (String?) -> Void
-    /// Add agent pressed for the owner, on a new Linux server: false when its page is the way on after all.
-    let addFirstAgent: (String, String) async -> Bool
+    /// Add agent's second step for the new server, which Add agent's New server made: it reads the servers first, so
+    /// that the step opens with the new server in it, and opens only while Add server still shows.
+    var goOnToAddAgent: (String) async -> Void = { _ in }
     /// The agent whose first server this is, or nil for Add server.
     var placing: Placing?
 
@@ -47,10 +57,29 @@ struct AddServerView: View {
 
     /// Where the wizard stands. The install itself lives in the store, so this screen can be left and opened again
     /// while a ten-minute install goes on: `opened()` puts the wizard back on it. A VPS's `machine` is the first run's
-    /// three cards, and `key`, `token` and `vps` are the first run's pages after them.
-    private enum Page: Equatable { case ways, ai, opening, machine, install, key(CloudProvider), token(CloudProvider), vps }
+    /// three cards, and `key`, `token` and `vps` are the first run's pages after them. `again` is "Start again", from
+    /// the link under the two cards of the manager's server page (`StartAgainModel`).
+    private enum Page: Equatable { case ways, ai, opening, machine, install, key(CloudProvider), token(CloudProvider), vps, again }
+    /// The page by its fixed name (`AppPlace`, `setup_state`'s `place`), with no default: a new page needs a name.
+    private static func placeName(_ page: Page) -> AppPlace.AddServerPage {
+        switch page {
+        case .ways: .ways
+        case .ai: .ai
+        case .opening: .opening
+        case .machine: .machine
+        case .install: .install
+        case .key: .key
+        case .token: .token
+        case .vps: .vps
+        case .again: .again
+        }
+    }
 
     @State private var page = Page.ways
+    /// "Start again": what its page read, and its run (`StartAgainModel`). Nothing of it outlives this view.
+    @State private var again = StartAgainModel()
+    /// This view's own mark for the page that it tells the store (`WizardPages.tell`, `gone`).
+    @State private var placeMark = UUID()
     /// The pasted line only: what that machine runs, which its line differs by.
     @State private var kind = "linux"
     /// Any VPS by its address, and the fleet's own Tailscale key, as the first run has them.
@@ -60,13 +89,41 @@ struct AddServerView: View {
     /// minutes, a second press waits for it, and `opened()` puts the wizard back on it.
     @MainActor private static let cloudModel = FleetCloudModel()
     private var cloud: FleetCloudModel { Self.cloudModel }
+    /// A provider makes a server for this wizard now, also behind another page: nothing may cover that work as if the
+    /// setup stood still (`FleetStore.welcomeCovers`).
+    @MainActor static var builds: Bool { cloudModel.stage == .making || cloudModel.stage == .joining }
+    /// **What the provider's list needs to know of a server that the fleet holds already** (`CloudExisting.reuse`): the
+    /// devices of this Mac's own network, and the fleet's servers whose install this Mac saw end. Both are read when
+    /// the list opens.
+    @State private var devices: [FleetOnTailscale.Device] = []
+    /// The devices of that read when it says what the network is now, or nil (`FleetOnTailscale.live`): only they
+    /// say where a server that Founderizer made stands to this fleet (`known`).
+    @State private var live: [FleetOnTailscale.Device]?
+    /// The installs that this Mac saw end for this hub, by server: the address that each reached (`InstallEnds`).
+    @State private var ended: [String: String] = [:]
+    /// The servers that this Mac made for this hub, with their ids at the provider (`MadeServers`).
+    @State private var madeKept: [String: String] = [:]
+    /// The list that shows already had its one suggestion of a server to take again.
+    @State private var suggested = false
+    /// The hub is asked whether it answers, before a server is made (`makeServer`); `makeAsked` counts the presses, and
+    /// the question is the page's own task, so it ends with the page and makes nothing after it.
+    @State private var asksHub = false
+    @State private var makeAsked = 0
+    /// The last press that the task took: a run of the page's tasks with no new press makes nothing.
+    @State private var makeTaken = 0
     @State private var code: JoinCode?
     @State private var list: ServerList?
     @State private var busy = false
     @State private var error: String?
     @State private var copied = false
-    /// The hub did not offer the new server for its first agent, so the row with Add agent stands.
-    @State private var firstAgentWaits = false
+    /// Add agent's New server opened this wizard, so the new server goes on to Add agent by itself (`goesOn`). It is
+    /// read when the wizard opens: the page history is the store's, and it moves while an install runs.
+    @State private var fromAddAgent = false
+    /// The hub did not offer the new server to Add agent in time, so the page with Add agent stands.
+    @State private var addAgentWaits = false
+    /// The new server for which he pressed Add agent on this wizard: Add agent's second step opens for it, with the
+    /// servers read first (`goOnToAddAgent`), from the page's own task, which ends with the page.
+    @State private var addAgentFor: String?
     /// Add server fills the window (`FleetStore.fillsWindow`): its × closes it, so its first page has no Back.
     @Environment(\.fillsWindow) private var fillsWindow
     private var time: Double { store.state?.time ?? Date().timeIntervalSince1970 }
@@ -83,13 +140,34 @@ struct AddServerView: View {
     /// the hub gave the server that joined with it (nil until then).
     private var lineName: String? { code.flatMap { $0.name.isEmpty ? join?.server : $0.name } }
 
+    /// **The manager whose first server these pages give** (`placing`, for the agent with the role manager), or nil.
+    /// Its setup shows its steps on Back's line, and these pages are its step "Servers" (`ManagerSetupSteps`; the
+    /// owner's "they look good" of 15 November 2026 to their pictures).
+    private var manager: String? {
+        guard let agent = placing?.agent, store.state?.agents.first(where: { $0.name == agent })?.role == "manager" else { return nil }
+        return agent
+    }
+
+    /// The steps of the manager's setup, on each of these pages but a build and an install, which show their own
+    /// steps and their minutes under their title: two lines of dots on one page had the word "Network" two times.
+    private var progress: SetupProgress? {
+        guard manager != nil, page != .install, page != .again, !building else { return nil }
+        return SetupProgress(names: ManagerSetupSteps.names, current: ManagerSetupSteps.servers.rawValue)
+    }
+
+    /// One line under the title of the manager's server page, which has two cards and no other words.
+    private var detail: String? {
+        guard page == .ways, let manager else { return nil }
+        return String(l10n: "\(manager.agentLabel) needs a server of its own that stays on.")
+    }
+
     /// **Each page is a setup step, as the first run's are** (`SetupPage`, `SetupStep`): the product's muted mark at
     /// the size of every step's mark, the title under it, what the page asks under that, and Back at the page's top left.
     /// The page puts the whole step in the middle of the window, and a wait is the title's moving words.
     var body: some View {
-        SetupPage { back } step: {
+        SetupPage(progress: progress) { back } step: {
             SetupStep(title: title, waits: waits, width: page == .machine && model.way == .linux ? SetupMetrics.cardsWidth
-                        : SetupMetrics.width) { mark } content: {
+                        : SetupMetrics.width, detail: detail) { mark } content: {
                 // The first run's own pages keep what they ask in the middle, as there; cards and forms read from their
                 // own leading edge.
                 if centred {
@@ -102,17 +180,53 @@ struct AddServerView: View {
             }
         }
         .onAppear { opened() }
+        .onChange(of: page, initial: true) { _, now in store.wizardPages.tell(addServer: Self.placeName(now), by: placeMark) }
+        .onDisappear { store.wizardPages.gone(placeMark); again.close() }
         // Its first page, also of the manager's setup: where it has no Back, Esc closes the wizard that fills the window.
         .preference(key: SetupFirstPage.self, value: page == .ways)
         .task(id: "\(store.hub)/\(store.state?.db ?? "")") { await poll() }
         // The install of a VPS that its provider made starts by itself once the server joined: also on this page opened
         // again during the build, which was not the page that pressed.
-        .onChange(of: model.running) { _, running in if running { page = .install } }
+        .onChange(of: model.running) { _, running in if running, !again.running { page = .install } }
+        // "Start again" is offered no more (another agent came, the manager got its server): its page goes, unless a
+        // run began, whose steps and whose stop stay to be read.
+        .onChange(of: offersStartAgain) { _, offers in
+            if !offers, page == .again, !again.started { again.close(); page = .ways }
+        }
+        // What goes on by itself after an install runs from the page and not from a view under its title: a step
+        // taller than its page takes that view out of the page (`SetupAction`), and its task would end with it.
+        .task(id: handsOver) { if handsOver, let placing { await handOver(placing) } }
+        .task(id: goesOn) { if goesOn { await goOn() } }
+        .task(id: addAgentFor) { if let server = addAgentFor { await goOnToAddAgent(server); addAgentFor = nil } }
+        // The provider's list of servers: what `reuse` reads, at each list that opens.
+        .task(id: chooses) { if chooses { suggested = false; await readFleet() } }
+        // One fleet's list and its network's devices say nothing of another fleet (`known`).
+        .onChange(of: store.hub) { list = nil; live = nil }
+        // **In an agent's own setup, a server that the fleet can take again is the chosen one when its list opens**:
+        // "New server" stood chosen over the server of the install that stopped, so the press at hand made a second
+        // one. Once for each list: "New server" stays his to choose.
+        .task(id: firstToReuse) {
+            if let firstToReuse, chooses, !suggested, cloud.chosen == nil { cloud.chosen = firstToReuse; suggested = true }
+        }
+        .task(id: makeAsked) { if makeAsked > makeTaken { makeTaken = makeAsked; await makeServer() } }
+    }
+
+    /// The provider's list of servers shows.
+    private var chooses: Bool {
+        if case .token = page { return cloud.stage == .choosing }
+        return false
     }
 
     @ViewBuilder private var asked: some View {
         switch page {
-        case .ways: ways
+        case .ways:
+            ways
+            if offersStartAgain {
+                SetupLink(StartAgain.Words.start) { again.open(hub: store.hub); page = .again }
+                    .frame(maxWidth: .infinity).accessibilityIdentifier("start-again")
+            }
+        // The link's conditions hold at the press too: a fleet that got an agent meanwhile is not started again.
+        case .again: StartAgainContent(model: again) { if offersStartAgain { again.run(store: store) } }
         case .ai: aiChoice
         case .opening: opening
         case .machine: machine
@@ -121,6 +235,17 @@ struct AddServerView: View {
         case .token(let provider): token(provider)
         case .vps: vpsPages
         }
+    }
+
+    /// **The link "Start again" shows under the two cards** (`StartAgain.offers`; the owner's "Yes, build it" of 15
+    /// November 2026): only while these pages give the manager its first server, with no install and no build that
+    /// runs, while the page does not ask the hub, and while the reading that the window draws has no other agent
+    /// than the manager and no agent on a server.
+    private var offersStartAgain: Bool {
+        guard let manager, let state = store.state else { return false }
+        return StartAgain.offers(givesManagerItsServer: true, runs: model.running || Self.builds, asksHub: asksHub,
+                                 otherAgents: state.agents.filter { $0.name != manager }.count,
+                                 serversWithAnAgent: state.agents.filter(\.placed).count)
     }
 
     private var centred: Bool {
@@ -158,15 +283,16 @@ struct AddServerView: View {
     private var waits: Bool {
         switch page {
         case .ways, .ai, .opening: return false
+        case .again: return again.reading || again.running
         case .machine: return busy
         case .key: return net.busy
-        case .token: return building || (cloud.stage == .choosing && cloud.offer == nil)
+        case .token: return building || asksHub || (cloud.stage == .choosing && cloud.offer == nil)
         case .vps:
             switch vps.phase {
             case .checking, .waiting: return true
             default: return false
             }
-        case .install: return model.way != .line ? model.running || addsFirstAgent || handsOver : lineWaits
+        case .install: return model.way != .line ? model.running || goesOn || handsOver : lineWaits
         }
     }
 
@@ -183,14 +309,16 @@ struct AddServerView: View {
     private var title: String {
         switch page {
         case .ways: placing.map { String(l10n: "\($0.agent.agentLabel)'s server") } ?? String(l10n: "Add server")
-        case .ai: model.way == .mac ? String(l10n: "Which AI runs on this Mac?") : String(l10n: "Which AI runs on this server?")
+        // A step that failed has a true title: what is still there.
+        case .again: again.started ? again.failed?.failedTitle ?? StartAgain.Words.starting : StartAgain.Words.start
+        case .ai: String(l10n: "Which AI runs on this Mac?")
         case .opening: String(l10n: "Open the installer on that Mac")
         case .machine:
             switch model.way {
             // The first run's "A VPS for your fleet": the fleet has its own, and the agents run on the servers he adds.
             case .linux: String(l10n: "A VPS for your agents")
             case .mac: String(l10n: "The Mac that stays on")
-            case .line: String(l10n: "The server you paste it on")
+            case .line: String(l10n: "The server you install by hand")
             }
         case .key: net.busy ? String(l10n: "Connecting your network") : String(l10n: "Your Tailscale key")
         // The build is the install's first steps, under the install's own title, so the words stay when it goes on. The
@@ -241,9 +369,10 @@ struct AddServerView: View {
                 SetupBack { store.destination = .settings(.servers) }.keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("add-server-back")
             }
-        } else if !model.running && !building && !handsOver {
+        } else if !model.running && !building && !handsOver && !goesOn && !asksHub && !again.running {
             SetupBack {
                 switch page {
+                case .again: again.close()          // nothing of a run is kept: the page reads again when it opens
                 case .install: model.cancel()       // a Mac's stopped order: this page reads it no more
                 case .token: cloud.cancel()
                 case .vps: vps.reset()
@@ -266,16 +395,17 @@ struct AddServerView: View {
     private var previous: Page {
         switch page {
         case .install: .machine
-        case .machine: model.way == .mac ? .opening : asksAI ? .ai : .ways
+        case .machine: model.way == .mac ? .opening : .ways
         case .opening: asksAI ? .ai : .ways
         case .key, .token, .vps: .machine
         default: .ways
         }
     }
 
-    /// The hub keeps the owner's choice of AI, and this way is one that has a first agent. An agent's own server asks
-    /// none: its provider is the next page of its setup.
-    private var asksAI: Bool { placing == nil && Servers.choosesAI(store.state?.ui_features) && model.way != .line }
+    /// The hub keeps the owner's choice of AI, and the server is a Mac, whose sitting shows only what that AI needs. An
+    /// agent's own server asks none: its provider is the next page of its setup. A VPS and a pasted line ask none: they
+    /// join empty, and Add agent asks for the AI of the agent that it adds there.
+    private var asksAI: Bool { placing == nil && Servers.choosesAI(store.state?.ui_features) && model.way == .mac }
 
     // MARK: one: how this machine joins
 
@@ -292,7 +422,10 @@ struct AddServerView: View {
             way(.mac, title: String(l10n: "Mac mini or Studio"), symbol: "apple.logo",
                 line: String(l10n: "Its installer runs on that Mac and waits for one code."))
             if placing == nil {
-                way(.line, title: String(l10n: "Paste a line"), symbol: "terminal", line: String(l10n: "One line that you paste in that server's own shell."))
+                // "Install by hand", with its line on hover: the owner's choice of 14 November 2026 for the card that was
+                // "Paste a line" ("'paste a line' is confusing, does not make sense").
+                way(.line, title: String(l10n: "Install by hand"), symbol: "terminal",
+                    line: String(l10n: "For a server that this Mac cannot reach over SSH. You run one command on it yourself."))
             }
         }
     }
@@ -317,19 +450,20 @@ struct AddServerView: View {
     private func choose(_ way: MachineInstallModel.Way) {
         model.way = way
         model.ai = nil
-        firstAgentWaits = false
+        addAgentWaits = false
         page = asksAI ? .ai : way == .mac ? .opening : .machine
     }
 
     // MARK: two: which AI
 
-    /// One card of one line for each AI, as the ways' cards are: its real logo or logos and its name, with its line on
-    /// hover. They were tall cards side by side with a sentence each, the look that the ways left on 3 November 2026.
+    /// One card of one line for each AI of a Mac, as the ways' cards are: its real logo or logos and its name, with its
+    /// line on hover. They were tall cards side by side with a sentence each, the look that the ways left on 3 November
+    /// 2026.
     private var aiChoice: some View {
         VStack(spacing: 10) {
-            ForEach(model.way == .mac ? ServerAI.allCases : ServerAI.linuxChoices, id: \.self) { ai in
-                let line = model.way == .mac ? ai.macLine : ai.linuxLine
-                Button { model.ai = ai; page = model.way == .mac ? .opening : .machine } label: {
+            ForEach(ServerAI.allCases, id: \.self) { ai in
+                let line = ai.macLine
+                Button { model.ai = ai; page = .opening } label: {
                     HStack(spacing: 12) {
                         HStack(spacing: 6) {
                             ForEach(ai.logos, id: \.self) { name in
@@ -399,7 +533,29 @@ struct AddServerView: View {
     /// **A server of the account, chosen in place of a new one**: the same check and the same Install press as Other
     /// VPS, at its public address.
     private func useExisting(_ server: CloudExisting) {
-        guard let address = server.ipv4 else { return }
+        var address = server.ipv4
+        switch reuse(server) {
+        // A free server of the fleet whose install this Mac saw end: the agent that waits takes it, with no install.
+        case .place(let name):
+            guard let placing else { return }
+            cloud.cancel()
+            placing.place(name)
+            return
+        // The server of an install that stopped. One that this Mac made for this hub lets only this Mac's own key in,
+        // as root, on the private network: its install starts again as its build started it. Any other gets the check
+        // first, at its address on the private network, for its user and its password.
+        case .install(let onNetwork):
+            if made.contains(server.name.lowercased()) {
+                cloud.cancel()
+                startInstall(InstallTarget(host: onNetwork, user: "root", port: 22, identityFile: AppSSHKey.path()))
+                return
+            }
+            address = onNetwork
+        // A row that the list's last read made unfit while it stood chosen is not a server to check.
+        case nil:
+            guard server.unfit(for: .join, fleet: Set(taken.map { $0.lowercased() })) == nil else { return }
+        }
+        guard let address else { return }
         cloud.cancel(); vps.reset()
         vps.addressText = address
         page = .vps
@@ -407,6 +563,96 @@ struct AddServerView: View {
             if vps.tailnet == nil { vps.tailnet = await MacNetwork.read().tailnet }
             vps.check(job: .join)
         }
+    }
+
+    /// What the fleet can do again with a server of the account's list (`CloudExisting.reuse`), from the hub's own list
+    /// as this page read it: with no list yet, nothing.
+    /// A hub from before `server_names` gives a server another name than its provider and its network do, so nothing
+    /// there is known by its name.
+    private func reuse(_ server: CloudExisting) -> CloudReuse? {
+        guard !asksName else { return nil }
+        return server.reuse(for: .join, servers: list?.servers, devices: devices, finished: finished, made: made,
+                            placing: placing != nil)
+    }
+
+    /// **The fleet's servers whose install this Mac saw end**, by name in lower case: the address that the install
+    /// reached is the address that the hub has for the server now (`InstallEnds`). A new server that took the name of a
+    /// removed one has another address, and is not one of them.
+    private var finished: Set<String> {
+        Set((list?.servers ?? []).filter { $0.address != nil && ended[$0.name.lowercased()] == $0.address }
+            .map { $0.name.lowercased() })
+    }
+
+    /// The servers of the account's list that this Mac made for this hub, by name in lower case (`MadeServers.holds`).
+    private var made: Set<String> {
+        // Never the fleet's own VPS, which a first run keeps in the same record since "Start again".
+        let hubs = MadeServers.hubsOwn(hub: store.hub, builds: BuildRecords.shared.all())
+        return Set(cloud.existing.filter { MadeServers.holds($0, in: madeKept) && !hubs.contains($0.id) }.map { $0.name.lowercased() })
+    }
+
+    /// **What a row may say of a server that Founderizer made and that the hub's list does not have by its name**
+    /// (`CloudExisting.unfit`): only while the hub answers, from its own list, from a hub that names its servers as
+    /// Tailscale does, and from this Mac's network as it was when the list opened (`FleetKnown`).
+    private var known: FleetKnown? {
+        guard !asksName, store.isFresh, let list else { return nil }
+        return FleetKnown(servers: list.servers, hub: store.hub.host, devices: live)
+    }
+
+    /// The first server of the list that the fleet can take again, by its id at the provider: only in an agent's own
+    /// setup, where a server is what the page is for. Add server makes no suggestion.
+    private var firstToReuse: String? { placing == nil ? nil : cloud.existing.first { reuse($0) != nil }?.id }
+
+    /// This Mac's own network and what it kept of its installs, for `reuse`, and the hub's list where the page has
+    /// none yet: its own read comes every 15 seconds.
+    private func readFleet() async {
+        ended = InstallEnds.ended(hub: store.hub)
+        madeKept = MadeServers.kept(hub: store.hub)
+        let status = await MacNetwork.status()
+        devices = FleetOnTailscale.devices(in: status ?? "{}")
+        live = FleetOnTailscale.live(in: status)
+        if list == nil, store.isFresh, let database = store.state?.db {
+            list = try? await HubClient().servers(hub: store.hub, database: database)
+        }
+    }
+
+    /// **Make the server, once the hub has answered** (the owner's report of 14 November 2026: a new user's server was
+    /// made and paid for, and its install could not start). The install needs a join line from the hub right after the
+    /// build, so a hub that does not answer now leaves a server at the provider that nothing installs. The line over
+    /// the press says why in the words of the window's own notice, and nothing is made.
+    ///
+    /// It is the page's own task (`makeAsked`): a page that closed while the hub was asked makes nothing. The server is
+    /// made only when the list still shows what was pressed: the same provider, the same offer, and "New server".
+    private func makeServer() async {
+        guard !asksHub, chooses, store.state != nil, let provider = cloud.provider, let offer = cloud.offer,
+              cloud.chosen == nil else { return }
+        asksHub = true
+        defer { asksHub = false }
+        cloud.stop(nil)
+        let hadList = list != nil, listing = cloud.listing
+        // A hub that took the owner's own write since this page's state has a new generation: one more read of the
+        // state, then the same question.
+        for attempt in 0..<2 {
+            guard let database = store.state?.db else { return }
+            do {
+                list = try await HubClient().servers(hub: store.hub, database: database)
+                break
+            } catch HubError.refusal(409, _) where attempt == 0 {
+                await store.refresh()
+            } catch {
+                if !Task.isCancelled { cloud.stop(HubReach.words(error, hub: store.hub).says) }
+                return
+            }
+        }
+        guard !Task.isCancelled, chooses, cloud.listing == listing, cloud.provider == provider, cloud.offer == offer,
+              cloud.chosen == nil else { return }
+        // The hub's list came only now, and it shows a server that the fleet can take again: that row is chosen, and
+        // the press is his again.
+        if !hadList, let firstToReuse {
+            cloud.chosen = firstToReuse; suggested = true
+            return
+        }
+        let fleet = store.hub
+        cloud.makeNew(for: fleet, made: { name, id in MadeServers.note(name, id: id, hub: fleet) }, then: installs())
     }
 
     /// What the build does once the new server is on the private network: its install, as the check's Install starts
@@ -439,7 +685,9 @@ struct AddServerView: View {
             }
             .accessibilityIdentifier("add-server-tailscale-key")
         }
-        if let lines = net.linesToAdd { PolicyLines(lines: lines, copied: net.copied) { net.copyLines() } }
+        if let lines = net.linesToAdd, let asks = net.asks {
+            PolicyLines(says: asks, lines: lines, copied: net.copied) { net.copyLines() }
+        }
         if let failure = net.failure { SetupWarning(failure) }
     }
 
@@ -450,8 +698,11 @@ struct AddServerView: View {
         if building {
             CloudBuilding(stage: cloud.stage, job: .join, provider: cloud.provider)
         } else if cloud.stage == .choosing {
-            CloudChoice(cloud: cloud, job: .join, fleet: Set(taken.map { $0.lowercased() }),
-                        makeNew: { cloud.makeNew(then: installs()) }, use: useExisting)
+            // Read here, in the page's own body, so that each row follows the page's readings.
+            let again = Dictionary(cloud.existing.map { ($0.id, reuse($0)) }) { first, _ in first }
+            CloudChoice(cloud: cloud, job: .join, fleet: Set(taken.map { $0.lowercased() }), known: known,
+                        reuse: { again[$0.id] ?? nil },
+                        makeNew: { if !asksHub { makeAsked += 1 } }, use: useExisting)
         } else {
             SetupSteps.token(provider)
             PasteField(placeholder: String(l10n: "Paste it here"), text: $cloud.tokenText,
@@ -460,7 +711,8 @@ struct AddServerView: View {
             }
             .accessibilityIdentifier("add-server-cloud-token")
         }
-        if let failure = cloud.failure { SetupWarning(failure) }
+        // While the list shows, its own press carries the line (`CloudChoice`).
+        if let failure = cloud.failure, cloud.stage != .choosing { SetupWarning(failure) }
     }
 
     /// **Any VPS, by its address**, the first run's pages: one field, the check, the password once when the VPS asks for
@@ -569,34 +821,39 @@ struct AddServerView: View {
         }
     }
 
-    /// A Linux server whose AI the owner chose: the app presses Add agent for him.
-    private var addsFirstAgent: Bool { model.way == .linux && model.ai != nil && !firstAgentWaits && model.checklist != nil }
+    /// **A VPS that Add agent's New server made goes on to Add agent by itself**: he asked for an agent on a new server,
+    /// so the page of that server's two ways on would only ask for the press he already made. Only a server whose
+    /// checks passed: one with a failed check keeps its page, which shows that check, and its two buttons.
+    private var goesOn: Bool {
+        model.way == .linux && placing == nil && fromAddAgent && !addAgentWaits && !model.running
+            && model.checklist.map { $0.isReady || $0.onlyNeedsSignIn } == true
+    }
 
-    /// Add agent pressed for the owner, as soon as the hub offers the new server: its first reading comes some seconds
-    /// after its join. A count ends the wait, and the row with Add agent is the way on then.
-    private func addFirstAgent() async {
-        guard let ai = model.ai, let server = installed, let database = store.state?.db else { return firstAgentGivenUp() }
-        for _ in 0..<40 where !Task.isCancelled {
+    /// Add agent for the new server, as soon as the hub offers that server: its first reading comes some seconds after
+    /// its join. A count ends the wait, and the page with Add agent is the way on then. Add agent opens on its second
+    /// step, the agent's name and its AI: nothing is added before his press there.
+    private func goOn() async {
+        guard let server = installed, let database = store.state?.db else { addAgentWaits = true; return }
+        for _ in 0..<20 where !Task.isCancelled {
             if let read = try? await HubClient().servers(hub: store.hub, database: database),
                read.servers.first(where: { $0.name == server })?.available == true {
-                if await addFirstAgent(server, ai.runtime) {
-                    // Its first agent is added: the next Add server is a new server, not this one's page again
-                    // (`opened`), where this task would add one more agent to it.
-                    model.ai = nil
-                } else if !Task.isCancelled { firstAgentGivenUp() }
+                // Add server that he closed meanwhile does not open Add agent over the page he went to.
+                guard !Task.isCancelled, store.destination == .addServer else { return }
+                await goOnToAddAgent(server)
+                // Add agent opened, and this page went with it. Where the page still stands, its two buttons are
+                // the way on.
+                if !Task.isCancelled { addAgentWaits = true }
                 return
             }
             try? await Task.sleep(for: .seconds(3))
         }
-        if !Task.isCancelled { firstAgentGivenUp() }
+        if !Task.isCancelled { addAgentWaits = true }
     }
 
-    /// The row with Add agent is the way on, and the AI choice goes with this server: the next Add server is a new
-    /// server, not this one's page again, where its task would add one more agent once the owner added one himself. A
-    /// wait that he only left (its task cancelled) keeps the choice, and goes on when Add server opens again.
-    private func firstAgentGivenUp() {
-        firstAgentWaits = true
-        model.ai = nil
+    /// Add agent pressed on this wizard, for a server that just joined: by its name, Add agent's second step with that
+    /// server in its list; with no name yet, Add agent's first step, the servers.
+    private func openAddAgent(on server: String?) {
+        if let server { addAgentFor = server } else { addAgent(nil) }
     }
 
     /// **The server that joined goes on to the agent's setup by itself**, as soon as the hub offers it: its first
@@ -617,26 +874,21 @@ struct AddServerView: View {
 
     /// What is left after a machine reached its checklist: its agent, which only the owner adds.
     @ViewBuilder private var joined: some View {
-        if let placing {
-            Color.clear.frame(height: 0).task { await handOver(placing) }
+        if placing != nil {
+            // It goes on to the agent's setup by itself (`handOver`, from the page's own task).
+            Color.clear.frame(height: 0)
         // A Mac that the hub sets up has its first agent already, and the installer on it leads the rest.
         } else if model.way == .mac, model.firstAgent != nil {
             FormSection {
                 FormRow("\(installed ?? String(l10n: "The server")) is in your fleet", symbol: "checkmark.circle") { openServer }
             }
-        } else if addsFirstAgent {
-            Color.clear.frame(height: 0).task { await addFirstAgent() }
+        } else if goesOn {
+            // It goes on to Add agent by itself (`goOn`, from the page's own task).
+            Color.clear.frame(height: 0)
         } else {
-            FormSection(footer: String(l10n: "A server is signed in to its provider from its own page: Settings, Servers, the server, Sign in.")) {
-                FormRow("\(installed ?? String(l10n: "The server")) is in your fleet", symbol: "checkmark.circle",
-                        detail: String(l10n: "Add an agent to it, and sign that server in to your provider account.")) {
-                    HStack(spacing: FleetSpace.actions) {
-                        openServer
-                        Button("Add agent") { addAgent(installed) }.buttonStyle(FleetPrimaryButtonStyle())
-                            .accessibilityIdentifier("install-add-agent")
-                    }
-                }
-            }
+            // The title says that it is installed. It has no agent, and none is added by itself.
+            ServerInstalled(addAgent: { openAddAgent(on: installed) },
+                            openServer: { store.destination = installed.map { .server($0) } ?? .settings(.servers) })
         }
     }
 
@@ -677,7 +929,7 @@ struct AddServerView: View {
                     HStack(spacing: FleetSpace.actions) {
                         Button("Open server") { store.destination = lineName.map { .server($0) } ?? .settings(.servers) }
                             .buttonStyle(FleetOutlineButtonStyle())
-                        Button("Add agent") { addAgent(lineName) }.buttonStyle(FleetPrimaryButtonStyle()).accessibilityIdentifier("add-server-agent")
+                        Button("Add agent") { openAddAgent(on: lineName) }.buttonStyle(FleetPrimaryButtonStyle()).accessibilityIdentifier("add-server-agent")
                     }
                 } else if expired || state == "canceled" {
                     Button("New line") { self.code = nil; copied = false; page = .machine }.buttonStyle(FleetOutlineButtonStyle())
@@ -732,8 +984,9 @@ struct AddServerView: View {
     /// address in the shared model, and the next machine is a new one, so that run is cleared instead of being offered
     /// as a form half filled in; a build that stopped is cleared the same way.
     private func opened() {
-        // A Linux server that waits for its first agent: leaving this page must not lose the owner's choice.
-        if model.running || addsFirstAgent { page = .install; return }
+        fromAddAgent = placing == nil && store.history.back.last == .addAgent
+        if cloud.onState == nil { cloud.onState = SetupChannel.reports(to: store, \.addServerBuild) }
+        if model.running { page = .install; return }
         if cloud.stage != .token, let provider = cloud.provider { page = .token(provider); return }
         cloud.cancel()
         guard model.checklist != nil || model.failure != nil else { return }
@@ -765,6 +1018,11 @@ struct AddServerView: View {
                 if let read = try? await HubClient().servers(hub: store.hub, database: database) {
                     guard !Task.isCancelled else { return }
                     list = read
+                    // Add server for that machine on this Mac: the server that joined with this page's own line loses a
+                    // removal mark of its name (package 4 of the vault's gates).
+                    if let joined = code?.state(in: read), joined.state == "joined", let server = joined.server {
+                        store.vaultModel().added(server)
+                    }
                     if model.name.isEmpty, code == nil, !model.running {
                         model.name = Servers.suggestedName(taken: read.servers.map(\.name))
                     }
@@ -772,5 +1030,24 @@ struct AddServerView: View {
             }
             do { try await store.nap(code == nil ? 15 : 3) } catch { return }
         }
+    }
+}
+
+/// **A VPS that is installed: its two ways on, and nothing else** (the owner's rule for a setup step: only the next
+/// action). The step's title says that the server is installed. It has no agent yet: Add agent opens Add agent for
+/// this server, which asks for the new agent's name and its AI, and Open server opens the server's own page. An agent
+/// that he has moves there with no question of this wizard's, and keeps its own AI.
+struct ServerInstalled: View {
+    let addAgent: () -> Void
+    let openServer: () -> Void
+
+    var body: some View {
+        HStack(spacing: FleetSpace.actions) {
+            Button("Open server", action: openServer).buttonStyle(FleetOutlineButtonStyle())
+                .accessibilityIdentifier("install-open-server")
+            Button("Add agent", action: addAgent).buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("install-add-agent")
+        }
+        .frame(maxWidth: .infinity)
     }
 }

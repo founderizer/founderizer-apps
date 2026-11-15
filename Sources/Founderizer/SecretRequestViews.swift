@@ -122,6 +122,7 @@ struct KeyPasteGuard: ViewModifier {
         watch = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             // The monitor runs on the main thread, before the menu and the field see the key.
             let held = MainActor.assumeIsolated { () -> Bool in
+                guard !AppFront.holdsKeys else { return false }     // no key after a front from outside (`AppFront`)
                 let keys = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .function, .numericPad])
                 guard keys == .command, !event.isARepeat, event.charactersIgnoringModifiers?.lowercased() == "v",
                       let text = NSPasteboard.general.string(forType: .string), text.count <= 100_000,

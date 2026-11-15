@@ -3,147 +3,30 @@ import FleetCore
 import Observation
 import SwiftUI
 
-/// Founderizer's own update, as one row of the Updates screen beside the fleet's (the owner's requirement 10).
-///
-/// The fleet updates itself from our signed release channel. This is the same channel, the same key and the same
-/// discipline for the app that drives it: the signature decides, a held build is never offered, and a refusal of our
-/// channel says so plainly instead of looking broken.
-///
-/// **This row is the press for a build now.** Opening this screen asks the channel and changes nothing. Update
-/// downloads, checks and replaces. The restart is a second press, so the app never disappears from under the
-/// owner in the middle of something. Without any press, `AppAutoUpdate` puts the same build in place while he is
-/// away from the app (22 October 2026).
-@MainActor @Observable
-final class AppUpdateModel {
-    private(set) var reading: AppUpdateReading?
-    private(set) var checking = false
-    private(set) var step: AppUpdateInstaller.Step?
-    private(set) var failure: String?
-    private(set) var installed = false
-    /// The channel and fleet of the last answer, so that one screen does not ask the same question twice.
-    private var asked: String?
-    /// The channel and fleet whose read has come back, reached or not.
-    private(set) var answered: String?
-
-    /// A model that begins with the channel's last answer that the store kept (`UpdatesPage.channelPrefetch`), so the
-    /// row is whole in its first frame.
-    init(reading: AppUpdateReading? = nil) { self.reading = reading }
-
-    /// The row has what it needs to draw: an answer of the channel, kept or new, or the read of this channel and fleet
-    /// came back without one.
-    func knows(channel: String?, fleet: String?, early: Bool) -> Bool {
-        reading != nil || answered == Self.key(channel: channel, fleet: fleet, early: early)
-    }
-
-    static func key(channel: String?, fleet: String?, early: Bool) -> String { "\(channel ?? "")/\(fleet ?? "")/\(early)" }
-
-    /// This app's own build. nil when the bundle does not say, and then nothing is ever offered.
-    let running = AppVersion.running
-    /// Where this app is, and whether it can be replaced where it stands.
-    let installer = AppUpdateInstaller()
-
-    var busy: Bool { checking || installing }
-    /// A build is being put in place: its download, its check, its swap. **Update to … is dimmed for this alone, and
-    /// not for a read of the channel** (10 November 2026): the page asks the channel at each visit, so the white
-    /// button drew dimmed for the 233 ms of that read, and then white, every time he opened Updates while a build
-    /// waited.
-    var installing: Bool { step != nil && !installed }
-
-    /// The build the button would take, and nothing when it would take none: a build that is held, or one this
-    /// Mac already runs, is not something to offer to install.
-    var offered: AppManifest? { reading?.offered == true ? reading?.manifest : nil }
-
-    /// Ask the channel. The page asks once for each channel and fleet it learns — a Mac whose hub answers after
-    /// this screen opened is asked again with its fleet id, and not left with the answer for a Mac that had none.
-    /// The owner's own press asks whatever the last answer was. **A read that does not reach the channel changes
-    /// nothing on the row**: it keeps the last state it knew, and the app asks again by itself.
-    func check(channel: String?, fleet: String?, early: Bool, force: Bool = false) async {
-        guard !busy else { return }
-        let asking = Self.key(channel: channel, fleet: fleet, early: early)
-        guard force || asked != asking else { return }
-        checking = true
-        failure = nil
-        asked = asking
-        defer { checking = false; answered = asking }
-        let site = AppUpdateChannel(channel: channel ?? AppUpdate.defaultChannel, fleet: fleet, early: early)
-        let fresh = await site.read(installed: running)
-        // Not under an update that he started while this read was on its way: its row says its steps.
-        if !fresh.unreachable, step == nil, !installed { reading = fresh }
-    }
-
-    /// The last read of `AppAutoUpdate` that reached the channel, which is the newest state known: the row says it,
-    /// with its Update to … when that read offers a build. Never in the middle of an update.
-    func adopt(_ known: AppUpdateReading?) {
-        guard let known, step == nil, !installed else { return }
-        reading = known
-    }
-
-    /// The one press: download, check, replace. The app is not restarted by it. It takes the build that the row offers,
-    /// also while a read of the channel is on its way.
-    func update() async {
-        guard !installing, !installed, let manifest = reading?.manifest, reading?.offered == true else { return }
-        failure = nil
-        step = .downloading(-1)
-        let installer = self.installer
-        let report: @Sendable (AppUpdateInstaller.Step) -> Void = { [weak self] step in
-            Task { @MainActor in self?.step = step }
-        }
-        do {
-            _ = try await installer.install(manifest, progress: report)
-            step = .installed
-            installed = true
-        } catch {
-            failure = (error as? LocalizedError)?.errorDescription
-                ?? String(l10n: "The update stopped, and nothing on this Mac changed.")
-            step = nil
-        }
-    }
-
-    /// Start the new build and leave, from the owner's own press.
-    func restart() { AppAutoUpdate.relaunch(installer.bundle) }
-
-    /// The one line under "Founderizer for Mac".
-    ///
-    /// `quiet` is true when the fleet's own line has already said that nothing can be checked, because this build
-    /// carries no release key either. Then this row shows the build it runs and nothing more: the reason is on the
-    /// screen once, where the owner reads it first. nil while nothing is known yet: the version at the right says it.
-    func says(quiet: Bool) -> String? {
-        if installed { return String(l10n: "The new Founderizer is in place. It starts when you say so, and not before.") }
-        if let step { return step.says }
-        if let failure { return failure }
-        if quiet { return running.map { String(l10n: "Founderizer \($0.name)") } ?? String(l10n: "This build does not say which one it is.") }
-        return AppUpdateWords.state(reading)
-    }
-
-    /// The short word at the right when this row offers no press: the version this Mac runs, with no build number.
-    func word(quiet: Bool) -> String {
-        if quiet { return String(l10n: "Nothing to check") }
-        if reading?.refused == true { return String(l10n: "Cannot check") }
-        if reading?.manifest?.hold == true { return String(localized: "Held (a release)", defaultValue: "Held", bundle: Localized.bundle, locale: Localized.digits) }
-        return AppUpdateWords.version(running)
-    }
-}
-
 /// **Founderizer updates itself, without a press** (the owner, 22 October 2026: "do they get the latest updates,
 /// improvements and bug fixes automatically? it must be like that!").
 ///
 /// The fleet's own poll calls `tick` every few seconds, as it calls the copy keeper's. It reads the channel at the
 /// start and every hour, and after a read that failed again after 1, 5 and 15 minutes (`AppUpdatePolicy`), and only
 /// while the fleet's Automatic updates switch is on: one switch for the fleet and the Mac that drives it. A read that
-/// fails changes nothing it knew: the build that waits still waits, and the Updates page keeps its last state. An
-/// offered build is put in place exactly as the Update button puts it — downloaded, checked against the signed manifest
+/// fails changes nothing it knew: the build that waits still waits. An
+/// offered build is put in place exactly as the sidebar's Update puts it — downloaded, checked against the signed manifest
 /// and against Apple's signature of the running app, swapped — and the app then starts again, but only after the owner
 /// has been away from it for two minutes with no request of his on its way (`AppUpdatePolicy`). Only a Developer ID
 /// build updates itself: a development build made on this Mac is never swapped for a published one.
+///
+/// **Before any hub answered this Mac** (the first run; the owner's yes of 14 November 2026) it reads our channel as a
+/// Mac that has just downloaded the app does, and a build goes in only while the setup's first page shows with no
+/// install begun; from the claim of an install until he leaves the setup, none goes in (`AppUpdatePolicy.setupHolds`).
 @MainActor @Observable
 final class AppAutoUpdate {
     /// The build that installs itself the next time he is away from the app, or nil.
     private(set) var waiting: AppManifest?
-    /// Why the last attempt stopped, for the Updates page. The next read tries again.
+    /// Why the last attempt stopped, for Settings › General › Updates. The next read tries again.
     private(set) var failure: String?
-    /// The last read that reached the channel, which the Updates page keeps when its own read does not.
+    /// The last read that reached the channel.
     private(set) var known: AppUpdateReading?
-    /// Since when every read has failed, or nil while they reach the channel; the page says so only after long.
+    /// Since when every read has failed, or nil while they reach the channel; General says so only after long.
     private(set) var failingSince: Date?
     @ObservationIgnored private var failures = 0
     @ObservationIgnored private var askedAt: Date?
@@ -155,24 +38,74 @@ final class AppAutoUpdate {
     /// **The build that waited when the app last quit** (`WaitingBuild`, kept with the fleet's reading; review B, round 3
     /// of 30 October 2026): the Update row draws from it in the launch's first frame, while it is newer than the build
     /// that runs, until this launch's own read decides what waits. **A read that fails takes it away** (`KeptReading`,
-    /// as the kept health and releases; review B, round 5): the Updates page that the row opens draws only this
+    /// as the kept health and releases; review B, round 5): the Updates page that the row opened drew only this
     /// launch's reading (`known`), so the row stood for a build that the page did not show.
     private(set) var keptWaiting = KeptReading<WaitingBuild>()
+    /// **The setup's first page shows, and no install of it began** (`FirstRunView`, `AppUpdatePolicy.setupHolds`): before
+    /// any hub answered, the only time a build goes in by itself.
+    @ObservationIgnored var setupAtRest = false
+    /// The last read was made before any hub answered: our channel, with no fleet and no switch of a fleet.
+    @ObservationIgnored private var readBeforeHub = false
 
     /// The build kept with the fleet's last reading, as the store starts. Only a build that reads the channel draws
     /// from it: a development build never asks, so nothing would ever replace it.
     func start(kept: WaitingBuild?) { keptWaiting = KeptReading(installer.team != nil ? kept : nil) }
 
+    /// Why this app cannot replace itself where it stands, or nil.
+    var cannotReplace: String? { installer.cannotReplace }
+
     /// **A build of this app waits** (the sidebar's Update row, `FleetStore.updateWaits`): one that installs itself,
     /// one the channel offers, or the one that waited when the app last quit, while it is newer than this one.
     var buildWaits: Bool { waiting != nil || known?.offered == true || keptWaiting.reading?.waits(over: running) == true }
+
+    /// **What his press of Update and Restart does now** (`pressInstall`), or nil at rest: the download, then its check
+    /// and swap. The sidebar's Update says it.
+    private(set) var pressed: AppUpdateInstaller.Step?
+    /// Why his last press of Update and Restart stopped. The sidebar's Update then says Try again, with this under the
+    /// pointer.
+    private(set) var pressFailure: String?
+
+    /// **Update and Restart of the window that the sidebar's Update opens** (`UpdateDialog`; the owner, 15 November 2026:
+    /// "a small confirmation modal to update, and be able to do it from there"): the build that the window named goes in
+    /// as the hourly path puts it in, and the app starts again at once, because he pressed it. Meanwhile the sidebar's
+    /// Update says the download and then Restarting…; a press that stopped says Try again, with the reason under the
+    /// pointer. Until that day one press of the banner did this with no question.
+    func pressInstall(_ build: AppManifest) async {
+        guard pressed == nil else { return }
+        pressFailure = nil
+        pressed = .downloading(-1)
+        // A step that arrives after a failure was said must not bring the steps back.
+        let failure = await installNow(build) { step in
+            Task { @MainActor [weak self] in
+                if let self, self.pressed != nil { self.pressed = step }
+            }
+        }
+        guard let failure else { return }
+        pressed = nil
+        pressFailure = failure
+    }
 
     func tick(store: FleetStore) {
         let now = Date()
         awaySince = NSApplication.shared.isActive ? nil : (awaySince ?? now)
         let published = installer.team != nil
         guard !working, published else { return }
+        // **Before any hub answered this Mac** (the first run): the read goes to our channel, as for a Mac that has just
+        // downloaded the app (the owner's yes of 14 November 2026). When a hub answers, what that read found waits for the
+        // hub's own read, which has the fleet's channel, its track and its switch.
+        let beforeHub = store.state == nil && !store.hubAnsweredBefore
+        if readBeforeHub, !beforeHub {
+            readBeforeHub = false
+            askedAt = nil
+            waiting = nil
+        }
         if AppUpdatePolicy.shouldAsk(lastAsked: askedAt, failures: failures, now: now) {
+            if beforeHub {
+                askedAt = now
+                working = true
+                Task { await askBeforeHub(store: store) }
+                return
+            }
             guard store.isFresh, let database = store.state?.db,
                   store.state?.ui_features?.contains(ReleaseState.feature) == true else { return }
             askedAt = now
@@ -181,12 +114,64 @@ final class AppAutoUpdate {
             Task { await ask(hub: hub, database: database, store: store) }
             return
         }
+        let setup = AppUpdatePolicy.setupHolds(beforeHub: beforeHub, setupAtRest: setupAtRest,
+                                               wizardHolds: store.firstRunHolds)
         guard let build = waiting,
               AppUpdatePolicy.shouldInstall(automatic: automatic, published: published, offered: true,
-                                            awaySince: awaySince, busy: store.sending || store.pending != nil,
+                                            awaySince: awaySince, busy: store.sending || store.pending != nil || setup,
                                             now: now) else { return }
         working = true
         Task { await install(build) }
+    }
+
+    /// The read before any hub answered: our channel, with no fleet id and not the early track. There is no fleet yet,
+    /// so no switch of one: a new fleet takes its releases by itself until he turns that off (`releases_automatic` of the
+    /// hub), and so does this app until then.
+    private func askBeforeHub(store: FleetStore) async {
+        defer { working = false }
+        let reading = await AppUpdateChannel().read(installed: running)
+        guard !reading.unreachable else { failed(); return }
+        automatic = true
+        readBeforeHub = true
+        reached(reading)
+        waiting = reading.offered ? reading.manifest : nil
+        decided(store)
+    }
+
+    /// **Founderizer › Check for Updates…** (`UpdateCheck`): one read of our channel now, as the hourly read asks it —
+    /// with the fleet's channel, id and track from the hub, or from its last reading when the hub does not answer, and
+    /// our channel's defaults before any hub answered. It decides nothing about what installs by itself.
+    func readNow(store: FleetStore) async -> AppUpdateReading {
+        var releases: ReleaseState?
+        if let database = store.state?.db {
+            releases = try? await HubClient().releases(hub: store.hub, database: database)
+        }
+        releases = releases ?? store.reading("releases") ?? store.keptReleases.reading(of: store.state?.db)
+        let reading = await AppUpdateChannel(channel: releases?.channel ?? AppUpdate.defaultChannel,
+                                             fleet: releases?.entitlement.fleet, early: releases?.early ?? false)
+            .read(installed: running)
+        if !reading.unreachable { reached(reading) }
+        return reading
+    }
+
+    /// **Update and Restart** of that window: the build goes in as the hourly path puts it in, and the app starts again
+    /// at once, because he pressed it. One install at a time: it waits for a read or an install of the hourly path that
+    /// runs. The words of a failure, or nil when the app restarts.
+    func installNow(_ build: AppManifest,
+                    progress: @escaping @Sendable (AppUpdateInstaller.Step) -> Void) async -> String? {
+        while working {
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return nil }
+        }
+        working = true
+        defer { working = false }
+        do {
+            try await installer.install(build, progress: progress)
+            AppAutoUpdate.relaunch(installer.bundle)
+            return nil
+        } catch {
+            return (error as? LocalizedError)?.errorDescription
+                ?? String(l10n: "The update stopped, and nothing on this Mac changed.")
+        }
     }
 
     private func ask(hub: URL, database: String, store: FleetStore) async {
@@ -218,7 +203,7 @@ final class AppAutoUpdate {
         keptWaiting.readFailed()
     }
 
-    /// A read that answered: the hourly pace again, and the channel's answer kept for the page.
+    /// A read that answered: the hourly pace again, and the channel's answer kept.
     private func reached(_ reading: AppUpdateReading?) {
         failures = 0
         failingSince = nil

@@ -8,19 +8,20 @@ import SwiftUI
 /// one already a row of its own section here — Secrets, Apps — with the same detail behind it (the owner,
 /// 24 October 2026: "there shouldn't even be an Access section, right? it's all done in each specific section!").
 ///
-/// **Ten sections, in the owner's map of 28 October 2026** (D-4, "the whole map"): the servers and his own devices are
-/// one section, Servers, and the fleet's and this Mac's updates another, Updates;
-/// they were three pages of the main sidebar. The MCP servers are a group of Apps, where the other apps his agents
-/// work in are.
+/// **Nine sections, in the owner's map of 28 October 2026** (D-4, "the whole map"): the servers and his own devices are
+/// one section, Servers; they were pages of the main sidebar. The MCP servers are a group of Apps, where the other apps
+/// his agents work in are. **The fleet's and this Mac's updates were a tenth, Updates, until 15 November 2026** (the
+/// owner: "we can remove the settings > Updates page and move the automatic updates switch to General, where we can
+/// also see the current versions"): an update is taken from the sidebar's Update, and General has the rest.
 enum SettingsTab: String, CaseIterable, Hashable {
-    case general, servers, updates, backup, status, secrets, knowledge, apps, people, team
+    case general, servers, backup, status, secrets, knowledge, apps, people, team
 
     /// A section by its name, also by the names of the pages that became parts of a section: `mcps` is Apps,
-    /// `subscription`, which is gone, Updates and `devices` Servers.
+    /// `updates` and `subscription`, which are gone, General, and `devices` Servers.
     static func named(_ name: String) -> SettingsTab? {
         switch name {
         case "mcps": .apps
-        case "subscription": .updates
+        case "updates", "subscription": .general
         case "devices": .servers
         default: SettingsTab(rawValue: name)
         }
@@ -30,7 +31,6 @@ enum SettingsTab: String, CaseIterable, Hashable {
         switch self {
         case .general: String(l10n: "General")
         case .servers: String(l10n: "Servers")
-        case .updates: String(l10n: "Updates")
         case .backup: String(l10n: "Backup")
         case .secrets: String(l10n: "Secrets")
         case .knowledge: String(l10n: "Knowledge")
@@ -47,7 +47,6 @@ enum SettingsTab: String, CaseIterable, Hashable {
         switch self {
         case .general: "switch.2"
         case .servers: "server.rack"
-        case .updates: "arrow.down.circle"
         case .backup: "clock.arrow.circlepath"
         case .secrets: "key"
         case .knowledge: "books.vertical"
@@ -69,8 +68,6 @@ enum SettingsTab: String, CaseIterable, Hashable {
             case .status: true
             case .servers: features.contains(Servers.feature) || features.contains("machines")
                 || features.contains(OwnerDevices.feature)
-            // It reads the releases route.
-            case .updates: features.contains(ReleaseState.feature)
             case .secrets: features.contains("secrets")
             case .knowledge: features.contains(KnowledgeClient.feature)
             case .apps: features.contains(Integrations.feature) || features.contains(Google.feature)
@@ -138,7 +135,6 @@ struct SettingsPage: View {
                     switch shown {
                     case .general: FleetPage("General") { general }
                     case .servers: ServersPage(store: store)
-                    case .updates: UpdatesPage(store: store)
                     case .backup: BackupSettings(store: store)
                     case .secrets: SecretsPage(store: store)
                     case .knowledge: KnowledgePage(store: store)
@@ -222,6 +218,12 @@ struct SettingsPage: View {
                         .disabled(store.notifications.requestingPermission).accessibilityIdentifier("notification-toggle")
                 }
                 .help(store.notifications.status == nil ? "" : store.notifications.cause ?? "")
+            }
+            // The release this fleet runs, the build this Mac runs, and the Automatic updates switch (the owner, 15
+            // November 2026: "move the automatic updates switch to General, where we can also see the current
+            // versions"); Settings › Updates is gone. It reads the releases route.
+            if store.state?.ui_features?.contains(ReleaseState.feature) == true {
+                UpdatesSection(store: store)
             }
             // Owner feature default_models: a row for each provider that his servers report, and for one whose default
             // stays set while none does. No section while there is no row.

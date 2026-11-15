@@ -411,6 +411,19 @@ public final class HubClient: Sendable {
         return result
     }
 
+    /// The hub's own faults and refused calls (owner feature `diagnostics`, UI-API.md 1.167), as `HubDiagnostics.checked`
+    /// leaves them: each value in its shape, or its entry left out.
+    public func diagnostics(hub: URL, database: String) async throws -> HubDiagnostics {
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/diagnostics"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database)]
+        let (data, _) = try await boundedArtifactRead(URLRequest(url: parts.url!), limit: 262_144)
+        let result = try JSONDecoder().decode(HubDiagnostics.self, from: data)
+        guard result.db == database, result.faults.count <= 1000, result.refusals.count <= 1000 else {
+            throw HubError.invalidResponse
+        }
+        return result.checked()
+    }
+
     public func machines(hub: URL, database: String) async throws -> MachineList {
         var parts = URLComponents(url: hub.appendingPathComponent("ui/machines"), resolvingAgainstBaseURL: false)!
         parts.queryItems = [.init(name: "db", value: database)]
@@ -418,6 +431,35 @@ public final class HubClient: Sendable {
         let list = try JSONDecoder().decode(MachineList.self, from: data)
         try list.validate(database: database)
         return list
+    }
+
+    /// **The hub's record of its own server** (`GET /ui/vault`, its `hub`: the machine's name, its address and the
+    /// fleet's `access` entry for it), or nil from a hub that names none. The key of this Mac needs it for a hub's
+    /// server that runs no agent, which `machines` does not name (`OwnerKeyPlan.record`). It reads these two fields of
+    /// the page and nothing else, and it keeps a machine of any name: the vault's own reading (`VaultReading.hub`)
+    /// keeps only a name that a pin can carry, and a server from before servers can have another one.
+    public func ownServer(hub: URL, database: String) async throws -> VaultHub? {
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/vault"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database)]
+        let (data, _) = try await boundedArtifactRead(URLRequest(url: parts.url!), limit: 1_048_576)
+        return try Self.ownServer(in: data, database: database)
+    }
+
+    /// The record out of the page's bytes. A page of another database is no answer; a record that is not one is none.
+    static func ownServer(in data: Data, database: String) throws -> VaultHub? {
+        struct Page: Decodable {
+            let db: String
+            let hub: VaultHub?
+            private enum Keys: String, CodingKey { case db, hub }
+            init(from decoder: Decoder) throws {
+                let data = try decoder.container(keyedBy: Keys.self)
+                db = try data.decode(String.self, forKey: .db)
+                hub = try? data.decodeIfPresent(VaultHub.self, forKey: .hub)
+            }
+        }
+        let page = try JSONDecoder().decode(Page.self, from: data)
+        guard page.db == database else { throw HubError.invalidResponse }
+        return page.hub
     }
 
     public func team(hub: URL, database: String) async throws -> TeamSnapshot {
@@ -924,7 +966,8 @@ public final class HubClient: Sendable {
         // A separate ephemeral session lets every failure/cancellation stop the transfer immediately.
         let transfer = URLSession(configuration: session.configuration, delegate: NoRedirects(), delegateQueue: nil)
         defer { transfer.invalidateAndCancel() }
-        let (bytes, response) = try await transfer.bytes(for: request)
+        // With this Mac's key, to the hub's number, and its answer under this request's own address (`hubBytes`).
+        let (bytes, response) = try await transfer.hubBytes(for: request)
         guard let response = response as? HTTPURLResponse, response.url == request.url else { throw ArtifactError.identity }
         if response.statusCode != 200 {
             throw Self.readRefusal(status: response.statusCode, body: await Self.refusalBody(bytes), checkedOutputs: checkedOutputs)
@@ -951,7 +994,7 @@ public final class HubClient: Sendable {
     }
 
     private func send(_ request: URLRequest) async throws -> Data {
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(in: data)) }

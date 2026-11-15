@@ -762,7 +762,7 @@ public struct ServerGrantClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(client, forHTTPHeaderField: "X-Fleet-Client")
         request.httpBody = try ServerGrantCommand.body(requestID: UUID(), database: database, agent: agent, server: server, level: level)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else {
@@ -788,7 +788,7 @@ public struct DoorSetupClient: Sendable {
         parts.queryItems = [.init(name: "db", value: database), .init(name: "renew", value: "form")]
         var request = URLRequest(url: parts.url!)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
         guard data.count <= 1_048_576 else { throw HubError.invalidResponse }
@@ -804,7 +804,7 @@ public struct DoorSetupClient: Sendable {
         request.setValue(client, forHTTPHeaderField: "X-Fleet-Client")
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "request_id": UUID().uuidString.lowercased(), "db": database, "address": address, "port": port], options: [.sortedKeys])
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
@@ -819,7 +819,7 @@ public struct DoorSetupClient: Sendable {
         request.setValue(client, forHTTPHeaderField: "X-Fleet-Client")
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "request_id": UUID().uuidString.lowercased(), "db": database, "token": token, "record": record], options: [.sortedKeys])
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
@@ -836,7 +836,7 @@ public struct DoorSetupClient: Sendable {
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "request_id": UUID().uuidString.lowercased(), "db": database, "host": host, "state": state, "said": line],
                                                       options: [.sortedKeys])
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
@@ -852,7 +852,7 @@ public struct DoorSetupClient: Sendable {
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "request_id": UUID().uuidString.lowercased(), "db": database, "owner": owner, "app_id": appID],
                                                       options: [.sortedKeys])
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }

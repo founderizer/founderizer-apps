@@ -24,7 +24,7 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
     private readonly LaneView lane;
     private readonly RequestStepView step;
     private readonly ScrollViewer stage;
-    private readonly EndedView ended = new();
+    private readonly EndedView ended;
     private readonly StackPanel empty = new() { Spacing = 12, Padding = new Thickness(0, 66, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
     private readonly TextBlock emptyWords = Look.Words("", brush: Look.Muted, wrap: false);
     private StoreState state = new();
@@ -39,6 +39,7 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
         source = services.Source;
         go = services.Go;
         this.chosen = chosen;
+        ended = new EndedView(OpenNeed);
         Padding = new Thickness(24, 0, 24, 0);
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -85,7 +86,7 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
         lane.Show(model.LaneHeading, model.OpenCount, model.Cards.Select(LaneCard.Of).ToList());
         ended.Show([], model.EndedCount == 0 ? null : model.EndedWords,
                    model.Ended.Select(day => (day.Day, (IReadOnlyList<EndedLine>)day.Rows
-                       .Select(r => new EndedLine(r.Key, r.Mark, r.Title, r.Badge, () => OpenNeed(r.Id))).ToList())).ToList());
+                       .Select(r => new EndedLine(r.Key, r.Mark, r.Title, r.Badge, r.Id)).ToList())).ToList());
         if (model.AtHand is { } hand)
         {
             step.Visibility = Visibility.Visible;

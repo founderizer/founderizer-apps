@@ -87,7 +87,7 @@ extension HubClient {
         configuration.timeoutIntervalForResource = 900
         let transfer = URLSession(configuration: configuration)
         defer { transfer.finishTasksAndInvalidate() }
-        let (temporary, response) = try await transfer.download(for: request)
+        let (temporary, response) = try await transfer.download(for: OwnerMacKey.authorized(request))
         guard let http = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard http.statusCode == 200 else {
             try? FileManager.default.removeItem(at: temporary)

@@ -68,7 +68,7 @@ struct ActivityBoard: View {
     private func lanes(_ board: [ActivityColumn: [FleetTask]], state: HubState) -> some View {
         let holds = (state.holds ?? []).filter { $0.state != "released" }
         let limited = Set(state.agents.filter { $0.limit != nil }.map(\.name))
-        let waits = state.ownerWaits
+        let waits = state.ownerWaits, subtasks = state.subtaskWaits
         let ended = EndedTasks(board[.done] ?? [])
         let count = CGFloat(ActivityColumn.allCases.count)
         return GeometryReader { proxy in
@@ -86,8 +86,10 @@ struct ActivityBoard: View {
                 }.frame(width: width)
                 lane(.waiting, count: board[.waiting]?.count ?? 0) {
                     ForEach(board[.waiting] ?? []) { task in
-                        card(task, wait: waits[task.id], state: state,
-                             why: waits[task.id] == nil ? why(task, holds: holds, limited: limited.contains(task.owner), now: state.time) : nil)
+                        let reason = waits[task.id] == nil
+                            ? why(task, holds: holds, limited: limited.contains(task.owner), subtasks: subtasks[task.id], now: state.time) : nil
+                        // Its hover and VoiceOver say what the card says, never "Working" (`words`).
+                        card(task, wait: waits[task.id], state: state, why: reason, words: subtasks[task.id] != nil ? reason : nil)
                     }
                 }.frame(width: width)
                 lane(.done, count: board[.done]?.count ?? 0) { endedRows(ended, state: state, narrow: width < EndedRow.narrow) }.frame(width: width)
@@ -113,26 +115,31 @@ struct ActivityBoard: View {
         }.accessibilityElement(children: .contain).accessibilityIdentifier("activity-column-\(column.rawValue)")
     }
 
-    /// One open task's card. `wait`: what it waits for from the owner; `why`: why any other task waits.
-    private func card(_ task: FleetTask, wait: OwnerWait?, state: HubState, why: String? = nil) -> some View {
+    /// One open task's card. `wait`: what it waits for from the owner; `why`: why any other task waits; `words`: its
+    /// state in words for its hover and VoiceOver where they are not its state word (a task that waits for subtasks).
+    private func card(_ task: FleetTask, wait: OwnerWait?, state: HubState, why: String? = nil, words: String? = nil) -> some View {
         var request: (() -> Void)?
         if case .request(let id, _) = wait {
             // The request itself, on Needs you, where he answers it.
             request = { store.selectedNeed = id; store.destination = .needs }
         }
         return ActivityCard(task: task, owner: scope == nil ? task.owner : nil, ownerLine: wait?.words, why: why,
-                            words: wait?.words ?? task.stateWord(in: state), openRequest: request) {
+                            words: wait?.words ?? words ?? task.stateWord(in: state), openRequest: request) {
             store.destination = .task(task.id)
         }.opensTask(task.id, store: store)
     }
 
     /// Why a task waits, at the end of its agent's line: until when its agent parked it, else its one state word
-    /// ("Waiting for Fleet Manager", "Usage limit", "Paused", "Queued").
-    private func why(_ task: FleetTask, holds: [TaskHold], limited: Bool, now: Double) -> String {
+    /// ("Waiting for Fleet Manager", "Usage limit", "Paused", "Queued"). **A task that waits for its subtasks names their
+    /// agents** ("Waiting for Web-Dev", 14 November 2026) where its state word would say "Working": a hold, a usage
+    /// limit and a stall keep their own word.
+    private func why(_ task: FleetTask, holds: [TaskHold], limited: Bool, subtasks: [String]?, now: Double) -> String {
         if let until = task.parked_until, !holds.contains(where: { $0.task == task.id }), !limited {
             return String(l10n: "Until \(fleetComingTime(until, now: now))")
         }
-        return task.stateWord(holds: holds, limited: limited)
+        let word = task.stateWord(holds: holds, limited: limited)
+        if let subtasks, word == TaskWords.working { return HubState.subtaskWords(subtasks) }
+        return word
     }
 
     /// **Ended: the results that did not succeed, and one row that opens the others** by day, the runs of one schedule
@@ -180,7 +187,7 @@ struct ActivityBoard: View {
             let open = openRows.contains(group.id)
             EndedRow(title: group.title, owner: owner, note: "×\(group.tasks.count)") {
                 if open { openRows.remove(group.id) } else { openRows.insert(group.id) }
-            }.accessibilityValue(open ? "Open" : "Closed").accessibilityIdentifier("activity-runs-\(group.id)")
+            }.accessibilityValue(open ? String(localized: "Open (a state)", defaultValue: "Open", bundle: Localized.bundle, locale: Localized.digits) : String(l10n: "Closed")).accessibilityIdentifier("activity-runs-\(group.id)")
             if open {
                 ForEach(group.tasks) { task in
                     EndedRow(title: task.title, owner: nil, note: messageTime(task.activityTime), indent: true) {

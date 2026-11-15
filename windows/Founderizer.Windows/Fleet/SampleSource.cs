@@ -42,6 +42,8 @@ public sealed partial class SampleSource : IFleetSource
     private Timer? renew;
     private Timer? changes;
     private int changeCount;
+    private long? openTask;
+    private OutputsState? outputs;
 
     public SampleSource()
     {
@@ -85,7 +87,17 @@ public sealed partial class SampleSource : IFleetSource
     // Every chat and task of the sample is read at the start, so a page that opens needs no read.
     public void OpenChat(string? agent) { }
 
-    public void OpenTask(long? task) { }
+    /// <summary>The task whose page shows: the checked outputs of another task go, as the store's do.</summary>
+    public void OpenTask(long? task)
+    {
+        lock (gate)
+        {
+            if (task == openTask) return;
+            openTask = task;
+            outputs = null;
+        }
+        Renew();
+    }
 
     public void SetDraft(string agent, string text)
     {
@@ -125,6 +137,37 @@ public sealed partial class SampleSource : IFleetSource
 
     public Task<byte[]> FileAsync(MessageAttachment file) => Task.FromResult(SampleFile(file));
 
+    public Task ListOutputsAsync()
+    {
+        lock (gate) outputs = openTask is { } task ? new OutputsState { Task = task, Files = ValueList.Of(SampleOutputs(task)), Listed = true } : null;
+        Renew();
+        return Task.CompletedTask;
+    }
+
+    public Task ViewOutputAsync(ArtifactFile file)
+    {
+        var bytes = SampleOutput(file.Path);
+        var size = file.IsImage ? PictureCheck.Size(bytes, file.Mime) : null;
+        lock (gate)
+        {
+            if (outputs is null) return Task.CompletedTask;
+            outputs = outputs with
+            {
+                Opened = file.IsImage
+                    ? new ArtifactContent(file, null, bytes, size?.Width ?? 0, size?.Height ?? 0)
+                    : new ArtifactContent(file, Encoding.UTF8.GetString(bytes), null),
+            };
+        }
+        Renew();
+        return Task.CompletedTask;
+    }
+
+    public void CloseOutputs()
+    {
+        lock (gate) outputs = null;
+        Renew();
+    }
+
     /// <summary>The sample notifies only in the state of picture 10 (SampleStates.cs).</summary>
     public event EventHandler<IReadOnlyList<Notice>>? Notified;
 
@@ -162,7 +205,8 @@ public sealed partial class SampleSource : IFleetSource
         // the public copy's list (app/public-copy/example-addresses.txt) for this PC, where the picture has one that is not on it.
         Hub = new Uri("http://100.84.1.2:8765/"),
         Key = KeyState.InHand,
-        Device = new MobileDevice("pc", "PC", "100.84.1.9", Key: true, LastSeen: at.ToUnixTimeMilliseconds() / 1000.0, ThisDevice: true, Kind: "pc"),
+        // Seen at the sample's own now (its clock of 15:12), as the hub's clock reads it: "just now" at any time of day.
+        Device = new MobileDevice("pc", "PC", "100.84.1.9", Key: true, LastSeen: now, ThisDevice: true, Kind: "pc"),
         Fleet = fleet,
         SnapshotAt = at,
         LastRead = at,
@@ -170,6 +214,7 @@ public sealed partial class SampleSource : IFleetSource
         Front = true,
         Chats = chats,
         TaskPages = tasks,
+        Outputs = outputs,
         Drafts = drafts,
         AnswerDrafts = answerDrafts,
     }, at);
@@ -212,7 +257,9 @@ public sealed partial class SampleSource : IFleetSource
             if (agent == "wren" && ask is not null) items.Add(Message("00000000-0000-0000-0000-0000000000a1", ask, now - 60));
             PictureChat(agent, chat);
             var page = HubDecode.ChatPage(Encoding.UTF8.GetBytes(chat.ToJsonString()), "sample", agent);
-            pages[agent] = new ChatPageState { Agent = agent, Items = ValueList.Of(page.Items) };
+            // Whole as the store reads a first page: fewer items than a page is the chat's whole history, so a request
+            // raised before its oldest item still stands in it (the library's rule of 14 November 2026).
+            pages[agent] = new ChatPageState { Agent = agent, Items = ValueList.Of(page.Items), Whole = page.Items.Count < StoreState.ChatFirstPage };
         }
         return pages.ToImmutable();
     }
@@ -232,6 +279,14 @@ public sealed partial class SampleSource : IFleetSource
                 Notes = ValueList.Of(page.Notes),
                 Holds = ValueList.Of(page.Holds),
                 Outcomes = ValueList.Of(page.Outcomes),
+                Permissions = ValueList.Of(page.Permissions ?? []),
+                Steers = ValueList.Of(page.Steers ?? []),
+                Subtasks = page.Subtasks is { } subtasks ? ValueList.Of(subtasks) : null,
+                ParentTask = page.ParentTask,
+                // The sample offers thread_events: a page shows once its record was read (the store's first read).
+                Activity = SampleActivity(id),
+                // Picture 7 of the fifth set: the last read of the record failed.
+                ActivityError = pictureState == "earlier" && id == 1 ? StepWords.Unavailable : null,
             };
         }
         return pages.ToImmutable();

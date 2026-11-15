@@ -222,6 +222,62 @@ struct CentralVaultPlanTests {
         #expect(plan.servers.map(\.machine) == ["newbox"])
     }
 
+    /// Package 4 of the vault's gates: a server that the owner removed on this Mac is never signed by itself, neither by
+    /// a first trust nor by a re-sign (`VaultRemovals`). When the hub names it again as one that can be trusted, it has
+    /// the server row with its own reason; Try again there clears the mark (`CentralVaultModel.retry`), and the server is
+    /// due as any other. A marked server that the hub does not name shows nothing, and an unmarked server is as before.
+    @Test func aServerThatTheOwnerRemovedOnThisMacShowsItsRowAndIsNeverSignedByItself() throws {
+        let words = "You removed this server on this Mac, so Founderizer does not trust its vault by itself. Select Try again to trust it."
+        func reading(_ kept: Int) throws -> VaultReading {
+            let json = """
+                {"db": "gen-1", "fleet": "0f1e2d3c4b5a6978", "central": {"ok": true, "recipient": "\(Self.vaultKey)",
+                 "fleet": "0f1e2d3c4b5a6978", "owner_keys": 1, "pins": {}, "recovery": "\(Self.vaultKey)", "items": 0,
+                 "source": null}, "program": null, "read_at": null, "error": null, "held": {}, "machines": [
+                  {"machine": "vps", "carrier": "vps", "broker_recipient": "\(Self.serverKey)", "pinned": "\(Self.serverKey)",
+                   "matches": true, "missing": [], "kept_pin_at": \(kept)}]}
+                """
+            return try JSONDecoder().decode(VaultReading.self, from: Data(json.utf8))
+        }
+        // A trusted server whose kept pin is old: re-signed when it has no mark; with the mark, its row and no step.
+        let old = try reading(Int(Self.now - 8 * 86400))
+        #expect(VaultPlan.of(old, facts: Self.mine()) == VaultPlan(step: .trust(["vps"])))
+        var marked = Self.mine()
+        marked.removed = ["vps"]
+        #expect(VaultPlan.of(old, facts: marked) == VaultPlan(step: .nothing, servers: [VaultServerNeed(machine: "vps", reason: words)]))
+        // Servers not trusted yet: newbox has the mark, worker4 gave up its first trust, mac-studio cannot be trusted and
+        // "gone" is not in the reading. Only newbox's row is new, and the rows keep the hub's order.
+        let open = try Self.reading(central: Self.vaultKey, recovery: true)
+        #expect(VaultPlan.of(open, facts: Self.mine()).step == .trust(["worker4", "newbox"]))
+        var removed = Self.mine()
+        removed.removed = ["newbox", "mac-studio", "gone"]
+        #expect(VaultPlan.of(open, facts: removed) == VaultPlan(step: .trust(["worker4"]),
+                                                                servers: [VaultServerNeed(machine: "newbox", reason: words)]))
+        let reason = "Founderizer could not read its vault key on worker4."
+        removed.servers = ["worker4": Self.gaveUp(reason)]
+        #expect(VaultPlan.of(open, facts: removed).servers == [VaultServerNeed(machine: "worker4", reason: reason),
+                                                                VaultServerNeed(machine: "newbox", reason: words)])
+        // Try again on newbox's row clears its mark: newbox is due as it is today, and the others do not change.
+        removed.removed = ["mac-studio", "gone"]
+        removed.servers = [:]
+        #expect(VaultPlan.of(open, facts: removed) == VaultPlan.of(open, facts: Self.mine()))
+        // Marks of machines that the reading does not name, or names as not trustable, show nothing.
+        var elsewhere = Self.mine()
+        elsewhere.removed = ["mac-studio", "gone"]
+        #expect(VaultPlan.of(old, facts: elsewhere) == VaultPlan.of(old, facts: Self.mine()))
+    }
+
+    /// The clock guard (package 4): no pin is signed while this Mac's clock and the hub's clock of its last state read
+    /// differ by more than an hour, so no pin is dated ahead of a broker's clock or old at once.
+    @Test func noPinIsSignedWhileTheClocksDifferByMoreThanAnHour() {
+        let words = "This Mac's clock and the hub's clock differ by more than an hour."
+        #expect(VaultPlan.clockProblem(hubTime: 1_000_000, readAt: 1_003_600) == nil)
+        #expect(VaultPlan.clockProblem(hubTime: 1_003_600, readAt: 1_000_000) == nil)
+        #expect(VaultPlan.clockProblem(hubTime: 1_000_000, readAt: 1_003_601) == words)
+        #expect(VaultPlan.clockProblem(hubTime: 1_003_601, readAt: 1_000_000) == words)
+        #expect(VaultPlan.clockProblem(hubTime: nil, readAt: 1_000_000) == nil)
+        #expect(VaultPlan.clockSkew == 3600)
+    }
+
     @Test func triesCountInARow() {
         let first = VaultTries.failed(after: nil, at: 100, reason: "a")
         #expect(first.failures == 1 && !first.givenUp && !first.isDue(at: 699) && first.isDue(at: 700))

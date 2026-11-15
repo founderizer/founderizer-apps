@@ -295,8 +295,11 @@ struct OwnerDeviceTests {
 
     @Test func thePictureOfACodeCarriesTheHubAndTheCode() {
         let payload = OwnerDevices.enrollPayload(hub: hub, code: "ABCD-2345")
-        let parts = URLComponents(string: payload)
-        #expect(parts?.scheme == "fleet" && parts?.host == "enroll")
+        let link = URLComponents(string: payload)
+        #expect(link?.scheme == "https" && link?.host == "founderizer.com" && link?.path == "/enroll")
+        #expect(link?.query == nil)
+        // The values ride in the fragment, which the phone reads as the old link's query (`MobileStore.enrollItems`).
+        let parts = URLComponents(string: "fleet://enroll?" + (link?.percentEncodedFragment ?? ""))
         #expect(parts?.queryItems?.first { $0.name == "code" }?.value == "ABCD-2345")
         #expect(parts?.queryItems?.first { $0.name == "hub" }?.value == hub.absoluteString)
         #expect(OwnerDevices.isCode("ABCD-2345") && !OwnerDevices.isCode("ABCD-23456"))
@@ -313,7 +316,8 @@ struct OwnerDeviceTests {
         #expect(DeviceBinding.binding(bind: bind, key: "AAAA") == nil)
         let fresh = DeviceBinding.newBind()
         #expect(fresh.count == 43 && fresh != DeviceBinding.newBind())
-        let parts = URLComponents(string: OwnerDevices.enrollPayload(hub: hub, code: "ABCD-2345", bind: fresh))
+        let link = URLComponents(string: OwnerDevices.enrollPayload(hub: hub, code: "ABCD-2345", bind: fresh))
+        let parts = URLComponents(string: "fleet://enroll?" + (link?.percentEncodedFragment ?? ""))
         #expect(parts?.queryItems?.first { $0.name == "bind" }?.value == fresh)
         let defaults = try #require(UserDefaults(suiteName: "founderizer-test-\(UUID().uuidString)"))
         DeviceBinds.remember(bind, until: 2_000, in: defaults)

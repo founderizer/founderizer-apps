@@ -1,6 +1,7 @@
 import AppKit
 import FleetCore
 import FleetMark
+import FleetOwnerAPI
 import SwiftUI
 
 /// **An agent that is not active yet shows its setup in place of its chat**, at the owner's own word (25 October 2026):
@@ -26,6 +27,17 @@ import SwiftUI
 /// command. Its install and its sign-in follow, then "Setting up Manager" until its session runs. It is active from
 /// the start, so nothing checks or activates it here.
 ///
+/// **In a fleet whose first run did not ask, its name and the fleet's servers come first** (`ManagerSetupStart`; the
+/// owner, 15 November 2026, of a manager with no server: "no option to chnage the name of the manager etc... very bad",
+/// "it misses many steps of the onboarding! like the name of the agent, fleet shape", "they look good" to the pictures
+/// in `~/dev/founderizer-plans/manager-setup-steps/`, and "Yes, start it" to the hub's part): "Name your manager",
+/// whose Continue renames the manager on the hub when the name changed, then "Your fleet's servers", whose Continue
+/// keeps the step on the hub. With "1 server" this Mac then runs one step as root on the hub's own server
+/// (`OneServerRemote`), under the moving "Setting up <Name>", and the AI provider's press gives the manager the hub's
+/// server: its server's page does not show. The hub's kept step says that the two pages are done. **That root step
+/// runs only after his press on Continue on this Mac**: a setup that is opened again with "1 server" kept and no
+/// server service on the hub's server shows the slider on that step, and nothing that the hub says starts the step.
+///
 /// **Each page is one centered step: its mark, its title and its one way on** (the owner, 26 October 2026: "centering
 /// and only showing the next action (dont show the send button if it's not clickable ...)", approved from a mockup
 /// the same day for every page). A button shows only while it can be pressed; while the machine works, the title is
@@ -47,6 +59,8 @@ struct AgentSetupWizard: View {
     }
     /// The other provider he chose on this visit, until the agent runs it.
     @State private var switchingTo: String?
+    /// This view's own mark for the page that it tells the store (`WizardPages.tell`, `gone`).
+    @State private var placeMark = UUID()
     /// A request is on its way.
     @State private var busy = false
     /// The hub's own words when it refused a step. They stay until the next step.
@@ -70,6 +84,24 @@ struct AgentSetupWizard: View {
     /// The hub took the activation: the page waits for the state that says so.
     @State private var activated = false
     @State private var askedSwitch = false
+    /// The hub's features at this visit's first read, which decide if the name and the servers come first: a hub that
+    /// gets them while the server's page shows does not take that page away from under his hands.
+    @State private var startFeatures: [String]?
+    /// The words in the field of "Name your manager".
+    @State private var typedName = ""
+    /// The step of the slider of "Your fleet's servers".
+    @State private var step = ServersStep.two
+    /// This Mac's step on the hub's own server for "1 server", and the wait after it (`HubShareModel`): the store
+    /// keeps it, so that it is the same after × and a new opening of this page.
+    private var share: HubShareModel { store.hubShare() }
+    /// The reads of this visit, one after the other, that had no list of the hub's servers while the hub answered its
+    /// state: after `unreadReadsMost` of them the moving title says so.
+    @State private var unreadReads = 0
+    /// The page itself moves the slider to the kept step now, which is no move of his.
+    @State private var standsOnKept = false
+    /// The rename of this page's Continue is on its way or done: the page stays the name's until the view of the
+    /// manager's new name takes its place, so that no slider shows for a moment under the old name.
+    @State private var renaming = false
 
     private var time: Double { store.state?.time ?? 0 }
     private var line: FleetAgent? { store.state?.agents.first { $0.name == agent } }
@@ -90,6 +122,8 @@ struct AgentSetupWizard: View {
     /// it this one. A server that left the fleet, or that another agent took since, is not one to give it: the page is
     /// its server's again.
     private var placeOn: String? {
+        // "1 server" is kept and the hub's own server is ready: the manager goes there.
+        if case .onHub(let name) = start { return name }
         guard let joined = store.joinedServer(agent) else { return nil }
         guard let list = servers else { return joined }
         guard let entry = list.servers.first(where: { $0.name == joined }), !entry.hub,
@@ -109,9 +143,34 @@ struct AgentSetupWizard: View {
     /// When this visit began: its "Setting up" shows a second later, and stands half a second once it showed.
     @State private var began = ContinuousClock.now
 
+    /// **What comes before the server's page of a manager with no server** (`ManagerSetupStart`): nothing for another
+    /// agent, on a hub without the parts, and once a server joined for it on this Mac, whose provider's page is next
+    /// as before.
+    private var start: ManagerSetupStart {
+        ManagerSetupStart.page(role: line?.role, placed: line?.placed, joined: store.joinedServer(agent) != nil,
+                               features: startFeatures, named: store.managerNamed, list: servers)
+    }
+
+    /// **The slider shows though "1 server" is kept**: the hub's own server has no server service and no step of this
+    /// visit made one (only his press starts that step), or the step or the wait after it stopped. Else the page is the
+    /// moving "Setting up <Name>": the step runs, or the hub's reading of the server's service is to come.
+    private var sliderShowsAgain: Bool {
+        guard case .sharing(let rootStep) = start, !share.running else { return false }
+        return share.stopped || (rootStep && !share.done)
+    }
+
     private var page: AgentSetupPage {
-        // With no server yet: its server, then its provider once he took one.
-        if line?.placed == false { return placeOn == nil ? .server : .provider }
+        // With no server yet: its name and the fleet's servers where the hub has those parts, then its server, then
+        // its provider once he took one.
+        if line?.placed == false {
+            if renaming { return .name }
+            switch start {
+            case .name: return .name
+            case .servers, .sharing, .unread: return .servers
+            case .onHub: return .provider
+            case .server: return placeOn == nil ? .server : .provider
+            }
+        }
         return AgentSetupFlow.page(runtime: runtime, job: job, machine: machine, switchingTo: switchingTo)
     }
 
@@ -122,19 +181,68 @@ struct AgentSetupWizard: View {
         }
         .animation(.easeInOut(duration: 0.18), value: page)
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(agent)") { await poll() }
-        .onChange(of: page) { _, now in
+        .onChange(of: page) { before, now in
             opened = false; code = ""; sentFrom = nil
+            // The words of a stop on the name's page or on the slider's are about that page.
+            if before == .name || before == .servers { refusal = nil }
             // His press asked for the sign-in at the end of these pages, and for nothing after they end.
             switch now {
             case .installing, .switching, .signIn: break
             default: askedSignIn = false
             }
         }
+        // What stopped a step of the slider is about that step: another step takes its line away.
+        // His move of the slider takes the words of a stop away, which were about the step before it. The page's
+        // own move to the kept step (`stand`) is none of his, and leaves the words of a stop that the store kept.
+        .onChange(of: step) {
+            if standsOnKept { standsOnKept = false; return }
+            share.words = nil
+            if page == .servers { refusal = nil }
+        }
+        // The slider stands on the kept step whenever a read gives one, also one that the visit's first read did not
+        // have: a Continue on another step would change the kept step.
+        .onChange(of: servers?.keptStep) { _, kept in if let kept { stand(on: kept) } }
+        .onChange(of: readingsCurrent ? Self.placeName(page) : nil, initial: true) { _, now in
+            store.wizardPages.tell(agentSetup: now.map { .init(agent: agent, page: $0) }, by: placeMark)
+        }
+        .onDisappear { store.wizardPages.gone(placeMark) }
+        // "Name your manager" is this setup's first page, with no Back: Esc closes the wizard there, as on Add
+        // server's first page (the owner's yes of 12 November 2026: "On the first page, it closes the wizard.").
+        .preference(key: SetupFirstPage.self, value: readingsCurrent && page == .name)
         .accessibilityIdentifier("agent-setup")
     }
 
+    /// The page by its fixed name (`AppPlace`, `setup_state`'s `place`), with no default: a new page needs a name.
+    private static func placeName(_ page: AgentSetupPage) -> AppPlace.SetupPage {
+        switch page {
+        case .name: .name
+        case .servers: .servers
+        case .server: .server
+        case .provider: .provider
+        case .installing: .installing
+        case .switching: .switching
+        case .signIn: .signIn
+        case .activate: .activate
+        }
+    }
+
+    /// **The manager's own setup shows its steps on Back's line** (`ManagerSetupSteps`; the owner, 15 November 2026, of
+    /// a manager with no server: "no progress steps ... very bad", and "they look good" to their pictures): while the
+    /// manager gets its first server, from its server's page to its first session. Another agent's setup, and a
+    /// manager that ran before and signs in again, show none: he saw no picture of those.
+    private var isFirstSetupOfManager: Bool { line?.role == "manager" && placing }
+    private var progress: SetupProgress? {
+        isFirstSetupOfManager ? SetupProgress(names: ManagerSetupSteps.names, current: ManagerSetupSteps.current(page)) : nil
+    }
+
     private var steps: some View {
-        SetupPage {
+        SetupPage(progress: progress) {
+            // Back on the slider's page goes to the name's page, as in the first run. No other page here goes back.
+            if readingsCurrent, start == .servers, !busy, startFeatures?.contains(FleetShapeHub.rename) == true {
+                SetupBack { refusal = nil; store.noteManagerNamed(false) }.keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("agent-setup-back")
+            }
+        } step: {
             Group {
                 if !readingsCurrent {
                     if store.addedAgent == agent {
@@ -146,6 +254,8 @@ struct AgentSetupWizard: View {
                     }
                 } else {
                     switch page {
+                    case .name: NameManagerPage(name: $typedName, stopped: refusal, busy: busy) { Task { await takeName() } }
+                    case .servers: fleetServers
                     case .server: EmptyView()       // `serverStep`, in place of this page
                     case .provider: providers
                     case .installing(let provider): SetupStep(title: title, waits: true) { mark(provider) }
@@ -169,7 +279,7 @@ struct AgentSetupWizard: View {
     /// **"<Agent>'s server"**, Add server's own pages under the agent's glyph: a VPS or a Mac that joins for it. The one
     /// that joined is the server of the provider page that follows, as soon as this page reads it.
     private var serverStep: some View {
-        AddServerView(store: store, addAgent: { _ in }, addFirstAgent: { _, _ in false },
+        AddServerView(store: store, addAgent: { _ in },
                       placing: .init(agent: agent) { joined in
                           store.noteJoined(joined, for: agent)
                           Task { await read() }
@@ -182,6 +292,8 @@ struct AgentSetupWizard: View {
     /// The name of the page he is on. Each one says what it asks, so no page needs a line to explain itself.
     private var title: String {
         switch page {
+        case .name: String(l10n: "Name your manager")
+        case .servers: String(l10n: "Your fleet's servers")
         case .server: String(l10n: "\(name)'s server")
         case .provider: String(l10n: "\(name)'s AI provider")
         // With the step of the server's job that runs, once it reports one: "Installing Codex on app-1 · 2 of 5".
@@ -200,12 +312,128 @@ struct AgentSetupWizard: View {
         SetupStep(title: String(l10n: "Setting up \(name)"), waits: true) { AgentGlyph(name: agent, size: SetupMetrics.mark) }
     }
 
+    // MARK: its name and the fleet's servers
+
+    /// **"Your fleet's servers"**, the first run's page: the fleet is the hub and the manager here, so the page draws
+    /// the agents to come itself. While "1 server" is kept and the hub's own server is made ready, the page is the
+    /// moving "Setting up <Name>", as each wait of this setup; when that stopped, the slider is back with the reason
+    /// over Continue, which tries again, or keeps another step.
+    @ViewBuilder private var fleetServers: some View {
+        switch start {
+        case .unread:
+            // No list of the hub's servers yet: the moving title, and after eight reads with none, why, under it.
+            // The reads go on, and the page goes on by itself with the first list.
+            SetupStep(title: String(l10n: "Setting up \(name)"), waits: true) {
+                AgentGlyph(name: agent, size: SetupMetrics.mark)
+            } content: {
+                if unreadReads > Self.unreadReadsMost {
+                    SetupWarning(String(l10n: "Founderizer cannot read \(name)'s server now."))
+                        .accessibilityIdentifier("agent-setup-unread")
+                }
+            }
+        case .sharing where !sliderShowsAgain: settingUp
+        default:
+            // The manager by its own name, as the page before asked for it.
+            FleetServersPage(plan: FleetPlan(manager: agent.capitalized, agents: []), step: $step,
+                             stopped: share.words ?? refusal, busy: busy || share.running) { Task { await keep() } }
+        }
+    }
+
+    /// Continue of "Name your manager": the manager's new name on the hub, when it is another than the one it has, and
+    /// then the page of the fleet's servers. The page that shows the manager goes with its new name by itself
+    /// (`FleetStore.noteRenamed`). A team.json that changed between the read and the press is read again, once.
+    private func takeName() async {
+        guard !busy, let wanted = ManagerName.agentName(typedName), let database = store.state?.db else { return }
+        busy = true; refusal = nil
+        defer { busy = false }
+        // The hub of the press: a store that goes to another hub meanwhile gets no command of this page.
+        let hub = store.hub
+        guard await store.writable(), store.hub == hub else { return }
+        guard wanted != agent else {
+            // He goes on with the name that it has: no rename, and no note of an earlier one that got no answer.
+            store.noteRenamed(from: agent, to: nil)
+            store.noteManagerNamed(true)
+            return
+        }
+        renaming = true
+        for attempt in 0..<2 {
+            do {
+                let team = try await HubClient().team(hub: hub, database: database)
+                guard store.hub == hub, store.state?.db == database else { renaming = false; return }
+                store.noteRenamed(from: agent, to: wanted)
+                _ = try await HubClient().nameManager(hub: hub, database: database, client: store.installation,
+                                                      agent: agent, sha256: team.sha256, name: wanted)
+                // The next reading has the new name: the page goes to it, and its view opens on the slider. A store
+                // that went to another hub meanwhile gets no mark: the name was this hub's.
+                guard store.hub == hub, store.state?.db == database else { renaming = false; return }
+                store.noteManagerNamed(true)
+                await store.refresh()
+                renaming = false
+                return
+            } catch let HubError.refusal(status, words) {
+                if status == 409, attempt == 0, words.contains("team.json changed") { continue }
+                store.noteRenamed(from: agent, to: nil)
+                refusal = words; renaming = false; return
+            } catch {
+                // No answer: the hub can have the new name. The next reading says which name it is, and the page
+                // goes with it.
+                refusal = String(l10n: "The hub has not answered. Try again.")
+                await store.refresh()
+                renaming = false
+                return
+            }
+        }
+        renaming = false
+    }
+
+    /// Continue of "Your fleet's servers": the hub keeps the step. With "1 server" the same command lets the hub's own
+    /// server take agents, and this Mac's step on that server follows when the server has no server service yet.
+    private func keep() async {
+        // The hub, its generation and its model of the press: the command goes to that hub, and this Mac's step
+        // runs for it alone (`HubShareModel.run`), also when the store goes to another hub meanwhile.
+        let hub = store.hub, share = self.share
+        guard !busy, !share.running, let database = store.state?.db else { return }
+        busy = true; refusal = nil; share.words = nil
+        defer { busy = false }
+        guard await store.writable(), store.hub == hub else { return }
+        let chosen = step
+        for attempt in 0..<2 {
+            do {
+                let team = try await HubClient().team(hub: hub, database: database)
+                guard store.hub == hub, store.state?.db == database else { return }
+                let receipt = try await HubClient().keepShape(hub: hub, database: database, client: store.installation,
+                                                              sha256: team.sha256, step: chosen)
+                // The hub took this Continue: what stopped before it is over.
+                share.taken()
+                await read()
+                guard store.hub == hub, store.state?.db == database else { return }
+                if chosen == .one, receipt.root_step == true || servers?.hubRow?.joined != true {
+                    await share.run(store: store, server: servers?.hubRow?.name ?? "hub")
+                    await read()
+                }
+                return
+            } catch let HubError.refusal(status, words) {
+                if status == 409, attempt == 0, words.contains("team.json changed") { continue }
+                refusal = words; return
+            } catch {
+                // No answer: the hub can have the step. The read says so, and the page then goes on by it.
+                refusal = String(l10n: "The hub has not answered. Try again.")
+                await read()
+                return
+            }
+        }
+    }
+
     // MARK: the AI provider
 
     /// Two cards, and a click on one is the way on. The one the agent has now carries a check mark. Under them, in
     /// orange, why the setup stopped the last time, in the hub's own words.
     private var providers: some View {
-        SetupStep(title: title) { AgentGlyph(name: agent, size: SetupMetrics.mark) } content: {
+        // One line under the title in the manager's first setup, which says what the page asks for (his pictures).
+        SetupStep(title: title, detail: isFirstSetupOfManager
+                    ? String(l10n: "The AI that \(name) works with. You sign in with your own account.") : nil) {
+            AgentGlyph(name: agent, size: SetupMetrics.mark)
+        } content: {
             VStack(spacing: FleetSpace.inside) {
                 HStack(alignment: .top, spacing: 14) {
                     card("codex")
@@ -493,6 +721,21 @@ struct AgentSetupWizard: View {
     /// the hub has the agent's machine report as soon as the server's job ends.
     private func follow() async {
         guard !busy else { return }
+        // "1 server" is kept and the page waits for the hub's reading of its own server's service: a count of reads
+        // ends that wait. It is a read and no write, and it starts nothing on the server: only Continue does. While
+        // this Mac's step runs, nothing counts. Another agent's setup never comes here, so that step holds none.
+        if case .sharing = start {
+            if !share.running, !sliderShowsAgain { share.countRead() }
+            return
+        }
+        // The hub has the parts and answers its state, and its list of servers did not answer: the page counts those
+        // reads, and after eight says so under its moving title. A hub that does not answer at all is the window's
+        // own notice, and counts nothing here.
+        if start == .unread {
+            if store.isFresh { unreadReads += 1 }
+            return
+        }
+        unreadReads = 0
         guard store.canWrite else { return }
         // Once on each visit: a check that fails or an activation the hub refuses is asked again only by Try again.
         if page == .activate, !signingInAgain, !placing, !checking, !loading, refusal == nil {
@@ -524,6 +767,16 @@ struct AgentSetupWizard: View {
         }
     }
 
+    /// The reads with no list of the hub's servers after which the page says so.
+    private static let unreadReadsMost = 8
+
+    /// The page's own move of the slider to the step that the hub keeps (`standsOnKept`).
+    private func stand(on kept: ServersStep) {
+        guard step != kept else { return }
+        standsOnKept = true
+        step = kept
+    }
+
     /// After a stop: the check and the activation run again by themselves, as on a first visit.
     private func tryAgain() {
         refusal = nil; askedCheck = nil; askedActivation = false; activated = false
@@ -537,12 +790,20 @@ struct AgentSetupWizard: View {
             // Nothing for a second, then "Setting up" moving, which stands half a second once it showed (`settle`),
             // then the page whole (fix round 2, item 97).
             if !answered { await store.settle(since: began) }
+            if startFeatures == nil, let state = store.state {
+                startFeatures = state.ui_features ?? []
+                // The field opens on the manager's own name with capitals, never on its role, which is no name; and
+                // on the suggestion when it has the hub's default. The slider opens on the kept step, or on the
+                // middle one. Both are set before the page first draws.
+                typedName = agent == ManagerName.fallback ? ManagerName.suggested : agent.capitalized
+                if let kept = servers?.keptStep { stand(on: kept) }
+            }
             answered = true
             if store.addedAgent == agent { store.addedAgent = nil }
             // Signed in again, or its session runs: the state's own reading of it ends these pages (`AgentSetupFlow.shows`).
             if page == .activate, signingInAgain || placing { await store.refresh() }
             await follow()
-            let quick = running || switchingTo != nil || checking || page == .activate
+            let quick = running || switchingTo != nil || checking || page == .activate || page == .servers
             do { try await store.nap(quick ? 2 : 5) } catch { return }
         }
     }

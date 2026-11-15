@@ -14,15 +14,15 @@ enum MobileError: LocalizedError, Sendable, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .invalidAddress: "Enter an HTTP or HTTPS hub address without a path or login."
-        case .invalidResponse: "The hub's answer does not match the phone's API."
+        case .invalidAddress: String(l10n: "Enter an HTTP or HTTPS hub address without a path or login.")
+        case .invalidResponse: String(l10n: "The hub's answer does not match the phone's API.")
         // The hub's reason as a sentence, and no status code: "atlas is in setup" reads "The hub refused it: Atlas is
         // in setup." The code stays in the error for what the app decides from it.
         case .refusal(_, let auth, let message):
-            auth.map(MobileError.authWords) ?? "The hub refused it: \(MobileError.sentence(message))"
-        case .noPhoneRoutes: "This hub does not have the phone's routes yet. The Mac app still works with it."
+            auth.map(MobileError.authWords) ?? String(l10n: "The hub refused it: \(MobileError.sentence(message))")
+        case .noPhoneRoutes: String(l10n: "This hub does not have the phone's routes yet. The Mac app still works with it.")
         // The Mac's words for the same failure, both sentences, so both apps say it one way (fix round 2, item 35).
-        case .noAnswer: "Your hub did not answer. Check that its server is on."
+        case .noAnswer: String(l10n: "Your hub did not answer. Check that its server is on.")
         }
     }
 
@@ -31,7 +31,7 @@ enum MobileError: LocalizedError, Sendable, Equatable {
     /// this phone's key keeps its own words, which say what to do.
     var notSentWords: String {
         guard case .refusal(_, nil, let message) = self else { return localizedDescription }
-        return "Not sent: \(Self.sentence(message))"
+        return String(l10n: "Not sent: \(Self.sentence(message))")
     }
 
     /// The hub's words as a sentence: the first letter in upper case and a full stop at the end.
@@ -62,19 +62,24 @@ enum MobileError: LocalizedError, Sendable, Equatable {
     static func enrollWords(_ error: MobileError) -> String {
         switch error {
         case .refusal(429, _, _):
-            return "Too many wrong codes. Wait an hour, or make a new code."
+            return tooManyCodes
         case .refusal(403, _, let message):
             return message.lowercased().contains("owner device")
-                ? "Your hub does not know this phone. Add it on your Mac."
-                : "This code did not work. Make a new one on your Mac."
+                ? String(l10n: "Your hub does not know this phone. Add it on your Mac.")
+                : codeDidNotWork
         default:
             return error.localizedDescription
         }
     }
 
+    /// The words of a code that did not work and of too many wrong codes, once in the device's language: `enrollWords`
+    /// gives them and `refusedCode` knows a refused code by them, so the two agree in every language.
+    static let codeDidNotWork = String(l10n: "This code did not work. Make a new one on your Mac.")
+    static let tooManyCodes = String(l10n: "Too many wrong codes. Wait an hour, or make a new code.")
+
     /// The words of a code that the hub refused, which cannot go again.
     static func refusedCode(_ words: String?) -> Bool {
-        words == "This code did not work. Make a new one on your Mac." || words?.hasPrefix("Too many wrong codes") == true
+        words == codeDidNotWork || words?.hasPrefix(tooManyCodes) == true
     }
 
     /// What a refusal of this device means and what the owner does next. Each `auth` value is a different thing: not
@@ -82,17 +87,17 @@ enum MobileError: LocalizedError, Sendable, Equatable {
     static func authWords(_ auth: String) -> String {
         switch auth {
         case "device_not_enrolled":
-            "This phone is not enrolled. On your Mac press New code, then add this phone in Settings."
+            String(l10n: "This phone is not enrolled. On your Mac press New code, then add this phone in Settings.")
         case "device_key_required":
-            "The hub wants this phone's key and the phone sent none. Add this phone again with a new code."
+            String(l10n: "The hub wants this phone's key and the phone sent none. Add this phone again with a new code.")
         case "device_key_mismatch":
-            "This phone's key is not the one the hub keeps. Add this phone again with a new code."
+            String(l10n: "This phone's key is not the one the hub keeps. Add this phone again with a new code.")
         case "device_not_allowed":
-            "The phone may not use that part of the hub. That setup work stays in the Mac app."
+            String(l10n: "The phone may not use that part of the hub. That setup work stays in the Mac app.")
         case "key_not_expected":
-            "This address is the owner's own Mac, which needs no key. Forget this phone's key in Settings."
+            String(l10n: "This address is the owner's own Mac, which needs no key. Forget this phone's key in Settings.")
         default:
-            "The hub refused this phone (\(auth))."
+            String(l10n: "The hub refused this phone (\(auth)).")
         }
     }
 }
@@ -131,7 +136,7 @@ final class MobileClient: Sendable {
     // MARK: Building one request
 
     /// One request to the hub. An enrolled phone carries its key as a bearer token on **every** call; a phone without
-    /// a key sends no header at all, because the owner's own Mac is refused when it sends one (`key_not_expected`).
+    /// a key adds no header here (a phone in the simulator gets the Mac's own key at the send, `data(for:)`).
     /// The key never goes into the address, a query or a log.
     static func request(_ route: String, hub: URL, key: String?, query: [URLQueryItem] = [],
                         method: String = "GET") -> URLRequest {
@@ -153,7 +158,7 @@ final class MobileClient: Sendable {
         default:
             let body = try? JSONDecoder().decode(RefusalBody.self, from: data)
             throw MobileError.refusal(status: response.statusCode, auth: body?.auth,
-                                      message: String((body?.error ?? "The hub gave no reason.").prefix(500)))
+                                      message: String((body?.error ?? String(l10n: "The hub gave no reason.")).prefix(500)))
         }
     }
 
@@ -163,9 +168,13 @@ final class MobileClient: Sendable {
     /// (review B9i): whatever path asks — a read, a send, a link, a file, a press on a ping — a request to any other
     /// host is refused before it goes, because the built-in address is the owner's own hub. A stand-in on this Mac
     /// still answers a check, and so does the sample fleet, which this app answers itself.
+    ///
+    /// **A phone in the simulator is a program of the owner's Mac** (`OwnerMacKey.home`): it has no device key and the
+    /// Mac's address, and the hub asks each call from that address for the Mac's key. So `hubData` adds that key to a
+    /// request that carries none. On a real phone there is no such key, and the request goes as it is.
     private func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         if Self.hostsTests, !Self.isLoopback(request.url), !answersHere(request.url) { throw OffThisMac() }
-        return try await session.data(for: request)
+        return try await session.hubData(for: request)
     }
 
     /// The request goes to the host that this app answers itself (`localHost`), so it never leaves the phone.

@@ -81,14 +81,49 @@ public enum AppHome {
         // Every other start ends here, before any more reads.
         guard readOnly, bundle.path.hasPrefix("/Volumes/") else { return false }
         let exists = FileManager.default.fileExists(atPath: installed.path)
+        let opened: Bool
         switch step(path: bundle.path, onReadOnlyVolume: readOnly, own: Build(bundle: bundle),
                     somethingThere: exists, there: Build(bundle: installed), runsThere: exists && runsThere(installed)) {
         case .stay: return false
         // macOS brings an app that runs to the front when it is opened again, and starts no second one.
-        case .front: return run("/usr/bin/open", [installed.path])
-        case .open: return open(installed, arguments: arguments)
+        case .front: opened = run("/usr/bin/open", [installed.path])
+        case .open: opened = open(installed, arguments: arguments)
         case .copy(let replaces):
-            return place(bundle, at: installed, replaces: replaces) && open(installed, arguments: arguments)
+            opened = place(bundle, at: installed, replaces: replaces) && open(installed, arguments: arguments)
+        }
+        if opened { eject(imageOf: bundle) }
+        return opened
+    }
+
+    /// **The disk image goes away once the app in Applications runs** (the owner's yes of 14 November 2026: the app
+    /// "copies itself to Applications and ejects the disk image"). Its window and the disk on the desktop would
+    /// otherwise stay until a restart, with a second copy of the app in them. Only a volume that `hdiutil` lists as a
+    /// disk image is ejected: a read-only drive of the customer's own is never touched.
+    ///
+    /// A volume that runs a program cannot be detached, and this process runs from it until `settle` returns. So a
+    /// shell of its own waits for this process to end and then detaches the volume. It looks every tenth of a second,
+    /// at most 600 times, and a detach that fails (Finder copies from the image, say) leaves it mounted, as before.
+    static func eject(imageOf bundle: URL) {
+        guard let volume = (try? bundle.resourceValues(forKeys: [.volumeURLKey]))?.volume,
+              let info = output("/usr/bin/hdiutil", ["info", "-plist"]),
+              isDiskImage(volume: volume.path, hdiutilInfo: info) else { return }
+        let wait = #"(n=0; while kill -0 "$1" 2>/dev/null && [ "$n" -lt 600 ]; do sleep 0.1; n=$((n+1)); done; "#
+            + #"/usr/bin/hdiutil detach -quiet "$2") </dev/null >/dev/null 2>&1 &"#
+        _ = run("/bin/sh", ["-c", wait, "eject", String(ProcessInfo.processInfo.processIdentifier), volume.path])
+    }
+
+    /// Whether `hdiutil info -plist` lists a disk image mounted at this volume.
+    static func isDiskImage(volume: String, hdiutilInfo: Data) -> Bool {
+        func bare(_ path: String) -> String {
+            path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+        }
+        guard let info = try? PropertyListSerialization.propertyList(from: hdiutilInfo, format: nil) as? [String: Any],
+              let images = info["images"] as? [[String: Any]] else { return false }
+        let wanted = bare(volume)
+        return images.contains { image in
+            (image["system-entities"] as? [[String: Any]] ?? []).contains {
+                ($0["mount-point"] as? String).map(bare) == wanted
+            }
         }
     }
 
@@ -122,6 +157,20 @@ public enum AppHome {
     /// process has the same identifier, and without `-n` macOS can take it for the app that already runs.
     private static func open(_ app: URL, arguments: [String]) -> Bool {
         run("/usr/bin/open", ["-n", app.path] + (arguments.isEmpty ? [] : ["--args"] + arguments))
+    }
+
+    /// Runs a tool of macOS to its end and gives what it printed; nil when it did not end with 0.
+    private static func output(_ tool: String, _ arguments: [String]) -> Data? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: tool)
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return process.terminationStatus == 0 ? data : nil
     }
 
     /// Runs a tool of macOS to its end. true when it ended with 0.

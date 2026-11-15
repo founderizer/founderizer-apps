@@ -34,7 +34,7 @@ struct SettingsPage: View {
                 .font(.system(size: min(addressSize, 33)))
                 Button("Connect") { Task { await store.connect() } }
             } header: {
-                GroupHeading("Hub")
+                GroupHeading(String(l10n: "Hub"))
             } footer: {
                 if let error = store.addressError { Text(error).foregroundStyle(Brand.warning) }
             }
@@ -47,7 +47,7 @@ struct SettingsPage: View {
                 Section {
                     LabeledContent("Last reading") {
                         Text(store.lastRead.map { fleetAge($0.timeIntervalSince1970,
-                                                           now: Date().timeIntervalSince1970) } ?? "Never")
+                                                           now: Date().timeIntervalSince1970) } ?? String(l10n: "Never"))
                             .foregroundStyle(Brand.warning)
                     }
                     .wholePoints()
@@ -94,8 +94,8 @@ struct SettingsPage: View {
             }
             if let device = store.device {
                 // Its name for what the row holds (fix round 2, item 42): "The hub calls this phone" read as an action.
-                DetailRow(title: "This phone's address", detail: "\(device.label) · \(device.address)",
-                          value: device.last_seen.map { fleetAge($0, now: store.hubNow) } ?? "No read yet")
+                DetailRow(title: String(l10n: "This phone's address"), detail: "\(device.label) · \(device.address)",
+                          value: device.last_seen.map { fleetAge($0, now: store.hubNow) } ?? String(l10n: "No read yet"))
             }
             NavigationLink("Add this phone", value: ChatsRoute.enroll)
                 .accessibilityIdentifier("open-enroll")
@@ -104,7 +104,7 @@ struct SettingsPage: View {
                     .accessibilityIdentifier("forget-key")
             }
         } header: {
-            GroupHeading("This phone")
+            GroupHeading(String(l10n: "This phone"))
         } footer: {
             if let forgetError {
                 Text(forgetError.words).foregroundStyle(Brand.warning).accessibilityValue(forgetError.detail)
@@ -115,10 +115,10 @@ struct SettingsPage: View {
 
     private var keyValue: String {
         switch store.keyState {
-        case .none: "None"
-        case .locked: "Locked"
-        case .ready: "In hand"
-        case .failed: "Not given"
+        case .none: String(localized: "None (a key)", defaultValue: "None", bundle: Localized.bundle, locale: Localized.digits)
+        case .locked: String(l10n: "Locked")
+        case .ready: String(l10n: "In hand")
+        case .failed: String(l10n: "Not given")
         }
     }
 
@@ -137,18 +137,18 @@ struct SettingsPage: View {
     @ViewBuilder private var pendingSection: some View {
         if let storageError = store.storageError {
             Section {
-                DetailRow(title: "Sending is blocked", detail: storageError, value: "Blocked", valueColor: Brand.warning)
+                DetailRow(title: String(l10n: "Sending is blocked"), detail: storageError, value: String(l10n: "Blocked"), valueColor: Brand.warning)
                     .accessibilityElement(children: .combine)
                     .accessibilityValue(store.storageErrorDetail ?? "")
             } header: {
-                GroupHeading("Pending write")
+                GroupHeading(String(l10n: "Pending write"))
             }
             .brandRows()
         } else if let pending = store.pending {
             Section {
                 DetailRow(title: store.pendingSummary,
-                          detail: pending.refusal ?? store.sendError ?? "It waits for its receipt.",
-                          value: pending.refusal == nil ? "Waiting" : "Refused", valueColor: Brand.warning)
+                          detail: pending.refusal ?? store.sendError ?? String(l10n: "It waits for its receipt."),
+                          value: pending.refusal == nil ? String(l10n: "Waiting") : String(l10n: "Refused"), valueColor: Brand.warning)
                 if !pending.text.isEmpty {
                     Text(verbatim: pending.text).font(.footnote).foregroundStyle(Brand.muted)
                         .lineLimit(4).textSelection(.enabled)
@@ -163,7 +163,7 @@ struct SettingsPage: View {
                         .accessibilityIdentifier("retry-pending")
                 }
             } header: {
-                GroupHeading("Pending write")
+                GroupHeading(String(l10n: "Pending write"))
             } footer: {
                 // Only what is known: the hub address is this app's own, but the generation needs a read.
                 if pending.hub != store.hub || store.snapshot.map({ $0.db != pending.database }) == true {

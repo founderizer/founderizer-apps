@@ -1,8 +1,9 @@
 import Foundation
 
-/// **Which AI runs on a new server**, the owner's one choice in Add server (1 November 2026: "why are we asking for
-/// chatgpt AND claude login if we still dont know what the user will choose?"). The hub keeps it, and on a Mac the
-/// sitting shows only what it needs. A Linux server has no desktop, so `both` is a choice of a Mac alone.
+/// **Which AI an agent runs**, the owner's one choice (1 November 2026: "why are we asking for chatgpt AND claude login
+/// if we still dont know what the user will choose?"). Add server asks it for a Mac, where the hub keeps it and the
+/// sitting shows only what it needs. A VPS is asked for none (13 November 2026): Add agent asks it with the agent's
+/// name. A Linux server has no desktop, so `both` is a choice of a Mac alone.
 public enum ServerAI: String, CaseIterable, Sendable {
     case claude, chatGPT, both
 

@@ -65,6 +65,21 @@ struct ChatPage: View {
         }
         return nil
     }
+    /// **His answers in words to requests of this agent, on their way or taken, until the chat's read brings each
+    /// message itself** (the owner, 14 November 2026: "When I reply to a card, the conversation should follow!"), the
+    /// oldest first: each is his message in this chat, as the hub writes it, from the frame he sends it. An option
+    /// that he pressed is none: its card shows it. An answer that did not go is none either: its card says "Not
+    /// sent", with Try again.
+    private var waitingAnswers: [PendingRequest] {
+        let asked = Set(requests.map(\.id))
+        var going = store.deliveredAnswers.filter { $0.needID.map(asked.contains) == true }
+        if let request = store.pending, request.answersInWords, !request.text.isEmpty, let need = request.needID,
+           asked.contains(need), store.givenAnswer(to: need) != nil,
+           !going.contains(where: { $0.requestID == request.requestID }) {
+            going.append(request)
+        }
+        return going
+    }
     /// The composer writes the correction while one is open, and this agent's draft otherwise.
     private var text: Binding<String> {
         isCorrecting
@@ -100,7 +115,7 @@ struct ChatPage: View {
                     // loading look in its first slot, held half a second once it shows (`MobileStore.settle`). On a
                     // slow hub the chat stood empty until its read came.
                     if isBlank && !store.hasRead(chat: agent) && store.readCanCome {
-                        LoadingLine("Reading…")
+                        LoadingLine(String(l10n: "Reading…"))
                     }
                     ForEach(rows) { row in
                         switch row {
@@ -113,8 +128,8 @@ struct ChatPage: View {
                                                        line: taken?.run == row.id ? taken?.line
                                                            : lineShowing ? lastLine : nil)
                             bubbles(run, isNewest: row.id == newest, arrived: arrived, taking: arrival.taking)
-                        case .request(let need, let stamp):
-                            // In the place of his answer, the answer's mark for the day or the hour stands over it.
+                        case .request(let need, let stamp, let spoken):
+                            // A card raised an hour or a day after the row over it has its own mark.
                             if let stamp { stampLine(stamp) }
                             // **The request card in the chat** (D-7): what the agent asks him, answered where it is
                             // asked, on the text column as the agent's words are (fix round 2, item 78: it stood 2
@@ -122,7 +137,8 @@ struct ChatPage: View {
                             // points from the message above it, as between two runs** (margins pass, fault 19): 4 more
                             // made it 14, though it belongs to the message above it.
                             NeedCard(store: store, need: need,
-                                     answerFiles: items.last { $0.answer_to == need.id }?.attachments ?? [])
+                                     answerFiles: items.last { $0.answer_to == need.id }?.attachments ?? [],
+                                     spoken: spoken)
                         }
                     }
                     // **What the answer waits for** ("Thinking"), its room kept from the send's first frame (fix round 2,
@@ -235,6 +251,13 @@ struct ChatPage: View {
                 followsLatest = true
                 Self.still { proxy.scrollTo(Self.end, anchor: .bottom) }
             }
+            // **The chat follows the answer that he writes to a request**: his words stand at its end, also when he
+            // wrote them in a card further up, and the agent's reply comes under them.
+            .onChange(of: waitingAnswers.last?.requestID) { _, id in
+                guard id != nil else { return }
+                followsLatest = true
+                Self.still { proxy.scrollTo(Self.end, anchor: .bottom) }
+            }
             // The line as it shows. The frame that a reply comes in still holds the line before it, so the reply takes
             // that line's place; once the line has gone, the run that took it keeps its words to its cross-fade's end.
             .onChange(of: shownLine, initial: true) { old, now in
@@ -247,8 +270,12 @@ struct ChatPage: View {
                 if let now { lastLine = now }
             }
         }
-        // A card that comes or goes. An answered one folds to its two lines in one step (`NeedAnswered`).
-        .animation(.easeOut(duration: 0.25), value: requests.map(\.id))
+        // A card that comes or goes. An answered one folds to its two lines in one step (`NeedAnswered`). **Which cards
+        // there are, not their order in the hub's two lists**: a request that he answers moves from the open list to
+        // the answered one, behind the older answered ones, and that change of order alone animated the frame in which
+        // the open card gives way to its fold, so the open card faded out, whole, over the fold and the rows under it
+        // (seen in a simulator's recording, 14 November 2026).
+        .animation(.easeOut(duration: 0.25), value: requests.map(\.id).sorted())
         .overlay {
             // **An empty chat shows his logo, muted, in the middle of the free space** (the owner, 20 October 2026:
             // "just the Founderizer logo, muted, centred"; his yes of 28 October 2026 to D-7 for the phone too). It
@@ -434,110 +461,141 @@ struct ChatPage: View {
 
     /// The id of the conversation's end.
     private static let end = "end"
-    /// Nothing of the conversation is drawn yet: no message, no request of the agent's and none of his on its way.
-    private var isBlank: Bool { items.isEmpty && waiting == nil && needs.isEmpty }
+    /// Nothing of the conversation is drawn yet: no message, no request of the agent's and none of his on its way, a
+    /// message or an answer that he wrote.
+    private var isBlank: Bool { items.isEmpty && waiting == nil && needs.isEmpty && waitingAnswers.isEmpty }
 
     // MARK: The runs
 
     /// One row of the conversation: a run of messages, or a request's card, with the mark for the day or the hour over
-    /// a card that stands in the place of his answer.
+    /// a card that was raised that long after the row over it. `spoken`: his answer stands in the chat as his own
+    /// message, so the folded card does not say it again.
     enum Row: Identifiable {
         case run(Run)
-        case request(OwnerNeed, stamp: Double?)
+        case request(OwnerNeed, stamp: Double?, spoken: Bool)
         var id: String {
             switch self {
             case .run(let run): "run-" + run.id
-            case .request(let need, _): "request-\(need.id)"
+            case .request(let need, _, _): "request-\(need.id)"
             }
         }
         var isRun: Bool { if case .run = self { true } else { false } }
     }
 
-    /// The places of this agent's requests among the items, by the Mac's own rule (`ChatRequestPlaces`, FleetCore): each
-    /// one right after the agent's message that told him about it ("It is in Needs you."), else a waiting one at the
-    /// end and an answered one in the place of his answer. **An answered one whose answer this chat has not read yet
-    /// stands at the end, where that answer comes** (item 103): the phone reads the requests and the chat one after the
-    /// other, so between the two reads a card that no message told him about had no place, and went for a moment.
-    static func places(of needs: [OwnerNeed], in items: [MobileChatItem], agent: String) -> ChatRequestPlaces {
+    /// **The places of this agent's requests among the items: each where it was raised** (the owner, 14 November 2026:
+    /// "Cards during a thread should appear wherever in the conversation they were requested, not all at the bottom of
+    /// the conversation!"; `ChatRequestPlaces.inTime`, FleetCore, the Mac's own rule): under everything that came before
+    /// it and over everything that came after, with the agent's reply of its turn over it, and at the chat's end only
+    /// while nothing came after it. Every waiting request that no message told him about stood at the end.
+    /// **A request that is older than every item the phone holds**: the phone holds the newest pages of a chat and
+    /// reads no earlier ones, so its place among the earlier messages is one that he cannot reach here. A waiting one
+    /// stands over them all, and with no item at all it stands alone. An answered one stands where his answer is, when
+    /// the phone holds that answer and it is an option that he pressed: its folded card ("✓ Correos") in the place of
+    /// the message, which is no bubble, so that his press shows in the chat. His written words are his bubble there,
+    /// with no card. Any other answered one that old is not drawn.
+    /// `written`: the request numbers of the answers that this phone knows he wrote in words (`ChatPage.written`).
+    static func places(of needs: [OwnerNeed], in items: [MobileChatItem], agent: String,
+                       written: Set<String> = []) -> ChatRequestPlaces {
         // Read only while the agent has a request: most chats have none.
         guard !needs.isEmpty else { return ChatRequestPlaces() }
-        var places = ChatRequestPlaces.of(needs: needs, in: entries(items, agent: agent), whole: false)
-        // **A waiting card whose answer this chat has read already shows that answer** (polish pass): the open chat
-        // reads before the fleet, so for a moment his answer is in the chat while its request still waits at the end.
-        // The answer stood as a bubble over the card until the fleet's read, and the chat moved up and back (48 points)
-        // before the card folded. The fleet's read then puts the card in its answer's place, where it stands.
-        for id in places.atEnd {
-            if let answer = items.first(where: { $0.kind == .message && $0.answer_to == id }) {
-                places.hidden.insert(answer.id)
+        let entries = entries(items, agent: agent, written: written)
+        var places = ChatRequestPlaces.inTime(needs: needs, in: entries, whole: false)
+        let placed = Set(places.after.values.joined()).union(places.before.values.joined()).union(places.atEnd)
+        let unplaced = needs.filter { !placed.contains($0.id) }.sorted { ($0.raised, $0.id) < ($1.raised, $1.id) }
+        // The answered ones whose pressed option the phone holds: each before the first drawn entry after that answer,
+        // in the order of the answers, and over the cards that were raised there.
+        var pressed: [(answer: Int, need: Int)] = []
+        for need in unplaced where !need.isOpen {
+            guard let answer = entries.firstIndex(where: { entry in
+                if case .message(let message) = entry { message.kind == "answer" && message.need_id == need.id } else { false }
+            }), places.hidden.contains(entries[answer].id) else { continue }
+            pressed.append((answer, need.id))
+        }
+        for (answer, need) in pressed.sorted(by: { ($0.answer, $0.need) > ($1.answer, $1.need) }) {
+            if let next = entries[answer...].first(where: { !places.hidden.contains($0.id) }) {
+                places.before[next.id] = [need] + (places.before[next.id] ?? [])
+            } else {
+                places.atEnd = [need] + places.atEnd
             }
         }
-        guard let newest = items.last?.ts else { return places }
-        let placed = Set(places.after.values.joined()).union(places.atEnd).union(places.inPlaceOf.values)
-        let late = needs.filter { !$0.isOpen && !placed.contains($0.id) && ($0.answered ?? 0) > newest }
-        guard !late.isEmpty else { return places }
-        places.atEnd = (needs.filter { places.atEnd.contains($0.id) } + late)
-            .sorted { ($0.raised, $0.id) < ($1.raised, $1.id) }.map(\.id)
+        // The waiting ones: over every item, in the order they were raised.
+        let older = unplaced.filter(\.isOpen).map(\.id)
+        guard !older.isEmpty else { return places }
+        if let first = entries.first(where: { !places.hidden.contains($0.id) }) {
+            places.before[first.id] = older + (places.before[first.id] ?? [])
+        } else {
+            places.atEnd = older + places.atEnd
+        }
         return places
     }
 
-    /// The runs, with **each request right after the agent's message that told him about it** ("It is in Needs you."),
-    /// by the Mac's own rule (`places`): his next message and the agent's next line stand under the card on both
-    /// screens. The message a card follows ends its run. **An answered card shows his answer, so the answer is no second
-    /// bubble** (fix round 2, item 103): where a message told him, his answer is not drawn; where none did, the card
-    /// takes his answer's place, between the runs around it, with the answer's mark for the day or the hour.
+    /// The runs, with **each request's card in its place** (`places`): a run ends where a card stands. **What he
+    /// answered in his own words is his message in the chat**, at its time, with the agent's reply under it, and its
+    /// card folds to its title where it stands; **an option that he pressed is no second bubble** (fix round 2, item
+    /// 103), because its card shows it. **A card counts for the marks of a day or an hour as a message does**, by the
+    /// time it was raised, and never earlier than the row over it (the reply of its turn stands over it and came
+    /// after it).
     static func rows(_ lines: [MobileChatItem], needs: [OwnerNeed], places: ChatRequestPlaces) -> [Row] {
         let byID = Dictionary(needs.map { ($0.id, $0) }) { first, _ in first }
         var rows: [Row] = []
         var run: [MobileChatItem] = []
         var stamp: Double?
-        // The item before, drawn or in a card's place: the marks for the day and the hour count from it.
-        var previous: MobileChatItem?
+        // The time of the row before, an item's or a card's: the marks for the day and the hour count from it.
+        var previous: Double?
 
-        func mark(over item: MobileChatItem) -> Double? {
-            guard let previous else { return item.ts }
-            let sameDay = Calendar.current.isDate(Date(timeIntervalSince1970: previous.ts),
-                                                  inSameDayAs: Date(timeIntervalSince1970: item.ts))
-            return item.ts - previous.ts > 3600 || !sameDay ? item.ts : nil
+        func mark(at time: Double) -> Double? {
+            guard let previous else { return time }
+            let sameDay = Calendar.current.isDate(Date(timeIntervalSince1970: previous),
+                                                  inSameDayAs: Date(timeIntervalSince1970: time))
+            return time - previous > 3600 || !sameDay ? time : nil
         }
         func close() {
             if !run.isEmpty { rows.append(.run(Run(items: run, stamp: stamp))) }
             run = []
         }
+        func cards(_ ids: [Int]) {
+            for need in ids.compactMap({ byID[$0] }) {
+                let time = max(need.raised, previous ?? need.raised)
+                rows.append(.request(need, stamp: mark(at: time), spoken: places.spoken.contains(need.id)))
+                previous = time
+            }
+        }
 
         for item in lines where !places.hidden.contains(item.id) {
-            if let id = places.inPlaceOf[item.id], let need = byID[id] {
+            if let over = places.before[item.id], !over.isEmpty {
                 close()
-                rows.append(.request(need, stamp: mark(over: item)))
-                previous = item
-                continue
+                cards(over)
             }
             if let last = run.last,
                last.kind != item.kind || last.client != item.client || last.isPushed != item.isPushed
                    || item.ts - last.ts > 300 {
                 close()
             }
-            if run.isEmpty { stamp = mark(over: item) }
+            if run.isEmpty { stamp = mark(at: item.ts) }
             run.append(item)
-            previous = item
-            let cards = (places.after[item.id] ?? []).compactMap { byID[$0] }
-            if !cards.isEmpty {
+            previous = max(item.ts, previous ?? item.ts)
+            if let under = places.after[item.id], !under.isEmpty {
                 close()
-                rows += cards.map { .request($0, stamp: nil) }
+                cards(under)
             }
         }
         close()
-        return rows + places.atEnd.compactMap { byID[$0] }.map { .request($0, stamp: nil) }
+        cards(places.atEnd)
+        return rows
     }
 
-    /// The conversation as FleetCore's `ChatEntry`, so the Mac's rule reads the phone's items: the ids are the same
-    /// ("message-<request>", "report-<number>"), and a message that answers a request is an answer to it, as the Mac
-    /// reads it. `whole` is false for the phone, which holds the newest pages only: a request older than every item it
-    /// holds waits at the end, where he sees it.
-    static func entries(_ items: [MobileChatItem], agent: String) -> [ChatEntry] {
+    /// The conversation as FleetCore's `ChatEntry`, so FleetCore's rule reads the phone's items: the ids are the same
+    /// ("message-<request>", "report-<number>"), a message that answers a request is an answer to it, and a report
+    /// names the message that it answers. **A message of `written` has no event of the hub's** (`event_id` 0), which is
+    /// how the rule knows his own words while the reading still has their request open: the phone reads the chat and
+    /// the requests one after the other, so for a moment an answer stands beside its open request, and one that he
+    /// wrote on this phone must not be taken for a pressed option whose words it happens to have.
+    static func entries(_ items: [MobileChatItem], agent: String, written: Set<String> = []) -> [ChatEntry] {
         items.compactMap { item in
             switch item.kind {
             case .message:
-                var object: [String: Any] = ["request_id": item.key, "kind": "message", "text": item.text, "event_id": 0,
+                var object: [String: Any] = ["request_id": item.key, "kind": "message", "text": item.text,
+                                             "event_id": written.contains(item.key.lowercased()) ? 0 : 1,
                                              "created": item.ts, "client": item.client ?? "", "recipient": agent]
                 if let need = item.answer_to {
                     object["kind"] = "answer"
@@ -549,7 +607,7 @@ struct ChatPage: View {
             case .report:
                 guard let number = Int(item.key) else { return nil }
                 let object: [String: Any] = ["id": number, "agent": agent, "text": item.text, "about": item.about ?? "",
-                                             "created": item.ts]
+                                             "created": item.ts, "in_reply_to": item.in_reply_to as Any? ?? NSNull()]
                 guard let data = try? JSONSerialization.data(withJSONObject: object),
                       let report = try? JSONDecoder().decode(ManagerReport.self, from: data) else { return nil }
                 return .report(report)
@@ -582,17 +640,36 @@ struct ChatPage: View {
     /// next send, and the old words stayed. The message's id, while the correction waits for its receipt.
     private var inPlace: String? { waiting.flatMap { store.editsInPlace($0) } }
 
+    /// **His answers in words on their way, as the items they will be** (`waitingAnswers`): his bubbles at the chat's
+    /// end from the send's first frame, each under its request's number, so the read that brings the message itself
+    /// replaces it in place.
+    private var waitingAnswerItems: [MobileChatItem] {
+        waitingAnswers.filter { request in
+            !items.contains { $0.kind == .message && $0.key.caseInsensitiveCompare(request.requestID.uuidString) == .orderedSame }
+        }.map(MobileChatItem.init(waiting:))
+    }
+
+    /// The request numbers of the answers that this phone knows he wrote in words: the one on its way, and the ones
+    /// that the hub took (`MobileStore.writtenAnswers`).
+    private var written: Set<String> {
+        var keys = store.writtenAnswers
+        if let request = store.pending, request.answersInWords { keys.insert(request.requestID.uuidString.lowercased()) }
+        return keys
+    }
+
     /// The conversation as it draws: what the hub gave, a correction on its way in its message's place, and his
-    /// message on its way at its end.
+    /// words on their way at its end, a message or an answer that he wrote to a request.
     private var lines: [MobileChatItem] {
         let shown = if let inPlace, let waiting { MobileStore.edit(items, message: inPlace, to: waiting.text) } else { items }
-        return shown + (waitingItem.map { [$0] } ?? [])
+        return shown + ((waitingItem.map { [$0] } ?? []) + waitingAnswerItems).sorted { $0.ts < $1.ts }
     }
 
     /// The conversation as rows: its runs, and the request cards in their places.
     private var rows: [Row] {
         let requests = self.requests
-        return Self.rows(lines, needs: requests, places: Self.places(of: requests, in: items, agent: agent))
+        let lines = self.lines
+        return Self.rows(lines, needs: requests,
+                         places: Self.places(of: requests, in: lines, agent: agent, written: written))
     }
 
     /// The run ends with the message that his correction on its way changes where it stands.
@@ -601,7 +678,7 @@ struct ChatPage: View {
         return last.kind == .message && last.key.caseInsensitiveCompare(inPlace) == .orderedSame
     }
 
-    /// The mark for the day or the hour over a run, or over a card in his answer's place.
+    /// The mark for the day or the hour over a run, or over a card.
     private func stampLine(_ stamp: Double) -> some View {
         chatStamp(stamp)
             .font(.caption2).foregroundStyle(Brand.muted)
@@ -741,7 +818,7 @@ struct ChatPage: View {
                     Text(refusal).font(.caption2).foregroundStyle(Brand.warning)
                         .multilineTextAlignment(.trailing).fixedSize(horizontal: false, vertical: true)
                     // Each action only while it can act, never grey (review B2i).
-                    TextAction(title: "Discard", font: .caption) { store.discardRefused() }
+                    TextAction(title: String(l10n: "Discard"), font: .caption) { store.discardRefused() }
                 }
             } else if store.sending {
                 Held { Text("Sending…").font(.caption2).foregroundStyle(Brand.muted) }
@@ -749,7 +826,7 @@ struct ChatPage: View {
                 HStack(spacing: 10) {
                     Text("Not sent").font(.caption2).foregroundStyle(Brand.warning)
                     if store.canRetry {
-                        TextAction(title: "Try again", font: .caption) { Task { await store.retry() } }
+                        TextAction(title: String(l10n: "Try again"), font: .caption) { Task { await store.retry() } }
                     }
                 }
             }
@@ -824,8 +901,8 @@ struct ChatPage: View {
                         .frame(height: line + 28)
                 }
                 // The placeholder in the brand's colour for it: the system's grey was 1.7:1 on the field.
-                let placeholder = isCorrecting ? "Correct your message"
-                    : typeSize.isAccessibilitySize ? "Message" : "Message \(agentName(agent))"
+                let placeholder = isCorrecting ? String(l10n: "Correct your message")
+                    : typeSize.isAccessibilitySize ? String(l10n: "Message") : String(l10n: "Message \(agentName(agent))")
                 TextField(text: text, prompt: Text(placeholder).foregroundStyle(Brand.placeholder), axis: .vertical) {
                     Text(placeholder)
                 }
@@ -841,7 +918,7 @@ struct ChatPage: View {
                 // round 2, item 90; the deep step stood far from a blue glyph), the arrow near-black or white,
                 // whichever reads stronger on it.
                 let look = MarkTeam.look(of: agent, in: team)
-                SendButton(enabled: canSend, label: isCorrecting ? "Send correction" : "Send message", side: 36,
+                SendButton(enabled: canSend, label: isCorrecting ? String(l10n: "Send correction") : String(l10n: "Send message"), side: 36,
                            fill: look.mid, arrow: Self.arrow(on: look.mid)) {
                     if isCorrecting { await store.sendCorrection(in: agent) } else { await store.send(to: agent) }
                 }
@@ -886,7 +963,7 @@ struct ChatPage: View {
             Image(systemName: "pencil")
             Text("Correcting your last message")
             Spacer(minLength: 8)
-            TextAction(title: "Cancel", font: .caption) { store.cancelCorrection() }
+            TextAction(title: String(l10n: "Cancel"), font: .caption) { store.cancelCorrection() }
         }
         .font(.caption).foregroundStyle(Brand.muted)
         .padding(.horizontal, 18).padding(.top, 12)
@@ -906,17 +983,17 @@ struct ChatPage: View {
         if let words = store.storageError { return (words, true) }
         if let words = store.fileError { return (words, true) }
         if store.filesAreWaiting(for: composerKey) {
-            return (store.uploading.isEmpty ? "A file did not go up. Send it again, or take it out." : "Sending a file…",
+            return (store.uploading.isEmpty ? String(l10n: "A file did not go up. Send it again, or take it out.") : String(l10n: "Sending a file…"),
                     store.uploading.isEmpty)
         }
         let count = trimmed.count
         // The Mac's words over the limit, and one number format in both lines (T-33): it read "16.127 of 16,000
         // characters.", and then "16.000" near the limit and "16,000" over it.
         if count > MobileStore.textLimit {
-            return ("Use no more than \(MobileStore.textLimit.formatted()) characters.", true)
+            return (String(l10n: "Use no more than \(MobileStore.textLimit.formatted()) characters."), true)
         }
         if count > MobileStore.textLimit - 500 {
-            return ("\(count.formatted()) of \(MobileStore.textLimit.formatted()) characters", false)
+            return (String(l10n: "\(count.formatted()) of \(MobileStore.textLimit.formatted()) characters"), false)
         }
         // No line while the hub does not answer: the line over the page says it once (D-2).
         return nil

@@ -51,11 +51,16 @@ public enum VaultKeyMove {
                 return
             }
             var source: [String: Data]?
+            // The newest lower generation that has its marker, or else generation 1, which has none: a generation with
+            // no marker is a copy that an earlier move left unfinished, and the generation under it is still whole. A
+            // marked generation ends the search, also with no item in it: after a marker, nothing lower is read.
             for lower in stride(from: generation - 1, through: 1, by: -1) {
                 let old = VaultKeychain(agent: agent, generation: lower, backend: backend, guarded: false)
+                if lower > 1, try old.raw(marker) == nil { continue }
                 var found: [String: Data] = [:]
                 for item in items { found[item] = try old.raw(item) }
-                if !found.isEmpty { source = found; break }
+                if !found.isEmpty { source = found }
+                break
             }
             guard let source else {
                 // A new Mac: nothing to move, and so nothing to delete. The marker alone.

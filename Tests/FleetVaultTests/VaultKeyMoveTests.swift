@@ -82,7 +82,8 @@ final class StandInKeychain: VaultKeychainBackend, @unchecked Sendable {
     @Test func theNamesOfEachGenerationAreConstants() {
         #expect(VaultSystemKeychain().lockFile.lastPathComponent == "keys.lock")
         #expect(VaultKeychain.service(1) == "local.agent-fleet.vault")          // builds 1 to 14
-        #expect(VaultKeychain.service(2) == "local.agent-fleet.vault.2" && VaultKeychain.generation == 2)
+        #expect(VaultKeychain.service(2) == "local.agent-fleet.vault.2")       // build 15
+        #expect(VaultKeychain.service(3) == "local.agent-fleet.vault.3" && VaultKeychain.generation == 3)   // build 16
         #expect(VaultKeyMove.items == ["store", "age", "writes", "calls"])
     }
 
@@ -170,6 +171,34 @@ final class StandInKeychain: VaultKeychainBackend, @unchecked Sendable {
         let three = VaultKeychain.service(3)
         #expect(keychain.value(three, "studio.store") == keys["store"] && keychain.value(three, "studio.age") == keys["age"])
         #expect(keychain.value(two, "studio.store") == nil && keychain.value(one, "studio.store") == nil)
+    }
+
+    /// A lower generation with no marker is a copy that an earlier move left unfinished: the move takes the generation
+    /// under it, which is still whole, and never the half copy.
+    @Test func aHalfCopyOfALowerGenerationIsNeverTheSource() throws {
+        let keychain = olderMac()                                       // generation 1, whole
+        keychain.set(two, "studio.store", keys["store"]!)               // build 15's move stopped after its first copy
+        try VaultKeyMove.move(agent: "studio", backend: keychain, generation: 3)          // build 16 starts first
+        let three = VaultKeychain.service(3)
+        for (item, data) in keys {
+            #expect(keychain.value(three, "studio.\(item)") == data, "\(item)")
+            #expect(keychain.value(one, "studio.\(item)") == nil && keychain.value(two, "studio.\(item)") == nil, "\(item)")
+        }
+    }
+
+    /// A marked lower generation ends the search, also with no item in it: keys that an older build made under
+    /// generation 1 after a new Mac's marker are never copied, and the next start removes them.
+    @Test func aMarkedLowerGenerationWithNoItemEndsTheSearch() throws {
+        let keychain = StandInKeychain()
+        keychain.set(two, "studio.moved", Data("2\n".utf8))            // a new Mac at build 15: the marker, no key yet
+        for (item, data) in keys { keychain.set(one, "studio.\(item)", data) }      // then an older build's keys
+        try VaultKeyMove.move(agent: "studio", backend: keychain, generation: 3)
+        let three = VaultKeychain.service(3)
+        #expect(keychain.value(three, "studio.moved") != nil)
+        for item in keys.keys { #expect(keychain.value(three, "studio.\(item)") == nil, "\(item)") }     // nothing copied
+        try VaultKeyMove.move(agent: "studio", backend: keychain, generation: 3)          // the next start
+        for item in keys.keys { #expect(keychain.value(one, "studio.\(item)") == nil, "\(item)") }
+        #expect(keychain.value(two, "studio.moved") == nil)
     }
 
     /// The proof is by bytes, so the move reads no store file. A store file that an agent damaged is no part of it.
@@ -279,6 +308,6 @@ final class StandInKeychain: VaultKeychainBackend, @unchecked Sendable {
 
     @Test func theStatusSaysTheKeyGeneration() {
         let status = VaultBroker.status(agent: "studio", user: "sam", recipient: "age1" + String(repeating: "q", count: 58))
-        #expect(status["key_generation"] as? Int == 2)
+        #expect(status["key_generation"] as? Int == 3)
     }
 }

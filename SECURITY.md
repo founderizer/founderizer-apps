@@ -42,7 +42,7 @@ Please keep the problem private until we publish the advisory.
 
 ## Which versions get fixes
 
-We fix only the newest version of each app. On a Mac, **Settings › Updates** installs it. Fleet Vault is inside the
+We fix only the newest version of each app. On a Mac, **Update** over Settings in the sidebar installs it. Fleet Vault is inside the
 Mac app, and its own updater installs a newer Fleet Vault only when the new build has our team's signature
 (`Vault/update.zsh`). If you build the apps yourself, build them again from the fixed source.
 

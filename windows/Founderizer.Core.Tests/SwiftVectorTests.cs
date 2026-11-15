@@ -148,6 +148,43 @@ public sealed class SwiftVectorTests
     }
 
     [TestMethod]
+    public void TheInlineRunsAreTheOnesThatFleetCoreReads()
+    {
+        foreach (var t in Vectors.Read("swift-words.json").GetProperty("inline").EnumerateArray())
+        {
+            var text = t.GetProperty("text").GetString()!;
+            // The PC opens only http, https and mailto: any other address is its words with no link.
+            var expected = t.GetProperty("runs").EnumerateArray().Select(r => new InlineRun(
+                r.GetProperty("text").GetString()!, r.GetProperty("bold").GetBoolean(), r.GetProperty("italic").GetBoolean(),
+                r.GetProperty("struck").GetBoolean(), r.GetProperty("code").GetBoolean(),
+                r.TryGetProperty("link", out var link) && InlineMarks.OpensInBrowser(link.GetString()!) ? link.GetString() : null)).ToList();
+            for (var i = expected.Count - 1; i > 0; i--)
+                if (expected[i - 1] with { Text = expected[i].Text } == expected[i])
+                {
+                    expected[i - 1] = expected[i - 1] with { Text = expected[i - 1].Text + expected[i].Text };
+                    expected.RemoveAt(i);
+                }
+            var runs = InlineMarks.Runs(text);
+            CollectionAssert.AreEqual(expected, runs.ToList(), $"{text}: {string.Join(" | ", runs)}");
+            Assert.AreEqual(InlineMarks.Plain(text), string.Concat(runs.Select(r => r.Text)), text);
+        }
+    }
+
+    [TestMethod]
+    public void TheRunsJoinedAreAlwaysThePlainWords()
+    {
+        foreach (var text in Vectors.Read("swift-words.json").GetProperty("texts").EnumerateArray()
+                     .SelectMany(t => t.GetProperty("blocks").EnumerateArray().Select(b => b.GetProperty("text").GetString()!))
+                     .Concat(["**a**_b_", "*a **b** c*", "~~**x**~~", "[a](b) [c](https://example.com)", "\\`x\\`", ""]))
+            Assert.AreEqual(InlineMarks.Plain(text), string.Concat(InlineMarks.Runs(text).Select(r => r.Text)), text);
+        Assert.IsFalse(InlineMarks.OpensInBrowser("javascript:alert(1)"));
+        Assert.IsFalse(InlineMarks.OpensInBrowser("file:///etc/passwd"));
+        Assert.IsFalse(InlineMarks.OpensInBrowser("docs/page"));
+        Assert.IsTrue(InlineMarks.OpensInBrowser("HTTPS://example.com"));
+        Assert.IsTrue(InlineMarks.OpensInBrowser("mailto:help@example.com"));
+    }
+
+    [TestMethod]
     public void AMessagesBlocksAreFleetCores()
     {
         foreach (var t in Vectors.Read("swift-words.json").GetProperty("texts").EnumerateArray())

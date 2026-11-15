@@ -6,6 +6,19 @@ import Testing
 /// about what the screen must **not** say: nothing that passed, nothing invented, and nothing about a machine this
 /// Mac has not read.
 struct FleetTroubleTests {
+    /// The lane "Bug reports": Report a problem says the hub's faults in its own rows, so the hub's warning about them
+    /// is no finding there, and no line of Checks. Every other warning stays.
+    @Test func aKindThatTheCallerSaysElsewhereIsNoFinding() throws {
+        let reading = try health(warnings: [["kind": "hub_fault", "detail": "3 times since 14:53."],
+                                            ["kind": "timers_stalled", "detail": "Since 14:53, nothing is restarted."]])
+        let all = read(health: reading)
+        #expect(all.findings.map(\.id).sorted() == ["hub/hub_fault", "hub/timers_stalled"])
+        let left = FleetTrouble.read(connectionError: nil, storageError: nil, isFresh: true, state: nil, health: reading,
+                                     machines: [], servers: [], checklists: [:], at: 1_000, leaving: ["hub_fault"])
+        #expect(left.findings.map(\.id) == ["hub/timers_stalled"])
+        #expect(!left.reportLine.contains("hub_fault"))
+    }
+
     private func health(helpers: [[String: Any]] = [], warnings: [[String: Any]] = [],
                         time: Double = 1_000) throws -> FleetHealth {
         try JSONDecoder().decode(FleetHealth.self, from: JSONSerialization.data(withJSONObject: [

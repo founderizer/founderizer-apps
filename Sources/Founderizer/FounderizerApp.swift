@@ -9,6 +9,10 @@ import SwiftUI
 enum FounderizerStart {
     @MainActor static func main() {
         if AppHome.settle(runsThere: { runs(at: $0) }) { exit(0) }
+        // The link `~/.founderizer/cli` to this app's program for the owner's AI agent, off the main thread (`ProgramLink`).
+        ProgramLink.keep()
+        // The link on which that program asks the running app (`SetupChannel`), off the main thread too.
+        SetupChannel.listen()
         FounderizerApp.main()
     }
 
@@ -51,8 +55,9 @@ struct FounderizerApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             // **About Founderizer**, where every Mac app has it: the system's own window, with the credit under the
-            // version (`AboutPanel`; the owner's yes of 10 November 2026).
-            AboutCommand()
+            // version (`AboutPanel`; the owner's yes of 10 November 2026). **Check for Updates…** under it (`UpdateCheck`;
+            // the owner's yes of 14 November 2026).
+            AboutCommand(store: store)
             // **File holds Close Window ⌘W and nothing else** (the owner's yes of 30 October 2026, to the polish that named
             // the missing File menu): every Mac app has it, and nothing closed the window from the keyboard. The system's
             // group of new items stays as it is, empty for this window: emptied here, it put a line over Close Window.
@@ -89,11 +94,13 @@ struct FounderizerApp: App {
 }
 
 /// Founderizer › About Founderizer, in the place of the system's own item: the same window, with the credit
-/// (`AboutPanel`).
+/// (`AboutPanel`); and Check for Updates… under it, the system's small window of `UpdateCheck`.
 private struct AboutCommand: Commands {
+    let store: FleetStore
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About Founderizer") { AboutPanel.show() }
+            Button("Check for Updates…") { UpdateCheck.shared.press(store: store) }
         }
     }
 }

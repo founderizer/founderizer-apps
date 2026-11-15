@@ -111,7 +111,9 @@ public sealed partial class MainWindow : Window
             page?.Show(state, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
         });
 
-        // The store reads only while the window is in front (StoreSettings): shown and not minimized.
+        // The store reads only while the window is in front (StoreSettings): shown and not minimized. A window that
+        // closed is asked nothing more: its Visible throws (0x800710DD), and the app would end with a crash report.
+        Closed += (_, _) => closed = true;
         VisibilityChanged += (_, _) => Front();
         AppWindow.Changed += (_, e) =>
         {
@@ -125,11 +127,12 @@ public sealed partial class MainWindow : Window
         // the keys in a tooltip wherever the pointer rests over the window ("Alt+Left"): no picture has that tooltip.
         Root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
         notices = new WindowsNotices(source, DispatcherQueue, () => state, OpenNotice);
+        notices.Register();
         Root.Loaded += async (_, _) =>
         {
             taskbar = new TaskbarCount(WinRT.Interop.WindowNative.GetWindowHandle(this), CountBadge, words => CountWords.Text = words);
-            _ = taskbar.Show(Screens.TaskbarCount(state));
-            if (await WindowsNotices.MarkFile(TitleMark, AppFolders.Root) is { } mark) notices.Start(mark);
+            _ = taskbar.Show(Screens.TaskbarCount(state), Screens.TaskbarWords(state));
+            if (await WindowsNotices.MarkFile(TitleMark, AppFolders.Root) is { } mark) notices.Header(mark);
         };
         Closed += (_, _) => notices.Stop();
         search = new SearchCard(() => state, Go, () =>
@@ -160,8 +163,11 @@ public sealed partial class MainWindow : Window
         Readings.BlockTheUiThread(DispatcherQueue);
     }
 
+    private bool closed;
+
     private void Front()
     {
+        if (closed) return;
         bool minimized = AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
         bool front = Visible && !minimized;
         source.SetFront(front);
@@ -248,7 +254,7 @@ public sealed partial class MainWindow : Window
         ShowPane();
         search.Show();
         notices.Prune(next);
-        if (taskbar is not null) _ = taskbar.Show(Screens.TaskbarCount(next));
+        if (taskbar is not null) _ = taskbar.Show(Screens.TaskbarCount(next), Screens.TaskbarWords(next));
         if (WaitingPage(next) != waitingPage) ShowPage();
         ShowLine();
         page?.Show(next, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
@@ -272,7 +278,9 @@ public sealed partial class MainWindow : Window
     {
         var next = Screens.Pane(state, history.Current, DateTimeOffset.UtcNow, ScreenContext.Local, reduceMotion: !settings.AnimationsEnabled);
         NeedsButton.Visibility = next.ShowsNeeds ? Visibility.Visible : Visibility.Collapsed;
-        NeedsCount.Text = next.NeedsCount.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        var badge = Navigation.PaneMarks.NeedsBadge(next);
+        NeedsCount.Text = badge ?? "";
+        NeedsPill.Visibility = badge is null ? Visibility.Collapsed : Visibility.Visible;
         SearchButton.Visibility = next.ShowsSearch ? Visibility.Visible : Visibility.Collapsed;
         Show(NeedsFill, NeedsBar, next.NeedsSelected);
         Show(TasksFill, TasksBar, next.TasksSelected);
@@ -359,7 +367,8 @@ public sealed partial class MainWindow : Window
             PageKind.Tasks => "Tasks",
             PageKind.Settings => "Settings",
             PageKind.AddThisPc => "Add this PC",
-            PageKind.Task => state.Fleet?.Tasks.FirstOrDefault(t => t.Id == current.Task)?.Title ?? "Tasks",
+            // The task page's own title (the library's), also for an ended task, which the fleet's open tasks do not hold.
+            PageKind.Task => Screens.Task(state, current.Task!.Value, DateTimeOffset.UtcNow, ScreenContext.Local)?.Title ?? "Tasks",
             _ => state.Names.Label(current.Agent ?? ""),
         };
         AutomationProperties.SetName(PageHost, name);

@@ -2,8 +2,9 @@ import Foundation
 import Testing
 @testable import FleetCore
 
-/// The fleet's own key to the owner's private network: the one access token he pastes, the lines this app adds to his
-/// policy file, the fleet key it makes and keeps, and the key it mints for each machine. Every request is proved against
+/// The fleet's own key to the owner's private network: the one access token he pastes, the lines this app adds to a
+/// policy file that it may write, the one line it asks of a file that it may not, the fleet key it makes and keeps, the
+/// key it mints for each machine, and the words for a connection that the policy does not let through. Every request is proved against
 /// a stand-in for Tailscale, so none of this needs a network, an account or a real token.
 struct TailscaleFleetKeyTests {
     private static let token = "tskey-api-kTEST1234CNTRL-notarealsecretvalue0000"
@@ -18,8 +19,11 @@ struct TailscaleFleetKeyTests {
     /// The one tag line, and the two grant lines, as this app writes them into a file.
     private static let tagInsert = "\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],"
     private static let grantLines = "\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], "
-        + "\"ip\": [\"tcp:22\", \"tcp:8765\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], "
-        + "\"ip\": [\"tcp:22\", \"tcp:8765\"]},"
+        + "\"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], "
+        + "\"ip\": [\"tcp:8765\", \"tcp:9418\"]},"
+    /// The one line that the owner adds himself to a file that this app does not write.
+    private static let tagLine = "\"tag:founderizer\": [\"autogroup:admin\"],"
+    private static let everything = FleetPolicy.Needs(tag: true, grants: FleetPolicy.grants)
 
     /// A tailnet that answers everything, with this policy file in it.
     private static func tailnet(policy: String, etag: String = "\"v1\"", managed: Bool = false,
@@ -72,7 +76,7 @@ struct TailscaleFleetKeyTests {
         let tailscale = Self.tailnet(policy: Self.allowAll)
         let shelf = MemoryShelf()
         let setup = try await Self.connect(tailscale, shelf: shelf)
-        #expect(setup == FleetKeySetup(keyMade: true, wrotePolicy: true, linesToAdd: nil, managedAt: nil))
+        #expect(setup == FleetKeySetup(keyMade: true, wrotePolicy: true, linesToAdd: nil, place: .tailscale))
         #expect(tailscale.calls.map { "\($0.method) \($0.path)" } == ["GET \(Self.settings)", "GET \(Self.acl)",
                                                                        "POST \(Self.validate)", "POST \(Self.acl)", "POST \(Self.keys)"])
         let posted = try #require(tailscale.call("POST", Self.acl))
@@ -126,6 +130,13 @@ struct TailscaleFleetKeyTests {
             == Self.restrictive)
         #expect(FleetPolicy.needs(in: posted)?.isEmpty == true)
         #expect(posted.contains("Only my laptop reaches my servers."))
+        // What the fleet uses, and no more: his devices reach its machines on SSH, on the hub's port and on the port
+        // of the fleet's code (a Mac that stays on is one of his devices, and its join fetches the code), and its
+        // machines reach the hub on its port and on the port of the code (join.sh stops without 9418). No machine
+        // opens SSH to another one.
+        #expect(FleetPolicy.grants.map(\.ip) == [["tcp:22", "tcp:8765", "tcp:9418"], ["tcp:8765", "tcp:9418"]])
+        #expect(FleetPolicy.grants.map(\.src) == [["autogroup:owner", "autogroup:admin"], ["tag:founderizer"]])
+        #expect(FleetPolicy.grants.allSatisfy { $0.dst == ["tag:founderizer"] })
     }
 
     @Test func theGrantsGoIntoTheGrantsTheFileHas() throws {
@@ -138,7 +149,7 @@ struct TailscaleFleetKeyTests {
         }
         """
         let needs = try #require(FleetPolicy.needs(in: file))
-        #expect(needs == .everything)
+        #expect(needs == Self.everything)
         let written = try #require(FleetPolicy.writing(needs, into: file))
         #expect(written.contains("\"grants\": [" + Self.grantLines + "\n\t\t// The owner's laptop"))
         #expect(written.hasPrefix("{\n\t\"tagOwners\": {" + Self.tagInsert + "\n\t},"))
@@ -177,6 +188,12 @@ struct TailscaleFleetKeyTests {
             + "{\"src\": [\"autogroup:admin\", \"autogroup:owner\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"22\", \"tcp:8765\"]},"
             + "{\"src\": [\"*\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:*\"]}]}"
         #expect(try #require(FleetPolicy.needs(in: mine)).isEmpty)
+        // The lines that this app wrote until 13 November 2026 gave no machine a way to the port of the fleet's
+        // code: such a file gets both grants as they are now, and keeps its own.
+        let before = "{\"tagOwners\": {\"tag:founderizer\": []}, \"acls\": [], \"grants\": ["
+            + "{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\"]},"
+            + "{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\"]}]}"
+        #expect(try #require(FleetPolicy.needs(in: before)) == FleetPolicy.Needs(tag: false, grants: FleetPolicy.grants))
         // One that gives less does not.
         let less = "{\"tagOwners\": {\"tag:founderizer\": []}, \"acls\": [], \"grants\": ["
             + "{\"src\": [\"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\"]}]}"
@@ -187,46 +204,205 @@ struct TailscaleFleetKeyTests {
         let ready = "{\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]}}"
         let tailscale = Self.tailnet(policy: ready)
         let setup = try await Self.connect(tailscale)
-        #expect(setup == FleetKeySetup(keyMade: true, wrotePolicy: false, linesToAdd: nil, managedAt: nil))
+        #expect(setup == FleetKeySetup(keyMade: true, wrotePolicy: false, linesToAdd: nil, place: .tailscale))
         #expect(tailscale.calls("POST", Self.acl).isEmpty && tailscale.calls("POST", Self.validate).isEmpty)
         #expect(tailscale.calls("POST", Self.keys).count == 1)
     }
 
-    @Test func aFileAnotherToolKeepsIsNeverWritten() async throws {
-        let link = "https://github.com/example/tailnet-policy"
+    @Test func aFileAnotherToolKeepsIsNeverWrittenAndIsAskedForTheTagAlone() async throws {
+        let link = "https://github.com/example/tailnet-policy/"
         let tailscale = Self.tailnet(policy: Self.restrictive, managed: true, link: link)
         let setup = try await Self.connect(tailscale)
-        // The owner gets the exact lines, and where to put them; and no key yet, for a tag nobody owns yet.
-        #expect(setup == FleetKeySetup(keyMade: false, wrotePolicy: false, linesToAdd: """
-        "tagOwners": {
-        \t"tag:founderizer": ["autogroup:admin"],
-        },
-        "grants": [
-        \t{"src": ["autogroup:owner", "autogroup:admin"], "dst": ["tag:founderizer"], "ip": ["tcp:22", "tcp:8765"]},
-        \t{"src": ["tag:founderizer"], "dst": ["tag:founderizer"], "ip": ["tcp:22", "tcp:8765"]},
-        ],
-        """, managedAt: URL(string: link)))
+        // The owner gets the one line that a key cannot exist without, and where his file is kept; and no key yet, for
+        // a tag nobody owns yet. No grant is asked of him: no reading of a file says what the fleet may reach.
+        #expect(setup == FleetKeySetup(keyMade: false, wrotePolicy: false, linesToAdd: Self.tagLine,
+                                       place: .tool(URL(string: link))))
+        #expect(setup.asks == "Your Tailscale policy has no tag:founderizer. Add this line to tagOwners in "
+            + "github.com/example/tailnet-policy, then paste a key again.")
         #expect(!tailscale.calls.contains { $0.method == "POST" })
-        // Once he has added the tag there, the key is made, and only the lines still missing are left for him.
+        // Once he has added the tag there, the key is made and nothing is left for him, whatever the file's rules are.
         let tagged = "{\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]}, \"acls\": []}"
         let later = Self.tailnet(policy: tagged, managed: true, link: link)
         let second = try await Self.connect(later)
-        #expect(second.keyMade && !second.wrotePolicy)
-        #expect(second.linesToAdd?.hasPrefix("\"grants\": [") == true)
+        #expect(second == FleetKeySetup(keyMade: true, wrotePolicy: false, linesToAdd: nil, place: .tool(URL(string: link))))
+        #expect(second.asks == nil)
         #expect(later.calls("POST", Self.acl).isEmpty && later.calls("POST", Self.validate).isEmpty)
-        // A link that is not a web page of its own is not passed on.
-        let odd = Self.tailnet(policy: tagged, managed: true, link: "javascript:alert(1)")
-        #expect(try await Self.connect(odd).managedAt == nil)
+        #expect(later.calls("POST", Self.keys).count == 1)
+        // A link that is not a web page of its own is not passed on, and the words then name the tool.
+        let odd = Self.tailnet(policy: Self.restrictive, managed: true, link: "javascript:alert(1)")
+        let unnamed = try await Self.connect(odd)
+        #expect(unnamed.place == .tool(nil) && unnamed.linesToAdd == Self.tagLine)
+        #expect(unnamed.asks == "Your Tailscale policy has no tag:founderizer. Add this line to tagOwners in the file of "
+            + "the tool that keeps your policy, then paste a key again.")
     }
 
-    @Test func aFileThisAppCannotReadIsLeftAloneAndSaidInFull() async throws {
-        for file in ["// a file with no object in it at all", "{\"acls\": [", "{\"acls\": \"never ends}", "[]"] {
+    /// A policy of the kind that stopped the owner on 13 November 2026, with example values: another tool keeps it, the
+    /// tag stands, and narrow rules give the fleet its reach (one device's address to the tag on SSH, the tag to the
+    /// hub's host on its two ports), with tests that refuse the grants this app would write.
+    private static let narrow = """
+    {
+    \t"hosts": {"fleet-hub": "100.64.0.10", "owner-mac": "100.64.0.2"},
+    \t"grants": [
+    \t\t// Lateral ports between the servers are left out on purpose.
+    \t\t{"src": ["100.64.0.2"], "dst": ["tag:founderizer"], "ip": ["tcp:22", "icmp:*"]},
+    \t\t{"src": ["owner-mac", "tag:founderizer"], "dst": ["fleet-hub"], "ip": ["tcp:8765", "tcp:9418"]},
+    \t],
+    \t"tagOwners": {
+    \t\t"tag:founderizer": ["autogroup:admin"],
+    \t},
+    \t"tests": [
+    \t\t{"src": "tag:founderizer", "proto": "tcp", "accept": ["fleet-hub:8765", "fleet-hub:9418"],
+    \t\t "deny": ["fleet-hub:22", "tag:founderizer:22", "tag:founderizer:8765"]},
+    \t\t{"src": "100.64.0.2", "proto": "tcp", "accept": ["tag:founderizer:22"], "deny": ["tag:founderizer:8765"]},
+    \t],
+    }
+    """
+
+    @Test func aPolicyThatWorksWithNarrowRulesIsAskedNothing() async throws {
+        // Another tool keeps it: the key is made, and the file is neither written nor checked.
+        let kept = Self.tailnet(policy: Self.narrow, managed: true)
+        let setup = try await Self.connect(kept)
+        #expect(setup == FleetKeySetup(keyMade: true, wrotePolicy: false, linesToAdd: nil, place: .tool(nil)))
+        #expect(kept.calls.map { "\($0.method) \($0.path)" } == ["GET \(Self.settings)", "GET \(Self.acl)", "POST \(Self.keys)"])
+        // Tailscale keeps it, and its own tests refuse the grants: the file stays as it is, and the key is made.
+        let own = Self.tailnet(policy: Self.narrow)
+        own.clear("POST", Self.validate)
+        own.answer("POST", Self.validate, 200, "{\"message\":\"test(s) failed\",\"data\":[{\"user\":\"tag:founderizer\","
+                   + "\"errors\":[\"address \\\"tag:founderizer:8765\\\": want: Drop, got: Accept\"]}]}")
+        let second = try await Self.connect(own)
+        #expect(second == FleetKeySetup(keyMade: true, wrotePolicy: false, linesToAdd: nil, place: .tailscale))
+        #expect(own.calls("POST", Self.validate).count == 1 && own.calls("POST", Self.acl).isEmpty)
+        #expect(own.calls("POST", Self.keys).count == 1)
+        // The file that lets everything through, which is every new tailnet's: the tag is all it gets
+        // (`theTagIsAddedAndEveryByteOfTheFileStays`), and with the tag in it, nothing.
+        let open = Self.allowAll.replacingOccurrences(of: "\"tag:server\"", with: "\"tag:founderizer\"")
+        let all = Self.tailnet(policy: open)
+        let third = try await Self.connect(all)
+        #expect(third == FleetKeySetup(keyMade: true, wrotePolicy: false, linesToAdd: nil, place: .tailscale))
+        #expect(!all.calls.contains { $0.method == "POST" && $0.path != Self.keys })
+    }
+
+    @Test func aFileWhoseOwnTestsRefuseTheGrantsGetsTheTagAlone() async throws {
+        let tailscale = Self.tailnet(policy: Self.restrictive)
+        tailscale.clear("POST", Self.validate)
+        tailscale.answer("POST", Self.validate, 200, "{\"message\":\"test(s) failed\",\"data\":[{\"user\":\"me@example.com\","
+                         + "\"errors\":[\"address \\\"tag:founderizer:22\\\": want: Drop, got: Accept\"]}]}")
+        tailscale.answer("POST", Self.validate, 200, "{}")
+        let setup = try await Self.connect(tailscale)
+        #expect(setup == FleetKeySetup(keyMade: true, wrotePolicy: true, linesToAdd: nil, place: .tailscale))
+        // The first check had the grants, the second the tag alone, and the second is the file that was set.
+        let checks = tailscale.calls("POST", Self.validate)
+        #expect(checks.count == 2 && checks[0].body.contains("\"grants\"") && !checks[1].body.contains("\"grants\""))
+        let posted = try #require(tailscale.call("POST", Self.acl)).body
+        #expect(posted == checks[1].body)
+        #expect(posted.replacingOccurrences(of: Self.tagInsert, with: "") == Self.restrictive)
+        #expect(posted.contains("\"tagOwners\": {" + Self.tagInsert))
+        // A check that Tailscale did not make at all is no word about the file: nothing is set, and no key is made.
+        let down = Self.tailnet(policy: Self.restrictive)
+        down.clear("POST", Self.validate)
+        down.answer("POST", Self.validate, 500, "{\"message\":\"internal server error\"}")
+        await #expect(throws: FleetKeyError.refused("internal server error")) { try await Self.connect(down) }
+        #expect(down.calls("POST", Self.validate).count == 1)
+        #expect(down.calls("POST", Self.acl).isEmpty && down.calls("POST", Self.keys).isEmpty)
+    }
+
+    @Test func aFileThisAppCannotReadIsLeftAloneAndTailscaleSaysWhetherTheTagStands() async throws {
+        // A file that names `tagOwners` twice is one of them: which of the two a reader takes is not this app's to
+        // guess, so it asks for no line that may stand in the other one.
+        let twice = "{\"tagOwners\": {\"tag:server\": []}, \"acls\": [], \"TagOwners\": {\"tag:founderizer\": []}}"
+        #expect(FleetPolicy.needs(in: twice) == nil)
+        for file in ["// a file with no object in it at all", "{\"acls\": [", "{\"acls\": \"never ends}", "[]", twice] {
+            // Tailscale makes the key: the tag stands, and nothing is asked. The file is neither checked nor set.
             let tailscale = Self.tailnet(policy: file)
             let setup = try await Self.connect(tailscale)
-            #expect(!setup.keyMade && !setup.wrotePolicy)
-            #expect(setup.linesToAdd == FleetPolicy.lines(for: .everything))
-            #expect(!tailscale.calls.contains { $0.method == "POST" })
+            #expect(setup == FleetKeySetup(keyMade: true, wrotePolicy: false, linesToAdd: nil, place: .tailscale))
+            #expect(tailscale.calls.filter { $0.method == "POST" }.map(\.path) == [Self.keys])
+            // Tailscale refuses the key: its own words say why, and this app guesses at no line for a file it
+            // cannot read.
+            let untagged = Self.tailnet(policy: file)
+            untagged.clear("POST", Self.keys)
+            untagged.answer("POST", Self.keys, 400, "{\"message\":\"requested tags [tag:founderizer] are invalid or not permitted\"}")
+            await #expect(throws: FleetKeyError.refused("requested tags [tag:founderizer] are invalid or not permitted")) {
+                try await Self.connect(untagged)
+            }
+            #expect(untagged.calls("POST", Self.acl).isEmpty && untagged.calls("POST", Self.validate).isEmpty)
         }
+    }
+
+    @Test func withTheTagInTheFileAWriteOfTheGrantsThatDoesNotGoThroughIsNoStop() async throws {
+        // Tailscale keeps the file, the tag stands, and the file lets little through: the grants go in.
+        let tagged = "{\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]}, \"acls\": []}"
+        let plain = Self.tailnet(policy: tagged)
+        let setup = try await Self.connect(plain)
+        #expect(setup == FleetKeySetup(keyMade: true, wrotePolicy: true, linesToAdd: nil, place: .tailscale))
+        let posted = try #require(plain.call("POST", Self.acl)).body
+        #expect(posted.contains("\"grants\": [" + Self.grantLines) && FleetPolicy.needs(in: posted)?.isEmpty == true)
+        // The same for a file with narrow rules of its own and no tests: no reading of it says that they are enough,
+        // so only a file whose own tests refuse the grants is left as it is (`aPolicyThatWorksWithNarrowRulesIsAskedNothing`).
+        let untested = Self.narrow.components(separatedBy: "\t\"tests\": [")[0] + "}"
+        #expect(FleetPolicy.needs(in: untested) == FleetPolicy.Needs(tag: false, grants: FleetPolicy.grants))
+        #expect(try await Self.connect(Self.tailnet(policy: untested)).wrotePolicy)
+        // Each way in which the write does not go through leaves the file as it is, and the key is made: a role that
+        // may not write the file, a change somebody made meanwhile (no second try), a check that Tailscale did not
+        // make, and a file with no version to set it against.
+        for (path, status) in [(Self.acl, 403), (Self.acl, 412), (Self.validate, 500)] {
+            let tailscale = Self.tailnet(policy: tagged)
+            tailscale.clear("POST", path)
+            tailscale.answer("POST", path, status, "{\"message\":\"no\"}")
+            let made = try await Self.connect(tailscale)
+            #expect(made == FleetKeySetup(keyMade: true, wrotePolicy: false, linesToAdd: nil, place: .tailscale), "\(path) \(status)")
+            // A change meanwhile gets one more try from the file as it then is, and no third.
+            #expect(tailscale.calls("POST", Self.acl).count == (path == Self.acl ? (status == 412 ? 2 : 1) : 0))
+            #expect(tailscale.calls("GET", Self.acl).count == (status == 412 ? 2 : 1))
+            #expect(tailscale.calls("POST", Self.keys).count == 1)
+        }
+        let unversioned = ProviderStandIn()
+        unversioned.answer("GET", Self.settings, 200, "{\"aclsExternallyManagedOn\":false}")
+        unversioned.answer("GET", Self.acl, 200, tagged)
+        unversioned.answer("POST", Self.keys, 200, Self.clientAnswer)
+        #expect(try await Self.connect(unversioned).keyMade)
+        #expect(unversioned.calls.filter { $0.method == "POST" }.map(\.path) == [Self.keys])
+        // With the tag missing, a file with no version cannot be set: the tag is the owner's line, and no key is made.
+        let untagged = ProviderStandIn()
+        untagged.answer("GET", Self.settings, 200, "{\"aclsExternallyManagedOn\":false}")
+        untagged.answer("GET", Self.acl, 200, Self.restrictive)
+        let asked = try await Self.connect(untagged)
+        #expect(asked == FleetKeySetup(keyMade: false, wrotePolicy: false, linesToAdd: Self.tagLine, place: .tailscale))
+        #expect(asked.asks == "Your Tailscale policy has no tag:founderizer. Add this line to tagOwners on the Access "
+            + "controls page of Tailscale, then paste a key again.")
+        #expect(!untagged.calls.contains { $0.method == "POST" })
+    }
+
+    @Test func aFileThatNeedsOnlyTheTagAndThatTailscaleRefusesSaysTailscalesWords() async throws {
+        // The file lets everything through, so the tag is all it misses: a check that refuses that file is said, on
+        // one line, and nothing is set and no key is made. No second file is tried, because there is none.
+        let tailscale = Self.tailnet(policy: Self.allowAll)
+        tailscale.clear("POST", Self.validate)
+        tailscale.answer("POST", Self.validate, 200, "{\"message\":\"test(s) failed\\nagain\",\"data\":[{\"user\":\"x\","
+                         + "\"errors\":[\"" + String(repeating: "e", count: 400) + "\"]}]}")
+        var said = ""
+        do { _ = try await Self.connect(tailscale) } catch FleetKeyError.refused(let words) { said = words }
+        #expect(said.hasPrefix("test(s) failed again: eee") && said.count == 301 && said.hasSuffix("…"))
+        #expect(tailscale.calls("POST", Self.validate).count == 1)
+        #expect(tailscale.calls("POST", Self.acl).isEmpty && tailscale.calls("POST", Self.keys).isEmpty)
+    }
+
+    @Test func aFileThatStillMissesWhatWasAskedAfterTheWriteIsNotGivenBack() {
+        // A file that names a section twice: a line in one of them may say nothing to the reader that takes the
+        // other. Such a file is not written into, whatever the case of the two names.
+        for twice in ["{\"tagOwners\": {\"tag:server\": []}, \"tagOwners\": {}}", "{\"TagOwners\": {}, \"acls\": [], \"tagowners\": {}}"] {
+            #expect(FleetPolicy.writing(FleetPolicy.Needs(tag: true, grants: []), into: twice) == nil, "file \(twice)")
+        }
+        let grants = "{\"tagOwners\": {}, \"grants\": [], \"Grants\": []}"
+        #expect(FleetPolicy.writing(FleetPolicy.Needs(tag: false, grants: FleetPolicy.grants), into: grants) == nil)
+        #expect(FleetPolicy.writing(FleetPolicy.Needs(tag: true, grants: []), into: grants) != nil)
+        #expect(FleetPolicy.scan(Array(grants.utf8))?.twice == ["grants"])
+        // The tag alone goes into a file that still misses the grants: that is what was asked.
+        let tagged = FleetPolicy.writing(FleetPolicy.Needs(tag: true, grants: []), into: Self.restrictive)
+        #expect(tagged.flatMap(FleetPolicy.needs(in:)) == FleetPolicy.Needs(tag: false, grants: FleetPolicy.grants))
+        // And the grants alone go into a file that still misses the tag.
+        let granted = FleetPolicy.writing(FleetPolicy.Needs(tag: false, grants: FleetPolicy.grants), into: Self.restrictive)
+        #expect(granted.flatMap(FleetPolicy.needs(in:)) == FleetPolicy.Needs(tag: true, grants: []))
     }
 
     @Test func aChangeMadeMeanwhileIsReadAgainOnce() async throws {
@@ -258,9 +434,11 @@ struct TailscaleFleetKeyTests {
         tailscale.clear("POST", Self.validate)
         tailscale.answer("POST", Self.validate, 200, "{\"message\":\"test(s) failed\",\"data\":[{\"user\":\"me@example.com\","
                          + "\"errors\":[\"address \\\"tag:founderizer:22\\\": want: Drop, got: Accept\"]}]}")
+        // The file with the grants is refused, and so is the file with the tag alone: Tailscale's words, and no key.
         await #expect(throws: FleetKeyError.refused("test(s) failed: address \"tag:founderizer:22\": want: Drop, got: Accept")) {
             try await Self.connect(tailscale)
         }
+        #expect(tailscale.calls("POST", Self.validate).count == 2)
         #expect(tailscale.calls("POST", Self.acl).isEmpty && tailscale.calls("POST", Self.keys).isEmpty)
         // Warnings alone are Tailscale taking the file, and saying something about it.
         let warned = Self.tailnet(policy: Self.restrictive)
@@ -421,6 +599,198 @@ struct TailscaleFleetKeyTests {
         await #expect(throws: FleetKeyError.notUnderstood) {
             try await TailscaleFleetKey(exchange: odd.exchange, shelf: MemoryShelf(Self.held.stored)).mintAuthKey(hostname: "x")
         }
+    }
+
+    // MARK: - The connections that the install proves
+
+    private static let devices = "/api/v2/tailnet/-/devices"
+    private static func device(name: String = "worker-5", hostname: String = "worker-5", created: String = "2026-11-13T21:00:30Z",
+                               authorized: Bool = true, tag: String = "tag:founderizer", address: String = "100.64.0.9",
+                               lock: String = "") -> String {
+        "{\"name\":\"\(name).example.ts.net\",\"hostname\":\"\(hostname)\",\"authorized\":\(authorized),\"created\":\"\(created)\","
+            + "\"addresses\":[\"\(address)\",\"fd7a:115c:a1e0::9\"],\"tags\":[\"\(tag)\"],\"tailnetLockError\":\"\(lock)\"}"
+    }
+    /// When the build of the server began, in the tests' own time.
+    private static let began = ISO8601DateFormatter().date(from: "2026-11-13T21:00:00Z")!
+
+    @Test func tailscalesOwnListSaysWhichMachineAServerBecame() async throws {
+        func listing(_ devices: String...) -> ProviderStandIn {
+            let tailscale = Self.minting()
+            tailscale.answer("GET", Self.devices, 200, "{\"devices\":[\(devices.joined(separator: ","))]}")
+            return tailscale
+        }
+        func joined(_ tailscale: ProviderStandIn, _ name: String = "worker-5") async throws -> JoinedDevice? {
+            try await TailscaleFleetKey(exchange: tailscale.exchange, shelf: MemoryShelf(Self.held.stored))
+                .joined(hostname: name, since: Self.began)
+        }
+        let server = JoinedDevice(name: "worker-5.example.ts.net", addresses: ["100.64.0.9", "fd7a:115c:a1e0::9"])
+        let tailscale = listing(Self.device())
+        #expect(try await joined(tailscale) == server)
+        #expect(try await joined(tailscale, "Worker-5") == server)
+        // The list is read with a token of the fleet key, never with the key itself.
+        let read = try #require(tailscale.call("GET", Self.devices))
+        #expect(read.headers["Authorization"] == "Bearer tskey-api-kMINTED1CNTRL-short-lived")
+        for other in ["worker-6", ""] {
+            let found = try await joined(tailscale, other)
+            #expect(found == nil, "name \(other)")
+        }
+        // The server is the device that gave itself the name, whatever Tailscale then called it: a tailnet that has a
+        // worker-5 already calls the new one worker-5-1. A device that only Tailscale calls worker-5 is another one.
+        let renamed = try await joined(listing(Self.device(name: "worker-5-1")))
+        #expect(renamed?.name == "worker-5-1.example.ts.net")
+        let other = try await joined(listing(Self.device(hostname: "ubuntu-4gb")))
+        #expect(other == nil)
+        // A device of that name from an earlier try is older than this build, and is not the server; of two, the
+        // newest is. A time with fractions of a second is read too.
+        let earlier = try await joined(listing(Self.device(created: "2026-11-13T20:40:00Z")))
+        #expect(earlier == nil)
+        // Five minutes of slack for a clock that is off, and no more.
+        let slack = try await joined(listing(Self.device(created: "2026-11-13T20:57:00Z")))
+        #expect(slack == server)
+        let before = try await joined(listing(Self.device(created: "2026-11-13T20:54:00Z")))
+        #expect(before == nil)
+        let newest = try await joined(listing(Self.device(created: "2026-11-13T20:59:00Z", address: "100.64.0.7"),
+                                              Self.device(created: "2026-11-13T21:01:02.345Z", address: "100.64.0.9")))
+        #expect(newest?.addresses.first == "100.64.0.9")
+        // A device that an admin has not approved, one that is no machine of the fleet, and one with no time are not it.
+        for devices in [Self.device(authorized: false), Self.device(tag: "tag:server"), Self.device(created: "")] {
+            let found = try await joined(listing(devices))
+            #expect(found == nil, "devices \(devices)")
+        }
+        // A server that Tailnet Lock has not signed is listed, and says so.
+        let locked = try await joined(listing(Self.device(lock: "node is not signed")))
+        #expect(locked?.locked == true)
+        // A Mac with no fleet key, an ended key and an answer that is no list each say so.
+        let unused = ProviderStandIn()
+        await #expect(throws: FleetKeyError.noFleetKey) {
+            try await TailscaleFleetKey(exchange: unused.exchange, shelf: MemoryShelf()).joined(hostname: "worker-5", since: Self.began)
+        }
+        let ended = Self.minting()
+        ended.answer("GET", Self.devices, 401, "{\"message\":\"invalid\"}")
+        await #expect(throws: FleetKeyError.fleetKeyEnded) { _ = try await joined(ended) }
+        let odd = Self.minting()
+        odd.answer("GET", Self.devices, 200, "[]")
+        await #expect(throws: FleetKeyError.notUnderstood) { _ = try await joined(odd) }
+    }
+
+    /// This Mac's `tailscale status --json`, as far as the proof reads it.
+    private static func status(state: String = "Running", own: String = "owner-mac.example.ts.net.", online: Bool = true,
+                               peers: String = "") -> String {
+        "{\"BackendState\":\"\(state)\",\"Self\":{\"DNSName\":\"\(own)\",\"Online\":\(online),\"TailscaleIPs\":[\"100.64.0.2\"]},\"Peer\":{\(peers)}}"
+    }
+
+    @Test func onlyAServerThatThisMacsTailscaleDoesNotShowIsKeptFromItByThePolicy() {
+        let server = JoinedDevice(name: "worker-5.example.ts.net", addresses: ["100.64.0.9", "fd7a:115c:a1e0::9"])
+        let hub = "\"k1\":{\"DNSName\":\"fleet-hub.example.ts.net.\",\"TailscaleIPs\":[\"100.64.0.10\"],\"Online\":true}"
+        // This Mac's Tailscale runs in the server's tailnet and shows other devices, and not the server.
+        #expect(FleetReach.keeps(server, from: Self.status(peers: hub)))
+        #expect(FleetReach.keeps(server, from: Self.status()))
+        // It shows the server: by its address, also offline and under another name, or by its name.
+        let offline = "\"k2\":{\"DNSName\":\"worker-5-1.example.ts.net.\",\"TailscaleIPs\":[\"100.64.0.9\"],\"Online\":false}"
+        #expect(!FleetReach.keeps(server, from: Self.status(peers: hub + "," + offline)))
+        let named = "\"k3\":{\"DNSName\":\"WORKER-5.example.ts.net.\",\"TailscaleIPs\":[\"100.64.0.99\"],\"Online\":true}"
+        #expect(!FleetReach.keeps(server, from: Self.status(peers: named)))
+        // Every other reason why this Mac does not see it is not the policy's: its Tailscale is stopped or signed
+        // out, it is in another tailnet than the fleet key's, Tailnet Lock has not signed the server, or the answer
+        // of this Mac's Tailscale cannot be read.
+        for state in ["Stopped", "NeedsLogin", "Starting", "NoState"] {
+            #expect(!FleetReach.keeps(server, from: Self.status(state: state, peers: hub)), "state \(state)")
+        }
+        #expect(!FleetReach.keeps(server, from: Self.status(own: "owner-mac.tail1234.ts.net.", peers: hub)))
+        #expect(!FleetReach.keeps(server, from: Self.status(own: "", peers: hub)))
+        // Cut off from its network, this Mac's Tailscale still says that it runs, with an old list of devices.
+        #expect(!FleetReach.keeps(server, from: Self.status(online: false, peers: hub)))
+        #expect(!FleetReach.keeps(server, from: Self.status(peers: hub).replacingOccurrences(of: "\"Online\":true,\"TailscaleIPs\":[\"100.64.0.2\"]", with: "\"TailscaleIPs\":[\"100.64.0.2\"]")))
+        #expect(FleetReach.unseen("worker-5") == "worker-5 is on your Tailscale network, but Tailscale on this Mac does not show "
+            + "it online. Check that Tailscale on this Mac is connected to the same network.")
+        #expect(!FleetReach.keeps(JoinedDevice(name: server.name, addresses: server.addresses, locked: true), from: Self.status(peers: hub)))
+        #expect(!FleetReach.keeps(JoinedDevice(name: "", addresses: server.addresses), from: Self.status(peers: hub)))
+        #expect(!FleetReach.keeps(JoinedDevice(name: "worker-5", addresses: server.addresses), from: Self.status(peers: hub)))
+        #expect(!FleetReach.keeps(server, from: "") && !FleetReach.keeps(server, from: "{}"))
+    }
+
+    @Test func aConnectionThatThePolicyStopsNamesItselfAndThePlaceOfThePolicy() throws {
+        let tool = PolicyPlace.tool(URL(string: "https://github.com/example/tailnet-policy"))
+        // A server that joined and that this Mac's Tailscale does not show: the one reach that is missing, by the
+        // fleet's tag and in the words of a grant, and never a wider one. A hub is asked its own port with it.
+        #expect(FleetReach.hidden("worker-5", place: tool) == "worker-5 is on your Tailscale network, but this Mac cannot "
+            + "reach it. Change your Tailscale policy in github.com/example/tailnet-policy so that this Mac reaches "
+            + "tag:founderizer on tcp:22.")
+        #expect(FleetReach.hidden("worker-5", place: .tool(nil)).contains("your Tailscale policy, which another tool keeps, so that"))
+        for place in [PolicyPlace.tailscale, nil] {
+            #expect(FleetReach.hidden("worker-5", place: place) == "worker-5 is on your Tailscale network, but this Mac "
+                + "cannot reach it. Change your Tailscale policy so that this Mac reaches tag:founderizer on tcp:22.")
+        }
+        #expect(FleetReach.hidden("worker-1", hub: true, place: nil).hasSuffix("so that this Mac reaches tag:founderizer on tcp:22, tcp:8765."))
+        // An SSH connection to an address on the private network that nothing answered: Tailscale drops what its
+        // policy does not allow. The line names the port that `ssh` used.
+        let timeout = "ssh: connect to host 100.64.0.9 port 22: Operation timed out"
+        // A server that is off gives the same line of `ssh`, so the words name both, as every server that did not
+        // answer is said, with the policy in the place of the server's firewall.
+        #expect(FleetReach.dropped(timeout, host: "100.64.0.9", place: tool) == "100.64.0.9 did not answer SSH on port 22. Check that "
+            + "the server is on, and that your Tailscale policy in github.com/example/tailnet-policy lets this Mac reach it on tcp:22.")
+        #expect(FleetReach.dropped(timeout, host: "100.64.0.9", place: .tool(nil))?.contains("policy, which another tool keeps, lets this Mac") == true)
+        #expect(FleetReach.dropped("ssh: connect to host 100.64.0.9 port 2222: Connection timed out", host: "100.64.0.9", place: nil)
+            == "100.64.0.9 did not answer SSH on port 2222. Check that the server is on, and that your Tailscale policy lets this "
+            + "Mac reach it on tcp:2222.")
+        // A server that refused the connection did get it; a public address is no matter of the policy; a line for
+        // another host, or of another program on the server, is not this connection; and a connection that opened
+        // and then went quiet was let through.
+        #expect(FleetReach.dropped("ssh: connect to host 100.64.0.9 port 22: Connection refused", host: "100.64.0.9", place: tool) == nil)
+        #expect(FleetReach.dropped("ssh: connect to host 203.0.113.9 port 22: Operation timed out", host: "203.0.113.9", place: tool) == nil)
+        #expect(FleetReach.dropped("ssh: connect to host github.com port 22: Operation timed out", host: "100.64.0.9", place: tool) == nil)
+        #expect(FleetReach.dropped("ssh: connect to host 100.64.0.99 port 22: Operation timed out", host: "100.64.0.9", place: tool) == nil)
+        #expect(FleetReach.dropped("Connection timed out during banner exchange", host: "100.64.0.9", place: tool) == nil)
+        // A stopped install says that line, and each other stop keeps its words.
+        let dropped = InstallError.step("Read the server", timeout)
+        #expect(dropped.plain(host: "100.64.0.9", place: tool) == FleetReach.dropped(timeout, host: "100.64.0.9", place: tool))
+        let refused = InstallError.step("Read the server", "ssh: connect to host 100.64.0.9 port 22: Connection refused")
+        #expect(refused.plain(host: "100.64.0.9", place: tool)
+            == "100.64.0.9 refused SSH on port 22. Check that SSH runs on that port and lets this Mac in.")
+        let open = InstallError.step("Read the server", "ssh: connect to host 203.0.113.9 port 22: Operation timed out")
+        let unanswered = "203.0.113.9 did not answer SSH on port 22. Check that the server is on and that its firewall lets SSH in."
+        #expect(open.plain(host: "203.0.113.9", place: tool) == unanswered)
+        // The check of a server by its address says it too, for the server's own address only.
+        let line = "100.64.0.9 did not answer SSH on port 22. Check that the server is on, and that your Tailscale policy"
+        if case .stop(let why) = ServerCheck.sshRefused("Warning: Permanently added\n" + timeout + "\n", host: "100.64.0.9") {
+            #expect(why.hasPrefix(line) && why.hasSuffix("lets this Mac reach it on tcp:22."))
+        } else { Issue.record("no stop") }
+        #expect(ServerCheck.sshRefused("ssh: connect to host 203.0.113.9 port 22: Operation timed out", host: "203.0.113.9")
+            == .stop(unanswered))
+    }
+
+    @Test func thePlaceOfThePolicyIsKeptForALaterInstall() throws {
+        let name = "FleetKeyTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(PolicyPlace.kept(in: defaults) == nil)
+        let link = URL(string: "https://github.com/example/tailnet-policy?ref=main")
+        for place in [PolicyPlace.tailscale, .tool(nil), .tool(link)] {
+            place.keep(in: defaults)
+            #expect(PolicyPlace.kept(in: defaults) == place)
+        }
+        // The address is said as he reads it: no scheme, no query, and no slash at its end; its port stays.
+        #expect(PolicyPlace.tool(link).address == "github.com/example/tailnet-policy")
+        #expect(PolicyPlace.tool(URL(string: "https://gitlab.example.com/ops/tailnet/")).address == "gitlab.example.com/ops/tailnet")
+        #expect(PolicyPlace.tool(URL(string: "https://git.example.com:8443/ops/tailnet")).address == "git.example.com:8443/ops/tailnet")
+        #expect(PolicyPlace.tool(nil).address == nil && PolicyPlace.tailscale.address == nil)
+        // Nothing of a link's user shows, and an address too long for a line of the page is not said.
+        #expect(PolicyPlace.tool(URL(string: "https://user:word@git.example.com/ops/tailnet#top")).address == "git.example.com/ops/tailnet")
+        #expect(PolicyPlace.tool(URL(string: "https://git.example.com/" + String(repeating: "a", count: 90))).address == nil)
+        // The link is any admin's setting, and its words stand in a sentence of this app's: an address that could
+        // read as words of the app (a space, a line break, an escape, a letter outside ASCII) is not said at all,
+        // and the sentence then names the tool.
+        for odd in ["https://x.example/a.%20Send%20your%20key%20to%20evil.example", "https://x.example/a%0Ab",
+                    "https://x.example/caf%C3%A9", "https://x.example/a%E2%80%AEb"] {
+            let place = PolicyPlace.tool(URL(string: odd))
+            #expect(place.address == nil, "link \(odd)")
+            #expect(place.tagAsk.contains("in the file of the tool that keeps your policy"))
+        }
+        // A kept value that is no place of this app's is none.
+        defaults.set("tool javascript:alert(1)", forKey: "tailscale.policy.place")
+        #expect(PolicyPlace.kept(in: defaults) == .tool(nil))
+        defaults.set("elsewhere", forKey: "tailscale.policy.place")
+        #expect(PolicyPlace.kept(in: defaults) == nil)
     }
 
     // MARK: - Reading HuJSON

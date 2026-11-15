@@ -1,3 +1,4 @@
+import FleetCore
 import Foundation
 import Synchronization
 
@@ -14,7 +15,7 @@ final class SampleHub: URLProtocol {
     static let host = "sample.founderizer.invalid"
     static let address = URL(string: "http://\(host)/")!
     /// The hub's words for a write in the sample, which the phone shows as "Not sent: This is a sample."
-    static let refusal = "this is a sample"
+    static let refusal = String(l10n: "this is a sample")
     /// The sample's generation, as `make_sample.py` names it.
     static let database = "sample"
 
@@ -57,7 +58,7 @@ final class SampleHub: URLProtocol {
     static func answer(_ request: URLRequest) -> Answer {
         guard (request.httpMethod ?? "GET") == "GET" else { return refused(409, refusal) }
         guard let url = request.url, let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return refused(404, "not in the sample")
+            return refused(404, String(l10n: "not in the sample"))
         }
         let sample = Self.reads.withLock { kept in
             if let kept { return kept }
@@ -75,19 +76,19 @@ final class SampleHub: URLProtocol {
             return Answer(status: 200, body: sample.mobile,
                           headers: ["Content-Type": "application/json", "ETag": sample.tag])
         }
-        guard path.count == 4, path[0] == "ui", path[1] == "mobile" else { return refused(404, "not in the sample") }
+        guard path.count == 4, path[0] == "ui", path[1] == "mobile" else { return refused(404, String(l10n: "not in the sample")) }
         switch path[2] {
         case "chat":
-            guard let page = sample.chats[path[3]] else { return refused(404, "not in the sample") }
+            guard let page = sample.chats[path[3]] else { return refused(404, String(l10n: "not in the sample")) }
             // The sample never changes: after the cursor of its page, a chat has nothing new.
             guard let since, let cursor = Double(since) else { return Answer(status: 200, body: page) }
             let empty: [String: Any] = ["db": database, "agent": path[3], "items": [Any](), "cursor": cursor]
             return Answer(status: 200, body: json(empty))
         case "task":
-            guard let id = Int(path[3]), let page = sample.tasks[id] else { return refused(404, "not in the sample") }
+            guard let id = Int(path[3]), let page = sample.tasks[id] else { return refused(404, String(l10n: "not in the sample")) }
             return Answer(status: 200, body: notes(of: page, after: since.flatMap { Int($0) } ?? 0))
         default:
-            return refused(404, "not in the sample")
+            return refused(404, String(l10n: "not in the sample"))
         }
     }
 
@@ -117,7 +118,9 @@ final class SampleHub: URLProtocol {
 
         init(now: Double) {
             var all: [String: Any] = [:]
-            if let parsed = try? JSONSerialization.jsonObject(with: Data(SampleFleetData.json.utf8)),
+            // The sample in the app's language (a phone in Spanish sees a Spanish company), else in English.
+            let text = SampleFleetData.localized[Bundle.main.preferredLocalizations.first ?? "en"] ?? SampleFleetData.json
+            if let parsed = try? JSONSerialization.jsonObject(with: Data(text.utf8)),
                let timed = SampleHub.timed(parsed, now: now) as? [String: Any] {
                 all = timed
             }

@@ -25,6 +25,32 @@ enum SetupMetrics {
     /// The width of a step whose cards stand three in a row with a line under each name, the VPS page's: each line on
     /// one line at the step's one size.
     static let cardsWidth: CGFloat = 540
+    /// **The first run's welcome page** (`WelcomeView`; the owner's yes of 14 November 2026 to its moving mock, "I
+    /// like it!!", then "Yes, build it"): its title at 30 pt, the one size of the app over 26, because the page has
+    /// nothing else to say; the manager's mark at 100 pt and its six agents at 56 pt; the room from the team to the
+    /// title and from the title to the two ways; the cards' line marks at 18 pt in their 34-pt tile, and the prompt's
+    /// mark at 24 pt in the 48-pt tile of the page after the press.
+    static let welcomeTitleFont = Font.system(size: 30, weight: .semibold)
+    static let welcomeManager: CGFloat = 100, welcomeAgent: CGFloat = 56
+    static let welcomeTeamGap: CGFloat = 48, welcomeTitleGap: CGFloat = 32
+    static let wayTile: CGFloat = 34, wayMark: CGFloat = 18, promptMark: CGFloat = 24
+    /// The gap between the welcome page's two cards, as between the VPS page's (`CloudCards`).
+    static let wayGap: CGFloat = 14
+    /// The hairlines from the manager to its agents: the hairline of the approved fleet graph, white 0.22 at 1.5 pt.
+    static let teamLine = Color.white.opacity(0.22), teamLineWidth: CGFloat = 1.5
+    /// The small white dot that the manager sends down a line, once.
+    static let workDot: CGFloat = 5
+    /// The dot in the middle of a welcome mark (white 0.94) and its soft ring (white 0.2).
+    static let markDot = Color.white.opacity(0.94), markDotRing = Color.white.opacity(0.2)
+    /// How the marks' dots move toward the card under the pointer, and back: the mock's 0.28 s.
+    static let lookCurve = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.28)
+    /// **The least room a short window leaves the welcome page** (the smallest window, 960 × 560): the team, its lines and
+    /// their places take one scale down to this one, and the two gaps with them, so the page fits with no scroll.
+    static let welcomeLeastScale: CGFloat = 0.4
+    /// The box of the prompt on the page after the press: a field's look on the canvas (`FleetFieldBox`: white 0.05,
+    /// 14 pt at its sides on a setup step), 12 pt over and under its lines, and the canvas's hairline as its edge.
+    static let promptFill = Color.white.opacity(0.05)
+    static let promptPadding = EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
     /// The height of a step's field: the app's field (`FleetFieldLook`) with the step's larger words.
     static let fieldHeight: CGFloat = 34
     /// The space between the mark, the title and what is under them.
@@ -41,6 +67,8 @@ enum SetupMetrics {
 /// onboarding so it is easier to use"): the top left of the page's column, where a step that scrolls does not move it.
 /// Every setup gives its Back here, as a `SetupBack`, and none under its step.
 struct SetupPage<Back: View, Step: View>: View {
+    /// The wizard's steps, on Back's line (`SetupProgress`): nil for a wizard that shows none.
+    var progress: SetupProgress?
     @ViewBuilder var back: () -> Back
     @ViewBuilder var step: () -> Step
     /// The step's own height: a step taller than its page keeps its way on at the window's bottom (`SetupAction`).
@@ -48,8 +76,10 @@ struct SetupPage<Back: View, Step: View>: View {
 
     var body: some View {
         GeometryReader { window in
+            // The room over the step: more on a page with the wizard's steps, whose names stand under Back's line.
+            let over = Self.margin + (progress == nil ? 0 : SetupProgress.room)
             // The step scrolls when it and its room over and under it do not fit in the page.
-            let scrolls = stepHeight + 2 * Self.margin + FleetSpace.lights > window.size.height
+            let scrolls = stepHeight + 2 * over + FleetSpace.lights > window.size.height
             ScrollView {
                 step()
                     .environment(\.setupRoom, window.size.height - 128)
@@ -65,12 +95,25 @@ struct SetupPage<Back: View, Step: View>: View {
                     // window's, and every page with more under its title stood lower.
                     // While it scrolls, its way on stands at the window's bottom (`SetupActionBar`, 86 pt high with its
                     // fade): the step keeps the button's place, and 40 pt under it bring its last row just over the fade.
-                    .padding(.top, Self.margin).padding(.bottom, scrolls ? 40 : Self.margin + FleetSpace.lights)
+                    .padding(.top, over).padding(.bottom, scrolls ? 40 : over + FleetSpace.lights)
                     .fleetColumn()
                     .frame(maxWidth: .infinity, minHeight: window.size.height, alignment: .center)
             }
             .overlayPreferenceValue(SetupActionKey.self, alignment: .bottom) { action in
                 if scrolls, let action { SetupActionBar(action: action.view) }
+            }
+        }
+        // The wizard's steps on the page's own ground, so that a step that scrolls goes under them and not through them.
+        .overlay(alignment: .top) {
+            if let progress {
+                let band = progress.width + 40
+                VStack(spacing: 0) {
+                    progress.padding(.top, 8).padding(.bottom, 10).frame(maxWidth: band).background(FleetStyle.canvas)
+                    LinearGradient(colors: [FleetStyle.canvas, FleetStyle.canvas.opacity(0)], startPoint: .top, endPoint: .bottom)
+                        .frame(maxWidth: band).frame(height: 14)
+                }
+                .padding(.top, FleetSpace.top - 8)
+                .allowsHitTesting(false)
             }
         }
         .overlay(alignment: .topLeading) {
@@ -83,7 +126,9 @@ struct SetupPage<Back: View, Step: View>: View {
 }
 
 extension SetupPage where Back == EmptyView {
-    init(@ViewBuilder step: @escaping () -> Step) { self.init(back: { EmptyView() }, step: step) }
+    init(progress: SetupProgress? = nil, @ViewBuilder step: @escaping () -> Step) {
+        self.init(progress: progress, back: { EmptyView() }, step: step)
+    }
 }
 
 /// **A step's way on, which stays in view** (the owner, 13 November 2026, of "Choose what to import": "Build all four
@@ -149,6 +194,11 @@ struct SetupStep<Mark: View, Content: View>: View {
     var waits = false
     /// The column's width: the step's own, and wider only for a row of three cards (`SetupMetrics.cardsWidth`).
     var width: CGFloat = SetupMetrics.width
+    /// **One muted line under the title**, on the first run's pages that name a thing the owner does not know yet (the
+    /// owner, 15 November 2026: "the pages need to be a little bit more detailed! Like: name your manager / he will be
+    /// the one leading the team and your main assistant", and "also add subtitles"). nil on every other step, whose
+    /// title says what it asks.
+    var detail: String?
     @ViewBuilder var mark: () -> Mark
     @ViewBuilder var content: () -> Content
     @Environment(\.setupRoom) private var room
@@ -158,7 +208,14 @@ struct SetupStep<Mark: View, Content: View>: View {
             VStack(spacing: SetupMetrics.gap) {
                 // The step's mark is its subject, not a status: an agent's glyph here draws no dot (`glyphDots`).
                 mark().environment(\.glyphDots, false)
-                SetupTitle(title: title, moving: waits)
+                VStack(spacing: 8) {
+                    SetupTitle(title: title, moving: waits)
+                    if let detail {
+                        Text(detail).foregroundStyle(FleetStyle.muted).lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: SetupMetrics.width)
+                    }
+                }
             }
             VStack(spacing: SetupMetrics.gap) { content() }
         }
@@ -238,7 +295,9 @@ struct SetupTitle: View {
     var body: some View {
         Group {
             if moving && !reduceMotion {
-                ShimmeringWords(text: title, font: .systemFont(ofSize: SetupMetrics.title, weight: .semibold))
+                // Digits of one width: the light's pass starts again when the words change their width
+                // (ShimmerView), so a count that moves each moment ("Importing 42 of 143 secrets") would stop it.
+                ShimmeringWords(text: title, font: .monospacedDigitSystemFont(ofSize: SetupMetrics.title, weight: .semibold))
             } else {
                 Text(title).font(SetupMetrics.titleFont)
                     .foregroundStyle(moving ? FleetStyle.muted : FleetStyle.text)
@@ -320,6 +379,60 @@ struct SetupPhases: View {
         case let (doing?, left?):
             return String(l10n: "Step \(step) of \(count): \(name). \(doing). About \(max(1, left)) minutes left.")
         }
+    }
+}
+
+/// **The steps of a wizard, on Back's line of each of its pages** (the owner, 15 November 2026, of the first run: "I
+/// want to also see the progress steps like in other wizards we have"): the install's line of dots (`SetupPhases`' own
+/// measures and colours) with each step's name under it, a done step in the words' colour, the page's own step in the
+/// green of work with a soft ring, the rest dim. It has no status line and no minutes, and it is no control. It says
+/// the step of the page that shows and keeps no memory: on an earlier page again, it shows that earlier step.
+struct SetupProgress: View {
+    let names: [String]
+    /// The step of the page that shows; `names.count` once all are done.
+    let current: Int
+
+    private static let dot: CGFloat = 10, ring: CGFloat = 18, rule: CGFloat = 2
+    /// The room that a page keeps over its step for the names, which stand under Back's line.
+    static let room: CGFloat = 32
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(names.enumerated()), id: \.offset) { index, name in
+                VStack(spacing: 8) {
+                    ZStack {
+                        HStack(spacing: 0) {
+                            Rectangle().fill(index == 0 ? Color.clear : segment(index)).frame(height: Self.rule)
+                            Rectangle().fill(index == names.count - 1 ? Color.clear : segment(index + 1)).frame(height: Self.rule)
+                        }
+                        Circle().fill(Color.green.opacity(index == current ? 0.25 : 0)).frame(width: Self.ring, height: Self.ring)
+                        Circle().fill(dot(index)).frame(width: Self.dot, height: Self.dot)
+                    }
+                    .frame(height: Self.ring)
+                    Text(name).foregroundStyle(index <= current ? FleetStyle.text : FleetStyle.muted).lineLimit(1).fixedSize()
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .font(SetupMetrics.textFont)
+        .frame(width: width)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(current < names.count ? String(l10n: "Step \(current + 1) of \(names.count): \(names[current]).")
+            : String(l10n: "All \(names.count) steps are done."))
+    }
+
+    /// Each step is as wide as the longest name and 16 points, and at least the 92 points of the install's steps, so
+    /// that no name is cut or made smaller in a language with longer words.
+    var width: CGFloat {
+        let font = NSFont.systemFont(ofSize: SetupMetrics.text)
+        let longest = names.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        return CGFloat(names.count) * max(92, (longest + 16).rounded(.up))
+    }
+
+    private func segment(_ index: Int) -> Color { index <= current ? FleetStyle.text.opacity(0.85) : FleetStyle.muted.opacity(0.3) }
+
+    private func dot(_ index: Int) -> Color {
+        index < current ? FleetStyle.text : index == current ? .green : FleetStyle.muted.opacity(0.35)
     }
 }
 
@@ -486,7 +599,8 @@ struct CodeField: View {
             .onChange(of: code) { before, after in
                 if after.count - before.count >= 8, MachineLogin.code(after) != nil { send() }
             }
-            .task { focused = true }
+            // Not after a front from outside, until the owner's click (`AppFront`): the page then takes no key.
+            .task { if !AppFront.holdsKeys { focused = true } }
     }
 }
 
@@ -507,7 +621,8 @@ struct SetupField: View {
             .fieldPlaceholder(placeholder, shows: text.isEmpty)
             .setupField(focus: $focused, wrong: wrong)
             .onSubmit(submit)
-            .task { focused = true }
+            // Not after a front from outside, until the owner's click (`AppFront`): the page then takes no key.
+            .task { if !AppFront.holdsKeys { focused = true } }
     }
 }
 

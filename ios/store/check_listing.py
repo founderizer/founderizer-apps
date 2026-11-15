@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Counts each field of listing.md against Apple's limit, which its heading names: "## Subtitle (30)".
 
-    python3 -B app/ios/store/check_listing.py
+    python3 -B app/ios/store/check_listing.py [app/ios/store/listing-es.md]
 """
 import os
 import re
@@ -22,7 +22,8 @@ def fields(text):
 
 def main():
     over = 0
-    for name, limit, words in fields(open(LISTING).read()):
+    listing = sys.argv[1] if len(sys.argv) > 1 else LISTING     # listing.md, or another language's page
+    for name, limit, words in fields(open(listing).read()):
         if name == "Keywords" and ", " in words:
             print(f"{name}: a space after a comma counts against the limit")
             over += 1

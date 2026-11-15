@@ -14,6 +14,13 @@ import Foundation
 public enum VaultOwnerPin {
     /// The most owner keys that may sign, as `vault.py` OWNER_KEYS.
     static let mostKeys = 8
+    /// A pin locks a handover for 90 days from the time that it names, by this Mac's clock, as `vault.py` PIN_LIFE
+    /// (package 4 of the vault's gates, C2): this vault keeps no record of an unpin, so an old pin of a key that the owner
+    /// took back ends here within that time, and the owner's app signs each pin again after 7 days (its `VaultPlan`). A
+    /// pin dated more than a day after this Mac's clock is not taken either (PIN_AHEAD), so a clock ahead on the owner's
+    /// Mac cannot make a pin live longer.
+    static let pinLife: Double = 90 * 86400
+    static let pinAhead: Double = 86400
 
     /// The statement and the signature of a pin, as the hub carries them beside a handover job.
     public struct Signed: Sendable, Equatable {
@@ -52,17 +59,22 @@ public enum VaultOwnerPin {
         guard configuration.ownerKeys != nil, configuration.fleet != nil else { throw VaultFailure.ownerKeysMissing }
     }
 
-    /// Refuses a handover unless the owner signed a pin of the recipient that the hub named for it, checked with the
-    /// owner's keys of this vault's configuration. Without them it refuses every handover.
-    public static func check(_ job: VaultJob, configuration: VaultConfiguration) throws {
+    /// Refuses a handover unless the owner signed a pin of the recipient that the hub named for it, in the last `pinLife`
+    /// and not more than `pinAhead` after `now`, checked with the owner's keys of this vault's configuration. Without
+    /// them it refuses every handover.
+    public static func check(_ job: VaultJob, configuration: VaultConfiguration,
+                             now: Double = Date().timeIntervalSince1970) throws {
         guard let keys = configuration.ownerKeys, let fleet = configuration.fleet else { throw VaultFailure.ownerKeysMissing }
         guard let pin = job.pin else { throw VaultFailure.ownerPinMissing }
-        guard try recipient(of: pin, keys: keys, fleet: fleet) == job.recipient else { throw VaultFailure.ownerPinOther }
+        let said = try pinned(pin, keys: keys, fleet: fleet)
+        guard said.recipient == job.recipient else { throw VaultFailure.ownerPinOther }
+        guard now - Double(said.at) <= pinLife else { throw VaultFailure.ownerPinOld }
+        guard Double(said.at) - now <= pinAhead else { throw VaultFailure.ownerPinAhead }
     }
 
-    /// The recipient that a valid pin names: a statement in its canonical form with exactly the fields of a pin, for this
-    /// fleet, and a signature of one of `keys` over its UTF-8 bytes.
-    static func recipient(of pin: Signed, keys: [String], fleet: String) throws -> String {
+    /// The recipient that a valid pin names, and the time that it names: a statement in its canonical form with exactly
+    /// the fields of a pin, for this fleet, and a signature of one of `keys` over its UTF-8 bytes.
+    static func pinned(_ pin: Signed, keys: [String], fleet: String) throws -> (recipient: String, at: Int) {
         guard let object = try? JSONSerialization.jsonObject(with: Data(pin.statement.utf8)) as? [String: Any],
               Set(object.keys) == ["v", "kind", "fleet", "machine", "recipient", "at"],
               VaultRequest.integer(object["v"]) == 1,
@@ -77,7 +89,7 @@ public enum VaultOwnerPin {
                          "recipient": .text(recipient), "at": .number(at)]) == pin.statement,
               said == fleet,
               signed(pin.statement, signature: pin.signature, keys: keys) else { throw VaultFailure.ownerPinInvalid }
-        return recipient
+        return (recipient, at)
     }
 
     /// True when all of `text` matches `pattern`, as vault.py's `fullmatch`: ICU's `$` also matches before one final line

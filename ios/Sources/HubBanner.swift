@@ -1,3 +1,4 @@
+import FleetCore
 import SwiftUI
 
 // The connection line over a page. It reads the store, so it lives apart from `MobileStyle.swift`, which the share
@@ -20,9 +21,9 @@ private struct HubBanner: View {
     /// on there); Try again for every other failure.
     @MainActor static func action(for store: MobileStore, settings: Bool) -> Action? {
         if store.outageNeedsSettings {
-            return settings ? Action(title: "Settings", run: { store.openSettings() }) : nil
+            return settings ? Action(title: String(l10n: "Settings"), run: { store.openSettings() }) : nil
         }
-        return Action(title: "Try again", run: { _ = Task { await store.refresh() } })
+        return Action(title: String(l10n: "Try again"), run: { _ = Task { await store.refresh() } })
     }
 
     var body: some View {
@@ -71,7 +72,7 @@ private struct SampleLine: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Sample fleet")
             Spacer(minLength: 0)
-            TextAction(title: "Leave", font: .footnote) { store.leaveSample() }
+            TextAction(title: String(l10n: "Leave"), font: .footnote) { store.leaveSample() }
                 .accessibilityIdentifier("leave-sample")
         }
         .font(.footnote)

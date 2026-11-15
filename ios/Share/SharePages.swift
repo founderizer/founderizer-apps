@@ -138,7 +138,7 @@ struct ShareComposePage: View {
         VStack(alignment: .leading, spacing: 0) {
             ShareFileRow(model: model).padding(.horizontal, 14).padding(.top, 6)
             HStack(alignment: .bottom, spacing: 0) {
-                let placeholder = typeSize.isAccessibilitySize ? "Message" : "Message \(agentName(agent))"
+                let placeholder = typeSize.isAccessibilitySize ? String(l10n: "Message") : String(l10n: "Message \(agentName(agent))")
                 TextField(text: $model.text, prompt: Text(placeholder).foregroundStyle(Brand.placeholder),
                           axis: .vertical) {
                     Text(placeholder)
@@ -153,7 +153,7 @@ struct ShareComposePage: View {
                 .padding(.trailing, 6)
                 .accessibilityIdentifier("share-text")
                 let look = MarkTeam.look(of: agent, in: team)
-                SendButton(enabled: model.canSend, label: "Send message", side: 36, fill: look.mid,
+                SendButton(enabled: model.canSend, label: String(l10n: "Send message"), side: 36, fill: look.mid,
                            arrow: SendButton.arrow(on: look.mid)) {
                     await model.send(to: agent)
                 }
@@ -179,14 +179,14 @@ struct ShareComposePage: View {
 
     /// The one line under the field: "Sending…" while the message goes, then what went wrong, in the app's words.
     private var note: (words: String, isWarning: Bool)? {
-        if model.sending { return ("Sending…", false) }
+        if model.sending { return (String(l10n: "Sending…"), false) }
         if let note = model.note { return note }
         let count = model.trimmed.count
         if count > ShareModel.textLimit {
-            return ("Use no more than \(ShareModel.textLimit.formatted()) characters.", true)
+            return (String(l10n: "Use no more than \(ShareModel.textLimit.formatted()) characters."), true)
         }
         if count > ShareModel.textLimit - 500 {
-            return ("\(count.formatted()) of \(ShareModel.textLimit.formatted()) characters", false)
+            return (String(l10n: "\(count.formatted()) of \(ShareModel.textLimit.formatted()) characters"), false)
         }
         return nil
     }

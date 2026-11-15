@@ -40,7 +40,7 @@ struct AgentPage: View {
                     // The mark in the column of a task's mark, as a row of Tasks has it (margins pass, fault 11,
                     // review B).
                     MarkedLine(symbol: "exclamationmark.triangle.fill", markColor: Brand.warning,
-                               words: "The manager needs attention: \(hubWords(warning.kind)) since \(fleetDate(warning.since)).",
+                               words: String(l10n: "The manager needs attention: \(hubWords(warning.kind)) since \(fleetDate(warning.since))."),
                                wordsColor: Brand.warning)
                         .font(.footnote)
                         .accessibilityIdentifier("manager-warning")
@@ -49,7 +49,7 @@ struct AgentPage: View {
             }
             // A group stands only while it has something to say.
             if entry?.limit != nil || !windows.isEmpty {
-                Section { usage } header: { GroupHeading("Usage") }
+                Section { usage } header: { GroupHeading(String(l10n: "Usage")) }
                     .brandRows()
             }
             if let entry {
@@ -61,7 +61,7 @@ struct AgentPage: View {
                     }
                     if let machine = entry.machine, !machine.isEmpty { Text(verbatim: machine) }
                 } header: {
-                    GroupHeading("Runs on")
+                    GroupHeading(String(l10n: "Runs on"))
                 }
                 .brandRows()
             }

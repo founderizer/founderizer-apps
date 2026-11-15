@@ -72,8 +72,9 @@ struct VaultSystemKeychain: VaultKeychainBackend {
 /// its first start moves the keys to its service (`VaultKeyMove`). Before the move is done, a build of this generation
 /// reads and writes none of its items, so it never makes a key beside the real ones.
 public final class VaultKeychain: @unchecked Sendable {
-    /// The key generation of this build.
-    public static let generation = 2
+    /// The key generation of this build: 2 from build 15 (package 7), 3 from build 16, which keeps a value with the
+    /// shape of a login out of each session (C11, package 3), so that no build of generation 2 undoes that rule.
+    public static let generation = 3
 
     /// The service of one generation: today's name for generation 1, and the name with its number for each later one.
     static func service(_ generation: Int) -> String {

@@ -28,7 +28,9 @@ internal sealed class TaskbarCount
         this.words = words;
     }
 
-    public async Task Show(string? count)
+    /// <param name="count">The number on the badge (Screens.TaskbarCount); null for none.</param>
+    /// <param name="sentence">Its words for assistive apps (Screens.TaskbarWords).</param>
+    public async Task Show(string? count, string? sentence)
     {
         if (count == shown) return;
         shown = count;
@@ -41,8 +43,8 @@ internal sealed class TaskbarCount
                 Free();
                 return;
             }
-            // Up to two digits fit Windows' overlay; from 100 on it says 99. Its words for assistive apps are the whole
-            // count: the library gives no sentence for it, and the screens put none together.
+            // Up to two digits fit Windows' overlay; from 100 on it says 99. Its words for assistive apps are the
+            // library's sentence of the whole count.
             int n = int.TryParse(count, out var whole) ? whole : 0;
             words(n > 99 ? "99" : count);
             badge.UpdateLayout();
@@ -50,7 +52,7 @@ internal sealed class TaskbarCount
             await bitmap.RenderAsync(badge, 32, 32);
             var pixels = (await bitmap.GetPixelsAsync()).ToArray();
             var next = Icon(pixels, bitmap.PixelWidth, bitmap.PixelHeight);
-            taskbar.SetOverlayIcon(window, next, count);
+            taskbar.SetOverlayIcon(window, next, sentence ?? count);
             Free();
             icon = next;
         }

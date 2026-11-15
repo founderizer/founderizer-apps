@@ -38,6 +38,11 @@ internal sealed class Updater
     private readonly HttpMessageInvoker http = ReleaseChannel.NewClient();
     private DateTimeOffset? awaySince;
     private DispatcherQueueTimer? swapTimer;
+    // While a build waits and the owner does not count as away yet, this looks every 10 s whether the window is
+    // minimized or behind another: Windows raises no event for those, and a fleet where nothing changes gives the store
+    // no change to ask at. So a waiting build takes over at most about 10 s after the owner's away time ends.
+    private DispatcherQueueTimer? awayTick;
+    private long? noted;
     private bool confirmed;
     private bool swapping;
     private long? waiting;
@@ -69,6 +74,7 @@ internal sealed class Updater
         window.Activated += (_, e) =>
         {
             awaySince = e.WindowActivationState == WindowActivationState.Deactivated ? awaySince ?? DateTimeOffset.UtcNow : null;
+            Readings.Note($"update: the window is {e.WindowActivationState}; away since {awaySince?.ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "-"}");
             CheckSwap();
         };
         source.Changed += (_, _) => ui.TryEnqueue(CheckSwap);
@@ -263,11 +269,40 @@ internal sealed class Updater
     /// is asked about again at the store's next change.</summary>
     private void CheckSwap()
     {
+        // A window that is minimized, or behind another window, has its owner away, also when Windows raised no
+        // deactivation (Win+M and the shell's "minimize all" raise none).
+        if (awaySince is null && !swapping)
+        {
+            var handle = Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+            if (window.AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } || GetForegroundWindow() != handle)
+            {
+                awaySince = DateTimeOffset.UtcNow;
+                Readings.Note($"update: the window is minimized or behind; away since {awaySince.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture)}");
+            }
+        }
         if (swapping || waiting is not { } build || awaySince is not { } since)
         {
+            if (waiting is { } held && !swapping && awaySince is null && noted != held)
+            {
+                noted = held;
+                Readings.Note($"update: build {held} waits until the owner is away from the window");
+            }
             swapTimer?.Stop();
+            if (waiting is not null && !swapping && awaySince is null)
+            {
+                if (awayTick is null)
+                {
+                    awayTick = ui.CreateTimer();
+                    awayTick.Interval = TimeSpan.FromSeconds(10);
+                    awayTick.IsRepeating = true;
+                    awayTick.Tick += (_, _) => CheckSwap();
+                }
+                if (!awayTick.IsRunning) awayTick.Start();
+            }
+            else awayTick?.Stop();
             return;
         }
+        awayTick?.Stop();
         var left = since + ReleaseChannel.Away - DateTimeOffset.UtcNow;
         if (left > TimeSpan.Zero)
         {
@@ -283,7 +318,11 @@ internal sealed class Updater
             return;
         }
         var state = source.State;
-        if (state.Sending || state.Pending is not null) return;
+        if (state.Sending || state.Pending is not null)
+        {
+            Readings.Note($"update: build {build} waits for a write on its way (sending {state.Sending}, a request {state.Pending is not null})");
+            return;
+        }
         Swap(build, DateTimeOffset.UtcNow - since);
     }
 

@@ -141,6 +141,23 @@ public struct VerifyChecklist: Equatable, Sendable {
         return VerifyChecklist(checks: answers, readAt: readAt)
     }
 
+    /// **Output that has what can be a list of checks**: the word "check" in quotes, as each answer of the list
+    /// names itself, or a list with nothing in it, and a "[" before a "{" or a "]" with a "]" after it. An install
+    /// tells by it a server that printed its checks in a shape that this app does not read, which is `noChecklist`,
+    /// from a program on the server that printed its own error and no list (`MachineInstaller.run`): the lines of a
+    /// Python error show source text, which has brackets of its own.
+    public static func holdsList(_ output: String) -> Bool {
+        guard output.contains("\"check\"") || output.filter({ !$0.isWhitespace }) == "[]",
+              let end = output.lastIndex(of: "]") else { return false }
+        var at = output.startIndex
+        while let found = output[at...].firstIndex(of: "["), found < end {
+            let rest = output[output.index(after: found)...].drop(while: \.isWhitespace)
+            if rest.first == "{" || rest.first == "]" { return true }
+            at = output.index(after: found)
+        }
+        return false
+    }
+
     /// The same array out of output that carries other lines around it, which is what an install over SSH gives.
     /// `verify --json` prints the array over several lines, so this takes the whole block and not one line: the
     /// candidates are read from the last to the first, and each one must decode to the frozen shape.

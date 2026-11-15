@@ -12,6 +12,8 @@ struct VaultOwnerPinTests {
     private let recipient = "age1" + String(repeating: "q", count: 58)
     private let other = "age1" + String(repeating: "p", count: 58)
     private var ownerKey: String { owner.publicKey.x963Representation.base64EncodedString() }
+    /// The time of this test's pins: now, because a pin lives 90 days by this Mac's clock (package 4 of the vault's gates).
+    private let at = Int(Date().timeIntervalSince1970)
 
     private func configuration(_ extra: [String: Any] = [:]) throws -> VaultConfiguration {
         let base: [String: Any] = ["agent": "studio", "hub": "http://100.96.10.20:8765", "store": "fleet", "worker_uid": 501,
@@ -21,8 +23,8 @@ struct VaultOwnerPinTests {
     private var keyed: VaultConfiguration { get throws { try configuration(["owner_keys": [ownerKey], "fleet": fleet]) } }
 
     /// A pin statement in the app's spelling (`OwnerStatement.pin`): keys sorted, no white space.
-    private func statement(fleet: String? = nil, machine: String = "worker-1", recipient: String? = nil, at: Int = 1_700_000_000) -> String {
-        #"{"at":\#(at),"fleet":"\#(fleet ?? self.fleet)","kind":"pin","machine":"\#(machine)","recipient":"\#(recipient ?? self.recipient)","v":1}"#
+    private func statement(fleet: String? = nil, machine: String = "worker-1", recipient: String? = nil, at: Int? = nil) -> String {
+        #"{"at":\#(at ?? self.at),"fleet":"\#(fleet ?? self.fleet)","kind":"pin","machine":"\#(machine)","recipient":"\#(recipient ?? self.recipient)","v":1}"#
     }
     private func sign(_ text: String, with key: P256.Signing.PrivateKey? = nil) throws -> String {
         try (key ?? owner).signature(for: Data(text.utf8)).derRepresentation.base64EncodedString()
@@ -43,7 +45,7 @@ struct VaultOwnerPinTests {
     @Test func theStatementIsTheAppsCanonicalText() {
         // OwnerStatement.pin writes this text for these fields, and vault.py's canonical() of its object is the same.
         #expect(VaultOwnerPin.canonical(["v": .number(1), "kind": .text("pin"), "fleet": .text(fleet), "machine": .text("worker-1"),
-                                         "recipient": .text(recipient), "at": .number(1_700_000_000)]) == statement())
+                                         "recipient": .text(recipient), "at": .number(1_700_000_000)]) == statement(at: 1_700_000_000))
         #expect(VaultOwnerPin.quoted("a\"b\\c\n\u{01}é") == #""a\"b\\c\n\u0001é""#)
     }
 
@@ -98,6 +100,27 @@ struct VaultOwnerPinTests {
         try VaultOwnerPin.check(try job(pin: ["statement": text, "signature": try sign(text, with: second)]), configuration: two)
     }
 
+    @Test func aPinLivesNinetyDaysAndIsNotTakenFromMoreThanADayAhead() throws {
+        // Package 4 of the vault's gates (C2), as vault.py owner_pinned: by this Mac's clock, a pin of 89 days and a pin
+        // dated one day ahead lock a handover; a pin of 91 days and a pin dated two days ahead do not.
+        let config = try keyed
+        let day = 86400.0, signedAt = Double(at)
+        let pin = try job(pin: try signedPin())
+        try VaultOwnerPin.check(pin, configuration: config, now: signedAt + 89 * day)
+        try VaultOwnerPin.check(pin, configuration: config, now: signedAt + 90 * day)
+        try VaultOwnerPin.check(pin, configuration: config, now: signedAt - day)
+        #expect(throws: VaultFailure.ownerPinOld) { try VaultOwnerPin.check(pin, configuration: config, now: signedAt + 91 * day) }
+        #expect(throws: VaultFailure.ownerPinOld) { try VaultOwnerPin.check(pin, configuration: config, now: signedAt + 90 * day + 1) }
+        #expect(throws: VaultFailure.ownerPinAhead) { try VaultOwnerPin.check(pin, configuration: config, now: signedAt - 2 * day) }
+        #expect(throws: VaultFailure.ownerPinAhead) { try VaultOwnerPin.check(pin, configuration: config, now: signedAt - day - 1) }
+        // A pin of another key says so first, whatever its time.
+        #expect(throws: VaultFailure.ownerPinOther) {
+            try VaultOwnerPin.check(try job(pin: try signedPin(), recipient: other), configuration: config, now: signedAt + 91 * day)
+        }
+        #expect(VaultFailure.ownerPinOld.rawValue == "The owner's pin of the receiving machine's key is more than 90 days old, so the login is not handed over.")
+        #expect(VaultFailure.ownerPinAhead.rawValue == "The owner's pin of the receiving machine's key is dated after now, so the login is not handed over.")
+    }
+
     @Test func onlyTheOwnersCanonicalPinOfThisFleetCounts() throws {
         let config = try keyed
         let base = statement()
@@ -107,13 +130,13 @@ struct VaultOwnerPinTests {
             base.replacingOccurrences(of: #""v":1"#, with: #""v":2"#),
             base.replacingOccurrences(of: #""v":1"#, with: #""v":true"#),
             base.replacingOccurrences(of: #""v":1"#, with: #""v":1.0"#),
-            base.replacingOccurrences(of: #""at":1700000000"#, with: #""at":-1"#),
-            base.replacingOccurrences(of: #""at":1700000000"#, with: #""at":"1700000000""#),
+            base.replacingOccurrences(of: #""at":\#(at)"#, with: #""at":-1"#),
+            base.replacingOccurrences(of: #""at":\#(at)"#, with: #""at":"\#(at)""#),
             statement(machine: "Worker-1"), statement(machine: "-worker"), statement(recipient: "age1short"),
             statement(machine: #"worker-1\n"#), statement(machine: #"worker-1\r\n"#),
             statement(machine: "worker-1\u{2028}"), statement(recipient: recipient + #"\n"#),
             base.replacingOccurrences(of: ",", with: ", "),                             // not canonical: white space
-            #"{"fleet":"\#(fleet)","at":1700000000,"kind":"pin","machine":"worker-1","recipient":"\#(recipient)","v":1}"#,   // order
+            #"{"fleet":"\#(fleet)","at":\#(at),"kind":"pin","machine":"worker-1","recipient":"\#(recipient)","v":1}"#,   // order
             base.replacingOccurrences(of: #""v":1}"#, with: #""v":1,"x":"y"}"#),       // a field too many
             base.replacingOccurrences(of: #","machine":"worker-1""#, with: ""),        // a field too few
             base.replacingOccurrences(of: #""fleet":"0123"#, with: #""fleet":"\u0030123"#),   // an escape of its own
@@ -126,7 +149,7 @@ struct VaultOwnerPinTests {
         }
         // The signature: another key's, over another text, not the owner's DER, or not the canonical base64.
         let stranger = try sign(base, with: P256.Signing.PrivateKey())
-        let otherText = try sign(statement(at: 1_700_000_001))
+        let otherText = try sign(statement(at: at + 1))
         let raw = try owner.signature(for: Data(base.utf8)).rawRepresentation.base64EncodedString()
         let good = try sign(base)
         for signature in [stranger, otherText, raw, String(good.dropLast()), good + "\n", " " + good, "", "AAAA"] {
@@ -164,7 +187,7 @@ extension VaultCallerTests {
     /// nothing of it after its one confirmation.
     @Test func aHandoverComesBackFromTheHubOnlyWithTheOwnersPin() async throws {
         let owner = P256.Signing.PrivateKey(), fleet = "0123456789abcdef", recipient = "age1" + String(repeating: "q", count: 58)
-        let statement = #"{"at":1700000000,"fleet":"\#(fleet)","kind":"pin","machine":"worker-1","recipient":"\#(recipient)","v":1}"#
+        let statement = #"{"at":\#(Int(Date().timeIntervalSince1970)),"fleet":"\#(fleet)","kind":"pin","machine":"worker-1","recipient":"\#(recipient)","v":1}"#
         let signature = try owner.signature(for: Data(statement.utf8)).derRepresentation.base64EncodedString()
         let hub = VaultHub(configuration: try VaultConfiguration(data: JSONSerialization.data(withJSONObject: [
             "agent": "studio", "hub": "http://100.64.0.1:9", "store": "fleet", "worker_uid": 501,      // no hub listens there
@@ -193,7 +216,7 @@ extension VaultCallerTests {
     /// `aHandoverWithoutTheOwnersKeysIsRefusedBeforeAnyHubCall`). A sign-in goes through `confirm` as before.
     @Test func theConfirmationAlsoRefusesAHandoverWithoutTheOwnersKeys() async throws {
         let owner = P256.Signing.PrivateKey(), fleet = "0123456789abcdef", recipient = "age1" + String(repeating: "q", count: 58)
-        let statement = #"{"at":1700000000,"fleet":"\#(fleet)","kind":"pin","machine":"worker-1","recipient":"\#(recipient)","v":1}"#
+        let statement = #"{"at":\#(Int(Date().timeIntervalSince1970)),"fleet":"\#(fleet)","kind":"pin","machine":"worker-1","recipient":"\#(recipient)","v":1}"#
         let signature = try owner.signature(for: Data(statement.utf8)).derRepresentation.base64EncodedString()
         let salts = ["password": "0123456789abcdef0123456789abcdef", "totp": "fedcba9876543210fedcba9876543210"]
         let hub = VaultHub(configuration: try VaultConfiguration(data: JSONSerialization.data(withJSONObject: [

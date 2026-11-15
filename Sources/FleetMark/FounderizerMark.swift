@@ -21,14 +21,19 @@ public struct FounderizerMark: View {
         self.size = size; self.plate = plate; self.ink = ink
     }
 
+    /// The two chevrons in the square of the original drawing (`side`), each with the width of its stroke there.
+    public static let chevrons: [(points: [CGPoint], width: CGFloat)] = [
+        ([CGPoint(x: 172, y: 217), CGPoint(x: 256, y: 133), CGPoint(x: 340, y: 217)], 50),
+        ([CGPoint(x: 148, y: 373), CGPoint(x: 256, y: 265), CGPoint(x: 364, y: 373)], 62),
+    ]
+
     public var body: some View {
         let scale = size / FounderizerMark.side
         ZStack {
             RoundedRectangle(cornerRadius: 116 * scale, style: .continuous).fill(plate)
-            chevron([CGPoint(x: 172, y: 217), CGPoint(x: 256, y: 133), CGPoint(x: 340, y: 217)], width: 50 * scale,
-                    scale: scale)
-            chevron([CGPoint(x: 148, y: 373), CGPoint(x: 256, y: 265), CGPoint(x: 364, y: 373)], width: 62 * scale,
-                    scale: scale)
+            ForEach(0..<Self.chevrons.count, id: \.self) { index in
+                chevron(Self.chevrons[index].points, width: Self.chevrons[index].width * scale, scale: scale)
+            }
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)

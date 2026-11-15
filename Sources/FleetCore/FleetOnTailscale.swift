@@ -12,6 +12,14 @@ public enum FleetOnTailscale {
         public let name: String
         public let address: String
         public let online: Bool
+        /// The name that the device itself gave Tailscale (`HostName`), in lower case, or empty when the answer has
+        /// none. A server that the app made gave the name that it has at its provider, and it keeps that one while
+        /// its name in Tailscale is another: Tailscale calls a second worker-1 "worker-1-1".
+        public let host: String
+
+        init(name: String, address: String, online: Bool, host: String = "") {
+            self.name = name; self.address = address; self.online = online; self.host = host
+        }
     }
 
     /// The other devices in `tailscale status --json`, by name. A device with no private IPv4 address is left out.
@@ -24,9 +32,24 @@ public enum FleetOnTailscale {
             guard let name = full.split(separator: ".").first.map(String.init), !name.isEmpty,
                   let address = ((node["TailscaleIPs"] as? [String]) ?? []).first(where: ClaimCode.isPrivateAddress)
             else { return nil }
-            return Device(name: name, address: address, online: node["Online"] as? Bool ?? false)
+            return Device(name: name, address: address, online: node["Online"] as? Bool ?? false,
+                          host: ((node["HostName"] as? String) ?? "").lowercased())
         }
         .sorted { $0.name < $1.name }
+    }
+
+    /// **The devices of an answer that says what the network is now**, or nil. The answer is read from its first `{`,
+    /// because a warning line can stand before it; Tailscale runs; and this Mac is online in its network. A Tailscale
+    /// that is stopped, signed out or cut off gives an old list of devices, and an answer that cannot be read gives
+    /// none: neither says where a server stands (`FleetKnown`).
+    public static func live(in output: String?) -> [Device]? {
+        guard let output, let brace = output.firstIndex(of: "{") else { return nil }
+        let json = String(output[brace...])
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["BackendState"] as? String == "Running",
+              (object["Self"] as? [String: Any])?["Online"] as? Bool == true else { return nil }
+        return devices(in: json)
     }
 
     /// The name of this Mac itself in the same answer, so it is never a server's name.

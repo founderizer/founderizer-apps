@@ -29,7 +29,8 @@ public sealed record MobileSnapshot(
     IReadOnlyList<string>? UiFeatures = null,
     IReadOnlyList<OwnerNeed>? AnsweredNeeds = null,
     MobileCounts? Counts = null,
-    string? Token = null)
+    string? Token = null,
+    string? EndedMark = null)
 {
     /// <summary>The hub's change token as one that the wait can ask from, or null.</summary>
     public LiveToken? LiveToken => Core.LiveToken.Parse(Token);
@@ -99,7 +100,10 @@ public sealed record MobileTaskHead(
     long? NudgeLevel = null,
     double? MissingSince = null,
     bool? Works = null,
-    string? Doing = null)
+    string? Doing = null,
+    double? ParkedUntil = null,
+    long? Parent = null,
+    long? TriggerId = null)
 {
     public bool IsTerminal => State is "completed" or "failed" or "rejected" or "canceled";
 }
@@ -131,6 +135,8 @@ public sealed record MobileChatItem(
     [JsonIgnore] public string Id => Kind + "-" + Key;
     [JsonIgnore] public bool IsFromAgent => Kind == "report";
     [JsonIgnore] public bool IsPushed => Pushed == true;
+    /// <summary>His words on their way, which the chat itself draws until the hub's copy comes (the Mac's event 0).</summary>
+    [JsonIgnore] public bool OnItsWay { get; init; }
 }
 
 /// <summary>GET /ui/mobile/task/&lt;id&gt;: the task itself, its notes after the cursor, its holds and outcomes.</summary>
@@ -140,7 +146,11 @@ public sealed record MobileTaskPage(
     IReadOnlyList<ProgressNote> Notes,
     IReadOnlyList<TaskHold> Holds,
     IReadOnlyList<TaskOutcome> Outcomes,
-    long Cursor);
+    long Cursor,
+    IReadOnlyList<TaskPermission>? Permissions = null,
+    IReadOnlyList<TaskSteer>? Steers = null,
+    IReadOnlyList<MobileTaskHead>? Subtasks = null,
+    MobileTaskHead? ParentTask = null);
 
 /// <summary>A task in full (FleetCore's FleetTask). `goal` must be there and may be null, which reads as none.</summary>
 public sealed record FleetTask(
@@ -245,6 +255,12 @@ public sealed record OwnerNeed(
     [JsonIgnore] public bool AsksForSecret => Kind == "secret";
     [JsonIgnore] public bool TakesFiles => Conversation is null && !AsksForSecret;
 
+    /// <summary>The task of the item stands on the front of its card, under the reason (OwnerNeed.taskInFront, Founderizer
+    /// 0.1.239; the owner, 15 November 2026: "the task itself need to be very clear"): the words that an agent wrote as
+    /// what he does. Not the hub's own sentence of a secret request or of a conversation's item (both have a kind), and
+    /// not an item with a door call, whose yes signs a call by its hash: those keep their task behind Details.</summary>
+    [JsonIgnore] public bool TaskInFront => Kind is null && DoorCall is null;
+
     /// <summary>The options as one answer each, or none (OwnerNeed.choices): fewer than two, an empty label, a control
     /// character, or two that say the same thing make it no choice.</summary>
     [JsonIgnore]
@@ -268,6 +284,20 @@ public sealed record OwnerNeed(
 
     /// <summary>The options combine: he ticks any of them and sends them together.</summary>
     [JsonIgnore] public bool Combines => Multi == true && Choices.Count >= 2;
+
+    /// <summary>He answered it in his own words (OwnerNeed.answeredInWords): no option pressed or ticked, and no secure
+    /// form.</summary>
+    [JsonIgnore] public bool AnsweredInWords => !IsOpen && Chosen is null && (Chose ?? []).Count == 0 && !AsksForSecret;
+
+    /// <summary><paramref name="words"/> are an option of this request, or its ticked options as the hub joins them
+    /// (OwnerNeed.offers): what a press writes as the answer.</summary>
+    public bool Offers(string words)
+    {
+        var choices = Choices;
+        if (choices.Contains(words)) return true;
+        var parts = words.Split("; ");
+        return Combines && parts.Length > 1 && parts.All(choices.Contains);
+    }
 }
 
 /// <summary>What a secret request asks for (owner feature `secret_requests`). It names a secret and never holds a value.
@@ -346,6 +376,10 @@ public sealed record SendReceipt(
     double? ReadAt = null,
     bool? Edited = null,
     string? MessageRequestId = null);
+
+/// <summary>GET /ui/mobile/ended (owner API 1.166): the head of every ended task, by id, with its schedule, and the
+/// `ended_mark` of GET /ui/mobile that it is of.</summary>
+public sealed record EndedReading(string Db, string Mark, IReadOnlyList<MobileTaskHead> Tasks);
 
 /// <summary>A task's guidance as the hub keeps it (FleetCore's TaskSteer).</summary>
 public sealed record TaskSteer(long Id, long Task, long Attempt, string Text, double Created, string RequestId,

@@ -66,17 +66,20 @@ public static partial class Screens
     public static PaneModel Pane(StoreState s, Page page, DateTimeOffset now, ScreenContext context, bool reduceMotion = false)
     {
         var fleet = s.Fleet;
-        var count = fleet is null ? 0 : Activity.NeedsYouCount(fleet);
+        var count = fleet is null ? 0 : Activity.NeedsYouCount(fleet, s.EndedTasks);
         var hubNow = fleet?.Time ?? s.HubNow(now);
         var rows = new List<AgentRow>();
         foreach (var agent in fleet?.Agents ?? [])
         {
             var status = s.StatusOf(agent.Name, now);
-            var preview = ChatLine.Preview(agent.Name, agent.Last, fleet!.Tasks);
-            var at = ChatLine.PreviewTime(agent.Name, agent.Last, fleet.Tasks);
+            var (request, newest) = WaitingRequest(s, agent);
+            var preview = request?.Title ?? ChatLine.Preview(agent.Name, agent.Last, fleet!.Tasks);
+            var at = request is not null ? ChatLine.RequestTime(request, newest) : ChatLine.LastTime(agent.Last);
             // While it works, its line says what it does now (hub 1.148), as on the Mac and the iPhone.
-            var line = status is { State: AgentState.Working, Old: false } ? ChatLine.ActionNow(agent.Name, fleet.Tasks) ?? preview : preview;
-            var more = line is null ? null : System.Text.RegularExpressions.Regex.Match(line, " \u00b7 \\+[0-9]+\\z");
+            var action = status is { State: AgentState.Working, Old: false } ? ChatLine.ActionNow(agent.Name, fleet!.Tasks) : null;
+            var line = action ?? preview;
+            var needsYou = action is null && request is not null;
+            var more = line is null || needsYou ? null : System.Text.RegularExpressions.Regex.Match(line, " \u00b7 \\+[0-9]+\\z");
             rows.Add(new AgentRow
             {
                 Name = agent.Name,
@@ -84,7 +87,8 @@ public static partial class Screens
                 Line = line,
                 LineText = more is { Success: true } ? line![..more.Index] : line,
                 LineCount = more is { Success: true } ? more.Value : null,
-                Time = line is not null && at is { } t ? TimeWords.RowTime(t, hubNow, context) : null,
+                NeedsYou = needsYou,
+                Time = at is { } t ? TimeWords.RowTime(t, hubNow, context) : null,
                 Mark = MarkLook.Of(s.MarkOf(agent.Name), status.MarkState, moves: !reduceMotion && !status.Old),
                 Status = status,
                 ShowsDot = status.HasDot(reduceMotion),
@@ -97,7 +101,7 @@ public static partial class Screens
         {
             ShowsNeeds = count > 0 || page.Kind == PageKind.Needs,
             NeedsCount = count,
-            NeedsHover = count switch { 0 => "Nothing needs you", 1 => "1 item needs you", _ => $"{count} items need you" },
+            NeedsHover = NeedsWords.Count(count),
             NeedsSelected = page.Kind == PageKind.Needs,
             TasksSelected = page.Kind is PageKind.Tasks or PageKind.Task,
             SettingsSelected = page.Kind is PageKind.Settings or PageKind.AddThisPc,
@@ -105,6 +109,19 @@ public static partial class Screens
             Reading = s.ReadsTheHub,
             Agents = ValueList.Of(rows),
         };
+    }
+
+    /// <summary>The request that waits for him when its card is the newest thing in the agent's chat, over the newest
+    /// <see cref="ChatLine.RowReads"/> items that the store holds of it, and the newest of them. A chat that the store has
+    /// not read yet has none: the store reads a chat whose newest line changed, in the background.</summary>
+    internal static (OwnerNeed? Need, MobileChatItem? Newest) WaitingRequest(StoreState s, MobileAgent agent)
+    {
+        if (s.Fleet is not { } fleet) return (null, null);
+        var items = s.Items(agent.Name);
+        var newest = items.Count > ChatLine.RowReads ? items.Skip(items.Count - ChatLine.RowReads).ToList() : items;
+        var whole = newest.Count == items.Count &&
+                    (s.Chats.TryGetValue(agent.Name, out var chat) ? chat.Whole : agent.Last is null && items.Count == 0);
+        return (ChatLine.WaitingRequest(agent.Name, newest, whole, fleet.Needs), newest.LastOrDefault());
     }
 
     // ---------------------------------------------------------------- a chat
@@ -123,31 +140,32 @@ public static partial class Screens
         var requests = open.Concat((fleet?.AnsweredNeeds ?? []).Where(n => n.By == agent && !ids.Contains(n.Id))).ToList();
         var lines = items.ToList();
         if (waiting is not null && !OwnerStore.Holds(waiting, items)) lines.Add(OnItsWay(waiting));
+        // His answer in his own words on its way is his message in the chat from the moment it goes (WordsOnTheirWay.
+        // answerInWords); a press is not: its card shows it.
+        foreach (var answer in AnswersInWordsTo(s, requests, items))
+            lines.Add(OnItsWay(answer) with { AnswerTo = answer.NeedId, OnItsWay = true });
         // The Mac's "Earlier messages" (ThreadViews): the newest items first, and the press adds as many again. A PC holds
         // what it read since its first read of the chat (the newest 30, then the newer ones): no route gives older pages.
         var earlier = lines.Count > Math.Max(shown, 1);
         if (earlier) lines = lines.Skip(lines.Count - Math.Max(shown, 1)).ToList();
-        var places = ChatPlaces.Of(requests, items);
+        // Each request where it was raised (the Mac's ChatRequestPlaces.inTime); one raised before the oldest item stands
+        // only while the items are the chat's whole history.
+        var whole = !earlier && s.Chats.TryGetValue(agent, out var page) && page.Whole;
+        var places = ChatPlaces.InTime(requests, lines, whole);
         var byId = requests.GroupBy(n => n.Id).ToDictionary(g => g.Key, g => g.First());
+        var parts = places.Rows(lines);
+        var times = ChatPlaces.Times(parts, byId.ToDictionary(p => p.Key, p => p.Value.Raised));
         var rows = new List<ChatRow>();
-        MobileChatItem? previous = null;
-        foreach (var item in lines)
+        double? previous = null;
+        for (var i = 0; i < parts.Count; i++)
         {
-            if (places.Hidden.Contains(item.Id)) continue;
-            if (Stamp(previous, item, Unix(now), context) is { } stamp)
-                rows.Add(new ChatRow { Key = "stamp-" + item.Id, Kind = ChatRowKind.Stamp, Text = stamp, Time = item.Ts });
-            previous = item;
-            if (places.InPlaceOf.TryGetValue(item.Id, out var inPlace) && byId.TryGetValue(inPlace, out var answered))
-            {
-                rows.Add(RequestRow(s, answered, items, now, context));
-                continue;
-            }
-            rows.Add(ItemRow(s, item, waiting, now, context));
-            foreach (var card in places.After.GetValueOrDefault(item.Id) ?? [])
-                if (byId.TryGetValue(card, out var need)) rows.Add(RequestRow(s, need, items, now, context));
+            if (Stamp(previous, times[i], Unix(now), context) is { } stamp)
+                rows.Add(new ChatRow { Key = "stamp-" + parts[i].Id, Kind = ChatRowKind.Stamp, Text = stamp, Time = times[i] });
+            previous = times[i];
+            if (parts[i].Item is { } item) rows.Add(ItemRow(s, item, waiting, now, context));
+            else if (byId.TryGetValue(parts[i].Need!.Value, out var need))
+                rows.Add(RequestRow(s, need, items, now, context, places.Spoken.Contains(need.Id)));
         }
-        foreach (var card in places.AtEnd)
-            if (byId.TryGetValue(card, out var need)) rows.Add(RequestRow(s, need, items, now, context));
         var line = WaitingLine(s, agent, waiting, now, context);
         var status = s.StatusOf(agent, now);
         var moving = line is { Shows: true, Line.Moving: true };
@@ -163,6 +181,7 @@ public static partial class Screens
             Waiting = line,
             WaitingMark = MarkLook.Of(s.MarkOf(agent), AgentState.Working, moves: !reduceMotion && moving),
             Earlier = earlier ? "Earlier messages" : null,
+            EmptyWords = $"No messages with {s.Names.Label(agent)} yet",
             Loading = blank && !s.HasRead(agent) && s.ReadCanCome,
             Empty = blank && s.HasRead(agent) && entry?.Last is null,
             Composer = Composer(s, agent, canChat, now),
@@ -191,10 +210,23 @@ public static partial class Screens
 
     /// <summary>The stamp over an item (ChatStamp): over the first, and over one that came more than an hour after the
     /// item before or on another day; "Today 15:03", "Yesterday 09:10", a weekday within six days, else the date.</summary>
-    private static string? Stamp(MobileChatItem? previous, MobileChatItem item, double now, ScreenContext context)
+    private static string? Stamp(double? previous, double time, double now, ScreenContext context)
     {
-        if (previous is not null && item.Ts - previous.Ts <= 3600 && context.Day(previous.Ts) == context.Day(item.Ts)) return null;
-        return StampWords(item.Ts, now, context);
+        if (previous is { } before && time - before <= 3600 && context.Day(before) == context.Day(time)) return null;
+        return StampWords(time, now, context);
+    }
+
+    /// <summary>His answers in his own words to this agent's requests on their way, until the chat holds the hub's copy
+    /// (WordsOnTheirWay.answerInWords): the waiting request, not refused, of this hub and generation, or one that the hub
+    /// took and that the chat has not read yet.</summary>
+    private static IEnumerable<PendingRequest> AnswersInWordsTo(StoreState s, IReadOnlyList<OwnerNeed> requests, IReadOnlyList<MobileChatItem> items)
+    {
+        var asked = requests.Select(n => n.Id).ToHashSet();
+        bool Here(PendingRequest r) => r.AnswersInWords && r.NeedId is { } need && asked.Contains(need) && r.Hub == s.Hub &&
+                                       r.Database == s.Fleet?.Db && !OwnerStore.Holds(r, items);
+        if (s.Pending is { Refusal: null } pending && Here(pending)) yield return pending;
+        foreach (var taken in s.AnswersTaken.Values)
+            if (taken.RequestId != s.Pending?.RequestId && Here(taken)) yield return taken;
     }
 
     private static double Unix(DateTimeOffset time) => time.ToUnixTimeMilliseconds() / 1000.0;
@@ -232,10 +264,11 @@ public static partial class Screens
         // while it waits for its receipt: the request line over the composer says that (the Mac's pendingBar).
         string? slot = null;
         var unconfirmed = false;
+        var sending = false;
         if (mine && waiting is not null)
         {
             if (s.Delivered?.RequestId == waiting.RequestId) slot = MessageTime(item.Ts, Unix(now), context);
-            else if (s.Sending) slot = "Sending…";
+            else if (s.Sending) { slot = "Sending…"; sending = true; }
             else unconfirmed = true;
         }
         string? hover = null;
@@ -251,6 +284,9 @@ public static partial class Screens
             Time = item.Ts,
             TimeWords = unconfirmed ? null : slot ?? MessageTime(item.Ts, Unix(now), context),
             TimeHover = hover,
+            AgeWords = unconfirmed ? null : sending ? slot : MessageAge(item.Ts, now, context),
+            AgeMoves = !unconfirmed && !sending,
+            AgeHover = item.Kind == "report" ? TimeWords.DateAndTime(item.Ts, context) : hover,
             SlotIsWarning = false,
             SlotAction = WriteAction.None,
             SlotHoldsBack = mine && s.Sending && s.Delivered?.RequestId != waiting!.RequestId,
@@ -262,21 +298,22 @@ public static partial class Screens
     }
 
     private static ChatRow RequestRow(StoreState s, OwnerNeed need, IReadOnlyList<MobileChatItem> items, DateTimeOffset now,
-                                      ScreenContext context) =>
+                                      ScreenContext context, bool spoken) =>
         new()
         {
             Key = "request-" + need.Id,
             Kind = ChatRowKind.Request,
             Time = need.Raised,
-            Request = Card(s, need, items, now, context),
+            Request = Card(s, need, items, now, context, spoken),
         };
 
     /// <summary>A request card in a chat (NeedRequestCard).</summary>
     public static RequestCard Card(StoreState s, OwnerNeed need, IReadOnlyList<MobileChatItem> items, DateTimeOffset now,
-                                   ScreenContext context)
+                                   ScreenContext context, bool spoken = false)
     {
         var taken = s.AnswersTaken.GetValueOrDefault(need.Id);
         var onItsWay = s.Pending is { NeedId: { } id } p && id == need.Id && p.Refusal is null ? p : taken;
+        var inWords = onItsWay?.AnswersInWords ?? need.AnsweredInWords;
         var ended = !need.IsOpen || onItsWay is not null;
         var todo = need.AsksForSecret ? "" : need.Todo;
         var isShort = need.Details is not null || Characters(need.Why) <= NeedTalkWhy;
@@ -289,6 +326,8 @@ public static partial class Screens
             Title = need.Title,
             Folded = ended,
             AnswerWords = answer.Length == 0 ? "Answered" : answer,
+            AnsweredInWords = inWords,
+            Spoken = spoken,
             Answered = !need.IsOpen,
             Why = need.Why,
             Short = isShort,
@@ -307,6 +346,7 @@ public static partial class Screens
             Answer = AnswerBox(s, need),
             AsksForSecret = need.AsksForSecret,
             AnswerFiles = ValueList.Of(items.LastOrDefault(i => i.AnswerTo == need.Id)?.Attachments ?? []),
+            Body = BodyOf(need, step: false),
         };
     }
 
@@ -349,9 +389,7 @@ public static partial class Screens
             FilesWait = s.FilesWait(composer),
             Note = note?.Words,
             NoteIsWarning = note?.Warning ?? false,
-            PlusHover = (s.Staged.GetValueOrDefault(composer)?.Count ?? 0) >= MessageAttachment.PerMessage
-                ? $"A message carries at most {MessageAttachment.PerMessage} files"
-                : "Send a picture, a PDF, a ZIP or a text file with this message",
+            PlusHover = AttachWords.PlusHover(s.Staged.GetValueOrDefault(composer)?.Count ?? 0),
             SendHover = "Send this answer",
         };
     }
@@ -419,6 +457,7 @@ public static partial class Screens
             Draft = draft,
             Files = files,
             Chips = ValueList.Of(files.Select(f => Chip(s, f))),
+            PlusHover = AttachWords.PlusHover(s.Staged.GetValueOrDefault("agent:" + agent)?.Count ?? 0),
             Note = note,
             NoteIsWarning = warning,
             // A file on its way, or one that did not go, holds the message back (filesAreWaiting).
@@ -547,8 +586,8 @@ public static partial class Screens
         var openIds = lane.Open.Select(n => n.Id).ToList();
         var hand = NeedsLane.AtHand(chosen, order ?? openIds, openIds);
         var waits = fleet is null ? new Dictionary<long, IReadOnlyList<string>>() : Activity.NeedWaits(fleet);
-        var ownerWaits = fleet is null ? new Dictionary<long, OwnerWait>() : Activity.OwnerWaits(fleet);
-        var ownerTasks = fleet is null ? [] : Activity.AllTasks(fleet).Where(t => Activity.OwnerOnly(fleet).Contains(t.Id))
+        var ownerWaits = fleet is null ? new Dictionary<long, OwnerWait>() : Activity.OwnerWaits(fleet, s.EndedTasks);
+        var ownerTasks = fleet is null ? [] : s.AllTasks().Where(t => Activity.OwnerOnly(fleet).Contains(t.Id))
             .OrderByDescending(t => t.Id).ToList();
         var cards = new List<NeedCardRow>();
         foreach (var need in lane.Open)
@@ -617,6 +656,7 @@ public static partial class Screens
         var isShort = need.Details is not null || Characters(need.Why) <= NeedTalkWhy;
         var hasMore = need.Details is not null || !isShort || todo.Length > 0;
         var blocks = MessageBlock.Parse(need.Why);
+        var inWords = onItsWay?.AnswersInWords ?? need.AnsweredInWords;
         var answer = (onItsWay?.Text ?? need.Answer ?? "").Trim();
         return new RequestStep
         {
@@ -639,12 +679,63 @@ public static partial class Screens
             TodoLabel = "What it needs from you",
             Ended = ended,
             AnswerWords = answer.Length == 0 ? "Answered" : answer,
+            AnsweredInWords = inWords,
             Options = Options(s, need),
             Answer = AnswerBox(s, need),
             AsksForSecret = need.AsksForSecret,
             AnswerFiles = ValueList.Of(s.Items(need.By).LastOrDefault(i => i.AnswerTo == need.Id)?.Attachments ?? []),
+            Body = BodyOf(need, step: true),
         };
     }
+
+    /// <summary>The body of a request as the Mac draws it since Founderizer 0.1.239 (app commit 95811d21b): the reason
+    /// and the task as message text, the task on the front when <see cref="OwnerNeed.TaskInFront"/>, and the link and
+    /// what stays behind it. <paramref name="step"/> is the request at hand (NeedStep), else the card in a chat
+    /// (NeedRequestCard): their links have their own words.</summary>
+    public static RequestBody BodyOf(OwnerNeed need, bool step)
+    {
+        var todo = need.AsksForSecret ? "" : need.Todo;
+        var task = need.TaskInFront ? todo : "";
+        var behind = task.Length == 0 ? todo : "";
+        var isShort = need.Details is not null || Characters(need.Why) <= NeedTalkWhy;
+        var hasMore = need.Details is not null || !isShort || behind.Length > 0;
+        var script = need.DoorHost is not null && need.Details is not null;
+        string? closed = null, open = null;
+        if (hasMore && step)
+            (closed, open) = isShort ? (script ? ("Script", "Script") : ("Details", "Details")) : ("Show all", "Show less");
+        else if (hasMore)
+            (closed, open) = need.Details is not null ? (need.DoorHost is not null ? ("Script", "Script") : ("Details", "Details"))
+                : ("Show all", "Show less");
+        static bool OneParagraph(string text) =>
+            MessageBlock.Parse(text) is var blocks && (blocks.Count == 0 || blocks is [{ Kind: MessageBlock.Kinds.Paragraph }]);
+        var taskOne = OneParagraph(task);
+        var whyOne = Characters(need.Why) <= NeedTalkWhy && OneParagraph(need.Why);
+        return new RequestBody
+        {
+            Why = need.Why,
+            WhyBlocks = ValueList.Of(MessageBlock.Parse(need.Why)),
+            Short = isShort,
+            FoldedWhy = string.Join(' ', need.Why.ReplaceLineEndings("\n").Split('\n')),
+            Task = task.Length > 0 ? task : null,
+            TaskBlocks = ValueList.Of(MessageBlock.Parse(task)),
+            MoreClosed = closed,
+            MoreOpen = open,
+            MoreChevron = hasMore && (step ? isShort : need.Details is not null),
+            Details = need.Details,
+            DetailsBlocks = ValueList.Of(MessageBlock.Parse(need.Details ?? "")),
+            DetailsIsScript = need.DoorScript is not null,
+            TodoBehind = behind.Length > 0 ? behind : null,
+            TodoBehindBlocks = ValueList.Of(MessageBlock.Parse(behind)),
+            CentredClosed = step && taskOne && (!isShort || whyOne),
+            CentredOpen = step && taskOne && whyOne,
+        };
+    }
+
+    /// <summary>How long ago a message came, in its footer under the pointer (messageAge, Founderizer 0.1.239; the owner,
+    /// 15 November 2026: "apply the style of the hover time (relative too)"): the app's words of an age, by this PC's
+    /// clock. Read it when the footer shows, as the Mac reads it then.</summary>
+    public static string MessageAge(double time, DateTimeOffset now, ScreenContext context) =>
+        TimeWords.Age(time, Unix(now), context);
 
     /// <summary>A day of a list that opens by day (ActivityBoard.dayWords): "Today", "Yesterday", else the short weekday,
     /// the day and the short month.</summary>
@@ -665,14 +756,14 @@ public static partial class Screens
         var periods = Enum.GetValues<ActivityPeriod>().Select(p => new Choice<ActivityPeriod>(p, p.Title())).ToList();
         var agents = new List<AgentChoice> { new(null, "All agents", null) };
         if (fleet is not null)
-            agents.AddRange(Activity.Agents(fleet, agent).Select(a => new AgentChoice(a, s.Names.Label(a),
+            agents.AddRange(Activity.Agents(fleet, agent, s.EndedTasks).Select(a => new AgentChoice(a, s.Names.Label(a),
                 MarkLook.Of(s.MarkOf(a), s.StatusOf(a, now).MarkState, moves: false))));
         var lanes = new List<LaneModel>();
         var any = false;
         if (fleet is not null)
         {
-            var columns = Activity.Lanes(fleet, agent, period, context);
-            var waits = Activity.OwnerWaits(fleet);
+            var columns = Activity.Lanes(fleet, agent, period, context, s.EndedTasks);
+            var waits = Activity.OwnerWaits(fleet, s.EndedTasks);
             foreach (var column in Enum.GetValues<ActivityColumn>())
             {
                 var tasks = columns[column];
@@ -683,12 +774,12 @@ public static partial class Screens
                     Title = column.Title(),
                     Count = tasks.Count,
                     Cards = column == ActivityColumn.Done ? ValueList<TaskCardRow>.Empty
-                        : ValueList.Of(tasks.Select(t => TaskCard(s, fleet, t, column, waits, now))),
+                        : ValueList.Of(tasks.Select(t => TaskCard(s, fleet, t, column, waits, now, context))),
                     Ended = column == ActivityColumn.Done ? Ended(s, fleet, tasks, now, context) : null,
                 });
             }
         }
-        var hasTasks = fleet is not null && Activity.AllTasks(fleet).Any(t => agent is null || t.Owner == agent);
+        var hasTasks = fleet is not null && s.AllTasks().Any(t => agent is null || t.Owner == agent);
         return new TaskBoardModel
         {
             Waiting = fleet is null,
@@ -702,15 +793,26 @@ public static partial class Screens
         };
     }
 
+    /// <summary>Until when its agent parked a task, at the end of its agent's line (ActivityBoard.why): "Until 16:00", while
+    /// no hold of the owner's and no usage limit holds it. Else null: its state word.</summary>
+    public static string? Parked(StoreState s, MobileSnapshot fleet, MobileTaskHead task, DateTimeOffset now, ScreenContext context) =>
+        task.ParkedUntil is { } until && !fleet.Holds.Any(h => h.Task == task.Id) &&
+        !fleet.Agents.Any(a => a.Name == task.Owner && a.Limit is not null)
+            ? $"Until {ComingTime(until, s.HubNow(now), context)}" : null;
+
     private static TaskCardRow TaskCard(StoreState s, MobileSnapshot fleet, MobileTaskHead task, ActivityColumn column,
-                                        IReadOnlyDictionary<long, OwnerWait> waits, DateTimeOffset now)
+                                        IReadOnlyDictionary<long, OwnerWait> waits, DateTimeOffset now, ScreenContext context)
     {
         var wait = waits.GetValueOrDefault(task.Id);
         var word = TaskWords.State(task, fleet, s.Names);
+        // A task that waits for its subtasks names their agents where its state word would say "Working" (the Mac's
+        // ActivityBoard.why of 14 November 2026), and its hover says the same.
+        var waitsFor = column == ActivityColumn.Waiting && Activity.SubtaskWaits(fleet).TryGetValue(task.Id, out var agents) ? agents : null;
+        var subtasks = waitsFor is not null && word == "Working" ? Activity.SubtaskWords(waitsFor, s.Names) : null;
         string? why = column switch
         {
             ActivityColumn.InProgress => word == "Working" ? null : word,
-            ActivityColumn.Waiting => wait is null ? word : null,
+            ActivityColumn.Waiting => wait is null ? Parked(s, fleet, task, now, context) ?? subtasks ?? word : null,
             _ => null,
         };
         return new TaskCardRow
@@ -724,7 +826,7 @@ public static partial class Screens
             AgentLabel = s.Names.Label(task.Owner),
             Mark = MarkLook.Of(s.MarkOf(task.Owner), s.StatusOf(task.Owner, now).MarkState, moves: false),
             Why = why,
-            Hover = task.Title + "\n" + (wait?.Words ?? word),
+            Hover = task.Title + "\n" + (wait?.Words ?? (waitsFor is not null ? why : null) ?? word),
         };
     }
 
@@ -750,11 +852,14 @@ public static partial class Screens
         };
     }
 
-    /// <summary>A task's page: what it asks, its notes, who did it, its state word and controls, its guidance box, and the
-    /// facts of the panel. Null before its first read.</summary>
+    /// <summary>A task's page: what it asks, its thread, who did it, its state word and controls, its guidance box, and the
+    /// facts of the panel. Null before its first read; on a current reading of a hub that keeps a thread's events, also
+    /// until the first read of its record has every page, so that the thread and the panel come in one frame (the Mac's
+    /// TaskView.shows).</summary>
     public static TaskPageModel? Task(StoreState s, long id, DateTimeOffset now, ScreenContext context)
     {
         if (!s.TaskPages.TryGetValue(id, out var page)) return null;
+        if (page.Activity is null && s.Offers("thread_events") && s.IsFresh(now)) return null;
         var task = page.Task;
         var fleet = s.Fleet;
         var hold = page.Holds.FirstOrDefault(h => h.State != "released");
@@ -785,6 +890,7 @@ public static partial class Screens
             guidance = new GuidanceModel { Placeholder = "Guide this task…", SendHover = "Send this guidance to the task" };
         var thread = page.Notes.Select(n => new NoteRow("note-" + n.Id, n.Text, ValueList.Of(MessageBlock.Parse(n.Text)),
                                                         MessageTime(n.Ts, Unix(now), context))).ToList();
+        var stopped = page.Holds.FirstOrDefault(h => h.State == "stopped")?.Attempt;
         string? waitingLabel = null, waitingValue = null, waitingAgent = null;
         if (!string.IsNullOrEmpty(task.WaitingOn))
         {
@@ -807,6 +913,11 @@ public static partial class Screens
                     ? $"{s.Names.Label(task.Owner)} is at its usage limit until {ComingTime(l.Until, s.HubNow(now), context)}."
                     : $"{s.Names.Label(task.Owner)} is at its usage limit.") : null,
             Notes = ValueList.Of(thread),
+            Thread = ValueList.Of(Thread(page, task, stopped, now, context)),
+            ThreadTopRows = page.Activity?.TopRows.Count ?? 0,
+            ActivityError = s.IsFresh(now) && s.Offers("thread_events") ? page.ActivityError : null,
+            OfflineWords = s.IsFresh(now) ? null : StepWords.Offline,
+            LivePlan = !task.IsTerminal && page.Activity is { Plan.Count: > 0 } live ? ValueList.Of(live.Plan.Select(PlanStep.Of)) : null,
             MissingWords = !task.IsTerminal && task.MissingSince is { } m ? "Session missing since " + TimeWords.DateAndTime(m, context) : null,
             WaitingLabel = waitingLabel,
             WaitingValue = waitingValue,
@@ -819,24 +930,231 @@ public static partial class Screens
                 How = task.How ?? "Not reported",
                 Note = task.CheckNote,
                 CheckedAt = task.CheckedAt is { } c ? TimeWords.DateAndTime(c, context) : null,
+                Outputs = task.Accepted == 1 ? Outputs(s, task.Id, now) : null,
             },
             Who = s.Names.Label(task.Owner),
             Controls = controls,
             Guidance = guidance,
-            Facts = ValueList.Of(Facts(s, task, word, context)),
+            Facts = ValueList.Of(Facts(s, task, word, context, page.Activity)),
+            ParentTask = ParentTask(s, page),
+            Subtasks = Subtasks(s, page),
+            ChildAgents = page.Activity is { Children.Count: > 0 } kids
+                ? new ChildAgentsModel(ValueList.Of(kids.Children.Take(20).Select(c => new ChildAgentRow(
+                    c.Key, c.Name, c.Status switch { "completed" => ChildState.Done, "failed" => ChildState.Failed, _ => ChildState.Working },
+                    StepWords.OpenChild(c.Key.Attempt)))), kids.Children.Count > 20 ? StepWords.MoreAgents : null) : null,
+            ChangedFiles = page.Activity is { ChangedFiles.Count: > 0 } a
+                ? new ChangedFilesModel(ValueList.Of(a.ChangedFiles.Select(c => new ChangedFileRow(
+                    c.Path, StepWords.Action(c.Action), c.Added is { } added ? StepWords.Added(added) : null,
+                    c.Removed is { } removed ? StepWords.Removed(removed) : null)))) : null,
+        };
+    }
+
+    /// <summary>"Parent task · &lt;title&gt;", or "Parent task" when its title is not known, as a link to it (the Mac's
+    /// taskFacts).</summary>
+    private static ParentTaskModel? ParentTask(StoreState s, TaskPageState page)
+    {
+        if (page.Task.Parent is not { } parent) return null;
+        var title = page.ParentTask is { } head && head.Id == parent ? head.Title
+            : s.AllTasks().FirstOrDefault(t => t.Id == parent)?.Title;
+        return new ParentTaskModel(parent, title is null ? "Parent task" : $"Parent task · {title}");
+    }
+
+    /// <summary>"Subtasks": each subtask by id, its title and its state word, a press opens it (the Mac's taskFacts). From
+    /// the task read (owner API 1.163), else from the reading's heads.</summary>
+    private static SubtasksModel? Subtasks(StoreState s, TaskPageState page)
+    {
+        if (s.Fleet is not { } fleet) return null;
+        var heads = page.Subtasks?.ToList() ?? s.AllTasks().Where(t => t.Parent == page.Task.Id).OrderBy(t => t.Id).ToList();
+        return heads.Count == 0 ? null
+            : new SubtasksModel(ValueList.Of(heads.Select(t => new SubtaskRow(t.Id, t.Title, TaskWords.State(t, fleet, s.Names)))));
+    }
+
+    /// <summary>A task's thread (RuntimeActivity.entries): runs of steps, what the agent said (a message, an error, the
+    /// record's cut), its notes, the permissions that wait or were refused, and the owner's guidance, in one order.</summary>
+    private static IEnumerable<ThreadRowModel> Thread(TaskPageState page, FleetTask task, long? stopped, DateTimeOffset now,
+                                                      ScreenContext context)
+    {
+        var activity = page.Activity;
+        var top = (IReadOnlyList<ShownRow>?)activity?.TopRows ?? [];
+        foreach (var entry in ThreadEntry.Of(top, page.Notes, page.Permissions, page.Steers))
+        {
+            if (entry.Steps is { } rows) yield return new ThreadRowModel { Key = "steps-" + rows[0].Id, Kind = ThreadRowKind.Steps, Steps = Steps(rows, task, stopped, activity, now, context) };
+            else if (entry.Said is { } said)
+            {
+                var row = Row(said, task, stopped, activity, now, context);
+                yield return new ThreadRowModel
+                {
+                    Key = "event-" + said.Id,
+                    Kind = said.Row.Event.Type switch { "agent_message" => ThreadRowKind.Message, "error" => ThreadRowKind.Error, _ => ThreadRowKind.Truncated },
+                    Words = row.Words,
+                    Text = said.Row.Event.Type == "agent_message" ? null : row.Text,
+                };
+            }
+            else if (entry.Note is { } n)
+                yield return new ThreadRowModel
+                {
+                    Key = "note-" + n.Id, Kind = ThreadRowKind.Note,
+                    Words = new NoteRow("note-" + n.Id, n.Text, ValueList.Of(MessageBlock.Parse(n.Text)), MessageTime(n.Ts, Unix(now), context)),
+                };
+            else if (entry.Permission is { } p)
+                yield return new ThreadRowModel
+                {
+                    Key = "permission-" + p.Id, Kind = ThreadRowKind.Permission,
+                    Permission = new PermissionRowModel(p.Tool, p.Decision ?? StepWords.Waiting, p.Input, p.Reason),
+                };
+            else if (entry.Steer is { } g)
+                yield return new ThreadRowModel
+                {
+                    Key = "steer-" + g.Id, Kind = ThreadRowKind.Guidance,
+                    Guidance = new SteerRowModel(g.Text, StepWords.Guidance(g, task.Attempt), TimeWords.DateAndTime(g.ReadAt ?? g.Created, context)),
+                };
+        }
+    }
+
+    /// <summary>One run of steps as one fold row (RuntimeActivity's StepsRow): the step that runs now while one runs, else
+    /// the count, with its failures in orange; each step a row as the Mac's RuntimeRow draws it.</summary>
+    public static StepsModel Steps(IReadOnlyList<ShownRow> rows, FleetTask task, long? stopped, TaskActivity? activity = null,
+                                   DateTimeOffset now = default, ScreenContext? context = null)
+    {
+        bool Ended(ActivityRow row) => row.EndedWithoutResult(task.Attempt, stopped);
+        var running = rows.Select(r => r.Row).LastOrDefault(r => r.Event.Type == "tool_call" && r.Status is not ("completed" or "failed") && !Ended(r));
+        var failures = rows.Count(r => r.Row.Status == "failed");
+        return new StepsModel
+        {
+            Title = running is not null ? StepWords.ToolTitle(running.Event.Title) : StepWords.Count(rows.Count),
+            Status = running is not null ? StepWords.Running(rows.Count) : failures == 0 ? "" : StepWords.Failed(failures),
+            Orange = failures > 0,
+            Symbol = running is not null ? StepWords.Symbol(running.Event.Kind) : StepSymbol.Steps,
+            Rows = ValueList.Of(rows.Select(shown => Row(shown, task, stopped, activity, now, context ?? ScreenContext.Local))),
+        };
+    }
+
+    /// <summary>One row of a thread as the Mac's RuntimeRow draws it: a message, a thought ("Thinking"), a tool call with
+    /// what it opens to, a child agent's plan ("Plan"), an error, or the record's cut.</summary>
+    private static StepRowModel Row(ShownRow shown, FleetTask task, long? stopped, TaskActivity? activity, DateTimeOffset now,
+                                    ScreenContext context)
+    {
+        var row = shown.Row;
+        var e = row.Event;
+        var key = "event-" + shown.Id;
+        switch (e.Type)
+        {
+            case "agent_message":
+                var text = e.Text ?? "";
+                return new StepRowModel(key, StepSymbol.Other, "", "", false)
+                {
+                    Kind = ActivityRowKind.Message,
+                    Words = new NoteRow(key, text, ValueList.Of(MessageBlock.Parse(text)), e.Ts is { } ts ? MessageTime(ts, Unix(now), context) : ""),
+                };
+            case "agent_thought":
+                return new StepRowModel(key, StepSymbol.Thought, StepWords.Thinking, "", false) { Kind = ActivityRowKind.Thought, Text = e.Text ?? "" };
+            case "plan":
+                return new StepRowModel(key, StepSymbol.Plan, StepWords.Plan, "", false)
+                {
+                    Kind = ActivityRowKind.Plan, Plan = ValueList.Of((e.Entries ?? []).Select(PlanStep.Of)),
+                };
+            case "error":
+                return new StepRowModel(key, StepSymbol.Other, "", "", true) { Kind = ActivityRowKind.Error, Text = e.Message ?? StepWords.RuntimeError };
+            case "truncated":
+                return new StepRowModel(key, StepSymbol.Other, "", "", false) { Kind = ActivityRowKind.Truncated, Text = StepWords.Truncated };
+        }
+        var ended = row.EndedWithoutResult(task.Attempt, stopped);
+        var children = row.Subagent is not null && e.ToolKey is { } call && activity is not null
+            ? ActivityTimeline.Children(activity.Rows, call) : [];
+        return new StepRowModel(key, row.Subagent is null ? StepWords.Symbol(e.Kind) : StepSymbol.Subagent,
+                                row.Subagent?.Name ?? StepWords.ToolTitle(e.Title),
+                                ended ? StepWords.ResultUnknown : StepWords.ToolStatus(row.Status), row.Status == "failed")
+        {
+            Kind = ActivityRowKind.Tool,
+            FullTitle = e.Title is { } title && StepWords.ToolTitle(title) != title ? title : null,
+            Locations = ValueList.Of(row.Locations.Select(l => l.Path)),
+            Output = row.Output is not null || row.Subagent is null ? row.Output ?? StepWords.NoOutput : null,
+            Script = shown.Script is { } script ? script.Event.Title ?? "exec" : null,
+            ScriptResult = shown.Script is { } done ? done.Output ?? StepWords.NoOutput : null,
+            ChildLines = ValueList.Of(children.TakeLast(3).Select(c => c.Event.Title ?? c.Event.Text ?? c.Event.Message ?? StepWords.Activity)),
+            Child = row.Subagent is not null && e.ToolKey is { } opens ? ToolKey.Of(opens) : null,
+        };
+    }
+
+    /// <summary>A child agent's thread, in place of the task's own thread (RuntimeActivity.childThread): Back, its name or
+    /// "Agent thread", its attempt, and its rows as a plain list without Fleet's own calls ("Waiting for agent activity."
+    /// while it has none). Null while the task's page or its record is not read, or the call has no agent.</summary>
+    public static ChildThreadModel? ChildThread(StoreState s, long id, ToolKey child, DateTimeOffset now, ScreenContext context)
+    {
+        if (!s.TaskPages.TryGetValue(id, out var page) || page.Activity is not { } activity) return null;
+        var call = activity.Rows.FirstOrDefault(r => r.Event.ToolKey == child.Tuple && r.Subagent is not null);
+        if (call is null) return null;
+        var stopped = page.Holds.FirstOrDefault(h => h.State == "stopped")?.Attempt;
+        var rows = ActivityTimeline.Children(activity.Rows, child.Tuple);
+        var shown = ShownRow.Of(rows, activity.KeptScripts).Where(r => !r.Row.IsFleetTool);
+        return new ChildThreadModel
+        {
+            Title = call.Subagent?.Name ?? StepWords.AgentThread,
+            AttemptWords = StepWords.Attempt(child.Attempt),
+            Rows = ValueList.Of(shown.Select(r => Row(r, page.Task, stopped, activity, now, context))),
+            WaitingWords = rows.Count == 0 ? StepWords.WaitingForAgent : null,
+        };
+    }
+
+    /// <summary>The checked outputs of an accepted result (the Mac's ArtifactSection), from what the store holds for the
+    /// open task. A reading that is not current holds nothing: what was read is discarded.</summary>
+    public static CheckedOutputsModel Outputs(StoreState s, long task, DateTimeOffset now)
+    {
+        var fresh = s.IsFresh(now);
+        var held = s.Outputs is { } o && o.Task == task ? o : null;
+        if (!fresh && held is { } h && (h.Listed || h.Opened is not null || h.Loading is not null || h.Files.Count > 0))
+            held = new OutputsState { Task = task, Error = OutputWords.Discarded };
+        var loading = held?.Loading;
+        var enabled = fresh && loading is null;
+        OpenedOutputModel? opened = null;
+        if (held?.Opened is { } content)
+        {
+            var file = content.File;
+            var newlines = content.Text?.Count(c => c == '\n') ?? 0;
+            opened = new OpenedOutputModel
+            {
+                Path = file.Path,
+                Text = content.Text,
+                EmptyText = content.Text?.Length == 0,
+                TextHeight = Math.Min(320, Math.Max(80, (Math.Min(newlines, 17) + 1) * 18 + 16)),
+                Picture = content.Picture,
+                Width = content.Width,
+                Height = content.Height,
+                PictureName = content.Picture is null ? null : OutputWords.VerifiedImage(file.Path),
+                Download = OutputWords.VerifiedDownload(file.Bytes),
+                Facts = ValueList.Of(new[] { new Fact(OutputWords.Commit, file.Commit), new Fact(OutputWords.Sha256, file.Sha256),
+                                             new Fact(OutputWords.Type, file.Mime) }),
+            };
+        }
+        return new CheckedOutputsModel
+        {
+            ViewWords = held?.Listed == true ? OutputWords.Reload : OutputWords.View,
+            Enabled = enabled,
+            ConnectionWords = fresh ? null : OutputWords.Connection,
+            Loading = loading,
+            Error = held?.Error,
+            NoFilesWords = held is { Listed: true, Files.Count: 0 } ? OutputWords.NoFiles : null,
+            Files = ValueList.Of((held?.Files ?? ValueList<ArtifactFile>.Empty).Select(f =>
+                new OutputFileRow(f, f.IsImage, OutputWords.ViewNamed(f.Path), enabled))),
+            Opened = opened,
         };
     }
 
     /// <summary>Who checks the result (FleetTask.checkStatus).</summary>
     public static string CheckStatus(FleetTask task, AgentBook names)
     {
-        var who = task.Requester == "owner" ? "you" : names.Label(task.Requester);
-        if (task.Accepted == 1) return "Accepted by " + who;
-        if (task.Accepted == 0) return "Not accepted by " + who;
-        return task.Delivered is null ? "No result yet" : task.Requester == "owner" ? "Waiting for your check" : $"Waiting for {who}'s check";
+        // One whole sentence for each case, as FleetTask.checkStatus (swift-words.json, "checks").
+        var owner = task.Requester == "owner";
+        var who = names.Label(task.Requester);
+        return task.Accepted switch
+        {
+            1 => owner ? "Accepted by you" : $"Accepted by {who}",
+            0 => owner ? "Not accepted by you" : $"Not accepted by {who}",
+            _ => task.Delivered is null ? "No result yet" : owner ? "Waiting for your check" : $"Waiting for {who}'s check",
+        };
     }
 
-    private static List<Fact> Facts(StoreState s, FleetTask task, string word, ScreenContext context)
+    private static List<Fact> Facts(StoreState s, FleetTask task, string word, ScreenContext context, TaskActivity? activity)
     {
         var facts = new List<Fact>();
         if (task.Project is { } project) facts.Add(new Fact("Project", project));
@@ -852,15 +1170,33 @@ public static partial class Screens
         {
             var parts = new List<string>();
             if (task.Attempt > 1) parts.Add($"Attempt {task.Attempt}");
-            if (task.Restarts > 0) parts.Add($"Restarted {task.Restarts} " + (task.Restarts == 1 ? "time" : "times"));
+            if (task.Restarts > 0) parts.Add(task.Restarts == 1 ? "Restarted 1 time" : $"Restarted {task.Restarts} times");
             facts.Add(new Fact("Attempt", string.Join(" · ", parts)));
+        }
+        // The AI providers of its attempt now, from the record (the Mac's taskFacts): by their own names, else as written.
+        var runtimes = activity?.Runtimes.Where(r => r.Attempt == task.Attempt).Select(r => r.Runtime).Order(StringComparer.Ordinal).ToList();
+        if (runtimes is { Count: > 0 })
+            facts.Add(new Fact("AI provider", string.Join(", ", runtimes.Select(r => r switch
+            {
+                "claude" => "Claude Code",
+                "codex" => "Codex",
+                "grok" => "Grok Build",
+                _ => r,
+            }))));
+        foreach (var model in activity?.Models.Where(m => m.Attempt == task.Attempt) ?? [])
+        {
+            facts.Add(new Fact("Model requested", model.RequestedModel ?? StepWords.Automatic));
+            facts.Add(new Fact("Model used", model.Model ?? StepWords.NotReported));
+            facts.Add(new Fact("Reasoning requested", model.RequestedEffort is { } asked ? StepWords.Reasoning(asked) : StepWords.Automatic));
+            facts.Add(new Fact("Reasoning used", model.Effort is { } used ? StepWords.Reasoning(used) : StepWords.NotReported));
+            if (model.Differs) facts.Add(new Fact("", StepWords.OtherSettings) { Warning = true });
         }
         facts.Add(new Fact("Last activity", task.LastActivity is { } at ? TimeWords.DateAndTime(at, context) : "Not reported"));
         facts.Add(new Fact("Done when", task.DoneWhen));
         if (task.Delivered is not null || task.Accepted is not null) facts.Add(new Fact("Result check", CheckStatus(task, s.Names)));
         if (task.Follows is { } follows)
         {
-            var title = s.Fleet is null ? null : Activity.AllTasks(s.Fleet).FirstOrDefault(t => t.Id == follows)?.Title;
+            var title = s.AllTasks().FirstOrDefault(t => t.Id == follows)?.Title;
             facts.Add(new Fact("Follow-up to", title ?? "An earlier task"));
         }
         return facts;
@@ -951,7 +1287,11 @@ public sealed record AgentRow
     public string? LineText { get; init; }
     /// <summary>The line's " · +N" count, or null: a narrow row keeps it whole after the cut text.</summary>
     public string? LineCount { get; init; }
-    /// <summary>The time at the end of the name's line, only with a line.</summary>
+    /// <summary>The line is a request that waits for him, its title in orange and whole, with no count (ChatRow needsYou,
+    /// the Mac's rule of 14 November 2026); the row's time is the card's. The status dot does not change.</summary>
+    public bool NeedsYou { get; init; }
+    /// <summary>The time of the chat's last message, at the end of the name's line (ChatList.lastTime), also while the
+    /// line names a task; null before the first message.</summary>
     public string? Time { get; init; }
     public MarkLook Mark { get; init; } = null!;
     public AgentStatus Status { get; init; } = new(AgentState.Unknown);
@@ -985,6 +1325,17 @@ public sealed record ChatRow
     /// <summary>The hover of a message's time in its footer: the date and time, whether the agent read it, and when it
     /// was edited; null for a reply and for his message on its way.</summary>
     public string? TimeHover { get; init; }
+    /// <summary>The footer's time as the Mac's of Founderizer 0.1.239 says it (messageAge; the owner, 15 November 2026:
+    /// "apply the style of the hover time (relative too)"): how long ago, "5 min ago", or the state of his message on
+    /// its way as <see cref="TimeWords"/> says it. Beside <see cref="TimeWords"/>, which keeps the clock time of the
+    /// approved pictures until the window draws this one.</summary>
+    public string? AgeWords { get; init; }
+    /// <summary><see cref="AgeWords"/> is an age: the window reads it again when the footer shows, with
+    /// <c>Screens.MessageAge(Time, now, context)</c>, as the Mac reads it then.</summary>
+    public bool AgeMoves { get; init; }
+    /// <summary>The hover of <see cref="AgeWords"/>: the exact date and time of a reply (fleetDate), and of his message
+    /// <see cref="TimeHover"/>, with whether the agent read it and when he edited it.</summary>
+    public string? AgeHover { get; init; }
     /// <summary>The footer's action under the pointer: it copies <see cref="Text"/>, the message as he wrote it.</summary>
     public string CopyWords => "Copy message";
     public bool Correction { get; init; }
@@ -1006,6 +1357,10 @@ public sealed record ChatModel
     public WaitingLineModel? Waiting { get; init; }
     /// <summary>The mark before "Thinking": it moves with the line.</summary>
     public MarkLook WaitingMark { get; init; } = null!;
+    /// <summary>What an assistive app says for the empty chat's mark (the Mac's accessibility label); the mark alone shows.</summary>
+    public string EmptyWords { get; init; } = "";
+    /// <summary>The line of a chat that was not read yet (the iPhone's LoadingLine), after a second.</summary>
+    public string LoadingWords => "Reading\u2026";
     /// <summary>"Earlier messages" over the first row while the chat holds more than it shows, else null.</summary>
     public string? Earlier { get; init; }
     /// <summary>The words of the button that brings the end back while he reads higher up (the screen decides when).</summary>
@@ -1027,6 +1382,8 @@ public sealed record ComposerModel
     public ValueList<StagedFile> Files { get; init; } = ValueList<StagedFile>.Empty;
     /// <summary>Each file of <see cref="Files"/> as its chip draws it.</summary>
     public ValueList<FileChip> Chips { get; init; } = ValueList<FileChip>.Empty;
+    /// <summary>The hover of the plus, the answer box's own sentence.</summary>
+    public string PlusHover { get; init; } = "";
     public string? Note { get; init; }
     public bool NoteIsWarning { get; init; }
     /// <summary>Send shows only while this is true.</summary>
@@ -1038,6 +1395,8 @@ public enum UsageLevel { Low, High, Full, Old }
 
 public sealed record UsageRow(string Label, int Percent, UsageLevel Level, string? Resets)
 {
+    /// <summary>The share under the bar, as both apps write it.</summary>
+    public string ShareWords => Founderizer.Core.ShareWords.Of(Percent);
     public string Hover { get; init; } = "";
 }
 
@@ -1068,8 +1427,9 @@ public sealed record OptionsModel
 {
     public OptionsKind Kind { get; init; }
     public ValueList<string> Labels { get; init; } = ValueList<string>.Empty;
-    /// <summary>The option whose press waits for the store ("Sending…" at its end, after a second).</summary>
+    /// <summary>The option whose press waits for the store: <see cref="SendingWords"/> at its end, after a second.</summary>
     public int? WaitingPress { get; init; }
+    public string SendingWords => "Sending\u2026";
     public static string SendWords(int ticked) => $"Send {ticked}";
     /// <summary>Send of ticked options is on with one tick at least while the store can write.</summary>
     public static bool CanSendTicks(StoreState s, DateTimeOffset now, int ticked) => ticked > 0 && s.CanWrite(now);
@@ -1105,6 +1465,16 @@ public sealed record RequestCard
     /// <summary>Answered (or its answer on its way): two lines, the title and the answer, until he opens it.</summary>
     public bool Folded { get; init; }
     public string AnswerWords { get; init; } = "";
+    /// <summary>He answered in his own words: words can ask something back or say no, so they have no check.</summary>
+    public bool AnsweredInWords { get; init; }
+    /// <summary>His answer stands in the chat as his own message: the folded card is its title alone.</summary>
+    public bool Spoken { get; init; }
+    /// <summary>The folded card's second line, the answer's words: not while his own message in the chat says them.</summary>
+    public bool ShowsAnswerLine => !(AnsweredInWords && Spoken);
+    /// <summary>The check before the answer's words: only for an option that he pressed or ticked.</summary>
+    public bool ShowsCheck => !AnsweredInWords;
+    /// <summary>What an assistive app says for the folded card (NeedRequestCard).</summary>
+    public string FoldedWords => AnsweredInWords && Spoken ? $"{Title}, answered" : $"{Title}, answered: {AnswerWords}";
     public bool Answered { get; init; }
     public string Why { get; init; } = "";
     public bool Short { get; init; }
@@ -1130,6 +1500,56 @@ public sealed record RequestCard
     public AnswerBoxModel Answer { get; init; } = new();
     public bool AsksForSecret { get; init; }
     public ValueList<MessageAttachment> AnswerFiles { get; init; } = ValueList<MessageAttachment>.Empty;
+    /// <summary>The body as the Mac's card of Founderizer 0.1.239 draws it (<see cref="RequestBody"/>), beside the
+    /// fields above, which keep the look of the approved pictures until the window draws this one.</summary>
+    public RequestBody Body { get; init; } = new();
+}
+
+/// <summary>The body of a request's card in a chat and of the request at hand as the Mac draws them since Founderizer
+/// 0.1.239 (app commit 95811d21b; the owner, 15 November 2026: "the task itself need to be very clear and also formatted
+/// like the chat messages (links, code format etc)"). The reason and the task are message text (the blocks of
+/// <see cref="MessageBlock.Parse"/> with the runs of <see cref="InlineMarks.Runs"/>: a link, inline code, a code block
+/// between two lines of three backticks, bold and a list), and the task stands under the reason when the item's
+/// <see cref="OwnerNeed.TaskInFront"/>; else it stays behind the link, under "What it needs from you". A secret
+/// request has no task here: the hub's sentence of its form is beside its form.</summary>
+public sealed record RequestBody
+{
+    /// <summary>The reason, as message text, whole while <see cref="Short"/> or open.</summary>
+    public string Why { get; init; } = "";
+    public ValueList<MessageBlock> WhyBlocks { get; init; } = ValueList<MessageBlock>.Empty;
+    /// <summary>A reason of one or two sentences, or one with details: whole. A longer one shows
+    /// <see cref="FoldedWhy"/> until the link opens it.</summary>
+    public bool Short { get; init; }
+    /// <summary>The start of a long reason, closed: its lines joined with a space, drawn with its inline runs in at most
+    /// three lines.</summary>
+    public string FoldedWhy { get; init; } = "";
+    /// <summary>The task on the front, under the reason, as message text: a message's room between the two. Null when
+    /// the item has none, or when it stays behind the link (<see cref="TodoBehind"/>).</summary>
+    public string? Task { get; init; }
+    public ValueList<MessageBlock> TaskBlocks { get; init; } = ValueList<MessageBlock>.Empty;
+    /// <summary>The link under them, closed and open, or null when nothing stands behind it: a card says "Details" (or
+    /// "Script" for the door's card) for an item with details, else "Show all" and "Show less"; the request at hand says
+    /// "Details" (or "Script") for a short reason, else "Show all" and "Show less".</summary>
+    public string? MoreClosed { get; init; }
+    public string? MoreOpen { get; init; }
+    /// <summary>The chevron after the link's words.</summary>
+    public bool MoreChevron { get; init; }
+    /// <summary>The long part behind the link, as message text. The door's script (<see cref="DetailsIsScript"/>) is
+    /// one code block in the hub's own details, whose long lines wrap and which has no copy icon.</summary>
+    public string? Details { get; init; }
+    public ValueList<MessageBlock> DetailsBlocks { get; init; } = ValueList<MessageBlock>.Empty;
+    public bool DetailsIsScript { get; init; }
+    /// <summary>The task that stays behind the link, under <see cref="TodoLabel"/>, as message text: an item with a door
+    /// call, or with a kind (a conversation's item).</summary>
+    public string? TodoBehind { get; init; }
+    public ValueList<MessageBlock> TodoBehindBlocks { get; init; } = ValueList<MessageBlock>.Empty;
+    public string TodoLabel => "What it needs from you";
+    /// <summary>The request at hand only: the reason and the task stand in the middle, as a step's line does, while the
+    /// link is closed and while it is open. Both read from the leading edge when the task is more than one paragraph (a
+    /// list, a command, several paragraphs); a long reason stands in the middle while it is closed, and a short one
+    /// when it is one paragraph. A card reads from its leading edge.</summary>
+    public bool CentredClosed { get; init; }
+    public bool CentredOpen { get; init; }
 }
 
 /// <summary>One card of the Needs you lane: a request, or a task that only he can move.</summary>
@@ -1194,11 +1614,17 @@ public sealed record RequestStep
     public string TodoLabel { get; init; } = "";
     public bool Ended { get; init; }
     public string AnswerWords { get; init; } = "";
+    /// <summary>He answered in his own words: the answer under it has no check (NeedAnswered), as a press has.</summary>
+    public bool AnsweredInWords { get; init; }
+    public bool ShowsCheck => !AnsweredInWords;
     public OptionsModel Options { get; init; } = new();
     public AnswerBoxModel Answer { get; init; } = new();
     public bool AsksForSecret { get; init; }
     /// <summary>The files of his answer, under the check of an ended request at hand.</summary>
     public ValueList<MessageAttachment> AnswerFiles { get; init; } = ValueList<MessageAttachment>.Empty;
+    /// <summary>The body as the Mac's request at hand of Founderizer 0.1.239 draws it (<see cref="RequestBody"/>),
+    /// beside the fields above, which keep the look of the approved pictures until the window draws this one.</summary>
+    public RequestBody Body { get; init; } = new();
 }
 
 public sealed record Choice<T>(T Value, string Words);
@@ -1271,13 +1697,194 @@ public sealed record NoteRow(string Key, string Text, ValueList<MessageBlock> Bl
 
 public sealed record ResultModel
 {
+    public string OutputLabel => "Output";
+    public string HowLabel => "How it was checked";
     public string What { get; init; } = "";
     public string Check { get; init; } = "";
     public string Output { get; init; } = "";
     public string How { get; init; } = "";
     public string? Note { get; init; }
     public string? CheckedAt { get; init; }
+    /// <summary>The check is a row that folds (its title <see cref="Check"/>, its mark and a chevron) and stands folded as
+    /// the page opens; a press opens it on <see cref="Output"/>, <see cref="How"/>, <see cref="Note"/> and
+    /// <see cref="CheckedAt"/> (the Mac's FoldRow).</summary>
+    public bool CheckOpensFolded => true;
+    /// <summary>"Checked outputs" with its button, only for a result that was accepted (the Mac's ArtifactSection).</summary>
+    public CheckedOutputsModel? Outputs { get; init; }
 }
+
+/// <summary>The checked outputs of an accepted result (the Mac's ArtifactSection; the owner's yes of 14 November 2026 to
+/// the fourth set): its heading and button, then one of: the line while a read runs with Cancel, an error in orange, the
+/// line for a result with no file, the files with View, and the file opened under them.</summary>
+public sealed record CheckedOutputsModel
+{
+    public string Heading => OutputWords.Heading;
+    /// <summary>"View outputs", or "Reload outputs" once the list was read. A press calls OwnerStore.ListOutputsAsync.</summary>
+    public string ViewWords { get; init; } = OutputWords.View;
+    /// <summary>The button and each View take presses: the reading is current and no read runs.</summary>
+    public bool Enabled { get; init; }
+    /// <summary>In orange while the reading is not current.</summary>
+    public string? ConnectionWords { get; init; }
+    /// <summary>The line while a read runs, muted, with Cancel (OwnerStore.CloseOutputs).</summary>
+    public string? Loading { get; init; }
+    public string CancelWords => OutputWords.Cancel;
+    /// <summary>In orange, its words selectable.</summary>
+    public string? Error { get; init; }
+    /// <summary>Muted, in the place of the list.</summary>
+    public string? NoFilesWords { get; init; }
+    public ValueList<OutputFileRow> Files { get; init; } = ValueList<OutputFileRow>.Empty;
+    public OpenedOutputModel? Opened { get; init; }
+}
+
+/// <summary>A checked file: a picture's mark or a text's, its path, and View (OwnerStore.ViewOutputAsync).</summary>
+public sealed record OutputFileRow(ArtifactFile File, bool IsImage, string ViewName, bool Enabled)
+{
+    public string Path => File.Path;
+    public string ViewWords => OutputWords.ViewFile;
+}
+
+/// <summary>A file opened, in a box on the surface: its path in semibold and Close (OwnerStore.CloseOutputs); the text
+/// in the code font in a scroll <see cref="TextHeight"/> high, "Empty text file", or the picture at most
+/// <see cref="PictureMaxHeight"/> high from a thumbnail of at most <see cref="ThumbnailMost"/> pixels; then the fold
+/// "Verified download · size" with its three facts.</summary>
+public sealed record OpenedOutputModel
+{
+    public string Path { get; init; } = "";
+    public string CloseWords => OutputWords.Close;
+    public string? Text { get; init; }
+    public bool EmptyText { get; init; }
+    public string EmptyWords => OutputWords.EmptyText;
+    public double TextHeight { get; init; }
+    public byte[]? Picture { get; init; }
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public double PictureMaxHeight => 340;
+    public int ThumbnailMost => 2048;
+    public string? PictureName { get; init; }
+    public string Download { get; init; } = "";
+    public ValueList<Fact> Facts { get; init; } = ValueList<Fact>.Empty;
+}
+
+/// <summary>What a row of a task's thread is: a run of steps, the agent's message, a note, a permission, the owner's
+/// guidance, an error (orange, with its mark) or the record's cut (muted).</summary>
+public enum ThreadRowKind { Steps, Message, Note, Permission, Guidance, Error, Truncated }
+
+/// <summary>What a row of the record is, inside a run or in a child agent's thread (the Mac's RuntimeRow).</summary>
+public enum ActivityRowKind { Tool, Thought, Message, Plan, Error, Truncated }
+
+/// <summary>One step of a plan: its words and its mark (done, running, or to do), muted once done.</summary>
+public sealed record PlanStep(string Content, PlanState State)
+{
+    public static PlanStep Of(PlanEntry entry) =>
+        new(entry.Content, entry.Status switch { "completed" => PlanState.Done, "in_progress" => PlanState.Running, _ => PlanState.ToDo });
+}
+
+public enum PlanState { ToDo, Running, Done }
+
+/// <summary>The owner's guidance in the thread: his words in his bubble, and under it, muted, "Guidance · Attempt 1 ·
+/// Read" with the time it was read (else sent) on hover.</summary>
+public sealed record SteerRowModel(string Text, string Line, string Hover);
+
+/// <summary>A child agent's thread: Back (one level up), its name, its attempt, and its rows.</summary>
+public sealed record ChildThreadModel
+{
+    public string BackWords => StepWords.Back;
+    public string Title { get; init; } = "";
+    public string AttemptWords { get; init; } = "";
+    public ValueList<StepRowModel> Rows { get; init; } = ValueList<StepRowModel>.Empty;
+    public string? WaitingWords { get; init; }
+    public string EarlierWords => StepWords.Earlier;
+}
+
+public enum ChildState { Working, Done, Failed }
+
+/// <summary>A child agent in the panel: its state's mark (done, failed in orange, or working), its name, and the arrow
+/// that opens its thread; <see cref="Hover"/> on hover.</summary>
+public sealed record ChildAgentRow(ToolKey Key, string Name, ChildState State, string Hover);
+
+/// <summary>"Parent task · &lt;title&gt;" under the facts, in the link's colour; a press opens that task's page.</summary>
+public sealed record ParentTaskModel(long Id, string Words);
+
+/// <summary>One subtask: its title (two lines at most) and, muted under it, its state word; a press opens its page.</summary>
+public sealed record SubtaskRow(long Id, string Title, string Status);
+
+/// <summary>"Subtasks" under the parent's link, before "Child agents".</summary>
+public sealed record SubtasksModel(ValueList<SubtaskRow> Rows)
+{
+    public string Heading => "Subtasks";
+}
+
+/// <summary>"Child agents" in the panel, at most 20, and "More agents in the task thread" past them.</summary>
+public sealed record ChildAgentsModel(ValueList<ChildAgentRow> Rows, string? MoreWords)
+{
+    public string Heading => StepWords.ChildAgents;
+}
+
+/// <summary>One row of a task's thread: a run of steps, a message of the agent or a note (both drawn as the agent's
+/// reply, <see cref="Words"/>), or a permission that waits or was refused.</summary>
+public sealed record ThreadRowModel
+{
+    public string Key { get; init; } = "";
+    public ThreadRowKind Kind { get; init; }
+    public StepsModel? Steps { get; init; }
+    public NoteRow? Words { get; init; }
+    public PermissionRowModel? Permission { get; init; }
+    public SteerRowModel? Guidance { get; init; }
+    /// <summary>An error's words, or the record's cut.</summary>
+    public string? Text { get; init; }
+}
+
+/// <summary>A run of steps as one fold row: its mark, its title ("8 steps", or the step that runs), its state ("1 failed"
+/// in orange, "Step 8 · Running", or none), and its steps under it when it opens.</summary>
+public sealed record StepsModel
+{
+    public string Title { get; init; } = "";
+    public string Status { get; init; } = "";
+    /// <summary>The state in orange (a step failed), else muted.</summary>
+    public bool Orange { get; init; }
+    public StepSymbol Symbol { get; init; }
+    public ValueList<StepRowModel> Rows { get; init; } = ValueList<StepRowModel>.Empty;
+}
+
+/// <summary>A row of the record (the Mac's RuntimeRow). A tool call: its kind's mark, its title, its state word (orange
+/// for Failed) and a chevron; opened, its full title in the code font when the title says it in words, its locations
+/// (each with a file's mark), its output in the code font, the script that made it with "Script result" folded, and for a
+/// child agent the last three rows it wrote and "Open agent thread". A thought: "Thinking", its text opened. A plan:
+/// "Plan", its steps opened. A message: the agent's reply (<see cref="Words"/>). An error: its words in orange with the
+/// error's mark. The record's cut: its words, muted.</summary>
+public sealed record StepRowModel(string Key, StepSymbol Symbol, string Title, string Status, bool Orange)
+{
+    public ActivityRowKind Kind { get; init; } = ActivityRowKind.Tool;
+    /// <summary>A thought's text, an error's words, or the record's cut.</summary>
+    public string? Text { get; init; }
+    public NoteRow? Words { get; init; }
+    public string? FullTitle { get; init; }
+    public ValueList<string> Locations { get; init; } = ValueList<string>.Empty;
+    /// <summary>The output, or "No output reported."; null for a child agent's call that reported none.</summary>
+    public string? Output { get; init; }
+    /// <summary>The script that made this call (muted, code font), and its own result in the fold "Script result".</summary>
+    public string? Script { get; init; }
+    public string? ScriptResult { get; init; }
+    public string ScriptResultTitle => StepWords.ScriptResult;
+    public ValueList<string> ChildLines { get; init; } = ValueList<string>.Empty;
+    /// <summary>The child agent's thread that "Open agent thread" opens (Screens.ChildThread).</summary>
+    public ToolKey? Child { get; init; }
+    public string OpenChildWords => StepWords.OpenAgentThread;
+    public ValueList<PlanStep> Plan { get; init; } = ValueList<PlanStep>.Empty;
+}
+
+/// <summary>A permission of the task: the hand, the tool's name, its state in orange ("Waiting", or the decision); opened,
+/// what it asks to run in the code font, then the reason once decided.</summary>
+public sealed record PermissionRowModel(string Title, string Status, string Input, string? Reason);
+
+/// <summary>"Changed files" in the panel: each path, its action, "+N" in green and "−N" in orange, and the footer.</summary>
+public sealed record ChangedFilesModel(ValueList<ChangedFileRow> Rows)
+{
+    public string Heading => "Changed files";
+    public string Footer => "Latest completed tool report per file.";
+}
+
+public sealed record ChangedFileRow(string Path, string Action, string? Added, string? Removed);
 
 /// <summary>The controls under a task: its state word, then Pause and Stop, or Resume and Stop for a held task.</summary>
 public sealed record ControlsModel
@@ -1305,7 +1912,11 @@ public sealed record GuidanceModel
         s.CanWrite(now) && text.Trim().Length > 0 && text.Length <= 4000;
 }
 
-public sealed record Fact(string Label, string Value, string? Agent = null);
+public sealed record Fact(string Label, string Value, string? Agent = null)
+{
+    /// <summary>A line in orange with the error's mark and no label ("The AI provider used other settings").</summary>
+    public bool Warning { get; init; }
+}
 
 public sealed record TaskPageModel
 {
@@ -1315,7 +1926,23 @@ public sealed record TaskPageModel
     public string Asks { get; init; } = "";
     public string? StalledReason { get; init; }
     public string? LimitWords { get; init; }
+    /// <summary>The notes alone, as before the fourth set. <see cref="Thread"/> holds them in their place among the steps.</summary>
     public ValueList<NoteRow> Notes { get; init; } = ValueList<NoteRow>.Empty;
+    /// <summary>The thread under what the task asks: its steps, what the agent said, its notes, the permissions and the
+    /// owner's guidance. The page shows the last <see cref="StepWords.ShownAtOnce"/> rows; "Earlier activity" over them
+    /// shows that many more, and rows that come while he reads further up add to what shows (<see cref="ThreadTopRows"/>
+    /// grows).</summary>
+    public ValueList<ThreadRowModel> Thread { get; init; } = ValueList<ThreadRowModel>.Empty;
+    public int ThreadTopRows { get; init; }
+    public string EarlierWords => StepWords.Earlier;
+    /// <summary>In orange with the error's mark over the thread: its last read failed. The window leaves it out while its
+    /// line over the page says the hub is away.</summary>
+    public string? ActivityError { get; init; }
+    /// <summary>In orange over the thread while the reading is not current.</summary>
+    public string? OfflineWords { get; init; }
+    /// <summary>The plan of the work that runs, open under the thread, in the box of an open fold; null once the task
+    /// ended.</summary>
+    public ValueList<PlanStep>? LivePlan { get; init; }
     public string? MissingWords { get; init; }
     public string? WaitingLabel { get; init; }
     public string? WaitingValue { get; init; }
@@ -1326,6 +1953,13 @@ public sealed record TaskPageModel
     public ControlsModel? Controls { get; init; }
     public GuidanceModel? Guidance { get; init; }
     public ValueList<Fact> Facts { get; init; } = ValueList<Fact>.Empty;
+    /// <summary>"Parent task · &lt;title&gt;" under the facts (after "Follow-up to"), then "Subtasks".</summary>
+    public ParentTaskModel? ParentTask { get; init; }
+    public SubtasksModel? Subtasks { get; init; }
+    /// <summary>"Child agents" under the facts, before the changed files; a row opens its thread in place of the task's.</summary>
+    public ChildAgentsModel? ChildAgents { get; init; }
+    /// <summary>"Changed files" under the facts, or null when no completed tool reported one.</summary>
+    public ChangedFilesModel? ChangedFiles { get; init; }
 }
 
 public sealed record DeviceLine(string Title, string Detail, string Value);

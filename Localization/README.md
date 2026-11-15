@@ -8,7 +8,13 @@ The plan: `~/dev/founderizer-plans/app-localization-plan.md`.
 - `Localizable.xcstrings`: the table, Apple's String Catalog (Xcode opens it). The key of each entry is the English
   text, with `%@` for a text value and `%lld` for a whole number. Spanish is neutral Spanish, with "tú".
 - `shipped`: the languages that the builds carry, one code on each line. **A language goes in only after the owner's
-  yes to the pictures of the pages in it.** With an empty list a build has no table, and the app is the same as before.
+  yes to the pictures of the pages in it.** Spanish since 14 November 2026 (his "Yes, as shown").
+- **How each build carries the table:** the Mac app's `run.sh` and `release.sh` run `l10n.py compile` into the app's
+  `Contents/Resources` (the languages of `shipped`, and `en`). The iPhone project has the catalog itself as a resource
+  of the app and of the Share extension, so Xcode compiles it into both (proved with `xcodebuild` on 14 November 2026:
+  the build does not write into the catalog). Xcode takes every language of the catalog, whatever `knownRegions` says,
+  so **the table holds words only in the languages of `shipped`**; `check` fails on any other language. The notification
+  extensions have no words of their own and no table.
 - `l10n.py`: `keys` lists the compiler's keys, `sync` adds new keys to the table and removes keys that no code uses,
   `check` finds the faults, `compile` puts the shipped tables into an app (`run.sh`, `release.sh`). Each of the first
   three builds the Mac app in `.build/l10n` first; `--ios` also builds the iPhone app.

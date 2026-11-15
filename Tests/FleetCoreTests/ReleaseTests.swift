@@ -211,6 +211,31 @@ struct ReleaseTests {
         #expect(running.value == "Updating")
         #expect(running.take == nil)
         #expect(running.says == "This fleet is updating to 2026.10.3…")
+        // The owner, 14 November 2026: "clicked on Update fleet, seems stuck". The run's word is a wait, which the page
+        // draws in moving words; nothing else on the row is one.
+        #expect(running.working)
+        let still = [try state().stand, try state(["IDLE": "false", "TASKS": "[12]"]).stand,
+                     try state(["ROWS": Self.started(state: "done", step: "follow", reached: true)]).stand,
+                     try state(["ROWS": Self.started(state: "failed", step: "push", says: "refused")]).stand]
+        #expect(still.allSatisfy { !$0.working })
+    }
+
+    @Test func aPressTheHubTookSaysUpdatingBeforeTheRunWritesItsRow() throws {
+        // The run asks our channel first and marks the release updating only then: the white Update to … came back
+        // after the press, and a second press got "already checking or updating" (the review of 14 November 2026).
+        let started = try state(["RUNNING": "true"])
+        #expect(started.stand.take?.version == "2026.10.3", "the hub's own row has not moved yet")
+        let pressed = started.stand(pressed: true)
+        #expect(pressed.working && pressed.take == nil)
+        #expect(pressed.value == "Updating")
+        #expect(pressed.says == "This fleet is updating to 2026.10.3…")
+        // Without his press, or once nothing runs, the row is the hub's own.
+        #expect(started.stand(pressed: false) == started.stand)
+        let ended = try state()
+        #expect(ended.stand(pressed: true) == ended.stand)
+        // And the run's own row, once written, says the same.
+        let running = try state(["RUNNING": "true", "ROWS": Self.started(state: "updating", step: "merge")])
+        #expect(running.stand(pressed: true) == running.stand)
     }
 
     @Test func aRunThatFailedIsTheOneThingToActOn() throws {
@@ -219,6 +244,40 @@ struct ReleaseTests {
         #expect(stand.warn)
         #expect(stand.value == "Did not finish")
         #expect(stand.says == "the push to config was refused")
+    }
+
+    /// One row of the hub's answer, by its id, version and state; a `done` row reached its release.
+    private static func release(_ id: Int, _ version: String, _ state: String) -> String {
+        let revision = String(repeating: String(id % 10), count: 40)
+        let done = state == "done"
+        return """
+        {"id": \(id), "revision": "\(revision)", "version": "\(version)", "notes": null, "minimum": null, "hold": false,
+         "state": "\(state)", "step": \(done ? "\"follow\"" : "null"), "says": null, "pinned": null,
+         "reached": \(done ? "\"\(revision)\"" : "null"), "seen_at": 1792267272,
+         "started_at": \(done ? "1792267300" : "null"), "finished_at": \(done ? "1792267400" : "null"),
+         "automatic": true, "applied": \(done)}
+        """
+    }
+
+    /// **A release that no run took and that stands under the one this fleet runs is never offered** (the owner, 15
+    /// November 2026): his fleet ran 2026.11.494, 2026.11.488 stood `verified` under it, and the page offered "Update to
+    /// 2026.11.488", which his press could not take. A release above it is offered as before.
+    @Test func aReleaseUnderTheOneTheFleetRunsIsNeverOffered() throws {
+        let under = try state(["ROWS": [Self.release(352, "2026.11.494", "done"),
+                                        Self.release(346, "2026.11.488", "verified")].joined(separator: ",")])
+        #expect(under.offered == nil && under.stand.take == nil)
+        #expect(under.stand.value == "2026.11.494")
+        let above = try state(["ROWS": [Self.release(353, "2026.11.495", "verified"), Self.release(352, "2026.11.494", "done"),
+                                        Self.release(346, "2026.11.488", "verified")].joined(separator: ",")])
+        #expect(above.offered?.version == "2026.11.495" && above.stand.take?.version == "2026.11.495")
+    }
+
+    /// **A `passed` release is code the fleet runs** (owner API 1.177): never offered, and the fleet's version when no
+    /// run took a newer one, as on a new hub whose checkout came at that release.
+    @Test func aPassedReleaseIsWhatTheFleetRunsAndIsNotOffered() throws {
+        let passed = try state(["ROWS": Self.release(5, "2026.11.494", "passed")])
+        #expect(passed.offered == nil && passed.stand.take == nil)
+        #expect(passed.current?.version == "2026.11.494" && passed.stand.value == "2026.11.494")
     }
 
     @Test func onlyAReleaseThisFleetReachedMakesItUpToDate() throws {

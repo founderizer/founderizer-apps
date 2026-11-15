@@ -57,6 +57,14 @@ final class CentralVaultModel {
     private var confirmedPins: [String: String] = [:]
     /// When this session last signed each machine's pin (`VaultFacts.signedAt`).
     private var signedAt: [String: Double] = [:]
+    /// The servers that the owner removed on this Mac, kept in a file of this Mac (`VaultRemovals`) and read again at
+    /// each reading, because the model of another hub address can change that file; and the removals and Add servers of
+    /// this session whose fleet the vault model has not read yet.
+    private var removals = VaultRemovals.load()
+    private var removedHere: [String: Double] = [:]
+    private var addedHere: Set<String> = []
+    /// The tries of each unpin that has not reached the central vault: one that fails waits `VaultTries.wait`, for ever.
+    private var unpins: [String: VaultTries] = [:]
 
     init(hub: URL) { self.hub = hub }
 
@@ -86,6 +94,7 @@ final class CentralVaultModel {
     private func rounds(_ store: FleetStore) async {
         for _ in 0..<5 {
             guard await read(store) else { return }
+            await unpinRemoved(store)
             switch plan.step {
             case .install: await installOwn(store)
             case .recover: await recover(store)
@@ -107,14 +116,25 @@ final class CentralVaultModel {
         do { fresh = try await VaultClient().reading(hub: hub, database: database) } catch { return false }
         guard store.hub == hub, store.state?.db == database else { return false }
         if self.database != database {        // another generation starts clean
-            install = nil; recovery = nil; servers = [:]; otherOwner = false; takeOverProblem = nil
+            install = nil; recovery = nil; otherOwner = false; takeOverProblem = nil
             confirmedRecovery = nil; confirmedPins = [:]; update = nil; updateFor = nil; tcpWindow = nil; tcpWindowFor = nil
-            // signedAt stays: a new generation of the hub does not shorten the day of wait after a signature.
+            // signedAt stays: a new generation of the hub does not shorten the day of wait after a signature. So do the
+            // tries of each server (package 4): a hub that changes its generation at each reading gets one SSH session
+            // for each wait, not one each minute, and after a real restore a server whose try failed waits its due time.
         }
         if fresh?.program != updateFor { update = nil }       // the tries were for another release's program
         self.database = database
         served = fresh != nil
         reading = fresh
+        removals = VaultRemovals.load()
+        if let fleet = fresh?.fleetID, !removedHere.isEmpty || !addedHere.isEmpty {
+            let (marked, joined) = (removedHere, addedHere)
+            changeRemovals { record in
+                for (machine, at) in marked { record.removed(machine, fleet: fleet, at: at, unpin: true) }
+                for machine in joined { record.added(machine, fleet: fleet) }
+            }
+            removedHere = [:]; addedHere = []
+        }
         if let fresh, fresh.central == nil {
             // The install runs only on a hub machine that the fleet has an SSH connection on record for. A hub that
             // names the vault's machine gives its record; an older one, the manager's machine, as before.
@@ -131,11 +151,91 @@ final class CentralVaultModel {
 
     private var facts: VaultFacts {
         let fleet = reading?.fleetID
+        var removed = Set(removedHere.keys)
+        if let fleet { removed.formUnion(removals.marks(fleet: fleet).keys) }
+        removed.subtract(addedHere)
         return VaultFacts(keyHeld: fleet.map(OwnerKeychain.isHeld) ?? false,
                           pin: fleet.flatMap { CentralVaultPins.recipient(hub: hub, fleet: $0) }, hubOnRecord: hubOnRecord,
                           otherOwner: otherOwner, confirmedRecovery: confirmedRecovery, confirmedPins: confirmedPins, signedAt: signedAt,
-                          install: install, recovery: recovery, servers: servers, update: update,
+                          install: install, recovery: recovery, servers: servers, update: update, removed: removed,
                           now: Date().timeIntervalSince1970)
+    }
+
+    // MARK: the servers that the owner removed on this Mac (package 4 of the vault's gates)
+
+    /// Remove server on this Mac, after the hub took it: the mark is written first, and the unpin of that machine goes
+    /// in the next round, which this starts at once. The removal never waits for the unpin and never fails because of
+    /// it. Before the model has read its fleet, the mark waits in this session and is written at the first reading.
+    func removed(_ machine: String, store: FleetStore) {
+        let at = Date().timeIntervalSince1970
+        addedHere.remove(machine)
+        if let fleet = reading?.fleetID {
+            changeRemovals { $0.removed(machine, fleet: fleet, at: at, unpin: true) }
+        } else {
+            removedHere[machine] = at
+        }
+        unpins[machine] = nil; servers[machine] = nil
+        tick(store: store, woken: true)
+    }
+
+    /// True when the owner removed `machine` on this Mac: also during a step that was on its way when he did.
+    private func isRemoved(_ machine: String) -> Bool {
+        if addedHere.contains(machine) { return false }
+        if removedHere[machine] != nil { return true }
+        return reading?.fleetID.map { removals.marks(fleet: $0)[machine] != nil } ?? false
+    }
+
+    /// Add server for `machine` on this Mac: a server that joined with a join code of this Mac. Its mark goes, so it
+    /// gets the trust step of a new server again.
+    func added(_ machine: String) {
+        removedHere[machine] = nil
+        if let fleet = reading?.fleetID {
+            guard VaultRemovals.load().marks(fleet: fleet)[machine] != nil || removals.marks(fleet: fleet)[machine] != nil else { return }
+            changeRemovals { $0.added(machine, fleet: fleet) }
+        } else {
+            addedHere.insert(machine)
+        }
+        unpins[machine] = nil; servers[machine] = nil       // its first trust starts with no try of the machine before
+    }
+
+    /// One change of the record, made to the record as its file holds it now and written back at once: the model of
+    /// another hub address may have changed the file since this model read it, and its marks stay. A write that fails
+    /// leaves this session's copy changed, so this session still signs no pin of a machine that it marked.
+    private func changeRemovals(_ change: (inout VaultRemovals) -> Void) {
+        var record = VaultRemovals.load()
+        change(&record)
+        removals = record
+        try? record.save()
+    }
+
+    /// The unpin of each machine that the owner removed on this Mac, until the central vault took it: signed with this
+    /// Mac's owner key and sent as a pin is (`POST /ui/vault/pin`). One that fails is tried again after
+    /// `VaultTries.wait`, for ever, and has no row: the hub can hold an unpin back (VAULT.md limit 8), but this Mac signs
+    /// that machine's pin no more, so it ends within 90 days at each broker.
+    private func unpinRemoved(_ store: FleetStore) async {
+        guard let fleet = reading?.fleetID, reading?.central?.ok == true else { return }
+        let now = Date().timeIntervalSince1970
+        for machine in removals.unpinsDue(fleet: fleet, tries: unpins, now: now) {
+            do {
+                guard store.hub == hub, store.isFresh, let database = store.state?.db, let key = OwnerKeychain.key(fleet: fleet) else {
+                    throw Stop(String(l10n: "Founderizer has no current status of the hub, or no owner key for it."))
+                }
+                if let problem = clockProblem(store) { throw Stop(problem) }
+                let statement = OwnerStatement.unpin(fleet: fleet, machine: machine)
+                _ = try await VaultClient().pin(hub: hub, database: database, client: store.installation, statement: statement,
+                                                signature: key.sign(statement))
+                changeRemovals { $0.unpinned(machine, fleet: fleet) }
+                unpins[machine] = nil
+            } catch {
+                unpins[machine] = VaultTries.failed(after: unpins[machine], at: now, reason: Self.words(error))
+            }
+        }
+    }
+
+    /// The clock guard: why this Mac signs no pin now (`VaultPlan.clockProblem`), against the hub's clock of the store's
+    /// last state read.
+    private func clockProblem(_ store: FleetStore) -> String? {
+        VaultPlan.clockProblem(hubTime: store.state?.time, readAt: store.lastSuccess?.timeIntervalSince1970)
     }
 
     // MARK: the owner's own presses
@@ -153,10 +253,15 @@ final class CentralVaultModel {
         }
     }
 
-    /// Retry on a server's row: its key read and pinned once more now.
+    /// Retry on a server's row: its key read and pinned once more now. On the row of a server that the owner removed on
+    /// this Mac, it is the owner's own act on this Mac: the mark goes first, and the trust step runs with each of its checks
+    /// (package 4 of the vault's gates). A hub that is broken into can make that row show, but it cannot press the button.
     func retry(server machine: String, _ store: FleetStore) {
         guard !working else { return }
-        run(machine, store) { model in await model.trust(machine, store) }
+        run(machine, store) { model in
+            model.added(machine)
+            await model.trust(machine, store)
+        }
     }
 
     /// Set up, only where the vault is not this Mac's to act on: the install without the check that a vault there is
@@ -348,6 +453,9 @@ final class CentralVaultModel {
             }
             guard let machine = reading?.machines.first(where: { $0.machine == name }), let reported = machine.broker_recipient,
                   machine.canBeTrusted else { throw Stop(String(l10n: "The hub reports no vault key for \(name) now.")) }
+            // The owner removed it on this Mac after this round's plan was made: no SSH session, and no pin.
+            if isRemoved(name) { servers[name] = nil; return }
+            if let problem = clockProblem(store) { throw Stop(problem) }
             var target = try await self.target(name, database: database)
             guard await MacNetwork.device(of: target.host) == name else {
                 throw Stop(String(l10n: "This Mac's Tailscale does not say that \(target.host) is \(name). Founderizer pinned nothing."))
@@ -363,6 +471,8 @@ final class CentralVaultModel {
             guard found == reported else {
                 throw Stop(String(l10n: "The vault key on \(name) is not the one the hub reports for it. Founderizer pinned nothing."))
             }
+            // The owner removed it on this Mac while its key was read: it gets no pin (package 4 of the vault's gates).
+            if isRemoved(name) { servers[name] = nil; return }
             let statement = OwnerStatement.pin(fleet: fleet, machine: name, recipient: found)
             _ = try await VaultClient().pin(hub: hub, database: database, client: store.installation, statement: statement,
                                             signature: key.sign(statement))

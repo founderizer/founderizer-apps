@@ -175,7 +175,8 @@ internal sealed class SearchCard : Grid
     {
         var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         names.Children.Add(Look.Words(agent.Label, semibold: true, wrap: false));
-        if (agent.Line is { } line) names.Children.Add(Look.Words(line, 12, 16, Look.Muted, wrap: false));
+        // A line that is a request waiting for him is orange, as in the pane (SearchAgentRow.NeedsYou).
+        if (agent.Line is { } line) names.Children.Add(Look.Words(line, 12, 16, agent.NeedsYou ? Look.Orange : Look.Muted, wrap: false));
         var mark = new AgentGlyph { Side = 22, Mark = agent.Mark, VerticalAlignment = VerticalAlignment.Center };
         return Row(48, mark, names, index, agent.Label);
     }

@@ -61,6 +61,11 @@ struct SecretImportView: View {
     @State private var pending: [Int: Pending] = [:]
     @State private var saved: [Int: String] = [:]
     @State private var failed: [Int: String] = [:]
+    /// The rows of this import that are done (in the vault, or refused), of `importTotal`: the count in the importing
+    /// step's moving title (the owner, 13 November 2026: "show some sort of progress bar there, otherwise it looks
+    /// stuck!", his yes to a mark of progress inside that step).
+    @State private var importDone = 0
+    @State private var importTotal = 0
     @State private var deleted = false
     @State private var hub: URL
     @State private var database: String?
@@ -86,7 +91,7 @@ struct SecretImportView: View {
             case .password: passwordStep
             case .choose: chooseStep
             case .importing:
-                SetupStep(title: String(l10n: "Importing \(Self.words(chosen.count))"), waits: true) {
+                SetupStep(title: String(l10n: "Importing \(importDone) of \(Self.words(importTotal))"), waits: true) {
                     IconTile(symbol: "square.and.arrow.down", size: SetupMetrics.mark).accessibilityHidden(true)
                 } content: { EmptyView() }
             case .done: doneStep
@@ -330,13 +335,24 @@ struct SecretImportView: View {
         central = reading.trusted(pin: CentralVaultPins.recipient(hub: context.hub, fleet: fleet))
     }
 
-    /// Each chosen row once, in order, as Add secret saves one: sealed to the vault's key, registered with the hub (its
+    /// Each chosen row once, as Add secret saves one: sealed to the vault's key, registered with the hub (its
     /// fingerprints and its catalog entry), then taken by the central vault. A row that failed keeps its reference and
     /// its sealed copy, so Try again goes on from the step that failed and never makes a second secret of it.
+    ///
+    /// A hub with `secrets_import` registers all the rows in one command and one commit, after the salts of each
+    /// reference; then the central vault takes them, `lanes` at a time. An older hub gets each row's two steps one row
+    /// after the other, as before. An import of 143 keys took 9 minutes one row at a time (the owner, 13 November 2026:
+    /// "it needs to be much faster!!").
+    ///
+    /// The rows go on from local values: the view can go away while the import runs (`clear()` empties `pending`), and
+    /// a row that the hub registered must still reach the vault, else it stays in the list with no value.
     private func importChosen() async {
         guard !busy, let reading else { return }
-        busy = true; message = nil
-        defer { busy = false }
+        guard !Self.running else {
+            message = String(l10n: "An import runs already. Try again when it has ended."); return
+        }
+        busy = true; message = nil; Self.running = true
+        defer { busy = false; Self.running = false }
         await readVaultKey()
         guard let central, let context else {
             message = String(l10n: "Founderizer Vault does not answer. Nothing was sent. Try again in a moment."); return
@@ -345,39 +361,177 @@ struct SecretImportView: View {
         guard let team = try? await HubClient().team(hub: context.hub, database: context.db), let catalog = team.logins else {
             message = String(l10n: "The hub did not answer. Nothing was sent. Try again in a moment."); return
         }
+        let rows = reading.rows.filter { chosen.contains($0.id) && saved[$0.id] == nil }
+        failed = [:]
+        importDone = 0; importTotal = rows.count
         page = .importing
         catalogCount = catalog.count
         var left = room
-        failed = [:]
-        for row in reading.rows where chosen.contains(row.id) && saved[row.id] == nil {
-            do {
-                let secret = row.secret
-                var step: Pending
-                if let waiting = pending[row.id] {
-                    step = waiting
-                } else {
-                    guard left > 0 else { failed[row.id] = String(l10n: "The list has \(LoginSecret.maxCatalog) secrets and takes no more."); continue }
-                    let sealed: String
-                    do { sealed = try AgeSeal.seal(try secret.value(), to: central) }
-                    catch { failed[row.id] = String(l10n: "Founderizer could not seal it for the vault. Nothing was sent."); continue }
-                    step = Pending(reference: "bws://\(UUID().uuidString.lowercased())", sealed: sealed)
-                    pending[row.id] = step
+        var steps: [ImportStep] = []
+        // The titles that the list has now and did not have when the file was read: another import saved those rows
+        // since (one of the same file, which ended while this page waited), and a login would go in a second time.
+        let since = Set(catalog.values.map(\.name)).subtracting(known)
+        for row in rows {
+            if var step = pending[row.id] {
+                // The hub took it in an earlier try whose answer was lost: it is in the list, and only its intake is left.
+                if !step.registered, catalog[step.reference] != nil { step.registered = true; pending[row.id] = step }
+                if step.registered { steps.append(ImportStep(row: row, step: step)); continue }
+            } else if since.contains(row.secret.title) {
+                refuse(row.id, String(l10n: "In Founderizer already")); continue
+            }
+            guard left > 0 else {
+                refuse(row.id, String(l10n: "The list has \(LoginSecret.maxCatalog) secrets and takes no more.")); continue
+            }
+            if pending[row.id] == nil {
+                do {
+                    pending[row.id] = Pending(reference: "bws://\(UUID().uuidString.lowercased())",
+                                              sealed: try AgeSeal.seal(try row.secret.value(), to: central))
+                } catch {
+                    refuse(row.id, String(l10n: "Founderizer could not seal it for the vault. Nothing was sent.")); continue
                 }
-                if !step.registered {
-                    try await SecretEntryView.register(step.reference, title: secret.title, kind: secret.kind, variable: secret.variable,
-                                                       value: try secret.value(), hub: context.hub, database: context.db,
-                                                       installation: store.installation)
-                    step.registered = true; pending[row.id] = step; left -= 1
+            }
+            left -= 1
+            if let step = pending[row.id] { steps.append(ImportStep(row: row, step: step)) }
+        }
+        if store.state?.ui_features?.contains(SecretCommand.importFeature) == true {
+            let ready = await registerAll(steps.filter { !$0.step.registered }, hub: context.hub, database: context.db)
+            await intakeAll(steps.filter(\.step.registered) + ready, hub: context.hub, database: context.db)
+        } else {
+            for var item in steps {
+                if !item.step.registered {
+                    do {
+                        try await SecretEntryView.register(item.step.reference, title: item.row.secret.title, kind: item.row.secret.kind,
+                                                           variable: item.row.secret.variable,
+                                                           address: SecretCommand.address(for: item.row.secret, features: store.state?.ui_features),
+                                                           value: try item.row.secret.value(),
+                                                           hub: context.hub, database: context.db, installation: store.installation)
+                    } catch { refuse(item.row.id, Self.reason(error)); continue }
+                    item.step.registered = true; pending[item.row.id]?.registered = true
                 }
-                _ = try await VaultClient().intake(hub: context.hub, database: context.db, client: store.installation,
-                                                   login: step.reference, ciphertext: step.sealed)
-                pending[row.id] = nil
-                saved[row.id] = step.reference
-            } catch {
-                failed[row.id] = (error as? LocalizedError)?.errorDescription ?? String(l10n: "The hub did not answer.")
+                await intakeAll([item], hub: context.hub, database: context.db)
             }
         }
         page = .done
+    }
+
+    /// One row of an import on its way: the row, with its reference and its sealed copy, in a local value.
+    private struct ImportStep {
+        let row: SecretImport.Row
+        var step: Pending
+    }
+
+    /// Requests of one import at the same time: four, so that the app's other reads of the hub keep their connections.
+    private static let lanes = 4
+
+    /// Whether an import runs in this app. An import goes on to its end after its page closed, and a second one of the
+    /// same file would then register again each row that the first one has not registered yet: a login can be in the
+    /// list two times. So a second import waits for the first.
+    private static var running = false
+
+    /// One row that is done with no value in the vault: its reason, and one more in the step's count.
+    private func refuse(_ row: Int, _ reason: String) {
+        failed[row] = reason; importDone += 1
+    }
+
+    /// The hub step of these rows in one command (feature `secrets_import`): the salts of each reference, `lanes` at a
+    /// time, then the fingerprints of each value here, and one import with them all. Returns the rows that the hub
+    /// took, registered. A row that the hub refuses, whose salts did not come, or that the app cannot send keeps its
+    /// reference and its sealed copy for Try again, and the others go on.
+    private func registerAll(_ items: [ImportStep], hub: URL, database: String) async -> [ImportStep] {
+        var salts: [Int: SecretSalts] = [:]
+        let client = HubClient()
+        await withTaskGroup(of: (Int, SecretSalts?, String?).self) { group in
+            var next = items.map { ($0.row.id, $0.step.reference) }.makeIterator()
+            for _ in 0..<Self.lanes {
+                guard let (id, reference) = next.next() else { break }
+                group.addTask { await Self.salts(of: reference, row: id, client: client, hub: hub, database: database) }
+            }
+            for await (id, got, problem) in group {
+                if let got { salts[id] = got } else { refuse(id, problem ?? String(l10n: "The hub did not answer.")) }
+                if let (id, reference) = next.next() {
+                    group.addTask { await Self.salts(of: reference, row: id, client: client, hub: hub, database: database) }
+                }
+            }
+        }
+        var sent: [ImportStep] = [], entries: [SecretImportEntry] = []
+        for item in items {
+            guard let got = salts[item.row.id] else { continue }
+            let secret = item.row.secret
+            do {
+                let entry = SecretImportEntry(login: item.step.reference, title: secret.title, kind: secret.kind, variable: secret.variable,
+                                              address: SecretCommand.address(for: secret, features: store.state?.ui_features),
+                                              fingerprints: try SecretFingerprint.of(try secret.value(), salts: got))
+                guard SecretCommand.isValid(entry) else {
+                    refuse(item.row.id, String(l10n: "Founderizer cannot send this item: its name, kind or variable is not one that the list takes."))
+                    continue
+                }
+                entries.append(entry); sent.append(item)
+            } catch { refuse(item.row.id, Self.reason(error)) }
+        }
+        guard !entries.isEmpty else { return [] }
+        do {
+            let answers = try await SecretsClient().importAll(hub: hub, database: database, client: store.installation,
+                                                              entries: entries)
+            var took: [ImportStep] = []
+            for (item, answer) in zip(sent, answers) {
+                if let answer { refuse(item.row.id, answer); continue }
+                var done = item
+                done.step.registered = true; pending[item.row.id]?.registered = true
+                took.append(done)
+            }
+            return took
+        } catch {
+            for item in sent { refuse(item.row.id, Self.reason(error)) }
+            return []
+        }
+    }
+
+    /// The central vault takes these rows, `lanes` at a time. A row that it took is saved; one that it did not take
+    /// keeps its reference and its sealed copy for Try again, under the same reference.
+    private func intakeAll(_ items: [ImportStep], hub: URL, database: String) async {
+        let client = VaultClient(), installation = store.installation
+        await withTaskGroup(of: (Int, String, String?).self) { group in
+            var next = items.map { ($0.row.id, $0.step.reference, $0.step.sealed) }.makeIterator()
+            for _ in 0..<Self.lanes {
+                guard let (id, reference, sealed) = next.next() else { break }
+                group.addTask {
+                    await Self.intake(reference, sealed, row: id, client: client, hub: hub, database: database, installation: installation)
+                }
+            }
+            for await (id, reference, problem) in group {
+                if let problem {
+                    refuse(id, problem)
+                } else {
+                    saved[id] = reference; pending[id] = nil; importDone += 1
+                }
+                if let (id, reference, sealed) = next.next() {
+                    group.addTask {
+                        await Self.intake(reference, sealed, row: id, client: client, hub: hub, database: database, installation: installation)
+                    }
+                }
+            }
+        }
+    }
+
+    /// One reference's salts, for a task of `registerAll`: the row with its salts, or with the reason that it has none.
+    private nonisolated static func salts(of reference: String, row: Int, client: HubClient, hub: URL,
+                                          database: String) async -> (Int, SecretSalts?, String?) {
+        do { return (row, try await client.secretSalts(hub: hub, database: database, login: reference), nil) }
+        catch { return (row, nil, reason(error)) }
+    }
+
+    /// One row into the central vault, for a task of `intakeAll`: the row and its reference, and nil or the reason
+    /// that it is not there.
+    private nonisolated static func intake(_ reference: String, _ sealed: String, row: Int, client: VaultClient, hub: URL,
+                                           database: String, installation: String) async -> (Int, String, String?) {
+        do {
+            _ = try await client.intake(hub: hub, database: database, client: installation, login: reference, ciphertext: sealed)
+            return (row, reference, nil)
+        } catch { return (row, reference, reason(error)) }
+    }
+
+    private nonisolated static func reason(_ error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? String(l10n: "The hub did not answer.")
     }
 
     /// Deletes the export file itself, not into the Trash: it holds the owner's secrets.

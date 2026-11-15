@@ -96,4 +96,15 @@ struct AgentMarkTests {
         #expect(GlyphLook(name: "manager").phase != GlyphLook(name: "vps").phase)
         #expect(GlyphLook(name: "manager").phase == GlyphLook(name: "manager").phase)
     }
+
+    @Test("A look by kind and hue, for the welcome page's marks, takes the hues of the list")
+    func aLookByKindAndHue() {
+        // The manager's fleet look is the lime sparkle: its hue by place gives the same two steps.
+        let manager = GlyphLook.team(fleet)["manager"]
+        let lime = GlyphLook(kind: .squircle, tone: 2)
+        #expect(lime.kind == .squircle && lime.tone == 2)
+        #expect(lime.light == manager?.light && lime.deep == manager?.deep)
+        #expect(GlyphLook(kind: .flower, tone: 8 + GlyphLook.toneCount).tone == 8)
+        #expect(GlyphLook(kind: .flower, tone: -1).tone == GlyphLook.toneCount - 1)
+    }
 }

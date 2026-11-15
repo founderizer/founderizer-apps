@@ -100,13 +100,16 @@ user), and run `create`. The downloads can stay in the first VM's folder: name t
 ```
 app/windows/vm/vm.sh start                     # starts QEMU detached and waits until SSH answers
 app/windows/vm/vm.sh run 'dotnet --version'    # one PowerShell command in an SSH session
-app/windows/vm/vm.sh run 'New-Item -ItemType Directory -Force -Path C:\fz\src\windows, C:\fz\setup | Out-Null'
+app/windows/vm/vm.sh run 'New-Item -ItemType Directory -Force -Path C:\fz\src\windows, C:\fz\src\vectors, C:\fz\setup | Out-Null'
 app/windows/vm/vm.sh copy app/windows/Directory.Build.props app/windows/global.json app/windows/nuget.config \
-    app/windows/Founderizer.Windows vm:C:/fz/src/windows/
+    app/windows/Founderizer.Core app/windows/Founderizer.Install app/windows/Founderizer.Windows vm:C:/fz/src/windows/
+app/windows/vm/vm.sh copy app/vectors/agent-marks.json vm:C:/fz/src/vectors/   # Founderizer.Core embeds ../../vectors/agent-marks.json
 app/windows/vm/vm.sh copy app/windows/vm/setup/build-window.ps1 vm:C:/fz/setup/
 app/windows/vm/vm.sh run 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\fz\setup\build-window.ps1 -Source C:\fz\src\windows\Founderizer.Windows'
 app/windows/vm/vm.sh desktop 'Start-Process C:\fz\out\arm64\Founderizer.App.exe'
 app/windows/vm/vm.sh picture /tmp/window.png    # a picture of the desktop, taken in the VM
+FZ_VM_USER=<session> app/windows/vm/vm.sh hold  # before a proof run: the VM is this session's, no update restarts it
+app/windows/vm/vm.sh release                   # after the run: Windows' updates as before, and the VM free again
 app/windows/vm/vm.sh stop                      # the power button through the monitor; waits until QEMU ends
 ```
 
@@ -157,7 +160,14 @@ who wants the VM in UTM can make a Windows VM there (Arm64, UEFI, TPM, NVMe, the
 - Privacy pages: no diagnostic data beyond the required, no Microsoft account, no online pages (`ProtectYourPC 3`,
   `HideOnlineAccountScreens`).
 - Windows Update does not restart Windows while the user is signed in (`NoAutoRebootWithLoggedOnUsers`). Updates
-  still install.
+  still install. **This policy did not hold:** at 02:28 UTC on 14 November 2026 Windows Update restarted the VM with
+  the user signed in (System event 1074: `MoUsoCoreWorker.exe`, "Service pack (Planned)", then `TrustedInstaller.exe`,
+  "Upgrade (Planned)"). So a proof run goes between `vm.sh hold` and `vm.sh release`. `hold` uses Windows' own pause of
+  updates (the values that Settings > Windows Update > Pause writes, for one day; Settings then says "Updates paused
+  until ...") and makes the next 18 hours Windows' active hours, in which Windows restarts for no update; it refuses
+  while a restart already waits (exit 3), so that the restart comes before the run, not in it. `release` takes the
+  pause away and puts the active hours back as they were. Neither restarts Windows: a restart also ends a Tailscale
+  sign-in link that waits for the owner (the restart of 14 November did, and the VM needed a new link).
 - The display, the disk and the VM never sleep; no hibernation; no lock at wake.
 - UAC stays on. The desktop session runs as a normal user; an SSH session of an administrator is elevated.
 - The automatic sign-in reads its password from the LSA secret `DefaultPassword`, not from the registry.
@@ -183,6 +193,7 @@ the variables below, for the proofs in this VM only; the release build (`C:\fz\o
 | `FOUNDERIZER_TIMING_LOG` | a file for the app's timing lines (see "Readings"), and the answer of each Connect and each code (`connect: …`, `enroll: …`), whose lines on the screen wait for their pictures |
 | `FOUNDERIZER_READING` | `changes`: the sample changes one line every 3 seconds; `block-ui`: the UI thread sleeps 4 seconds, 5 seconds after the start; `long-chat`: Customer Support's chat has 2,000 messages and replies, and 5 seconds after it opens, the scroll reading runs (see "Readings") |
 | `FOUNDERIZER_DEBUG_LOG` | a file for an exception that nothing caught |
+| `FOUNDERIZER_THREAD_TRACE` | `1`: each measure of a chat's or a task's view, its rests, its changes (inertial or not) and his hand, into the debug log (how the end of a long thread was measured on 14 November 2026) |
 
 The argument `-openPage needs|tasks|activity|settings|agent.<name>|task.<id>` opens that page first, as the Mac app's
 does.
@@ -225,7 +236,7 @@ python3 -I app/windows/vm/pictures/motion.py frames motion.png       # with the 
 `scratch_hub.py` serves the scratch hub of `app_decode.py` on the Mac (a temporary database and configuration,
 nothing of the machine's), makes the VM a PC owner device, and prints the hub's address as the VM reaches it
 (`http://10.0.2.2:<port>`) and a code. Run it from the repository's root, in the background; it then takes the words
-`need`, `line`, `code` and `quit` from the file `commands` in its folder and logs each change, and each answer to
+`need`, `ticks` (a request whose options combine), `line`, `marks` (a reply with bold, italic, code and a link), `markdown` (a reply with a heading, a list, code and a link), `result` (Task 1 ends with an accepted result), `outputs` and `nooutputs` (its result names two checked outputs in a Git repository of the folder, a text file and a picture, or none), `steps` and `step` (Task 2's thread on Claude Code: 8 steps with one that failed and one that changed a file, the agent's message and 2 steps more; one step more; `manysteps`: 120 steps more in its last run), `permission` (Task 2 waits for a permission of Bash), `park` (its agent parks Task 2 until the next full hour), `thought`, `script`, `child`, `plan` and `cut` (Task 2's thread gets a thought, a Codex script that made a call, a child agent with its steps and words, the plan of the work that runs with a step that runs, the record's cut), `error` (its attempt ends with a call that never finished and an error, and attempt 2 starts), `guidance` (his guidance, read), `long` (90 rows more), `subtasks` (a parent task and two subtasks), `failread` and `readok` (each read of Task 2's record fails with 503, or answers again), `ended400` (400 ended tasks over the last six days: 3 failed, 60 runs of one schedule, the rest with titles of their own), `slowchat` and `fastchat` (each chat read 8 s late, or at once), `settle`, `two`, `code` and `quit` from the file `commands` in its folder and logs each change, and each answer to
 `/ui/wait`, `/ui/mobile` and `/ui/owner/enroll`, with the Mac's time, to `changes.log` there.
 
 ```
@@ -287,6 +298,20 @@ app/windows/vm/vm.sh run '& "C:\Program Files\Tailscale\tailscale.exe" up --unat
 
 - `up` prints a sign-in link for one use and waits. Nobody here opens it: it goes to the owner, who signs the
   machine in on Tailscale's own page. No key, token or login of his is used for the join.
+- **Only Tailscale's own card reaches his network.** For the next person who makes a VM: a VM on QEMU's user network
+  leaves with the Mac's own place in every network, so a hub that knows the owner's Mac by its address takes the VM for
+  the Mac, unless the VM's own Tailscale carries that traffic or the VM blocks it. A call from the VM to an address of
+  his network that its Tailscale does not carry leaves with the Mac's own address there. Measured on 14 November 2026: with Tailscale down in the VM, the hub's
+  owner page answered 200 with no key; with Tailscale up, 403. The firewall rule
+  `fz-tailscale-range-only-through-tailscale` (outbound, block, 100.64.0.0/10 and fd7a:115c:a1e0::/48, on every card
+  but Tailscale's) closes it: with Tailscale down, no connection reaches his network at all. `setup/first-logon.ps1`
+  makes it at a new VM's first start; an older VM takes it with the same `New-NetFirewallRule` over `vm.sh run`.
+- **The Mac's own services stay out of the VM's reach.** The same network gives the VM every service that listens on
+  the Mac's loopback, at 10.0.2.2 (on 14 November 2026, 65 of the Mac's 71 listening ports answered from the VM,
+  among them 56 local servers of Claude Code). The VM reaches 10.0.2.2 only on 58440 to 58459, the ports of its test
+  servers: the test channel's 58443, and a scratch hub's first free port from 58444 (`scratch_hub.py`). The rules
+  `fz-host-only-test-ports-tcp` (outbound, block, every other TCP port of 10.0.2.2) and `fz-host-no-udp` hold it;
+  SSH comes in from the Mac, and its answers go back on that connection, which no outbound rule stops.
 - The settings: unattended (it stays connected with nobody signed in at its window), shields up (no connection from
   the network reaches the VM), no Tailscale SSH, no routes accepted or advertised, no exit node; `tailscale debug
   prefs` shows them. The VM's name on the network says what it is (for example `founderizer-windows-vm`).
@@ -294,7 +319,8 @@ app/windows/vm/vm.sh run '& "C:\Program Files\Tailscale\tailscale.exe" up --unat
   `C:\fz\downloads\Tailscale-startup.lnk`, so nothing but the service starts by itself, and the desktop of the
   pictures stays as it was.
 - `tailnet/find-hub.cs` runs the library's own search for the hub (`Tailnet.FindAsync`, `GET /health` on port 8765
-  of each device of the network) and prints the hub's address; no address is written into a file of this folder.
+  of each device of the network) and prints each device that it asks by its number, its answer and its time, and which
+  number is the hub: no name and no address of the network, so its lines can go into a report as they are.
   Copy it to `C:\fz\src\windows\vm\tailnet\` beside the copied `Founderizer.Core` and run `dotnet run find-hub.cs`.
 
 ## The second set of pictures in the VM

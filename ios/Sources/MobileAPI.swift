@@ -71,12 +71,12 @@ extension MobileSnapshot {
         guard !canChat(with: name, features: features) else { return nil }
         // The Mac's words, with the place he goes adapted (fix round 3, item 38).
         if agents.first(where: { $0.name == name })?.active == false {
-            return "This agent is in setup. Activate it in the Mac app before sending work."
+            return String(l10n: "This agent is in setup. Activate it in the Mac app before sending work.")
         }
         if !features.contains("direct_chat") && name != "manager" {
-            return "This hub needs an update before direct chat is available."
+            return String(l10n: "This hub needs an update before direct chat is available.")
         }
-        return "Direct chat is unavailable for this agent. Send a task to Manager."
+        return String(l10n: "Direct chat is unavailable for this agent. Send a task to Manager.")
     }
 }
 
@@ -158,7 +158,7 @@ struct MobileUsageWindow: Decodable, Sendable {
     /// A label with no length stays as the hub wrote it. The phone's read carries the label only, not the minutes the
     /// Mac counts from.
     var shortLabel: String {
-        guard var words = label?.trimmingCharacters(in: .whitespaces), !words.isEmpty else { return "Window" }
+        guard var words = label?.trimmingCharacters(in: .whitespaces), !words.isEmpty else { return String(l10n: "Window") }
         if let bucket = words.range(of: " / ", options: .backwards) { words = String(words[bucket.upperBound...]) }
         if let scope = words.range(of: " (") { words = String(words[..<scope.lowerBound]) }
         let parts = words.split(separator: " ")
@@ -289,7 +289,8 @@ struct MobileChatItem: Decodable, Identifiable, Sendable, Equatable {
         in_reply_to = nil
         attachments = []
         pushed = nil
-        answer_to = nil
+        // His answer in words to a request is his message in the chat too (`ChatPage.waitingAnswers`).
+        answer_to = request.needID
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -404,7 +405,7 @@ extension MobileTaskHead {
     func mark(holds: [TaskHold], limited: Bool, outcomeUnknown: Bool = false)
         -> (symbol: String, words: String, attention: Bool, inWork: Bool) {
         // An outcome that is not known comes first (fix round 3b, as FleetCore's).
-        if outcomeUnknown { return ("questionmark.circle", "Outcome not known: check it", true, false) }
+        if outcomeUnknown { return ("questionmark.circle", String(l10n: "Outcome not known: check it"), true, false) }
         let words = stateWord(holds: holds, limited: limited)
         if let hold = holds.first(where: { $0.task == id && $0.state != "released" }) {
             return hold.state == "not_confirmed" ? ("exclamationmark.circle", words, true, false) : ("pause.circle", words, false, false)

@@ -321,4 +321,5 @@ public enum AppUpdateFailure: LocalizedError, Equatable, Sendable {
         }
     }
 }
+
 #endif

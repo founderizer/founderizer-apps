@@ -15,11 +15,13 @@ public struct NotificationLedger: Codable, Sendable {
     private var seen: [String: Int] = [:]
     private var warnings: [String: String]?
     public init() {}
-    public mutating func observe(context: String, needs: [OwnerNeed]) -> [Int] {
+    /// The new open requests of the manager, which is `manager` by the name that the reading gives it
+    /// (`HubState.managerName`): a manager with a name of its own notifies as one named `manager` does.
+    public mutating func observe(context: String, needs: [OwnerNeed], manager: String = "manager") -> [Int] {
         let previous = seen[context]
         seen[context] = max(previous ?? 0, needs.map(\.id).max() ?? 0)
         guard let previous else { return [] }
-        return needs.filter { $0.id > previous && $0.isOpen && $0.by == "manager" }.map(\.id)
+        return needs.filter { $0.id > previous && $0.isOpen && $0.by == manager }.map(\.id)
     }
 
     public mutating func observeWarning(context: String, warning: ManagerWarning?) -> String? {

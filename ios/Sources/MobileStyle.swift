@@ -144,16 +144,16 @@ indirect enum AgentState: Equatable {
     var words: String {
         switch self {
         // An old reading, in the Mac's words (fix round 2, item 35), on the screen and for VoiceOver.
-        case .unknown: "Last reading"
-        case .setup: "In setup"
+        case .unknown: String(l10n: "Last reading")
+        case .setup: String(l10n: "In setup")
         // One word for each state on both screens, the Mac's (lane E's fix): "Offline" and "Limited" were the
         // phone's own.
-        case .offline: "Not answering"
-        case .limited: "Usage limit"
+        case .offline: String(l10n: "Not answering")
+        case .limited: String(l10n: "Usage limit")
         case .attention(let words): words
-        case .working: "Working"
-        case .old: "Last reading"
-        case .online: "Online"
+        case .working: String(l10n: "Working")
+        case .old: String(l10n: "Last reading")
+        case .online: String(l10n: "Online")
         }
     }
     /// The colour of the state's dot. **Work is green** (D-8): the accent is what he can press, and a state is never
@@ -839,7 +839,7 @@ func requestTime(_ timestamp: Double, now: Date = .now, calendar: Calendar = .cu
 
 /// The head of a request, in the Mac's form: "From Iris · 0:08".
 func requestHead(by agent: String, raised: Double, now: Date = .now) -> String {
-    "From \(agentName(agent)) · \(requestTime(raised, now: now))"
+    String(l10n: "From \(agentName(agent)) · \(requestTime(raised, now: now))")
 }
 
 /// **A time to come, as the Mac writes it** (`fleetComingTime` there; the lead's call on item 32): the time today, the
@@ -855,7 +855,7 @@ func comingTime(_ timestamp: Double, now: Double, calendar: Calendar = .current)
 
 /// A date and a time, or "Not reported" without one.
 func fleetDate(_ timestamp: Double?) -> String {
-    guard let timestamp else { return "Not reported" }
+    guard let timestamp else { return String(l10n: "Not reported") }
     return Date(timeIntervalSince1970: timestamp).formatted(date: .abbreviated, time: .shortened)
 }
 
@@ -863,9 +863,9 @@ func fleetDate(_ timestamp: Double?) -> String {
 func fleetAge(_ timestamp: Double, now: Double) -> String {
     let seconds = max(0, now - timestamp)
     switch seconds {
-    case ..<60: return "just now"
-    case ..<3600: return "\(Int(seconds / 60)) min ago"
-    case ..<86_400: return "\(Int(seconds / 3600)) h ago"
+    case ..<60: return String(l10n: "just now")
+    case ..<3600: return String(l10n: "\(Int(seconds / 60)) min ago")
+    case ..<86_400: return String(l10n: "\(Int(seconds / 3600)) h ago")
     default: return fleetDate(timestamp)
     }
 }
@@ -877,9 +877,9 @@ func chatStamp(_ timestamp: Double) -> Text {
     let calendar = Calendar.current
     let day: String
     if calendar.isDateInToday(date) {
-        day = "Today"
+        day = String(l10n: "Today")
     } else if calendar.isDateInYesterday(date) {
-        day = "Yesterday"
+        day = String(l10n: "Yesterday")
     } else if let aWeekBack = calendar.date(byAdding: .day, value: -6, to: .now), date > aWeekBack {
         day = date.formatted(.dateTime.weekday(.wide))
     } else {

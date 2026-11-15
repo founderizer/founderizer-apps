@@ -44,7 +44,8 @@ internal sealed class Field : Grid
     /// <summary>The plus: he wants to add files.</summary>
     public event Action? PlusPressed;
 
-    private readonly StackPanel chips = new() { Orientation = Orientation.Horizontal, Spacing = 8, Padding = new Thickness(6, 6, 8, 0), Visibility = Visibility.Collapsed };
+    // 12 over the chips, under the field's edge (picture 4: 13 from the edge's top to the chip).
+    private readonly StackPanel chips = new() { Orientation = Orientation.Horizontal, Spacing = 8, Padding = new Thickness(6, 12, 8, 0), Visibility = Visibility.Collapsed };
     private readonly double lineHeight;
 
     public Field(double height, double fontSize, double textLeft, FieldLook? look = null)

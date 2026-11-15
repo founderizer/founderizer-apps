@@ -27,7 +27,7 @@ KEYS = APP / ".build" / "l10n" / "keys.json"     # a build product, never in git
 ENGLISH = APP / ".build" / "l10n" / "english.json"
 # The folders whose words a person sees in the Mac app and the iPhone app.
 MAC_SOURCES = ("Sources/Founderizer/", "Sources/FleetCore/", "Sources/FleetMark/")
-IOS_SOURCES = ("ios/Sources/",)
+IOS_SOURCES = ("ios/Sources/", "ios/Share/", "ios/NeedActions/", "ios/NeedSeal/")
 LANGUAGES = ("es",)        # the languages that the catalog holds, shipped or not
 SOURCE = "en"
 # A key that only Windows uses has a comment that starts with this word, so no Swift code needs it.
@@ -147,6 +147,13 @@ def problems(catalog, keys, languages, english=None):
         for language in languages:
             if not entry or not [text for text in units(entry, language) if text.strip()]:
                 out.append((language, f"no {language} words: {key!r} at {keys[key][0]}"))
+    # The iPhone build carries every language of the table (Xcode compiles the catalog itself), so a language that no
+    # build may carry yet has no words in it.
+    allowed = set(languages) | {SOURCE}
+    held = sorted({language for entry in strings.values() for language in entry.get("localizations", {})} - allowed)
+    for language in held:
+        out.append(("", f"the table has words in {language}, which shipped does not name: the iPhone app would show "
+                        f"them before the owner's yes; keep them out of the table until then"))
     for key, entry in strings.items():
         if key not in keys and not entry.get("comment", "").startswith(WINDOWS):
             out.append(("", f"no code shows it any more: {key!r}"))
@@ -190,7 +197,7 @@ def command_check(args):
     keys = json.loads(KEYS.read_text())
     catalog = load()
     live = shipped()
-    found = problems(catalog, keys, list(LANGUAGES), json.loads(ENGLISH.read_text()) if ENGLISH.exists() else {})
+    found = problems(catalog, keys, live, json.loads(ENGLISH.read_text()) if ENGLISH.exists() else {})
     for language, line in found:
         print(("FAULT " if not language or language in live else "todo  ") + line)
     faults = [line for language, line in found if not language or language in live]

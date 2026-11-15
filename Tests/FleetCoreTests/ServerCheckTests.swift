@@ -293,7 +293,7 @@ struct ServerCheckTests {
 
     private func check(_ status: Int32, _ output: String, target: InstallTarget = InstallTarget(host: "203.0.113.9"),
                        calls: Calls = Calls()) async -> ServerCheck.Result {
-        await ServerCheck.run(target, job: .join, keys: Self.noKeys, ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
+        await ServerCheck.run(target, job: .join, keys: Self.noKeys, tries: ServerCheck.KeyTries(), ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
             calls.add(executable, arguments, stdin)
             return LocalShell.Answer(status: status, output: output)
         }
@@ -396,7 +396,7 @@ struct ServerCheckTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let keys = ServerCheck.keyFiles(in: folder), calls = Calls()
         let target = InstallTarget(host: "203.0.113.9")
-        let result = await ServerCheck.run(target, job: .hub, keys: folder, ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
+        let result = await ServerCheck.run(target, job: .hub, keys: folder, tries: ServerCheck.KeyTries(), ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
             calls.add(executable, arguments, stdin)
             switch Self.key(arguments) {
             case nil: return LocalShell.Answer(status: 255, output: Self.tooMany)
@@ -420,7 +420,7 @@ struct ServerCheckTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let keys = ServerCheck.keyFiles(in: folder), calls = Calls()
         let target = InstallTarget(host: "203.0.113.9", identityFile: keys[1])
-        let result = await ServerCheck.run(target, job: .join, keys: folder, ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
+        let result = await ServerCheck.run(target, job: .join, keys: folder, tries: ServerCheck.KeyTries(), ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
             calls.add(executable, arguments, stdin)
             return LocalShell.Answer(status: 255, output: Self.key(arguments) == keys[1]
                                      ? "root@203.0.113.9: Permission denied (publickey,password)."
@@ -440,7 +440,7 @@ struct ServerCheckTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let keys = ServerCheck.keyFiles(in: folder), calls = Calls()
         let denied = "root@203.0.113.9: Permission denied (publickey)."
-        let result = await ServerCheck.run(InstallTarget(host: "203.0.113.9"), job: .join, keys: folder,
+        let result = await ServerCheck.run(InstallTarget(host: "203.0.113.9"), job: .join, keys: folder, tries: ServerCheck.KeyTries(),
                                            ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
             calls.add(executable, arguments, stdin)
             if arguments.first == "-G" {
@@ -455,12 +455,44 @@ struct ServerCheckTests {
         #expect(result.verdict == .stop(ServerCheck.keyRefused("203.0.113.9")))
         // With a key of its own, the first session offered that key only: the other files go, and no ssh -G.
         let own = Calls()
-        _ = await ServerCheck.run(InstallTarget(host: "203.0.113.9", identityFile: keys[0]), job: .join, keys: folder,
+        _ = await ServerCheck.run(InstallTarget(host: "203.0.113.9", identityFile: keys[0]), job: .join, keys: folder, tries: ServerCheck.KeyTries(),
                                   ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
             own.add(executable, arguments, stdin)
             return LocalShell.Answer(status: 255, output: denied)
         }
         #expect(own.all.map { Self.key($0.arguments) } == [keys[0], keys[1], keys[2]])
+    }
+
+    /// **The key files go once for each target** (the owner, 14 November 2026: "we might get locked out if we attempt
+    /// many ssh connections"): after a check in which none let this Mac in, Try again makes its first session only. A
+    /// server that then did not answer keeps the refusal; a check that gets in ends it, and the next refusal tries the
+    /// files again. Another user at the same address is another target.
+    @Test func theKeyFilesGoOnceForEachTargetUntilACheckGetsIn() async throws {
+        let folder = try Self.keyFolder(["id_ed25519", "founderizer_ed25519"])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let tries = ServerCheck.KeyTries(), target = InstallTarget(host: "203.0.113.9")
+        func check(_ target: InstallTarget, _ answer: @escaping @Sendable ([String]) -> LocalShell.Answer) async -> Int {
+            let calls = Calls()
+            _ = await ServerCheck.run(target, job: .join, keys: folder, tries: tries, ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
+                calls.add(executable, arguments, stdin)
+                return answer(arguments)
+            }
+            return calls.all.filter { $0.arguments.first != "-G" }.count
+        }
+        let denied: @Sendable ([String]) -> LocalShell.Answer = { arguments in
+            arguments.first == "-G" ? LocalShell.Answer(status: 0, output: "hostname 203.0.113.9\nuser root\nport 22\n")
+                : LocalShell.Answer(status: 255, output: "root@203.0.113.9: Permission denied (publickey).")
+        }
+        #expect(await check(target, denied) == 3)
+        #expect(await check(target, denied) == 1)
+        #expect(await check(target, { _ in LocalShell.Answer(status: 255, output: "ssh: connect to host 203.0.113.9 port 22: "
+                                                              + "Connection refused") }) == 1)
+        #expect(await check(target, denied) == 1)
+        // Another user is another target.
+        #expect(await check(InstallTarget(host: "203.0.113.9", user: "deploy", becomeRoot: true), denied) == 3)
+        // A check that gets in ends the refusal.
+        #expect(await check(target, { _ in LocalShell.Answer(status: 0, output: Self.ready.joined(separator: "\n")) }) == 1)
+        #expect(await check(target, denied) == 3)
     }
 
     /// Only a refused key leads to the key files: a server that was not reached, that changed its host key, that takes
@@ -477,7 +509,7 @@ struct ServerCheckTests {
         for (status, output) in answers {
             let calls = Calls()
             let target = InstallTarget(host: "203.0.113.9")
-            let result = await ServerCheck.run(target, job: .join, keys: folder, ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
+            let result = await ServerCheck.run(target, job: .join, keys: folder, tries: ServerCheck.KeyTries(), ssh: "/usr/bin/ssh") { executable, arguments, stdin, _ in
                 calls.add(executable, arguments, stdin)
                 return LocalShell.Answer(status: status, output: output)
             }

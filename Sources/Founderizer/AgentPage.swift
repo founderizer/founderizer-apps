@@ -189,19 +189,21 @@ struct AgentPage: View {
 }
 
 /// **People, one part of an agent** (D-5): its channels, the people who can talk to it, and its conversations, each a
-/// group of one page under its heading. The people are the fleet's rows with this agent's share, read-only: a person is
-/// added in Settings › People, and a row opens the person's page, where "Can talk to" is the one editor. A group with
-/// nothing in it is an empty card, as on Can use (the owner's yes of 3 November 2026). Its conversations are those with
-/// people and those with the other agents (6 November 2026); the manager, which no person talks to, has the second kind.
+/// group of one page under its heading. The people are the fleet's rows with this agent's share: a row opens the
+/// person's page, and the + of the heading gives this agent to a person of the fleet, or opens Add person (the owner's
+/// "Yes, build it" of 14 November 2026). A group with nothing in it is an empty card, as on Can use (the owner's yes of
+/// 3 November 2026). Its conversations are those with people and those with the other agents (6 November 2026); the
+/// manager, which no person talks to, has the second kind.
 ///
-/// The Discord page, a person, a conversation and a chat with another agent each take the part's place, with their own
-/// way back, as a sub-page does; the part keeps which one is open, so the page it came from is there when he comes back.
+/// A channel's steps (`ChannelSetup`), a person, a conversation and a chat with another agent each take the part's
+/// place, with their own way back, as a sub-page does; the part keeps which one is open, so the page it came from is
+/// there when he comes back.
 struct AgentPeoplePart: View {
     @Bindable var store: FleetStore
     let agent: String
     /// Each reading of the accounts, for the People dot of the agent's sidebar.
     var onChannels: (ChatAppsSnapshot) -> Void = { _ in }
-    @State private var discord: Bool?
+    @State private var channelSteps: ChannelSetup?
     @State private var route: [PeoplePage.Route] = []
     @State private var conversation: Int?
     /// The other agent whose chat with this one is open.
@@ -211,8 +213,8 @@ struct AgentPeoplePart: View {
     private var worker: Bool { ["worker", "lead"].contains(store.state?.agents.first { $0.name == agent }?.role ?? "") }
 
     var body: some View {
-        if discord != nil {
-            ChannelsPage(store: store, agent: agent, onRead: onChannels, grouped: true, discord: $discord)
+        if channelSteps != nil {
+            ChannelsPage(store: store, agent: agent, onRead: onChannels, grouped: true, setup: $channelSteps)
         } else if !route.isEmpty {
             PeoplePage(store: store, agent: agent, grouped: true, route: $route)
         } else if let id = conversation {
@@ -222,7 +224,7 @@ struct AgentPeoplePart: View {
         } else {
             FleetPage(AgentTab.people.heading) {
                 if features.contains(ChatApps.feature) {
-                    ChannelsPage(store: store, agent: agent, onRead: onChannels, grouped: true, discord: $discord)
+                    ChannelsPage(store: store, agent: agent, onRead: onChannels, grouped: true, setup: $channelSteps)
                 }
                 if worker && features.contains(People.feature) {
                     PeoplePage(store: store, agent: agent, grouped: true, route: $route)

@@ -190,8 +190,10 @@ struct ServerCards: View {
 
     // MARK: Sizes
 
-    /// A figure's column: "100%" in the line's 12-pt figures, or the head "Memory", whichever is wider.
-    static let figureWidth: CGFloat = max(width("100%", figures: true), width("Memory")).rounded(.up)
+    /// A figure's column: "100%" in the line's 12-pt figures, or the widest head in the app's language ("Memory";
+    /// "Memoria" in Spanish), whichever is wider.
+    static let figureWidth: CGFloat = max(width("100%", figures: true), width(String(l10n: "CPU")), width(String(l10n: "Memory")),
+                                          width(String(l10n: "Disk"))).rounded(.up)
 
     /// The parts of the cards' lines, with the words of these columns measured in the lines' 12 points.
     static func parts(_ columns: [String]) -> ServerCardLayout.Parts {

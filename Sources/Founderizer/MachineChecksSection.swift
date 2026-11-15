@@ -106,7 +106,7 @@ final class MachineChecksModel {
     /// owner reads one line instead of filling four boxes, and it is taken once: a connection he gave himself, or
     /// one a check has already used, stands.
     /// `address` is the server's private address from the hub's list of servers, which also has a server that runs no
-    /// agent yet and so has no reading.
+    /// agent yet and so has no reading. `reach` is nil while no page that the app holds names the server.
     func fleetSays(_ reach: MachineReach?, address: String? = nil) {
         // A connection kept from an install names the public address that was typed, where the machine lets no SSH
         // in once its installer has run: it goes to the private address the fleet reports (`MachineReach.reaching`).
@@ -289,7 +289,7 @@ struct MachineStandingSection: View {
     }
 
     var body: some View {
-        let standing = self.standing
+        let standing = self.standing, record = fleetRecord
         VStack(alignment: .leading, spacing: 14) {
             FormSection(footer: footer) {
                 FormRow(standing.words, symbol: standing.symbol,
@@ -314,9 +314,18 @@ struct MachineStandingSection: View {
         // What the hub itself reports about reaching this machine. It arrives after the page draws, and again
         // whenever the readings change, so the connection is filled from the fleet's own record and the owner is
         // asked for none of it.
-        .task(id: MachineReach.of(model.machine, in: readings)) {
-            model.fleetSays(MachineReach.of(model.machine, in: readings), address: server.address)
+        .task(id: record) {
+            model.fleetSays(record, address: server.address)
         }
+    }
+
+    /// **The fleet's record of how this server is reached, out of the pages that the app holds already**
+    /// (`ServerRecords.held`, with the rule of the steps that run by themselves): the list of machines, which names
+    /// only a server that an agent runs on, then the server's own row, then, for the hub's own server, the hub's
+    /// record of it in the vault's page, which the store's poll keeps. 15 November 2026: this card read the list
+    /// alone, so for a hub's own server with no agent it asked the owner for a connection that the fleet had on record.
+    private var fleetRecord: MachineReach? {
+        ServerRecords.held(of: server, machines: readings, own: store.vaultModel().reading?.hub)
     }
 
     /// **A machine that is connected gets no button**, which is the whole of what the owner asked for. One that is

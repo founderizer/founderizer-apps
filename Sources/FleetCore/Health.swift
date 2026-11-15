@@ -147,9 +147,16 @@ extension FleetHealth.Warning {
         case "allowance_spent": return who.isEmpty ? String(l10n: "An agent reached its usage limit") : String(l10n: "\(who) reached its usage limit")
         case "timers_stalled": return String(l10n: "The hub's timers stopped")
         case "vault_behind": return who.isEmpty ? String(l10n: "A server's vault is out of date") : String(l10n: "\(who)'s vault is out of date")
+        // Package 4 of the vault's gates (C5): the owner's trust in a server's vault, the kept pin of each handover to it,
+        // ends 90 days after his Mac signed it. "Trust" is the Secrets page's own word.
+        case "vault_pin_ends": return who.isEmpty ? String(l10n: "The trust in a server's vault ends soon") : String(l10n: "The trust in \(who)'s vault ends soon")
+        case "vault_pin_ended": return who.isEmpty ? String(l10n: "The trust in a server's vault has ended") : String(l10n: "The trust in \(who)'s vault has ended")
         case "tasks_stuck": return String(l10n: "Some tasks are stuck")
         case "circles_stuck": return String(l10n: "Some work runs in circles")
         case "reports_undecided": return String(l10n: "Reports wait for a decision")
+        // The hub's own faults (UI-API.md 1.167; the owner's yes of 14 November 2026 to the picture E1). Its button is
+        // the default's, Report a problem, which carries them.
+        case "hub_fault": return String(l10n: "The hub hit an error")
         default: return kind.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }

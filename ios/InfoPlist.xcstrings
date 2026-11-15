@@ -1,0 +1,24 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSFaceIDUsageDescription" : {
+      "comment" : "Info.plist of the app and of Share: why Face ID opens this phone's key.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Founderizer unlocks this phone's own key for the hub."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Founderizer desbloquea la clave propia de este teléfono para el hub."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

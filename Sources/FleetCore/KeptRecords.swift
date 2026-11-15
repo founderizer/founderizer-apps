@@ -1,0 +1,176 @@
+#if os(macOS)
+import Foundation
+
+/// This start of the app, in each record that it writes (`KeptRecords`).
+public enum AppLaunch {
+    public static let id = UUID().uuidString
+}
+
+/// **A record of work that this Mac did, which must outlive the page that did it** (an install, `InstallRecord`; a
+/// server made at a provider, `BuildRecord`). The start of the app that wrote it is in it, so that a later start reads
+/// work that was cut off as that, and never as work that runs.
+public protocol KeptRecord: Codable, Equatable, Sendable, Identifiable where ID == UUID {
+    /// The start of the app that wrote this record (`AppLaunch.id`).
+    var launch: String { get }
+    var began: Date { get }
+    /// The record says that its work runs.
+    var runs: Bool { get }
+    /// The same record as a later start of the app reads it when it says that its work runs: cut off.
+    func cutOff() -> Self
+    /// Posted on `NotificationCenter.default` after a write that changed a record of this kind.
+    static var changed: Notification.Name { get }
+}
+
+/// Where the app keeps its records: a folder of its own in `Application Support/Founderizer`.
+enum KeptRecordsPlace {
+    static func folder(_ name: String) -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Founderizer").appendingPathComponent(name)
+    }
+}
+
+/// **The records of one kind, in a folder of the app**: one small file for each record, written whole at each change,
+/// readable by its user only. A process writes the files of its own work's records, and closes a record of an earlier
+/// start only where later work proved it (`noteJoined`); past the limit it removes the oldest files, whoever wrote
+/// them. The folder is read one time; after that every read is from memory and opens no file, so the records are for
+/// the app's own process. Safe from any thread.
+///
+/// **Work that was cut off never reads as work that runs**: every read gives a record that says `runs` and that another
+/// start of the app wrote as `cutOff()` gives it, never as its file has it.
+///
+/// **A sign of change**: `changes` goes up at each write that changed a record, and each such write posts the record's
+/// `changed`, so a reader in this app knows when to read again without a look at the folder.
+public final class KeptRecords<Record: KeptRecord>: @unchecked Sendable {
+    /// The largest file that is read as a record: a record is about 2 KiB.
+    public static var largestFile: Int { 64 * 1024 }
+    /// Posted on `NotificationCenter.default` after a write that changed a record of this kind, with this object.
+    public static var changed: Notification.Name { Record.changed }
+
+    private let folder: URL
+    private let launch: String
+    private let keeps: Int
+    private let lock = NSLock()
+    private var records: [UUID: Record]?
+    private var counted = 0
+    /// The records whose last write did not reach the disk: each write tries them again.
+    private var unsaved: Set<UUID> = []
+
+    /// `keeps`: the newest records that stay; an older one goes with its file at the next write.
+    public init(folder: URL, launch: String = AppLaunch.id, keeps: Int = 40) {
+        self.folder = folder
+        self.launch = launch
+        self.keeps = max(1, keeps)
+    }
+
+    /// How many writes changed a record since this object was made.
+    public var changes: Int {
+        lock.lock(); defer { lock.unlock() }
+        return counted
+    }
+
+    /// Reads the folder, one time. Every read and every write does it when it is still to do; a caller that wants it
+    /// off the main thread calls it there first.
+    public func load() {
+        lock.lock(); defer { lock.unlock() }
+        _ = loaded()
+    }
+
+    /// Every record, newest first, each as this start of the app reads it.
+    public func all() -> [Record] {
+        lock.lock(); defer { lock.unlock() }
+        return Self.sorted(loaded().values).map { $0.runs && $0.launch != launch ? $0.cutOff() : $0 }
+    }
+
+    /// Keeps the record as it is now. A record that did not change writes nothing and counts nothing. Every record
+    /// whose last write did not reach the disk is written again at each call, also at one that changes nothing; a
+    /// write counts only when it changed a record.
+    public func write(_ record: Record) {
+        lock.lock()
+        var all = loaded()
+        let changed = all[record.id] != record
+        guard changed || !unsaved.isEmpty else { lock.unlock(); return }
+        all[record.id] = record
+        // The oldest go, with their files; never one that this start of the app still runs.
+        let extra = Self.sorted(all.values).dropFirst(keeps).filter { !($0.runs && $0.launch == launch) }
+        for old in extra where old.id != record.id {
+            all[old.id] = nil
+            try? FileManager.default.removeItem(at: file(old.id))
+        }
+        records = all
+        if changed { counted += 1; unsaved.insert(record.id) }
+        // The last write of a record (its end) has no next write of its own: each write, also one that changes
+        // nothing, tries every record that still waits for the disk.
+        for id in Array(unsaved) {
+            if let waits = all[id] { if save(waits) { unsaved.remove(id) } } else { unsaved.remove(id) }
+        }
+        lock.unlock()
+        if changed { NotificationCenter.default.post(name: Record.changed, object: self) }
+    }
+
+    /// **Takes records away, with their files**: the ones for which `matches` is true, as this start of the app
+    /// reads them. For a fleet that the app forgets ("Start again"). It counts and says one change when a record went.
+    public func remove(where matches: (Record) -> Bool) {
+        lock.lock()
+        var all = loaded()
+        let gone = all.values.filter { matches($0.runs && $0.launch != launch ? $0.cutOff() : $0) }
+        for record in gone {
+            all[record.id] = nil
+            unsaved.remove(record.id)
+            try? FileManager.default.removeItem(at: file(record.id))
+        }
+        records = all
+        if !gone.isEmpty { counted += 1 }
+        lock.unlock()
+        if !gone.isEmpty { NotificationCenter.default.post(name: Record.changed, object: self) }
+    }
+
+    private static func sorted(_ records: some Collection<Record>) -> [Record] {
+        records.sorted { $0.began != $1.began ? $0.began > $1.began : $0.id.uuidString < $1.id.uuidString }
+    }
+
+    private func file(_ id: UUID) -> URL { folder.appendingPathComponent("\(id.uuidString.lowercased()).json") }
+
+    /// With the lock held: the records of the folder, read at the first call. A file that is no record of this
+    /// version, or that is larger than a record can be, is passed over and stays.
+    private func loaded() -> [UUID: Record] {
+        if let records { return records }
+        var found: [UUID: Record] = [:]
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        for name in names where name.hasSuffix(".json") {
+            let file = folder.appendingPathComponent(name)
+            guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int,
+                  size <= Self.largestFile, let data = try? Data(contentsOf: file),
+                  let record = try? keptDecoder().decode(Record.self, from: data),
+                  name == "\(record.id.uuidString.lowercased()).json" else { continue }
+            found[record.id] = record
+        }
+        records = found
+        return found
+    }
+
+    /// With the lock held: the record's file, whole, for its user only. False when it did not reach the disk.
+    private func save(_ record: Record) -> Bool {
+        guard let data = try? keptEncoder().encode(record) else { return false }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
+        let file = file(record.id)
+        guard (try? data.write(to: file, options: .atomic)) != nil else { return false }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        return true
+    }
+}
+
+/// A record's file: its dates as whole milliseconds, its keys in order.
+private func keptEncoder() -> JSONEncoder {
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .millisecondsSince1970
+    encoder.outputFormatting = [.sortedKeys]
+    return encoder
+}
+
+private func keptDecoder() -> JSONDecoder {
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .millisecondsSince1970
+    return decoder
+}
+#endif

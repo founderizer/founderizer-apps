@@ -53,6 +53,8 @@ struct ServersPage: View {
                     if list.servers.isEmpty {
                         FormSection { FormEmpty("No servers yet", symbol: "server.rack") }
                     } else {
+                        // The slider of the fleet's shape over the cards (the owner's yes of 15 November 2026).
+                        if ShapeServersCard.shows(store, list) { ShapeServersCard(store: store, list: list) }
                         ServerCards(store: store, list: list, helpers: helpers)
                     }
                 } else if older, let machines {
@@ -255,7 +257,7 @@ struct ServersPage: View {
                 Spacer(minLength: 12)
                 agents(rows.map(\.agent), alignment: .trailing).padding(.vertical, 8)
                 // A server that reports says nothing, as the cards above mark only a server that needs something.
-                Text(words == "Reported" ? "" : words).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                Text(words == String(l10n: "Reported") ? "" : words).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                     .frame(minWidth: 110, alignment: .trailing)
             }.padding(.horizontal, FormMetrics.rowInset).frame(minHeight: FormMetrics.twoLineRow)
         }.buttonStyle(FleetRowButtonStyle()).accessibilityIdentifier("server-\(name)")
@@ -671,6 +673,8 @@ struct ServerPage: View {
             let team = try await HubClient().team(hub: store.hub, database: database)
             _ = try await HubClient().removeServer(hub: store.hub, database: database, client: store.installation,
                                                    server: server.name, sha256: team.sha256)
+            // Package 4 of the vault's gates: this Mac signs no pin of that machine again, and sends its unpin by itself.
+            store.vaultModel().removed(server.name, store: store)
             store.destination = .settings(.servers)
         } catch let HubError.refusal(_, words) { error = words }
         catch { self.error = String(l10n: "The hub has not answered. Try again.") }

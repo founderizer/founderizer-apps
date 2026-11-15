@@ -3,9 +3,9 @@ import Foundation
 /// The three columns of the Tasks board (the owner's yes of 11 November 2026 to its picture). An open task is in
 /// progress while the hub reports it in work. It waits when it is queued for its agent, when the hub reports that it
 /// needs an answer or a sign-in, when it waits on something (`waiting_on`), when its agent parked it until a time
-/// (`parked_until`), when a hold or its agent's usage limit holds it, and when only the owner can move it: an outcome
-/// that is not known after a stop or a pause, or a stop that was not confirmed, also on a task that ended. Every other
-/// task that ended is in Ended.
+/// (`parked_until`), when its session does no work now while subtasks of it are open (`subtaskWaits`), when a hold or
+/// its agent's usage limit holds it, and when only the owner can move it: an outcome that is not known after a stop or a
+/// pause, or a stop that was not confirmed, also on a task that ended. Every other task that ended is in Ended.
 ///
 /// The board had a fourth column, Needs you, with the manager's open requests in it: the Needs you page shows them,
 /// one row above Tasks in the sidebar, so the column said them twice.
@@ -72,12 +72,17 @@ extension FleetTask {
 
     /// The task's column. `held`: a hold that is not released, or a usage limit of the task's agent. `needsOwner`: an
     /// outcome that the owner must record, or a stop that was not confirmed; also for a task that ended.
-    public func activityColumn(held: Bool, needsOwner: Bool = false) -> ActivityColumn {
+    /// `waitsForSubtasks`: its session does no work now and subtasks of it are open (`HubState.subtaskWaits`).
+    public func activityColumn(held: Bool, needsOwner: Bool = false, waitsForSubtasks: Bool = false) -> ActivityColumn {
         if needsOwner { return .waiting }
         if isTerminal { return .done }
         if held || state == "input-required" || state == "auth-required" || !(waiting_on ?? "").isEmpty { return .waiting }
         // Its agent parked it until a time: it does no work until then, whatever its state says.
         if parked_until != nil { return .waiting }
+        // **A lead's task whose subtasks are still open waits for them** (the owner's "Yes, build it" of 14 November
+        // 2026): the hub keeps its state `working` while nothing of its session runs (`works` false), and the board
+        // showed three such tasks In progress for hours. When its session works again, to check a result, it is back.
+        if waitsForSubtasks && state == "working" && works == false { return .waiting }
         // A queued task (`submitted`) waits for its agent; a state that this app does not know is never shown as work,
         // and never hidden.
         return state == "working" ? .inProgress : .waiting
@@ -109,10 +114,11 @@ extension HubState {
         let start = period.start(now: Date(timeIntervalSince1970: time), calendar: calendar)?.timeIntervalSince1970 ?? -.infinity
         let held = Set((holds ?? []).filter { $0.state != "released" }.map(\.task))
         let limited = Set(agents.filter { $0.limit != nil }.map(\.name))
-        let owner = ownerOnly, waits = ownerWaits
+        let owner = ownerOnly, waits = ownerWaits, subtasks = subtaskWaits
         var columns: [ActivityColumn: [FleetTask]] = [:]
         for task in tasks where (agent == nil || task.owner == agent) && (task.activityTime >= start || waits[task.id] != nil) {
-            let column = task.activityColumn(held: held.contains(task.id) || limited.contains(task.owner), needsOwner: owner.contains(task.id))
+            let column = task.activityColumn(held: held.contains(task.id) || limited.contains(task.owner), needsOwner: owner.contains(task.id),
+                                             waitsForSubtasks: subtasks[task.id] != nil)
             columns[column, default: []].append(task)
         }
         var sorted = columns.mapValues { $0.sorted { ($0.activityTime, $0.id) > ($1.activityTime, $1.id) } }
@@ -151,6 +157,31 @@ extension HubState {
             }
         }
         return waits
+    }
+
+    /// **The agents whose open subtasks a task waits for**, by task: only for an open task in state `working` whose
+    /// session does no work now (`works` false; nothing for a hub that does not say), each agent once, the one whose
+    /// subtask moved last first. A task whose session works, to check a result, is not in it.
+    public var subtaskWaits: [Int: [String]] {
+        let idle = Set(tasks.filter { $0.state == "working" && $0.works == false }.map(\.id))
+        guard !idle.isEmpty else { return [:] }
+        var open: [Int: [FleetTask]] = [:]
+        for task in tasks where !task.isTerminal {
+            if let parent = task.parent, idle.contains(parent) { open[parent, default: []].append(task) }
+        }
+        return open.mapValues { subtasks in
+            var agents: [String] = []
+            for task in subtasks.sorted(by: { ($0.activityTime, $0.id) > ($1.activityTime, $1.id) }) where !agents.contains(task.owner) {
+                agents.append(task.owner)
+            }
+            return agents
+        }
+    }
+
+    /// The words of a task that waits for its subtasks, at the end of its agent's line on the board: "Waiting for
+    /// Web-Dev", the words of a task that waits for an agent.
+    public static func subtaskWords(_ agents: [String]) -> String {
+        String(l10n: "Waiting for \(agents.map(\.agentLabel).joined(separator: ", "))")
     }
 
     /// The number of the hub's reference `<letter>-<number>` ("N-53" with "N" is 53), or nil.

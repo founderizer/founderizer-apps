@@ -61,7 +61,7 @@ struct HealthView: View {
     var body: some View {
         FleetPage("System status") {
             connected
-            if ready, let reading, !reading.warnings.isEmpty {
+            if ready, noOwnerKey || !(reading?.warnings.isEmpty ?? true) {
                 // What to do from a kept reading waits a second for the read that can clear it (the loading contract, C4.4).
                 // At once, from the reading kept last: these are the hub's own words about its machines, and the read
                 // that starts changes them in place. Held for its second, What to do came 50 ms after the page on
@@ -180,6 +180,23 @@ struct HealthView: View {
 
     // ---------------------------------------------------------------- what to do about it
 
+    /// **This Mac could not register its key for the hub by itself** (`OwnerKeyModel.cannot`): the hub is one from
+    /// before the key, this Mac reads it, and it has no SSH connection to the hub's server that the registration can
+    /// use. Then the hub knows this Mac by its address alone, and so a VM or a container on this Mac too.
+    private var noOwnerKey: Bool { store.isFresh && store.keyModel().cannot }
+
+    /// The one block that this Mac says itself (the owner's yes of 14 November 2026 to its picture, "One row in System
+    /// status"): what is wrong, and the one line that puts it right, which he runs on the hub's server.
+    private var ownerKeyBlock: some View {
+        FormBlock(String(l10n: "The hub knows this Mac by its address only"),
+                  detail: String(l10n: "A program in a VM or a container on this Mac can act as you. Run this on the hub's server:")) {
+            Text(verbatim: "sh hub.sh --reclaim")
+                .font(.system(size: 12, design: .monospaced)).foregroundStyle(FleetStyle.text)
+                .textSelection(.enabled)
+        }
+        .accessibilityIdentifier("health-warning-owner-key")
+    }
+
     /// One block for each thing that is wrong: what the hub said, the line it wrote for putting it right, and the one
     /// button that does it.
     ///
@@ -187,8 +204,15 @@ struct HealthView: View {
     /// two become one"). The hub raises one warning for each fact, so one server that went quiet stood here twice —
     /// "Mini is not answering", "Mini sent no status" — each with its own "Open Mini". The warnings about one agent's
     /// server are one block now: the first one's title, what the hub said in each, and each button once.
-    private func toPutRight(_ reading: FleetHealth) -> some View {
+    private func toPutRight(_ reading: FleetHealth?) -> some View {
         FormSection("What to do", footer: copy.said ?? copy.failure) {
+            if noOwnerKey { ownerKeyBlock }
+            if let reading { hubBlocks(reading) }
+        }
+    }
+
+    @ViewBuilder private func hubBlocks(_ reading: FleetHealth) -> some View {
+        Group {
             // One block for each agent's server, each fact once (`FleetHealth.blocks`, which Report a problem draws too).
             ForEach(Array(FleetHealth.blocks(reading.warnings, manager: store.state?.agents.first(where: { $0.role == "manager" })?.name).enumerated()), id: \.offset) { _, block in
                 if !block.updates.isEmpty {

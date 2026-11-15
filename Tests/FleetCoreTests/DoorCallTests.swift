@@ -232,7 +232,7 @@ struct DoorCallTests {
                        ["title": DoorCall.title(host: "db-1")], ["todo": "Press the first one"], ["id": 8],
                        ["github_app": "example-org"], ["add_device": 1],
                        ["options": ["Run it once", "Full access on db-1", "No"]], ["details": NSNull()],
-                       ["door_script": NSNull()]] as [[String: Any]] {
+                       ["door_script": NSNull()], ["door_task": "Copy the uploads"]] as [[String: Any]] {
             #expect(!pressed.signsTheSame(as: try need(change)), "\(change.keys)")
         }
     }
@@ -266,6 +266,33 @@ struct DoorCallTests {
         #expect(old.door_script == nil)
         #expect(DoorCall.checked(title: old.title, answers: old.options ?? [], host: "web-1", call: Self.call,
                                  script: old.door_script, details: old.details) == .failure(.noScript))
+    }
+
+    /// The owner's "Yes, as shown" of 14 November 2026: two cards on one server read as two things. The title that
+    /// the Mac signs under stays word for word, and the task that asked comes after it (API 1.160).
+    @Test func theCardNamesTheTaskThatAskedAfterItsTitle() throws {
+        func need(_ more: [String: Any]) throws -> OwnerNeed {
+            var row: [String: Any] = ["id": 7, "title": DoorCall.title(host: "web-1"), "why": "It copies a folder.",
+                                      "todo": "Answer", "raised": 1.0, "by": "manager",
+                                      "options": DoorCall.answers(host: "web-1"), "door_call": Self.call,
+                                      "door_host": "web-1", "door_script": Self.script,
+                                      "details": DoorCall.details(script: Self.script)]
+            row.merge(more) { $1 }
+            return try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: row))
+        }
+        let card = try need(["door_task": "Copy the uploads"])
+        #expect(card.title == "Run one root script on web-1?")
+        #expect(card.shownTitle == "Run one root script on web-1? · Copy the uploads")
+        // the Mac signs under the title alone, and the task's words are held to the rule of the card's other words
+        #expect(DoorCall.names(host: "web-1", title: card.title, answers: card.options ?? []))
+        #expect(!DoorCall.names(host: "web-1", title: card.shownTitle, answers: card.options ?? []))
+        #expect(DoorCall.checked(title: card.title, answers: card.options ?? [], host: "web-1", call: Self.call,
+                                 script: card.door_script, details: card.details,
+                                 words: [card.why, card.todo, "Copy `rm -rf /` the uploads"]) == .failure(.decoy))
+        // a hub of an earlier version, a card whose task the hub does not know, and an item that is no door card
+        for none in [[:], ["door_task": NSNull()], ["door_task": ""]] as [[String: Any]] {
+            #expect(try need(none).shownTitle == "Run one root script on web-1?")
+        }
     }
 
     // MARK: a server's mode

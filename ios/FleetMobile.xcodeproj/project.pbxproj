@@ -36,6 +36,10 @@
 		AA00000000000000000016 /* FleetMark in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000015 /* FleetMark */; };
 		AC00000000000000000030 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000030 /* Assets.xcassets */; };
 		AC00000000000000000031 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000031 /* PrivacyInfo.xcprivacy */; };
+		AC000000000000000000F1 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000F0 /* Localizable.xcstrings */; };
+		AC000000000000000000F2 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000F0 /* Localizable.xcstrings */; };
+		AC000000000000000000F6 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000F5 /* InfoPlist.xcstrings */; };
+		AC000000000000000000F7 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000F5 /* InfoPlist.xcstrings */; };
 		AC0000000000000000001A /* MobileKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000001A /* MobileKeyTests.swift */; };
 		AC0000000000000000001B /* MobileReadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000001B /* MobileReadTests.swift */; };
 		AC0000000000000000001C /* MobileAttachmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000001C /* MobileAttachmentTests.swift */; };
@@ -110,6 +114,8 @@
 		AB00000000000000000042 /* UserNotificationsUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotificationsUI.framework; path = System/Library/Frameworks/UserNotificationsUI.framework; sourceTree = SDKROOT; };
 		AB00000000000000000030 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AB00000000000000000031 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		AB000000000000000000F0 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = Localizable.xcstrings; path = ../Localization/Localizable.xcstrings; sourceTree = "<group>"; };
+		AB000000000000000000F5 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		AA00000000000000000021 /* FleetMobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FleetMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB0000000000000000001A /* MobileKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileKeyTests.swift; sourceTree = "<group>"; };
 		AB0000000000000000001B /* MobileReadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileReadTests.swift; sourceTree = "<group>"; };
@@ -195,6 +201,8 @@
 				AA00000000000000000028 /* Tests */,
 				AB00000000000000000030 /* Assets.xcassets */,
 				AB00000000000000000031 /* PrivacyInfo.xcprivacy */,
+				AB000000000000000000F0 /* Localizable.xcstrings */,
+				AB000000000000000000F5 /* InfoPlist.xcstrings */,
 				AA00000000000000000010 /* Info.plist */,
 				AB00000000000000000032 /* FleetMobile.entitlements */,
 				AA00000000000000000011 /* README.md */,
@@ -407,6 +415,7 @@
 			knownRegions = (
 				en,
 				Base,
+				es,
 			);
 			mainGroup = AA00000000000000000002;
 			packageReferences = (
@@ -433,6 +442,8 @@
 			files = (
 				AC0000000000000000007A /* Assets.xcassets in Resources */,
 				AC0000000000000000007B /* PrivacyInfo.xcprivacy in Resources */,
+				AC000000000000000000F2 /* Localizable.xcstrings in Resources */,
+				AC000000000000000000F7 /* InfoPlist.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -442,6 +453,8 @@
 			files = (
 				AC00000000000000000030 /* Assets.xcassets in Resources */,
 				AC00000000000000000031 /* PrivacyInfo.xcprivacy in Resources */,
+				AC000000000000000000F1 /* Localizable.xcstrings in Resources */,
+				AC000000000000000000F6 /* InfoPlist.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -585,7 +598,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Share/Share.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Share/Info.plist;
@@ -595,7 +608,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -610,7 +623,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Share/Share.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Share/Info.plist;
@@ -620,7 +633,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -685,7 +698,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = FleetMobile.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
@@ -693,7 +706,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
@@ -709,7 +722,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = FleetMobile.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
@@ -717,7 +730,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
@@ -731,10 +744,10 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TARGETED_DEVICE_FAMILY = 1;
@@ -747,10 +760,10 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TARGETED_DEVICE_FAMILY = 1;
@@ -762,7 +775,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NeedActions/Info.plist;
@@ -772,7 +785,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.needs;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -785,7 +798,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NeedActions/Info.plist;
@@ -795,7 +808,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.needs;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -809,7 +822,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = NeedSeal/NeedSeal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NeedSeal/Info.plist;
@@ -819,7 +832,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.seal;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -833,7 +846,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = NeedSeal/NeedSeal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 6EBZ756H9Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NeedSeal/Info.plist;
@@ -843,7 +856,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.founderizer.mobile.seal;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

@@ -28,8 +28,8 @@ public sealed record OwnerWait(OwnerWait.Kinds Kind, long Need = 0, string Title
 
 /// <summary>The rules of the Tasks board and of Needs you over the device's read (GET /ui/mobile), as FleetCore's
 /// Activity.swift and NeedsLane.swift hold them over the Mac's state. The device's read differs from the Mac's in what it
-/// carries: the heads of the open tasks and of the last 20 that ended (not every task), no `parked_until` and no
-/// `trigger_id`, and the holds and outcomes that still stop work.</summary>
+/// carries: the heads of the open tasks and of the last 20 that ended (not every task), no `trigger_id`, and the holds and
+/// outcomes that still stop work. Its heads say until when an agent parked a task (`parked_until`, owner API 1.161).</summary>
 public static class Activity
 {
     public static string Title(this ActivityColumn column) => column switch
@@ -80,22 +80,49 @@ public static class Activity
 
     /// <summary>A task's lane (FleetTask.activityColumn). <paramref name="held"/>: a hold that is not released, or a usage
     /// limit of its agent. <paramref name="needsOwner"/>: an outcome that he must record, or a stop that was not
-    /// confirmed, also for a task that ended. The device's head has no `parked_until`, so a parked task reads by its
-    /// state.</summary>
-    public static ActivityColumn Column(this MobileTaskHead task, bool held, bool needsOwner = false)
+    /// confirmed, also for a task that ended. A task that its agent parked until a time waits, whatever its state says.
+    /// <paramref name="waitsForSubtasks"/>: its session does no work now and subtasks of it are open
+    /// (<see cref="SubtaskWaits"/>); such a task in state working waits for them.</summary>
+    public static ActivityColumn Column(this MobileTaskHead task, bool held, bool needsOwner = false, bool waitsForSubtasks = false)
     {
         if (needsOwner) return ActivityColumn.Waiting;
         if (task.IsTerminal) return ActivityColumn.Done;
         if (held || task.State is "input-required" or "auth-required" || !string.IsNullOrEmpty(task.WaitingOn))
             return ActivityColumn.Waiting;
+        if (task.ParkedUntil is not null) return ActivityColumn.Waiting;
+        // A lead's task whose subtasks are still open waits for them (the Mac's rule of 14 November 2026, Founderizer
+        // 0.1.220): the hub keeps it working while nothing of its session runs.
+        if (waitsForSubtasks && task.State == "working" && task.Works == false) return ActivityColumn.Waiting;
         return task.State == "working" ? ActivityColumn.InProgress : ActivityColumn.Waiting;
     }
 
-    /// <summary>Every task head that the read carries, the open ones and the ones that ended, each once.</summary>
-    public static IReadOnlyList<MobileTaskHead> AllTasks(MobileSnapshot snapshot)
+    /// <summary>The agents whose open subtasks a task waits for, by task (HubState.subtaskWaits): only for an open task in
+    /// state working whose session does no work now (`works` false; nothing for a hub that does not say), each agent once,
+    /// the one whose subtask moved last first. The device's heads carry every open task, with its parent (owner API
+    /// 1.162).</summary>
+    public static IReadOnlyDictionary<long, IReadOnlyList<string>> SubtaskWaits(MobileSnapshot snapshot)
+    {
+        var tasks = AllTasks(snapshot);
+        var idle = tasks.Where(t => t.State == "working" && t.Works == false).Select(t => t.Id).ToHashSet();
+        if (idle.Count == 0) return new Dictionary<long, IReadOnlyList<string>>();
+        return tasks.Where(t => !t.IsTerminal && t.Parent is { } parent && idle.Contains(parent))
+            .GroupBy(t => t.Parent!.Value)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.OrderByDescending(t => t.ActivityTime()).ThenByDescending(t => t.Id)
+                .Select(t => t.Owner).Distinct().ToList());
+    }
+
+    /// <summary>The words of a task that waits for its subtasks (HubState.subtaskWords): "Waiting for Developer, DevOps".</summary>
+    public static string SubtaskWords(IReadOnlyList<string> agents, AgentBook names) =>
+        $"Waiting for {string.Join(", ", agents.Select(names.Label))}";
+
+    /// <summary>Every task head that the device holds, each once: the open ones, every ended task of the hub's ended read
+    /// (owner API 1.166) when the store has one, as the Mac's state has every task, and the 20 newest that ended of the
+    /// reading. An ended read's head comes before the reading's own: it carries the task's schedule, and the store reads
+    /// it again in the same pass whenever the reading's mark moves.</summary>
+    public static IReadOnlyList<MobileTaskHead> AllTasks(MobileSnapshot snapshot, IReadOnlyList<MobileTaskHead>? ended = null)
     {
         var seen = new HashSet<long>();
-        return snapshot.Tasks.Concat(snapshot.Recent).Where(t => seen.Add(t.Id)).ToList();
+        return snapshot.Tasks.Concat(ended ?? []).Concat(snapshot.Recent).Where(t => seen.Add(t.Id)).ToList();
     }
 
     /// <summary>The tasks that only the owner can move: an outcome that is not known, a stop that was not confirmed.</summary>
@@ -106,7 +133,7 @@ public static class Activity
     /// <summary>What each task waits for from the owner, by task (HubState.ownerWaits): an unknown outcome first, then a
     /// stop that was not confirmed, and for an open task the request it waits on (`waiting_on` "N-53" names the request,
     /// "Q-68" the question that a request carries) or its agent's sign-in.</summary>
-    public static IReadOnlyDictionary<long, OwnerWait> OwnerWaits(MobileSnapshot snapshot)
+    public static IReadOnlyDictionary<long, OwnerWait> OwnerWaits(MobileSnapshot snapshot, IReadOnlyList<MobileTaskHead>? ended = null)
     {
         var unknown = snapshot.Outcomes.Where(o => o.State == "unknown").Select(o => o.Task).ToHashSet();
         var unconfirmed = snapshot.Holds.Where(h => h.State == "not_confirmed").Select(h => h.Task).ToHashSet();
@@ -119,7 +146,7 @@ public static class Activity
             if (need.Question is { } q) byQuestion.TryAdd(q, need);
         }
         var waits = new Dictionary<long, OwnerWait>();
-        foreach (var task in AllTasks(snapshot))
+        foreach (var task in AllTasks(snapshot, ended))
         {
             if (unknown.Contains(task.Id)) { waits[task.Id] = new OwnerWait(OwnerWait.Kinds.Outcome); continue; }
             if (unconfirmed.Contains(task.Id)) { waits[task.Id] = new OwnerWait(OwnerWait.Kinds.Stop); continue; }
@@ -150,29 +177,30 @@ public static class Activity
 
     /// <summary>How many items need the owner: the open requests and the tasks that only he can move
     /// (HubState.needsYouCount): the count of the pane's Needs you row, which shows only while it is above 0.</summary>
-    public static int NeedsYouCount(MobileSnapshot snapshot) =>
-        snapshot.Needs.Count(n => n.IsOpen) + AllTasks(snapshot).Count(t => OwnerOnly(snapshot).Contains(t.Id));
+    public static int NeedsYouCount(MobileSnapshot snapshot, IReadOnlyList<MobileTaskHead>? ended = null) =>
+        snapshot.Needs.Count(n => n.IsOpen) + AllTasks(snapshot, ended).Count(t => OwnerOnly(snapshot).Contains(t.Id));
 
     /// <summary>The tasks of the board for one agent (null: all) and one period, newest activity first in each lane, and in
     /// Waiting the tasks that wait for the owner before the others (HubState.activity). A task that waits for the owner
     /// shows whatever the period.</summary>
     public static IReadOnlyDictionary<ActivityColumn, IReadOnlyList<MobileTaskHead>> Lanes(
-        MobileSnapshot snapshot, string? agent, ActivityPeriod period, ScreenContext context)
+        MobileSnapshot snapshot, string? agent, ActivityPeriod period, ScreenContext context, IReadOnlyList<MobileTaskHead>? ended = null)
     {
         var start = period.Start(snapshot.Time, context) ?? double.NegativeInfinity;
         var held = snapshot.Holds.Where(h => h.State != "released").Select(h => h.Task).ToHashSet();
         var limited = snapshot.Agents.Where(a => a.Limit is not null).Select(a => a.Name).ToHashSet();
         var owner = OwnerOnly(snapshot);
-        var waits = OwnerWaits(snapshot);
+        var waits = OwnerWaits(snapshot, ended);
+        var subtasks = SubtaskWaits(snapshot);
         var lanes = new Dictionary<ActivityColumn, List<MobileTaskHead>>
         {
             [ActivityColumn.InProgress] = [], [ActivityColumn.Waiting] = [], [ActivityColumn.Done] = [],
         };
-        foreach (var task in AllTasks(snapshot))
+        foreach (var task in AllTasks(snapshot, ended))
         {
             if (agent is not null && task.Owner != agent) continue;
             if (task.ActivityTime() < start && !waits.ContainsKey(task.Id)) continue;
-            lanes[task.Column(held.Contains(task.Id) || limited.Contains(task.Owner), owner.Contains(task.Id))].Add(task);
+            lanes[task.Column(held.Contains(task.Id) || limited.Contains(task.Owner), owner.Contains(task.Id), subtasks.ContainsKey(task.Id))].Add(task);
         }
         var sorted = lanes.ToDictionary(p => p.Key, p => p.Value
             .OrderByDescending(t => t.ActivityTime()).ThenByDescending(t => t.Id).ToList());
@@ -184,10 +212,10 @@ public static class Activity
 
     /// <summary>The choices of the agent filter (HubState.activityAgents): the hub's agents in its order, then other
     /// owners of tasks, then the saved choice when the hub no longer has it.</summary>
-    public static IReadOnlyList<string> Agents(MobileSnapshot snapshot, string? saved)
+    public static IReadOnlyList<string> Agents(MobileSnapshot snapshot, string? saved, IReadOnlyList<MobileTaskHead>? ended = null)
     {
         var names = snapshot.Agents.Select(a => a.Name).ToList();
-        names.AddRange(AllTasks(snapshot).Select(t => t.Owner).Distinct().Except(names).Order(StringComparer.Ordinal));
+        names.AddRange(AllTasks(snapshot, ended).Select(t => t.Owner).Distinct().Except(names).Order(StringComparer.Ordinal));
         if (!string.IsNullOrEmpty(saved) && !names.Contains(saved)) names.Add(saved);
         return names;
     }
@@ -202,8 +230,9 @@ public static class Activity
 }
 
 /// <summary>The Ended lane as it shows (FleetCore's EndedTasks): the results that he must see, one row each, and every
-/// other ended task behind one row that opens them by day, grouped by agent and title (the device's heads carry no
-/// schedule).</summary>
+/// other ended task behind one row that opens them by day, the runs of one schedule of one agent as one row, and tasks of
+/// one agent with one title as one row (the heads of the hub's ended read carry their schedule, owner API 1.166; a head
+/// of GET /ui/mobile has none, and groups by its title).</summary>
 public sealed record EndedTasks
 {
     public sealed record Group(string Title, IReadOnlyList<MobileTaskHead> Tasks)
@@ -248,7 +277,7 @@ public sealed record EndedTasks
         var groups = new Dictionary<string, List<MobileTaskHead>>();
         foreach (var task in tasks)
         {
-            var key = task.Owner + "\u001f" + "title " + task.Title;
+            var key = task.Owner + "\u001f" + (task.TriggerId is { } schedule ? "schedule " + schedule : "title " + task.Title);
             if (!groups.ContainsKey(key)) { order.Add(key); groups[key] = []; }
             groups[key].Add(task);
         }
@@ -385,15 +414,15 @@ public static class TaskWords
 
     /// <summary>"Waiting for you" when its requester is the owner, else "Waiting for Manager".</summary>
     public static string WaitingFor(string requester, AgentBook names) =>
-        requester == "owner" ? "Waiting for you" : "Waiting for " + names.Label(requester);
+        requester == "owner" ? "Waiting for you" : $"Waiting for {names.Label(requester)}";
 
     /// <summary>The one a task waits on when it is not its requester: an agent; null for the hub's own references
     /// ("Q-1", "P-3", "CM-7") and its screen, which are its requester's to answer.</summary>
     public static string? Waiter(string waitingOn, AgentBook names) =>
         IsReference(waitingOn) ? null : names.Label(waitingOn);
 
-    private static string Waiting(string waitingOn, string requester, AgentBook names) =>
-        Waiter(waitingOn, names) is { } who ? "Waiting on " + who : WaitingFor(requester, names);
+    internal static string Waiting(string waitingOn, string requester, AgentBook names) =>
+        Waiter(waitingOn, names) is { } who ? $"Waiting on {who}" : WaitingFor(requester, names);
 
     private static bool IsReference(string waitingOn)
     {

@@ -1,0 +1,94 @@
+using System;
+using System.IO;
+using System.Linq;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using static Founderizer.Core.Tests.SampleFleet;
+
+namespace Founderizer.Core.Tests;
+
+/// <summary>The words that the library gives the screens where the Swift writes them in its views, which no FleetCore
+/// test can call: each is held equal to the Swift's own literal, read from the source file that the build copies beside
+/// the tests (as CreditTests reads Credit.swift). A value that the Swift puts into its sentence, "\(n)", is put into the
+/// literal here, so the sentence is compared whole.</summary>
+[TestClass]
+public sealed class SwiftWordsTests
+{
+    /// <summary>The Swift literal in <paramref name="file"/>, as written there between its quotes; the test fails when
+    /// the file does not hold it, so a change of the Swift's words fails here first.</summary>
+    private static string Literal(string file, string literal)
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "sources", file));
+        Assert.IsTrue(source.Contains("\"" + literal + "\"", StringComparison.Ordinal), $"{file} no longer says \"{literal}\"");
+        return literal;
+    }
+
+    private static string With(string literal, string swiftValue, object value) => literal.Replace(swiftValue, value.ToString());
+
+    [TestMethod]
+    public void APressedOptionSaysSendingAsTheMacsCard()
+    {
+        Assert.AreEqual(Literal("NeedRequestCard.swift", "Sending…"), new OptionsModel().SendingWords);
+    }
+
+    [TestMethod]
+    public void TheComposersPlusHasTheAttachButtonsHover()
+    {
+        var some = Literal("AttachmentViews.swift", "Send a picture, a PDF, a ZIP or a text file with this message");
+        var full = Literal("AttachmentViews.swift", "A message carries at most \\(MessageAttachment.perMessage) files");
+        var s = State(Decode(Snapshot()), Clock);
+        Assert.AreEqual(some, Screens.Chat(s, "manager", Clock, Utc).Composer.PlusHover);
+        Assert.AreEqual(some, AttachWords.PlusHover(0));
+        Assert.AreEqual(With(full, "\\(MessageAttachment.perMessage)", MessageAttachment.PerMessage),
+                        AttachWords.PlusHover(MessageAttachment.PerMessage));
+        Assert.AreEqual(Screens.Chat(s, "manager", Clock, Utc).Composer.PlusHover,
+                        Screens.Card(s, s.Fleet!.Needs[0], [], Clock, Utc).Answer.PlusHover, "one plus, one sentence");
+    }
+
+    [TestMethod]
+    public void TheTaskbarCountIsSaidInTheWordsOfTheMacsNeedsRow()
+    {
+        var none = Literal("FleetView.swift", "Nothing needs you");
+        var one = Literal("FleetView.swift", "1 item needs you");
+        var many = Literal("FleetView.swift", "\\(waiting) items need you");
+        Assert.AreEqual((none, one, With(many, "\\(waiting)", 3)), (NeedsWords.Count(0), NeedsWords.Count(1), NeedsWords.Count(3)));
+        Assert.AreEqual(With(many, "\\(waiting)", 2), Screens.TaskbarWords(State(Decode(Snapshot()), Clock)));
+        var single = Snapshot();
+        single["needs"]!.AsArray().RemoveAt(1);
+        Assert.AreEqual(one, Screens.TaskbarWords(State(Decode(single), Clock)));
+        var empty = Snapshot();
+        empty["needs"] = new System.Text.Json.Nodes.JsonArray();
+        Assert.IsNull(Screens.TaskbarWords(State(Decode(empty), Clock)), "no count, no sentence");
+        Assert.AreEqual(none, Screens.Pane(State(Decode(empty), Clock), Page.Needs, Clock, Utc).NeedsHover);
+    }
+
+    [TestMethod]
+    public void AUsageShareIsWrittenAsBothAppsWriteIt()
+    {
+        // The Mac: Text("\(Int(window.used_percent.rounded()))%"); the iPhone: Text("\(percent)%").
+        var mac = Literal("AgentStatusPanel.swift", "\\(Int(window.used_percent.rounded()))%");
+        var phone = Literal(Path.Combine("ios", "AgentPage.swift"), "\\(percent)%");
+        Assert.AreEqual(With(mac, "\\(Int(window.used_percent.rounded()))", 42), ShareWords.Of(42));
+        Assert.AreEqual(With(phone, "\\(percent)", 100), new UsageRow("5 h", 100, UsageLevel.Full, null).ShareWords);
+    }
+
+    [TestMethod]
+    public void AnEmptyChatAndAChatThatWasNotReadSayWhatTheAppsSay()
+    {
+        var empty = Literal("ThreadViews.swift", "No messages with \\(agent.agentLabel) yet");
+        var reading = Literal(Path.Combine("ios", "ChatPage.swift"), "Reading…");
+        var s = State(Decode(Snapshot()), Clock);
+        var chat = Screens.Chat(s, "pax", Clock, Utc);
+        Assert.AreEqual(With(empty, "\\(agent.agentLabel)", "DevOps"), chat.EmptyWords);
+        Assert.AreEqual(reading, chat.LoadingWords);
+    }
+
+    [TestMethod]
+    public void ATasksResultHasTheMacsLabels()
+    {
+        var model = new ResultModel();
+        Assert.AreEqual(Literal("ThreadViews.swift", "Output"), model.OutputLabel);
+        Assert.AreEqual(Literal("ThreadViews.swift", "How it was checked"), model.HowLabel);
+        Assert.IsTrue(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "sources", "ThreadViews.swift"))
+                          .Contains("String(l10n: \"No result reported\")", StringComparison.Ordinal));
+    }
+}

@@ -69,7 +69,8 @@ public partial class App : Application
         if (store is not null && await store.StartAsync() is { } refused) Note("the store did not start: " + refused);
     }
 
-    private static void Note(string line)
+    /// <summary>A line of the proofs' debug log (FOUNDERIZER_DEBUG_LOG); nothing in a release build.</summary>
+    internal static void Note(string line)
     {
         if (DebugLog is null) return;
         try { File.AppendAllText(DebugLog, line + Environment.NewLine); } catch (IOException) { }

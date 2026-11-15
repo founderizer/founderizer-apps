@@ -128,6 +128,20 @@ internal sealed class FakeHub : IDisposable
     public int WaitReads;
     public string? WaitToken;
     public long NextEvent = 100;
+    /// <summary>Each task's record (GET /ui/tasks/&lt;id&gt;/events), in id order; a page holds at most EventPage.</summary>
+    public readonly ConcurrentDictionary<long, List<JsonObject>> Events = new();
+    public int EventPage = 500;
+    public int EventReads;
+    /// <summary>The answer of GET /ui/mobile/ended (owner API 1.166) while it is set, and how many reads came.</summary>
+    public JsonObject? Ended;
+    public int EndedReads;
+    /// <summary>While it is set, the status and the body of each read of a record.</summary>
+    public (int Status, string Body)? RefuseEvents;
+    /// <summary>Each accepted task's checked files (GET /ui/tasks/&lt;id&gt;/artifacts and /artifact) from one commit.</summary>
+    public readonly ConcurrentDictionary<long, List<(string Path, string Mime, byte[] Bytes)>> Artifacts = new();
+    public string Commit = new('a', 40);
+    /// <summary>While it is set, the status and the body of each read of a file.</summary>
+    public (int Status, string Body)? RefuseArtifact;
 
     public FakeHub() => Server = new LoopbackHub(Answer);
 
@@ -149,6 +163,11 @@ internal sealed class FakeHub : IDisposable
             if (seen.Header("If-None-Match") == ETag) return LoopbackHub.Raw(304, [], ("ETag", ETag));
             return LoopbackHub.Json(200, Snapshot.ToJsonString(), ("ETag", ETag));
         }
+        if (path == "/ui/mobile/ended" && Ended is { } ended)
+        {
+            Interlocked.Increment(ref EndedReads);
+            return LoopbackHub.Json(200, ended.ToJsonString());
+        }
         if (path.StartsWith("/ui/mobile/chat/", StringComparison.Ordinal))
         {
             var agent = path[16..];
@@ -156,6 +175,48 @@ internal sealed class FakeHub : IDisposable
         }
         if (path.StartsWith("/ui/mobile/task/", StringComparison.Ordinal) && Tasks.TryGetValue(long.Parse(path[16..]), out var task))
             return LoopbackHub.Json(200, task.ToJsonString());
+        if (path.StartsWith("/ui/tasks/", StringComparison.Ordinal) && seen.Method == "GET")
+        {
+            var parts = path.Split('/');
+            var id = long.Parse(parts[3]);
+            string? Query(string name) => query.Split('&').Select(p => p.Split('=', 2)).FirstOrDefault(p => p[0] == name) is { Length: 2 } p
+                ? Uri.UnescapeDataString(p[1]) : null;
+            if (parts[4] == "events")
+            {
+                Interlocked.Increment(ref EventReads);
+                if (RefuseEvents is { } refusedRead) return LoopbackHub.Json(refusedRead.Status, refusedRead.Body);
+                var after = long.Parse(Query("after") ?? "0");
+                var limit = Math.Min(int.Parse(Query("limit") ?? "200"), EventPage);
+                List<JsonObject> rows;
+                lock (Events) rows = (Events.TryGetValue(id, out var all) ? all : []).Where(e => e["id"]!.GetValue<long>() > after).ToList();
+                var page = rows.Take(limit).Select(e => (JsonNode)e.DeepClone()).ToArray();
+                var next = page.Length > 0 ? page[^1]!["id"]!.GetValue<long>() : after;
+                return LoopbackHub.Json(200, new JsonObject
+                {
+                    ["db"] = Db, ["task"] = id, ["events"] = new JsonArray(page), ["next"] = next, ["more"] = rows.Count > limit,
+                }.ToJsonString());
+            }
+            var files = Artifacts.TryGetValue(id, out var kept) ? kept : [];
+            if (parts[4] == "artifacts")
+                return LoopbackHub.Json(200, new JsonObject
+                {
+                    ["db"] = Db, ["task"] = id,
+                    ["artifacts"] = new JsonArray(files.Select(f => (JsonNode)new JsonObject
+                    {
+                        ["path"] = f.Path, ["commit"] = Commit,
+                        ["sha256"] = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(f.Bytes)),
+                        ["bytes"] = f.Bytes.Length, ["mime"] = f.Mime,
+                    }).ToArray()),
+                }.ToJsonString());
+            if (parts[4] == "artifact")
+            {
+                if (RefuseArtifact is { } refused) return LoopbackHub.Json(refused.Status, refused.Body);
+                var file = files.Single(f => f.Path == Query("path"));
+                return LoopbackHub.Raw(200, file.Bytes, ("Content-Type", file.Mime), ("X-Fleet-DB", Db),
+                                       ("X-Fleet-Task", id.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                                       ("X-Fleet-Commit", Query("commit") ?? ""));
+            }
+        }
         if (path == "/ui/wait")
         {
             Interlocked.Increment(ref WaitReads);

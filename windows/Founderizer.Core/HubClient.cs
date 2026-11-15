@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -34,7 +35,7 @@ public sealed record SnapshotReading(MobileSnapshot Snapshot, string? ETag, byte
 /// private network, and a redirect would take the key somewhere else), no cookie, no stored credential, no proxy (the
 /// bearer key goes to the hub and to nothing between), gzip and no other encoding, and the device's key as a bearer
 /// token on every call once it has one. Each answer is read with a size cap and decoded by <see cref="HubDecode"/>.</summary>
-public sealed class HubClient : IDisposable
+public sealed partial class HubClient : IDisposable
 {
     private readonly HttpClient http;
     private readonly HubClientOptions options;
@@ -119,6 +120,32 @@ public sealed class HubClient : IDisposable
                                     [("db", database), ("since", since.ToString(CultureInfo.InvariantCulture))]);
         var answer = await SendAsync(request, HubDecode.TaskLimit, options.RequestTimeout, cancel);
         return HubDecode.TaskPage(answer.Body, database, id);
+    }
+
+    /// <summary>The largest answer of GET /ui/mobile/ended: about 70,000 ended heads (483 bytes each at a hub of 586).</summary>
+    public const int EndedLimit = 32 * 1024 * 1024;
+
+    /// <summary>GET /ui/mobile/ended (owner API 1.166): the head of every ended task, with its schedule, and the mark of
+    /// GET /ui/mobile that it is of. Held to its rules: this generation, ended states only, each id once, by id.</summary>
+    public async Task<EndedReading> EndedAsync(Uri hub, string? key, string database, CancellationToken cancel = default)
+    {
+        using var request = Request(HttpMethod.Get, hub, "ui/mobile/ended", key, [("db", database)]);
+        var answer = await SendAsync(request, EndedLimit, options.RequestTimeout, cancel);
+        EndedReading reading;
+        try
+        {
+            reading = System.Text.Json.JsonSerializer.Deserialize(answer.Body, CoreJson.Default.EndedReading)
+                      ?? throw HubException.InvalidResponse("GET /ui/mobile/ended", "no answer");
+        }
+        catch (System.Text.Json.JsonException e)
+        {
+            throw HubException.InvalidResponse("GET /ui/mobile/ended", e.Message, e);
+        }
+        var ids = reading.Tasks.Select(t => t.Id).ToList();
+        if (reading.Db != database || reading.Mark.Length == 0 || reading.Tasks.Any(t => !t.IsTerminal) ||
+            !ids.SequenceEqual(ids.Order()) || ids.Distinct().Count() != ids.Count)
+            throw HubException.InvalidResponse("GET /ui/mobile/ended", "the answer breaks its rules");
+        return reading;
     }
 
     /// <summary>GET /ui/owner/devices: the owner's devices, so that Settings can name this one.</summary>

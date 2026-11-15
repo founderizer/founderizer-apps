@@ -49,7 +49,7 @@ enum DoorCallSigning {
             if let host = need.door_host {      // the door's card of a run: the hash of what the card shows
                 switch DoorCall.checked(title: need.title, answers: need.options ?? [], host: host, call: call,
                                         script: need.door_script, details: need.details,
-                                        words: [need.why, need.todo]) {
+                                        words: [need.why, need.todo] + (need.door_task.map { [$0] } ?? [])) {
                 case .success(let computed): signs = computed
                 case .failure(.noScript) where !features.contains(modeSet): return .refused(DoorCall.olderHub)
                 case .failure(let why): return .refused(why.line(by: need.by.agentLabel))

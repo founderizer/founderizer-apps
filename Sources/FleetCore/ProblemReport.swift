@@ -7,7 +7,7 @@ import Foundation
 /// while they are staring at the thing that broke.
 ///
 /// **The shape is one form, not two.** A problem and "this screen is confusing" go the same way, because the
-/// heavier of the two is already light: a few words, an address to answer, and six short facts. A second path
+/// heavier of the two is already light: a few words, an address to answer, and a few short facts. A second path
 /// would only ask the customer to classify his own trouble before he may tell us about it, and we can read which
 /// one it is ourselves.
 ///
@@ -50,15 +50,24 @@ public struct ProblemReport: Equatable, Sendable {
         }
     }
 
-    /// Ready to send: he wrote something, it is not longer than the website takes, and the address can be answered.
-    public var isReady: Bool { !trimmedText.isEmpty && trimmedText.count <= Self.maxText && Self.isAddress(email) }
+    /// Ready to send: he wrote something, it is not longer than the website takes, it holds nothing that looks like a
+    /// key, and the address can be answered.
+    public var isReady: Bool {
+        !trimmedText.isEmpty && trimmedText.count <= Self.maxText && !holdsKey && Self.isAddress(email)
+    }
 
     public var trimmedText: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// **What he typed holds what looks like a key** (E2, the owner's yes of 14 November 2026 to its picture): a key in a
+    /// report would sit in our mail, so Send waits until it is out. The guard of the chat's composer finds it
+    /// (`KeyInText`). Copy report still works: what he does with a copy is his.
+    public var holdsKey: Bool { KeyInText.contains(trimmedText) }
 
     /// The one thing that is not right yet, or nil. One line at a time, the most important fact now.
     public var refusal: String? {
         if trimmedText.isEmpty { return nil }
         if trimmedText.count > Self.maxText { return String(l10n: "That is longer than we take. Keep it under \(Self.maxText.formatted()) characters.") }
+        if holdsKey { return String(l10n: "This text holds what looks like a key. Take it out, then send.") }
         if !Self.isAddress(email) { return String(l10n: "Write the address we should answer at.") }
         return nil
     }
@@ -90,6 +99,41 @@ public struct ProblemReport: Equatable, Sendable {
 }
 
 extension ProblemReport {
+    /// **The fact of a report whose text the owner's own agent wrote** (`prepare_problem_report`): on the screen with
+    /// the other facts before Send, and in what goes, so that support reads the text as an agent's account.
+    public static let writtenByAgent = Fact(name: "Written by", value: "Your AI agent")
+
+    /// **The box of the report form, as far as an agent's text goes**: when such a text may go into the box, and
+    /// whether the report still is an agent's. The rule, in one place for the form and for its tests:
+    /// - An agent's text goes into the box only when the box is empty, when it holds exactly the agent's text of
+    ///   before, or when it holds exactly the text of a report that was sent. **Text that the owner wrote or changed
+    ///   is never written over.**
+    /// - The report is an agent's while the box still holds that agent's text whole. The owner may write before it
+    ///   and after it. When the owner changes or removes the agent's text, the report is the owner's own.
+    public struct AgentDraft: Equatable, Sendable {
+        /// The text that the agent put into the box, while the box still holds it whole.
+        public private(set) var agentText: String?
+
+        public init() {}
+
+        /// The report says that an agent wrote it.
+        public var isAgents: Bool { agentText != nil }
+
+        /// Whether an agent's text may go into the box now. `sent`: the text of the report that this form sent
+        /// last, or nil when it sent none.
+        public func isFree(box: String, sent: String?) -> Bool {
+            box.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || box == agentText || (sent != nil && box == sent)
+        }
+
+        /// The agent's text went into the box.
+        public mutating func took(_ text: String) { agentText = text }
+
+        /// The box changed, by the owner's hand or by the form.
+        public mutating func changed(to box: String) {
+            if let agentText, !box.contains(agentText) { self.agentText = nil }
+        }
+    }
+
     /// The facts, built from what this Mac already knows. Each one is a short value or "Not reported" — never a
     /// guess, and never a value the app did not actually read. A hub's bare revision is cut to twelve characters,
     /// because that is what the row can show and what goes must be what he read; a release (`hubRelease`) goes whole.
@@ -190,7 +234,8 @@ public final class ProblemReportClient: Sendable {
     public static let path = "api/report"
     private let session: URLSession
 
-    public init() {
+    /// `protocolClasses` is for a test only: it answers the request with no network.
+    public init(protocolClasses: [AnyClass]? = nil) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
@@ -198,18 +243,32 @@ public final class ProblemReportClient: Sendable {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 20
-        session = URLSession(configuration: configuration)
+        if let protocolClasses { configuration.protocolClasses = protocolClasses }
+        // A redirect is an answer, never a second request: the words go to the one address that `endpoint` checked.
+        session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
     }
 
-    /// Where the report goes: our channel, which is the hub's channel when its own differs from ours.
+    /// Where the report goes: our own site, or the fleet's channel when it is HTTPS on our own domain, so that a
+    /// staging fleet reports to staging. The hub names the channel, so a channel on any other host, or one without
+    /// HTTPS, is refused before anything leaves: no hub can send the customer's words to another site (review of
+    /// 14 November 2026).
     public static func endpoint(channel: String?) throws -> URL {
         let text = (channel?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
             ?? AppUpdate.defaultChannel
-        guard let parts = URLComponents(string: text), let scheme = parts.scheme,
-              ["http", "https"].contains(scheme), let host = parts.host, !host.isEmpty,
+        guard let parts = URLComponents(string: text), parts.scheme?.lowercased() == "https",
+              let host = parts.host, isOurs(host),
               parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil,
               let url = parts.url else { throw ProblemReportError.badChannel }
         return url.appendingPathComponent(path)
+    }
+
+    /// Our own host or a host below it: `founderizer.com` and `staging.founderizer.com`, never `xfounderizer.com`.
+    static func isOurs(_ host: String) -> Bool {
+        guard let ours = URLComponents(string: AppUpdate.defaultChannel)?.host?.lowercased(), !ours.isEmpty else {
+            return false
+        }
+        let host = host.lowercased()
+        return host == ours || host.hasSuffix("." + ours)
     }
 
     public func send(_ report: ProblemReport, channel: String?, fleet: String?) async throws -> ProblemReceipt {

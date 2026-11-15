@@ -9,6 +9,17 @@ public struct ServerList: Decodable, Sendable {
     public let desired_revision: String?
     public let servers: [ServerEntry]
     public let join: JoinState?
+    /// The hub's own server takes agents (owner API 1.168, `hub_shared`); nil from a hub before it.
+    public let hub_shared: Bool?
+    /// The step of the fleet's shape that the hub keeps (owner feature `fleet_shape`); nil from a hub before it, and
+    /// for a fleet that never kept one. `keptStep` reads it.
+    public let shape: KeptShape?
+
+    /// **The kept step of the fleet's shape**, or nil: no step is kept, the hub does not say, or it says a step that
+    /// this app does not know.
+    public var keptStep: ServersStep? { shape?.step }
+    /// The hub's own row.
+    public var hubRow: ServerEntry? { servers.first { $0.hub } }
 
     public func validate(database: String) throws {
         guard db == database, time.isFinite, servers.count <= 1000, Set(servers.map(\.name)).count == servers.count,
@@ -50,6 +61,20 @@ extension ServerEntry {
     }
 }
 
+/// `shape` of `GET /ui/servers`: `{"step": "one" | "two" | "each"}`. A value of another form, and a step that this
+/// app does not know, read as no kept step: they never fail the read of the list of servers.
+public struct KeptShape: Decodable, Sendable, Equatable {
+    public let step: ServersStep?
+
+    public init(step: ServersStep?) { self.step = step }
+
+    private enum Keys: String, CodingKey { case step }
+    public init(from decoder: Decoder) throws {
+        let values = try? decoder.container(keyedBy: Keys.self)
+        step = (try? values?.decodeIfPresent(String.self, forKey: .step)).flatMap { $0 }.flatMap(ServersStep.init(rawValue:))
+    }
+}
+
 extension RuntimeSwitch {
     /// The server's preparation that Change provider shows: one of this switch's target provider, while it goes on,
     /// after a failure, and after its end until this readiness has the helper's new reading. A preparation of another
@@ -80,9 +105,101 @@ public struct ServerEntry: Decodable, Identifiable, Sendable {
     /// Its CPU, memory and disk, or nil from a hub before the load readings (4 November 2026) and while nothing
     /// has read them.
     public let load: ServerLoad?
+    /// On the hub's own row, the hub's own reading of its server's SSH and npm (owner API 1.170); nil on every other
+    /// row, on a hub that runs on a Mac, and from a hub before it. `ServerHardening` reads it, and no page does.
+    public let hardening: HubHardening?
+    /// How the fleet reaches this server, by its own record (owner API 1.173); nil from a hub before it, whose rows do
+    /// not say. `reach` reads it.
+    public let access: ServerAccess?
     public var id: String { name }
     public var isMac: Bool { kind == "mac" }
     public var symbol: String { isMac ? "desktopcomputer" : "server.rack" }
+
+    /// **What this row says of the fleet's record of how it reaches this server**, read as `MachineReach` reads a
+    /// machine's, with the row's own address. A record that is none (the hub's `ssh` is null) is a reach with no user.
+    /// Nil when the row says nothing, which is another answer (`OwnerKeyPlan.record`): a row without the key (a hub
+    /// before owner API 1.173), and a row whose value this app cannot use as a connection (a user, a port or an
+    /// address that `ssh` cannot take: `InstallTarget.isValid`). The hub masks a text that holds a registered login
+    /// in this page also (`scrub`), and a later hub can send another shape: such a value is no word that the fleet
+    /// has no record, so the pages after the row still decide.
+    public var reach: MachineReach? {
+        guard let access, access.isRead else { return nil }
+        let said = MachineReach(address: address, user: access.ssh?.user, port: access.ssh?.port)
+        if access.ssh == nil { return said }
+        guard let whole = said.onRecord,
+              InstallTarget(host: whole.address, user: whole.user, port: whole.port).isValid else { return nil }
+        return said
+    }
+}
+
+/// **How the fleet reaches one server, by its own record** (owner API 1.173; the `access` entry of the fleet's file, of
+/// which the list of machines has the copy for a server that an agent runs on). A server need run no agent: one that
+/// joined and has none yet, and a hub's own server. Then the list of machines does not name it, and its row of the
+/// list of servers is the page with its record. `ServerEntry.user` is another thing: the OS user of the server's
+/// service and its agents, which is not the record's SSH user and can differ from it.
+///
+/// The hub sends an object on every row, also for a server with no record (`ssh` is then null), so a row without the
+/// key is a hub from before it. A value that cannot be read loses its facts and never the list.
+public struct ServerAccess: Decodable, Sendable, Equatable {
+    /// The SSH user and port of the record; nil when the fleet has none for this server, and when `isRead` is false.
+    public let ssh: VaultHub.SSH?
+    /// The value has the shape that this app reads: an object whose `ssh` is null, or an object that can hold a user
+    /// and a port. A value of another shape says nothing, and so does a user and a port that make no connection
+    /// (`ServerEntry.reach`).
+    public let isRead: Bool
+
+    private enum Keys: String, CodingKey { case ssh }
+    public init(from decoder: Decoder) throws {
+        guard let keys = try? decoder.container(keyedBy: Keys.self) else {
+            ssh = nil; isRead = false
+            return
+        }
+        // An object without the key is no null: `decodeNil` throws for it, and so does the read after it.
+        if (try? keys.decodeNil(forKey: .ssh)) == true {
+            ssh = nil; isRead = true
+        } else {
+            ssh = try? keys.decode(VaultHub.SSH.self, forKey: .ssh)
+            isRead = ssh != nil
+        }
+    }
+}
+
+/// **The hub's own reading of its own server** (owner API 1.170): that server has no server service, so the hub reads
+/// the two facts of the join's hardening there itself, as its own user and with the function that a server's service
+/// reads them with, about once a minute. A value that cannot be read is nil, and a key that cannot be read at all
+/// loses its facts and never the list.
+public struct HubHardening: Decodable, Sendable, Equatable {
+    /// SSH takes keys only; nil where OpenSSH does not run there, where its files cannot say, and where the hub's read
+    /// got no answer from systemctl (the hub then leaves the key out).
+    public let ssh_keys_only: Bool?
+    /// npm holds back a package version newer than seven days; nil where the server has no npm.
+    public let npm_rule: Bool?
+    /// When the hub read them, by its own clock.
+    public let at: Double?
+    /// When the owner's Mac that the hub's team names claimed the hub (its install's claim, or a second one), or when
+    /// the hub's records were restored, if that is later; nil while the hub has not kept it.
+    public let claimed_at: Double?
+
+    public init(ssh_keys_only: Bool?, npm_rule: Bool?, at: Double?, claimed_at: Double?) {
+        self.ssh_keys_only = ssh_keys_only; self.npm_rule = npm_rule; self.at = at; self.claimed_at = claimed_at
+    }
+
+    private enum Keys: String, CodingKey { case ssh_keys_only, npm_rule, at, claimed_at }
+    public init(from decoder: Decoder) throws {
+        let keys = try? decoder.container(keyedBy: Keys.self)
+        func fact(_ key: Keys) -> Bool? { (try? keys?.decodeIfPresent(Bool.self, forKey: key)).flatMap { $0 } }
+        func time(_ key: Keys) -> Double? {
+            (try? keys?.decodeIfPresent(Double.self, forKey: key)).flatMap { $0 }.flatMap { $0.isFinite ? $0 : nil }
+        }
+        self.init(ssh_keys_only: fact(.ssh_keys_only), npm_rule: fact(.npm_rule), at: time(.at),
+                  claimed_at: time(.claimed_at))
+    }
+
+    /// Read in the last ten minutes, as a server's reading counts (`ServerReading.isCurrent`).
+    public func isCurrent(at time: Double) -> Bool {
+        guard let at else { return false }
+        return time - at >= -5 && time - at < 600
+    }
 }
 
 /// **A server's CPU, memory and disk** (the owner's yes of 4 November 2026 to the mockup: "do we have data of
@@ -182,6 +299,11 @@ public struct ServerReading: Decodable, Sendable {
         /// When apt's daily run last ended a security upgrade well, or nil: before its first, and from a hub before
         /// Fleet 2026.11.173.
         public let upgraded_at: Double?
+        /// The join's hardening (`hubsetup.py harden`), as the server reads it: SSH takes keys only, and npm holds back
+        /// a package version newer than seven days. nil when it cannot say (no OpenSSH, no npm) and from a helper
+        /// before 3 November 2026. `ServerHardening` reads them.
+        public let ssh_keys_only: Bool?
+        public let npm_rule: Bool?
     }
 
     public func isCurrent(at time: Double) -> Bool {

@@ -133,17 +133,69 @@ struct ChatListTests {
         #expect(AgentActivity.actionNow("worker4", tasks: [runs]) == nil)
     }
 
-    @Test func theRowsTimeIsTheTimeOfWhatItsLineShows() throws {
+    /// The owner, 14 November 2026, of a row that said this morning's minute over a chat whose last message was two
+    /// days old: "last message is from Thursday but on the sidebar it says 8:09 today". Every session had started
+    /// again that minute, which moved every open task.
+    @Test func theRowsTimeIsTheTimeOfTheChatsLastMessage() throws {
         let last = try report("Done.")                  // created at 10
-        // The line is what the agent is doing: the task's last move.
-        #expect(ChatList.previewTime("vps", last: last, tasks: [try task(moved: 50)]) == 50)
-        #expect(ChatList.previewTime("vps", last: nil, tasks: [try task(moved: 5)]) == 5)
-        // The line is its last message: that message's time, also beside an older or another agent's task.
-        #expect(ChatList.previewTime("vps", last: last, tasks: [try task(moved: 5)]) == 10)
-        #expect(ChatList.previewTime("vps", last: last, tasks: [try task(owner: "worker4")]) == 10)
-        #expect(ChatList.previewTime("vps", last: try message("Is it live?"), tasks: []) == 9)
-        // No line, no time.
-        #expect(ChatList.previewTime("vps", last: nil, tasks: []) == nil)
-        #expect(ChatList.previewTime("vps", last: try message(""), tasks: []) == nil)
+        #expect(ChatList.lastTime(last) == 10)
+        #expect(ChatList.lastTime(try message("Is it live?")) == 9)
+        // A task that moved after the message changes the line, and not the time.
+        #expect(ChatList.preview("vps", last: last, tasks: [try task(moved: 50)]) == "The shop page")
+        // No message, no time: also where the line names a task.
+        #expect(ChatList.lastTime(nil) == nil)
+        #expect(ChatList.lastTime(try message("")) == nil)
+    }
+
+    /// An entry of the manager's chat: his message (`asked`: its request id) or the agent's reply.
+    private func entry(_ id: Int, at created: Double, his asked: String? = nil, replyingTo: String? = nil) throws -> ChatEntry {
+        if let asked {
+            return .message(try JSONDecoder().decode(OwnerMessage.self, from: JSONSerialization.data(withJSONObject: [
+                "request_id": asked, "recipient": "manager", "kind": "message", "text": "Synthetic", "event_id": id,
+                "created": created, "client": "test", "attachments": [],
+            ])))
+        }
+        return .report(try JSONDecoder().decode(ManagerReport.self, from: JSONSerialization.data(withJSONObject: [
+            "id": id, "agent": "manager", "text": "Synthetic", "about": "", "created": created,
+            "in_reply_to": replyingTo as Any? ?? NSNull(),
+        ])))
+    }
+
+    private func need(_ id: Int, raised: Double, by agent: String = "manager", answered: Double? = nil) throws -> OwnerNeed {
+        try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: [
+            "id": id, "by": agent, "title": "Request \(id)", "why": "", "todo": "", "raised": raised,
+            "answer": answered == nil ? NSNull() : "Yes", "answered": answered as Any? ?? NSNull(),
+        ]))
+    }
+
+    /// The owner, 14 November 2026: "why does the preview not show the card if the card is the latest element on the
+    /// chat?", and his yes to its title in orange. Only a card that still waits for him and that is the newest thing in
+    /// its chat, where the chat itself places it.
+    @Test func aWaitingCardThatIsTheNewestThingInTheChatIsTheLine() throws {
+        let chat = [try entry(1, at: 10), try entry(2, at: 20, his: "a"), try entry(3, at: 30)]
+        // Raised after the last message: its card is the newest thing, and the row's time is the card's.
+        let newest = try ChatList.waitingRequest("manager", entries: chat, whole: true, needs: [try need(7, raised: 40), try need(6, raised: 35)])
+        #expect(newest?.id == 7)
+        #expect(ChatList.requestTime(try need(7, raised: 40), last: chat.last) == 40)
+        // A message after it: the message is the line.
+        #expect(try ChatList.waitingRequest("manager", entries: chat, whole: true, needs: [try need(7, raised: 25)]) == nil)
+        // Answered, or another agent's: no orange line.
+        #expect(try ChatList.waitingRequest("manager", entries: chat, whole: true, needs: [try need(7, raised: 40, answered: 50)]) == nil)
+        #expect(try ChatList.waitingRequest("manager", entries: chat, whole: true, needs: [try need(7, raised: 40, by: "vps")]) == nil)
+        #expect(try ChatList.waitingRequest("manager", entries: chat, whole: true, needs: []) == nil)
+        // With no message yet, a waiting card is the whole chat.
+        #expect(try ChatList.waitingRequest("manager", entries: [], whole: true, needs: [try need(7, raised: 40)])?.id == 7)
+    }
+
+    /// The agent's reply of the turn in which it raised the request ("It is in Needs you.") came after the request, and
+    /// the chat draws the card under it: the card is still the newest thing, at the reply's time.
+    @Test func aCardUnderTheReplyOfItsTurnIsStillTheLine() throws {
+        let chat = [try entry(1, at: 10), try entry(2, at: 20, his: "a"), try entry(3, at: 45, replyingTo: "a")]
+        let request = try need(7, raised: 40)
+        #expect(ChatList.waitingRequest("manager", entries: chat, whole: true, needs: [request])?.id == 7)
+        #expect(ChatList.requestTime(request, last: chat.last) == 45)
+        // A later message of the agent's that answers nothing of his comes after the card.
+        let later = chat + [try entry(4, at: 90)]
+        #expect(ChatList.waitingRequest("manager", entries: later, whole: true, needs: [request]) == nil)
     }
 }

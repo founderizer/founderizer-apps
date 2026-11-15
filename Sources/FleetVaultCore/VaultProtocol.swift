@@ -30,6 +30,10 @@ public enum VaultFailure: String, Error, Sendable, CaseIterable {
     case ownerPinMissing = "The owner has signed no pin of the receiving machine's key, so the login is not handed over."
     case ownerPinInvalid = "The owner's pin of the receiving machine's key is not valid, so the login is not handed over."
     case ownerPinOther = "The owner's pin names another key than the one the login would be locked for, so it is not handed over."
+    // Package 4 of the vault's gates (C2): a pin locks a handover for 90 days from its time, by this Mac's clock, and not
+    // when it is dated more than a day after now, as the Linux broker says it.
+    case ownerPinOld = "The owner's pin of the receiving machine's key is more than 90 days old, so the login is not handed over."
+    case ownerPinAhead = "The owner's pin of the receiving machine's key is dated after now, so the login is not handed over."
     // Shared broker callers (protocol 2 `callers`): the exact answers of the contract, the same as the Linux broker's.
     case caller = "the caller fields are not valid"
     case key = "the hub did not accept this agent's key"
@@ -715,15 +719,26 @@ enum VaultProviderSites {
 struct VaultSecret: Sendable {
     let password: String
     let totp: String?
+    /// C11: the stored item has a user name or an authenticator seed, the shape of a login, which never reaches a
+    /// session (`VaultBroker.read`), as `vault.py` `login_shaped`: a field that is there and not empty counts, whatever
+    /// its type. A login that was saved with no user name and no seed has the shape of a key, and this cannot tell.
+    let loginShaped: Bool
 
-    init(password: String, totp: String?) { self.password = password; self.totp = totp }
+    init(password: String, totp: String?, loginShaped: Bool = false) {
+        self.password = password; self.totp = totp; self.loginShaped = loginShaped
+    }
 
-    /// An item's value: an object with a password that is not empty and an optional seed. No other field is read.
+    /// An item's value: an object with a password that is not empty and an optional seed. Of the other fields, only
+    /// whether a user name is there is read.
     init(data: Data) throws {
         guard data.count <= 65536, let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let password = object["password"] as? String, !password.isEmpty,
               object["totp"] == nil || object["totp"] is String else { throw VaultFailure.login }
-        self.init(password: password, totp: object["totp"] as? String)
+        let shaped = ["username", "totp"].contains { name in
+            guard let field = object[name], !(field is NSNull) else { return false }
+            return (field as? String).map { !$0.isEmpty } ?? true
+        }
+        self.init(password: password, totp: object["totp"] as? String, loginShaped: shaped)
     }
 
     var protectedValues: [(kind: String, value: String)] {

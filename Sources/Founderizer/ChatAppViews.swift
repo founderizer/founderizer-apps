@@ -4,7 +4,7 @@ import FleetCore
 import SwiftUI
 
 // The small views that the Channels pages, Settings and the agent chat share: the brand marks, the status line, a QR
-// code, the owner's link step, and the delivery icons under a reply.
+// code, and the delivery icons under a reply.
 
 /// The WhatsApp or the Discord mark: the SVG path data of Simple Icons 16.34.0 (CC0, published 4 October 2026, read
 /// from the npm package), drawn by AppKit as a template image, so that it takes the color that the caller gives: the
@@ -121,70 +121,6 @@ struct QRCodeView: View {
         filter.correctionLevel = "M"
         guard let output = filter.outputImage else { return nil }
         return CIContext().createCGImage(output, from: output.extent)
-    }
-}
-
-/// The owner's link step of one app, in a channel's card: the message to send with Copy, a QR code of the agent's
-/// own account, its link, and how long the code still works on the hub's clock, then Get new code.
-struct OwnerLinkStep: View {
-    @Bindable var store: FleetStore
-    let app: String
-    /// nil before Fleet has a code.
-    let code: LinkCode?
-    let target: LinkCode.Target?
-    let making: Bool
-    let canRenew: Bool
-    let renew: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Link your \(ChatApps.title(app))", systemImage: "person.crop.circle.badge.checkmark")
-                .font(FormMetrics.title).foregroundStyle(FleetStyle.text)
-            if let code {
-                HStack(alignment: .top, spacing: 16) {
-                    if let link = target?.link { QRCodeView(text: link.absoluteString, size: 112) }
-                    VStack(alignment: .leading, spacing: 9) {
-                        HStack(spacing: 6) {
-                            Text("link \(code.display)").font(FormMetrics.title)
-                                .foregroundStyle(FleetStyle.text).textSelection(.enabled).accessibilityIdentifier("channels-code-\(app)")
-                            MessageAction(symbol: "square.on.square", label: String(l10n: "Copy the message")) { copyMessage("link \(code.display)") }
-                                .foregroundStyle(FleetStyle.muted)
-                        }
-                        if let link = target?.link {
-                            Link(destination: link) { Label(app == "whatsapp" ? "Open WhatsApp" : "Open in Discord", systemImage: "arrow.up.right") }
-                                .buttonStyle(FleetOutlineButtonStyle()).help(link.absoluteString)
-                        } else {
-                            Text("No link yet").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                        }
-                        countdown(code)
-                    }
-                }
-            } else if making {
-                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Making a code…") }
-                    .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-            } else {
-                Button("Get code") { renew() }.buttonStyle(FleetOutlineButtonStyle()).disabled(!canRenew)
-            }
-        }
-        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-        .background(FleetStyle.canvas, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
-        .accessibilityElement(children: .contain).accessibilityIdentifier("channels-owner-link-\(app)")
-    }
-
-    /// "Works for 9:41" on the hub's clock, once a second; at the end, Get new code.
-    private func countdown(_ code: LinkCode) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let left = ChatApps.remaining(expires: code.expires, serverTime: store.state?.time ?? Date().timeIntervalSince1970,
-                                          readAt: store.lastSuccess ?? context.date, now: context.date)
-            if left > 0 {
-                Text("Works for \(ChatApps.countdown(left))").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).monospacedDigit()
-            } else {
-                HStack(spacing: 8) {
-                    Text("Expired").font(FormMetrics.detail).foregroundStyle(.orange)
-                    Button("Get new code") { renew() }.buttonStyle(FleetOutlineButtonStyle()).disabled(!canRenew)
-                }
-            }
-        }
     }
 }
 

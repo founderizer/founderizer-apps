@@ -114,6 +114,10 @@ public sealed record PendingRequest
 
     public string RequestIdText => RequestId.ToString("D");
 
+    /// <summary>An answer to a request in his own words, or with files alone (PendingRequest.answersInWords): no option
+    /// that he pressed or ticked.</summary>
+    public bool AnswersInWords => NeedId is not null && Command is null && Choice is null && Choices is null;
+
     public string Route => Command?.Route ?? (NeedId is { } need ? $"ui/needs/{need}" : "ui/messages");
 
     /// <summary>The body that goes, with its keys sorted as the Mac's: `request_id` and `db`, then the request's own.</summary>

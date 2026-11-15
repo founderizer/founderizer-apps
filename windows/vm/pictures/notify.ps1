@@ -11,6 +11,9 @@ Remove-Item C:\fz\timing.log, C:\fz\notify-*.png -ErrorAction SilentlyContinue
 $env:FOUNDERIZER_TIMING_LOG = 'C:\fz\timing.log'; $env:FOUNDERIZER_SAMPLE = '1'; $env:FOUNDERIZER_SAMPLE_CLOCK = '15:12'; $env:FOUNDERIZER_SAMPLE_STATE = $State
 $exe = if ($env:SHOT_EXE) { $env:SHOT_EXE } else { "C:\fz\src\windows\Founderizer.Windows\bin\ARM64\Debug\net10.0-windows10.0.26100.0\win-arm64\Founderizer.App.exe" }
 Start-Process -FilePath $exe -ArgumentList '-openPage', $Page
+# A press with the mouse on the open page's own row, as a person's first press: WinUI then draws no keyboard focus frame
+# (after a picture that typed keys, the window's first focus, Search, showed one).
+& C:\fz\setup\ui.ps1 -Click $(if ($Page -eq 'needs') { 'Needs you' } else { 'Tasks' }) | Out-Null
 for ($i = 0; $i -lt 60; $i++) { Start-Sleep -Milliseconds 200; if ((Test-Path C:\fz\timing.log) -and (Select-String -Path C:\fz\timing.log -Pattern '^notification:' -Quiet)) { break } }
 $n = 1
 foreach ($wait in 500, 1000, 1500) {

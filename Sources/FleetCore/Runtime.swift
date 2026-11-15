@@ -648,7 +648,7 @@ public struct TaskSteer: Decodable, Identifiable, Equatable, Sendable {
     public let client: String
     public var isValid: Bool { id > 0 && task > 0 && attempt > 0 && !text.isEmpty && text.count <= 4000 && created.isFinite }
     public func deliveryLabel(currentAttempt: Int) -> String {
-        read_at != nil ? "Read" : currentAttempt > attempt ? String(l10n: "Not delivered · task restarted") : String(l10n: "Received")
+        read_at != nil ? String(localized: "Read (guidance)", defaultValue: "Read", bundle: Localized.bundle, locale: Localized.digits) : currentAttempt > attempt ? String(l10n: "Not delivered · task restarted") : String(l10n: "Received")
     }
     public func matches(_ pending: PendingRequest) -> Bool {
         guard case .steer(let task, let attempt) = pending.command else { return false }

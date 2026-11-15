@@ -145,6 +145,20 @@ public sealed class WindowsUpdateTests
                         (away.Says, away.Unreachable));
     }
 
+    [TestMethod]
+    public async Task AChannelAnswerLargerThanAnAnswerIsRefusedAlsoWithNoLength()
+    {
+        var huge = new byte[AppManifest.AnswerLimit + 10_000];
+        Array.Fill(huge, (byte)' ');
+        using var server = new LoopbackHub(_ => Raw(huge, null));
+        using var http = new HttpClient(new ToTheLocalServer(server.Address)) { Timeout = Timeout.InfiniteTimeSpan };
+        var reading = await WindowsUpdate.ReadAsync(http, Channel, "arm64", false, Keys, new InstalledBuild("0.2.2", 22), Windows11);
+        Assert.AreEqual("The channel did not answer with a build this app could read.", reading.Says);
+        using var good = new LoopbackHub(_ => LoopbackHub.Json(200, Windows.GetProperty("manifest").GetRawText()));
+        using var client = new HttpClient(new ToTheLocalServer(good.Address)) { Timeout = Timeout.InfiniteTimeSpan };
+        Assert.IsTrue((await WindowsUpdate.ReadAsync(client, Channel, "arm64", false, Keys, new InstalledBuild("0.2.2", 22), Windows11)).Offered);
+    }
+
     /// <summary>A build of <paramref name="size"/> bytes, and its manifest as the library checks it.</summary>
     private static (byte[] Bytes, WindowsManifest Manifest) Build(int size)
     {
@@ -179,6 +193,24 @@ public sealed class WindowsUpdateTests
         var again = await BuildDownload.FetchAsync(http, manifest, root);
         Assert.AreNotEqual(folder, Path.GetDirectoryName(again));
         Assert.AreEqual(2, Directory.GetDirectories(root).Length);
+    }
+
+    /// <summary>The window session's release proof of 14 November 2026: the channel stopped a download after half its
+    /// bytes, and the app said "The download did not start (0)". An HttpClient (BuildDownload.NewClient's kind) read the
+    /// whole body before SendAsync returned, so the stop came out where a start that failed does.</summary>
+    [TestMethod]
+    public async Task ADownloadThatStopsInTheMiddleSaysItsSizeAlsoThroughAnHttpClient()
+    {
+        var (bytes, manifest) = Build(200_000);
+        using var server = new LoopbackHub(_ => Raw(bytes[..100_000], bytes.Length.ToString()));
+        using var http = new HttpClient(new ToTheLocalServer(server.Address)) { Timeout = Timeout.InfiniteTimeSpan };
+        var failed = await Assert.ThrowsExactlyAsync<UpdateFailure>(() => BuildDownload.FetchAsync(http, manifest, root));
+        Assert.AreEqual("The download is not the size the signed manifest promised. Nothing was unpacked.", failed.Message);
+        Assert.AreEqual(0, Directory.GetFileSystemEntries(root).Length);
+        // A whole download through the same kind of client still works, with its progress from the first bytes.
+        using var whole = new LoopbackHub(_ => Raw(bytes, bytes.Length.ToString()));
+        using var client = new HttpClient(new ToTheLocalServer(whole.Address)) { Timeout = Timeout.InfiniteTimeSpan };
+        CollectionAssert.AreEqual(bytes, await File.ReadAllBytesAsync(await BuildDownload.FetchAsync(client, manifest, root)));
     }
 
     [TestMethod]

@@ -112,6 +112,12 @@ public sealed class StoreSource : IFleetSource
 
     public Task<byte[]> FileAsync(MessageAttachment file) => store.FileAsync(file);
 
+    public Task ListOutputsAsync() => store.ListOutputsAsync();
+
+    public Task ViewOutputAsync(ArtifactFile file) => store.ViewOutputAsync(file);
+
+    public void CloseOutputs() => store.CloseOutputs();
+
     public event EventHandler<IReadOnlyList<Notice>>? Notified;
 
     public Task<string?> ConnectAsync(string address) => store.ConnectAsync(address);
