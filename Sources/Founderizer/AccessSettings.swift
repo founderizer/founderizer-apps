@@ -63,6 +63,8 @@ struct AccessSettings: View {
     /// The rows of an agent's repositories that he opened, each "<agent> <owner>/<level>" (`repositoryRows`): closed again
     /// when the page opens again.
     @State private var opened: Set<String> = []
+    /// The Google account whose Disconnect asks its one line now (`disconnectRow`), by its resource id.
+    @State private var disconnecting: String?
 
     private var offered: Bool { store.state?.ui_features?.contains(ResourceList.feature) == true }
     private var canChange: Bool { offered && store.isFresh && working == nil }
@@ -268,7 +270,7 @@ struct AccessSettings: View {
         let standing = StandingRows.words(resource.standing, reading: reading, kind: resource.kind)
         let unreached = reading.unreachedPage(resource) != nil
         let extra = accessory?(resource)
-        return Button { note = nil; shown = ShownResource(id: resource.id) } label: {
+        return Button { note = nil; disconnecting = nil; forgetDisconnect(resource); shown = ShownResource(id: resource.id) } label: {
             HStack(spacing: 12) {
                 IconTile(symbol: Self.symbol(resource.kind))
                 VStack(alignment: .leading, spacing: 3) {
@@ -398,8 +400,11 @@ struct AccessSettings: View {
                         }
                     }
                 }
+                if disconnects(resource.id, connected: resource.connected) { disconnectRow(resource.id) }
             } else {
                 Text("This resource is no longer in the list.").font(FormMetrics.text).foregroundStyle(FleetStyle.muted)
+                // A Disconnect whose last write was refused after this card's own service had left the list.
+                if disconnects(id, connected: false) { disconnectRow(id) }
             }
         }
         .padding(22).frame(width: 560)
@@ -567,6 +572,92 @@ struct AccessSettings: View {
         } catch {
             return String(l10n: "The hub did not take this change. Try again.")
         }
+    }
+
+    // MARK: Disconnect of a Google account
+
+    /// The account of a Google resource id (`gmail:<email>`, `drive:<email>`), or nil for another kind.
+    private static func googleAccount(_ id: String) -> String? {
+        let parts = id.split(separator: ":", maxSplits: 1).map(String.init)
+        return parts.count == 2 && ["gmail", "drive"].contains(parts[0]) ? parts[1].lowercased() : nil
+    }
+
+    /// The name of a Disconnect of this account that did not end well, on the hub and generation that the page shows.
+    private func leftName(_ account: String) -> String {
+        GoogleDisconnectLeft.name(account, hub: store.hub, database: store.state?.db ?? "")
+    }
+
+    /// A Disconnect of this account that did not end well (`GoogleDisconnectLeft`), or nil.
+    private func left(_ account: String) -> GoogleDisconnectLeft? { store.reading(leftName(account)) }
+
+    /// A card that opens anew forgets the line of a Disconnect of an account that is still connected, as it forgets its
+    /// other lines. An account that is no longer connected keeps it: its line and Disconnect end what is left of it.
+    private func forgetDisconnect(_ resource: FleetResource) {
+        guard resource.connected, let account = Self.googleAccount(resource.id), left(account) != nil else { return }
+        store.keep(nil, as: leftName(account))
+    }
+
+    /// **Disconnect stands on the card** of the fleet's page in Settings › Apps only, where the owner said yes to it: of
+    /// a Google account that the hub holds a token of, on a hub with Google; while its own Disconnect goes on (the
+    /// account reads as not connected once the hub has dropped its token, and the card's spinner stays); and of one whose
+    /// Disconnect did not end well while something of it is left, so that its line and a new press stay (the reviews of
+    /// 16 November 2026).
+    private func disconnects(_ id: String, connected: Bool) -> Bool {
+        guard agent == nil, let account = Self.googleAccount(id),
+              store.state?.ui_features?.contains(Google.feature) == true else { return false }
+        return connected || working == "\(id) Disconnect"
+            || left(account) != nil && !(reading?.cleanup(account: account).isEmpty ?? true)
+    }
+
+    /// The Disconnect of this account's card in its step (`GoogleDisconnectRow`).
+    private func disconnectRow(_ id: String) -> some View {
+        let account = Self.googleAccount(id) ?? ""
+        return GoogleDisconnectRow(step: working == "\(id) Disconnect" ? .working : disconnecting == id ? .asking : .button,
+                                   refused: left(account)?.refused, enabled: canChange,
+                                   press: { disconnecting = id },
+                                   cancel: { disconnecting = nil },
+                                   confirm: { Task { await disconnect(id: id, account: account) } })
+    }
+
+    /// The hub revokes the account's access at Google and drops its token (`POST /ui/google/disconnect`); then what is
+    /// left of the account here goes, one write at a time (`GoogleDisconnect.clear`): each agent's level and the
+    /// manager's standing of each service. Then the account's card closes, and the next reading has no row of it. One
+    /// that does not end well is kept under the account (`GoogleDisconnectLeft`), for the hub and generation that it
+    /// ran on: while the page shows another, its line goes.
+    private func disconnect(id: String, account: String) async {
+        guard canChange, !account.isEmpty, let database = store.state?.db else { return }
+        let hub = store.hub, client = store.installation
+        let name = GoogleDisconnectLeft.name(account, hub: hub, database: database)
+        working = "\(id) Disconnect"
+        note = nil
+        defer { working = nil }
+        var refused: String?
+        do {
+            _ = try await GoogleClient().disconnect(hub: hub, database: database, client: client, account: account)
+            try await GoogleDisconnect.clear(account: account) {
+                try await ResourcesClient().read(hub: hub, database: database)
+            } write: { item, sha256 in
+                switch item {
+                case .access(let service):
+                    try await GoogleClient().saveAccess(hub: hub, database: database, client: client, sha256: sha256,
+                                                        account: account, service: service, access: [:])
+                case .standing(let service):
+                    _ = try await ResourcesClient().saveStanding(hub: hub, database: database, client: client,
+                                                                 sha256: sha256, resource: "\(service.rawValue):\(account)",
+                                                                 standing: .ownerOnly)
+                }
+            }
+        } catch let HubError.refusal(refusal) {
+            refused = refusal.words
+        } catch {
+            refused = String(l10n: "The hub did not take this change. Try again.")
+        }
+        disconnecting = nil
+        if store.hub == hub, store.state?.db == database {
+            store.keep(refused.map(GoogleDisconnectLeft.init(refused:)), as: name)
+            if refused == nil, let open = shown?.id, Self.googleAccount(open) == account { shown = nil }
+        }
+        await read()
     }
 
     /// Who may give this item: the owner alone, or the fleet manager too, up to a level (`StandingRows`).

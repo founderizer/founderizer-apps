@@ -51,6 +51,31 @@ import Testing
         #expect(!none.isAgents)
     }
 
+    /// **The app's own words** (the manager band's Report a problem, 16 November 2026) go into a free box as an
+    /// agent's text does, never make the report an agent's, and leave the box free for the next such text while they
+    /// are unchanged. Words that the owner added or changed are never written over.
+    @Test func theAppsOwnWordsAreNoAgentsAndKeepTheBoxFree() {
+        let apps = "The manager session is not running, since 12:45."
+        var draft = ProblemReport.AgentDraft()
+        draft.took(apps, byAgent: false)
+        draft.changed(to: apps)
+        #expect(!draft.isAgents)
+        #expect(draft.isFree(box: apps, sent: nil))
+        #expect(!draft.isFree(box: apps + " It stopped after the update.", sent: nil))
+        draft.took(agents)                                              // an agent's text in their place
+        #expect(draft.isAgents && draft.isFree(box: agents, sent: nil) && !draft.isFree(box: apps, sent: nil))
+        // The app's words never go over an agent's text, which says more; an agent's new text may.
+        #expect(!draft.isFree(box: agents, sent: nil, byAgent: false))
+        #expect(draft.isFree(box: "", sent: nil, byAgent: false))
+        var sent = ProblemReport.AgentDraft()
+        #expect(sent.isFree(box: "My sent report.", sent: "My sent report.", byAgent: false))
+        sent.took(apps, byAgent: false)
+        #expect(sent.isFree(box: apps, sent: nil, byAgent: false))      // its own words of before, unchanged
+        draft.took(apps, byAgent: false)                                // a text in the box is no agent's after this
+        draft.changed(to: apps)
+        #expect(!draft.isAgents)
+    }
+
     /// The fact for an agent's text is one short row.
     @Test func theFactIsOneShortRow() {
         #expect(ProblemReport.writtenByAgent == ProblemReport.Fact(name: "Written by", value: "Your AI agent"))

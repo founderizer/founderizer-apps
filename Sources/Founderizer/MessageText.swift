@@ -16,6 +16,9 @@ struct MessageText: View, Equatable {
     /// The text stands on a card (a request's card in a chat): a code block is a well in the canvas's colour there,
     /// because the fill of a code block is the card's own fill.
     var card = false
+    /// The block of a hand step's command that has Run (owner feature `need_run`): the code block whose text is its
+    /// command, and no other, shows Run (`NeedRunTarget`).
+    var run: NeedRunTarget? = nil
     /// Code in a line of a step's words: a little under the words' 15 points, as the chat's code is under its 14.
     private static let stepCode = Font.system(size: 13.5, design: .monospaced)
 
@@ -75,6 +78,8 @@ struct MessageText: View, Equatable {
 
     var body: some View {
         let blocks = blocks, lines = chat ? ChatStyle.lineSpacing : 5
+        // owner feature need_run: the first block of the command has Run, and no second one
+        let runs = run.flatMap { run in blocks.firstIndex { $0.kind == .code && $0.text == run.command } }
         VStack(alignment: .leading, spacing: chat ? 0 : 9) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
                 Group {
@@ -99,7 +104,7 @@ struct MessageText: View, Equatable {
                     }
                 case .code: CodeBlock(text: block.text, font: chat ? ChatStyle.code : step && !script ? Self.stepCode : FormMetrics.code,
                                       spacing: chat ? 5 : 4, fill: card ? FleetStyle.canvas : FleetStyle.surface,
-                                      wraps: script, copies: (chat || step) && !script)
+                                      wraps: script, copies: (chat || step) && !script, run: index == runs ? run : nil)
                 case .rule: Rule().padding(.vertical, 4)
                 case .table:
                     Grid(alignment: .topLeading, horizontalSpacing: 18, verticalSpacing: 7) {
@@ -145,12 +150,51 @@ private struct CodeBlock: View {
     /// The copy icon shows under the pointer. Never over a wrapped script, where it would cover the end of its first
     /// row.
     var copies = false
+    /// **The command of a hand step that has Run** (owner feature `need_run`, the owner's "Yes, as drawn" of 16 November
+    /// 2026): Run stands at the block's right, always, with the copy icon beside it under the pointer, and the line of
+    /// a run that did not reach its Mac stands under the block. Only the block whose text is the command has it. **Its
+    /// command wraps, and Run stands beside it, never over it**, as the door's card wraps its script: every character
+    /// that Run runs is on screen, also the end of a long line (the review of 16 November 2026: a block that scrolled
+    /// sideways under Run could hide a second command at its end).
+    var run: NeedRunTarget? = nil
     @State private var hovered = false
     @State private var copied = false
 
+    private var runs: Bool { run?.command == text && !wraps }
+
     var body: some View {
+        if runs, let run {
+            VStack(alignment: .leading, spacing: 6) {
+                block
+                NeedRunLine(target: run)
+            }
+        } else {
+            block
+        }
+    }
+
+    private var copyIcon: some View {
+        // A one-line block is 41 points high, so the 28-point icon 6 points in from its corner stands in its middle; a
+        // longer block keeps it at its top.
+        IconButton(symbol: copied ? "checkmark" : "square.on.square", words: String(l10n: "Copy code"), size: 12) {
+            copyMessage(text); copied = true
+        }
+        .opacity(hovered ? 1 : 0).allowsHitTesting(hovered)
+        .accessibilityHidden(!hovered)
+    }
+
+    private var block: some View {
         Group {
-            if wraps {
+            if runs, let run {
+                HStack(alignment: .center, spacing: 6) {
+                    Text(verbatim: text).font(font).lineSpacing(spacing)
+                        .fixedSize(horizontal: false, vertical: true).padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if copies { copyIcon }
+                    NeedRunButton(target: run)
+                }
+                .padding(.leading, 12).padding(.trailing, 6)
+            } else if wraps {
                 Text(verbatim: text).font(font).lineSpacing(spacing)
                     .fixedSize(horizontal: false, vertical: true).padding(12)
             } else {
@@ -164,16 +208,7 @@ private struct CodeBlock: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(fill, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
         .overlay(alignment: .topTrailing) {
-            if copies && !wraps {
-                // A one-line block is 41 points high, so the 28-point icon 6 points in from its corner stands in its
-                // middle; a longer block keeps it at its top.
-                IconButton(symbol: copied ? "checkmark" : "square.on.square", words: String(l10n: "Copy code"), size: 12) {
-                    copyMessage(text); copied = true
-                }
-                .padding(6)
-                .opacity(hovered ? 1 : 0).allowsHitTesting(hovered)
-                .accessibilityHidden(!hovered)
-            }
+            if copies && !wraps && !runs { copyIcon.padding(6) }
         }
         .onHover { hovered = $0; if !$0 { copied = false } }
     }

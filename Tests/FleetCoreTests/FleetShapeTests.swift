@@ -266,12 +266,13 @@ struct FleetShapeTests {
         }
     }
 
-    /// The steps of the manager's own setup: each page of an agent's setup has its place in the line, a wait for the
-    /// provider's install stays the provider's step, and after the sign-in each step is done.
+    /// The steps of the manager's own setup: each page of an agent's setup has its place in the line, the AI provider
+    /// comes before the servers (the owner, 16 November 2026), a wait for the provider's install on its server and a
+    /// switch are the step Servers, and after the sign-in each step is done.
     @Test func theStepsOfTheManagersSetup() {
-        #expect(ManagerSetupSteps.names == ["Manager", "Servers", "AI provider", "Sign in"])
-        #expect(ManagerSetupSteps.current(.server) == 1)
-        #expect(ManagerSetupSteps.current(.provider) == 2)
+        #expect(ManagerSetupSteps.names == ["Manager", "AI provider", "Servers", "Sign in"])
+        #expect(ManagerSetupSteps.current(.provider) == 1)
+        #expect(ManagerSetupSteps.current(.server) == 2)
         #expect(ManagerSetupSteps.current(.installing(runtime: "claude")) == 2)
         #expect(ManagerSetupSteps.current(.switching(runtime: "codex")) == 2)
         #expect(ManagerSetupSteps.current(.signIn(runtime: "claude")) == 3)

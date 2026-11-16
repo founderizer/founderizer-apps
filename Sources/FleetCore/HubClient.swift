@@ -729,6 +729,26 @@ public final class HubClient: Sendable {
                                  fields: ["automatic": on])
     }
 
+    /// `GET /ui/error-reports` (owner feature `error_reports`): whether Settings › General › Error reports is on.
+    public func errorReports(hub: URL, database: String) async throws -> ErrorReportsState {
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/error-reports"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database)]
+        let (data, _) = try await boundedArtifactRead(URLRequest(url: parts.url!), limit: 4096)
+        let state = try JSONDecoder().decode(ErrorReportsState.self, from: data)
+        try state.validate(database: database)
+        return state
+    }
+
+    /// `POST /ui/error-reports`: the switch on or off, an owner command as `POST /ui/releases/auto` is.
+    public func errorReports(_ send: Bool, hub: URL, database: String, client: String,
+                             requestID: UUID = UUID()) async throws -> ErrorReportsReceipt {
+        let receipt = try JSONDecoder().decode(ErrorReportsReceipt.self, from: await ownerCommand(
+            "ui/error-reports", hub: hub, database: database, client: client, requestID: requestID, fields: ["send": send]))
+        guard receipt.ok, receipt.request_id.lowercased() == requestID.uuidString.lowercased(),
+              receipt.send.map({ $0 == send }) ?? true else { throw HubError.invalidResponse }
+        return receipt
+    }
+
     /// `POST /ui/releases/entitlement`: the token the website issued for this fleet (PRODUCT.md 4.2). Only
     /// `ClaimFromLink` calls it, and it goes with it when our open channel answers every fleet.
     ///

@@ -173,8 +173,12 @@ private struct ReportProblemCommand: Commands {
 
 @MainActor
 final class FleetAppDelegate: NSObject, NSApplicationDelegate {
-    /// Every right-click menu opens in the app's own menu (`FleetContextMenus`).
-    func applicationDidFinishLaunching(_ notification: Notification) { FleetContextMenus.start() }
+    /// Every right-click menu opens in the app's own menu (`FleetContextMenus`), and the crashes of earlier runs come
+    /// from MetricKit (`CrashSubscriber`).
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        FleetContextMenus.start()
+        CrashSubscriber.start()
+    }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationWillTerminate(_ notification: Notification) { ScreenSharingSession.shared.shutdown() }
 }

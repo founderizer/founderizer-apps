@@ -896,7 +896,8 @@ struct FirstRunView: View {
             SetupStep(title: machineHead.title, waits: machineHead.waits) { mark } content: {
                 form {
                     MachineInstallRun(model: install, title: String(l10n: "Your hub"), next: AnyView(afterInstall),
-                                      again: { install.installHub(store: store) }, showsStatus: true)
+                                      again: { install.installHub(store: store) }, report: { store.reportAsk = $0 },
+                                      showsStatus: true)
                 }
             }
             // **On to Manager's sign-in by itself** (D-3 item 1, his rule "it should just activate it"; fix round 2): when

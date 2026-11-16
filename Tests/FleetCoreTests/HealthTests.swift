@@ -73,10 +73,12 @@ import Testing
     #expect(warning("machine_stale", agent: "vps").act == .openMachine("vps"))
     #expect(warning("helper_offline", agent: "vps").act == .openMachine("vps"))
     #expect(warning("disk_low", agent: "manager").act == .openMachine("manager"))
-    // A session that is not running is the one manager warning a button settles (`ManagerSession`). Its others are
-    // not put right by a start, so they keep the page where its session and its machine are.
-    #expect(warning("manager_down", agent: "manager").act == .startManager(agent: "manager"))
+    // A session that is not running gets Report a problem: its helper starts it again by itself, so no button of the
+    // owner's starts it (`ManagerSession`, 16 November 2026). Its others keep the page where its session and its
+    // machine are.
+    #expect(warning("manager_down", agent: "manager").act == .tellUs)
     #expect(warning("manager_down").act == .tellUs)
+    #expect(warning("manager_signed_out").act == .tellUs)
     #expect(warning("manager_switch_stalled", agent: "manager").act == .openAgent("manager"))
     #expect(warning("manager_limited", agent: "manager").act == .openAgent("manager"))
     #expect(warning("manager_screen", agent: "manager").act == .openAgent("manager"))
@@ -94,7 +96,7 @@ import Testing
         #expect(warning(kind, agent: "vps").act.label.isEmpty == false)
     }
     #expect(warning("machine_behind", agent: "vps").act.label == "Update Vps")
-    #expect(warning("manager_down", agent: "manager").act.label == "Start the session")
+    #expect(warning("manager_down", agent: "manager").act.label == "Report a problem")
     #expect(warning("manager_down", agent: "manager").title == "Manager's session is not running")
     #expect(warning("backup_missing").title == "No copy of your fleet")
     // The hub's kind is never his title: an agent near its limit is said in his words.
@@ -159,15 +161,12 @@ import Testing
     #expect(ManagerSession.bandShows(kind: nil, overItsSetup: true))
 }
 
-/// The start of the manager's standing session (`manager_start`). The machine's own helper starts a session that
-/// went by itself, so this is the owner's hand on the same switch, for the one warning a start settles.
-@Test func onlyASessionThatIsNotRunningCarriesItsStart() throws {
+/// The start of the manager's standing session (`manager_start`) stays a command of the owner's own agent
+/// (`start_manager_session`), and no button of his: the machine's own helper starts a session that went by itself, so
+/// a start asked for one that it was already making (16 November 2026).
+@Test func theStartIsTheOwnersAgentsCommandOnly() throws {
     #expect(ManagerSession.feature == "manager_start")
-    #expect(ManagerSession.startable(kind: "down"))
-    for kind in ["limited", "screen", "silent", "switching", "switch_stalled", "", "DOWN"] {
-        #expect(!ManagerSession.startable(kind: kind))
-    }
-    #expect(!ManagerSession.startable(kind: nil))
+    #expect(ManagerSession.downKind == "down")
     let command = OwnerCommand.managerStart(agent: "manager")
     #expect(command.route == "ui/machines/manager/manager")
     #expect(command.requiredFeature == "manager_start")
@@ -176,6 +175,54 @@ import Testing
     // It carries no input of its own: the route names the agent, and the hub takes nothing else.
     let body = try command.bodyFields(text: "")
     #expect(body as? [String: String] == ["agent": "manager", "note": ""])
+}
+
+/// **What the report form holds when the band of a session that is not running opens it** (the owner's choice of 16
+/// November 2026): the problem, and since when in his own clock, a time of today alone and a date before it.
+@Test func theBandsReportSaysTheProblemAndSinceWhen() {
+    let zone = TimeZone(identifier: "UTC")!
+    let since = 1_794_829_515.0
+    // The clock is System status's own (`FleetTrouble.since`), whose words follow the Mac's region.
+    let today = FleetTrouble.since(since, now: since + 600, zone: zone)
+    let before = FleetTrouble.since(since, now: since + 86_400, zone: zone)
+    #expect(!today.contains(",") && before.hasSuffix(today) && before != today)
+    #expect(ManagerSession.reportText(since: since, now: since + 600, zone: zone)
+        == "The manager session is not running, since \(today).")
+    #expect(ManagerSession.reportText(since: since, now: since + 86_400, zone: zone)
+        == "The manager session is not running, since \(before).")
+    // A hub that gave no time: the problem alone, never a time that it did not say.
+    #expect(ManagerSession.reportText(since: nil, now: since, zone: zone) == "The manager session is not running.")
+    #expect(ManagerSession.reportText(since: 0, now: since, zone: zone) == "The manager session is not running.")
+}
+
+/// **Only a session that is not running while its helper answers gets Report a problem on its band** (16 November
+/// 2026): its helper starts it again by itself. A server that went silent with a message waiting, another kind, and
+/// a hub that names no cause keep the manager's page.
+@Test func theBandReportsOnlyASessionThatIsNotRunning() throws {
+    func warning(_ json: String) throws -> ManagerWarning {
+        try JSONDecoder().decode(ManagerWarning.self, from: Data(json.utf8))
+    }
+    #expect(ManagerSession.reports(try warning(#"{"kind": "down", "since": 1.0, "cause": "not_running"}"#)))
+    #expect(!ManagerSession.reports(try warning(#"{"kind": "down", "since": 1.0, "cause": "server_silent"}"#)))
+    #expect(!ManagerSession.reports(try warning(#"{"kind": "down", "since": 1.0}"#)))         // an older hub
+    #expect(try warning(#"{"kind": "down", "since": 1.0}"#).cause == nil)
+    #expect(!ManagerSession.reports(try warning(#"{"kind": "limited", "since": 1.0, "cause": "not_running"}"#)))
+    #expect(!ManagerSession.reports(nil))
+    // An older hub's words lose the step that no button takes now, and only that.
+    #expect(ManagerSession.bandWords("The manager session is not running. Start it again.")
+        == "The manager session is not running.")
+    #expect(ManagerSession.bandWords("The manager session is not running.") == "The manager session is not running.")
+    #expect(ManagerSession.bandWords("The manager's server has been silent since 12:00; a message waits.")
+        == "The manager's server has been silent since 12:00; a message waits.")
+    // and its System status row loses that start too, in its words and its fix; another row keeps its fix
+    let old = FleetHealth.blocks([
+        .init(kind: "manager_down", detail: "The manager session is not running. Start it again.",
+              fix: "Start the session of Manager again.", agent: "manager"),
+        .init(kind: "tasks_stuck", detail: "2 tasks are stuck.", fix: "Tell Manager what to do with them.", agent: "manager"),
+    ])
+    #expect(old.map(\.detail) == ["The manager session is not running.", "2 tasks are stuck."])
+    #expect(old.map(\.fixes) == [[], ["Tell Manager what to do with them."]])
+    #expect(old[0].acts == [.tellUs])
 }
 
 /// The kinds the hub raises that had no title of his: each says its thing in his words, never the hub's kind in Title

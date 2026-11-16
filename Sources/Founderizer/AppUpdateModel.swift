@@ -2,14 +2,16 @@ import AppKit
 import FleetCore
 import Observation
 import SwiftUI
+import notify
 
 /// **Founderizer updates itself, without a press** (the owner, 22 October 2026: "do they get the latest updates,
 /// improvements and bug fixes automatically? it must be like that!").
 ///
 /// The fleet's own poll calls `tick` every few seconds, as it calls the copy keeper's. It reads the channel at the
-/// start and every hour, and after a read that failed again after 1, 5 and 15 minutes (`AppUpdatePolicy`), and only
-/// while the fleet's Automatic updates switch is on: one switch for the fleet and the Mac that drives it. A read that
-/// fails changes nothing it knew: the build that waits still waits. An
+/// start and every five minutes, one minute after a read that failed, when the owner comes back to the app, and at
+/// once after the signal of a new build that the Mac that publishes the app posts (`AppUpdatePolicy`), and only while
+/// the fleet's Automatic updates switch is on: one switch for the fleet and the Mac
+/// that drives it. A read that fails changes nothing it knew: the build that waits still waits. An
 /// offered build is put in place exactly as the sidebar's Update puts it — downloaded, checked against the signed manifest
 /// and against Apple's signature of the running app, swapped — and the app then starts again, but only after the owner
 /// has been away from it for two minutes with no request of his on its way (`AppUpdatePolicy`). Only a Developer ID
@@ -31,6 +33,16 @@ final class AppAutoUpdate {
     @ObservationIgnored private var failures = 0
     @ObservationIgnored private var askedAt: Date?
     @ObservationIgnored private var awaySince: Date?
+    /// **He came back to the app since the last read began** (`AppUpdatePolicy.back`; the owner, 16 November 2026: "I
+    /// always have to go to the topbar to check for updates!"): the next read comes at once, so the sidebar's Update
+    /// stands for a build that came while he was away.
+    @ObservationIgnored private var cameBack = false
+    /// **A signal of a new build came since the last read began** (`AppUpdatePolicy.signal`): the Mac that publishes
+    /// the app posts it when a build has ended, and the next read comes at once, so the sidebar's Update stands within
+    /// seconds of the build. Registered once, at `start`.
+    @ObservationIgnored private var signalled = false
+    @ObservationIgnored private var listens = false
+    @ObservationIgnored private var signalToken: Int32 = 0
     @ObservationIgnored private var automatic = false
     @ObservationIgnored private var working = false
     @ObservationIgnored private let running = AppVersion.running
@@ -49,7 +61,13 @@ final class AppAutoUpdate {
 
     /// The build kept with the fleet's last reading, as the store starts. Only a build that reads the channel draws
     /// from it: a development build never asks, so nothing would ever replace it.
-    func start(kept: WaitingBuild?) { keptWaiting = KeptReading(installer.team != nil ? kept : nil) }
+    func start(kept: WaitingBuild?) {
+        keptWaiting = KeptReading(installer.team != nil ? kept : nil)
+        guard !listens else { return }
+        listens = notify_register_dispatch(AppUpdatePolicy.signal, &signalToken, .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.signalled = true }
+        } == NOTIFY_STATUS_OK
+    }
 
     /// Why this app cannot replace itself where it stands, or nil.
     var cannotReplace: String? { installer.cannotReplace }
@@ -67,9 +85,9 @@ final class AppAutoUpdate {
 
     /// **Update and Restart of the window that the sidebar's Update opens** (`UpdateDialog`; the owner, 15 November 2026:
     /// "a small confirmation modal to update, and be able to do it from there"): the build that the window named goes in
-    /// as the hourly path puts it in, and the app starts again at once, because he pressed it. Meanwhile the sidebar's
-    /// Update says the download and then Restarting…; a press that stopped says Try again, with the reason under the
-    /// pointer. Until that day one press of the banner did this with no question.
+    /// as the path with no press puts it in, and the app starts again at once, because he pressed it. Meanwhile the
+    /// sidebar's Update says the download and then Restarting…; a press that stopped says Try again, with the reason
+    /// under the pointer. Until that day one press of the banner did this with no question.
     func pressInstall(_ build: AppManifest) async {
         guard pressed == nil else { return }
         pressFailure = nil
@@ -87,7 +105,9 @@ final class AppAutoUpdate {
 
     func tick(store: FleetStore) {
         let now = Date()
-        awaySince = NSApplication.shared.isActive ? nil : (awaySince ?? now)
+        let active = NSApplication.shared.isActive
+        if active, awaySince != nil { cameBack = true }
+        awaySince = active ? nil : (awaySince ?? now)
         let published = installer.team != nil
         guard !working, published else { return }
         // **Before any hub answered this Mac** (the first run): the read goes to our channel, as for a Mac that has just
@@ -99,9 +119,12 @@ final class AppAutoUpdate {
             askedAt = nil
             waiting = nil
         }
-        if AppUpdatePolicy.shouldAsk(lastAsked: askedAt, failures: failures, now: now) {
+        if AppUpdatePolicy.shouldAsk(lastAsked: askedAt, failures: failures, cameBack: cameBack, signalled: signalled,
+                                     now: now) {
             if beforeHub {
                 askedAt = now
+                cameBack = false
+                signalled = false
                 working = true
                 Task { await askBeforeHub(store: store) }
                 return
@@ -109,6 +132,8 @@ final class AppAutoUpdate {
             guard store.isFresh, let database = store.state?.db,
                   store.state?.ui_features?.contains(ReleaseState.feature) == true else { return }
             askedAt = now
+            cameBack = false
+            signalled = false
             working = true
             let hub = store.hub
             Task { await ask(hub: hub, database: database, store: store) }
@@ -138,7 +163,7 @@ final class AppAutoUpdate {
         decided(store)
     }
 
-    /// **Founderizer › Check for Updates…** (`UpdateCheck`): one read of our channel now, as the hourly read asks it —
+    /// **Founderizer › Check for Updates…** (`UpdateCheck`): one read of our channel now, as the timed read asks it —
     /// with the fleet's channel, id and track from the hub, or from its last reading when the hub does not answer, and
     /// our channel's defaults before any hub answered. It decides nothing about what installs by itself.
     func readNow(store: FleetStore) async -> AppUpdateReading {
@@ -154,9 +179,9 @@ final class AppAutoUpdate {
         return reading
     }
 
-    /// **Update and Restart** of that window: the build goes in as the hourly path puts it in, and the app starts again
-    /// at once, because he pressed it. One install at a time: it waits for a read or an install of the hourly path that
-    /// runs. The words of a failure, or nil when the app restarts.
+    /// **Update and Restart** of that window: the build goes in as the path with no press puts it in, and the app
+    /// starts again at once, because he pressed it. One install at a time: it waits for a read or an install of that
+    /// path that runs. The words of a failure, or nil when the app restarts.
     func installNow(_ build: AppManifest,
                     progress: @escaping @Sendable (AppUpdateInstaller.Step) -> Void) async -> String? {
         while working {
@@ -203,7 +228,7 @@ final class AppAutoUpdate {
         keptWaiting.readFailed()
     }
 
-    /// A read that answered: the hourly pace again, and the channel's answer kept.
+    /// A read that answered: the usual pace again, and the channel's answer kept.
     private func reached(_ reading: AppUpdateReading?) {
         failures = 0
         failingSince = nil

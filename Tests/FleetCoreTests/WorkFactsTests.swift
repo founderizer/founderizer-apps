@@ -167,7 +167,8 @@ struct WorkFactsTests {
         }
         #expect(fields == ["way: String", "running: Bool", "failed: Bool", "ended: Bool", "job: String?",
                            "steps: [Step]", "planned: [String]", "runningStep: String?", "since: Date",
-                           "stop: InstallRecord.Stop?", "waitsForNetwork: Bool", "cause: InstallCause?"])
+                           "stop: InstallRecord.Stop?", "waitsForNetwork: Bool", "cause: InstallCause?",
+                           "tries: Int"])
         // The model's own line: the kind, and neither of its two texts of a stop.
         let model = try String(contentsOf: file.appendingPathComponent("Sources/Founderizer/MachineInstallView.swift"),
                                encoding: .utf8)

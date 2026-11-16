@@ -33,11 +33,11 @@ struct InstallCauseTests {
             ("This join code was already used. Make a new code in Founderizer: Settings, Servers, Add server.",
              .joinCodeRefused),
             ("A newer join code replaced this code. Copy the newest line from Founderizer.", .joinCodeRefused),
-            ("This join code expired. Make a new code in Founderizer: Settings, Servers, Add server.", .joinCodeRefused),
+            ("This join code expired. Make a new code in Founderizer: Settings, Servers, Add server.", .joinCodeExpired),
             ("Too many wrong join codes from this address. Wait 10 minutes, then try again.", .joinCodeRefused),
             ("This server is in your fleet already, as worker-2.", .serverNameRefused),
             ("The hub could not read this server's name in Tailscale. Run the line again in a minute.",
-             .serverNameRefused),
+             .serverNameUnread),
             ("This server is called x in Tailscale, and a server's name in Fleet has 2 to 31 letters.",
              .serverNameRefused),
             ("Your fleet has a server named worker-2. Rename one of the two in Tailscale, then run the line again.",
@@ -141,8 +141,11 @@ struct InstallCauseTests {
         for line in clears { #expect(line.contains("cause = nil"), "\(line)") }
         #expect(lines.contains("cause = InstallCause.of(error, sealed: sealed)"))
         #expect(lines.contains("log?.stop(kind, says: InstallRecord.words(of: error, host: target.host), cause: cause,"))
+        // The hub's install and a server's stop through `tries`, after the retry's decision (`InstallRetry`): one call
+        // for both. A Mac's link stops through its own two.
         let finishes = lines.filter { $0.contains("finish(error:") && !$0.contains("func finish") }
-        #expect(finishes.count >= 4)
+        #expect(finishes.count >= 3)
+        #expect(lines.contains("else { return finish(error: error) }"))
         #expect(finishes.filter { $0.contains("sealed:") }
                 == ["if failure == nil { finish(error: MacLinkError.refused(state.says), sealed: state.says) }"])
     }
@@ -223,7 +226,7 @@ struct InstallCauseTests {
         // The sentences that read as `other`: an option of the line, a folder or a file of the hub's own install,
         // a Mac's own tools and settings, and a few that say in their own words what to do. Each part is held to a
         // sentence, so that none stays here after its sentence has gone.
-        let others = ["fleet_reboot_time", "unknown option", "--port must", "--claim-wait must", "--runtime must",
+        let others = ["and the line says --kind", "fleet_reboot_time", "unknown option", "--port must", "--claim-wait must", "--runtime must",
                       "$name_rule", "fleet_shape_step", "fleet_hub_server=shared",
                       "is there and is not a founderizer checkout", "is not a copy of the founderizer repository",
                       "is not a git checkout with a commit", "could not make a folder for the auth key",

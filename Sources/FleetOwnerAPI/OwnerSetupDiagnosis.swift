@@ -47,9 +47,13 @@ public struct SetupDiagnosis: Equatable, Sendable {
     /// words. Only a stop of the kind `installer_stopped` or `mac_refused` has one; a name that this list does not
     /// have is given as `other`.
     public static let installCauses = ["none", "needs_root", "system_not_supported", "no_systemd", "hub_no_answer",
-                                       "code_not_fetched", "join_code_refused", "server_name_refused", "hub_busy",
-                                       "private_network", "firewall", "agent_users", "vault", "updates", "service",
+                                       "code_not_fetched", "join_code_refused", "join_code_expired",
+                                       "server_name_refused", "server_name_unread", "hub_busy", "private_network",
+                                       "firewall", "agent_users", "vault", "updates", "packages", "service",
                                        "hub_claim", "agent_program", "homebrew", "wrong_mac_user", "other"]
+    /// **The tries of one press of an install** (`InstallRetry`: the app runs an install again by itself, two more
+    /// times at most, after an error that passes): no count is given above it.
+    public static let mostTries = 3
     /// The kinds of a stop that carry the installer's own reason (`installCauses`).
     public static let stopsWithCause: Set<String> = ["installer_stopped", "mac_refused"]
     /// What a kept record of an install is of (`InstallRecord.Kind`): `join` is a server that joins the fleet, which
@@ -218,6 +222,21 @@ public struct SetupBuild: Equatable, Sendable {
     }
 }
 
+/// A count of a press's tries: 1 to `mostTries`.
+private func pressTries(_ count: Int) -> JSONValue {
+    .int(Int64(min(max(count, 1), SetupDiagnosis.mostTries)))
+}
+
+/// **Why the earlier tries of a press stopped** (`InstallRecord.retried`), oldest first: each a name of
+/// `installCauses` or of `installStops` (never `none`), else `other`; at most the tries before the last.
+private func retriedNames(_ names: [String]) -> JSONValue {
+    .array(names.suffix(SetupDiagnosis.mostTries - 1).map { name in
+        let known = name != "none" && (SetupDiagnosis.installCauses.contains(name)
+                                       || SetupDiagnosis.installStops.contains(name))
+        return .string(known ? name : "other")
+    })
+}
+
 /// A count of an install's steps: 0 to the longest plan.
 private func steps(_ count: Int) -> JSONValue {
     .int(Int64(min(max(count, 0), SetupDiagnosis.longestPlan)))
@@ -245,9 +264,11 @@ public struct SetupInstall: Equatable, Sendable {
     public var waitsForNetwork: Bool
     public var stepsDone: Int
     public var stepsPlanned: Int
+    /// The tries of this press so far (`InstallRetry`): 1 until the app ran the install again by itself.
+    public var tries: Int
 
     public init(state: String, kind: String, step: String, stop: String, cause: String = "none",
-                waitsForNetwork: Bool = false, stepsDone: Int, stepsPlanned: Int) {
+                waitsForNetwork: Bool = false, stepsDone: Int, stepsPlanned: Int, tries: Int = 1) {
         self.state = state
         self.kind = kind
         self.step = step
@@ -256,6 +277,7 @@ public struct SetupInstall: Equatable, Sendable {
         self.waitsForNetwork = waitsForNetwork
         self.stepsDone = stepsDone
         self.stepsPlanned = stepsPlanned
+        self.tries = tries
     }
 
     func json(seconds given: Int?) -> JSONValue {
@@ -272,6 +294,7 @@ public struct SetupInstall: Equatable, Sendable {
             "waits_for_network": .bool(waitsForNetwork && state == .string("stopped")),
             "steps_done": steps(stepsDone),
             "steps_planned": steps(stepsPlanned),
+            "tries": pressTries(tries),
             "seconds_in_step": state == .string("running") ? seconds(given) : .null,
         ])
     }
@@ -294,9 +317,14 @@ public struct SetupLastInstall: Equatable, Sendable {
     public var waitsForNetwork: Bool
     public var stepsDone: Int
     public var stepsPlanned: Int
+    /// The tries of the record's press (`InstallRecord.tries`), and why each earlier one stopped
+    /// (`InstallRecord.retried`), as fixed names.
+    public var tries: Int
+    public var retried: [String]
 
     public init(kind: String, outcome: String, step: String, stop: String, cause: String = "none",
-                waitsForNetwork: Bool = false, stepsDone: Int, stepsPlanned: Int) {
+                waitsForNetwork: Bool = false, stepsDone: Int, stepsPlanned: Int, tries: Int = 1,
+                retried: [String] = []) {
         self.kind = kind
         self.outcome = outcome
         self.step = step
@@ -305,6 +333,8 @@ public struct SetupLastInstall: Equatable, Sendable {
         self.waitsForNetwork = waitsForNetwork
         self.stepsDone = stepsDone
         self.stepsPlanned = stepsPlanned
+        self.tries = tries
+        self.retried = retried
     }
 
     func json(seconds given: Int?) -> JSONValue {
@@ -322,6 +352,8 @@ public struct SetupLastInstall: Equatable, Sendable {
             "waits_for_network": .bool(waitsForNetwork && stopped),
             "steps_done": steps(stepsDone),
             "steps_planned": steps(stepsPlanned),
+            "tries": pressTries(tries),
+            "retried": retriedNames(retried),
             "seconds_ago": seconds(given),
         ])
     }

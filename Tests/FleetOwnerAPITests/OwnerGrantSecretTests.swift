@@ -419,9 +419,10 @@ struct OwnerGrantSecretFieldTests {
 
 /// **The words of `grant_secret`**: the tool as the program lists it, its description, and its fixed sentences.
 struct OwnerGrantSecretWordsTests {
-    /// **The tool is a write with three required fields and no value, and it is listed last**: the fourth of
-    /// `OwnerLinkTools.names` and `tools`, one time in each, and no tool of `owner_mcp.py`'s table.
-    @Test func theToolIsAWriteWithThreeRequiredFieldsAndIsListedLast() throws {
+    /// **The tool is a write with three required fields and no value, and it is listed**: the fourth of
+    /// `OwnerLinkTools.names` and `tools`, one time in each, and no tool of `owner_mcp.py`'s table. (It was the last
+    /// one until `share_secret` came after it.)
+    @Test func theToolIsAWriteWithThreeRequiredFieldsAndIsListed() throws {
         let tool = GrantSecret.tool
         #expect(tool.name == "grant_secret" && GrantSecret.name == "grant_secret" && tool.what == "grant_secret")
         #expect(tool.annotations == .object(["readOnlyHint": .bool(false)]))
@@ -437,15 +438,17 @@ struct OwnerGrantSecretWordsTests {
         #expect(tool.feature == nil && tool.route.isEmpty && !tool.requestIDFromArguments && tool.fields.isEmpty)
         #expect(tool.firstSentence == "Gives one secret of the fleet to one agent with the owner's signature, or "
                 + "takes it back, as Give and Take back on the Founderizer app's Secrets page do.")
-        #expect(OwnerLinkTools.names == ["save_bot_token", "prepare_problem_report", "save_secret", "grant_secret"])
-        #expect(OwnerLinkTools.names.last == GrantSecret.name && OwnerLinkTools.names.count == 4)
+        #expect(OwnerLinkTools.names == ["save_bot_token", "prepare_problem_report", "save_secret", "grant_secret",
+                                         "share_secret"])
+        #expect(OwnerLinkTools.names.firstIndex(of: GrantSecret.name) == 3 && OwnerLinkTools.names.count == 5)
         #expect(OwnerLinkTools.names.filter { $0 == GrantSecret.name }.count == 1)
         #expect(OwnerLinkTools.tools.map(\.name) == OwnerLinkTools.names)
-        #expect(OwnerLinkTools.tools.last?.description == tool.description)
-        // Not a tool of owner_mcp.py's table: a tool of the program only. The program lists it last.
+        #expect(OwnerLinkTools.tools[3].description == tool.description)
+        // Not a tool of owner_mcp.py's table: a tool of the program only. The program lists it last but one, before
+        // `share_secret`.
         #expect(Fixture.table.tool(GrantSecret.name) == nil)
         let listed = OwnerTools.programTable(Fixture.table).tools.filter { $0.kind.listed }
-        #expect(listed.last?.name == GrantSecret.name)
+        #expect(listed.suffix(2).map(\.name) == [GrantSecret.name, ShareSecret.name])
         #expect(listed.filter { $0.name == GrantSecret.name }.count == 1)
         // It has its own words for a lost answer.
         #expect(OwnerLinkTools.notKnownHere(GrantSecret.name) == GrantSecret.notKnownHere)
@@ -479,7 +482,7 @@ struct OwnerGrantSecretWordsTests {
             "On a hub that takes no signed grant, the tool sends nothing: grant_access gives a secret there.",
             "While the hub has no reading of a central vault, the tool sends nothing too: the fleet has none, or the "
                 + "hub has not read it since it started, and only on a fleet that has none does grant_access give a "
-                + "secret.",
+                + "secret in this tool's place.",
             "A grant that grant_access wrote into the list with no signature is repaired by the same give at the "
                 + "same level, which signs it.",
             "It answers login, agent, level, signed true, server (the server that a give was signed for), changed "
@@ -532,7 +535,7 @@ struct OwnerGrantSecretWordsTests {
         #expect(GrantSecret.noVaultReading == "The hub has no reading of a central vault now: this fleet has none, "
                 + "or the hub has not read it since it started. Call grant_secret again in a minute. If the same "
                 + "answer comes again, ask the owner whether this fleet has Founderizer Vault: only on a fleet that "
-                + "has none does grant_access give a secret. Nothing was sent.")
+                + "has none does grant_access give a secret in this tool's place. Nothing was sent.")
         #expect(GrantSecret.vaultSilent == "The hub's last reading of the central vault failed, so the vault may not "
                 + "answer now. Call grant_secret again in a minute. Nothing was sent.")
         #expect(GrantSecret.noOwnerKey == "This Mac holds no owner key for this fleet, so the app on it cannot sign: "
@@ -570,7 +573,8 @@ struct OwnerGrantSecretWordsTests {
                 + "fleet's list was not changed. Call grant_secret again in the same way: a second signature of the "
                 + "same grant is no error, because the vault keeps the newer one.")
         #expect(GrantSecret.grantRefusedTakenBack == "The hub refused the grant, and the app took the owner's "
-                + "signature of it back, so nothing is changed.")
+                + "signature of it back: the fleet's list has no grant of this secret for this agent, and the vault no "
+                + "signed grant of it for this agent.")
         #expect(GrantSecret.grantRefusedSignatureLeft == "The hub refused the grant, and the app could not take the "
                 + "owner's signature of it back: a signed grant of this secret for this agent stays in the vault "
                 + "with no grant in the fleet's list. Call grant_secret with level null to end it.")
@@ -639,7 +643,7 @@ struct OwnerGrantSecretWordsTests {
         }
         let hubSaid = GrantSecret.withHubWords(GrantSecret.signRefused, status: 400, "the statement is older")
         let others = OwnerLinkTools.names.filter { $0 != GrantSecret.name }
-        #expect(others.count == 3)
+        #expect(others.count == 4)
         for words in before + after + notes + [hubSaid, notSigned] {
             for other in others { #expect(!words.contains(other), "\(words)") }
             for never in ["read a login", "reads a login", "read the login", "reads the login", "read the secret",
@@ -1245,8 +1249,9 @@ struct OwnerGrantSecretAppTests {
             app.grantAnswers = [SaveBotToken.HubFailure.refused(status, hubs)]
             let answer = await app.answer(give)
             #expect(answer == .refused("The hub refused the grant, and the app took the owner's signature of it "
-                                       + "back, so nothing is changed. The hub's words (status \(status)): \(hubs)"),
-                    "\(status)")
+                                       + "back: the fleet's list has no grant of this secret for this agent, and the "
+                                       + "vault no signed grant of it for this agent. The hub's words (status "
+                                       + "\(status)): \(hubs)"), "\(status)")
             #expect(app.asked == toTheRefusal + ["team", "sign ungrant"], "\(status)")
             #expect(app.statements.count == 2 && app.ungrants == 1 && app.refreshes == 0, "\(status)")
             #expect(app.statements.last == GrantSecret.Statement(fleet: fleet, login: key, agent: worker, machine: nil))
@@ -1481,18 +1486,18 @@ final class OwnerGrantSecretProgramTests {
         return (status, out.all, errors)
     }
 
-    /// **The tool is a write of the program alone, and the last one of its list**: taken by `write` and by the MCP
-    /// form, refused by `call`, and no tool of `owner_mcp.py`'s table.
-    @Test func theToolIsAWriteOfTheProgramAloneAndTheLastOne() throws {
+    /// **The tool is a write of the program alone, and the last one of its list but one** (`share_secret` came after
+    /// it): taken by `write` and by the MCP form, refused by `call`, and no tool of `owner_mcp.py`'s table.
+    @Test func theToolIsAWriteOfTheProgramAloneAndTheLastButOne() throws {
         let tools = OwnerTools(table: Fixture.table, context: context(ValueLink()))
         let tool = try #require(tools.listed.first { $0.name == GrantSecret.name })
         #expect(tool.annotations == .object(["readOnlyHint": .bool(false)]))
         #expect(OwnerTools.verb(of: tool) == .write)
-        #expect(tools.listed.last?.name == GrantSecret.name)
+        #expect(tools.listed.suffix(2).map(\.name) == [GrantSecret.name, ShareSecret.name])
         #expect(Fixture.table.tool(GrantSecret.name) == nil)
         let (status, out, _) = try run(["tools"], ValueLink())
         #expect(status == 0)
-        #expect(out.last == "write grant_secret: " + GrantSecret.tool.firstSentence)
+        #expect(out.dropLast().last == "write grant_secret: " + GrantSecret.tool.firstSentence)
         #expect(out.filter { $0.hasPrefix("write grant_secret") }.count == 1)
         let (one, full, _) = try run(["tools", "grant_secret"], ValueLink())
         #expect(one == 0 && full.contains(GrantSecret.tool.description))
@@ -1576,7 +1581,9 @@ final class OwnerGrantSecretProgramTests {
         mcp.finish()
         let said = lines.wait(for: 3)
         let listed = try #require(said.first { $0["id"] == .int(1) }?["result"]?["tools"]?.array)
-        let tool = try #require(listed.last)
+        // The last tool but one: `share_secret` came after it.
+        #expect(listed.suffix(2).map { $0["name"] } == [.string("grant_secret"), .string("share_secret")])
+        let tool = try #require(listed.dropLast().last)
         #expect(tool["name"] == .string("grant_secret"))
         #expect(tool["annotations"]?["readOnlyHint"] == .bool(false))
         #expect(tool["inputSchema"]?["required"] == .array([.string("login"), .string("agent"), .string("level")]))

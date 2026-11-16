@@ -114,6 +114,10 @@ struct SettingsPage: View {
     static let defaultsPrefetch = PagePrefetch("defaults.page", feature: DefaultModels.feature) {
         try await DefaultModelsClient().read(hub: $0, database: $1)
     }
+    /// Owner feature `owner_profile`: the fleet's name for the owner (Your profile), read and kept as the defaults are.
+    private var profile: OwnerProfilePage? {
+        get { store.reading("profile.page") } nonmutating set { store.keep(newValue, as: "profile.page") }
+    }
 
     var body: some View {
         let tabs = SettingsTab.available(features: store.state?.ui_features ?? [])
@@ -160,37 +164,50 @@ struct SettingsPage: View {
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(shown.rawValue)/\(generalReads)") {
             let features = store.state?.ui_features ?? []
             let chat = features.contains(ChatApps.feature), models = features.contains(DefaultModels.feature)
-            guard shown == .general, chat || models else { return }
+            let own = features.contains(OwnerProfile.feature)
+            guard shown == .general, chat || models || own else { return }
             asked = .now
             while !Task.isCancelled {
                 if let db = store.state?.db {
                     let hub = store.hub
-                    // both reads at once, so that the two sections come in one frame
+                    // the reads at once, so that the sections come in one frame
                     async let chatRead = chat ? try? await ChatAppsClient().read(hub: hub, database: db) : nil
                     async let modelsRead = models ? try? await DefaultModelsClient().read(hub: hub, database: db) : nil
-                    let (freshChannels, freshDefaults) = await (chatRead, modelsRead)
+                    async let profileRead = own ? try? await OwnerProfileClient().read(hub: hub, database: db) : nil
+                    let (freshChannels, freshDefaults, freshProfile) = await (chatRead, modelsRead, profileRead)
                     if store.state?.db == db {
                         if let freshChannels { channels = freshChannels }
                         if let freshDefaults { defaults = freshDefaults }
+                        if let freshProfile { profile = freshProfile }
                     }
                 }
                 if !Task.isCancelled { answered = true }
                 do { try await store.nap(15) } catch { return }
             }
         }
+        // The switch of error reports, read here and not by its section, which draws nothing before a reading.
+        .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(shown.rawValue)/\(offersErrorReports)") {
+            guard shown == .general, offersErrorReports else { return }
+            await ErrorReportsModel.of(store).poll(store: store)
+        }
     }
 
-    /// Which of General's two readings the hub offers: a hub that gains one while the page shows starts its loop again.
+    /// The hub has the switch of error reports (owner feature error_reports).
+    private var offersErrorReports: Bool { store.state?.ui_features?.contains(ErrorReportsState.feature) == true }
+
+    /// Which of General's readings the hub offers: a hub that gains one while the page shows starts its loop again.
     private var generalReads: String {
         let features = store.state?.ui_features ?? []
-        return "\(features.contains(ChatApps.feature))/\(features.contains(DefaultModels.feature))"
+        return "\(features.contains(ChatApps.feature))/\(features.contains(DefaultModels.feature))/"
+            + "\(features.contains(OwnerProfile.feature))"
     }
 
     /// The channels or the default models are offered and not read yet on this page.
     private var channelsWait: Bool {
         let features = store.state?.ui_features ?? []
         return !answered && (features.contains(ChatApps.feature) && channels == nil ||
-                             features.contains(DefaultModels.feature) && defaults == nil)
+                             features.contains(DefaultModels.feature) && defaults == nil ||
+                             features.contains(OwnerProfile.feature) && profile == nil)
     }
 
     /// What is left here is what he sets: when Founderizer tells him something, and whether his agents receive
@@ -209,6 +226,11 @@ struct SettingsPage: View {
 
     @ViewBuilder private var sections: some View {
         Group {
+            // Owner feature owner_profile: the name that the agents call him by, above Notifications (his "Mac account
+            // + Settings row" to its picture, 16 November 2026). No section from a hub that does not know the setting.
+            if let profile, profile.name != nil {
+                OwnerProfileSection(store: store, page: profile) { self.profile = $0 }
+            }
             FormSection("Notifications") {
                 // No line under it (D-2): the row's words say what it does.
                 FormRow("Tell me when I am needed", symbol: "bell", warning: store.notifications.status) {
@@ -221,9 +243,13 @@ struct SettingsPage: View {
             }
             // The release this fleet runs, the build this Mac runs, and the Automatic updates switch (the owner, 15
             // November 2026: "move the automatic updates switch to General, where we can also see the current
-            // versions"); Settings › Updates is gone. It reads the releases route.
-            if store.state?.ui_features?.contains(ReleaseState.feature) == true {
-                UpdatesSection(store: store)
+            // versions"); Settings › Updates is gone. It reads the releases route, from a hub that has it; this Mac's
+            // build shows from every hub.
+            UpdatesSection(store: store)
+            // Error reports, off until he turns them on (his "Yes, as drawn" of 16 November 2026), while the hub has the
+            // switch (owner feature error_reports).
+            if store.state?.ui_features?.contains(ErrorReportsState.feature) == true {
+                ErrorReportsSection(store: store)
             }
             // Owner feature default_models: a row for each provider that his servers report, and for one whose default
             // stays set while none does. No section while there is no row.

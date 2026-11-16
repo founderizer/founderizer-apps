@@ -159,7 +159,7 @@ final class MachineInstallModel {
                                runningStep: steps.contains { $0.step == runningStep && $0.state == .running }
                                    ? runningStep : nil,
                                since: runningSince,
-                               stop: stop, waitsForNetwork: needsNetworkKey, cause: cause)
+                               stop: stop, waitsForNetwork: needsNetworkKey, cause: cause, tries: log?.record.tries ?? 1)
     }
     /// What Tailscale said when this Mac tried to mint the key from the credential it holds. A credential that was
     /// ended or that expired leads to the same one question, and this is the line that says why it is being asked
@@ -178,6 +178,13 @@ final class MachineInstallModel {
     /// stays with the model after the end for a step's report that comes late, until the next install or `again`.
     private var log: InstallLog?
     private var work: Task<Void, Never>?
+    /// **Which run the page follows**: each try of a press (`tries`) and each `again` makes a new one, and a step's
+    /// report of an earlier run that comes late (a report goes to the main actor in a task of its own) is dropped, so
+    /// that the steps of a retry never hold a step of the try before.
+    private var runCount = 0
+    /// The step that the last run of a plan stopped at (`InstallRetry.FailedStep`), for the retry's decision; nil when a
+    /// try stopped before its plan ran.
+    private var failedStep: String?
 
     var target: InstallTarget {
         InstallTarget(host: host.trimmingCharacters(in: .whitespaces), user: user.trimmingCharacters(in: .whitespaces),
@@ -241,14 +248,13 @@ final class MachineInstallModel {
         begin(.hub, hub: nil, host: target.host)
         work = Task { [weak self] in
             guard let self else { return }
-            do {
+            await tries(job: .hub, store: store) { [weak self] _ in
+                guard let self else { return }
                 try await mintKey(for: "hub")
                 let plan = InstallPlan.hub(target: target, source: source.trimmingCharacters(in: .whitespaces),
                                            authKey: authKey.isEmpty ? nil : authKey, managerName: managerName,
                                            oneServer: oneServer, shape: shape)
                 try await run(plan: plan, store: store, machine: "hub")
-            } catch {
-                finish(error: error)
             }
         }
     }
@@ -266,13 +272,28 @@ final class MachineInstallModel {
         begin(.join, hub: store.hub.absoluteString, host: target.host, server: machine)
         work = Task { [weak self] in
             guard let self else { return }
-            do {
-                let join = try await HubClient().joinCode(hub: store.hub, database: database,
-                                                          client: store.installation, name: machine, kind: "linux")
-                made = (join.name, join.kind, join.expires_at)
-                guard let line = join.line, let code = join.code else {
+            // **A retry runs the same line** (`InstallRetry.freshCode`): the hub takes the same server's repeat of a
+            // used code, and a new code would end every other open code of the hub, and with it any other join that
+            // has not sent its code yet. Only an expired code, a code with too little time left
+            // (`InstallRetry.keepsCode`), or a try that got no line, asks for a new one.
+            var given: (line: String, code: String)?
+            await tries(job: .join, store: store) { [weak self] freshCode in
+                guard let self else { return }
+                if freshCode || given == nil
+                    || !InstallRetry.keepsCode(expiresAt: made?.expiresAt ?? 0, now: Date().timeIntervalSince1970) {
+                    given = nil; made = nil
+                    let join = try await HubClient().joinCode(hub: store.hub, database: database,
+                                                              client: store.installation, name: machine, kind: "linux")
+                    made = (join.name, join.kind, join.expires_at)
+                    guard let line = join.line, let code = join.code else {
+                        throw InstallError.cannotStart(String(l10n: "The hub gave no join line. Try again."))
+                    }
+                    given = (line, code)
+                }
+                guard let kept = given else {
                     throw InstallError.cannotStart(String(l10n: "The hub gave no join line. Try again."))
                 }
+                let (line, code) = kept
                 // The key carries the tags of the hub's own join line, as the sign-in link does, so the server has
                 // the tags by which the tailnet's policy gives the fleet's machines their rights. A credential that
                 // may not give those tags leaves the server to the link, which the owner approves.
@@ -282,8 +303,49 @@ final class MachineInstallModel {
                 let plan = InstallPlan.join(target: target, line: line, code: code,
                                             authKey: authKey.isEmpty ? nil : authKey)
                 try await run(plan: plan, store: store, machine: machine)
+            }
+        }
+    }
+
+    /// **One press, up to three tries** (`InstallRetry`; the owner's "Yes, build it" of 16 November 2026 to the plan
+    /// `install-auto-repair-plan.md`): a try that stopped for an error that passes runs again by itself. The page stays
+    /// the running page, its steps counted again from the plan (`InstallPhases` with `planned`), so **nothing new
+    /// shows**; the record follows the next try and counts it (`InstallLog.retry`); after the last try the stop shows as
+    /// before. A press that gave a sudo password gets no retry: `run` lets go of the password after each run, on purpose,
+    /// so it is noted here, before the first run. `once` gets whether a join asks for a new code (`freshCode`). A cancel
+    /// ends the press, its retries and their waits included, and shows no stop: `cancel()` ended the record already,
+    /// and the error is a try's that the cancel cut off, or one of a try before the wait that the owner never saw
+    /// (a review of 16 November 2026; `linkMac` does the same).
+    private func tries(job: InstallJob, store: FleetStore,
+                       once: @escaping (_ freshCode: Bool) async throws -> Void) async {
+        let usedSudoPassword = sudoPassword != nil
+        var tries = 1, freshCode = false
+        while true {
+            runCount += 1
+            failedStep = nil
+            do {
+                try await once(freshCode)
+                return
             } catch {
-                finish(error: error)
+                guard !Task.isCancelled else { return }
+                let stopped = InstallRetry.stopped(by: error, networkKeyRefused: error is NetworkKeyRefused,
+                                                   authKeyEmpty: authKey.isEmpty)
+                guard let retry = InstallRetry.decision(stop: stopped.stop, cause: stopped.cause, job: job,
+                                                        step: failedStep, tries: tries,
+                                                        needsNetworkKey: stopped.needsNetworkKey,
+                                                        usedSudoPassword: usedSudoPassword)
+                else { return finish(error: error) }
+                tries += 1
+                freshCode = retry.freshCode
+                if log?.retry(after: stopped.stop, cause: stopped.cause) == true { keepRecord() }
+                runCount += 1
+                steps = []
+                // Reads of this Mac's hub at the pace of the wait for a server (`InstallRetry.readEvery`).
+                await InstallRetry.wait(retry.wait,
+                                        pause: { try? await Task.sleep(for: .seconds(InstallRetry.readEvery)) },
+                                        read: { await MachineInstaller.readHub(at: store.hub) != .silent },
+                                        cancelled: { Task.isCancelled })
+                guard !Task.isCancelled else { return }
             }
         }
     }
@@ -291,25 +353,27 @@ final class MachineInstallModel {
     /// Links **a Mac that stays on**: the hub's one-time line goes to the installer that runs there, with the link
     /// code the owner read off its screen. The app then reads that installer until the install ends. `withAgent`
     /// false: the order names no first agent, because the Mac is the server of an agent that the fleet has already (the
-    /// manager of a new fleet, which the hub refuses as a Mac's new agent).
-    func linkMac(store: FleetStore, withAgent: Bool = true) {
+    /// manager of a new fleet, which the hub refuses as a Mac's new agent). `named`: the name that he gave that agent on
+    /// Add agent, whose New server opened this install; else the name that Add agent would suggest.
+    func linkMac(store: FleetStore, withAgent: Bool = true, named: String? = nil) {
         guard !running, let database = store.state?.db else { return }
         guard let installer = MacInstallerClient.address(macHost), let code = ClaimCode.read(linkCode) else {
             failure = MacLinkError.notAnAddress.errorDescription; failureDetail = nil
-            stop = .cannotStart
+            stop = .cannotStart; cause = nil     // no cause of a stop before this one stands for this one
             return
         }
         guard Servers.setsUpMacs(store.state?.ui_features) else {
             failure = String(l10n: "Your hub needs the newest Founderizer first: Settings, Updates."); failureDetail = nil
-            stop = .cannotStart
+            stop = .cannotStart; cause = nil
             return
         }
         // A hub with `server_names` names this Mac by its name in Tailscale at its join, so its code is made with no
         // name. The installer is still sent a name the hub allows: its older copies refuse an order without one.
         let asks = Servers.asksName(store.state?.ui_features)
         let machine = asks || Servers.nameProblem(name, taken: []) == nil ? name : Servers.suggestedName(taken: [])
-        // The first agent of this Mac: the name Add agent would suggest. The hub adds it once this Mac has joined.
-        firstAgent = withAgent ? AddAgentModel.freeName(taken: Set(store.state?.agents.map(\.name) ?? [])) : nil
+        // The first agent of this Mac: the name he gave it on Add agent, or the name Add agent would suggest. The hub adds
+        // it once this Mac has joined.
+        firstAgent = withAgent ? named ?? AddAgentModel.freeName(taken: Set(store.state?.agents.map(\.name) ?? [])) : nil
         work?.cancel()      // the reading of the order before this one
         running = true; failure = nil; failureDetail = nil; steps = []; planned = []; checklist = nil
         job = .join
@@ -405,11 +469,17 @@ final class MachineInstallModel {
         let installer = MachineInstaller(plan: plan, authKey: authKey, sudoPassword: sudoPassword)
         defer { sudoPassword = nil }
         let answer: VerifyChecklist
+        let thisRun = runCount, failed = InstallRetry.FailedStep()
         do {
             answer = try await installer.run { progress in
-                Task { @MainActor [weak self] in self?.record(progress) }
+                failed.note(progress)
+                Task { @MainActor [weak self] in
+                    guard let self, runCount == thisRun else { return }
+                    record(progress)
+                }
             }
         } catch {
+            failedStep = failed.value
             // Once on the private network the machine lets SSH in there only: a Try again goes to that address.
             host = await installer.reached.host
             throw error
@@ -557,6 +627,7 @@ final class MachineInstallModel {
     func again() {
         guard !running else { return }
         work?.cancel(); work = nil
+        runCount += 1
         steps = []; planned = []; checklist = nil; failure = nil; failureDetail = nil; hubAddress = nil; needsNetworkKey = false; networkFailure = nil
         job = nil
         server = nil; made = nil
@@ -691,9 +762,18 @@ struct MachineInstallRun: View {
     let next: AnyView
     /// Starts the same install again, which is what the one question of this screen leads to.
     var again: (() -> Void)?
+    /// Puts a stop into the report form's box (the caller's `store.reportAsk`): the stop row's Report a problem, which
+    /// then opens the form. Nil: the row has no such button.
+    var report: ((ReportAsk) -> Void)?
+    /// The hub that this install joins, for the prompt of a stop that the owner's agent can fix (`InstallFixPrompt`).
+    /// Nil: no such row (the first run's own hub).
+    var hub: URL?
     /// The line of what runs now under the title: the first run's "Building your fleet" only, which the owner approved
     /// on 5 November 2026.
     var showsStatus = false
+    @Environment(\.openWindow) private var openWindow
+    /// The prompt of this stop is on the clipboard: its button says Copied until the next stop.
+    @State private var promptCopied = false
 
     var body: some View {
         if model.needsNetworkKey, let again { network(again) }
@@ -773,13 +853,51 @@ struct MachineInstallRun: View {
                 // **What stopped, in a few plain words, over one Try again** (fix round 3, item 51): the line said the
                 // machine's own last line, under an outline "Install again" that only went back to the form. The same
                 // install runs again; the machine's own words stay on the line's hover, and Back goes to the form.
-                FormSection(footer: String(l10n: "Each step checks first, so nothing is done twice.")) {
-                    FormRow("The install stopped", symbol: "exclamationmark.triangle", warning: failure) {
-                        Button("Try again") { if let again { again() } else { model.again() } }
-                            .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
-                            .accessibilityIdentifier("install-again")
+                // **No footer under it** (the owner, 16 November 2026, of "Each step checks first, so nothing is done
+                // twice.": "that subtitle ... needs to be removed!"). **Report a problem beside Try again** (the owner,
+                // the same day: "here we should have a button to Report... as we did in another thread"): it opens the
+                // report form, and puts the stop and the server's last lines into its box (`InstallReport`) where the
+                // box is free for the app's words (never over the owner's own text), as the manager band's Report a
+                // problem does. **A stop that the owner's agent can fix says so in plain words, with a prompt for it**
+                // (the owner, the same day, of a page that asked for a Tailscale key and policy lines: "No, too
+                // technical. It should be something like Copy prompt to fix maybe instead?", and "Yes, build it" to its
+                // picture): the line is the app's own sentence, and the row under it copies `InstallFixPrompt`, where
+                // the technical part is. The installer's own words stay on the hover, in the report and in the prompt.
+                let fixes = hub != nil && InstallFixPrompt.offers(job: model.job, cause: model.cause)
+                FormSection {
+                    FormRow("The install stopped", symbol: "exclamationmark.triangle",
+                            warning: fixes ? InstallFixPrompt.stopLine : failure) {
+                        HStack(spacing: 8) {
+                            if let report {
+                                Button("Report a problem") {
+                                    let failed = model.steps.last { $0.state == .failed }
+                                    report(ReportAsk(text: InstallReport.text(step: failed?.title, stop: failure,
+                                                                              lines: failed?.lines ?? []),
+                                                     byAgent: false))
+                                    openWindow(id: FounderizerApp.reportWindow)
+                                }
+                                .buttonStyle(FleetOutlineButtonStyle())
+                                .accessibilityIdentifier("install-report")
+                            }
+                            Button("Try again") { if let again { again() } else { model.again() } }
+                                .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
+                                .accessibilityIdentifier("install-again")
+                        }
                     }
                     .help(model.failureDetail ?? "")
+                    if fixes {
+                        FormRow("Your AI agent can fix this", symbol: "wrench.and.screwdriver",
+                                detail: String(l10n: "Paste the prompt into your agent, then try again.")) {
+                            Button(promptCopied ? "Copied" : "Copy prompt to fix") {
+                                let failed = model.steps.last { $0.state == .failed }
+                                copyMessage(InstallFixPrompt.text(server: model.server, address: model.host, hub: hub,
+                                                                  said: failure, lines: failed?.lines ?? []))
+                                promptCopied = true
+                            }
+                            .buttonStyle(FleetOutlineButtonStyle())
+                            .accessibilityIdentifier("install-fix-prompt")
+                        }
+                    }
                 }
             }
             if let checklist = model.checklist {
@@ -794,6 +912,8 @@ struct MachineInstallRun: View {
                 SetupAction { next }
             }
         }
+        // A new stop, or a new install, is a new prompt: its button says Copy again.
+        .onChange(of: model.failure) { promptCopied = false }
     }
 
     private var detail: String? {

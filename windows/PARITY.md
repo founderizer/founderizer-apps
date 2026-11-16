@@ -37,7 +37,7 @@ Mac, and a device route is all that the PC reaches.
 | `file_changes` | built | the latest completed report of each path from the task's record (`ActivityTimeline.ChangedFiles`, `ChangedFilesModel`); the panel's "Changed files" (`Pages/TasksPages.cs` `ChangedFiles`, fourth set, 2a) |
 | `subagents` | built | the child agents of the record (`ActivityTimeline.ChildAgents`, `ChildAgentsModel`, `Screens.ChildThread`); a step's child rows and "Open agent thread" (`Pages/TaskRows.cs`), the panel's "Child agents" (`Pages/TasksPages.cs` `ChildAgentsView`) and the child agent's thread with "Back" (`ChildHeadRowView`) |
 | `vault_isolation` | waits (2.3) | |
-| `triggers` | waits (2.4) | wake-up rules |
+| `triggers` | waits (2.4) | wake-up rules. For that phase: a rule's check can have the form `read` (UI-API.md 1.191), and a last run in the state `joined` is no trouble (`TriggerRun.goodStates`) |
 | `trigger_checks` | waits (2.4) | |
 | `agent_setup` | waits (2.2) | `active` of an agent is read (built) |
 | `wakeups` | waits (2.4) | |
@@ -121,6 +121,7 @@ Mac, and a device route is all that the PC reaches.
 | `hub_shared` | waits (2.1) | the hub's own server that takes agents (owner API 1.168): the hub install's word `FLEET_HUB_SERVER=shared` and `hub_shared` of `GET /ui/servers`, which is no device route; no app turns it on yet |
 | `chat_waits` | built | `MobileAgent.WaitsSince` |
 | `diagnostics` | waits | `GET /ui/diagnostics`, the hub's own faults and refused calls (UI-API.md 1.167), for the Mac's Report a problem; the Windows app has no Report a problem yet (lane "Bug reports") |
+| `error_reports` | waits | `GET` and `POST /ui/error-reports`, the owner's switch of Settings › General › Error reports (UI-API.md 1.204), and the Mac's own crashes; the Windows app has no such switch yet (lane "Error reports") |
 | `owner_key` | waits (2.1) | the owner's computer sends its own key with its address (owner API 1.169); a PC at the device level calls with its device key, which the hub's device rule takes as before, so step 1 needs nothing; the key file, the claim's header and `POST /ui/owner/key` are the first run of an owner with only Windows |
 | `central_vault` | waits (2.3) | |
 | `kept_pins` | waits (2.3) | the Mac signs each machine's kept pin again with the owner's key; a PC holds no owner key in step 1 |

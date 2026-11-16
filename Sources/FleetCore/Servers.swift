@@ -803,10 +803,24 @@ public enum Servers {
         guard let server else { return String(l10n: "Select a server.") }
         // The server he picked can no longer take one: why, in the words of its own row.
         guard server.available else { return server.why.first.map(reason) ?? String(l10n: "It cannot take an agent now.") }
+        return agentNameProblem(name: name, existing: existing)
+    }
+
+    /// **Why the name on Add agent's first step cannot go**, or nil: that step comes before the server (the owner, 16
+    /// November 2026: "agent onboarding should ask first for the name and AI provider before the server page").
+    public static func agentNameProblem(name: String, existing: [String]) -> String? {
         guard name.range(of: AgentPlacement.namePattern, options: .regularExpression) != nil, name != "owner" else {
             return String(l10n: "Use a name of 2 to 31 characters: a-z, 0-9 and -, starting with a letter.")
         }
         return existing.contains(name) ? String(l10n: "An agent with this name exists.") : nil
+    }
+
+    /// **The servers of Add agent's server step**, for the AI that he chose on the step before it, in the order of
+    /// `open`: every server that can take one more agent, for an AI on a plan; only a Linux server that takes an agent
+    /// on a key or a model server, for Other models (`onAccount`); and only such a server with no agent yet, for his own
+    /// model server at a loopback address with no key, which only an agent alone on its server may reach (`alone`).
+    public static func offered(_ open: [ServerEntry], onAccount: Bool, alone: Bool) -> [ServerEntry] {
+        open.filter { (!onAccount || $0.takesModelAccounts) && (!alone || $0.agents.isEmpty) }
     }
 }
 

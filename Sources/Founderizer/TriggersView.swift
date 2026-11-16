@@ -67,8 +67,7 @@ struct TriggersView: View {
     /// start — which is where its daily limit appears, and the only place the owner meets it.
     private func trouble(_ trigger: FleetTrigger) -> String? {
         if trigger.state == "paused" { return trigger.paused_reason ?? String(l10n: "Paused") }
-        guard let last = trigger.last_run, !last.isCheckMatch,
-              !["started", "quiet", "sent"].contains(last.state) else { return nil }
+        guard let last = trigger.last_run, !last.isCheckMatch, !last.isGood else { return nil }
         return last.reason ?? last.state.replacingOccurrences(of: "_", with: " ").capitalized
     }
 

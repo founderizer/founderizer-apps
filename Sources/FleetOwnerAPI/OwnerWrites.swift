@@ -354,15 +354,20 @@ extension OwnerTools {
     }
 
     /// `owner_mcp.py`'s SHARE_NOT_SIGNED: the words when `share_resource` does not send a standing for a secret
-    /// (`standingReaches`). One fixed sentence, which quotes no reference and no word of the hub. Its end asks for no
-    /// second call: the app's own control signs the secret into the pool and writes the standing itself.
+    /// (`standingReaches`). One fixed sentence, which quotes no reference and no word of the hub. It names
+    /// `share_secret` (`ShareSecret`), the link tool with which the app signs the secret into the pool and writes the
+    /// standing, by where it is (the Mac where the app runs, with the whole command): the same words are the Python
+    /// server's, which has no such tool, so they say no "from here" of it. Its end asks for no second call: the app
+    /// writes the standing itself, as its own control does.
     static let shareNotSigned = "On this fleet the central vault sends a secret's value to a server only for a grant "
         + "that the owner's app signed for an agent on that server, or for a secret that the owner signed into the "
         + "grantable pool. By the hub's last reading, this secret is not in the signed pool, the owner signed no grant "
         + "of it for a server, and no server's vault holds a copy of it. A standing from here would let the fleet "
-        + "manager give the secret and, by that reading, bring its value to no server, so nothing was sent. The owner "
-        + "sets who may give the secret in the Founderizer app: on Secrets, the secret's card, Who may give it. The "
-        + "app signs that and writes the standing, and nothing more is needed from here then."
+        + "manager give the secret and, by that reading, bring its value to no server, so nothing was sent. On the "
+        + "Mac where the Founderizer app runs, its program sets it with the owner's signature (~/.founderizer/cli "
+        + "write share_secret): the app signs the secret into the grantable pool and writes the standing, as the "
+        + "owner's own Who may give it on Secrets does, and the owner can also set it there. After either, "
+        + "share_resource needs no second call."
 
     /// `DOOR_MACHINE`: the name under which the owner's signed grant for the door stands in the central vault
     /// (`hub.py` `DOOR_PIN`). The door is no server that an agent of the fleet works on, so such a grant brings no
@@ -373,12 +378,13 @@ extension OwnerTools {
     /// could bring the value to a server.** `POST /ui/resources` writes the standing into the fleet's list with no
     /// signature, and the fleet manager can then give the secret to a worker or a lead. But on a fleet with a central
     /// vault, a server's vault gets a secret only when the owner signed it into the grantable pool, or signed a grant
-    /// of it for an agent of that server, and only the owner's app signs: its own control signs the pool statement
-    /// first and writes the standing after. This is the twin of `secretReaches`, for every server at once, because a
-    /// standing names no agent: it refuses only what the reading shows as useless, and it sends each standing that it
-    /// cannot judge. `shareResource` makes the two reads: `reading` is the page of the vault (`vaultRead`; 1: a page
-    /// that cannot judge is sent), and `page` is the team's (`GET /ui/team`), the one read that also gives the command
-    /// its base. True when the standing is sent, which is each of these, in this order:
+    /// of it for an agent of that server, and only the owner's app signs: its own control, and `share_secret` of its
+    /// program, sign the pool statement first and write the standing after. This is the twin of `secretReaches`, for
+    /// every server at once, because a standing names no agent: it refuses only what the reading shows as useless,
+    /// and it sends each standing that it cannot judge. `shareResource` makes the two reads: `reading` is the page of
+    /// the vault (`vaultRead`; 1: a page that cannot judge is sent), and `page` is the team's (`GET /ui/team`), the
+    /// one read that also gives the command its base. True when the standing is sent, which is each of these, in this
+    /// order:
     ///
     /// 2. The reference is in the grantable pool that the owner signed.
     /// 3. a. The catalog (`logins`) has no entry for the secret, `most` is not `use` or `read`, or the page has no

@@ -58,8 +58,8 @@ enum GrantSigning {
     }
 
     /// **The error of `send` that says "not signed, and nothing was sent"**: the owner key of this Mac could not
-    /// be read, or it made no signature. It has no words: no view gets it, only the link tool `grant_secret`
-    /// (`LinkTools.grantDesk`), which has its own.
+    /// be read, or it made no signature. It has no words: no view gets it, only the link tools `grant_secret` and
+    /// `share_secret` (`LinkTools.grantDesk`, `LinkTools.shareDesk`), which have their own.
     struct NotSigned: Error {}
 
     /// **One statement of one agent's grant of one secret, made, signed with the owner key of this Mac and sent**,
@@ -85,16 +85,47 @@ enum GrantSigning {
                                           signature: made.signature)
     }
 
+    /// **One statement of one secret's place in the grantable pool, made, signed with the owner key of this Mac and
+    /// sent**, for the link tool `share_secret` (`LinkTools.shareDesk`): `pool` while the fleet manager may give it,
+    /// `unpool` when only the owner gives it, under the fleet id that the caller gives. It does not look at the
+    /// store's features: the tool must know that a statement was signed and sent.
+    ///
+    /// **Two ends, which the tool must tell apart**, as for `send(grantOn:...)`: `NotSigned` (the key could not be
+    /// read, or it made no signature), before anything is sent; and every other error, the send's own
+    /// (`VaultClient.grant`), after which the outcome can be unknown.
+    static func send(pool inPool: Bool, login: String, fleet: String, client: String, hub: URL,
+                     database: String) async throws {
+        let made: (statement: String, signature: String)
+        do {
+            guard let key = OwnerKeychain.key(fleet: fleet) else { throw NotSigned() }
+            made = try signed(pool: inPool, login: login, fleet: fleet, key: key)
+        } catch {
+            throw NotSigned()
+        }
+        _ = try await VaultClient().grant(hub: hub, database: database, client: client, statement: made.statement,
+                                          signature: made.signature)
+    }
+
     /// The signed statement of one secret's place in the grantable pool: `pool` while the fleet manager may give it,
     /// `unpool` when only the owner gives it.
     static func pool(_ inPool: Bool, login: String, store: FleetStore, hub: URL, database: String) async throws {
         guard offered(store) else { return }
         let (fleet, key) = try await owner(hub: hub, database: database)
+        let made = try signed(pool: inPool, login: login, fleet: fleet, key: key)
+        _ = try await VaultClient().grant(hub: hub, database: database, client: store.installation,
+                                          statement: made.statement, signature: made.signature)
+    }
+
+    /// **The statement of one secret's place in the grantable pool, and its signature, with the key that the caller
+    /// gives**: `pool` or `unpool`, at this Mac's next time for the fleet (`GrantClock.next`). It reads no key and
+    /// sends nothing: `pool` above gives it the key of its one read (`owner`), and `send(pool:...)` the key that it
+    /// read itself.
+    private static func signed(pool inPool: Bool, login: String, fleet: String,
+                               key: any OwnerKey) throws -> (statement: String, signature: String) {
         let at = GrantClock.next(fleet: fleet)
         let statement = inPool ? OwnerStatement.pool(fleet: fleet, login: login, at: at)
                                : OwnerStatement.unpool(fleet: fleet, login: login, at: at)
-        _ = try await VaultClient().grant(hub: hub, database: database, client: store.installation, statement: statement,
-                                          signature: key.sign(statement))
+        return (statement, try key.sign(statement))
     }
 
     /// The owner's signed replace of one secret's value (owner feature `secret_replace`): the statement about this

@@ -196,6 +196,12 @@ public struct InstallRecord: Codable, Equatable, Sendable, Identifiable {
     /// never kept in its words: only for a stop of the kind `installerStopped`, or a Mac's stop that its sealed state
     /// gave. nil for every other record, and for a record that an app from before this field wrote.
     public internal(set) var cause: InstallCause?
+    /// **How many tries the owner's press made** (`InstallRetry`): 2 or 3 when the app ran the install again by itself
+    /// after an error that passes; nil for one try, and for a record that an app from before this field wrote.
+    public internal(set) var tries: Int?
+    /// **Why each earlier try of the press stopped**, oldest first, at most `InstallRetry.most`: the fixed name of its
+    /// cause (`InstallCause`) or of its stop's kind (`Stop`), never its words. nil with no retry.
+    public internal(set) var retried: [String]?
 
     public init(id: UUID = UUID(), kind: Kind, hub: String?, host: String, launch: String = AppLaunch.id,
                 at began: Date = Date()) {
@@ -213,6 +219,8 @@ public struct InstallRecord: Codable, Equatable, Sendable, Identifiable {
         waitsForNetwork = false
         says = nil
         cause = nil
+        tries = nil
+        retried = nil
     }
 
     /// **The step that the install stopped at**: the one that failed, else the one that ran. nil for an install that
@@ -316,6 +324,20 @@ public struct InstallLog: Sendable {
         record.says = says.map(kept)
         hides = []
         return record != before
+    }
+
+    /// **The install runs again by itself** (`InstallRetry`): the try that stopped is counted and the name of its stop
+    /// kept, and the steps start again for the next try, which this same record follows. Only an install that runs: a
+    /// stop, an end and a cancel come after the last try.
+    @discardableResult
+    public mutating func retry(after stop: InstallRecord.Stop, cause: InstallCause?) -> Bool {
+        guard record.outcome == .running else { return false }
+        record.tries = (record.tries ?? 1) + 1
+        record.retried = Array(((record.retried ?? []) + [InstallRetry.name(stop: stop, cause: cause)])
+            .suffix(InstallRetry.most))
+        record.steps = []
+        places = [:]
+        return true
     }
 
     /// The page ended an install that ran. One that ended already keeps its end.

@@ -149,6 +149,46 @@ struct TriggerTests {
         #expect(again["form"] as? String == "lines" && again["condition"] == nil && again["repeat_minutes"] == nil)
     }
 
+    /// A read check (the hub's own read for a rule, 15 November 2026) has the form "read" with its read and its
+    /// arguments, and the three fields that this decoder has always needed: a path of no file, a commit of zeros and
+    /// a SHA-256. So the rule list, the rule's page and a duty's watch read it, from a new hub and from an older one.
+    @Test func aReadCheckReadsInTheListOnItsPageAndInADutysWatch() throws {
+        let request = PendingRequest(hub: hub, database: "db", client: "local", text: "")
+        let read: [String: Any] = ["form": "read", "read": "gmail_label", "args": ["labels": ["INBOX"], "hours": 48],
+                                   "path": "checks/no_file_read_by_the_hub.py",
+                                   "commit": String(repeating: "0", count: 40),
+                                   "sha256": String(repeating: "b", count: 64)]
+        var rule = try object(request, id: 6)
+        rule["check"] = read; rule["created_by"] = "support"
+        for key in ["late_minutes", "max_tasks_per_day"] { rule.removeValue(forKey: key) }
+        let list = try JSONDecoder().decode(TriggerList.self, from: JSONSerialization.data(withJSONObject: [
+            "db": "db", "triggers": [try object(request, check: check), rule]]))
+        try list.validate(database: "db")
+        let found = try #require(list.triggers.first { $0.id == 6 }?.check)
+        #expect(found.form == "read" && !found.isSaved && found.condition == nil && found.isValid)
+        let page = try JSONDecoder().decode(TriggerDetail.self, from: JSONSerialization.data(withJSONObject: [
+            "db": "db", "trigger": rule, "upcoming": [], "runs": []]))
+        try page.validate(database: "db", id: 6, before: nil)
+        #expect(page.source == nil && page.verifiedSource == nil)
+        let watch = try JSONDecoder().decode(DutyWatch.self, from: JSONSerialization.data(withJSONObject: [
+            "trigger": 6, "kind": "own", "state": "active", "needs": "none", "failures": 0,
+            "check": ["path": read["path"], "sha256": read["sha256"], "condition": NSNull(),
+                      "repeat_minutes": NSNull()] as [String: Any?]]))
+        #expect(watch.check?.sha256 == String(repeating: "b", count: 64) && watch.isRunning)
+    }
+
+    /// The rule's row shows the reason of a last run that is not good. A run whose new lines joined the open wake-up is
+    /// good: before, each new mail of a busy rule showed "Joined" as trouble.
+    @Test func aRunThatJoinedItsOpenWakeUpIsNoTrouble() throws {
+        func run(_ state: String) throws -> TriggerRun {
+            try JSONDecoder().decode(TriggerRun.self, from: JSONSerialization.data(withJSONObject: [
+                "id": 3, "due": 10.0, "manual": false, "revision": 1, "state": state, "created": 10.0]))
+        }
+        for state in ["started", "quiet", "sent", "joined"] { #expect(try run(state).isGood) }
+        for state in ["error", "waiting", "not_started", "missed", "obsolete"] { #expect(try !run(state).isGood) }
+        #expect(TriggerRun.goodStates == ["started", "quiet", "sent", "joined"])
+    }
+
     @Test func checkOnlyReceiptCannotBecomeAnAgentTaskReceipt() throws {
         let request = PendingRequest(hub: hub, database: "db", client: "local", command: .triggerState(id: 4, revision: 8, action: .check_now), text: "")
         #expect(request.command?.requiredFeature == "trigger_checks")

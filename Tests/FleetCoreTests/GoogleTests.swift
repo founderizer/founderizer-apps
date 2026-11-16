@@ -31,6 +31,63 @@ private func snapshot(dev: Any = ["gmail": grant(other, "send"), "drive": grant(
     return try JSONDecoder().decode(GoogleSnapshot.self, from: JSONSerialization.data(withJSONObject: object))
 }
 
+/// A stand-in for the hub after the Disconnect of the owner's account: what is left of it (Gmail's agents and standing,
+/// then Drive's), and the version of `team.json` that each write moves. The first `conflicts` writes are refused with
+/// 409, as when another write came first; the write number `fails` is refused with 502; with `staleOnce`, the reading
+/// after the first write is the one from before it, once.
+private actor StandIn {
+    private(set) var left: [GoogleCleanup] = [.access(.gmail), .standing(.gmail), .access(.drive), .standing(.drive)]
+    private(set) var done: [GoogleCleanup] = []
+    private(set) var writes = 0
+    private var version = 0
+    private var conflicts: Int
+    private let fails: Int?
+    private var staleOnce: Bool
+    private var before: (left: [GoogleCleanup], version: Int)?
+
+    init(conflicts: Int = 0, fails: Int? = nil, staleOnce: Bool = false) {
+        self.conflicts = conflicts; self.fails = fails; self.staleOnce = staleOnce
+    }
+
+    func read() -> ResourceList {
+        if staleOnce, let before {
+            staleOnce = false
+            return Self.list(before.left, before.version)
+        }
+        return Self.list(left, version)
+    }
+
+    func write(_ item: GoogleCleanup, _ sha256: String) throws {
+        writes += 1
+        if writes == fails { throw HubError.refusal(HubRefusal(status: 502, hubWords: "Google cannot be reached now.")) }
+        if conflicts > 0 {
+            conflicts -= 1
+            version += 1
+            throw HubError.refusal(HubRefusal(status: 409, hubWords: "team.json changed: read it again"))
+        }
+        guard sha256 == Self.sha(version) else {
+            throw HubError.refusal(HubRefusal(status: 409, hubWords: "team.json changed: read it again"))
+        }
+        before = (left, version)
+        left.removeAll { $0 == item }
+        done.append(item)
+        version += 1
+    }
+
+    private static func sha(_ version: Int) -> String { String(format: "%064d", version) }
+
+    private static func list(_ left: [GoogleCleanup], _ version: Int) -> ResourceList {
+        let resources = GoogleService.allCases.map { service in
+            FleetResource(id: "\(service.rawValue):\(owner)", kind: service.rawValue, what: owner, title: owner, needs: "",
+                          levels: service.levels.map(\.rawValue), uses: [], credential: "google", connected: false,
+                          grant: left.contains(.standing(service)) ? .init(max: "read", to: ResourceList.everyone) : nil,
+                          holders: left.contains(.access(service)) ? [.init(agent: "dev", level: "read")] : [])
+        }
+        return ResourceList(db: "db", revision: nil, sha256: sha(version), audience: ResourceList.everyone, limit: 100,
+                            kinds: [], resources: resources)
+    }
+}
+
 private func sent(_ command: GoogleCommand) throws -> [String: Any] {
     try #require(try JSONSerialization.jsonObject(with: GoogleClient.body(command, requestID: requestID, database: "db")) as? [String: Any])
 }
@@ -185,6 +242,113 @@ struct GoogleTests {
         // The Connect sends no client: the hub has Founderizer's (its release brings the ID, founderizer.com the secret).
         let fields = try sent(.connect(redirectURI: "http://127.0.0.1:53111/", service: .gmail, account: nil))
         #expect(fields["client"] == nil)
+    }
+
+    /// **The notice before Google's page** (the owner's "Yes, both as drawn" of 16 November 2026; Google's Workspace User
+    /// Data and Developer Policy): who asks, for what, where the access stays, what the agents do with it, who else reads
+    /// it, and that Founderizer's servers never receive it, for each service in its own words.
+    @Test func theNoticeSaysWhoAsksForWhatWhereItStaysAndWhoReadsIt() {
+        #expect(GoogleService.gmail.notice == "Google will ask you to give Founderizer access to the email of one account. "
+                + "Your hub keeps this access on your server. The agents that you give the account search, read, draft, "
+                + "label, archive, trash and send its email, as far as their level allows, and send what they read to the "
+                + "AI provider that they run on, and to the people and apps that their tasks reach. Founderizer's servers "
+                + "never receive your email.")
+        #expect(GoogleService.drive.notice == "Google will ask you to give Founderizer access to the Google Drive of one "
+                + "account. Your hub keeps this access on your server. The agents that you give the account search, read, "
+                + "make, change, move and trash its files, as far as their level allows, and send what they read to the AI "
+                + "provider that they run on, and to the people and apps that their tasks reach. Founderizer's servers "
+                + "never receive your files.")
+        // What each level of the service lets an agent do is in its notice (`words`): Send sends, Write trashes.
+        #expect(GoogleService.gmail.notice.contains("send its email") && GoogleService.gmail.notice.contains("trash"))
+        #expect(GoogleService.drive.notice.contains("make, change, move and trash its files"))
+        #expect(Google.disconnectWords == "Google ends this account's Gmail and Google Drive access in every fleet that "
+                + "connected it. The agents that have it lose it.")
+    }
+
+    /// Connect account shows the notice and starts nothing; only its Continue starts a Connect, once; Cancel, another
+    /// page and another hub are no yes; and every Connect asks again (Google: the notice must "immediately precede a
+    /// request for user consent", and "must not interpret navigation away from the disclosure ... as consent").
+    @Test func onlyTheNoticesContinueStartsAConnect() {
+        // A consent (`GoogleConsent`) is what `GoogleClient.connect` needs, and only `proceed()` makes one.
+        var notice = GoogleConnectNotice()
+        var started = notice.proceed() != nil
+        #expect(!notice.shows && !started)                           // a Continue with no notice starts nothing
+        notice.press(connecting: false)
+        #expect(notice.shows)
+        notice.dismiss()                                             // Cancel, another page, another hub
+        started = notice.proceed() != nil
+        #expect(!notice.shows && !started)
+        notice.press(connecting: false)
+        started = notice.proceed() != nil
+        #expect(started && !notice.shows)                            // Continue: one Connect
+        started = notice.proceed() != nil
+        #expect(!started)                                            // and not a second one
+        notice.press(connecting: true)                               // while a Connect is on its way: nothing
+        #expect(!notice.shows)
+        notice.press(connecting: false)                              // the next Connect asks again
+        #expect(notice.shows)
+    }
+
+    /// **After a Disconnect, nothing of the account stays** (the owner's "Yes, both as drawn" of 16 November 2026: "The
+    /// agents that have it lose it", and the account leaves the list): Google's revoke ends both services, so the agents
+    /// and the standing of each go, Gmail first, whichever page the Disconnect was on; another account keeps its own.
+    @Test func afterADisconnectTheAgentsAndTheStandingsOfBothServicesGo() throws {
+        func item(_ kind: String, _ email: String, holders: [ResourceHolder], grant: FleetResource.Policy?) -> FleetResource {
+            FleetResource(id: "\(kind):\(email)", kind: kind, what: email, title: email, needs: "a mail account",
+                          levels: kind == "gmail" ? ["read", "write", "send"] : ["read", "write", "write_shared"], uses: [],
+                          credential: "google", connected: true, grant: grant, holders: holders)
+        }
+        let list = ResourceList(db: "db", revision: nil, sha256: sha, audience: ResourceList.everyone, limit: 100, kinds: [],
+                                resources: [item("gmail", owner, holders: [.init(agent: "dev", level: "send"), .init(agent: "lead", level: "read")],
+                                                 grant: .init(max: "read", to: ResourceList.everyone)),
+                                            item("drive", owner, holders: [], grant: .init(max: "write", to: ResourceList.everyone)),
+                                            item("gmail", other, holders: [.init(agent: "dev", level: "read")], grant: nil),
+                                            item("drive", other, holders: [], grant: nil)])
+        #expect(list.cleanup(account: owner) == [.access(.gmail), .standing(.gmail), .standing(.drive)])
+        #expect(list.cleanup(account: "Owner@Example.com") == list.cleanup(account: owner))
+        #expect(list.cleanup(account: other) == [.access(.gmail)])
+        #expect(list.cleanup(account: "nobody@example.com").isEmpty)    // nothing left: the account leaves the list
+    }
+
+    /// The clean-up after a Disconnect writes against each new reading, Gmail first, and ends with nothing left also
+    /// when other writes come first (409) four times: four writes and a last reading need more than the rounds of the
+    /// writes (the review of 16 November 2026).
+    @Test func theCleanUpTakesEverythingAwayThroughRefusalsOfANewerVersion() async throws {
+        let hub = StandIn(conflicts: 4)
+        try await GoogleDisconnect.clear(account: owner, read: { await hub.read() }, write: { try await hub.write($0, $1) })
+        let (left, writes, done) = await (hub.left, hub.writes, hub.done)
+        #expect(left.isEmpty && writes == 8)
+        #expect(done == [.access(.gmail), .standing(.gmail), .access(.drive), .standing(.drive)])
+        // A reading from before the last write (more left, an old version): its write gets 409, and the next reading
+        // goes on from what is there.
+        let late = StandIn(staleOnce: true)
+        try await GoogleDisconnect.clear(account: "Owner@Example.com", read: { await late.read() },
+                                         write: { try await late.write($0, $1) })
+        let (lateLeft, lateWrites) = await (late.left, late.writes)
+        #expect(lateLeft.isEmpty && lateWrites == 5)
+    }
+
+    /// Any refusal that is not a newer version stops the clean-up at once, and more refusals than rounds end it with the
+    /// last one; what is left stays for the next Disconnect.
+    @Test func theCleanUpStopsAtARefusalAndAfterItsRounds() async {
+        let refused = StandIn(fails: 2)
+        do {
+            try await GoogleDisconnect.clear(account: owner, read: { await refused.read() }, write: { try await refused.write($0, $1) })
+            Issue.record("the clean-up went on after a refusal")
+        } catch HubError.refusal(let refusal) {
+            #expect(refusal.status == 502)
+        } catch { Issue.record("\(error)") }
+        let (refusedWrites, refusedLeft) = await (refused.writes, refused.left)
+        #expect(refusedWrites == 2 && refusedLeft == [.standing(.gmail), .access(.drive), .standing(.drive)])
+        let busy = StandIn(conflicts: 100)
+        do {
+            try await GoogleDisconnect.clear(account: owner, read: { await busy.read() }, write: { try await busy.write($0, $1) })
+            Issue.record("the clean-up ended well with everything left")
+        } catch HubError.refusal(let refusal) {
+            #expect(refusal.status == 409)
+        } catch { Issue.record("\(error)") }
+        let (busyWrites, busyLeft) = await (busy.writes, busy.left)
+        #expect(busyWrites == GoogleDisconnect.rounds && busyLeft.count == 4)
     }
 
     @Test func theListenerReadsGooglesAnswer() {

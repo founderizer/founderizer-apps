@@ -13,17 +13,19 @@ public enum AgentSetupPage: Equatable, Sendable {
     /// **Its name**, for a manager with no server on a hub that can rename it (`ManagerSetupStart`): "Name your
     /// manager", the first run's page, for a fleet whose first run did not ask.
     case name
-    /// **The fleet's servers**, after its name: the slider of the first run. With "1 server" the page then waits while
-    /// the hub's own server is made ready for the manager.
+    /// **The fleet's servers**, after its name and its AI provider: the slider of the first run. With "1 server" the
+    /// page then waits while the hub's own server is made ready for the manager.
     case servers
     /// **Where it runs**, for the manager of a new fleet, which has no server yet (hub feature `manager_server`; the
     /// owner, 4 November 2026: "The agent is done BY AGENT and here we're setting the fleet, no servers yet"): a VPS or a
-    /// Mac that joins for it. Its provider comes next, and a press there gives it both.
+    /// Mac that joins for it. Its provider was chosen before (the owner, 16 November 2026: "agent onboarding should ask
+    /// first for the name and AI provider before the server page"), so the server that joins gets it by itself.
     case server
     /// Which AI runs it. An agent that is not signed in opens here, so no sign-in code starts before he is there to
     /// use it: a code dies in 15 minutes, and that is how the installs of his first agents stopped. It opens here when
     /// its provider is set too: both providers, with a check mark on the one it has now (the owner, 4 November 2026:
-    /// "if an agent is not connected, it should always have all the options!").
+    /// "if an agent is not connected, it should always have all the options!"). The manager of a new fleet comes here
+    /// after its name and before its servers, and the press keeps the AI on this Mac until its server is there.
     case provider
     /// The server installs or prepares the provider by itself: one wait, nothing to press.
     case installing(runtime: String)

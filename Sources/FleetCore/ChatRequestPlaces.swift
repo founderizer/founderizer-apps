@@ -141,12 +141,18 @@ extension OwnerNeed {
     /// no secure form. Such an answer can ask something back or say no, so nothing marks it as a yes: it has no check,
     /// and in the chat it is his message (the owner, 14 November 2026: "when I typed a custom answer instead of
     /// choosign one of the suggested ones, do not show the CHECK animation because it is misleading").
-    public var answeredInWords: Bool { !isOpen && chosen == nil && (chose ?? []).isEmpty && !asksForSecret }
+    /// **A press of Run is no answer in words** (owner feature `need_run`): its card folds with its check, and the chat
+    /// shows no message of his for it.
+    public var answeredInWords: Bool {
+        !isOpen && chosen == nil && (chose ?? []).isEmpty && !asksForSecret && run_status == nil
+    }
 
     /// `words` are an option of this request, or its ticked options as the hub joins them: what a press writes as the
-    /// answer. It tells a press from his own words while the reading still has the request open.
+    /// answer. It tells a press from his own words while the reading still has the request open. The hub's words of a
+    /// press of Run are a press too (`NeedRun.answerWords`).
     public func offers(_ words: String) -> Bool {
         if choices.contains(words) { return true }
+        if run_command != nil, words.hasPrefix(NeedRun.answerPrefix) { return true }
         let parts = words.components(separatedBy: "; ")
         return combines && parts.count > 1 && parts.allSatisfy(choices.contains)
     }
@@ -154,5 +160,5 @@ extension OwnerNeed {
 
 extension PendingRequest {
     /// An answer to a request in his own words, or with files alone: no option that he pressed or ticked.
-    public var answersInWords: Bool { needID != nil && command == nil && choice == nil && choices == nil }
+    public var answersInWords: Bool { needID != nil && command == nil && choice == nil && choices == nil && ran == nil }
 }

@@ -106,19 +106,20 @@ struct ReportProblemView: View {
         .onChange(of: store.reportAsk?.id, initial: true) { _, _ in take(store.reportAsk) }
     }
 
-    /// **A text of the owner's own agent** (`prepare_problem_report`): it goes into the box only when the box is
-    /// free for it (`ProblemReport.AgentDraft.isFree`: empty, the agent's text of before unchanged, or the unchanged
-    /// text of a report that was sent). Text that the owner wrote or changed is never written over: the ask is
-    /// answered with that, and nothing changes.
+    /// **A text of the owner's own agent** (`prepare_problem_report`), **or the app's own words** of the problem that
+    /// a button reports (the manager band's Report a problem): it goes into the box only when the box is free for it
+    /// (`ProblemReport.AgentDraft.isFree`: empty, such a text of before unchanged, or the unchanged text of a report
+    /// that was sent; the app's words never go over an agent's text). Text that the owner wrote or changed is never
+    /// written over: the ask is answered with that, and nothing changes.
     private func take(_ ask: ReportAsk?) {
         guard let ask, ask.outcome == nil else { return }
-        guard draft.isFree(box: text, sent: model.reference == nil ? nil : model.sentText) else {
+        guard draft.isFree(box: text, sent: model.reference == nil ? nil : model.sentText, byAgent: ask.byAgent) else {
             store.reportAsk?.outcome = .ownText
             return
         }
         model.newDraft()
         text = ask.text
-        draft.took(ask.text)
+        draft.took(ask.text, byAgent: ask.byAgent)
         store.reportAsk?.outcome = .shown
     }
 

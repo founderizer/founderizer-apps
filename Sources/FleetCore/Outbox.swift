@@ -23,6 +23,10 @@ public struct PendingRequest: Codable, Equatable, Sendable {
     /// beside the answer. nil on every other request.
     public let statement: String?
     public let signature: String?
+    /// Owner feature `need_run` (API 1.197): his press of Run on the item's command, with what this Mac read of the run:
+    /// its exit status and the end of its output. The hub writes the answer itself, so `text` holds its words
+    /// (`NeedRun.answerWords`) and is not sent. nil on every other request.
+    public let ran: NeedRunResult?
     public fileprivate(set) var text: String
     public let createdAt: Date
     public let client: String
@@ -38,11 +42,12 @@ public struct PendingRequest: Codable, Equatable, Sendable {
     /// for one that an older version refused (its words are in `refusal`).
     public var hubRefusal: HubRefusal?
 
-    public init(hub: URL, database: String, client: String, needID: Int? = nil, choice: Int? = nil, choices: [Int]? = nil, recipient: String? = nil, replacesRequestID: String? = nil, command: OwnerCommand? = nil, attachments: [Int] = [], approval: (statement: String, signature: String)? = nil, text: String) {
+    public init(hub: URL, database: String, client: String, needID: Int? = nil, choice: Int? = nil, choices: [Int]? = nil, recipient: String? = nil, replacesRequestID: String? = nil, command: OwnerCommand? = nil, attachments: [Int] = [], approval: (statement: String, signature: String)? = nil, ran: NeedRunResult? = nil, text: String) {
         requestID = UUID()
         self.attachments = attachments
         statement = needID == nil ? nil : approval?.statement
         signature = needID == nil ? nil : approval?.signature
+        self.ran = needID == nil || choice != nil || choices != nil ? nil : ran
         self.hub = hub
         self.database = database
         self.needID = needID
@@ -71,6 +76,8 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         attachments = try saved.decodeIfPresent([Int].self, forKey: .attachments) ?? []
         statement = try saved.decodeIfPresent(String.self, forKey: .statement)
         signature = try saved.decodeIfPresent(String.self, forKey: .signature)
+        // A request that a version before Run saved carries no run.
+        ran = try saved.decodeIfPresent(NeedRunResult.self, forKey: .ran)
         text = try saved.decode(String.self, forKey: .text)
         createdAt = try saved.decode(Date.self, forKey: .createdAt)
         client = try saved.decode(String.self, forKey: .client)
@@ -121,12 +128,24 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         var fields: [String: Any] = ["request_id": requestID.uuidString.lowercased(), "db": database]
         if let choice, needID != nil { fields["choice"] = choice }
         else if let choices, needID != nil { fields["choices"] = choices }
+        else if let ran, needID != nil { fields["ran"] = ["status": ran.status, "output": ran.output] }
         else { fields[needID == nil ? "text" : "answer"] = text }
         if let recipient { fields["recipient"] = recipient }
         if let replacesRequestID { fields["replaces_request_id"] = replacesRequestID }
         if !attachments.isEmpty { fields["attachments"] = attachments }
         if let statement, let signature, needID != nil { fields["statement"] = statement; fields["signature"] = signature }
         return try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])
+    }
+}
+
+/// What this Mac read of one press of Run (owner feature `need_run`): the command's exit status, 0 to 255, and the end
+/// of its output, at most `NeedRun.outputCharacters`.
+public struct NeedRunResult: Codable, Equatable, Sendable {
+    public let status: Int
+    public let output: String
+    public init(status: Int, output: String) {
+        self.status = min(max(status, 0), 255)
+        self.output = NeedRun.tail(output)
     }
 }
 
@@ -152,6 +171,7 @@ public struct Outbox: Sendable {
             existing.command != request.command || existing.recipient != request.recipient || existing.replacesRequestID != request.replacesRequestID ||
             existing.attachments != request.attachments ||
             existing.statement != request.statement || existing.signature != request.signature ||
+            existing.ran != request.ran ||
             existing.text != request.text || existing.client != request.client {
             throw OutboxError.pendingRequest
         }

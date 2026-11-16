@@ -142,10 +142,11 @@ public struct ChatAskRow: Identifiable, Sendable, Equatable {
 /// - **A turn** is his messages that follow each other, each within five minutes of the one before (`turnGap`) and with
 ///   nothing of the agent's between them, and the agent's messages after them, up to his next message.
 /// - **The reply of a turn** is the first message of the agent's that answers one of his messages of the turn
-///   (`in_reply_to`), also when he wrote again before it came. A message that names none is no reply: the hub writes
-///   lines of its own into the Fleet Manager's chat (a standing item, a grant), and the Fleet Manager's own reply to a
-///   message written in the app names none either (the hub keeps its turn to itself, since 10 November 2026). There
-///   the row stands under his message, and it comes when the chat's "Thinking" ends, so it does not move.
+///   (`in_reply_to`), also when he wrote again before it came, or that took the turn of one of them (`turn`, owner API
+///   1.190: the Fleet Manager's reply to a message written in the app, a worker's sentence before its task) before he
+///   wrote again. A message that names neither is no reply: the hub writes lines of its own into the Fleet Manager's
+///   chat (a standing item, a grant). With no reply the row stands under his message, and it comes when the chat's
+///   "Thinking" ends, so it does not move.
 /// - **His message and its corrections are one ask** (the hub's `ask_message` files the work under the first of them),
 ///   so its row stands in the newest turn that holds one of them: a correction after a question of the agent's is
 ///   where the work began.
@@ -188,6 +189,13 @@ public enum ChatAskPlaces {
                 spoke = true
                 // The reply of the turn that holds the message it names, also when he wrote again before it came.
                 if let asked = report.in_reply_to, let n = turnOfMessage[key(asked)], turns[n].reply == nil {
+                    turns[n].reply = at
+                // A report that names none but took the turn of a message of his (`turn`): the reply of that turn,
+                // only while it is the newest turn. The hub gives the turn of the oldest message that waits to the
+                // Fleet Manager's next words, also after it did the work with its tools and no words, so words of a
+                // later turn are not taken for this one's.
+                } else if report.in_reply_to == nil, let turned = report.turn, let n = turnOfMessage[key(turned)],
+                          n == turns.count - 1, turns[n].reply == nil {
                     turns[n].reply = at
                 }
             default:

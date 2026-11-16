@@ -74,7 +74,7 @@ final class OwnerGuideTests {
     /// table, or that changed from a read to a write, fails here and not in an owner's session.
     @Test func theGuideNamesOnlyToolsOfTheProgramWithTheirOwnVerb() {
         // The program's own list: the table's tools, the three reads that ask the running app (`setup_state`,
-        // `setup_show`, `setup_diagnosis`) and the link's four writes (`OwnerLinkTools`).
+        // `setup_show`, `setup_diagnosis`) and the link's five writes (`OwnerLinkTools`).
         let table = OwnerTools.programTable(Fixture.table)
         let tools = named("`([a-z]+(?:_[a-z]+)+)`").subtracting(["first_run", "no_change"])
         #expect(tools.count >= 7)
@@ -85,7 +85,7 @@ final class OwnerGuideTests {
                              ("call", "setup_state"), ("call", "setup_show"), ("call", "setup_diagnosis"),
                              ("write", "save_chat_account"),
                              ("write", "save_bot_token"), ("write", "save_secret"),
-                             ("write", "grant_secret")] {
+                             ("write", "grant_secret"), ("write", "share_secret")] {
             #expect(OwnerGuide.text.contains("~/.founderizer/cli \(verb) \(name)"))
             #expect(table.tool(name).flatMap(OwnerTools.verb(of:))?.rawValue == verb)
         }
@@ -240,7 +240,8 @@ final class OwnerGuideTests {
                      "Do not give a secret of the central vault with `grant_access`: a grant from it has no "
                         + "signature of the owner's, and the central vault sends a value only for a grant that the "
                         + "app signed or for a secret of the grantable pool; `share_resource` does not sign a "
-                        + "secret into that pool, only the owner's app does.",
+                        + "secret into that pool, and `share_secret` does, as the owner's own Who may give it on "
+                        + "Secrets does.",
                      "`grant_access` refuses a give that the hub's reading of the vault shows as never delivered, "
                         + "and it sends a give that it cannot judge, so a give that it sends does not prove that "
                         + "the value arrived.",
@@ -248,13 +249,18 @@ final class OwnerGuideTests {
                      "A grant from `grant_access` that is in the list already is repaired by `grant_secret` at the "
                         + "same level, which signs it.",
                      "`grant_secret` with \"level\" null takes a secret back and ends the owner's signature of it.",
-                     // A refusal of the tool, and the one that never sends the agent to `grant_access`.
-                     "A refusal of `grant_secret` is a fixed sentence: do the step that it names, and no other. When "
-                        + "it says that this Mac holds no owner key, tell the owner; do not use `grant_access` for a "
-                        + "give in its place.",
+                     // A refusal of the two signed tools, and the one that never sends the agent to an unsigned
+                     // tool in their place: `grant_access` for a give, `share_resource` for a standing.
+                     "A refusal of `grant_secret` or `share_secret` is a fixed sentence: do the step that it names, "
+                        + "and no other. When it says that this Mac holds no owner key, tell the owner; do not use "
+                        + "`grant_access` for a give, or `share_resource` to set a standing, in its place.",
+                     // The unsigned end of a standing, only on the owner's word.
+                     "`share_resource` with no max may end the hub's standing only when the owner says so, after you "
+                        + "told them that the signed pool statement stays.",
                      // A take-back that a refusal names is part of the call that the owner asked for.
-                     "A take-back that such a refusal names ends only the owner's signature that the call itself "
-                        + "left, and it is part of the give or the take-back that the owner asked for.",
+                     "A take-back that such a refusal names ends only the owner's signature or pool statement that "
+                        + "the call itself left, and it is part of the call that the owner asked for, except where the "
+                        + "refusal says that the owner must want it: then ask the owner first.",
                      // The four refusals that need the owner.
                      "Some refusals of `save_secret` need the owner. For four of them:",
                      "- It says that this Mac pinned no key of the central vault yet: the owner sets up Founderizer "
@@ -336,7 +342,7 @@ final class OwnerGuideTests {
             .deletingLastPathComponent().appendingPathComponent("Localization/Localizable.xcstrings")
         let strings = try JSONSerialization.jsonObject(with: Data(contentsOf: table)) as? [String: Any]
         let keys = Set((strings?["strings"] as? [String: Any] ?? [:]).keys)
-        for word in ["Secrets", "Add 2FA code", "Founderizer Vault"] {
+        for word in ["Secrets", "Add 2FA code", "Founderizer Vault", "Who may give it"] {
             #expect(keys.contains(word), "the app has no words \(word) any more")
             #expect(section.contains(word))
         }
@@ -390,8 +396,8 @@ final class OwnerGuideTests {
 
     /// **The guide gives a secret with `grant_secret`, and the one example call of it is a call that the tool
     /// takes** (`OwnerGrantSecret.swift`): read from the guide's own text, with a made-up word in the place of each
-    /// word in angle brackets. The guide's words of the two levels are the tool's own, and the guide still says
-    /// that only the owner's app signs a secret into the pool.
+    /// word in angle brackets. The guide's words of the two levels are the tool's own, and the guide says that
+    /// `share_resource` signs no secret into the pool and that `share_secret` does.
     @Test func theGuideGivesASecretWithGrantSecret() throws {
         let text = OwnerGuide.text
         let guide = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
@@ -423,15 +429,15 @@ final class OwnerGuideTests {
         // what the owner named, and a refusal's own step. The four refusals after them are `save_secret`'s, by name.
         let named = try #require(guide.range(of: "Give or take back a secret only for the agent and at the level "
                                                  + "that the owner named."))
-        let refusal = try #require(guide.range(of: "A refusal of `grant_secret` is a fixed sentence: do the step "
-                                                   + "that it names, and no other."))
+        let refusal = try #require(guide.range(of: "A refusal of `grant_secret` or `share_secret` is a fixed "
+                                                   + "sentence: do the step that it names, and no other."))
         #expect(example.upperBound < named.lowerBound && named.upperBound < refusal.lowerBound
                 && refusal.upperBound < end.lowerBound)
         #expect(!guide.contains("Some refusals need the owner."))
         // The refusal that the guide names is the tool's own, and it sends nobody to `grant_access` for a give.
         #expect(GrantSecret.noOwnerKey.hasPrefix("This Mac holds no owner key"))
         #expect(guide.contains("When it says that this Mac holds no owner key, tell the owner; do not use "
-                               + "`grant_access` for a give in its place."))
+                               + "`grant_access` for a give, or `share_resource` to set a standing, in its place."))
         #expect(!GrantSecret.noOwnerKey.contains("grant_access"))
         #expect(guide.contains("Give such a secret with `grant_secret` to the agent that the owner names"))
         // The two levels and the repair, in the tool's own words.
@@ -441,8 +447,79 @@ final class OwnerGuideTests {
                                + "variable, so give read only when the owner asked for it."))
         #expect(words.contains("A grant that grant_access wrote into the list with no signature is repaired by the "
                                + "same give at the same level, which signs it."))
-        // The pool stays the owner's: no tool signs a secret into it.
-        #expect(guide.contains("`share_resource` does not sign a secret into that pool, only the owner's app does."))
+        // The pool: `share_resource` signs nothing, and `share_secret` signs, as the owner's own control does.
+        #expect(guide.contains("`share_resource` does not sign a secret into that pool, and `share_secret` does, as "
+                               + "the owner's own Who may give it on Secrets does."))
+        #expect(!guide.contains("only the owner's app does"))
+        // No sentence says that an agent can read a login.
+        for never in ["can read a login", "reads a login", "read the login"] {
+            #expect(!guide.contains(never), "the guide says: \(never)")
+        }
+    }
+
+    /// **The guide sets who may give a secret with `share_secret`, and the one example call of it is a call that the
+    /// tool takes** (`OwnerShareSecret.swift`): the level that the owner named, `read` only for an API key and only
+    /// when the owner asked for it, `max` null only when the owner asks that only the owner gives the secret again,
+    /// with what that does to the grants that the fleet manager gave, and the rule for a refusal, which never sends
+    /// the agent to the unsigned tool.
+    @Test func theGuideSetsWhoMayGiveASecretWithShareSecret() throws {
+        let text = OwnerGuide.text
+        let guide = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        #expect(OwnerTools.verb(of: ShareSecret.tool) == .write)
+        let calls = try NSRegularExpression(pattern: "`~/\\.founderizer/cli write share_secret '(\\{[^'\\n]*\\})'`")
+        let whole = text as NSString
+        let examples = calls.matches(in: text, range: NSRange(location: 0, length: whole.length)).map {
+            whole.substring(with: $0.range(at: 1))
+        }
+        #expect(examples.count == 1)
+        var json = try #require(examples.first)
+        json = json.replacingOccurrences(of: "<the reference of the secret>", with: SaveSecretSample.reference)
+        #expect(!json.contains("<"), "the example has a word in angle brackets that this test does not know")
+        let fields = try #require(JSONValue.parse(json)?.object)
+        #expect(!fields.keys.contains(where: OwnerLinkTools.namedLikeAValue))
+        let send = try ShareSecret.plan(fields).get()
+        let expected: [String: JSONValue] = ["login": .string(SaveSecretSample.reference), "max": .string("use")]
+        #expect(send == expected)
+        // The step stands after the give of `grant_secret`, and before the refusals of `save_secret`.
+        let give = try #require(guide.range(of: "~/.founderizer/cli write grant_secret"))
+        let example = try #require(guide.range(of: "~/.founderizer/cli write share_secret"))
+        let end = try #require(guide.range(of: "Some refusals of `save_secret` need the owner."))
+        #expect(give.upperBound < example.lowerBound && example.upperBound < end.lowerBound)
+        for rule in ["7. When the owner asks that the fleet manager may give a secret itself, set it with "
+                        + "`share_secret`, at the level that the owner named:",
+                     "The app signs the secret into the grantable pool with the owner's key, as the owner's own Who "
+                        + "may give it on Secrets does, and the hub writes the standing: the fleet manager may then "
+                        + "give the secret itself to any worker or lead, at most at that level.",
+                     "The grants in the fleet's list do not change with the standing.",
+                     "\"read\" is only for an API key, and only when the owner asked for it, because the manager may "
+                        + "then put the key's value into the sessions of each agent that it gives the key to at "
+                        + "\"read\".",
+                     "\"max\" null is only for when the owner asks that only the owner gives the secret again: the "
+                        + "hub ends the standing, and the app ends the pool statement.",
+                     "The grants in the fleet's list stay, and the central vault takes its copy back from each "
+                        + "server for which the owner signed no grant of the secret, where that server's vault takes "
+                        + "withdrawals, at the first pass of the hub at which that server takes part: a server that is "
+                        + "off or not pinned keeps its copy until then.",
+                     "An agent on a server that the copy went back from can then no longer use the secret, while "
+                        + "the list still shows its grant: one that the manager gave it to, and one that holds it by a "
+                        + "grant from `grant_access`.",
+                     // The rule of the agent and of the level stands, for both tools.
+                     "Give or take back a secret only for the agent and at the level that the owner named."] {
+            #expect(guide.contains(rule), "the guide lost: \(rule)")
+        }
+        // The rule for a refusal stands after the step, before the refusals of `save_secret`.
+        let refusal = try #require(guide.range(of: "A refusal of `grant_secret` or `share_secret` is a fixed "
+                                                   + "sentence: do the step that it names, and no other."))
+        #expect(example.upperBound < refusal.lowerBound && refusal.upperBound < end.lowerBound)
+        // The refusal that the guide names is the tool's own: a Mac with no owner key, whose words name the unsigned
+        // tool only for a take-back.
+        #expect(ShareSecret.noOwnerKey.hasPrefix("This Mac holds no owner key"))
+        #expect(!ShareSecret.noOwnerKey.contains("share_resource"))
+        #expect(ShareSecret.noOwnerKeyTakeBack.hasPrefix("This Mac holds no owner key")
+                && ShareSecret.noOwnerKeyTakeBack.contains("share_resource with no max"))
+        // The tool's own words for `read`.
+        #expect(ShareSecret.tool.description.contains("read is only for an API key"))
+        #expect(ShareSecret.tool.description.contains("so set read only when the owner asked for it."))
         // No sentence says that an agent can read a login.
         for never in ["can read a login", "reads a login", "read the login"] {
             #expect(!guide.contains(never), "the guide says: \(never)")
@@ -742,7 +819,7 @@ final class OwnerGuideTests {
                                   "server_joined", "first_run_build", "add_server_build", "stage", "stopped_at",
                                   "stop_shows", "seconds_in_stage", "install", "state", "step", "stop", "kind",
                                   "app_build", "waits_for_network", "cause", "last_install", "outcome", "seconds_ago",
-                                  "builds", "unjoined", "newest_seconds_ago"]
+                                  "builds", "unjoined", "newest_seconds_ago", "tries", "retried"]
         // The pages of the first run that this section names are names of `setup_state` and `setup_show`.
         let pages = [FirstRunPage.welcome.rawValue, FirstRunPage.paste.rawValue, FirstRunPage.name.rawValue, "front"]
         #expect(SetupShow.pages.contains("front") && SetupShow.pages.contains(FirstRunPage.name.rawValue))

@@ -29,10 +29,11 @@ struct ChatAsksTests {
 
     /// `pushed`: the agent wrote it first (`message_owner`), so it is no reply. A report that names no message and
     /// that is not pushed is the Fleet Manager's reply to a message from the app.
+    /// `turn`: the message whose turn it took (owner API 1.190), with no link.
     private func report(_ id: Int, at created: Double, by agent: String = "dev", replyingTo asked: String? = nil,
-                        pushed: Bool = false) -> [String: Any] {
+                        pushed: Bool = false, turn: String? = nil) -> [String: Any] {
         ["id": id, "agent": agent, "text": "Reply \(id)", "about": "", "created": created, "in_reply_to": asked ?? NSNull(),
-         "pushed": pushed]
+         "pushed": pushed, "turn": turn ?? NSNull()]
     }
 
     private func need(_ id: Int, by agent: String = "dev", raised: Double, answered: Double? = nil) -> [String: Any] {
@@ -91,6 +92,36 @@ struct ChatAsksTests {
                             reports: [report(1, at: Self.now - 2995, pushed: true),
                                       report(2, at: Self.now - 1000, replyingTo: "a")])
         #expect(chat(state) == ["message-a", "report-1", "message-b", "ask-b", "report-2", "ask-a"])
+    }
+
+    @Test func theFleetManagersReplyStandsOverTheRowByTheTurnItTook() throws {
+        // A line of the hub's (no link, no turn) is no reply; the Fleet Manager's words that took the turn are.
+        let state = try hub([task(1, "working", ask: "a", owner: "dev")],
+                            messages: [message("a", at: Self.now - 3000, to: "manager")],
+                            reports: [report(1, at: Self.now - 2990, by: "manager"),
+                                      report(2, at: Self.now - 2980, by: "manager", turn: "a")])
+        #expect(chat(state, agent: "manager") == ["message-a", "report-1", "report-2", "ask-a"])
+        // Words that took the turn after he wrote again are not this turn's reply: the hub gives the turn of the
+        // oldest message that waits to the manager's next words, also when it did the work with no words.
+        let later = try hub([task(1, "working", ask: "a", owner: "dev")],
+                            messages: [message("a", at: Self.now - 3000, to: "manager"),
+                                       message("b", at: Self.now - 2000, to: "manager")],
+                            reports: [report(1, at: Self.now - 2500, by: "manager", pushed: true),
+                                      report(2, at: Self.now - 1000, by: "manager", turn: "a")])
+        #expect(chat(later, agent: "manager") == ["message-a", "ask-a", "report-1", "message-b", "report-2"])
+    }
+
+    @Test func aTurnIsNoLinkForARequestsCard() throws {
+        // The turn places the row of an ask and nothing else: a request's card stands under the reply of its turn only
+        // by `in_reply_to` (`ChatRequestPlaces.turnReply`), so a report with a turn alone has no card under it.
+        let state = try hub([], messages: [message("a", at: Self.now - 3000, to: "manager")],
+                            reports: [report(1, at: Self.now - 2000, by: "manager", turn: "a")],
+                            needs: [need(7, by: "manager", raised: Self.now - 2500)])
+        var timeline = ChatTimeline()
+        _ = timeline.update(messages: state.messages, reports: state.reports)
+        let entries = timeline.entries(for: "manager", limit: .max)
+        let places = ChatRequestPlaces.inTime(needs: state.needs, in: entries, whole: true)
+        #expect(places.rows(of: entries).map(\.id) == ["message-a", "need-7", "report-1"])
     }
 
     @Test func aMessageThatNamesNoneIsNoReply() throws {

@@ -3,6 +3,9 @@ import Foundation
 public struct ManagerWarning: Codable, Equatable, Sendable {
     public let kind: String
     public let since: Double
+    /// Which `down` it is (hub, 16 November 2026): `not_running` (its helper answers and its window is gone) or
+    /// `server_silent` (its server went silent with a message waiting); nil for another kind or an older hub.
+    public let cause: String?
     public var episode: String? {
         guard since.isFinite, since > 0,
               kind.range(of: "^[a-z][a-z0-9_-]{0,63}$", options: .regularExpression) != nil else { return nil }

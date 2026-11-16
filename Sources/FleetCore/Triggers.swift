@@ -252,6 +252,11 @@ public struct TriggerRun: Codable, Identifiable, Equatable, Sendable {
     public let finished: Double?
     public let event_id: Int?
     public let parent_task: Int?
+    /// The states of a run that are no trouble: it started a wake-up, it was quiet, it is with its helper, or its new
+    /// lines joined the wake-up that is open. `joined` is what a check that prints lines, and a read that the hub makes,
+    /// write for each new item while their wake-up is open: the rule's row showed it as trouble.
+    public static let goodStates: Set<String> = ["started", "quiet", "sent", "joined"]
+    public var isGood: Bool { Self.goodStates.contains(state) }
     public var isValid: Bool {
         id > 0 && revision > 0 && due.isFinite && created.isFinite && !state.isEmpty && (task == nil || task! > 0) &&
         (event_id == nil || event_id! > 0) && (parent_task == nil || parent_task! > 0) &&

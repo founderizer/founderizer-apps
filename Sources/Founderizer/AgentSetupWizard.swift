@@ -21,22 +21,25 @@ import SwiftUI
 /// An active agent whose machine reports it signed out shows the same pages without Activate: it is active already,
 /// so the page it would reach is its own chat and Settings, which come back when the hub reports it signed in.
 ///
-/// **The manager of a new fleet starts with its server** (hub feature `manager_server`; the owner, 4 November 2026: "The
-/// agent is done BY AGENT and here we're setting the fleet, no servers yet"): "Manager's server", whose pages are Add
-/// server's (`AddServerView.Placing`), then its AI provider, where a press gives it that server and that provider in one
-/// command. Its install and its sign-in follow, then "Setting up Manager" until its session runs. It is active from
-/// the start, so nothing checks or activates it here.
+/// **The manager of a new fleet gets its server in its setup** (hub feature `manager_server`; the owner, 4 November 2026:
+/// "The agent is done BY AGENT and here we're setting the fleet, no servers yet"): first its AI provider, then
+/// "Manager's server", whose pages are Add server's (`AddServerView.Placing`) (the owner, 16 November 2026: "agent
+/// onboarding should ask first for the name and AI provider before the server page"). This Mac keeps the provider of
+/// the press (`FleetStore.chosenProvider`), and as soon as the server is there the setup gives the manager that server
+/// and that provider in one command, by itself. Its install and its sign-in follow, then "Setting up Manager" until its
+/// session runs. It is active from the start, so nothing checks or activates it here.
 ///
 /// **In a fleet whose first run did not ask, its name and the fleet's servers come first** (`ManagerSetupStart`; the
 /// owner, 15 November 2026, of a manager with no server: "no option to chnage the name of the manager etc... very bad",
 /// "it misses many steps of the onboarding! like the name of the agent, fleet shape", "they look good" to the pictures
 /// in `~/dev/founderizer-plans/manager-setup-steps/`, and "Yes, start it" to the hub's part): "Name your manager",
-/// whose Continue renames the manager on the hub when the name changed, then "Your fleet's servers", whose Continue
-/// keeps the step on the hub. With "1 server" this Mac then runs one step as root on the hub's own server
-/// (`OneServerRemote`), under the moving "Setting up <Name>", and the AI provider's press gives the manager the hub's
-/// server: its server's page does not show. The hub's kept step says that the two pages are done. **That root step
-/// runs only after his press on Continue on this Mac**: a setup that is opened again with "1 server" kept and no
-/// server service on the hub's server shows the slider on that step, and nothing that the hub says starts the step.
+/// whose Continue renames the manager on the hub when the name changed, then its AI provider, then "Your fleet's
+/// servers", whose Continue keeps the step on the hub. With "1 server" this Mac then runs one step as root on the hub's
+/// own server (`OneServerRemote`), under the moving "Setting up <Name>", and the manager then gets the hub's server
+/// with the provider he chose: its server's page does not show. The hub's kept step says that the slider's page is
+/// done. **That root step runs only after his press on Continue on this Mac**: a setup that is opened again with "1
+/// server" kept and no server service on the hub's server shows the slider on that step, and nothing that the hub says
+/// starts the step.
 ///
 /// **Each page is one centered step: its mark, its title and its one way on** (the owner, 26 October 2026: "centering
 /// and only showing the next action (dont show the send button if it's not clickable ...)", approved from a mockup
@@ -59,6 +62,12 @@ struct AgentSetupWizard: View {
     }
     /// The other provider he chose on this visit, until the agent runs it.
     @State private var switchingTo: String?
+    /// **The command that gives a manager with no server its server and its provider** went on this visit, by itself
+    /// (`placeChosen`): once, and again only by a press on a provider.
+    @State private var placeAsked = false
+    /// The hub refused that command, or did not answer it: the provider's page shows again with its words, where a press
+    /// tries again.
+    @State private var placeRefused = false
     /// This view's own mark for the page that it tells the store (`WizardPages.tell`, `gone`).
     @State private var placeMark = UUID()
     /// A request is on its way.
@@ -121,9 +130,9 @@ struct AgentSetupWizard: View {
     private var placing: Bool {
         line.map { AgentSetupFlow.places($0, features: store.state?.ui_features ?? [], placing: store.placing(agent)) } ?? false
     }
-    /// **The server that joined for an agent with no server yet** (`FleetStore.joinedServer`): its provider's press gives
-    /// it this one. A server that left the fleet, or that another agent took since, is not one to give it: the page is
-    /// its server's again.
+    /// **The server that joined for an agent with no server yet** (`FleetStore.joinedServer`): it gets the agent with the
+    /// provider that he chose before (`placeChosen`). A server that left the fleet, or that another agent took since, is
+    /// not one to give it: the page is its server's again.
     private var placeOn: String? {
         // "1 server" is kept and the hub's own server is ready: the manager goes there.
         if case .onHub(let name) = start { return name }
@@ -133,7 +142,8 @@ struct AgentSetupWizard: View {
               entry.agents.allSatisfy({ $0 == agent }) else { return nil }
         return joined
     }
-    private var serverName: String { server?.name ?? machine?.machine ?? String(l10n: "its server") }
+    /// The server it goes on: before the command that gives it its first server, the one that command names.
+    private var serverName: String { server?.name ?? machine?.machine ?? placeOn ?? String(l10n: "its server") }
     /// Something goes on that the page is about: an install or a preparation, or a sign-in.
     private var running: Bool { job?.isOpen == true || machine?.login?.isOpen == true }
 
@@ -163,16 +173,10 @@ struct AgentSetupWizard: View {
     }
 
     private var page: AgentSetupPage {
-        // With no server yet: its name and the fleet's servers where the hub has those parts, then its server, then
-        // its provider once he took one.
+        // With no server yet: its name where the hub can rename it, its provider, the fleet's servers where the hub has
+        // that part, then its server, and the install that the server and the provider start together.
         if line?.placed == false {
-            if renaming { return .name }
-            switch start {
-            case .name: return .name
-            case .servers, .sharing, .unread: return .servers
-            case .onHub: return .provider
-            case .server: return placeOn == nil ? .server : .provider
-            }
+            return start.page(renaming: renaming, provider: store.chosenProvider(agent), placeOn: placeOn, refused: placeRefused)
         }
         if modelProvider != nil { return AgentSetupFlow.accountPage(job: job, runtime: runtime) }
         return AgentSetupFlow.page(runtime: runtime, job: job, machine: machine, switchingTo: switchingTo)
@@ -241,10 +245,16 @@ struct AgentSetupWizard: View {
 
     private var steps: some View {
         SetupPage(progress: progress) {
-            // Back on the slider's page goes to the name's page, as in the first run. No other page here goes back.
-            if readingsCurrent, start == .servers, !busy, startFeatures?.contains(FleetShapeHub.rename) == true {
-                SetupBack { refusal = nil; store.noteManagerNamed(false) }.keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier("agent-setup-back")
+            // Back on the provider's page goes to the name's page, and Back on the slider's page to the provider's, as
+            // in the first run. No other page here goes back.
+            if readingsCurrent, start == .servers, !busy {
+                if page == .servers {
+                    SetupBack { refusal = nil; store.noteProvider(nil, for: agent) }.keyboardShortcut(.cancelAction)
+                        .accessibilityIdentifier("agent-setup-back")
+                } else if page == .provider, line?.placed == false, startFeatures?.contains(FleetShapeHub.rename) == true {
+                    SetupBack { refusal = nil; store.noteManagerNamed(false) }.keyboardShortcut(.cancelAction)
+                        .accessibilityIdentifier("agent-setup-back")
+                }
             }
         } step: {
             Group {
@@ -281,12 +291,12 @@ struct AgentSetupWizard: View {
     // MARK: the server
 
     /// **"<Agent>'s server"**, Add server's own pages under the agent's glyph: a VPS or a Mac that joins for it. The one
-    /// that joined is the server of the provider page that follows, as soon as this page reads it.
+    /// that joined gets the agent with the provider that he chose before, by itself, as soon as this page reads it.
     private var serverStep: some View {
         AddServerView(store: store, addAgent: { _ in },
                       placing: .init(agent: agent) { joined in
                           store.noteJoined(joined, for: agent)
-                          Task { await read() }
+                          Task { await read(); await follow() }
                       })
     }
 
@@ -470,13 +480,17 @@ struct AgentSetupWizard: View {
         return head + ".\n" + tail
     }
 
+    /// The provider with the check mark: for a manager with no server, the one that he chose on this Mac, when he chose
+    /// one; else the one that the agent has now.
+    private var markedProvider: String { line?.placed == false ? store.chosenProvider(agent) ?? runtime : runtime }
+
     private func card(_ provider: String) -> some View {
         Button { Task { await choose(provider) } } label: {
             HStack(spacing: 12) {
                 ProviderIcon(runtime: provider, size: 28)
                 Text(providerName(provider)).font(SetupMetrics.choiceFont).foregroundStyle(FleetStyle.text)
                 Spacer(minLength: 8)
-                if provider == runtime {
+                if provider == markedProvider {
                     Image(systemName: "checkmark").font(IconMetrics.symbol(12, weight: .semibold)).foregroundStyle(FleetStyle.muted)
                         .accessibilityLabel("Now")
                 }
@@ -621,10 +635,11 @@ struct AgentSetupWizard: View {
         defer { busy = false }
         guard await store.writable() else { return }
         if line?.placed == false {
-            if let placeOn {
-                await place(on: placeOn, runtime: provider, database: database)
-                askedSignIn = refusal == nil            // its install ends in his sign-in
-            }
+            // This Mac keeps the provider until the server is there, and the server's page or the slider's is next.
+            // With the server there already, the command goes now.
+            store.noteProvider(provider, for: agent)
+            placeRefused = false
+            await placeChosen(database: database)
             await read()
             return
         }
@@ -664,6 +679,17 @@ struct AgentSetupWizard: View {
         }
         askedSignIn = start.signsIn && refusal == nil
         await read()
+    }
+
+    /// **The server and the provider that he chose, once both are there** (`ManagerSetupStart.page`), for the manager of
+    /// a new fleet: by itself once the server is there, and at once for a press when it is there already. A refusal, or
+    /// no answer, shows the provider's page again with the words of it.
+    private func placeChosen(database: String) async {
+        guard line?.placed == false, let provider = store.chosenProvider(agent), let placeOn else { return }
+        placeAsked = true
+        await place(on: placeOn, runtime: provider, database: database)
+        placeRefused = refusal != nil
+        askedSignIn = refusal == nil            // its install ends in his sign-in
     }
 
     /// **Its server and its provider, in one command** (owner API 1.82): the hub sets its server and, for the other
@@ -739,7 +765,7 @@ struct AgentSetupWizard: View {
         // ends that wait. It is a read and no write, and it starts nothing on the server: only Continue does. While
         // this Mac's step runs, nothing counts. Another agent's setup never comes here, so that step holds none.
         if case .sharing = start {
-            if !share.running, !sliderShowsAgain { share.countRead() }
+            if page == .servers, !share.running, !sliderShowsAgain { share.countRead() }
             return
         }
         // The hub has the parts and answers its state, and its list of servers did not answer: the page counts those
@@ -751,6 +777,17 @@ struct AgentSetupWizard: View {
         }
         unreadReads = 0
         guard store.canWrite else { return }
+        // A manager with no server whose provider he chose and whose server is there now: the command that gives both
+        // goes by itself, once on this visit (`placeChosen`).
+        if line?.placed == false, !placeAsked, !placeRefused, store.chosenProvider(agent) != nil, placeOn != nil,
+           let database = store.state?.db {
+            busy = true; refusal = nil
+            defer { busy = false }
+            guard await store.writable() else { return }
+            await placeChosen(database: database)
+            await read()
+            return
+        }
         // Once on each visit: a check that fails or an activation the hub refuses is asked again only by Try again.
         if page == .activate, !signingInAgain, !placing, !checking, !loading, refusal == nil, installStopped == nil {
             if permits, !askedActivation {

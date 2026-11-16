@@ -66,8 +66,9 @@ final class OwnerMCPTests {
         #expect(hello["instructions"] == .string(Fixture.table.instructions))
         let listed = try #require(said.first { $0["id"] == .int(2) }?["result"]?["tools"]?.array)
         // The 54 of the table, the four reads and the nine writes, the two setup tools of the link to the app, and
-        // the link's four write tools (save_bot_token, prepare_problem_report, save_secret, grant_secret).
-        #expect(listed.count == 74)
+        // the link's five write tools (save_bot_token, prepare_problem_report, save_secret, grant_secret,
+        // share_secret).
+        #expect(listed.count == 75)
         for tool in listed {
             let name = tool["name"]?.string ?? ""
             #expect(tool["annotations"]?["readOnlyHint"]
@@ -169,7 +170,7 @@ final class OwnerCLITests {
     @Test func toolsGivesOneLineEachOrOneToolInFull() throws {
         let executable = try program()
         let (status, out, _) = run(["tools"], executable: executable)
-        #expect(status == 0 && out.count == 74)
+        #expect(status == 0 && out.count == 75)
         #expect(out.contains("write check_machine: Have one machine take its reading now."))
         #expect(out.contains { $0.hasPrefix("call fleet_overview: ") })
         #expect(out.filter { $0.hasPrefix("call ") }.count == 7)

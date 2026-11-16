@@ -488,20 +488,37 @@ struct AppUpdateTests {
         #expect(AppUpdateChannel.meets("14.9", system: here))
     }
 
-    /// The update nobody presses: asked at the start and every hour, put in place only while the owner is away. After
-    /// a read that failed (our site restarts with each release), the next ones come after 1, 5 and 15 minutes.
-    @Test func theAppAsksAtItsStartThenEveryHourAndSoonAfterAFailedRead() {
+    /// The update nobody presses: asked at the start and every five minutes, put in place only while the owner is away.
+    /// After a read that failed (our site restarts with each release), the next one comes after one minute. When he
+    /// comes back to the app, a read comes once the last one is a minute old (the owner, 16 November 2026: "the UPDATE
+    /// button on the left sidebar takes too long to show when there is an update!").
+    @Test func theAppAsksAtItsStartEveryFiveMinutesSoonAfterAFailedReadAndWhenHeComesBack() {
         let start = Date(timeIntervalSince1970: 1_792_660_000)
-        func asks(after minutes: Double, failures: Int = 0) -> Bool {
-            AppUpdatePolicy.shouldAsk(lastAsked: start, failures: failures, now: start.addingTimeInterval(minutes * 60))
+        func asks(after minutes: Double, failures: Int = 0, cameBack: Bool = false) -> Bool {
+            AppUpdatePolicy.shouldAsk(lastAsked: start, failures: failures, cameBack: cameBack,
+                                      now: start.addingTimeInterval(minutes * 60))
         }
         #expect(AppUpdatePolicy.shouldAsk(lastAsked: nil, now: start))
-        #expect(!asks(after: 59) && asks(after: 60))
+        #expect(!asks(after: 4.9) && asks(after: 5))
         #expect(!asks(after: 0.9, failures: 1) && asks(after: 1, failures: 1))
-        #expect(!asks(after: 4, failures: 2) && asks(after: 5, failures: 2))
-        #expect(!asks(after: 14, failures: 3) && asks(after: 15, failures: 3))
-        #expect(!asks(after: 59, failures: 4) && asks(after: 60, failures: 4))     // then the hourly pace again
-        #expect(asks(after: -1))                                                  // a clock set back
+        #expect(!asks(after: 4.9, failures: 2) && asks(after: 5, failures: 2))       // then the usual pace again
+        #expect(!asks(after: 0.9, cameBack: true) && asks(after: 1, cameBack: true))
+        #expect(asks(after: 1, failures: 3, cameBack: true))                         // also while reads fail
+        #expect(asks(after: -1))                                                     // a clock set back
+    }
+
+    /// The signal of a new build (16 November 2026): the Mac that publishes posts it when a build that its push hook
+    /// started has ended, and the next tick reads the channel at once, but not sooner than ten seconds after the last
+    /// read, so a burst of signals reads once.
+    @Test func aSignalOfANewBuildReadsAtOnceButNotTwiceInTenSeconds() {
+        let start = Date(timeIntervalSince1970: 1_792_660_000)
+        func asks(after seconds: Double, signalled: Bool) -> Bool {
+            AppUpdatePolicy.shouldAsk(lastAsked: start, signalled: signalled, now: start.addingTimeInterval(seconds))
+        }
+        #expect(AppUpdatePolicy.signal == "com.founderizer.app.read-updates")
+        #expect(!asks(after: 9.9, signalled: true) && asks(after: 10, signalled: true))
+        #expect(!asks(after: 60, signalled: false) && asks(after: 60, signalled: true))
+        #expect(asks(after: 300, signalled: false))                                    // the usual pace stays
     }
 
     @Test func aNewBuildIsPutInPlaceOnlyWhileTheOwnerIsAway() {

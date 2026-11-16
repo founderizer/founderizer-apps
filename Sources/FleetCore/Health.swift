@@ -95,9 +95,6 @@ extension FleetHealth.Warning {
         case update(agent: String)
         /// That agent's own page, where its session is: the manager's warnings are about its session.
         case openAgent(String)
-        /// `ui/machines/<agent>/manager`: start that agent's standing manager session again. Only `manager_down`
-        /// gets it, because only a missing session is put right by a start (`ManagerSession`).
-        case startManager(agent: String)
         /// That machine's page, where its checks and its controls are.
         case openMachine(String)
         /// Nothing here settles it. The report window carries the whole reading to us.
@@ -118,10 +115,11 @@ extension FleetHealth.Warning {
         switch kind {
         case "backup_missing", "backup_old": return .saveCopy
         case "machine_behind", "machine_failed": return agent.map { .update(agent: $0) } ?? .tellUs
-        case _ where kind.hasPrefix("manager_"):
-            guard let agent else { return .tellUs }
-            return ManagerSession.startable(kind: String(kind.dropFirst("manager_".count)))
-                ? .startManager(agent: agent) : .openAgent(agent)
+        // A session that is not running: its helper starts it again by itself, so no button of the owner's starts
+        // it, and the report carries what the hub knows of why (`ManagerSession`, the owner's choice of 16 November
+        // 2026). The manager's other warnings are put right on its page.
+        case "manager_down": return .tellUs
+        case _ where kind.hasPrefix("manager_"): return agent.map { .openAgent($0) } ?? .tellUs
         default: return agent.map { Act.openMachine($0) } ?? .tellUs
         }
     }
@@ -227,8 +225,12 @@ extension FleetHealth {
             let acts = group.map { $0.act(manager: manager) }.reduce(into: [Warning.Act]()) { acts, act in
                 if !acts.contains(where: { $0.label == act.label }) { acts.append(act) }
             }
-            return Block(warnings: group, title: group[0].title, detail: once(said.map(\.detail)).joined(separator: " "),
-                         fixes: once(said.compactMap(\.fix).filter { !$0.isEmpty }), acts: acts)
+            // A hub from before 16 November 2026 gives manager_down "Start it again." and the fix "Start the session
+            // of Manager again.", and no app has that start now: its row's button is Report a problem.
+            let details = said.map { $0.kind == "manager_down" ? ManagerSession.bandWords($0.detail) : $0.detail }
+            let fixes = said.filter { $0.kind != "manager_down" }.compactMap(\.fix).filter { !$0.isEmpty }
+            return Block(warnings: group, title: group[0].title, detail: once(details).joined(separator: " "),
+                         fixes: once(fixes), acts: acts)
         }
     }
 
@@ -264,7 +266,6 @@ extension FleetHealth.Warning.Act {
         switch self {
         case .saveCopy: String(l10n: "Save copy")
         case .update(let agent): String(l10n: "Update \(agent.agentLabel)")
-        case .startManager: String(l10n: "Start the session")
         case .openAgent(let name): String(l10n: "Open \(name.agentLabel)")
         case .openMachine(let name): String(l10n: "Open \(name.capitalized)")
         case .tellUs: String(l10n: "Report a problem")

@@ -139,10 +139,12 @@ extension ReachFacts {
         public var stepsPlanned: Int
         /// When the running step began, while one runs: for the seconds only.
         public var since: Date?
+        /// The tries of this press so far (`InstallRetry`): 1 until the app ran the install again by itself.
+        public var tries: Int
 
         public init(state: InstallState, kind: InstallKind, step: InstallStepName, stop: InstallRecord.Stop?,
                     cause: InstallCause? = nil, waitsForNetwork: Bool = false, stepsDone: Int, stepsPlanned: Int,
-                    since: Date?) {
+                    since: Date?, tries: Int = 1) {
             self.state = state
             self.kind = kind
             self.step = step
@@ -152,6 +154,7 @@ extension ReachFacts {
             self.stepsDone = stepsDone
             self.stepsPlanned = stepsPlanned
             self.since = since
+            self.tries = tries
         }
     }
 
@@ -188,10 +191,12 @@ extension ReachFacts {
         public var waitsForNetwork: Bool
         /// The fixed name of the installer's own reason (`MachineInstallModel.cause`), or nil.
         public var cause: InstallCause?
+        /// The tries of the press (its record's `tries`): 1 until the app ran the install again by itself.
+        public var tries: Int
 
         public init(way: String, running: Bool, failed: Bool, ended: Bool, job: String? = nil,
                     steps: [InstallProgress], planned: [String], runningStep: String?, since: Date,
-                    stop: InstallRecord.Stop?, waitsForNetwork: Bool, cause: InstallCause? = nil) {
+                    stop: InstallRecord.Stop?, waitsForNetwork: Bool, cause: InstallCause? = nil, tries: Int = 1) {
             self.way = way
             self.running = running
             self.failed = failed
@@ -204,6 +209,7 @@ extension ReachFacts {
             self.stop = stop
             self.waitsForNetwork = waitsForNetwork
             self.cause = cause
+            self.tries = tries
         }
     }
 
@@ -245,7 +251,8 @@ extension ReachFacts {
                             waitsForNetwork: stopped && link.waitsForNetwork, stepsDone: min(done, longestPlan),
                             stepsPlanned: min(planned, longestPlan),
                             // Only while a step runs: an install that waits for its first step has no step's seconds.
-                            since: state == .running && link.runningStep != nil ? link.since : nil)
+                            since: state == .running && link.runningStep != nil ? link.since : nil,
+                            tries: min(max(link.tries, 1), InstallRetry.most + 1))
     }
 
     /// **The seconds in the running step**, or nil when no step runs.
@@ -275,10 +282,14 @@ extension ReachFacts {
         public var stepsPlanned: Int
         /// The newest time in the record (its end, or its last step's change): for the seconds only.
         public var lastChange: Date
+        /// The tries of the record's press, and why each earlier one stopped, as fixed names (`InstallRecord.tries`,
+        /// `retried`): a name that is neither a cause nor a stop's kind is not passed on.
+        public var tries: Int
+        public var retried: [String]
 
         public init(kind: InstallRecord.Kind, outcome: InstallRecord.Outcome, stop: InstallRecord.Stop?,
                     cause: InstallCause? = nil, waitsForNetwork: Bool, step: InstallStepName, stepsDone: Int,
-                    stepsPlanned: Int, lastChange: Date) {
+                    stepsPlanned: Int, lastChange: Date, tries: Int = 1, retried: [String] = []) {
             self.kind = kind
             self.outcome = outcome
             self.stop = stop
@@ -288,6 +299,8 @@ extension ReachFacts {
             self.stepsDone = stepsDone
             self.stepsPlanned = stepsPlanned
             self.lastChange = lastChange
+            self.tries = tries
+            self.retried = retried
         }
     }
 
@@ -329,7 +342,11 @@ extension ReachFacts {
                            step: stood.map { installStep($0.rawValue) } ?? .none,
                            stepsDone: min(record.steps.filter { $0.state == .done }.count, longestPlan),
                            stepsPlanned: min(max(plan, record.steps.count), longestPlan),
-                           lastChange: record.lastChange)
+                           lastChange: record.lastChange,
+                           tries: min(max(record.tries ?? 1, 1), InstallRetry.most + 1),
+                           retried: (record.retried ?? []).filter { name in
+                               InstallCause(rawValue: name) != nil || InstallRecord.Stop(rawValue: name) != nil
+                           }.suffix(InstallRetry.most).map { $0 })
     }
 
     /// **The seconds since the record's last change**: since the install ended, or since its last step changed for

@@ -43,7 +43,8 @@ public enum AppPlace: Hashable, Sendable {
         case ways, ai, opening, machine, install, key, token, vps, again
     }
 
-    /// A step of Add agent: its servers, the new agent's name and AI, and the install that runs.
+    /// A step of Add agent: the new agent's name and AI, its servers after them (the owner, 16 November 2026), and the
+    /// install that runs.
     public enum AddAgentStep: String, CaseIterable, Sendable {
         case server, name, progress
     }

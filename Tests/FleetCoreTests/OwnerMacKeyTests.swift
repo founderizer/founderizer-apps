@@ -1302,6 +1302,7 @@ struct OwnerMacKeyTests {
         // Files whose requests go to somebody that is no hub's owner API, and to whom.
         let elsewhere: [String: String] = [
             "ProblemReport.swift": "our own site, for a report", "FleetOnTailscale.swift": "GET /health, which every caller reads",
+            "ErrorReports.swift": "our own site, for error reports (its hub calls are in HubClient.swift)",
             "TailscaleFleetKey.swift": "Tailscale's API", "AppUpdateInstall.swift": "the release channel",
             "MachineInstaller.swift": "the claim's listener, with the key's SHA-256", "AppUpdate.swift": "the release channel",
             "EntitlementClaim.swift": "our own site", "PrivateNetwork.swift": "Tailscale's API",

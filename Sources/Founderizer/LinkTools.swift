@@ -5,7 +5,8 @@ import Foundation
 
 /// **The app's side of the link's write tools** (`OwnerLinkTools` in FleetOwnerAPI; the secrets plan, steps B and
 /// E): a thin adapter from each tool's logic (`SaveBotToken.answer`, `PrepareReport.answer`, `SaveSecret.answer`,
-/// `GrantSecret.answer`, tested there with stand-ins) to the app's own engine, on the board of `SetupChannel`.
+/// `GrantSecret.answer`, `ShareSecret.answer`, tested there with stand-ins) to the app's own engine, on the board of
+/// `SetupChannel`.
 /// Nothing of it shows on the screen, and nothing of a request (its line, its fields, its value part) is written
 /// to the app's log.
 ///
@@ -30,8 +31,16 @@ import Foundation
 /// the team. One call writes at a time, in a line of its own (`GrantSecret.Line`). The desk is `grantDesk`, closure
 /// by closure.
 ///
-/// **A text that the owner's own agent wrote for the report form** (`prepare_problem_report`): the form takes it, and
-/// says whether it shows it or keeps the owner's own text.
+/// **`share_secret`** sets who may give one secret, or ends it, as "Who may give it" of the Secrets page does
+/// (`SecretsPage.saveStanding`): the owner's signed `pool` statement through `GrantSigning.send(pool:...)`
+/// (`POST /ui/vault/grant`) and the hub's standing through `ResourcesClient.saveStanding` (`POST /ui/resources`), in
+/// the page's own order. It asks the owner nothing, and it writes against the base of its own read of the
+/// resources. One call of it writes at a time, in a line of its own (an instance of `ShareSecret.Line`). The desk is
+/// `shareDesk`, closure by closure.
+///
+/// **A text for the report form**: one that the owner's own agent wrote (`prepare_problem_report`), or the app's own
+/// words of the problem that a button reports (the manager band's Report a problem). The form takes it, and says
+/// whether it shows it or keeps the owner's own text.
 struct ReportAsk: Equatable {
     enum Outcome: Equatable {
         case shown
@@ -40,6 +49,9 @@ struct ReportAsk: Equatable {
 
     let id = UUID()
     let text: String
+    /// The owner's own agent wrote it, and the report then says so (`ProblemReport.writtenByAgent`); false for the
+    /// app's own words.
+    var byAgent = true
     var outcome: Outcome?
 }
 
@@ -103,6 +115,13 @@ enum LinkTools {
         let line = GrantSecret.Line()
         board.add(set: OwnerSetupTools.set, tool: GrantSecret.name, value: .none) { fields, value in
             await GrantSecret.answer(fields: fields, value: value, desk: grants, line: line)
+        }
+        // `share_secret`: who may give one secret, with the owner's signature, or its end. A line of writes of the
+        // tool's own, which lives as long as the board: one call of it writes at a time, and its writes end without it.
+        let shares = shareDesk(store: store)
+        let shareLine = ShareSecret.Line()
+        board.add(set: OwnerSetupTools.set, tool: ShareSecret.name, value: .none) { fields, value in
+            await ShareSecret.answer(fields: fields, value: value, desk: shares, line: shareLine)
         }
     }
 
@@ -323,6 +342,83 @@ enum LinkTools {
                         GrantSecret.Receipt.Access(before: $0.before, after: $0.after, missing: $0.missing)
                     }
                     return GrantSecret.Receipt(changed: receipt.changed, access: access)
+                } catch {
+                    throw failure(error)
+                }
+            },
+            // Started, and not waited for, as `secretDesk`'s.
+            refresh: {
+                guard let store = store() else { return }
+                Task { @MainActor in await store.refresh() }
+            })
+    }
+
+    // ------------------------------------------------------------ a signed standing (`share_secret`)
+
+    /// **The fleet's resources as the tool reads them**, from one read of the resources page: its base, the id of
+    /// each resource, and the level of each standing now (the page's `grant.max`, at any level), by its id.
+    nonisolated static func standings(_ list: ResourceList) -> ShareSecret.Resources {
+        let held = list.resources.compactMap { resource in resource.grant.map { (resource.id, $0.max) } }
+        return ShareSecret.Resources(sha256: list.sha256, ids: Set(list.resources.map(\.id)),
+                                     standings: Dictionary(held) { first, _ in first })
+    }
+
+    /// **The app's engine for `share_secret`**, closure by closure (`ShareSecret.Desk`). Each request ends by the
+    /// time limit of its own client (the team's read 10 seconds for a request and 15 in all; the vault's read and the
+    /// signed statement 20 and 30 each; the resources' read and the standing 60 and 90 each), so the writes of a
+    /// call, which run without their caller, never wait without a bound. No closure writes anything of a request to
+    /// the log, and none shows anything on the screen.
+    static func shareDesk(store: @escaping @MainActor () -> FleetStore?) -> ShareSecret.Desk<Place> {
+        let vault = VaultClient(), lists = HubClient(), owned = ResourcesClient()
+        return ShareSecret.Desk<Place>(
+            // As `grantDesk`'s: a current reading with a database, and a hub that serves the Secrets page.
+            ready: {
+                guard let store = store(), store.isFresh, let database = store.state?.db,
+                      SecretEntryView.isOffered(by: store) else { return nil }
+                return Place(hub: store.hub, database: database, client: store.installation)
+            },
+            // `signed_grants` and `resource_grants`, from the features of the hub that the store still shows: a store
+            // that moved is nil, which the tool reads as "not ready" and never as "not listed".
+            features: { place in
+                features(of: store(), at: place).map {
+                    ShareSecret.Features(signs: $0.contains(GrantSigning.feature),
+                                         standings: $0.contains(ResourceList.feature))
+                }
+            },
+            // The list's read of `grantDesk`. A read that failed is thrown as it is, and a page with no catalog too.
+            team: { place in
+                guard let found = fleetList(try await lists.team(hub: place.hub, database: place.database)) else {
+                    throw HubError.invalidResponse
+                }
+                return found
+            },
+            // The resources' read, which the client checks for its database and its form. A read that failed is
+            // thrown as it is.
+            resources: { place in standings(try await owned.read(hub: place.hub, database: place.database)) },
+            // The vault's reading, as `grantDesk`'s.
+            vault: { place in vaultFacts(try await vault.reading(hub: place.hub, database: place.database)) },
+            holdsKey: { fleet in OwnerKeychain.isHeld(fleet: fleet) },
+            // One pool statement, made, signed and sent, for the fleet that the tool read. A key that could not be
+            // read, and a key that made no signature, are that function's `NotSigned`: nothing was sent then.
+            sign: { place, statement in
+                do {
+                    try await GrantSigning.send(pool: statement.inPool, login: statement.login, fleet: statement.fleet,
+                                                client: place.client, hub: place.hub, database: place.database)
+                } catch is GrantSigning.NotSigned {
+                    throw ShareSecret.NotSigned()
+                } catch {
+                    throw failure(error)                  // a refusal carries the hub's own status and its words
+                }
+            },
+            // The hub's standing for the secret against the tool's base, for every worker and lead, or its end for
+            // nil, under a new request id of the hub at each call.
+            standing: { place, base, login, max in
+                let standing = max.map { ResourceStanding.grantable(max: $0.rawValue, to: ResourceList.everyone) }
+                    ?? .ownerOnly
+                do {
+                    return try await owned.saveStanding(hub: place.hub, database: place.database, client: place.client,
+                                                        sha256: base, resource: ShareSecret.resourceID(login),
+                                                        standing: standing).changed
                 } catch {
                     throw failure(error)
                 }

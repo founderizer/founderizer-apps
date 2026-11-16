@@ -16,8 +16,10 @@ import SwiftUI
 ///   - **Your model server**: the Address field, which the app checks by the hub's rule, then "Your model server's
 ///     key" for every address but a loopback one whose agent is alone on its server.
 ///
-/// The last page's press adds the agent (`AddAgentModel.start(store:provider:...)`): the account, the agent with it,
-/// and its read grant. What the hub refuses then is that page's one orange line. Back goes one page back.
+/// The last page's press goes on to Add agent's server step, whose press adds the agent (the owner, 16 November 2026:
+/// the name and the AI before the server), or adds it on a form that came with its server
+/// (`AddAgentModel.start(store:provider:...)`): the account, the agent with it, and its read grant. What the hub refuses
+/// of the account then is that page's one orange line. Back goes one page back.
 @MainActor @Observable
 final class OtherModels {
     enum Page: Equatable {
@@ -56,7 +58,8 @@ final class OtherModels {
 struct OtherModelsPages: View {
     @Bindable var store: FleetStore
     @Bindable var model: AddAgentModel
-    /// The press on the last page: Add agent adds the agent with this provider, then hands it to its setup.
+    /// The press on the last page: Add agent's server step with this provider, or the agent on the server that the form
+    /// came with.
     let add: (ModelProvider) -> Void
     /// "Adding <Name>" stands while the add runs and until the agent's own setup takes the window.
     let adding: Bool
@@ -178,8 +181,10 @@ struct OtherModelsPages: View {
         case .failure(let refusal): other.line = refusal.words
         case .success(let address):
             other.checkedAddress = address
-            // A loopback server that only this agent reaches, alone on its server, may have no key (spec 3.8).
-            if ModelServerAddress.host(address).map(ModelServerAddress.isLoopback) == true, model.selected?.agents.isEmpty == true {
+            // A loopback server that only this agent reaches, alone on its server, may have no key (spec 3.8). With no
+            // server yet, the server step then offers only servers with no agent (`AddAgentModel.alone`).
+            if ModelServerAddress.host(address).map(ModelServerAddress.isLoopback) == true,
+               model.given ? model.selected?.agents.isEmpty == true : true {
                 other.secret = nil; other.secretOf = nil
                 add(.own)
             } else {

@@ -631,6 +631,12 @@ private struct NeedStep: View {
         .environment(\.stepText, SetupMetrics.text)
         .environment(\.fleetButtonText, SetupMetrics.text)
         .accessibilityElement(children: .contain).accessibilityIdentifier("need-step-\(need.id)")
+        // owner feature need_run: Run and its line read the store, and a command for a Mac of the fleet needs the
+        // machines' readings for its Run to stand
+        .environment(store)
+        .task(id: need.isOpen ? need.run_on : nil) {
+            if need.isOpen, let on = need.run_on, on != NeedRun.ownMac { await store.readRunMachines() }
+        }
     }
 
     /// Who asks, by the name the sidebar gives it, and when; and the raised hand of a request that stops work
@@ -664,7 +670,8 @@ private struct NeedStep: View {
     /// What he does, as a message draws it: a command in its code block, with its copy icon, a page as its link, and
     /// steps as a list.
     private var taskWords: some View {
-        MessageText(text: task, step: true).foregroundStyle(FleetStyle.text)
+        // owner feature need_run: the block of its command has Run (the owner's "Yes, as drawn")
+        MessageText(text: task, step: true, run: NeedRunTarget.of(need, store: store)).foregroundStyle(FleetStyle.text)
             .multilineTextAlignment(centred ? .center : .leading)
             .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
     }
@@ -704,8 +711,9 @@ private struct NeedStep: View {
     private var answers: some View {
         VStack(spacing: 18) {
             if ended {
-                NeedAnswered(store: store, need: need, words: onItsWay?.text,
-                             inWords: onItsWay?.answersInWords ?? need.answeredInWords, draws: settles)
+                NeedAnswered(store: store, need: need, words: NeedRunAnswer.of(need, onItsWay: onItsWay)?.words ?? onItsWay?.text,
+                             inWords: onItsWay?.answersInWords ?? need.answeredInWords, draws: settles,
+                             symbol: NeedRunAnswer.of(need, onItsWay: onItsWay)?.symbol ?? "checkmark")
                     // His answer moves up from where he gave it, as the other answers go.
                     .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: answerTop)), removal: .opacity))
             } else {
@@ -742,6 +750,9 @@ private struct NeedAnswered: View {
     var inWords = false
     /// He answered a moment ago, here: the check draws itself, white, and then goes quiet (`NeedsBoard.hold`).
     var draws = false
+    /// The mark before his answer: a check, or a cross for a command that he ran and that ended with another exit
+    /// status than 0 (owner feature `need_run`).
+    var symbol = "checkmark"
     @Environment(\.colorSchemeContrast) private var contrast
     /// The check shows: at once, or 0.11 s after the answer began to move, when it draws.
     @State private var drawn = false
@@ -779,7 +790,7 @@ private struct NeedAnswered: View {
 
     /// The check before his answer. It keeps its place while it is not drawn yet, so the words do not move.
     @ViewBuilder private var check: some View {
-        let mark = Image(systemName: "checkmark").font(IconMetrics.symbol(12, weight: .semibold))
+        let mark = Image(systemName: symbol).font(IconMetrics.symbol(12, weight: .semibold))
             .foregroundStyle(draws && !quiet ? Color.white : FleetStyle.muted).accessibilityHidden(true)
         if !draws {
             mark

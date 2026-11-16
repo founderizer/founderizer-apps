@@ -21,7 +21,8 @@ struct RefusalWordsVectorsTests {
     /// `connect_stale`, `google_refused` and `google_revoked_during`; and the twelve of the MCP form (UI-API.md 1.187):
     /// `package_unknown`, `package_unread`, `package_registry_away`, `package_record_large`, `package_no_record`,
     /// `package_no_version`, `package_too_new`, `package_too_new_older`, `package_none_old`, `mcp_registry_away`,
-    /// `mcp_registry_no_list` and `mcp_no_endpoints`; and `server_name_kept`, a server named door (UI-API.md 1.188).
+    /// `mcp_registry_no_list` and `mcp_no_endpoints`; and `server_name_kept`, a server named door (UI-API.md 1.188); and
+    /// the two of the sealed Google file (UI-API.md 1.202): `google_file_key` and `google_file_lost`.
     private static let waiting: Set<String> = [
         "time_passed",
         "google_file_mode", "google_file_unreadable", "google_no_client", "google_no_secret", "connect_stale",
@@ -32,6 +33,9 @@ struct RefusalWordsVectorsTests {
         "package_no_version", "package_too_new", "package_too_new_older", "package_none_old", "mcp_registry_away",
         "mcp_registry_no_list", "mcp_no_endpoints",
         "server_name_kept",
+        // the sealed Google file (UI-API.md 1.202): a key that the hub cannot read now, and a file that its key no
+        // longer opens
+        "google_file_key", "google_file_lost",
     ]
 
     /// The codes that have a case: every code of the hub's table that is not waiting.

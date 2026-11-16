@@ -5,18 +5,32 @@ import FleetOwnerAPI
 import Observation
 import SwiftUI
 
-/// Add agent (owner feature `servers`): **first the server, then its name and its AI** (the owner, 7 November 2026: "Why
-/// doesn't it ask me first if I want to use an existing server or a new one?!" and "it should have asked me first", and
-/// his yes to the mockup the same day). A server with agents takes one more (the owner, 3 November 2026: "we allow
-/// multiple agents per server"). The hub registers the agent, inactive and with no credential access, as a worker that
-/// reports to the manager, and the server's service installs it: the AI he pressed when the server has none, the agent's
-/// checkout and service, and the AI's sign-in when the server is not signed in. Nothing installs before that press. The
-/// model stays while other pages show, so the install's progress goes on.
+/// Add agent (owner feature `servers`): **first its name and its AI, then the server** (the owner, 16 November 2026: "agent
+/// onboarding should ask first for the name and AI provider before the server page", and his choice of the same day
+/// that the manager's own setup asks in that order too). Until then the server came first (the owner, 7 November 2026:
+/// "Why doesn't it ask me first if I want to use an existing server or a new one?!"). A server with agents takes one
+/// more (the owner, 3 November 2026: "we allow multiple agents per server"). The hub registers the agent, inactive and
+/// with no credential access, as a worker that reports to the manager, and the server's service installs it: the AI he
+/// pressed when the server has none, the agent's checkout and service, and the AI's sign-in when the server is not
+/// signed in. Nothing installs before his press on a server, or on an AI when the form came with its server (a
+/// server's own page, Add server's end). New server keeps his name and his AI, and the server that it makes gets the
+/// agent by itself (`goOn`). The model stays while other pages show, so the install's progress goes on.
 @MainActor @Observable
 final class AddAgentModel {
     var server: String?
-    /// He chose the server, on the first step or on a server's own page: the second step shows.
-    private(set) var picked = false
+    /// **What he pressed on the first step**: an AI on a plan, by its runtime, or a provider after Other models, whose
+    /// key, address and model `other` keeps. The server step shows while it is set.
+    enum Choice: Equatable {
+        case plan(String)
+        case account(ModelProvider)
+    }
+    var choice: Choice?
+    /// The form came with its server (a server's own page, or Add server's end): it has no server step, and the press on
+    /// an AI adds the agent there.
+    private(set) var given = false
+    /// The server that Add agent's New server made, for the choice that he made before it: the view adds the agent
+    /// there by itself (`goOn`), once.
+    var startsOn: String?
     var name = ""
     var runtime = "codex"
     var role = "worker"
@@ -36,25 +50,48 @@ final class AddAgentModel {
     var running: Bool { receipt != nil && (job == nil || job?.isOpen == true) }
     var selected: ServerEntry? { list?.servers.first { $0.name == server } }
 
-    /// A form with no install, or an install that ended in success: a new form, on its first step, or on its second for
-    /// the server that a server's page gave. A failed install stays for Try again, unless its agent has left the fleet
-    /// (`listed`: the agents the hub lists now), which he deleted: that install is over.
+    /// A form with no install, or an install that ended in success: a new form, on its first step, the name and the AI,
+    /// with the server that a server's page gave or with none. A failed install stays for Try again, unless its agent
+    /// has left the fleet (`listed`: the agents the hub lists now), which he deleted: that install is over.
     func prepare(server: String?, listed: [String]? = nil) {
         if let receipt, let listed, !listed.contains(receipt.agent) { forget() }
         if job?.state == "done" || job?.state == "canceled" { reset() }
         guard receipt == nil else { return }
         self.server = server
-        picked = server != nil
+        given = server != nil
+        choice = nil; startsOn = nil
         error = nil
+        // A name that an agent has now (a Mac that New server made took it as its first agent) makes way for a new
+        // suggestion.
+        if let listed, listed.contains(key) { name = "" }
         // A new form starts at its own step: the pages after Other models of a visit before are gone.
         other.leave()
     }
 
-    /// The server he pressed on the first step.
-    func pick(_ server: String) { self.server = server; picked = true; error = nil }
+    /// **The server that Add agent's New server made**, for the name and the AI that he chose before it: the agent goes
+    /// there by itself (`startsOn`), as his press on that server would add it. With no choice, a new form for that
+    /// server.
+    func goOn(on server: String, listed: [String]? = nil) {
+        guard receipt == nil, choice != nil else { prepare(server: server, listed: listed); return }
+        self.server = server; given = true; error = nil
+        startsOn = server
+    }
 
-    /// Back to the first step.
-    func unpick() { picked = false; error = nil; other.leave() }
+    /// His press on the first step: the AI, or the last page after Other models.
+    func choose(_ chosen: Choice) { choice = chosen; error = nil }
+
+    /// Back from the server step: the first step, or the last page after Other models, as he left it.
+    func unchoose() {
+        choice = nil; error = nil
+        if !given { server = nil }
+    }
+
+    /// The name and the AI, with the name's own problem only: the server is the next step.
+    var nameProblem: String? { Servers.agentNameProblem(name: key, existing: team?.lines.map(\.agent) ?? []) }
+
+    /// **His own model server at a loopback address with no key**: only an agent alone on its server reaches it, so the
+    /// server step offers only a server with no agent (`Servers.offered`).
+    var alone: Bool { choice == .account(.own) && other.secret == nil }
 
     func reset() {
         guard !running else { return }
@@ -64,7 +101,8 @@ final class AddAgentModel {
     /// A new form, whatever the last install did.
     private func forget() {
         watch?.cancel(); watch = nil
-        receipt = nil; job = nil; error = nil; name = ""; server = nil; picked = false; role = "worker"; reportsTo = nil
+        receipt = nil; job = nil; error = nil; name = ""; server = nil; given = false; choice = nil; startsOn = nil
+        role = "worker"; reportsTo = nil
         other.leave()
     }
 
@@ -105,6 +143,22 @@ final class AddAgentModel {
             .map(\.element)
     }
 
+    /// The servers of the server step: those that can take the agent with the AI that he chose.
+    var offered: [ServerEntry] { Servers.offered(open, onAccount: onAccount, alone: alone) }
+
+    /// **The agent that New server is for**: its name and its AI on a plan, or no AI for a provider after Other models
+    /// (`AddServerView.newAgent`). nil while he chose nothing, and while an install of this form stands.
+    var newServerAgent: AddServerView.NewAgent? {
+        guard receipt == nil, let choice else { return nil }
+        switch choice {
+        case .plan(let runtime): return .init(name: key, ai: runtime == ServerAI.chatGPT.runtime ? .chatGPT : .claude)
+        case .account: return .init(name: key, ai: nil)
+        }
+    }
+
+    /// He chose a provider after Other models.
+    var onAccount: Bool { if case .account? = choice { return true }; return false }
+
     /// Why Add agent cannot go now, or nil.
     var problem: String? {
         Servers.agentProblem(name: key, server: selected, existing: team?.lines.map(\.agent) ?? [])
@@ -112,7 +166,10 @@ final class AddAgentModel {
 
     /// The agent on the chosen server with `runtime`, the AI he pressed.
     func start(store: FleetStore, runtime chosen: String) async {
-        guard !busy, problem == nil, let server, let database = store.state?.db else { return }
+        guard !busy, let server, let database = store.state?.db else { return }
+        // The name or the server changed since his press (another agent took the name, the server can take none now):
+        // why, where he pressed.
+        if let problem { error = problem; return }
         busy = true; error = nil
         defer { busy = false }
         let name = key
@@ -141,7 +198,11 @@ final class AddAgentModel {
     /// signs as it signs each grant. Nil when the agent is added; else the line for the last page, in the app's own
     /// words for a refusal whose code it knows (round 2, sentences 4, 6, 7 and 8).
     func start(store: FleetStore, provider: ModelProvider, secret: String?, address: String?, model: String?) async -> String? {
-        guard !busy, problem == nil, let server, let database = store.state?.db else { return nil }
+        guard !busy, let server, let database = store.state?.db else { return nil }
+        if let problem {
+            if given { other.leave(); choice = nil }
+            error = problem; return ""
+        }
         busy = true; error = nil
         defer { busy = false }
         let name = key, hub = store.hub
@@ -171,9 +232,13 @@ final class AddAgentModel {
                 return nil
             } catch let HubError.refusal(refused) {
                 if refused.status == 409, attempt == 0, refused.means(.teamChanged) { continue }
-                // **Sentence 3 stands under the name field** (round 2, item 14), where Add agent shows a refusal of
-                // the server: the pages after Other models go, and the line is the name step's ("" to the page).
-                if refused.isOpenServer { other.leave(); error = refused.words; return "" }
+                // **Sentence 3 stands where he chose the server** (round 2, item 14), where Add agent shows a refusal
+                // of the server: on the server step, with his choice kept; on the first step for a form that came with
+                // its server, where the pages after Other models go ("" to the page).
+                if refused.isOpenServer {
+                    if given { other.leave(); choice = nil }
+                    error = refused.words; return ""
+                }
                 return refused.words
             } catch { return String(l10n: "The hub has not answered. Look at the server's page before you try again.") }
         }
@@ -184,7 +249,8 @@ final class AddAgentModel {
     func retry(store: FleetStore, server: ServerEntry, job: ServerJob) async {
         guard let agent = job.agent, let runtime = job.runtime else { return }
         let role = team?.lines.first { $0.agent == agent }?.role ?? "worker"
-        self.server = server.name; picked = true; name = agent; self.runtime = runtime; self.role = role == "lead" ? "lead" : "worker"
+        self.server = server.name; given = true; choice = .plan(runtime); name = agent; self.runtime = runtime
+        self.role = role == "lead" ? "lead" : "worker"
         receipt = nil; self.job = nil
         busy = true; error = nil
         defer { busy = false }
@@ -239,17 +305,25 @@ struct AddAgentView: View {
                 }
             } else if let receipt = model.receipt, !handingOff {
                 FleetPage("Add agent") { progress(receipt) }
-            } else if model.picked, model.other.page != nil {
+            } else if model.choice == nil, model.other.page != nil {
                 // The pages after Other models, under their own marks and titles.
-                OtherModelsPages(store: store, model: model, add: addOnAccount, adding: model.busy || handingOff)
+                OtherModelsPages(store: store, model: model, add: chooseAccount, adding: model.busy || handingOff)
             } else {
                 step
             }
         }
-        // Its first page, the servers (or the hub's line that it cannot add agents): Esc closes the wizard there.
-        .preference(key: SetupFirstPage.self, value: model.receipt == nil && !model.picked && !model.busy && !handingOff)
+        // Its first page, the name and the AI (or the hub's line that it cannot add agents): Esc closes the wizard there.
+        .preference(key: SetupFirstPage.self, value: model.receipt == nil && model.choice == nil && model.other.page == nil
+                    && !model.busy && !handingOff)
         .onChange(of: placeStep, initial: true) { _, now in store.wizardPages.tell(addAgent: now, by: placeMark) }
         .onDisappear { store.wizardPages.gone(placeMark) }
+        // **The server that New server made gets the agent by itself** (`AddAgentModel.goOn`): he chose its name and its
+        // AI, and then that new server.
+        .task(id: model.startsOn) {
+            guard model.startsOn != nil else { return }
+            model.startsOn = nil
+            add()
+        }
         .task(id: "\(store.hub)/\(store.state?.db ?? "")") {
             while !Task.isCancelled {
                 if model.receipt == nil { await model.read(store: store) }
@@ -264,46 +338,50 @@ struct AddAgentView: View {
     private var placeStep: AppPlace.AddAgentStep? {
         guard store.state?.ui_features?.contains(Servers.feature) == true else { return nil }
         if model.receipt != nil || model.busy || handingOff { return .progress }
-        if model.picked, model.other.page != nil { return nil }
-        return model.picked ? .name : .server
+        if model.choice == nil, model.other.page != nil { return nil }
+        return model.choice == nil ? .name : .server
     }
 
     /// **Add agent is two centred steps under one mark and one title** (D-3 of 28 October 2026, and the owner's yes of
-    /// 7 November 2026 to the mockup): the new agent's glyph and "Add agent" stay over both, and under them first the
-    /// servers, then its name and its AI. It is a worker that reports to the manager, which Settings › Reporting lines
-    /// changes.
+    /// 7 November 2026 to the mockup): the new agent's glyph and "Add agent" stay over both, and under them first its
+    /// name and its AI, then the servers (the owner, 16 November 2026: "agent onboarding should ask first for the name
+    /// and AI provider before the server page"). It is a worker that reports to the manager, which Settings › Reporting
+    /// lines changes.
     private var step: some View {
         let list = model.list ?? store.reading("servers.list")
         let team = store.state?.agents.map(\.name) ?? []
-        // Back from its name to the servers stands at the page's top left, where every setup page has it.
+        let adding = model.busy || handingOff
+        // Back from the servers to its name and its AI stands at the page's top left, where every setup page has it.
         return SetupPage {
-            if !handingOff, list != nil, model.picked, !model.busy {
-                SetupBack { model.unpick() }.keyboardShortcut(.cancelAction).accessibilityIdentifier("add-agent-back")
+            if !handingOff, list != nil, model.choice != nil, !model.given, !model.busy {
+                SetupBack { model.unchoose() }.keyboardShortcut(.cancelAction).accessibilityIdentifier("add-agent-back")
             }
         } step: {
-            SetupStep(title: model.busy || handingOff ? String(l10n: "Adding \(model.name)") : String(l10n: "Add agent"), waits: model.busy || handingOff) {
+            SetupStep(title: adding ? String(l10n: "Adding \(model.name)") : String(l10n: "Add agent"), waits: adding) {
                 // The glyph it will wear: its name, at the end of the hub's list.
                 AgentGlyph(name: model.key, size: SetupMetrics.mark).environment(\.glyphTeam, team + [model.key])
             } content: {
-                // **While it hands over, the moving title alone** (fix round 3b): the server it took was busy with it,
-                // and "No free server." with a white Add server stood under "Adding Juno" for a frame.
+                // **While it adds and hands over, the moving title alone** (fix round 3b): the server it took was busy
+                // with it, and "No free server." with a white Add server stood under "Adding Juno" for a frame.
                 if !handingOff, list != nil {
-                    if model.picked { naming } else { servers }
+                    if model.choice == nil { naming } else if !adding, !model.given { servers }
                 }
             }
         }
     }
 
-    // MARK: one: where it runs
+    // MARK: two: where it runs
 
-    /// **A card for each server that can take one more agent**, the one with the fewest agents first, with its agents'
-    /// glyphs (the owner, 7 November 2026: "agents should always come with their icon"), then **New server**, which
-    /// opens Add server. Only New server while no server can take one.
-    private var servers: some View {
+    /// **A card for each server that can take one more agent with the AI that he chose**, the one with the fewest agents
+    /// first, with its agents' glyphs (the owner, 7 November 2026: "agents should always come with their icon"), then
+    /// **New server**, which opens Add server and keeps his name and his AI for the server that it makes. Only New
+    /// server while no server can take one. The press on a server adds the agent there. What the hub refused stands
+    /// under the cards.
+    @ViewBuilder private var servers: some View {
         VStack(spacing: 10) {
-            ForEach(model.open) { server in
+            ForEach(model.offered) { server in
                 card(symbol: server.symbol, title: server.name, help: server.agents.count > 2 ? People.agentWords(server.agents) : nil) {
-                    model.pick(server.name)
+                    place(on: server.name)
                 } trailing: {
                     agents(server.agents)
                 }
@@ -313,6 +391,7 @@ struct AddAgentView: View {
             card(symbol: "plus", title: String(l10n: "New server"), help: nil) { addServer() } trailing: { EmptyView() }
                 .accessibilityIdentifier("add-agent-add-server")
         }
+        if let error = model.error { SetupWarning(error) }
     }
 
     /// The agents of a server at its card's right end: each glyph with its name, and the glyphs alone where three or
@@ -328,29 +407,34 @@ struct AddAgentView: View {
         }.accessibilityHidden(true)
     }
 
-    // MARK: two: its name and its AI
+    // MARK: one: its name and its AI
 
-    /// **Its name, then a card for each AI: the press on one adds the agent with that AI** (the owner, 7 November 2026:
-    /// "I just chose Juno and it installed claude code??! why?? it should have asked me first"). The field holds a name
-    /// already, and Return in it adds nothing. The AIs are Add server's, in its cards' look.
+    /// **Its name, then a card for each AI: the press on one goes on to the servers** (the owner, 16 November 2026), or
+    /// adds the agent with that AI on the server that the form came with (the owner, 7 November 2026: "I just chose Juno
+    /// and it installed claude code??! why?? it should have asked me first"). The field holds a name already, and Return
+    /// in it adds nothing. The AIs are Add server's, in its cards' look.
     @ViewBuilder private var naming: some View {
-        SetupField(placeholder: String(l10n: "Agent name"), text: $model.name, wrong: !model.name.isEmpty && model.problem != nil) {}
+        // The server's own problem waits for the server step, unless the form came with its server.
+        let problem = model.given ? model.problem : model.nameProblem
+        SetupField(placeholder: String(l10n: "Agent name"), text: $model.name, wrong: !model.name.isEmpty && problem != nil) {}
             .accessibilityIdentifier("add-agent-name")
-        if let error = model.error ?? (model.name.isEmpty ? nil : model.problem) {
+        if let error = model.error ?? (model.name.isEmpty ? nil : problem) {
             SetupWarning(error)
         }
         // Only once it can go: no grey card (the owner: "dont show the send button if it's not clickable").
-        if !model.busy && model.problem == nil && store.canWrite {
+        if !model.busy && problem == nil && store.canWrite {
             VStack(spacing: 10) {
                 ForEach(ServerAI.linuxChoices, id: \.self) { ai in
                     let line = model.selected?.isMac == true ? ai.macLine : ai.linuxLine
-                    card(logos: ai.logos, title: ai.title, help: line) { add(runtime: ai.runtime) }
+                    card(logos: ai.logos, title: ai.title, help: line) { choose(.plan(ai.runtime)) }
                         .accessibilityHint(line)
                         .accessibilityIdentifier("add-agent-ai-\(ai.rawValue)")
                 }
-                // **Other models** (picture 1, his "Yes, as shown"): under Claude and ChatGPT, for a Linux server that the
-                // hub says takes such an agent, in their cards' look. A Mac server keeps its two cards.
-                if model.selected?.takesModelAccounts == true, store.state?.ui_features?.contains(ModelProvider.feature) == true {
+                // **Other models** (picture 1, his "Yes, as shown"): under Claude and ChatGPT, in their cards' look, where
+                // the hub takes such an agent; on a form that came with its server, only for a Linux server that the hub
+                // says takes one. A Mac server keeps its two cards, and the server step offers only servers that take one.
+                if !model.given || model.selected?.takesModelAccounts == true,
+                   store.state?.ui_features?.contains(ModelProvider.feature) == true {
                     let line = String(l10n: "With an API key, or on your own model server.")
                     card(mark: "ellipsis", title: String(l10n: "Other models"), help: line) { model.other.open(.choices) }
                         .accessibilityHint(line)
@@ -413,6 +497,30 @@ struct AddAgentView: View {
         .help(help)
     }
 
+    /// **His press on an AI, or on the last page after Other models**: the server step is next, or, on a form that came
+    /// with its server, the agent is added there.
+    private func choose(_ chosen: AddAgentModel.Choice) {
+        model.choose(chosen)
+        if model.given { add() }
+    }
+
+    private func chooseAccount(_ provider: ModelProvider) { choose(.account(provider)) }
+
+    /// His press on a server of the server step: the agent goes there with the AI that he chose.
+    private func place(on server: String) {
+        model.server = server
+        add()
+    }
+
+    /// The agent on its server with what he chose.
+    private func add() {
+        switch model.choice {
+        case .plan(let runtime)?: add(runtime: runtime)
+        case .account(let provider)?: addOnAccount(provider)
+        case nil: break
+        }
+    }
+
     /// **Add agent, then the agent's own page**, whose setup takes it from the install to its chat one centered step at
     /// a time (`AgentSetupWizard`). The install's rows show here only on a hub without those pages. **"Adding Juno"
     /// stays until the setup can draw** (fix round 3, item 12): the install's page showed 198 ms after it, and then the
@@ -420,22 +528,36 @@ struct AddAgentView: View {
     private func add(runtime: String) {
         Task {
             handingOff = configure != nil
+            // A press while another request is on its way goes when the hub can take it, under "Adding Juno". With no
+            // hub to take it, a form that came with its server shows its first step again.
+            guard await store.writable() else { if model.given { model.choice = nil }; handingOff = false; return }
             await model.start(store: store, runtime: runtime)
+            // What the hub refused stands where he pressed: on the server step, or on the first step of a form that came
+            // with its server, whose AI he presses again there.
+            if model.receipt == nil, model.given { model.choice = nil }
             handOff()
         }
     }
 
-    /// **The press on the last page after Other models**: the agent on an account with that provider, then its setup
-    /// page, as for an agent on a plan. A refusal is that page's one orange line, and the page stays.
+    /// **The agent on an account with the provider of the pages after Other models**, then its setup page, as for an
+    /// agent on a plan. A refusal of the account is the last of those pages' one orange line, and that page shows again;
+    /// a refusal of the server stands where he chose the server (`AddAgentModel.start`).
     private func addOnAccount(_ provider: ModelProvider) {
         let other = model.other
         Task {
             handingOff = configure != nil
+            guard await store.writable() else { if model.given { model.choice = nil }; handingOff = false; return }
             let line = await model.start(store: store, provider: provider,
                                          secret: other.secretOf == provider ? other.secret : nil,
                                          address: provider == .own ? other.checkedAddress : nil,
                                          model: provider.sellsManyMakers ? provider.accountModel(other.modelName) : nil)
-            if let line { if !line.isEmpty { other.line = line }; handingOff = false; return }
+            // No agent: the account's refusal on the last page after Other models, with that page again; else the
+            // words stand where he pressed, and a form that came with its server shows its first step again.
+            guard model.receipt != nil else {
+                if let line, !line.isEmpty { other.line = line; model.unchoose() }
+                else if model.given { model.choice = nil }
+                handingOff = false; return
+            }
             handOff()
         }
     }

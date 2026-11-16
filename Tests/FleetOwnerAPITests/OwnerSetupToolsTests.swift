@@ -550,7 +550,7 @@ final class OwnerSetupProgramTests {
 
     @Test func theTwoToolsAreReadsOfTheSetOwner() throws {
         let listed = tools(Link([.nothingListens])).listed
-        #expect(listed.count == 67 + 3 + 4)                 // and the link's four write tools
+        #expect(listed.count == 67 + 3 + 5)                 // and the link's five write tools
         for name in OwnerSetupTools.names {
             let tool = try #require(listed.first { $0.name == name })
             #expect(tool.annotations == .object(["readOnlyHint": .bool(true)]))
@@ -571,7 +571,7 @@ final class OwnerSetupProgramTests {
     @Test func toolsAndCallTakeThemAndWriteDoesNot() throws {
         let link = Link([.answer(.result(Self.state))])
         let (status, out, _) = try run(["tools"], link: link)
-        #expect(status == 0 && out.count == 74)
+        #expect(status == 0 && out.count == 75)
         #expect(out.filter { $0.hasPrefix("call ") }.count == 7)
         #expect(out.contains { $0.hasPrefix("call setup_state: Where the setup of the fleet stands") })
         #expect(out.contains { $0.hasPrefix("call setup_show: Asks macOS to bring the Founderizer app to the front") })

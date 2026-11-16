@@ -70,9 +70,9 @@ struct OwnerSetupDiagnosisTests {
                                  "seconds_since_answer"]
         let build: Set<String> = ["stage", "stopped_at", "stop_shows", "use", "provider", "seconds_in_stage"]
         let install: Set<String> = ["state", "kind", "step", "stop", "cause", "waits_for_network", "steps_done",
-                                    "steps_planned", "seconds_in_step"]
+                                    "steps_planned", "tries", "seconds_in_step"]
         let last: Set<String> = ["kind", "outcome", "step", "stop", "cause", "waits_for_network", "steps_done",
-                                 "steps_planned", "seconds_ago"]
+                                 "steps_planned", "tries", "retried", "seconds_ago"]
         let builds: Set<String> = ["unjoined", "server", "left_behind", "not_known", "newest_seconds_ago"]
         let appBuild: Set<String> = ["running", "on_disk", "offered", "state"]
         let secretWords = try! NSRegularExpression(pattern: "token|key|pass|secret|code|address|account|mail|user|host",
@@ -140,7 +140,7 @@ struct OwnerSetupDiagnosisTests {
         #expect(json["install"] == .object(["state": .string("running"), "kind": .string("server"),
                                             "step": .string("network"), "stop": .string("none"),
                                             "cause": .string("none"), "waits_for_network": .bool(false),
-                                            "steps_done": .int(1), "steps_planned": .int(4),
+                                            "steps_done": .int(1), "steps_planned": .int(4), "tries": .int(1),
                                             "seconds_in_step": .int(3)]))
         // The keys of the last install, with a hub of each kind: it shows while the model holds no install.
         for hub in [SetupFacts.Hub.none, .set, .answers] {
@@ -148,6 +148,34 @@ struct OwnerSetupDiagnosisTests {
             #expect(kept["last_install"]?.object.map { Set($0.keys) } == last)
             #expect(Set(kept.object!.keys) == top)
         }
+    }
+
+    /// **The tries of a press** (`InstallRetry`): 1 to 3, and the earlier tries' stops by the names of the lists of
+    /// cause and of stop only; a count outside its range is held to it, and any other name is `other`.
+    @Test func theTriesAndTheEarlierStopsAreFixedNames() {
+        let record = SetupLastInstall(kind: "join", outcome: "stopped", step: "join", stop: "installer_stopped",
+                                      cause: "packages", stepsDone: 2, stepsPlanned: 4, tries: 3,
+                                      retried: ["hub_busy", "server_unreached", "rm -rf /", "none"])
+        let last = Self.diagnosis(lastInstall: record).json(change: 1)["last_install"]
+        #expect(last?["tries"] == .int(3))
+        #expect(last?["retried"] == .array([.string("other"), .string("other")]))
+        let two = SetupLastInstall(kind: "join", outcome: "stopped", step: "join", stop: "installer_stopped",
+                                   cause: "packages", stepsDone: 2, stepsPlanned: 4, tries: 9,
+                                   retried: ["hub_busy", "server_unreached"])
+        let said = Self.diagnosis(lastInstall: two).json(change: 1)["last_install"]
+        #expect(said?["tries"] == .int(3))
+        #expect(said?["retried"] == .array([.string("hub_busy"), .string("server_unreached")]))
+        let none = Self.diagnosis(install: SetupInstall(state: "running", kind: "server", step: "join", stop: "none",
+                                                         stepsDone: 1, stepsPlanned: 4, tries: 0))
+            .json(change: 1)["install"]
+        #expect(none?["tries"] == .int(1))
+        let many = Self.diagnosis(install: SetupInstall(state: "running", kind: "server", step: "join", stop: "none",
+                                                         stepsDone: 1, stepsPlanned: 4, tries: 9))
+            .json(change: 1)["install"]
+        #expect(many?["tries"] == .int(3))
+        let zero = SetupLastInstall(kind: "join", outcome: "stopped", step: "join", stop: "installer_stopped",
+                                    cause: "packages", stepsDone: 2, stepsPlanned: 4, tries: 0, retried: [])
+        #expect(Self.diagnosis(lastInstall: zero).json(change: 1)["last_install"]?["tries"] == .int(1))
     }
 
     /// **The last install by the kept records**: given only while the model holds no install, with its seconds, and
@@ -160,7 +188,8 @@ struct OwnerSetupDiagnosisTests {
                                                  "step": .string("verify"), "stop": .string("no_checklist"),
                                                  "cause": .string("none"), "waits_for_network": .bool(false),
                                                  "steps_done": .int(3),
-                                                 "steps_planned": .int(4), "seconds_ago": .int(75)]))
+                                                 "steps_planned": .int(4), "tries": .int(1), "retried": .array([]),
+                                                 "seconds_ago": .int(75)]))
         // With an install in the model, in any state: null, whatever the record says.
         for held in [Self.runningInstall,
                      SetupInstall(state: "none", kind: "server", step: "read", stop: "none", stepsDone: 0, stepsPlanned: 4),
@@ -289,7 +318,7 @@ struct OwnerSetupDiagnosisTests {
         #expect(json["install"] == .object(["state": .null, "kind": .null, "step": .string("other"),
                                             "stop": .string("none"), "cause": .string("none"),
                                             "waits_for_network": .bool(false),
-                                            "steps_done": .int(9), "steps_planned": .int(0),
+                                            "steps_done": .int(9), "steps_planned": .int(0), "tries": .int(1),
                                             "seconds_in_step": .null]))
         // The same for a kept record: a kind or an outcome outside its list is null, a step or a stop `other`.
         let record = SetupLastInstall(kind: "worker-2", outcome: "It stopped", step: "Install Founderizer on example-mac",
@@ -298,7 +327,7 @@ struct OwnerSetupDiagnosisTests {
         #expect(Self.diagnosis(lastInstall: record).json(change: 1, workSeconds: .init(lastInstall: 9))["last_install"]
                 == .object(["kind": .null, "outcome": .null, "step": .string("other"), "stop": .string("none"),
                             "cause": .string("none"), "waits_for_network": .bool(false), "steps_done": .int(9),
-                            "steps_planned": .int(0),
+                            "steps_planned": .int(0), "tries": .int(1), "retried": .array([]),
                             "seconds_ago": .int(9)]))
         var halted = record
         halted.outcome = "stopped"

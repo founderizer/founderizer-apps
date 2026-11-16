@@ -306,11 +306,42 @@ struct FleetShapeHubTests {
                                        list: one) == .sharing(rootStep: true))
     }
 
-    /// The two new pages in the steps of the manager's setup: the name is the step Manager, and the slider's page is
-    /// the step Servers, as the server's page after it.
-    @Test func theTwoPagesInTheStepsOfTheManagersSetup() {
+    /// The pages in the steps of the manager's setup: the name is the step Manager, the AI provider comes next, and the
+    /// slider's page is the step Servers, as the server's page and the install on it after it.
+    @Test func thePagesInTheStepsOfTheManagersSetup() {
+        #expect(ManagerSetupSteps.names == ["Manager", "AI provider", "Servers", "Sign in"])
         #expect(ManagerSetupSteps.current(.name) == 0)
-        #expect(ManagerSetupSteps.current(.servers) == 1)
-        #expect(ManagerSetupSteps.current(.server) == 1)
+        #expect(ManagerSetupSteps.current(.provider) == 1)
+        #expect(ManagerSetupSteps.current(.servers) == 2)
+        #expect(ManagerSetupSteps.current(.server) == 2)
+        #expect(ManagerSetupSteps.current(.installing(runtime: "codex")) == 2)
+        #expect(ManagerSetupSteps.current(.signIn(runtime: "codex")) == 3)
+        #expect(ManagerSetupSteps.current(.activate) == 4)
+    }
+
+    /// **The manager's own setup asks for its name and its AI provider before the servers** (the owner, 16 November
+    /// 2026: "agent onboarding should ask first for the name and AI provider before the server page"): the provider
+    /// that he chose waits on this Mac for the server, and the install that gives the manager both is the page once the
+    /// server is there. A command that the hub refused shows the provider's page again.
+    @Test func theManagersSetupAsksForTheProviderBeforeTheServers() {
+        func page(_ start: ManagerSetupStart, renaming: Bool = false, provider: String? = nil, placeOn: String? = nil,
+                  refused: Bool = false) -> AgentSetupPage {
+            start.page(renaming: renaming, provider: provider, placeOn: placeOn, refused: refused)
+        }
+        #expect(page(.name) == .name)
+        #expect(page(.name, provider: "claude") == .name)
+        #expect(page(.servers, renaming: true) == .name)
+        #expect(page(.unread) == .servers)                      // the moving title, until the list answers
+        for start in [ManagerSetupStart.servers, .sharing(rootStep: true), .sharing(rootStep: false), .onHub("hub"), .server] {
+            #expect(page(start) == .provider, "\(start)")
+            #expect(page(start, placeOn: "hub") == .provider, "\(start)")
+        }
+        #expect(page(.servers, provider: "claude") == .servers)
+        #expect(page(.sharing(rootStep: true), provider: "claude") == .servers)
+        #expect(page(.server, provider: "claude") == .server)
+        #expect(page(.server, provider: "claude", placeOn: "vps-2") == .installing(runtime: "claude"))
+        #expect(page(.onHub("hub"), provider: "codex", placeOn: "hub") == .installing(runtime: "codex"))
+        #expect(page(.onHub("hub"), provider: "codex", placeOn: "hub", refused: true) == .provider)
+        #expect(page(.server, provider: "codex", placeOn: "vps-2", refused: true) == .provider)
     }
 }

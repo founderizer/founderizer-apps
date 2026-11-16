@@ -16,13 +16,21 @@ public enum InstallCause: String, Codable, CaseIterable, Sendable {
     case hubNoAnswer = "hub_no_answer"
     case codeNotFetched = "code_not_fetched"
     case joinCodeRefused = "join_code_refused"
+    /// The one refusal of a join code that passes: the code expired before the join reached it (a slow package step).
+    /// Each try asks the hub for a new code (`InstallRetry`).
+    case joinCodeExpired = "join_code_expired"
     case serverNameRefused = "server_name_refused"
+    /// The hub could not read the server's name in Tailscale yet, and keeps the code: one of the stops that pass.
+    case serverNameUnread = "server_name_unread"
     case hubBusy = "hub_busy"
     case privateNetwork = "private_network"
     case firewall
     case agentUsers = "agent_users"
     case vault
     case updates
+    /// The system's packages: an `apt-get` of an installer or of this app's own steps did not finish (a mirror that
+    /// failed for a moment), with our own sentence for it since the plan of 16 November 2026.
+    case packages
     case service
     case hubClaim = "hub_claim"
     case agentProgram = "agent_program"
@@ -85,10 +93,10 @@ public enum InstallCause: String, Codable, CaseIterable, Sendable {
         Row(part: "join code is not valid", cause: .joinCodeRefused),
         Row(part: "join code was already used", cause: .joinCodeRefused),
         Row(part: "a newer join code replaced", cause: .joinCodeRefused),
-        Row(part: "join code expired", cause: .joinCodeRefused),
+        Row(part: "join code expired", cause: .joinCodeExpired),
         Row(part: "too many wrong join codes", cause: .joinCodeRefused),
         Row(part: "this server is in your fleet already", cause: .serverNameRefused),
-        Row(part: "could not read this server's name in tailscale", cause: .serverNameRefused),
+        Row(part: "could not read this server's name in tailscale", cause: .serverNameUnread),
         Row(part: "and a server's name in fleet has", cause: .serverNameRefused),
         Row(part: "your fleet has a server named", cause: .serverNameRefused),
         Row(part: "keeps that name for itself", cause: .serverNameRefused),
@@ -100,6 +108,10 @@ public enum InstallCause: String, Codable, CaseIterable, Sendable {
         Row(part: "tailscale gave no address", cause: .privateNetwork),
         Row(part: "tailscale's service did not start", cause: .privateNetwork),
         Row(part: "this mac is not on your private network", cause: .privateNetwork),
+        // The system's packages: the package steps of join.sh and hub.sh, and this app's own steps that install git or
+        // Tailscale's curl (`InstallPlan.packagesStop`).
+        Row(part: "package lists could not be updated", cause: .packages),
+        Row(part: "the packages of this system could not be installed", cause: .packages),
         // The server's own steps.
         Row(part: "firewall of this", cause: .firewall),
         Row(part: "the firewall did not turn on", cause: .firewall),

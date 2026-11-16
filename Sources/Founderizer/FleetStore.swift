@@ -458,6 +458,15 @@ final class FleetStore {
     /// The first option of a Needs-you item for his phone (API 1.95) asked for the Add device picture: the Devices
     /// group of Settings › Servers makes its code at once, as its own Add device does, and clears this.
     var addDeviceAsked = false
+    /// Owner feature `need_run`: each item's Run while it runs, and the line of a run that did not reach its Mac, by
+    /// the item's id. A quit forgets them, and an item whose command ran is answered.
+    var needRuns: [Int: NeedRunState] = [:]
+    /// The machines' readings that Run takes a Mac of the fleet from (`NeedRun.place`): read while a card shows a
+    /// command for one, and again at each press.
+    var runMachines: [MachineStatus]?
+    @ObservationIgnored private var runJobs: [Int: NeedRunJob] = [:]
+    @ObservationIgnored private var runMachinesRead: ContinuousClock.Instant?
+    @ObservationIgnored private var runQuitWatch: NSObjectProtocol?
     var destination: Destination = FleetStore.asked ?? .agent("manager") {
         didSet {
             // The first page the app chose for itself is no step he can go back to; a step of Back or Forward is not
@@ -654,9 +663,6 @@ final class FleetStore {
     var supportsDirectChat: Bool { state?.ui_features?.contains("direct_chat") == true }
     func canChat(with agent: String) -> Bool { state?.supportsChat(with: agent) == true }
     var supportsCorrections: Bool { state?.ui_features?.contains("corrections") == true }
-    /// Whether this hub takes the start of the manager's standing session (`ManagerSession`), so that the warning
-    /// band draws no control an older hub would refuse.
-    var supportsManagerStart: Bool { state?.ui_features?.contains(ManagerSession.feature) == true }
     func draft(for agent: String) -> String { agent == "manager" ? draft : agentDrafts[agent] ?? "" }
     func setDraft(_ text: String, for agent: String) {
         if agent == "manager" { draft = text } else { agentDrafts[agent] = text }
@@ -968,9 +974,9 @@ final class FleetStore {
     func chatShowsDetail(_ agent: String) -> Bool {
         state?.agents.first { $0.name == agent }?.modelProvider != nil && !setupShows(agent)
     }
-    /// **The server that joined for an agent with no server yet**, by the same key: its provider's press gives it that
-    /// server. This Mac keeps it, so an app that starts again between the join and that press opens on the provider, and
-    /// not on the server's page, where a press would make another server.
+    /// **The server that joined for an agent with no server yet**, by the same key: the setup gives it that server with
+    /// its provider. This Mac keeps it, so an app that starts again between the join and that command goes on with that
+    /// server, and does not open on the server's page, where a press would make another server.
     private var joinedFor = UserDefaults.standard.dictionary(forKey: "serversJoinedFor") as? [String: String] ?? [:] {
         didSet { UserDefaults.standard.set(joinedFor, forKey: "serversJoinedFor") }
     }
@@ -979,8 +985,21 @@ final class FleetStore {
         guard let database = state?.db else { return }
         joinedFor[placingKey(agent, database: database)] = server
     }
+    /// **The AI provider that he chose for an agent with no server yet**, by the same key (the owner, 16 November 2026:
+    /// "agent onboarding should ask first for the name and AI provider before the server page"): the setup gives it to
+    /// the agent with its server, as soon as that server is there. This Mac keeps it, so an app that starts again
+    /// between the press and the server goes on to the server, and does not ask for the provider again.
+    private var providerFor = UserDefaults.standard.dictionary(forKey: "providersChosenFor") as? [String: String] ?? [:] {
+        didSet { UserDefaults.standard.set(providerFor, forKey: "providersChosenFor") }
+    }
+    func chosenProvider(_ agent: String) -> String? { state.flatMap { providerFor[placingKey(agent, database: $0.db)] } }
+    /// nil takes the choice away: Back from the page after it.
+    func noteProvider(_ provider: String?, for agent: String) {
+        guard let database = state?.db else { return }
+        providerFor[placingKey(agent, database: database)] = provider
+    }
     /// An agent with no server goes on the list, and one that runs leaves it. One that has its server needs no joined
-    /// server any more.
+    /// server and no chosen provider any more.
     private func notePlacing(_ fresh: HubState) {
         // The reading that has a manager under its new name, and no more under its old one (`noteRenamed`).
         if let renamed = renamedManager, renamed.hub == hub, renamed.database == fresh.db,
@@ -996,6 +1015,7 @@ final class FleetStore {
             if !agent.placed, !unplaced.contains(key) { unplaced.insert(key) }
             if AgentSetupFlow.runs(agent), unplaced.contains(key) { unplaced.remove(key) }
             if agent.placed, joinedFor[key] != nil { joinedFor[key] = nil }
+            if agent.placed, providerFor[key] != nil { providerFor[key] = nil }
         }
     }
     /// **A write that its own row says it waits for** (fix round 3c, the lead's call): the request, and the agent's part
@@ -1328,7 +1348,7 @@ final class FleetStore {
                     // The copy he asked for, if one is due. This app runs only while he runs it, so the fleet's own
                     // poll is the only clock there is; until a copy is due this is two dates compared.
                     await self.copies.tick(store: self)
-                    // A new build of this app, read every four hours and put in place while he is away from it.
+                    // A new build of this app, read every 5 minutes and when he comes back, in place while he is away.
                     self.updates.tick(store: self)
                     // The fleet's central vault, read once a minute and kept in order by itself, on every page.
                     self.vaultModel().tick(store: self)
@@ -1341,7 +1361,11 @@ final class FleetStore {
                     self.accessModel().tick(store: self)
                     // The join's hardening of each Linux server, put right again as root, with nothing on a page.
                     self.hardeningModel().tick(store: self)
+                    // This app's crashes, to our own site while his Error reports switch is on, with nothing on a page.
+                    ErrorReportsSender.shared.tick(store: self)
                     self.releasesTick()
+                    // The Mac's language and name for the agents, once for each hub generation, with nothing on a page.
+                    self.ownerProfileTick()
                     wait = self.untilRead
                 }
                 do { try await Task.sleep(for: .seconds(max(wait, 0.1))) } catch { return }
@@ -1392,6 +1416,29 @@ final class FleetStore {
             let read = try? await HubClient().releases(hub: hub, database: database)
             guard let self, self.hub == hub, self.state?.db == database else { return }
             if let read { self.keep(read, as: "releases") } else { self.keptReadingFailed("releases") }
+        }
+    }
+
+    /// The hub and generation whose name and language this launch has looked at (`ownerProfileTick`).
+    @ObservationIgnored private var profileLooked: String?
+
+    /// **The Mac's language and name for the agents** (owner feature `owner_profile`; the owner, 16 November 2026: "when
+    /// the fleet is setup on an app with spanish language, bots should talk in Spanish", and "Mac account + Settings
+    /// row" to the picture of his name): once for each hub generation in a launch, a setting that the fleet has not set
+    /// gets the Mac's own value — the first of its preferred languages, the first name of its account (`OwnerProfile`).
+    /// Under the hood: nothing of it is on a page, and a read or a write that fails goes again at the next launch. His
+    /// Name row is in Settings › General › Your profile.
+    private func ownerProfileTick() {
+        guard isFresh, let database = state?.db, state?.ui_features?.contains(OwnerProfile.feature) == true else { return }
+        let looked = "\(hub.absoluteString)|\(database)"
+        guard profileLooked != looked else { return }
+        profileLooked = looked
+        let language = OwnerProfile.languageTag(), name = OwnerProfile.accountName()
+        guard language != nil || name != nil else { return }
+        let hub = hub, client = installation
+        Task {
+            _ = try? await OwnerProfileClient().fill(hub: hub, database: database, client: client, language: language,
+                                                     name: name)
         }
     }
 
@@ -1707,6 +1754,100 @@ final class FleetStore {
         guard !ticked.isEmpty, ticked.allSatisfy(need.choices.indices.contains) else { return }
         let request = PendingRequest(hub: hub, database: state.db, client: installation, needID: need.id,
                                      choices: ticked, text: ticked.map { need.choices[$0] }.joined(separator: "; "))
+        do {
+            try outbox.save(request)
+            pending = request
+            sending = true
+        } catch {
+            storageFailed(String(l10n: "Cannot save this answer. Nothing was sent."), cause: error)
+            return
+        }
+        await transmit(request)
+    }
+
+    // MARK: Run on the command of a hand step (owner feature need_run, API 1.197)
+
+    /// **Where this Mac runs the command of `need` at a press of Run, or nil: its card shows no Run.** A hub that names
+    /// `need_run`, an item whose command passes this Mac's own checks (`NeedRun.command`), and a place that this Mac
+    /// reaches: itself, or a Mac of the fleet by the machines' readings (`NeedRun.place`).
+    func runPlace(_ need: OwnerNeed) -> NeedRun.Place? {
+        guard state?.ui_features?.contains(NeedRun.feature) == true, NeedRun.command(of: need) != nil else { return nil }
+        return NeedRun.place(of: need, machines: runMachines)
+    }
+
+    /// Reads the machines for the cards whose command runs on a Mac of the fleet: at most once in 30 seconds while
+    /// such a card shows, and at once (`now`) at a press, so that a press takes the address of now.
+    func readRunMachines(now: Bool = false) async {
+        guard let state else { return }
+        let clock = ContinuousClock()
+        if !now, let read = runMachinesRead, clock.now - read < .seconds(30) { return }
+        runMachinesRead = clock.now
+        let hub = hub, database = state.db
+        guard let list = try? await client.machines(hub: hub, database: database),
+              (try? list.validate(database: database)) != nil, self.hub == hub, self.state?.db == database else { return }
+        runMachines = list.machines
+    }
+
+    /// **His press of Run on the command of `need`**: this Mac runs it where the item says, and its exit status and the
+    /// end of its output go as his answer, through the outbox as every answer goes (the hook). A run that did not
+    /// reach its Mac sends nothing, and the card says so under the command. Stop ends the run and sends nothing. Each
+    /// press has its own id: after every wait the press goes on only while the state is still its own.
+    func run(_ need: OwnerNeed) async {
+        guard answersWrites, state?.ui_features?.contains(NeedRun.feature) == true,
+              let command = NeedRun.command(of: need), needRuns[need.id]?.busy != true, pending?.needID != need.id
+        else { return }
+        let press = UUID()
+        needRuns[need.id] = .running(press)
+        watchRunsAtQuit()
+        if need.run_on != NeedRun.ownMac { await readRunMachines(now: true) }
+        guard needRuns[need.id] == .running(press) else { return }      // Stop came while the machines were read
+        guard let place = NeedRun.place(of: need, machines: runMachines) else {
+            needRuns[need.id] = .notReached("")
+            return
+        }
+        let job = NeedRunJob(command: command, place: place)
+        runJobs[need.id] = job
+        let outcome = await job.run()
+        if runJobs[need.id] === job { runJobs[need.id] = nil }
+        guard needRuns[need.id] == .running(press) else { return }
+        switch outcome {
+        case .stopped:
+            needRuns[need.id] = nil
+        case .notReached(let said):
+            needRuns[need.id] = .notReached(said)
+        case .ran(let status, let output):
+            // The command ran: its answer waits for the outbox as a pressed option waits, with no Stop.
+            needRuns[need.id] = .sending
+            await answer(need, ran: NeedRunResult(status: status, output: output))
+            if needRuns[need.id] == .sending { needRuns[need.id] = nil }
+        }
+    }
+
+    /// His press of Stop on a run of `need`: the job ends, and its outcome clears the state. Before the job started
+    /// (the machines are read), the press ends there.
+    func stopRun(_ need: OwnerNeed) {
+        guard case .running? = needRuns[need.id] else { return }
+        if let job = runJobs[need.id] { job.stop() } else { needRuns[need.id] = nil }
+    }
+
+    /// A quit of the app stops the runs on this Mac, as a closed Terminal window ends its commands.
+    private func watchRunsAtQuit() {
+        guard runQuitWatch == nil else { return }
+        runQuitWatch = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
+                                                              object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.runJobs.values.forEach { $0.stop() } }
+        }
+    }
+
+    /// What this Mac read of a run of `need`'s command, as his answer: the hub writes the words of the answer itself
+    /// (owner feature `need_run`), so `text` holds them only for this app. It waits while another request is on its
+    /// way, as a press waits. An item that closed meanwhile (withdrawn, replaced, answered on the phone) takes
+    /// nothing: the hub refuses an answer to a closed item, and nothing waits for this one any more.
+    func answer(_ need: OwnerNeed, ran: NeedRunResult) async {
+        guard await writable(), let state, let on = need.run_on,
+              let open = openNeeds.first(where: { $0.id == need.id }), open.signsTheSame(as: need) else { return }
+        let request = PendingRequest(hub: hub, database: state.db, client: installation, needID: need.id, ran: ran,
+                                     text: NeedRun.answerWords(on: on, status: ran.status))
         do {
             try outbox.save(request)
             pending = request

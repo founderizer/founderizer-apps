@@ -630,8 +630,10 @@ struct ChatPage: View {
                 return .message(message)
             case .report:
                 guard let number = Int(item.key) else { return nil }
+                // The message whose turn it took (hub 1.190), which places the row of what he asked for.
                 let object: [String: Any] = ["id": number, "agent": agent, "text": item.text, "about": item.about ?? "",
-                                             "created": item.ts, "in_reply_to": item.in_reply_to as Any? ?? NSNull()]
+                                             "created": item.ts, "in_reply_to": item.in_reply_to as Any? ?? NSNull(),
+                                             "turn": item.turn as Any? ?? NSNull()]
                 guard let data = try? JSONSerialization.data(withJSONObject: object),
                       let report = try? JSONDecoder().decode(ManagerReport.self, from: data) else { return nil }
                 return .report(report)

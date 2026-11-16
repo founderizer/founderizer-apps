@@ -203,6 +203,9 @@ struct AppsSettings: View {
         Group {
             if let only {
                 FleetPage(only.title, back: FleetBack("Apps") { store.destination = .settings(.apps) }) {
+                    // Connect account stands in the header from the first frame, so its notice and its wait stand too
+                    // while the list waits for its first reading (the review of 16 November 2026).
+                    if waits, let service = only.service, connecting(service).shows { connectStatus(service) }
                     if waits { waiting } else { page(only) }
                 } actions: {
                     lastReading
@@ -231,7 +234,11 @@ struct AppsSettings: View {
         // One agent's ticks never stand on another agent's page: the page keeps this view when it goes from one agent's
         // Can use to another's, or to another hub. A new hub generation closes the list too: its reading is kept by
         // generation, so the open card would wait for ever on the old one.
-        .onChange(of: "\(store.hub)\n\(store.state?.db ?? "")\n\(agent ?? "")") { repositories.close() }
+        .onChange(of: "\(store.hub)\n\(store.state?.db ?? "")\n\(agent ?? "")") {
+            repositories.close()
+            // A notice that showed for another hub is no yes for this one (Google's policy: only its Continue is).
+            drive.dismiss(); gmail.dismiss()
+        }
         // The MCP servers' form keeps its state here, where the page always is (`MCPAdding`). Its servers are read
         // again on the lists' clock, so the mark and Sign in again of a row stay true while the page shows.
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/mcp") {
@@ -275,7 +282,7 @@ struct AppsSettings: View {
             GitHubAppSection(store: store, app: integrations?.github) { await readIntegrations() }
             AccessSettings(store: store, kinds: [group.kind], agent: nil)
         case .drive, .gmail:
-            if let service = group.service, connecting(service).shows { GoogleConnectStatus(model: connecting(service)) }
+            if let service = group.service, connecting(service).shows { connectStatus(service) }
             AccessSettings(store: store, kinds: [group.kind], agent: nil).id("\(group.kind)/\(connects)")
         case .mcp:
             if mcp.shows { MCPAddSection(store: store, shared: mcp) }
@@ -306,14 +313,23 @@ struct AppsSettings: View {
         }
     }
 
-    /// Bringing another account of one Google service into the fleet.
+    /// Bringing another account of one Google service into the fleet. **The press shows the notice before Google's page**
+    /// (the owner's "Yes, both as drawn" of 16 November 2026), and only its Continue starts the Connect.
     private func connectButton(_ service: GoogleService) -> some View {
         let connect = connecting(service)
-        return Button { connect.start(store: store, service: service) { connects += 1 } } label: {
+        return Button { connect.ask() } label: {
             Label("Connect account", systemImage: "plus")
         }
         .buttonStyle(FleetOutlineButtonStyle()).disabled(!connect.canConnect(store))
         .accessibilityIdentifier("google-connect-\(service.rawValue)")
+    }
+
+    /// The notice, the wait or the last result of one service's Connect, whose Continue starts the Connect.
+    private func connectStatus(_ service: GoogleService) -> some View {
+        let connect = connecting(service)
+        return GoogleConnectStatus(model: connect, service: service, canContinue: connect.canContinue(store)) {
+            connect.start(store: store, service: service) { connects += 1 }
+        }
     }
 
     @ViewBuilder private var addMCPServer: some View {
@@ -392,7 +408,7 @@ struct AppsSettings: View {
                         AccessGive(store: store, agent: agent, kind: service.rawValue)
                     }
                 }
-                if agent == nil, connect.shows { GoogleConnectStatus(model: connect) }
+                if agent == nil, connect.shows { connectStatus(service) }
             }
             // The three lists draw one reading, and the first of them on the page says when it is the last one.
             AccessSettings(store: store, kinds: [service.rawValue], agent: agent, lead: FleetSpace.inside)

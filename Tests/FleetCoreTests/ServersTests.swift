@@ -118,6 +118,30 @@ struct ServersTests {
         #expect(Servers.reason("fix_holder") == "An agent there has full control of it.")
     }
 
+    /// **Add agent asks for the name and the AI before the server** (the owner, 16 November 2026: "agent onboarding
+    /// should ask first for the name and AI provider before the server page"): the first step checks the name alone,
+    /// and the server step offers the servers that take the AI that he chose.
+    @Test func addAgentChecksTheNameFirstAndOffersTheServersOfItsAI() throws {
+        #expect(Servers.agentNameProblem(name: "kai", existing: ["leo"]) == nil)
+        #expect(Servers.agentNameProblem(name: "leo", existing: ["leo"]) == "An agent with this name exists.")
+        #expect(Servers.agentNameProblem(name: "owner", existing: []) != nil)
+        #expect(Servers.agentNameProblem(name: "Big Box", existing: []) != nil)
+        func entry(_ name: String, kind: String = "linux", agents: [String] = [], providers: [String]? = nil) throws -> ServerEntry {
+            var fields: [String: Any] = ["name": name, "kind": kind, "hub": false, "joined": true, "agents": agents,
+                                         "reading": NSNull(), "available": true, "why": []]
+            if let providers { fields["model_providers"] = providers }
+            return try JSONDecoder().decode(ServerEntry.self, from: JSONSerialization.data(withJSONObject: fields))
+        }
+        let old = try entry("old", agents: ["leo"])
+        let shared = try entry("shared", agents: ["leo"], providers: ["gemini", "own"])
+        let empty = try entry("empty", providers: ["gemini", "own"])
+        let mini = try entry("mini", kind: "mac")
+        let open = [old, shared, empty, mini]
+        #expect(Servers.offered(open, onAccount: false, alone: false).map(\.name) == ["old", "shared", "empty", "mini"])
+        #expect(Servers.offered(open, onAccount: true, alone: false).map(\.name) == ["shared", "empty"])
+        #expect(Servers.offered(open, onAccount: true, alone: true).map(\.name) == ["empty"])
+    }
+
     @Test func aRowAndItsPageSayOneWordInEveryCase() throws {
         let on = { (agent: String) in FleetHealth.Helper(agent: agent, last_seen: 1020, offline: false) }
         let off = { (agent: String) in FleetHealth.Helper(agent: agent, last_seen: 900, offline: true) }

@@ -12,7 +12,8 @@ import SwiftUI
 /// settings > Updates page and move the automatic updates switch to General, where we can also see the current
 /// versions"). An update is taken from the sidebar's Update and the window it opens (`UpdateDialog`). General shows the
 /// release this fleet runs, the build this Mac runs and the Automatic updates switch. The page's Check now went with the
-/// page: the hub asks our channel every 15 minutes, this Mac asks every hour, and Founderizer › Check for Updates… stays.
+/// page: the hub asks our channel every 15 minutes, this Mac every five minutes and when he comes back to the app, and
+/// Founderizer › Check for Updates… stays.
 ///
 /// A git revision and a fleet id are this app's own business. It needs both and shows neither, because neither is
 /// anything a person reads (the owner, 19 October 2026: "IDs like the attached are not useful at all for the viewer").
@@ -102,6 +103,16 @@ final class UpdatesModel {
 /// we can also see the current versions"): Your fleet with the release it runs, Founderizer for Mac with the build it
 /// runs, and the Automatic updates switch. **No button**: an update is taken from the sidebar's Update. What went wrong
 /// stays where the Updates page said it: an orange line under its row, and a refusal of the hub under the card.
+///
+/// **The section always stands, with this Mac's row** (the owner, 16 November 2026: "I requested for the app version
+/// and the fleet version to appear under Settings > General. However, theyre nowhere to be seen"). Until then it was
+/// a `Group` that held nothing until the model had a reading, and the read that gives the model one was that `Group`'s
+/// task: SwiftUI starts no task on a view with no content. The sidebar's Update makes the model at launch
+/// (`FleetStore.fleetUpdateWords`), before the first read of the releases, so on his Mac the model never had one and
+/// General showed neither version for the whole launch. Now the task stands on the section, which always holds this
+/// Mac's row; the fleet's rows draw the model's reading, or the one that the store read under the hood
+/// (`FleetStore.releasesTick`, the prefetch) until the model has its own. This Mac's build needs nothing of the hub, so
+/// its row shows also from a hub without the releases.
 struct UpdatesSection: View {
     @Bindable var store: FleetStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -110,20 +121,25 @@ struct UpdatesSection: View {
     static let prefetch = PagePrefetch("releases", feature: ReleaseState.feature) { try await HubClient().releases(hub: $0, database: $1) }
 
     var body: some View {
-        Group {
-            if let state = model.state {
-                rows(state)
-            } else if model.failed || store.connectionError != nil {
+        let fleet = store.state?.ui_features?.contains(ReleaseState.feature) == true
+        let state: ReleaseState? = fleet ? model.state ?? store.reading("releases") : nil
+        // Reads of our channel that fail are said only once they have failed for a day.
+        let failing = AppUpdateWords.failing(since: store.updates.failingSince, now: Date())
+        FormSection("Updates", footer: model.error ?? store.updates.cannotReplace ?? store.updates.failure) {
+            if let state {
+                fleetRow(state)
+            } else if fleet, model.failed || store.connectionError != nil, !store.hubNoticeShows {
                 // While the hub does not answer nothing is read: the failed row, never a loading line. **Not while the
                 // window's notice says the outage** (`FleetStore.hubNoticeShows`): it is said once, over the page.
-                if !store.hubNoticeShows {
-                    FormSection("Updates") {
-                        FormRow("Founderizer cannot read the updates now.", detail: String(l10n: "It reads again when the hub answers."))
-                    }
-                }
+                FormRow("Founderizer cannot read the updates now.", detail: String(l10n: "It reads again when the hub answers."))
             }
+            FormRow("Founderizer for Mac", symbol: "app.badge", warning: failing) {
+                Text(AppUpdateWords.version(AppVersion.running)).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                    .accessibilityIdentifier("app-update-running")
+            }
+            if let state { automaticRow(state) }
         }
-        .task(id: "\(store.hub)/\(store.state?.db ?? "")") { await poll() }
+        .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(fleet)") { if fleet { await poll() } }
         .onDisappear { model.left() }
     }
 
@@ -136,34 +152,30 @@ struct UpdatesSection: View {
         }
     }
 
-    private func rows(_ state: ReleaseState) -> some View {
+    /// The release this fleet runs, or what goes on in its place.
+    private func fleetRow(_ state: ReleaseState) -> some View {
         let stand = state.stand(pressed: model.pressed)
-        // Reads of our channel that fail are said only once they have failed for a day.
-        let failing = AppUpdateWords.failing(since: store.updates.failingSince, now: Date())
-        return FormSection("Updates", footer: model.error ?? store.updates.cannotReplace ?? store.updates.failure) {
-            FormRow("Your fleet", symbol: "shippingbox", warning: stand.warn ? stand.says : nil) {
-                if stand.working && store.isFresh && !reduceMotion {
-                    // A run moves, as every other wait of this app (the owner, 14 November 2026: "clicked on Update
-                    // fleet, seems stuck, not a great ux"). Under Reduce Motion it stands.
-                    ShimmeringWords(text: stand.value).fixedSize()
-                        .accessibilityElement().accessibilityLabel(stand.value).accessibilityIdentifier("releases-updating")
-                } else {
-                    // The release this fleet runs; what stands in its place when there is none ("Nothing to check").
-                    Text(stand.working ? stand.value : state.current?.version ?? stand.value)
-                        .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                        .accessibilityIdentifier("releases-running")
-                }
-            }.help(stand.warn ? "" : stand.says)
-            FormRow("Founderizer for Mac", symbol: "app.badge", warning: failing) {
-                Text(AppUpdateWords.version(AppVersion.running)).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                    .accessibilityIdentifier("app-update-running")
+        return FormRow("Your fleet", symbol: "shippingbox", warning: stand.warn ? stand.says : nil) {
+            if stand.working && store.isFresh && !reduceMotion {
+                // A run moves, as every other wait of this app (the owner, 14 November 2026: "clicked on Update
+                // fleet, seems stuck, not a great ux"). Under Reduce Motion it stands.
+                ShimmeringWords(text: stand.value).fixedSize()
+                    .accessibilityElement().accessibilityLabel(stand.value).accessibilityIdentifier("releases-updating")
+            } else {
+                // The release this fleet runs; what stands in its place when there is none ("Nothing to check").
+                Text(stand.working ? stand.value : state.current?.version ?? stand.value)
+                    .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                    .accessibilityIdentifier("releases-running")
             }
-            FormRow("Automatic updates", symbol: "clock.arrow.circlepath") {
-                Toggle("Automatic updates", isOn: Binding(get: { state.automatic },
-                                                          set: { on in Task { await model.automatic(on, store: store) } }))
-                    .toggleStyle(.switch).controlSize(.small).labelsHidden()
-                    .disabled(model.busy || !store.canWrite).accessibilityIdentifier("releases-auto")
-            }
+        }.help(stand.warn ? "" : stand.says)
+    }
+
+    private func automaticRow(_ state: ReleaseState) -> some View {
+        FormRow("Automatic updates", symbol: "clock.arrow.circlepath") {
+            Toggle("Automatic updates", isOn: Binding(get: { state.automatic },
+                                                      set: { on in Task { await model.automatic(on, store: store) } }))
+                .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                .disabled(model.busy || !store.canWrite).accessibilityIdentifier("releases-auto")
         }
     }
 }

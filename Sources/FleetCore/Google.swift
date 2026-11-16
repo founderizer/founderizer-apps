@@ -30,6 +30,103 @@ public enum GoogleService: String, CaseIterable, Identifiable, Sendable {
         default: String(l10n: "No access")
         }
     }
+
+    /// **The notice before Google's page** (the owner's "Yes, both as drawn" of 16 November 2026): Settings › Apps shows
+    /// it at every Connect account, between the press and the browser, with Cancel and Continue (`GoogleConnectNotice`).
+    /// Google's Workspace User Data and Developer Policy asks for "a disclosure of your data access, collection, use, and
+    /// sharing" inside the application, which must "accompany and immediately precede a request for user consent": who
+    /// asks (Founderizer), for what (the email or the files of one account), where the access stays (the hub), what the
+    /// agents do with it, who else reads it (the AI provider of each agent), and that Founderizer's servers never
+    /// receive it.
+    public var notice: String {
+        switch self {
+        case .gmail: String(l10n: "Google will ask you to give Founderizer access to the email of one account. Your hub keeps this access on your server. The agents that you give the account search, read, draft, label, archive, trash and send its email, as far as their level allows, and send what they read to the AI provider that they run on, and to the people and apps that their tasks reach. Founderizer's servers never receive your email.")
+        case .drive: String(l10n: "Google will ask you to give Founderizer access to the Google Drive of one account. Your hub keeps this access on your server. The agents that you give the account search, read, make, change, move and trash its files, as far as their level allows, and send what they read to the AI provider that they run on, and to the people and apps that their tasks reach. Founderizer's servers never receive your files.")
+        }
+    }
+}
+
+/// **The steps of one Connect of Settings › Apps before the browser opens** (the owner's "Yes, both as drawn" of 16
+/// November 2026): Connect account shows the notice (`GoogleService.notice`) and starts nothing; only its Continue starts
+/// the Connect; Cancel, another page and another hub end it with no Connect. Google's policy: the disclosure "must
+/// accompany and immediately precede a request for user consent", the consent must "require affirmative user action",
+/// and it "must not interpret navigation away from the disclosure ... as consent". So the notice shows at every Connect,
+/// and nothing that is not Continue goes on to Google's page.
+public struct GoogleConnectNotice: Equatable, Sendable {
+    public private(set) var shows = false
+
+    public init() {}
+
+    /// Connect account: the notice. Nothing while a Connect is on its way.
+    public mutating func press(connecting: Bool) {
+        if !connecting { shows = true }
+    }
+
+    /// Continue: one consent, while the notice shows, and nil otherwise. It is the one way to a Connect: the start of a
+    /// Connect takes it (`GoogleClient.connect`), and nothing else makes one.
+    public mutating func proceed() -> GoogleConsent? {
+        defer { shows = false }
+        return shows ? GoogleConsent() : nil
+    }
+
+    /// Cancel, another page or another hub: no Connect.
+    public mutating func dismiss() { shows = false }
+}
+
+/// **The owner's Continue on the notice before Google's page**, as a value: `GoogleClient.connect` needs one, and only
+/// `GoogleConnectNotice.proceed()` makes one, so no code of the app can open Google's consent page without the notice
+/// and its Continue in front of it.
+public struct GoogleConsent: Sendable {
+    fileprivate init() {}
+}
+
+/// **What is left of one Google account in the fleet after its Disconnect, taken away** (`ResourceList.cleanup`): one
+/// write at a time, each against a new reading (`read`), so no write goes against an old version of `team.json`. A write
+/// that a newer version refused (409) reads again; any other refusal, and a failed reading, stop at once. At most
+/// `rounds` writes, the 409s among them, then one more reading: nothing left is success, else the last refusal. The
+/// app's Disconnect calls it after `POST /ui/google/disconnect` (`AccessSettings`).
+public enum GoogleDisconnect {
+    /// Four writes (two services, each with its agents and its standing) and four refusals.
+    public static let rounds = 8
+
+    public static func clear(account: String, rounds: Int = rounds,
+                             read: @Sendable () async throws -> ResourceList,
+                             write: @Sendable (GoogleCleanup, _ sha256: String) async throws -> Void) async throws {
+        var last: Error = HubError.invalidResponse
+        for _ in 0..<rounds {
+            let list = try await read()
+            guard let next = list.cleanup(account: account).first else { return }
+            do {
+                try await write(next, list.sha256)
+            } catch let HubError.refusal(refusal) where refusal.status == 409 {
+                last = HubError.refusal(refusal)
+            }
+        }
+        if try await read().cleanup(account: account).isEmpty { return }
+        throw last
+    }
+}
+
+/// What is left of one Google account in the fleet after the hub's Disconnect, one write at a time (the owner's "Yes,
+/// both as drawn" of 16 November 2026: "The agents that have it lose it", and the account leaves the list).
+public enum GoogleCleanup: Equatable, Sendable {
+    /// Every agent's level of this service from the account: `POST /ui/team/google` with an empty map.
+    case access(GoogleService)
+    /// The fleet manager's standing for this service of the account: `POST /ui/resources` with no policy.
+    case standing(GoogleService)
+}
+
+extension ResourceList {
+    /// The writes that are left for one account after its Disconnect, Gmail first: the agents that hold a service of it,
+    /// then the standing of that service. Google's revoke ends both services of the account, so both go, whichever
+    /// page the Disconnect was on. Empty when nothing of it is left: the account then leaves the list.
+    public func cleanup(account: String) -> [GoogleCleanup] {
+        let email = account.lowercased()
+        return GoogleService.allCases.flatMap { service -> [GoogleCleanup] in
+            guard let item = resource("\(service.rawValue):\(email)") else { return [] }
+            return (item.holders.isEmpty ? [] : [.access(service)]) + (item.grant == nil ? [] : [.standing(service)])
+        }
+    }
 }
 
 /// The level of one agent in one service, as team.json keeps it.
@@ -65,6 +162,11 @@ public struct GoogleChange: Equatable, Sendable {
 public enum Google {
     public static let feature = "google"
     public static let reachesOthers = String(l10n: "Reaches other people, as you, without asking.")
+    /// **What the Disconnect of a Google account does, in the place of its button after a press** (the owner's "Yes,
+    /// both as drawn" of 16 November 2026). Google's revoke "removes all OAuth 2.0 scopes previously granted to a
+    /// project" and ends the tokens "for all clients registered under that project": both services of the account end,
+    /// in every fleet that connected it with the same Google app (UI-API.md, "One Google account in two fleets").
+    public static let disconnectWords = String(l10n: "Google ends this account's Gmail and Google Drive access in every fleet that connected it. The agents that have it lose it.")
 
     /// The address that the browser comes back to: the listener of this Connect.
     public static func redirectURI(port: UInt16) -> String { "http://127.0.0.1:\(port)/" }
@@ -162,8 +264,9 @@ public struct GoogleSnapshot: Decodable, Sendable {
         Google.access(access(change.service, account: change.account), agent: change.agent, to: change.level)
     }
 
-    /// A connected account that no agent uses for any service: the app disconnects it, so that the hub keeps no unused
-    /// token.
+    /// A connected account that no agent uses for any service. Nothing in the app disconnects such an account by itself
+    /// since 18 October 2026 ("The account is the unit"): the owner ends an account with Disconnect on its card
+    /// (`AccessSettings`), which takes it from its agents too (`ResourceList.cleanup`).
     public func unused(_ email: String) -> Bool {
         google?.accounts.contains { $0.email == email && $0.connected } == true
             && !lines.contains { line in GoogleService.allCases.contains { line.grant($0)?.account == email } }
@@ -433,9 +536,10 @@ public final class GoogleClient: Sendable {
 
     /// Starts a Connect of one service with the hub's client: of any account, or with `account` (a login hint) of that
     /// account again. The hub asks for that service's permission, and in a fleet with accounts of an own client for
-    /// their services too (owner API 1.185). Fleet opens only the consent page on accounts.google.com.
+    /// their services too (owner API 1.185). Fleet opens only the consent page on accounts.google.com, and only with the
+    /// owner's Continue on the notice before it (`consent`, from `GoogleConnectNotice.proceed()`).
     public func connect(hub: URL, database: String, client: String, redirectURI: String, service: GoogleService,
-                        account: String?) async throws -> GoogleConnectStart {
+                        account: String?, consent: GoogleConsent) async throws -> GoogleConnectStart {
         let receipt = try await write(.connect(redirectURI: redirectURI, service: service, account: account),
                                       hub: hub, database: database, client: client)
         guard let address = receipt.url, let url = URL(string: address), url.scheme == "https", url.host == "accounts.google.com",

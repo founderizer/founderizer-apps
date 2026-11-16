@@ -356,8 +356,8 @@ public struct InstallPlan: Equatable, Sendable {
                       : String(l10n: "Tailscale, with your key on standard input, and the address it gets."),
                   action: authKey == nil ? .run(onNetwork) : keyedNetwork),
             .init(id: "code", title: String(l10n: "The Founderizer code"), says: String(l10n: "A copy of the code on the server, from your own download page."),
-                  action: .run(gitInstall + "; if test -d \(kit)/.git; then git -C \(kit) pull -q --ff-only; "
-                               + "else git clone -q -- \(quote(source)) \(kit); fi; "
+                  action: .run(gitInstall + " || { \(packagesStop); }; if test -d \(kit)/.git; then git -C \(kit) pull -q "
+                               + "--ff-only; else git clone -q -- \(quote(source)) \(kit) || { \(cloneStop); }; fi; "
                                + "git -C \(kit) rev-parse --short HEAD; ls \(kit)/hub.sh")),
             .init(id: "plan", title: String(l10n: "The plan"), says: String(l10n: "Every step the install would take. It changes nothing."),
                   action: .run("\(layout) \(callerVerifies) sh \(kit)/hub.sh --check\(named)")),
@@ -395,6 +395,26 @@ public struct InstallPlan: Equatable, Sendable {
         + "&& break; sleep 15; false; done || \(updateOnce); } && DEBIAN_FRONTEND=noninteractive apt-get -o "
         + "DPkg::Lock::Timeout=\(aptLockWait) -y -q install git; }"
 
+    /// **The stops of this app's own steps that a retry can repair** (`InstallRetry`, the plan of 16 November 2026):
+    /// each prints the installers' stop mark and a sentence that `InstallCause` reads, where the step ended before with
+    /// a line of apt's, git's or the shell's that no row read (`step_failed`). Apt's own words stay in the step's lines.
+    /// No apostrophe in them: they stand in single quotes.
+    static let packagesStop = "echo 'Founderizer install stopped: The packages of this system could not be installed: "
+        + "apt-get did not finish. A package mirror can fail for a moment: run the line again.'; exit 1"
+    static let cloneStop = "echo 'Founderizer install stopped: Could not clone the Founderizer repository from its "
+        + "address: git did not finish. Check the address, then run the line again.'; exit 1"
+    /// After `tailscaleInstall`: a server that still has no `tailscale` stops with its own sentence, where it ended before
+    /// with the shell's "tailscale: not found" at the next command.
+    static let tailscaleThere = tailscaleStop(removing: nil)
+
+    /// `tailscaleThere`, which first removes `file`: the keyed step's key file, which its own `rm -f` after `tailscale
+    /// up` no longer reaches once this stop ended the step (a review of 16 November 2026).
+    static func tailscaleStop(removing file: String?) -> String {
+        "command -v tailscale >/dev/null 2>&1 || { " + (file.map { "rm -f \($0); " } ?? "")
+            + "echo 'Founderizer install stopped: Could not install Tailscale on this server: its installer did not "
+            + "finish. A package mirror can fail for a moment: run the line again.'; exit 1; }; "
+    }
+
     /// Tailscale's own installer, on a machine that has none. It comes over curl, which a bare server may not have
     /// either, and the check lets such a server through (`ServerCheck.script`'s `reach=<host> none`): so curl first.
     /// `apt-get update` does not wait for the lock of the package lists, which the first updates of a new server
@@ -430,7 +450,7 @@ public struct InstallPlan: Equatable, Sendable {
     /// The step prints the address only when `tailscale status` says that Tailscale runs. A machine that waits for an
     /// admin's approval can have its address already, and until then nothing reaches it at that address.
     static let keyedNetwork: InstallStep.Action = .sendAuthKey(
-        "umask 077; cat > \(authKeyFile); " + tailscaleInstall
+        "umask 077; cat > \(authKeyFile); " + tailscaleInstall + tailscaleStop(removing: authKeyFile)
             + "tailscale status >/dev/null 2>&1 || tailscale up --reset --auth-key=file:\(authKeyFile) "
             + "--accept-dns=false --timeout=\(tailscaleUpWait)s; rm -f \(authKeyFile); "
             + "tailscale status >/dev/null 2>&1 && tailscale ip -4")
@@ -761,7 +781,7 @@ public struct NetworkSignIn: Equatable, Sendable {
         let tagged = tags.isEmpty ? "" : "--advertise-tags=\(tags.joined(separator: ",")) "
         let up = "tailscale up \(tagged)--accept-dns=false --timeout=\(waitMinutes)m"
         // The log of an earlier try goes first, also when Tailscale runs: its end is not this try's.
-        let start = install + "umask 077; rm -f \(log); tailscale status >/dev/null 2>&1 && exit 0; "
+        let start = install + InstallPlan.tailscaleThere + "umask 077; rm -f \(log); tailscale status >/dev/null 2>&1 && exit 0; "
             + "setsid sh -c '\(up); echo \(endMark) $?' > \(log) 2>&1 < /dev/null &"
         // `tailscale status` also says yes while Tailscale starts, and the join's next step needs the network itself.
         let check = "echo \(nameMark)$(hostname); tailscale status --json 2>/dev/null | grep -q '\"BackendState\": \"Running\"' && "

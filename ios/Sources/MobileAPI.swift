@@ -306,6 +306,9 @@ struct MobileChatItem: Decodable, Identifiable, Sendable, Equatable {
     /// A message: the request that it answers (fix round 2, item 103), whose folded card shows the answer in the chat,
     /// so the message is no second bubble. nil for every other message, and on a hub from before the field.
     let answer_to: Int?
+    /// A report: the owner's message whose turn it took, when it names none (hub 1.190): no link, only the place of
+    /// the row of what he asked for (`ChatAskPlaces`). nil on a hub from before it.
+    let turn: String?
 
     var id: String { "\(kind.rawValue)-\(key)" }
     /// The agent wrote this to the owner first: it answers no message.
@@ -329,10 +332,11 @@ struct MobileChatItem: Decodable, Identifiable, Sendable, Equatable {
         pushed = nil
         // His answer in words to a request is his message in the chat too (`ChatPage.waitingAnswers`).
         answer_to = request.needID
+        turn = nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, ts, id, text, client, read_at, replaces, about, in_reply_to, attachments, pushed, answer_to
+        case kind, ts, id, text, client, read_at, replaces, about, in_reply_to, attachments, pushed, answer_to, turn
     }
 
     init(from decoder: Decoder) throws {
@@ -351,6 +355,7 @@ struct MobileChatItem: Decodable, Identifiable, Sendable, Equatable {
         in_reply_to = try data.decodeIfPresent(String.self, forKey: .in_reply_to)
         pushed = try data.decodeIfPresent(Bool.self, forKey: .pushed)
         answer_to = try data.decodeIfPresent(Int.self, forKey: .answer_to)
+        turn = try data.decodeIfPresent(String.self, forKey: .turn)
     }
 
     /// This item in the hub's own words, so that the phone keeps a chat between launches and reads it back with the
@@ -365,6 +370,7 @@ struct MobileChatItem: Decodable, Identifiable, Sendable, Equatable {
         if let in_reply_to { fields["in_reply_to"] = in_reply_to }
         if let pushed { fields["pushed"] = pushed }
         if let answer_to { fields["answer_to"] = answer_to }
+        if let turn { fields["turn"] = turn }
         return fields
     }
 }

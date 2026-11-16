@@ -201,6 +201,8 @@ struct FormRow<Control: View>: View {
     /// A leading mark that is not an SF Symbol: a provider's icon, a service's mark, a brand mark.
     private let mark: AnyView?
     private let detail: String?
+    /// Words that open a page, at the end of the detail (`FormLink`); only the init that takes one sets it.
+    private var link: FormLink?
     private let warning: String?
     private let control: Control
     @Environment(\.stepText) private var stepText
@@ -247,7 +249,7 @@ struct FormRow<Control: View>: View {
                 // and under it.
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(titleFont).foregroundStyle(FleetStyle.text)
-                    if lines > 1 { DetailRoom { FormNotes(detail: detail, warning: warning) } }
+                    if lines > 1 { DetailRoom { FormNotes(detail: detail, link: link, warning: warning) } }
                 }.padding(.vertical, 10)
                 Spacer(minLength: 16)
                 control.padding(.vertical, 8)
@@ -256,7 +258,7 @@ struct FormRow<Control: View>: View {
                 leading
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(titleFont).foregroundStyle(FleetStyle.text)
-                    FormNotes(detail: detail, warning: warning)
+                    FormNotes(detail: detail, link: link, warning: warning)
                     control.padding(.top, 5)
                 }.padding(.vertical, 10)
                 Spacer(minLength: 0)
@@ -279,6 +281,39 @@ extension FormRow where Control == EmptyView {
     @_disfavoredOverload
     init(_ title: String, mark: some View, detail: String? = nil, warning: String? = nil) {
         self.init(title, mark: mark, detail: detail, warning: warning) { EmptyView() }
+    }
+}
+
+extension FormRow {
+    /// **A row whose detail ends in a link** (Settings › General › Error reports, "… Privacy ↗"): the other inits, and
+    /// every row that they make, stay as they were. Its literal title is looked up, as `LocalizedTitles.swift` does.
+    init(_ title: String.LocalizationValue, symbol: String, detail: String, link: FormLink, warning: String? = nil,
+         @ViewBuilder control: () -> Control) {
+        self.init(String(l10n: title), symbol: symbol, detail: detail, warning: warning, control: control)
+        self.link = link
+    }
+}
+
+/// **Words that open a page, at the end of a row's detail**, drawn as a link of the setup steps is (`SetupSteps.words`;
+/// UI-PATTERNS.md, "a link reads as a link"): the words underlined, then a no-break space and the arrow ↗, all in
+/// `FleetStyle.link`. The arrow is a character of the link, so a click on it opens the page too.
+struct FormLink: Equatable {
+    let words: String
+    let url: URL
+
+    init(_ words: String, url: URL) {
+        self.words = words
+        self.url = url
+    }
+
+    /// The detail, a space, and the link.
+    func line(after detail: String) -> AttributedString {
+        var words = AttributedString(self.words)
+        words.link = url
+        words.underlineStyle = Text.LineStyle(pattern: .solid, color: FleetStyle.link)
+        var arrow = AttributedString("\u{00A0}\u{2197}\u{FE0E}")
+        arrow.link = url
+        return AttributedString(detail + " ") + words + arrow
     }
 }
 
@@ -585,14 +620,20 @@ private struct DetailRoom: Layout {
     }
 }
 
-/// The secondary lines under a row title: a muted detail and an orange warning that can be copied.
+/// The secondary lines under a row title: a muted detail, which can end in a link, and an orange warning that can be
+/// copied.
 private struct FormNotes: View {
     let detail: String?
+    var link: FormLink? = nil
     let warning: String?
     @Environment(\.stepText) private var stepText
 
     var body: some View {
-        if let detail, !detail.isEmpty {
+        if let detail, !detail.isEmpty, let link {
+            Text(link.line(after: detail)).font(FormMetrics.onStep(stepText) ?? FormMetrics.detail)
+                .foregroundStyle(FleetStyle.muted).tint(FleetStyle.link)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if let detail, !detail.isEmpty {
             Text(detail).font(FormMetrics.onStep(stepText) ?? FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }

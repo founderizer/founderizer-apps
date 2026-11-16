@@ -11,19 +11,22 @@ import Foundation
 /// goes to the app as the value part after the request line (`OwnerChannel.Value`); or from the clipboard, which the
 /// app reads itself, in its own process (the secrets plan, step C). No tool gives a value back.
 ///
-/// **The four tools.** `save_bot_token` (below): a Discord bot's token to the hub. `prepare_problem_report`
+/// **The five tools.** `save_bot_token` (below): a Discord bot's token to the hub. `prepare_problem_report`
 /// (`OwnerProblemReport.swift`): the agent's own text into the app's report form, with no value. `save_secret`
 /// (`OwnerSaveSecret.swift`, `OwnerSaveSecretApp.swift`): a new login or API key into the fleet's central vault,
 /// with work that outlives its call (`LinkWork`). `grant_secret` (`OwnerGrantSecret.swift`): one secret to one
-/// agent with the owner's signature, or its end, with no value; the app signs for it.
+/// agent with the owner's signature, or its end, with no value; the app signs for it. `share_secret`
+/// (`OwnerShareSecret.swift`): who may give one secret, with the owner's signature into the grantable pool, or its
+/// end, with no value; the app signs for it.
 public enum OwnerLinkTools {
-    public static let names = [SaveBotToken.name, PrepareReport.name, SaveSecret.name, GrantSecret.name]
+    public static let names = [SaveBotToken.name, PrepareReport.name, SaveSecret.name, GrantSecret.name,
+                               ShareSecret.name]
     public static let tools: [OwnerTable.Tool] = [SaveBotToken.tool, PrepareReport.tool, SaveSecret.tool,
-                                                  GrantSecret.tool]
+                                                  GrantSecret.tool, ShareSecret.tool]
 
     /// **The program's words for a link write whose request went out and got no answer**: each tool's own, because
     /// what may have happened is its own (a token saved, a report shown, a save of a secret begun, a grant signed
-    /// or written).
+    /// or written, a pool statement signed or a standing written).
     ///
     /// **A case for each tool, by its name, and no tool's words for another one.** A name with no case gets
     /// `notKnownOther`, which says only that the outcome is not known: it names no tool and no effect. Only a tool
@@ -37,6 +40,7 @@ public enum OwnerLinkTools {
         case PrepareReport.name: return PrepareReport.notKnownHere
         case SaveSecret.name: return SaveSecret.notKnownHere
         case GrantSecret.name: return GrantSecret.notKnownHere
+        case ShareSecret.name: return ShareSecret.notKnownHere
         default: return notKnownOther
         }
     }

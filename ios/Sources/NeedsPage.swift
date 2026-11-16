@@ -497,6 +497,11 @@ private struct NeedAnswered: View {
     /// What he answered, in the folded card's second line: his words or the option he pressed.
     private var answerWords: String { Self.words(of: need) }
     static func words(of need: OwnerNeed) -> String {
+        // owner feature need_run: a press of Run on the Mac, in this phone's words: "Ran on <Mac>"
+        if !need.isOpen, need.run_command != nil, need.run_status != nil {
+            let place = need.run_on == NeedRun.ownMac || need.run_on == nil ? String(l10n: "your Mac") : need.run_on!
+            return String(l10n: "Ran on \(place)")
+        }
         let answer = need.answer?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return answer.isEmpty ? String(l10n: "Answered") : answer
     }
@@ -511,10 +516,18 @@ private struct NeedAnswered: View {
     /// words that he wrote with none.
     static func answerLine(_ need: OwnerNeed) -> some View {
         HStack(spacing: 5) {
-            if !need.answeredInWords { Image(systemName: "checkmark").font(.caption.weight(.semibold)) }
+            // a cross for a command that he ran on the Mac and that ended with another exit status than 0
+            if !need.answeredInWords {
+                Image(systemName: (need.run_status ?? 0) == 0 ? "checkmark" : "xmark").font(.caption.weight(.semibold))
+                    .accessibilityHidden(true)
+            }
             Text(verbatim: words(of: need)).lineLimit(1)
         }
         .font(.caption).foregroundStyle(Brand.muted)
+        // VoiceOver: a run that failed says its exit status, which the cross alone does not say
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel((need.run_status ?? 0) == 0 ? words(of: need)
+                            : words(of: need) + ", " + String(l10n: "exit status \(need.run_status ?? 0)"))
     }
 
     /// **It changes in one step, as the Mac's card does when it is answered** (item 103): the chat stands on its newest

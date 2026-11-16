@@ -57,7 +57,8 @@ public enum GrantSecret {
             set up Founderizer Vault holds the owner's key and can sign. On a hub that takes no signed grant, the \
             tool sends nothing: grant_access gives a secret there. While the hub has no reading of a central vault, \
             the tool sends nothing too: the fleet has none, or the hub has not read it since it started, and only \
-            on a fleet that has none does grant_access give a secret. A grant that grant_access wrote into the list \
+            on a fleet that has none does grant_access give a secret in this tool's place. A grant that grant_access \
+            wrote into the list \
             with no signature is repaired by the same give at the same level, which signs it. It answers login, \
             agent, level, signed true, server (the server that a give was signed for), changed (whether the hub \
             changed its list), vault (the agent's vault access before and after, with the hub's codes for what is \
@@ -120,7 +121,7 @@ public enum GrantSecret {
     static let noVaultReading = "The hub has no reading of a central vault now: this fleet has none, or the hub has "
         + "not read it since it started. Call grant_secret again in a minute. If the same answer comes again, ask "
         + "the owner whether this fleet has Founderizer Vault: only on a fleet that has none does grant_access give "
-        + "a secret. Nothing was sent."
+        + "a secret in this tool's place. Nothing was sent."
     /// The hub has a reading of the central vault, and its newest read of the vault failed (the page's `error`).
     static let vaultSilent = "The hub's last reading of the central vault failed, so the vault may not answer now. "
         + "Call grant_secret again in a minute. Nothing was sent."
@@ -167,9 +168,12 @@ public enum GrantSecret {
         + "not changed. Call grant_secret again in the same way: a second signature of the same grant is no error, "
         + "because the vault keeps the newer one."
     /// A give, the statement taken, the hub's grant refused, the list read again with no grant of this secret for
-    /// this agent, and the signed end taken.
+    /// this agent, and the signed end taken. It does not say "nothing is changed": a signed grant is the server's
+    /// (`vault.py` `sealable`), so while it stood, another agent on that server that the list gives the secret to
+    /// could get the value.
     static let grantRefusedTakenBack = "The hub refused the grant, and the app took the owner's signature of it "
-        + "back, so nothing is changed."
+        + "back: the fleet's list has no grant of this secret for this agent, and the vault no signed grant of it for "
+        + "this agent."
     /// The same, when the signed end did not go.
     static let grantRefusedSignatureLeft = "The hub refused the grant, and the app could not take the owner's "
         + "signature of it back: a signed grant of this secret for this agent stays in the vault with no grant in "
@@ -624,7 +628,8 @@ public enum GrantSecret {
 
     /// How one write ended, as the tool reads it: the hub took it; the hub refused it for certain, with its status
     /// (under 500) and its words; the app made no signature, so nothing was sent; or the outcome is not known.
-    private enum Sent<Taken: Sendable> {
+    /// `share_secret` (`ShareSecret`) reads its writes by the same rule.
+    enum Sent<Taken: Sendable> {
         case took(Taken)
         case refused(Int, String)
         case notSigned
@@ -632,7 +637,7 @@ public enum GrantSecret {
     }
 
     @MainActor
-    private static func sent<Taken: Sendable>(_ send: () async throws -> Taken) async -> Sent<Taken> {
+    static func sent<Taken: Sendable>(_ send: () async throws -> Taken) async -> Sent<Taken> {
         do {
             return .took(try await send())
         } catch SaveBotToken.HubFailure.refused(let status, let said) where status < 500 {

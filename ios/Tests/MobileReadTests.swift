@@ -905,4 +905,24 @@ struct MobileAskTests {
                                   reading: reading, waitsOn: "abc-1")
         #expect(alone.isEmpty)
     }
+
+    @Test("The Fleet Manager's words that took the turn of his message stand over its row, and the phone keeps the turn")
+    func theTurnPlacesTheRow() throws {
+        let asked = try item(#"{"kind": "message", "ts": 10, "id": "abc-1", "text": "Move the images.", "client": "founderizer-ios/1/x"}"#)
+        let line = try item(#"{"kind": "report", "ts": 11, "id": 4, "text": "Standing item ended."}"#)
+        let reply = try item(#"{"kind": "report", "ts": 12, "id": 5, "text": "The developer has it.", "turn": "abc-1"}"#)
+        #expect(reply.turn == "abc-1" && line.turn == nil)
+        // Kept between launches with it.
+        let kept = try JSONDecoder().decode(MobileChatItem.self, from: JSONSerialization.data(withJSONObject: reply.wire))
+        #expect(kept.turn == "abc-1")
+        let lines = [asked, line, reply]
+        let entries = ChatPage.entries(lines, agent: "manager", names: ["abc-1": "Move the images"])
+        let task = try #require(try head(["ask": "abc-1"]).fleetTask)
+        let reading = HubState(phoneTime: 40, db: "gen-1", agents: [], tasks: [task], needs: [],
+                               messages: entries.compactMap { if case .message(let message) = $0 { message } else { nil } },
+                               holds: [], outcomes: [])
+        let rows = ChatPage.rows(lines, needs: [], places: ChatRequestPlaces(),
+                                 asks: ChatPage.asks(in: entries, places: ChatRequestPlaces(), agent: "manager", reading: reading))
+        #expect(rows.map(\.id) == ["run-message-abc-1", "run-report-4", "ask-abc-1"])
+    }
 }

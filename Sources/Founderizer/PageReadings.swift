@@ -224,7 +224,7 @@ extension PagePrefetch {
         ServersPage.prefetch, AgentStatusPanel.prefetch, HealthView.prefetch, DevicesSection.prefetch, UpdatesSection.prefetch,
         AgentPage.prefetch, TeamEditor.prefetch, TriggersView.prefetch, PeoplePage.prefetch,
         PeoplePage.rolesPrefetch, KnowledgePage.prefetch, AccessSettings.prefetch, AppsSettings.prefetch,
-        SecretsPage.prefetch, SettingsPage.defaultsPrefetch, RepositoryPicking.prefetch,
+        SecretsPage.prefetch, SettingsPage.defaultsPrefetch, RepositoryPicking.prefetch, ErrorReportsSection.prefetch,
     ]
     /// **The readings that a page judges against the hub's clock**: whether a server answers, whether a machine's
     /// reading is current, which helpers report. The store reads them again every 15 seconds while the app runs

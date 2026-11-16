@@ -339,10 +339,6 @@ struct HealthView: View {
                     .buttonStyle(FleetPrimaryButtonStyle()).disabled(store.sending || !store.canWrite)
                     .accessibilityIdentifier("health-update-fleet")
             }
-        case .startManager(let agent):
-            Button(act.label) { Task { await store.command(.managerStart(agent: agent)); await refresh() } }
-                .buttonStyle(FleetPrimaryButtonStyle()).disabled(store.sending || !store.canWrite)
-                .accessibilityIdentifier("health-start-manager")
         case .openAgent(let name):
             Button(act.label) { store.destination = .agent(name) }.buttonStyle(FleetOutlineButtonStyle())
         case .openMachine(let name):

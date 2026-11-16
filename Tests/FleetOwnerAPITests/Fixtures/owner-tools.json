@@ -110,7 +110,7 @@
   ],
   "resources": [
    "/ui/resources",
-   "the grantable pool: each resource, the owner's standing for it, who holds it"
+   "each resource, the owner's standing for it (grant), who holds it; the signed pool of secrets is on the page vault"
   ],
   "responsibilities": [
    "/ui/responsibilities",
@@ -155,6 +155,10 @@
   "triggers": [
    "/ui/triggers",
    "every wake-up rule of the fleet"
+  ],
+  "vault": [
+   "/ui/vault",
+   "the central vault as the hub last read it, with no value and no title: the owner's signed grants and pool, each server's pin and what each server's vault holds (held)"
   ]
  },
  "PAGE_IN_PATH": [
@@ -206,7 +210,7 @@
    "annotations": {
     "readOnlyHint": true
    },
-   "description": "One page of the owner API, by name. Every check the owner's app reads is here: agent_messages \u2014 the messages one agent sent or got (give agent); artifacts \u2014 the checked output files of one accepted task; capacity \u2014 who can take work now: suitability and availability per runtime account; chat_apps \u2014 Pause all, when the bridge last called, and each chat account; chat_link \u2014 one WhatsApp account's link state and its current QR text (give name, the account id). The QR is only here, and it dies in seconds; checks \u2014 the code checks that a wake-up rule can read; conversation \u2014 one whole conversation, oldest first after `after`; conversations \u2014 every conversation between an agent and a person, newest first; devices \u2014 the owner's phones, their keys, and when each phone's open enrollment code ends (never a code itself); diagnostics \u2014 the hub's own record of its faults and of the calls that it refused, for the code that runs now: exception classes, files and lines, counts and times, and no words of an error. Read it before you prepare a problem report; events \u2014 one task's runtime thread records, from a cursor; goal \u2014 one goal with its recorded spending and its history; health \u2014 hub, database, backup and machine health in one answer; knowledge \u2014 one owner knowledge file with its text (give path); machines \u2014 every machine's reading, Fleet revision and update state; notes \u2014 one agent's own working notes and every version of them (give agent). The agent writes these, never the owner: the profile is the owner's words and this is the agent's own; people \u2014 the people the owner added, their roles and handles, and the unknown senders; profiles \u2014 every agent's profile at the hub revision; releases \u2014 this fleet's revision, the release channel and the subscription it carries; resources \u2014 the grantable pool: each resource, the owner's standing for it, who holds it; responsibilities \u2014 every duty with its watches, open cases and counters; responsibility \u2014 one duty with its cases, newest first; roles \u2014 the roles a person can hold: each one's prompt, its tools switch and its daily limit; servers \u2014 the servers, their readings, which are available, and the newest join code; settings \u2014 the fleet's settings: each one's value, its default, and what it does; skills \u2014 every agent's own skills, or one agent's (give agent): each one's name, description, path and files, and its newest commit with the task it was written in and that task's reads of outside text. The agents write them; remove_skill removes one; standing \u2014 the standing instructions and targets that steer agents, newest first, ended ones included (give agent for the ones that steer one agent); state \u2014 the whole snapshot: agents, tasks, notes, needs, goals, duties, reports and messages; team \u2014 the reporting lines with each agent's settings, access and logins; trigger \u2014 one wake-up rule with its next due times and its runs; triggers \u2014 every wake-up rule of the fleet",
+   "description": "One page of the owner API, by name. Every check the owner's app reads is here: agent_messages \u2014 the messages one agent sent or got (give agent); artifacts \u2014 the checked output files of one accepted task; capacity \u2014 who can take work now: suitability and availability per runtime account; chat_apps \u2014 Pause all, when the bridge last called, and each chat account; chat_link \u2014 one WhatsApp account's link state and its current QR text (give name, the account id). The QR is only here, and it dies in seconds; checks \u2014 the code checks that a wake-up rule can read; conversation \u2014 one whole conversation, oldest first after `after`; conversations \u2014 every conversation between an agent and a person, newest first; devices \u2014 the owner's phones, their keys, and when each phone's open enrollment code ends (never a code itself); diagnostics \u2014 the hub's own record of its faults and of the calls that it refused, for the code that runs now: exception classes, files and lines, counts and times, and no words of an error. Read it before you prepare a problem report; events \u2014 one task's runtime thread records, from a cursor; goal \u2014 one goal with its recorded spending and its history; health \u2014 hub, database, backup and machine health in one answer; knowledge \u2014 one owner knowledge file with its text (give path); machines \u2014 every machine's reading, Fleet revision and update state; notes \u2014 one agent's own working notes and every version of them (give agent). The agent writes these, never the owner: the profile is the owner's words and this is the agent's own; people \u2014 the people the owner added, their roles and handles, and the unknown senders; profiles \u2014 every agent's profile at the hub revision; releases \u2014 this fleet's revision, the release channel and the subscription it carries; resources \u2014 each resource, the owner's standing for it (grant), who holds it; the signed pool of secrets is on the page vault; responsibilities \u2014 every duty with its watches, open cases and counters; responsibility \u2014 one duty with its cases, newest first; roles \u2014 the roles a person can hold: each one's prompt, its tools switch and its daily limit; servers \u2014 the servers, their readings, which are available, and the newest join code; settings \u2014 the fleet's settings: each one's value, its default, and what it does; skills \u2014 every agent's own skills, or one agent's (give agent): each one's name, description, path and files, and its newest commit with the task it was written in and that task's reads of outside text. The agents write them; remove_skill removes one; standing \u2014 the standing instructions and targets that steer agents, newest first, ended ones included (give agent for the ones that steer one agent); state \u2014 the whole snapshot: agents, tasks, notes, needs, goals, duties, reports and messages; team \u2014 the reporting lines with each agent's settings, access and logins; trigger \u2014 one wake-up rule with its next due times and its runs; triggers \u2014 every wake-up rule of the fleet; vault \u2014 the central vault as the hub last read it, with no value and no title: the owner's signed grants and pool, each server's pin and what each server's vault holds (held)",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -267,7 +271,8 @@
        "state",
        "team",
        "trigger",
-       "triggers"
+       "triggers",
+       "vault"
       ],
       "type": "string"
      },
@@ -760,7 +765,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Move an agent to an empty server of its own kind, which joined with a join code: one commit of team.json, the install job there and the end of its old session. Its tasks, chat, memory, duties and grants stay with it; its vault starts again on the new server, and it signs in there. Not while a turn of it runs. Read servers to see the job end; the same call again gives a failed install there once more. A new fleet's manager has no server yet (placed false in state): this gives it its first one, of any kind, and runtime its AI provider; any other agent keeps its own.",
+   "description": "Move an agent to another server that joined with a join code: a Linux server, where each agent has its own user account, also beside other agents, or an empty Mac, because a Mac runs one agent; an agent with the browser or the screen stays on a Mac. One commit of team.json, the install job there and the end of its old session. Its tasks, chat, memory, duties and grants stay with it; its vault starts again on the new server, and it signs in there. Not while a turn of it runs. Read servers to see the job end; the same call again gives a failed install there once more. A new fleet's manager has no server yet (placed false in state): this gives it its first one, of any kind, and runtime its AI provider; any other agent keeps its own.",
    "feature": "agent_move",
    "fields": [
     "server",
@@ -1289,7 +1294,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Connect one service of a Google account to the fleet, as the app's Connect account does: Gmail or Google Drive, each a Connect of its own. It opens Google's page in the owner's browser on this Mac and waits up to 10 minutes while the owner chooses the account and presses Allow there, so tell the owner first. While Google has not verified Founderizer's app, Google shows a warning page first: the owner presses Advanced, then Go to Founderizer. Google's code goes to this server's own listener and on to the hub, and never to you. account: the email of an account to connect again; leave it out for a new one. The account then has no agent: give it with grant_access, as gmail:<email> or drive:<email>. In a fleet that shares one Google account with another fleet, disconnect_google ends it in both, because Google revokes the account's whole grant to Founderizer's app. A call of this tool can run for many minutes. This server runs one call at a time: another call that you send meanwhile waits for this call to end. So wait for its answer before you call a tool of this server again.",
+   "description": "Connect one service of a Google account to the fleet, as the app's Connect account does: Gmail or Google Drive, each a Connect of its own. It opens Google's page in the owner's browser on this Mac and waits up to 10 minutes while the owner chooses the account and presses Allow there. So first tell the owner the app's notice of that service, word for word, and call this tool when the owner says to go on, as the app's Continue does: Google asks for the notice before each consent. Gmail: \"Google will ask you to give Founderizer access to the email of one account. Your hub keeps this access on your server. The agents that you give the account search, read, draft, label, archive, trash and send its email, as far as their level allows, and send what they read to the AI provider that they run on, and to the people and apps that their tasks reach. Founderizer's servers never receive your email.\" Google Drive: \"Google will ask you to give Founderizer access to the Google Drive of one account. Your hub keeps this access on your server. The agents that you give the account search, read, make, change, move and trash its files, as far as their level allows, and send what they read to the AI provider that they run on, and to the people and apps that their tasks reach. Founderizer's servers never receive your files.\" While Google has not verified Founderizer's app, Google shows a warning page first: the owner presses Advanced, then Go to Founderizer. Google's code goes to this server's own listener and on to the hub, and never to you. account: the email of an account to connect again; leave it out for a new one. The account then has no agent: give it with grant_access, as gmail:<email> or drive:<email>. In a fleet that shares one Google account with another fleet, disconnect_google ends it in both, because Google revokes the account's whole grant to Founderizer's app. A call of this tool can run for many minutes. This server runs one call at a time: another call that you send meanwhile waits for this call to end. So wait for its answer before you call a tool of this server again.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -1574,7 +1579,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "The owner's standing for one resource in the grantable pool: the manager may hand it out itself up to max. Leave max out to take the entry back, so the owner alone gives this resource. It changes no grant of its own. On a fleet with a central vault, a standing for a secret is refused, and nothing is sent, when the hub's reading of the vault shows that no give of the manager from it could bring the value to a server (the secret is not in the signed pool, the owner signed no grant of it for a server, and no server's vault holds a copy of it): the owner then sets who may give that secret in the Founderizer app, on Secrets (Who may give it), where the app signs. A standing that the reading cannot judge is sent, and taking the entry back always goes; for a secret, the owner's signed pool statement then stays in the vault until the app ends it.",
+   "description": "The owner's standing for one resource in the grantable pool: the manager may hand it out itself up to max. Leave max out to take the entry back, so the owner alone gives this resource. It changes no grant of its own. On a fleet with a central vault, a standing for a secret is refused, and nothing is sent, when the hub's reading of the vault shows that no give of the manager from it could bring the value to a server (the secret is not in the signed pool, the owner signed no grant of it for a server, and no server's vault holds a copy of it): on the Mac where the Founderizer app runs, share_secret of its program (~/.founderizer/cli) sets it with the owner's signature, as the owner does in the app, on Secrets (Who may give it). A standing that the reading cannot judge is sent, and taking the entry back always goes; for a secret, the owner's signed pool statement then stays in the vault until the app ends it.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2150,15 +2155,19 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "The fleet's settings, in team.json: settings maps the name of each one to change to its new value, or to null for its default. runtime_facts maps a runtime to the facts of it to change -- cache_seconds, compact_tokens, token_weights (its list prices in dollars per million tokens as {model: {input, cache_read, cache_write, output}} with \"default\" for any other model), routine (the {model, effort} of routine work) and default_model (the {model, effort} that an agent of that runtime runs when it has none of its own, null for the runtime's own; a model that its servers list) -- or to null for the table's value, for when a provider changes its prices, its cache or its models. fleet_read(page=\"settings\") gives every setting and fact with its value and its default. One commit of team.json, applied at once.",
+   "description": "The fleet's settings, in team.json: settings maps the name of each one to change to its new value, or to null for its default. runtime_facts maps a runtime to the facts of it to change -- cache_seconds, compact_tokens, token_weights (its list prices in dollars per million tokens as {model: {input, cache_read, cache_write, output}} with \"default\" for any other model), routine (the {model, effort} of routine work) and default_model (the {model, effort} that an agent of that runtime runs when it has none of its own, null for the runtime's own; a model that its servers list) -- or to null for the table's value, for when a provider changes its prices, its cache or its models. fleet_read(page=\"settings\") gives every setting and fact with its value and its default. One commit of team.json, applied at once. only_unset true sets only the settings that the fleet has not set yet, as the owner's Mac fills owner.name and owner.language.",
    "feature": "settings",
    "fields": [
     "settings",
-    "runtime_facts"
+    "runtime_facts",
+    "only_unset"
    ],
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "only_unset": {
+      "type": "boolean"
+     },
      "request_id": {
       "description": "A UUID. Give the same one again only to send a command once more after an answer was lost; otherwise leave it out.",
       "type": "string"
@@ -3223,5 +3232,5 @@
    "name": "take_backup"
   }
  ],
- "version": "84cd7bf5080027bd9cc46d303ae4cc07b4e5a9bce3506a94a07c28456f3e766d"
+ "version": "180ece6e955849daf3b4a9401b7ade2bc40386df02fe4b40164942d5b9ba40a8"
 }

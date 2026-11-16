@@ -417,7 +417,17 @@ struct NeedAnswerGiven: View {
 
     var body: some View {
         let answer = need.answer ?? ""
-        if !answer.isEmpty || !files.isEmpty {
+        if let ran = NeedRunAnswer.of(need, onItsWay: nil) {
+            // owner feature need_run: what his press of Run answered, and the end of the command's output under it
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 5) {
+                    Image(systemName: ran.symbol).font(IconMetrics.symbol(10, weight: .semibold)).accessibilityHidden(true)
+                    Text(ran.words)
+                }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                    .accessibilityElement(children: .ignore).accessibilityLabel(ran.spoken)
+                NeedRunOutput(output: need.run_output ?? "")
+            }
+        } else if !answer.isEmpty || !files.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 if answer.isEmpty {
                     Text("Your answer").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
@@ -485,6 +495,7 @@ struct NeedRequestCard: View {
     private var titleFont: Font { ChatStyle.title }
     /// What he answered, in the folded card's second line: his words or the option he pressed.
     private var answerWords: String {
+        if let ran = ranAnswer { return ran.spoken }        // a press of Run, in this Mac's words (VoiceOver too)
         let answer = (onItsWay?.text ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return answer.isEmpty ? String(l10n: "Answered") : answer
     }
@@ -493,7 +504,8 @@ struct NeedRequestCard: View {
 
     var body: some View {
         Group {
-            if (!need.isOpen || onItsWay != nil) && !expanded {
+            // a run that goes on keeps the card open, with its Stop, also when the item closed meanwhile
+            if (!need.isOpen || onItsWay != nil) && !expanded && store.needRuns[need.id]?.busy != true {
                 Button { withAnimation(.easeInOut(duration: 0.12)) { expanded = true } } label: {
                     folded.padding(FormMetrics.rowInset).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.buttonStyle(.plain)
@@ -524,7 +536,16 @@ struct NeedRequestCard: View {
         .onChange(of: store.pending?.requestID, initial: true) { _, _ in
             if let request = store.answerOnItsWay(to: need) { sent = request }
         }
+        // owner feature need_run: Run and its line read the store, and a command for a Mac of the fleet needs the
+        // machines' readings for its Run to stand
+        .environment(store)
+        .task(id: need.isOpen ? need.run_on : nil) {
+            if need.isOpen, let on = need.run_on, on != NeedRun.ownMac { await store.readRunMachines() }
+        }
     }
+
+    /// What a press of Run answered (owner feature `need_run`), or nil.
+    private var ranAnswer: NeedRunAnswer? { NeedRunAnswer.of(need, onItsWay: onItsWay) }
 
     /// The two lines of an answered request: its title, medium (`titleFont`), and what he answered, 12 points muted:
     /// the option that he pressed with a check, and words that he wrote with none. Words that stand in the chat as his
@@ -532,7 +553,13 @@ struct NeedRequestCard: View {
     private var folded: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(heading).font(titleFont).foregroundStyle(FleetStyle.text).lineLimit(1)
-            if !(inWords && spoken) {
+            if let ran = ranAnswer {
+                // a press of Run: its mark says how the command ended, "Ran on <Mac>" where it ran
+                HStack(spacing: 5) {
+                    Image(systemName: ran.symbol).font(IconMetrics.symbol(10, weight: .semibold)).accessibilityHidden(true)
+                    Text(ran.words).lineLimit(1)
+                }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+            } else if !(inWords && spoken) {
                 HStack(spacing: 5) {
                     if !inWords { Image(systemName: "checkmark").font(IconMetrics.symbol(10, weight: .semibold)) }
                     Text(answerWords).lineLimit(1)
@@ -564,7 +591,8 @@ struct NeedRequestCard: View {
                         .font(ChatStyle.font).lineSpacing(ChatStyle.lineSpacing).tint(FleetStyle.link)
                         .lineLimit(3).fixedSize(horizontal: false, vertical: true)
                 }
-                if !task.isEmpty { MessageText(text: task, chat: true, card: true) }
+                // owner feature need_run: the block of its command has Run (the owner's "Yes, as drawn")
+                if !task.isEmpty { MessageText(text: task, chat: true, card: true, run: NeedRunTarget.of(need, store: store)) }
             }
             if expanded, let details = need.details {
                 // **The door's card shows its script line for line** (API 1.125, review point 5.6): one code block, as

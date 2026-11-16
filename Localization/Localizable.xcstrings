@@ -6430,6 +6430,16 @@
         }
       }
     },
+    "Copy prompt to fix" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar prompt para arreglarlo"
+          }
+        }
+      }
+    },
     "Copy report" : {
       "localizations" : {
         "es" : {
@@ -6546,6 +6556,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Corrección para %@"
+          }
+        }
+      }
+    },
+    "Could not reach %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo conectar con %@"
+          }
+        }
+      }
+    },
+    "Could not run it on this Mac" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo ejecutar en este Mac"
           }
         }
       }
@@ -7050,6 +7080,16 @@
         }
       }
     },
+    "Disconnect" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desconectar"
+          }
+        }
+      }
+    },
     "Disconnect Screen Sharing" : {
       "localizations" : {
         "es" : {
@@ -7260,16 +7300,6 @@
         }
       }
     },
-    "Each step checks first, so nothing is done twice." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cada paso comprueba primero, así que nada se hace dos veces."
-          }
-        }
-      }
-    },
     "Earlier activity" : {
       "localizations" : {
         "es" : {
@@ -7456,6 +7486,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Escribe el usuario con el que te conectas a ese servidor: root u otro usuario que pueda convertirse en root."
+          }
+        }
+      }
+    },
+    "Error codes, versions and counts. Never your work, names or keys." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Códigos de error, versiones y recuentos. Nunca tu trabajo, nombres ni claves."
+          }
+        }
+      }
+    },
+    "Error reports" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Informes de errores"
           }
         }
       }
@@ -9306,6 +9356,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Subiendo…"
+          }
+        }
+      }
+    },
+    "Google ends this account's Gmail and Google Drive access in every fleet that connected it. The agents that have it lose it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google pone fin al acceso al Gmail y al Google Drive de esta cuenta en todos los equipos que la conectaron. Los agentes que la tienen la pierden."
+          }
+        }
+      }
+    },
+    "Google will ask you to give Founderizer access to the Google Drive of one account. Your hub keeps this access on your server. The agents that you give the account search, read, make, change, move and trash its files, as far as their level allows, and send what they read to the AI provider that they run on, and to the people and apps that their tasks reach. Founderizer's servers never receive your files." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google te pedirá que des a Founderizer acceso al Google Drive de una cuenta. Tu hub guarda este acceso en tu servidor. Los agentes a los que des la cuenta buscan, leen, crean, cambian, mueven y mandan a la papelera los archivos de esa cuenta, en la medida en que su nivel lo permita, y envían lo que leen al proveedor de IA con el que funcionan, y a las personas y apps con las que conectan sus tareas. Los servidores de Founderizer nunca reciben tus archivos."
+          }
+        }
+      }
+    },
+    "Google will ask you to give Founderizer access to the email of one account. Your hub keeps this access on your server. The agents that you give the account search, read, draft, label, archive, trash and send its email, as far as their level allows, and send what they read to the AI provider that they run on, and to the people and apps that their tasks reach. Founderizer's servers never receive your email." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google te pedirá que des a Founderizer acceso al correo de una cuenta. Tu hub guarda este acceso en tu servidor. Los agentes a los que des la cuenta buscan, leen, etiquetan, archivan y mandan a la papelera el correo de esa cuenta, y redactan borradores y envían correo desde ella, en la medida en que su nivel lo permita, y envían lo que leen al proveedor de IA con el que funcionan, y a las personas y apps con las que conectan sus tareas. Los servidores de Founderizer nunca reciben tu correo."
           }
         }
       }
@@ -14660,6 +14740,16 @@
         }
       }
     },
+    "Paste the prompt into your agent, then try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pega el prompt en tu agente y luego reintenta."
+          }
+        }
+      }
+    },
     "Paste the token" : {
       "localizations" : {
         "es" : {
@@ -14960,6 +15050,16 @@
         }
       }
     },
+    "Privacy" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privacidad"
+          }
+        }
+      }
+    },
     "Private address" : {
       "localizations" : {
         "es" : {
@@ -15146,6 +15246,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "En cola"
+          }
+        }
+      }
+    },
+    "Ran on %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ejecutado en %@"
           }
         }
       }
@@ -16640,6 +16750,16 @@
         }
       }
     },
+    "Run" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ejecutar"
+          }
+        }
+      }
+    },
     "Run schedule" : {
       "localizations" : {
         "es" : {
@@ -17386,6 +17506,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mensaje para %@"
+          }
+        }
+      }
+    },
+    "Send to Founderizer's developers" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviar a los desarrolladores de Founderizer"
           }
         }
       }
@@ -18426,16 +18556,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Empezar de nuevo"
-          }
-        }
-      }
-    },
-    "Start the session" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Iniciar la sesión"
           }
         }
       }
@@ -21270,6 +21390,16 @@
         }
       }
     },
+    "The install stopped at “%@”." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La instalación se detuvo en «%@»."
+          }
+        }
+      }
+    },
     "The install stopped." : {
       "localizations" : {
         "es" : {
@@ -21746,6 +21876,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La sesión del gestor no está en marcha"
+          }
+        }
+      }
+    },
+    "The manager session is not running, since %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sesión del gestor no está en marcha desde %@."
           }
         }
       }
@@ -22270,6 +22410,26 @@
         }
       }
     },
+    "The server did not install" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo instalar el servidor"
+          }
+        }
+      }
+    },
+    "The server did not link" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo vincular el servidor"
+          }
+        }
+      }
+    },
     "The server for %@ is not there. Try again." : {
       "localizations" : {
         "es" : {
@@ -22396,6 +22556,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El servidor que instalas a mano"
+          }
+        }
+      }
+    },
+    "The server's last lines:" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Últimas líneas del servidor:"
           }
         }
       }
@@ -24150,6 +24320,16 @@
         }
       }
     },
+    "This server could not get Founderizer's code from your hub." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este servidor no pudo descargar el código de Founderizer desde tu hub."
+          }
+        }
+      }
+    },
     "This server does not answer." : {
       "localizations" : {
         "es" : {
@@ -25206,6 +25386,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Usar iCloud Drive"
+          }
+        }
+      }
+    },
+    "Use letters and spaces only, at most 40 characters." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa solo letras y espacios, como máximo 40 caracteres."
           }
         }
       }
@@ -26650,6 +26840,16 @@
         }
       }
     },
+    "Your AI agent can fix this" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu agente de IA puede arreglarlo"
+          }
+        }
+      }
+    },
     "Your App" : {
       "localizations" : {
         "es" : {
@@ -27530,6 +27730,16 @@
         }
       }
     },
+    "Your profile" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu perfil"
+          }
+        }
+      }
+    },
     "Your role in Tailscale cannot make this change. Use an access token of an Owner or an Admin of the tailnet." : {
       "localizations" : {
         "es" : {
@@ -27646,6 +27856,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "cada trabajador y líder"
+          }
+        }
+      }
+    },
+    "exit status %lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "estado de salida %lld"
           }
         }
       }
@@ -28356,6 +28576,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "tu@example.com"
+          }
+        }
+      }
+    },
+    "your Mac" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tu Mac"
           }
         }
       }

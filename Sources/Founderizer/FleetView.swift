@@ -195,7 +195,8 @@ struct FleetView: View {
     /// of the agent being added, which `content` draws in place of its chat.
     @ViewBuilder private var addingPage: some View {
         switch store.destination {
-        case .addServer: AddServerView(store: store, addAgent: { openAddAgent($0) }, goOnToAddAgent: addAgentOnNewServer)
+        case .addServer: AddServerView(store: store, addAgent: { openAddAgent($0) }, goOnToAddAgent: addAgentOnNewServer,
+                                              newAgent: addAgent.newServerAgent)
         case .addAgent: addAgentPage
         case .shapeChange(let step): ShapeChangePage(store: store, step: step).id("\(store.hub)/shape/\(step.rawValue)")
         default: content
@@ -262,20 +263,23 @@ struct FleetView: View {
     /// Settings shows, also on a server's page and Add server, which are pages of its Servers.
     private var isSettings: Bool { store.destination.settingsTab != nil }
 
-    /// Add agent: a new agent on a server. From the plus it opens on its first step, the servers; `server`, from a
-    /// server's own page, opens it on the second for that server.
+    /// Add agent: a new agent on a server. It opens on its first step, the name and the AI; from the plus its server
+    /// step follows, and `server`, from a server's own page, is the server that it adds the agent on.
     private func openAddAgent(_ server: String? = nil) {
         addAgent.prepare(server: server, listed: store.state?.agents.map(\.name))
         store.destination = .addAgent
     }
 
-    /// Add agent's second step for a server that Add server just installed: the agent's name and its AI. It opens by
-    /// itself where Add agent's New server made that server, and on Add server's own Add agent button. Nothing is added
-    /// before his press on an AI there. The servers are read first, so the step opens with the new server in its list,
-    /// and it opens only while that Add server still shows (its task ends with it). An install of Add agent that
-    /// stands (one that failed) keeps its page.
-    private func addAgentOnNewServer(_ server: String) async {
-        addAgent.prepare(server: server, listed: store.state?.agents.map(\.name))
+    /// Add agent for a server that Add server just installed. It opens by itself where Add agent's New server made that
+    /// server, and on Add server's own Add agent button. `chosen`: Add agent's New server opened that Add server, after
+    /// his press on an AI, so the agent goes on the new server with the name and the AI that he chose
+    /// (`AddAgentModel.goOn`); else its first step, the name and the AI, for that server, where nothing is added before
+    /// his press on an AI. The servers are read first, so the step has the new server in its list, and it opens only
+    /// while that Add server still shows (its task ends with it). An install of Add agent that stands (one that failed)
+    /// keeps its page.
+    private func addAgentOnNewServer(_ server: String, chosen: Bool) async {
+        if chosen { addAgent.goOn(on: server, listed: store.state?.agents.map(\.name)) }
+        else { addAgent.prepare(server: server, listed: store.state?.agents.map(\.name)) }
         if addAgent.receipt == nil { await addAgent.read(store: store) }
         guard !Task.isCancelled, store.destination == .addServer else { return }
         store.destination = .addAgent
@@ -623,7 +627,8 @@ struct FleetView: View {
                 openAddAgent(server.name)
                 Task { await addAgent.retry(store: store, server: server, job: job) }
             }.id("\(store.hub)/\(name)"))
-        case .addServer: AnyView(AddServerView(store: store, addAgent: { openAddAgent($0) }, goOnToAddAgent: addAgentOnNewServer))
+        case .addServer: AnyView(AddServerView(store: store, addAgent: { openAddAgent($0) }, goOnToAddAgent: addAgentOnNewServer,
+                                               newAgent: addAgent.newServerAgent))
         case .app(let group): AnyView(AppsSettings(store: store, only: group).id("\(store.hub)/app/\(group.rawValue)"))
         case .connectKey: AnyView(ConnectAppKeyPage(store: store, model: store.connectSwitch()).id("\(store.hub)/connect-key"))
         default: nil
@@ -1111,19 +1116,20 @@ struct FleetNotices: View {
         } else if let warning = store.state?.manager_flag, !warning.isEmpty, store.isFresh,
                   ManagerSession.bandShows(kind: store.state?.manager_warning?.kind, overItsSetup: managerSetupUnder) {
             let manager = store.state?.agents.first { $0.role == "manager" }?.name
-            BandNotice(warning) {
-                // "The manager session is not running. Start it again." now carries the start itself: the helper's
-                // own loop starts a session that went by itself, and this is the owner's hand on the same switch
-                // (`ManagerSession`). Its other warnings — a usage limit, a question on its screen, a silence, a
-                // switch that has not finished — are not put right by a start, so they keep the page, which is
-                // where its session is opened: the machine, the provider and Screen Sharing.
-                if let manager, store.supportsManagerStart,
-                   ManagerSession.startable(kind: store.state?.manager_warning?.kind) {
-                    Button("Start the session") { Task { await store.command(.managerStart(agent: manager)) } }
-                        .buttonStyle(FleetOutlineButtonStyle()).disabled(store.sending || !store.canWrite)
-                        .accessibilityIdentifier("notice-manager-start")
-                }
-                if let manager {
+            let flag = store.state?.manager_warning
+            BandNotice(ManagerSession.bandWords(warning)) {
+                // A session that is not running has one button, Report a problem, with the problem already in the
+                // report's box (the owner's choice of 16 November 2026, `ManagerSession`): its helper starts it
+                // again by itself, so a start or its page could not help. Its other warnings — a usage limit, a
+                // question on its screen, a silence, a switch that has not finished, a server that went silent —
+                // keep the page, which is where its session is opened: the machine, the provider and Screen Sharing.
+                if ManagerSession.reports(flag) {
+                    Button("Report a problem") {
+                        store.reportAsk = ReportAsk(text: ManagerSession.reportText(
+                            since: flag?.since, now: store.state?.time ?? Date().timeIntervalSince1970), byAgent: false)
+                        openWindow(id: FounderizerApp.reportWindow)
+                    }.buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("notice-manager-report")
+                } else if let manager {
                     Button("Open \(manager.agentLabel)") { store.destination = .agentDetail(manager, .settings) }
                         .buttonStyle(FleetOutlineButtonStyle())
                 }

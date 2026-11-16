@@ -206,8 +206,8 @@ enum AppFront {
 
 /// **The app's side of the link with its program** (`OwnerChannel` in FleetOwnerAPI; the plan's section 3.4): a local
 /// socket in the app's own folder of the user's Library, on which the program inside this bundle (`founderizer-cli`)
-/// asks the running app its reads (`setup_state`, `setup_show`, `setup_diagnosis`) and its four writes
-/// (`save_bot_token`, `prepare_problem_report`, `save_secret`, `grant_secret`; `LinkTools`). The
+/// asks the running app its reads (`setup_state`, `setup_show`, `setup_diagnosis`) and its five writes
+/// (`save_bot_token`, `prepare_problem_report`, `save_secret`, `grant_secret`, `share_secret`; `LinkTools`). The
 /// listener runs on a queue of its own; the answers come on the
 /// main actor, from the store (`SetupBoard`). Nothing of it shows on the screen.
 ///
@@ -221,13 +221,17 @@ enum AppFront {
 /// sealed to the central vault's key, on to the vault: through the hub's routes that any process of the owner's
 /// user reaches already, so it gives such a process no new power; it gives the secret to no agent, replaces nothing
 /// and sets no site itself. Proved with the released, Developer ID signed build (14 November 2026), before
-/// `save_secret` was on the link: that tool is not run in a signed build yet.
+/// `save_secret` was on the link; `save_secret` ran in the released build 0.1.275 on a test fleet (16 November 2026).
 ///
-/// **One tool signs, and that is a new power.** `grant_secret` makes this app sign the owner's grant of a secret of
+/// **Two tools sign, and that is a new power.** `grant_secret` makes this app sign the owner's grant of a secret of
 /// the list to a worker or a lead, or its end, with the owner key of this Mac and with no question to the owner (the
 /// owner, 15 November 2026: "No touch"). So each process of the owner's user can bring a secret's value to an
-/// agent's server, and with `read` an API key into that agent's sessions. `OWNER-MCP-BOUNDARY.md`, section 7b, has
-/// the power, its traces and its limits. Not run in a signed build yet.
+/// agent's server, and with `read` an API key into that agent's sessions. `share_secret` makes this app sign a secret
+/// of the list into the grantable pool, or out of it, in the same way, and the hub then lets the fleet manager give
+/// it to any worker or lead, at most at the level that the call names. `OWNER-MCP-BOUNDARY.md`, section 7b, has the
+/// powers, their traces and their limits. `grant_secret` ran in the released build 0.1.275 on a test fleet (16
+/// November 2026): the signed give, the value on a worker's server, and the signed end. `share_secret` ran in a test
+/// build only, which reads no owner key, so its signature is not seen yet.
 @MainActor
 final class SetupChannel {
     static let shared = SetupChannel()
@@ -256,8 +260,8 @@ final class SetupChannel {
                                },
                                // The bundle's Info.plist on the disk now: an update swaps the bundle at its path.
                                diskBuild: { ProgramPlace.build(of: Bundle.main.bundleURL) })
-        // The link's write tools (`save_bot_token`, `prepare_problem_report`, `save_secret`, `grant_secret`), on the same board and
-        // the same store.
+        // The link's write tools (`save_bot_token`, `prepare_problem_report`, `save_secret`, `grant_secret`,
+        // `share_secret`), on the same board and the same store.
         LinkTools.add(to: board, store: { [weak self] in self?.store })
         return board
     }()
@@ -764,7 +768,7 @@ final class SetupChannel {
         SetupInstall(state: install.state.rawValue, kind: install.kind.rawValue, step: install.step.rawValue,
                      stop: install.stop?.rawValue ?? "none", cause: install.cause?.rawValue ?? "none",
                      waitsForNetwork: install.waitsForNetwork,
-                     stepsDone: install.stepsDone, stepsPlanned: install.stepsPlanned)
+                     stepsDone: install.stepsDone, stepsPlanned: install.stepsPlanned, tries: install.tries)
     }
 
     /// The last install's facts by the names of the wire: the date stays here.
@@ -772,7 +776,8 @@ final class SetupChannel {
         SetupLastInstall(kind: last.kind.rawValue, outcome: last.outcome.rawValue, step: last.step.rawValue,
                          stop: last.stop?.rawValue ?? "none", cause: last.cause?.rawValue ?? "none",
                          waitsForNetwork: last.waitsForNetwork,
-                         stepsDone: last.stepsDone, stepsPlanned: last.stepsPlanned)
+                         stepsDone: last.stepsDone, stepsPlanned: last.stepsPlanned, tries: last.tries,
+                         retried: last.retried)
     }
 
     /// **The seconds of the app's own work**, read only when an answer is written, so that they never move a number.

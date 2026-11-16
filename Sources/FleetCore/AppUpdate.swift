@@ -479,29 +479,45 @@ public struct AppUpdateChannel: Sendable {
 /// When Founderizer updates itself without a press (the owner, 22 October 2026: "do they get the latest updates,
 /// improvements and bug fixes automatically? it must be like that!").
 ///
-/// It asks the channel when it starts and every hour after, sooner after a read that failed, and it puts a new build in
-/// place only while the owner is away from the app, because the restart that follows would take away what he was
-/// typing. One switch decides it, and it is the fleet's own Automatic updates: the fleet and the Mac that drives it
-/// take a release the same way. A build that is not a Developer ID build is never replaced, so a development build made
-/// on this Mac is never swapped for a published one under the person working on it.
+/// It asks the channel when it starts, every five minutes after, sooner after a read that failed, and when the owner
+/// comes back to the app, and it puts a new build in place only while the owner is away from the app, because the
+/// restart that follows would take away what he was typing. One switch decides it, and it is the fleet's own Automatic
+/// updates: the fleet and the Mac that drives it take a release the same way. A build that is not a Developer ID build
+/// is never replaced, so a development build made on this Mac is never swapped for a published one under the person
+/// working on it.
 public enum AppUpdatePolicy {
-    /// Between two reads of the channel, so that a release reaches his Macs the same morning (the owner, 28 October
-    /// 2026: "why didn't it update automatically to the next version if it's available?"). It was four hours.
-    public static let every: TimeInterval = 3600
-    /// After one, two and three reads in a row that failed, the next one comes this much sooner; then `every` again.
-    /// A release makes our site restart, and a read in those minutes fails.
-    public static let retries: [TimeInterval] = [60, 300, 900]
+    /// Between two reads of the channel, so that the sidebar's Update stands within minutes of a build (the owner,
+    /// 16 November 2026: "the UPDATE button on the left sidebar takes too long to show when there is an update! I
+    /// always have to go to the topbar to check for updates!"). It was one hour, and four hours until 28 October 2026.
+    /// A read is one small answer of our site, as the app's own Check for Updates… asks it.
+    public static let every: TimeInterval = 300
+    /// After one read that failed, the next one comes this much sooner; then `every` again. A release makes our site
+    /// restart, and a read in those minutes fails.
+    public static let retries: [TimeInterval] = [60]
+    /// **When the owner comes back to the app**, it reads the channel again once its last read is this old: he comes
+    /// to the app to look, so the sidebar's Update stands for a build that came while he was away, and he need not
+    /// ask with Founderizer › Check for Updates….
+    public static let back: TimeInterval = 60
     /// How long reads may fail before Settings › General says so. A failure shorter than this is not news.
     public static let long: TimeInterval = 24 * 3600
     /// How long the app is in the background before it restarts itself onto a new build.
     public static let away: TimeInterval = 120
+    /// **The signal of a new build** (16 November 2026): a Darwin notification that the Mac that publishes the app
+    /// posts when a build that its push hook started has ended. The app then reads the channel at once, and the
+    /// sidebar's Update stands within seconds of the build and not within `every`. Nothing posts it on another Mac.
+    public static let signal = "com.founderizer.app.read-updates"
+    /// The least time between a read and the read that a signal starts: a burst of signals reads once.
+    public static let signalGap: TimeInterval = 10
 
-    /// Whether to read the channel now: at the first chance after the app starts, then once in each `every`, and
-    /// after `failures` reads in a row that failed, once each of `retries` has passed.
-    public static func shouldAsk(lastAsked: Date?, failures: Int = 0, now: Date) -> Bool {
+    /// Whether to read the channel now: at the first chance after the app starts, then once in each `every`, after
+    /// `failures` reads in a row that failed once each of `retries` has passed, once the owner `cameBack` to the
+    /// app when the last read is at least `back` old, and once a `signal` came when it is at least `signalGap` old.
+    public static func shouldAsk(lastAsked: Date?, failures: Int = 0, cameBack: Bool = false, signalled: Bool = false,
+                                 now: Date) -> Bool {
         guard let lastAsked else { return true }
         let wait = (1...retries.count).contains(failures) ? retries[failures - 1] : every
-        return now.timeIntervalSince(lastAsked) >= wait || now < lastAsked
+        let since = now.timeIntervalSince(lastAsked)
+        return since >= wait || (cameBack && since >= back) || (signalled && since >= signalGap) || now < lastAsked
     }
 
     /// Whether to install the offered build now: the switch is on, this is a published build, the owner has been

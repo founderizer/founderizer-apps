@@ -552,6 +552,15 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     public let multi: Bool?
     /// The indexes of the options he ticked, once he answered an item whose options combine.
     public let chose: [Int]?
+    /// Owner feature `need_run` (API 1.197): the one command of a hand step that this Mac runs at his press of Run,
+    /// and where it runs (`NeedRun.ownMac`, or a machine of the fleet); nil on every other item. Run stands only where
+    /// `NeedRun.command(of:)` says.
+    public let run_command: String?
+    public let run_on: String?
+    /// Once he pressed Run: the command's exit status and the end of its output, which the hub masked; nil after an
+    /// answer in words.
+    public let run_status: Int?
+    public let run_output: String?
     public var isOpen: Bool { answered == nil && answer == nil }
     /// The same card to sign, byte for byte: its words, its answers, its door call, server and script, and what its
     /// first option starts on this Mac (a GitHub App, the Add device picture). A press
@@ -562,7 +571,7 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
         return id == other.id && same(title, other.title) && same(why, other.why) && same(todo, other.todo)
             && same(details, other.details) && same(door_call, other.door_call) && same(door_host, other.door_host)
             && same(door_script, other.door_script) && same(door_task, other.door_task)
-            && same(github_app, other.github_app)
+            && same(github_app, other.github_app) && same(run_command, other.run_command) && same(run_on, other.run_on)
             && add_device == other.add_device && (options ?? []).count == (other.options ?? []).count
             && zip(options ?? [], other.options ?? []).allSatisfy { same($0, $1) }
     }
@@ -656,6 +665,10 @@ public struct ManagerReport: Decodable, Identifiable, Sendable, Equatable {
     public var isPushed: Bool { pushed?.value == true }
     /// CHAT-APPS.md 20: the files that the agent sent with these words. A hub from before that round sends none.
     public let attachments: [MessageAttachment]?
+    /// **The owner's message whose turn this report took** (owner API 1.190), when it names none: the Fleet Manager's
+    /// reply to a message written in the app, a worker's sentence before its task. It is no link (never `in_reply_to`),
+    /// and only the row of what he asked for stands under it (`ChatAskPlaces`). A hub from before it sends none.
+    public let turn: String?
 }
 
 public struct SendReceipt: Decodable, Sendable {

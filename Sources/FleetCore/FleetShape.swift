@@ -95,17 +95,18 @@ public enum ServersSketch {
 /// **The steps of the manager's own setup**, on Back's line of each of its pages while it gets its first server (the
 /// owner, 15 November 2026, of a fleet whose manager had no server: "If i click on the manager I only see the choice
 /// between VPS and mac mini/studio, nothing else! no progress steps ... very bad", and "they look good" to their
-/// pictures in `~/dev/founderizer-plans/manager-setup-steps/`): its name, the servers, its AI provider, its sign-in.
-/// "Servers" is the step of each page that gives the manager its server; the page of the fleet's shape comes under
-/// it too.
+/// pictures in `~/dev/founderizer-plans/manager-setup-steps/`): its name, its AI provider, the servers, its sign-in.
+/// The AI provider comes before the servers (the owner, 16 November 2026: "agent onboarding should ask first for the
+/// name and AI provider before the server page"). "Servers" is the step of each page that gives the manager its
+/// server, of the page of the fleet's shape, and of the provider's install on that server.
 public enum ManagerSetupSteps: Int, CaseIterable, Sendable {
-    case manager, servers, provider, signIn
+    case manager, provider, servers, signIn
 
     public var name: String {
         switch self {
         case .manager: String(l10n: "Manager")
-        case .servers: String(l10n: "Servers")
         case .provider: String(l10n: "AI provider")
+        case .servers: String(l10n: "Servers")
         case .signIn: String(l10n: "Sign in")
         }
     }
@@ -113,13 +114,13 @@ public enum ManagerSetupSteps: Int, CaseIterable, Sendable {
     public static var names: [String] { allCases.map(\.name) }
 
     /// **The step of a page of an agent's setup** (`AgentSetupPage`), as the place of the step in the line: the wait
-    /// for the provider's install and a switch of provider are the provider's step, and after the sign-in each step is
-    /// done (`names.count`), while the machine check and the activation run by themselves.
+    /// for the provider's install on its server and a switch of provider are the step Servers, and after the sign-in
+    /// each step is done (`names.count`), while the machine check and the activation run by themselves.
     public static func current(_ page: AgentSetupPage) -> Int {
         switch page {
         case .name: manager.rawValue
-        case .servers, .server: servers.rawValue
-        case .provider, .installing, .switching: provider.rawValue
+        case .provider: provider.rawValue
+        case .servers, .server, .installing, .switching: servers.rawValue
         case .signIn: signIn.rawValue
         case .activate: allCases.count
         }
@@ -427,7 +428,8 @@ public enum ManagerSetupStart: Equatable, Sendable {
     /// server has no server service (`rootStep`), which only his press on Continue starts, then the hub's reading
     /// of it.
     case sharing(rootStep: Bool)
-    /// "1 server" is kept, and the hub's own server takes the manager: its AI provider's press gives it that server.
+    /// "1 server" is kept, and the hub's own server takes the manager: it gets that server with the AI provider that he
+    /// chose.
     case onHub(String)
     /// Nothing comes before its server's page: the pages of before.
     case server
@@ -436,8 +438,8 @@ public enum ManagerSetupStart: Equatable, Sendable {
     case unread
 
     /// **For the agent of a setup**: only a manager with no server gets these pages, on a visit that read the hub's
-    /// features (`features`, nil before that read), and not once a server joined for it on this Mac (`joined`), whose
-    /// provider's page is next as before. `role` and `placed` are nil for an agent that the state does not list.
+    /// features (`features`, nil before that read), and not once a server joined for it on this Mac (`joined`), which
+    /// gets it with its provider. `role` and `placed` are nil for an agent that the state does not list.
     public static func page(role: String?, placed: Bool?, joined: Bool, features: [String]?, named: Bool,
                             list: ServerList?) -> ManagerSetupStart {
         guard role == "manager", placed == false, !joined, let features else { return .server }
@@ -457,6 +459,27 @@ public enum ManagerSetupStart: Equatable, Sendable {
             guard list.hub_shared == true, let hub = list.hubRow else { return .sharing(rootStep: false) }
             if hub.joined, hub.available { return .onHub(hub.name) }
             return .sharing(rootStep: !hub.joined)
+        }
+    }
+
+    /// **The page of the manager's own setup while it has no server**, in the owner's order of 16 November 2026 ("agent
+    /// onboarding should ask first for the name and AI provider before the server page"): its name, its AI provider,
+    /// the fleet's servers, its server. `provider`: the AI that he chose on this Mac (`FleetStore.chosenProvider`), or
+    /// nil. `placeOn`: the server that it goes on now (the hub's own with "1 server", or the one that joined for it), or
+    /// nil. Once both are there, the setup gives it that server and that provider by itself, and the page is the install
+    /// that this command starts. A command that the hub refused (`refused`) shows the provider's page again, with the
+    /// hub's words, where a press tries again.
+    public func page(renaming: Bool, provider: String?, placeOn: String?, refused: Bool) -> AgentSetupPage {
+        if renaming { return .name }
+        switch self {
+        case .name: return .name
+        case .unread: return .servers
+        default: break
+        }
+        guard let provider, !refused else { return .provider }
+        switch self {
+        case .servers, .sharing: return .servers
+        default: return placeOn == nil ? .server : .installing(runtime: provider)
         }
     }
 }

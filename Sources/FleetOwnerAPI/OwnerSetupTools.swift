@@ -168,19 +168,21 @@ public enum OwnerSetupTools {
             connection); cause, the app's own name for the reason that the installer itself gave, read from its stop \
             sentence and never given in its words, only when stop is installer_stopped or mac_refused (for kind mac \
             only from that Mac's sealed state), else none: none, needs_root, system_not_supported, no_systemd, \
-            hub_no_answer, code_not_fetched, join_code_refused, server_name_refused, hub_busy, private_network, \
-            firewall, agent_users, vault, updates, service, hub_claim, agent_program, homebrew, wrong_mac_user, other \
-            (other: a reason that this list does not know); steps_done \
-            and steps_planned, whole numbers; seconds_in_step (null while no step runs). The words of a stop stay in \
-            the app. \
+            hub_no_answer, code_not_fetched, join_code_refused, join_code_expired, server_name_refused, \
+            server_name_unread, hub_busy, private_network, firewall, agent_users, vault, updates, packages, service, \
+            hub_claim, agent_program, homebrew, wrong_mac_user, other (other: a reason that this list does not know); \
+            steps_done and steps_planned, whole numbers; tries, 1 to 3: the tries of the owner's press (after an \
+            error that passes, the app runs the install again by itself, twice at most, and the page shows no stop \
+            until the last); seconds_in_step (null while no step runs). The words of a stop stay in the app. \
             last_install: the newest install for this hub that the app kept a record of on this Mac (with hub \
             none, the newest install of a hub), which is what is left of an install after a restart of the app. It \
             is given only while install is null, and it is null with no record: kind: hub, join, mac (join is a \
             server that joins the fleet); outcome: running, done, stopped, cancelled, interrupted (cancelled: its \
             page ended it; interrupted: the app quit, crashed or was updated while it ran); step, the step where \
             it stood, stop and cause, each of the same list as in install; waits_for_network; steps_done and \
-            steps_planned; seconds_ago (whole seconds since the record's last change: the install's end, or the \
-            last change of a step for one that was cut off). \
+            steps_planned; tries, as in install; retried, why each earlier try of that press stopped, oldest first, \
+            each a name of the list of cause or of stop; seconds_ago (whole seconds since the record's last change: \
+            the install's end, or the last change of a step for one that was cut off). \
             builds: whole numbers from the app's kept records of the servers that it asked a provider for, of every \
             fleet and every run of the app (the newest 40 records): unjoined, the servers that this Mac never saw \
             join and that can still stand at a provider, where each is billed; and its three parts by what the \

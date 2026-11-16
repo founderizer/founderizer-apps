@@ -103,30 +103,39 @@ extension ProblemReport {
     /// the other facts before Send, and in what goes, so that support reads the text as an agent's account.
     public static let writtenByAgent = Fact(name: "Written by", value: "Your AI agent")
 
-    /// **The box of the report form, as far as an agent's text goes**: when such a text may go into the box, and
-    /// whether the report still is an agent's. The rule, in one place for the form and for its tests:
-    /// - An agent's text goes into the box only when the box is empty, when it holds exactly the agent's text of
-    ///   before, or when it holds exactly the text of a report that was sent. **Text that the owner wrote or changed
-    ///   is never written over.**
+    /// **The box of the report form, as far as a text that the form did not get from the owner goes**: an agent's
+    /// text, or the app's own words of a problem that a button reports (the manager band's Report a problem, the
+    /// owner's choice of 16 November 2026). When such a text may go into the box, and whether the report still is an
+    /// agent's. The rule, in one place for the form and for its tests:
+    /// - Such a text goes into the box only when the box is empty, when it holds exactly the app's words of before
+    ///   or, for an agent's new text, the agent's text of before, or when it holds exactly the text of a report that
+    ///   was sent. **Text that the owner wrote or changed is never written over**, and the app's words never go over
+    ///   an agent's text, which says more.
     /// - The report is an agent's while the box still holds that agent's text whole. The owner may write before it
-    ///   and after it. When the owner changes or removes the agent's text, the report is the owner's own.
+    ///   and after it. When the owner changes or removes the agent's text, the report is the owner's own. The app's
+    ///   own words never make the report an agent's.
     public struct AgentDraft: Equatable, Sendable {
         /// The text that the agent put into the box, while the box still holds it whole.
         public private(set) var agentText: String?
+        /// The app's own words that a button put into the box: the box is still free while it holds them unchanged.
+        public private(set) var appText: String?
 
         public init() {}
 
         /// The report says that an agent wrote it.
         public var isAgents: Bool { agentText != nil }
 
-        /// Whether an agent's text may go into the box now. `sent`: the text of the report that this form sent
-        /// last, or nil when it sent none.
-        public func isFree(box: String, sent: String?) -> Bool {
-            box.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || box == agentText || (sent != nil && box == sent)
+        /// Whether an agent's new text (`byAgent`) or the app's words may go into the box now. `sent`: the text of
+        /// the report that this form sent last, or nil when it sent none.
+        public func isFree(box: String, sent: String?, byAgent: Bool = true) -> Bool {
+            box.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (byAgent && box == agentText)
+                || box == appText || (sent != nil && box == sent)
         }
 
-        /// The agent's text went into the box.
-        public mutating func took(_ text: String) { agentText = text }
+        /// A text went into the box: the agent's (`byAgent`), or the app's own words.
+        public mutating func took(_ text: String, byAgent: Bool = true) {
+            (agentText, appText) = byAgent ? (text, nil) : (nil, text)
+        }
 
         /// The box changed, by the owner's hand or by the form.
         public mutating func changed(to box: String) {
@@ -228,37 +237,20 @@ public enum ProblemReportError: LocalizedError, Sendable {
     }
 }
 
-/// The one request this app makes to our own website on the customer's behalf. It sends the report and reads back a
-/// reference; it carries no key, no token and no cookie, and it follows no redirect.
-public final class ProblemReportClient: Sendable {
-    public static let path = "api/report"
-    private let session: URLSession
-
-    /// `protocolClasses` is for a test only: it answers the request with no network.
-    public init(protocolClasses: [AnyClass]? = nil) {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpCookieStorage = nil
-        configuration.urlCredentialStorage = nil
-        configuration.httpShouldSetCookies = false
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.timeoutIntervalForRequest = 15
-        configuration.timeoutIntervalForResource = 20
-        if let protocolClasses { configuration.protocolClasses = protocolClasses }
-        // A redirect is an answer, never a second request: the words go to the one address that `endpoint` checked.
-        session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
-    }
-
-    /// Where the report goes: our own site, or the fleet's channel when it is HTTPS on our own domain, so that a
+/// **Our own website, as this app sends to it on the customer's behalf**: Report a problem (`ProblemReportClient`) and
+/// error reports (`ErrorReportClient`). One rule for where a request may go, and one session for both.
+enum OurSite {
+    /// The address of `path` on our own site, or on the fleet's channel when it is HTTPS on our own domain, so that a
     /// staging fleet reports to staging. The hub names the channel, so a channel on any other host, or one without
-    /// HTTPS, is refused before anything leaves: no hub can send the customer's words to another site (review of
-    /// 14 November 2026).
-    public static func endpoint(channel: String?) throws -> URL {
+    /// HTTPS, gives nil and nothing leaves: no hub can send the customer's words to another site (review of 14 November
+    /// 2026).
+    static func endpoint(channel: String?, path: String) -> URL? {
         let text = (channel?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
             ?? AppUpdate.defaultChannel
         guard let parts = URLComponents(string: text), parts.scheme?.lowercased() == "https",
               let host = parts.host, isOurs(host),
               parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil,
-              let url = parts.url else { throw ProblemReportError.badChannel }
+              let url = parts.url else { return nil }
         return url.appendingPathComponent(path)
     }
 
@@ -269,6 +261,40 @@ public final class ProblemReportClient: Sendable {
         }
         let host = host.lowercased()
         return host == ours || host.hasSuffix("." + ours)
+    }
+
+    /// A session that keeps nothing (no cookie, no credential, no cache) and follows no redirect. `protocolClasses` is
+    /// for a test only: it answers the request with no network.
+    static func session(protocolClasses: [AnyClass]?) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 20
+        if let protocolClasses { configuration.protocolClasses = protocolClasses }
+        // A redirect is an answer, never a second request: the words go to the one address that `endpoint` checked.
+        return URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
+    }
+}
+
+/// The request of Report a problem to our own website, on the customer's behalf (error reports have the other one,
+/// `ErrorReportClient`). It sends the report and reads back a reference; it carries no key, no token and no cookie, and
+/// it follows no redirect.
+public final class ProblemReportClient: Sendable {
+    public static let path = "api/report"
+    private let session: URLSession
+
+    /// `protocolClasses` is for a test only: it answers the request with no network.
+    public init(protocolClasses: [AnyClass]? = nil) {
+        session = OurSite.session(protocolClasses: protocolClasses)
+    }
+
+    /// Where the report goes: our own site, or the fleet's channel when it is HTTPS on our own domain (`OurSite`).
+    public static func endpoint(channel: String?) throws -> URL {
+        guard let url = OurSite.endpoint(channel: channel, path: path) else { throw ProblemReportError.badChannel }
+        return url
     }
 
     public func send(_ report: ProblemReport, channel: String?, fleet: String?) async throws -> ProblemReceipt {
