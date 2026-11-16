@@ -13,13 +13,15 @@ public struct AttachmentKeepReceipt: Decodable, Sendable {
 }
 
 public enum HubError: LocalizedError, Sendable {
-    case invalidAddress, invalidResponse, refusal(Int, String), unavailable
+    /// A refusal carries what the hub said as one value (`HubRefusal`): its status, its English line, its code and the
+    /// names inside it. Every funnel makes it with `HubRefusal.read(status:body:)`.
+    case invalidAddress, invalidResponse, refusal(HubRefusal), unavailable
 
     public var errorDescription: String? {
         switch self {
         case .invalidAddress: String(l10n: "Enter an HTTP or HTTPS hub address without a path or login.")
         case .invalidResponse: String(l10n: "The hub response does not match API version 1.")
-        case .refusal(let status, let message): "Hub refused the request (\(status)): \(message)"
+        case .refusal(let refusal): String(l10n: "Hub refused the request (\(refusal.status)): \(refusal.words)")
         case .unavailable: String(l10n: "The hub is unavailable. The last received state is shown.")
         }
     }
@@ -28,8 +30,8 @@ public enum HubError: LocalizedError, Sendable {
     /// too large, the wrong type, registered login text, or a hub that is not serving. 409 is **not** one of them,
     /// and used to be: see `conflict`.
     public var definitiveRefusal: Bool {
-        if case .refusal(let status, _) = self {
-            return [400, 403, 404, 413, 415, 422, 503].contains(status)
+        if case .refusal(let refusal) = self {
+            return [400, 403, 404, 413, 415, 422, 503].contains(refusal.status)
         }
         return false
     }
@@ -43,7 +45,7 @@ public enum HubError: LocalizedError, Sendable {
     /// and no retry settles those. Nothing in the status tells the two apart, and the words are prose this app does
     /// not read, so the sender decides by reading the base again: a base that moved was the stale one.
     public var conflict: Bool {
-        if case .refusal(409, _) = self { return true }
+        if case .refusal(let refusal) = self { return refusal.status == 409 }
         return false
     }
 
@@ -55,11 +57,11 @@ public enum HubError: LocalizedError, Sendable {
     ///
     /// Every owner route writes `{"error": "<one line for the owner>"}` beside the status, for the owner to read.
     /// A screen that reports a failed read shows this where the hub wrote one, and its own words only where it did
-    /// not — because "HTTP 403" and "HTTP 503" are the same sentence to him, and the hub had written two.
+    /// not — because "HTTP 403" and "HTTP 503" are the same sentence to him, and the hub had written two. The sentence
+    /// is the refusal's `words`: the app's own for a code that it knows, in the language of the device.
     public static func said(_ error: Error) -> String? {
-        guard case HubError.refusal(_, let words) = error else { return nil }
-        let said = words.trimmingCharacters(in: .whitespacesAndNewlines)
-        return said.isEmpty || said == unexplained ? nil : said
+        guard case HubError.refusal(let refusal) = error else { return nil }
+        return refusal.said
     }
 }
 
@@ -997,7 +999,7 @@ public final class HubClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(in: data)) }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         return data
     }
 
@@ -1018,15 +1020,8 @@ public final class HubClient: Sendable {
         switch status {
         case 409 where checkedOutputs: return ArtifactError.stale
         case 422 where checkedOutputs: return ArtifactError.refusedText
-        default: return HubError.refusal(status, words(in: body))
+        default: return HubError.refusal(.read(status: status, body: body))
         }
-    }
-
-    /// The `{"error": ...}` line of a refusal, or `HubError.unexplained` when it carried none.
-    static func words(in body: Data) -> String {
-        let said = ((try? JSONDecoder().decode(ErrorBody.self, from: body))?.error ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return said.isEmpty ? HubError.unexplained : String(said.prefix(500))
     }
 
     /// The refusal's own body, bounded: the hub writes one line, and a body that will not read must not hide the
@@ -1042,6 +1037,4 @@ public final class HubClient: Sendable {
         } catch {}
         return body
     }
-
-    struct ErrorBody: Decodable { let error: String }
 }

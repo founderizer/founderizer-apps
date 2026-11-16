@@ -325,7 +325,9 @@ struct AddServerView: View {
         // hub names the server at its join, after the build.
         case .token(let provider):
             building ? String(l10n: "Installing the server")
-                : cloud.stage == .choosing ? placing.map { String(l10n: "\($0.agent.agentLabel)'s server at \(provider.name)") }
+                // After the token was taken, a stop leaves the page the server's: its title too.
+                : cloud.stage == .choosing || cloud.tokenTaken
+                    ? placing.map { String(l10n: "\($0.agent.agentLabel)'s server at \(provider.name)") }
                     ?? String(l10n: "A server at \(provider.name)")
                 : String(l10n: "Your \(provider.name) token")
         case .vps:
@@ -636,7 +638,7 @@ struct AddServerView: View {
             do {
                 list = try await HubClient().servers(hub: store.hub, database: database)
                 break
-            } catch HubError.refusal(409, _) where attempt == 0 {
+            } catch let error as HubError where error.conflict && attempt == 0 {
                 await store.refresh()
             } catch {
                 if !Task.isCancelled { cloud.stop(HubReach.words(error, hub: store.hub).says) }
@@ -703,7 +705,8 @@ struct AddServerView: View {
             CloudChoice(cloud: cloud, job: .join, fleet: Set(taken.map { $0.lowercased() }), known: known,
                         reuse: { again[$0.id] ?? nil },
                         makeNew: { if !asksHub { makeAsked += 1 } }, use: useExisting)
-        } else {
+        } else if !cloud.tokenTaken {
+            // A token that the provider took is never asked for again on this page (`FleetCloudModel.tokenTaken`).
             SetupSteps.token(provider)
             PasteField(placeholder: String(l10n: "Paste it here"), text: $cloud.tokenText,
                        accepts: { $0.count >= 20 && !$0.contains(" ") }) {
@@ -712,7 +715,7 @@ struct AddServerView: View {
             .accessibilityIdentifier("add-server-cloud-token")
         }
         // While the list shows, its own press carries the line (`CloudChoice`).
-        if let failure = cloud.failure, cloud.stage != .choosing { SetupWarning(failure) }
+        if let failure = cloud.failure, cloud.stage != .choosing || cloud.offer == nil { SetupWarning(failure) }
     }
 
     /// **Any VPS, by its address**, the first run's pages: one field, the check, the password once when the VPS asks for
@@ -1006,7 +1009,7 @@ struct AddServerView: View {
             code = answer; copied = false
             page = .install
             list = try? await HubClient().servers(hub: store.hub, database: database)
-        } catch let HubError.refusal(_, words) { error = words }
+        } catch let HubError.refusal(refused) { error = refused.words }
         catch { self.error = String(l10n: "The hub has not answered. Try again.") }
     }
 

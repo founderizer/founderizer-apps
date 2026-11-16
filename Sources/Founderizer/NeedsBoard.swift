@@ -13,7 +13,8 @@ import SwiftUI
 /// - A click on a card puts that request at hand; so do the Up and Down keys.
 /// - A request that he answers leaves the lane in the frame he answers, and the one that stood under it comes to hand
 ///   (`NeedsLane.successor`).
-/// - A request that an agent's work waits for has an orange hourglass on its card and beside its agent's name.
+/// - A card says at its top right when its request was raised.
+/// - A request that an agent's work waits for has an orange raised hand on its card and beside its agent's name.
 /// - A task that only he can move is in the lane as its card of the Tasks board, which opens the task.
 /// - The requests that ended stand behind one row, "53 answered", by day, as Ended's "110 more" does on Tasks. The page
 ///   drew each of them as a card under the open ones: 53 cards under 9 on his fleet that day.
@@ -51,10 +52,10 @@ struct NeedsBoard: View {
     @State private var stepKeys = StepKeys()
     /// **The requests that he answered here a moment ago, which stay in the lane and at hand while the answer settles**
     /// (`hold`; the owner's yes of 11 November 2026 to its moving picture: "Yes, build it"): his answer stands with a
-    /// check that draws itself, the glyph of the agent that asked makes its one jump and the orange hourglass goes
+    /// check that draws itself, the glyph of the agent that asked makes its one jump and the orange hand goes
     /// out, and then the request leaves. Not under Reduce Motion: there the request leaves in the frame he answers.
     @State private var settling: Set<Int> = []
-    /// The requests whose agent took the answer, 0.3 s after he gave it: its glyph jumps and its hourglass is out.
+    /// The requests whose agent took the answer, 0.3 s after he gave it: its glyph jumps and its hand is out.
     @State private var took: Set<Int> = []
     /// A request leaves by his answer: the one that comes to hand rises 8 points into its place, and the mark of
     /// "Nothing needs you" draws itself when it was the last one.
@@ -309,15 +310,16 @@ struct NeedsBoard: View {
                         // card where its row came to stand.
                         ForEach(lane.open, id: \.cardKey) { need in
                             NeedCard(need: need, selected: need.id == atHand, waits: waits[need.id] ?? [],
-                                     took: took.contains(need.id)) { pick(need.id) }
+                                     took: took.contains(need.id), now: now) { pick(need.id) }
                                 .transition(.opacity)
                         }
                         // A task that only he can move, as its card of the Tasks board: its orange words say what it
                         // waits for, and a click opens the task.
                         ForEach(tasks, id: \.cardKey) { task in
                             let words = owner[task.id]?.words
-                            ActivityCard(task: task, owner: task.owner, ownerLine: words, why: nil,
-                                         words: words ?? task.stateWord(in: state), openRequest: nil) {
+                            ActivityCard(title: task.title, identifier: "activity-task-\(task.id)",
+                                         requestIdentifier: "activity-request-\(task.id)", owner: task.owner, ownerLine: words,
+                                         why: nil, words: words ?? task.stateWord(in: state), openRequest: nil) {
                                 store.destination = .task(task.id)
                             }.opensTask(task.id, store: store).focused($focusedTask, equals: task.id)
                         }
@@ -481,36 +483,50 @@ private extension NeedsLane.Day {
     var key: LaneKey { .day(start) }
 }
 
+/// **The mark of a request that an agent's work waits for**: an orange raised hand (the owner, 15 November 2026: "use a
+/// different icon/image for the stopped agent!", and his pick of the raised hand from three pictures). It was the
+/// hourglass, which the Tasks board also gives a usage limit. Orange is what needs him (D-8): here, the answer that
+/// stops work. A permission request in a task's thread has the same hand, outline and muted.
+private let stopsWork = "hand.raised.fill"
+
 /// **One request that waits, in the lane of Needs you**: its title, and under it the agent that asks, as a task's card
 /// on the Tasks board is its title and its agent (the owner, 11 November 2026: "I like simple things! not too much
-/// information!"). **An orange hourglass at the end of the agent's line where an agent's work waits for the answer**
-/// (`HubState.needWaits`): a mark only where there is something to tell, with the agent's name behind it on hover. The
-/// card of the request at hand is a little lighter.
+/// information!"). **When it was raised stands at the top right, clearly visible** (the owner, 15 November 2026: "time
+/// should be at the right top, clearly visible", in the words of the request at hand: "18 min ago", from seven days the
+/// date). **An orange raised hand at the end of the agent's line where an agent's work waits for the answer**
+/// (`HubState.needWaits`, `stopsWork`): a mark only where there is something to tell, with the agent's name behind it
+/// on hover. The card of the request at hand is a little lighter.
 private struct NeedCard: View {
     let need: OwnerNeed
     /// The request at hand.
     let selected: Bool
     /// The agents whose work waits for its answer.
     let waits: [String]
-    /// The agent took his answer a moment ago: the hourglass is out (`NeedsBoard.took`).
+    /// The agent took his answer a moment ago: the hand is out (`NeedsBoard.took`).
     var took = false
+    /// The hub's time, for the words of when it was raised.
+    let now: Double
     let open: () -> Void
     @State private var hovered = false
 
     var body: some View {
         let waiting = NeedsLane.waitWords(waits)
+        let age = activityAge(need.raised, now: now)
         Button(action: open) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(need.shownTitle).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(2).multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(need.shownTitle).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(2).multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    // Whole, never cut: the title gives way.
+                    Text(age).monospacedDigit().foregroundStyle(FleetStyle.text).lineLimit(1).fixedSize()
+                }
                 HStack(spacing: 6) {
                     // The glyph with its dot, as everywhere it stands for the agent (D-8 item 2).
                     AgentGlyph(name: need.by, size: GlyphSize.inline, ground: selected ? FleetStyle.bubble : FleetStyle.surface)
                     Text(need.by.agentLabel).lineLimit(1)
                     Spacer(minLength: 4)
                     if !waits.isEmpty && !took {
-                        // Orange is what needs him (D-8): here, the answer that stops work.
-                        Image(systemName: "hourglass").font(IconMetrics.symbol(11, weight: .medium)).foregroundStyle(.orange)
+                        Image(systemName: stopsWork).font(IconMetrics.symbol(11, weight: .medium)).foregroundStyle(.orange)
                             .help(waiting).accessibilityHidden(true).transition(.goesOut)
                     }
                 }
@@ -523,7 +539,7 @@ private struct NeedCard: View {
         .onHover { hovered = $0 }
         .help(waits.isEmpty ? need.shownTitle : "\(need.shownTitle)\n\(waiting)")
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel([need.shownTitle, need.by.agentLabel, waits.isEmpty ? nil : waiting].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel([need.shownTitle, age, need.by.agentLabel, waits.isEmpty ? nil : waiting].compactMap { $0 }.joined(separator: ", "))
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         // The element stands for the button, so it has the button's press (`ActivityCard`).
         .accessibilityAction(.default, open)
@@ -559,7 +575,7 @@ private struct NeedStep: View {
     let takesCursor: Bool
     /// His answer went from here a moment ago and settles: it stands with a check that draws itself (`NeedsBoard.hold`).
     var settles = false
-    /// The agent took that answer: its glyph makes its one jump, and the hourglass is out.
+    /// The agent took that answer: its glyph makes its one jump, and the hand is out.
     var took = false
     /// An answer went: true when it went from the field.
     let answered: (Bool) -> Void
@@ -617,13 +633,14 @@ private struct NeedStep: View {
         .accessibilityElement(children: .contain).accessibilityIdentifier("need-step-\(need.id)")
     }
 
-    /// Who asks, by the name the sidebar gives it, and when; and the hourglass of a request that stops work.
+    /// Who asks, by the name the sidebar gives it, and when; and the raised hand of a request that stops work
+    /// (`stopsWork`).
     private var from: some View {
         HStack(spacing: 6) {
             Text("\(need.by.agentLabel) · \(activityAge(need.raised, now: now))")
             if !waits.isEmpty && !took {
                 let waiting = NeedsLane.waitWords(waits)
-                Image(systemName: "hourglass").font(IconMetrics.symbol(11, weight: .medium)).foregroundStyle(.orange)
+                Image(systemName: stopsWork).font(IconMetrics.symbol(11, weight: .medium)).foregroundStyle(.orange)
                     .help(waiting).accessibilityLabel(waiting).transition(.goesOut)
             }
         }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
@@ -778,7 +795,7 @@ extension AnyTransition {
         if #available(macOS 26, *) { AnyTransition(.symbolEffect(.drawOn)) } else { .opacity }
     }
 
-    /// The hourglass of a request that he answered: it goes out, a little smaller.
+    /// The raised hand of a request that he answered: it goes out, a little smaller.
     static var goesOut: AnyTransition { .asymmetric(insertion: .identity, removal: .opacity.combined(with: .scale(scale: 0.6))) }
 }
 

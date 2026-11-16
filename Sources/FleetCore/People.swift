@@ -68,7 +68,10 @@ public enum People {
 
     /// A refusal in the hub's own words, or a write without an answer that can still have arrived.
     public static func reason(_ error: Error) -> String {
-        if case HubError.refusal(_, let text) = error { return String(l10n: "The hub said: \(text.hasSuffix(".") ? text : text + ".")") }
+        if case HubError.refusal(let refused) = error {
+            let text = refused.words
+            return String(l10n: "The hub said: \(text.hasSuffix(".") ? text : text + ".")")
+        }
         if error is URLError { return String(l10n: "No answer from the hub. It can still have done it: look again before you try again.") }
         return error.localizedDescription
     }
@@ -835,6 +838,9 @@ public struct ConversationItem: Decodable, Equatable, Sendable, Identifiable {
     public let in_reply_to: String?
     public let need: Need?
     public let delivery: Delivery?
+    /// CHAT-APPS.md 20: the files that the agent sent with these words; none on every other line, and from a hub
+    /// from before that round.
+    public let attachments: [MessageAttachment]?
 
     /// The number in `CM-7`, for the next page.
     public var number: Int? { Int(id.dropFirst(id.hasPrefix("CM-") ? 3 : 0)) }
@@ -1020,15 +1026,11 @@ public final class PeopleClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else {
-            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error ?? "Unexpected HTTP response."
-            throw HubError.refusal(response.statusCode, String(message.prefix(500)))
-        }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         guard data.count <= 4_194_304 else { throw HubError.invalidResponse }
         return data
     }
 
-    private struct ErrorBody: Decodable { let error: String }
 }
 
 /// The answer to a write about a person: the person as the hub now has them, what changed, or what a removal took.

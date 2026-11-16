@@ -382,10 +382,10 @@ struct MobileReadTests {
     func theMacsWords() {
         #expect(MobileError.noAnswer.localizedDescription == "Your hub did not answer. Check that its server is on.")
         #expect(AgentState.unknown.words == "Last reading")
-        let refused = MobileError.refusal(status: 409, auth: nil, message: "atlas is in setup")
+        let refused = MobileError.refusal(HubRefusal(status: 409, hubWords: "atlas is in setup"), auth: nil)
         #expect(refused.notSentWords == "Not sent: Atlas is in setup.")
         // A refusal of this phone's key keeps the words that say what to do.
-        let key = MobileError.refusal(status: 403, auth: "device_key_mismatch", message: "")
+        let key = MobileError.refusal(HubRefusal(status: 403, hubWords: ""), auth: "device_key_mismatch")
         #expect(key.notSentWords == MobileError.authWords("device_key_mismatch"))
     }
 

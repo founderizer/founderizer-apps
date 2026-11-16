@@ -674,7 +674,7 @@ final class MobileStore {
             guard requested == hub else { return }
             // A generation change makes everything that the phone holds stale. Drop it and read the new one at once:
             // the clock's next read was up to 30 seconds away, with nothing on the pages until then.
-            if case MobileError.refusal(409, _, _) = error {
+            if case MobileError.refusal(let refusal, _) = error, refusal.status == 409 {
                 forgetGeneration()
                 Task { await self.refresh() }
                 return
@@ -694,7 +694,7 @@ final class MobileStore {
         // goes, so an unchanged fleet answers 304 and what was kept is current.
         let database = lastRead == nil ? nil : snapshot?.db
         do { answer = try await client.snapshot(at: requested, key: key, database: database, etag: etag) }
-        catch MobileError.refusal(404, _, _) { throw MobileError.noPhoneRoutes }
+        catch MobileError.refusal(let refusal, _) where refusal.status == 404 { throw MobileError.noPhoneRoutes }
         guard let answer else {
             // 304: the fleet did not change, so what the phone holds is current.
             lastRead = Date()
@@ -1468,7 +1468,7 @@ final class MobileStore {
         guard storageError == nil else { return }
         // The sample fleet takes no file, as it takes no write: the hub's refusal, at once, where a file's words go.
         guard !sample else {
-            fileFailed(MobileError.refusal(status: 409, auth: nil, message: SampleHub.refusal).notSentWords)
+            fileFailed(MobileError.refusal(HubRefusal(status: 409, hubWords: SampleHub.refusal), auth: nil).notSentWords)
             return
         }
         guard stagedFiles(for: composer).count < MessageAttachment.perMessage else {
@@ -1832,7 +1832,7 @@ final class MobileStore {
         } catch {
             // A read in between may have found the hub's own event for this request already.
             guard pending?.requestID == request.requestID else { return }
-            if case MobileError.refusal(422, _, _) = error {
+            if case MobileError.refusal(let refusal, _) = error, refusal.status == 422 {
                 // The hub does not say which words are a login. Every draft of this phone goes, with the request.
                 secretRefusals += 1
                 drafts = [:]
@@ -1845,7 +1845,9 @@ final class MobileStore {
                 sendError = String(l10n: "The hub refused registered login text. The text and the drafts are gone from this phone.")
             } else if let error = error as? MobileError, error.isDefinitive {
                 var refused = request
-                refused.refusal = error.notSentWords
+                // What the hub refused is kept as its fields, and the words are made when the owner reads them, in the
+                // language of that day (`PendingRequest.notSentLine`).
+                refused.refuse(because: error)
                 do { try outbox.save(refused); pending = refused }
                 catch { storageError = String(l10n: "Cannot save the refusal. The request is kept as it was.") }
                 sendError = error.notSentWords

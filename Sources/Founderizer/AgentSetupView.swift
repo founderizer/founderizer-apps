@@ -629,9 +629,9 @@ struct AgentSetupView: View {
                     await store.refresh()
                     store.destination = .agentDetail(receipt.agent, .settings)
                     return
-                } catch let HubError.refusal(status, words) {
-                    if status == 409, attempt == 0, words.contains("team.json changed") { continue }
-                    setRenameError(words); return
+                } catch let HubError.refusal(refused) {
+                    if refused.status == 409, attempt == 0, refused.means(.teamChanged) { continue }
+                    setRenameError(refused.words); return
                 } catch { setRenameError(String(l10n: "The hub has not answered. Look at the agent's name before you try again.")); return }
             }
         }
@@ -677,7 +677,7 @@ struct AgentSetupView: View {
                                                          server: server, sha256: team.sha256, agent: agent, runtime: runtime,
                                                          role: line.role, reportsTo: nil)
                 await model.readServers()
-            } catch let HubError.refusal(_, words) { setRenameError(words) }
+            } catch let HubError.refusal(refused) { setRenameError(refused.words) }
             catch { setRenameError(String(l10n: "The hub has not answered. Try again.")) }
         }
     }

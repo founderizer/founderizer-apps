@@ -86,7 +86,7 @@ struct HubReadsTests {
         let read: @Sendable () async throws -> HubReads.Answer = {
             await count.add()
             try await Task.sleep(for: .milliseconds(150))
-            throw HubError.refusal(503, "The hub is starting.")
+            throw HubError.refusal(HubRefusal(status: 503, hubWords: "The hub is starting."))
         }
         let first = Task { try await reads.share("get /ui/servers", read) }
         let second = Task { try await reads.share("get /ui/servers", read) }

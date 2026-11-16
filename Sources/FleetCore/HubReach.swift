@@ -24,16 +24,16 @@ public struct HubReach: Equatable, Sendable {
             case .invalidAddress:
                 return HubReach(says: String(l10n: "That is not a hub address."),
                                 next: String(l10n: "An address looks like http://100.84.1.2:8765 — the private address of your hub, and its port."))
-            case .refusal(let status, _) where status == 403:
+            case .refusal(let refused) where refused.status == 403:
                 // Never the hub's own words in brackets (fix round 3, item 50): "(owner only)" ended this line.
                 return HubReach(says: String(l10n: "Your hub answered\(at), and it does not serve its pages to this Mac."),
                                 next: String(l10n: "A hub serves the owner's own address only. Claim it from this Mac, or add this Mac to the same private network."))
-            case .refusal(let status, _) where status == 404:
+            case .refusal(let refused) where refused.status == 404:
                 return HubReach(says: String(l10n: "Something answered\(at), but it is not a Founderizer hub."),
                                 next: String(l10n: "Check the address and the port."))
-            case .refusal(_, let message):
+            case .refusal(let refused):
                 // No status code in a line of his (review B8, fix round 2): "(503)" said nothing to him.
-                return HubReach(says: String(l10n: "Your hub refused this read."), next: message)
+                return HubReach(says: String(l10n: "Your hub refused this read."), next: refused.words)
             case .invalidResponse:
                 return HubReach(says: String(l10n: "Your hub answered something this app could not read."),
                                 next: String(l10n: "It may run an older Founderizer. Update it from Updates on its own server."))
@@ -78,7 +78,7 @@ public struct HubReach: Equatable, Sendable {
     public static func worthAgain(_ error: Error) -> Bool {
         switch error {
         case let reason as URLError: return reason.code != .timedOut && reason.code != .cancelled
-        case HubError.refusal(let status, _): return status >= 500
+        case HubError.refusal(let refused): return refused.status >= 500
         case HubError.unavailable: return true
         default: return false
         }

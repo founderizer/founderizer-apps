@@ -372,7 +372,7 @@ struct ChannelsPage: View {
             do {
                 _ = try await client.saveAccount(hub: hub, database: db, client: installation, sha256: sha, id: choice.id, account: choice.account)
                 return choice.id
-            } catch HubError.refusal(409, _) where attempt == 1 {
+            } catch let error as HubError where error.conflict && attempt == 1 {
                 current = try await client.read(hub: hub, database: db)
             }
         }

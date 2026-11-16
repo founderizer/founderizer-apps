@@ -3,11 +3,12 @@ import Darwin
 import Foundation
 
 /// **The nine tools that write, as `owner_mcp.py` writes them** (slice A2): `save_profile` (`with_profile_base`),
-/// `attach_file`, `read_attachment`, `take_backup`, `grant_access` (with `_one_moved`, `_one_moved_map` and
-/// `_team_command`), `share_resource`, `send_message` (`write_message`), `answer_needs_you` (`answer_need`) and
-/// `decline_secret_request` (`decline_secret`). Each makes the same requests in the same order, with the same refusals
-/// in the same words and the same result; the parity check (`OwnerParityTests`, `test_owner_mcp.Parity`) holds them to
-/// that function by function.
+/// `attach_file`, `read_attachment`, `take_backup`, `grant_access` (with `_one_moved`, `_one_moved_map`,
+/// `_team_command`, `secret_reaches`, `vault_read`, `vault_reading` and `made_by_an_agent`), `share_resource` (with
+/// `standing_reaches`), `send_message` (`write_message`),
+/// `answer_needs_you` (`answer_need`) and `decline_secret_request` (`decline_secret`). Each makes the same requests in
+/// the same order, with the same refusals in the same words and the same result; the parity check
+/// (`OwnerParityTests`, `test_owner_mcp.Parity`) holds them to that function by function.
 extension OwnerTools {
     /// The tools of the table's kind `swift` that this program has. A table of a newer `owner_mcp.py` can name a
     /// `swift` tool that this code has not: that tool is refused in words, as one of a later version (`init`).
@@ -89,7 +90,9 @@ extension OwnerTools {
                               "drive": "/ui/team/google", "gmail": "/ui/team/google"]
 
     /// `grant_access`: one agent's hold of one resource that the fleet already has. Each kind is its own owner route,
-    /// and the three that take a whole map are read from `GET /ui/team` first, so only the named agent moves.
+    /// and the three that take a whole map are read from `GET /ui/team` first, so only the named agent moves. A give of
+    /// a secret that the hub's reading of the central vault shows as one that brings its value to no server is not
+    /// sent (`secretReaches`); an end of a hold always goes, with no read before it.
     func grantAccess(_ args: [String: JSONValue], on hub: OwnerHub) throws -> JSONValue? {
         let resource = args["resource"] ?? .null, agent = args["agent"] ?? .null, level = args["level"] ?? .null
         let (kind, what) = PyText.partition(Self.text(resource), ":")
@@ -109,6 +112,9 @@ extension OwnerTools {
         }
         let whatFor = "the grant of \(resource.pythonText) to \(name)"
         if PyText.same(kind, "secret") {
+            if !level.isNull, try !secretReaches(what, name, level, on: hub) {
+                throw OwnerRefusal(Self.grantNotSigned)
+            }
             return try hub.command("/ui/secrets/grant", ["login": .string(what), "agent": agent, "grant": level],
                                    whatFor, requestID: args["request_id"])
         }
@@ -173,6 +179,167 @@ extension OwnerTools {
         return value
     }
 
+    /// `owner_mcp.py`'s GRANT_NOT_SIGNED: the words when `grant_access` does not send a give of a secret
+    /// (`secretReaches`). One fixed sentence, which quotes no reference, no agent's name and no word of the hub. Its
+    /// end names only the pool: the app's own give of a secret signs the grant and writes it into the list itself, so
+    /// a call from here after it would add nothing, and could change the level that the owner chose.
+    static let grantNotSigned = "On this fleet the central vault sends a secret's value to a server only for a grant "
+        + "that the owner's app signed for an agent on that server, or for a secret that the owner signed into the "
+        + "grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it "
+        + "for this agent's server, and that server's vault holds no copy of it. A grant from here would show the "
+        + "secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was "
+        + "sent. The owner gives the secret to the agent in the Founderizer app, on Secrets: the app signs the grant "
+        + "and writes it into the list, and nothing more is needed from here then. If the owner put the secret into "
+        + "the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once "
+        + "a minute."
+
+    /// `vault_reading`: what `secretReaches` and `standingReaches` read of `GET /ui/vault` (`hub.py` `vault_view`),
+    /// with each reference in lower case.
+    struct VaultReading {
+        /// The references that the owner signed into the grantable pool (`central.pool`).
+        let pool: [String]
+        /// Each grant that the owner signed, as its reference and its machine (`central.grants`).
+        let grants: [(login: String, machine: String)]
+        /// Each machine with a worker or a lead (`machines`), and whether it takes deliveries now: its `missing` is an
+        /// empty list (the page adds `not_pinned` and `pin_mismatch` to it).
+        let machines: [(machine: String, takes: Bool)]
+        /// For each machine, the references that its vault holds by the hub's own records (`held`, which counts a copy
+        /// only when it was sealed to the machine's pin).
+        let held: [(machine: String, references: [String])]
+    }
+
+    /// `vault_reading`: the reading of the page, or nil when the answer does not say it: a fleet with no central vault
+    /// (`central` null or absent), a vault with no good reading (`central.ok` not true, or the page's `error` is set:
+    /// the hub's newest read of the vault failed, and the page still has the last good `central`, however old), and
+    /// an answer of any other shape than this one. Text of the hub is data: nothing here stops on it.
+    static func vaultReading(_ page: JSONValue?) -> VaultReading? {
+        guard let page = page?.object, let central = page["central"]?.object,
+              central["ok"] == JSONValue.bool(true) else { return nil }
+        if let error = page["error"], !error.isNull { return nil }
+        guard let pool = central["pool"]?.array, let grants = central["grants"]?.array,
+              let machines = page["machines"]?.array, let held = page["held"]?.object else { return nil }
+        /// A list of texts as lower-case references, or nil when an element is no text.
+        func references(_ list: [JSONValue]) -> [String]? {
+            var out: [String] = []
+            for item in list {
+                guard case .string(let text) = item else { return nil }
+                out.append(PyText.asciiLower(text))
+            }
+            return out
+        }
+        guard let pooled = references(pool) else { return nil }
+        var signed: [(login: String, machine: String)] = []
+        for grant in grants {
+            guard case .string(let login)? = grant.object?["login"],
+                  case .string(let machine)? = grant.object?["machine"] else { return nil }
+            signed.append((PyText.asciiLower(login), machine))
+        }
+        var takes: [(machine: String, takes: Bool)] = []
+        for entry in machines {
+            guard case .string(let machine)? = entry.object?["machine"],
+                  let missing = entry.object?["missing"]?.array else { return nil }
+            takes.append((machine, missing.isEmpty))
+        }
+        var holds: [(machine: String, references: [String])] = []
+        for (machine, list) in held {
+            guard let list = list.array, let copies = references(list) else { return nil }
+            holds.append((machine, copies))
+        }
+        return VaultReading(pool: pooled, grants: signed, machines: takes, held: holds)
+    }
+
+    /// `vault_read`: the read that both rules make first (`secretReaches`, `standingReaches`): `GET /ui/vault`, and
+    /// what `vaultReading` reads of its answer, or nil when the page cannot judge: the hub has no such page or refuses
+    /// the read, the answer has another shape, the fleet has no central vault, or the vault has no good reading. A hub
+    /// that does not answer, and a generation that moved two times, are this program's own errors, as for each of its
+    /// reads: the caller sends nothing then.
+    func vaultRead(on hub: OwnerHub) throws -> VaultReading? {
+        let answer = try hub.answered("/ui/vault")
+        if hub.stale(answer) { throw hub.refusal(answer, "a read of the vault") }   // a second new generation
+        return answer.status == 200 ? Self.vaultReading(answer.data) : nil
+    }
+
+    /// `made_by_an_agent`: step 3b of both rules, on the team's page and a reference in lower case: true when an agent
+    /// made this secret, which is when `created_logins` names it (the agents' `create_login` and `save_key`). Such a
+    /// value is in the own store of the maker's server, which the page of the vault does not show, so no rule here
+    /// judges it. True also for a page with no such list of objects, which cannot say.
+    static func madeByAnAgent(_ page: JSONValue?, _ reference: String) -> Bool {
+        guard let made = page?.object?["created_logins"]?.array, made.allSatisfy({ $0.object != nil }) else {
+            return true
+        }
+        return made.contains { one in
+            guard case .string(let login)? = one.object?["login"] else { return false }
+            return PyText.same(PyText.asciiLower(login), reference)
+        }
+    }
+
+    /// `secret_reaches`: **a give of a secret is sent unless the hub's own reading shows that its value would reach no
+    /// server.** On a fleet with a central vault, a machine's vault gets a secret only when the owner signed a grant
+    /// of it for an agent of that machine, or signed it into the grantable pool, and only the owner's app signs;
+    /// `POST /ui/secrets/grant` writes the grant into the fleet's list with no signature. This refuses only what the
+    /// reading shows as never delivered, and it sends each give that it cannot judge. True when the give is sent,
+    /// which is each of these, in this order:
+    ///
+    /// 1. The hub's page of the vault (`GET /ui/vault`) cannot judge: the hub has no such page or refuses the read,
+    ///    the answer has another shape, the fleet has no central vault, or the vault has no good reading
+    ///    (`vaultReading`).
+    /// 2. The reference is in the grantable pool. No read of the team is made for it.
+    /// 3. After the read of the fleet's list (`GET /ui/team`):
+    ///    a. The catalog (`logins`) does not have the secret, or the level does not fit it: it is not `use` or `read`,
+    ///       or it is `read` for an entry whose `kind` is not `api_key`. The hub then answers in its own words. A page
+    ///       with no `logins` object is sent too.
+    ///    b. An agent made the secret: `created_logins` names it (the agents' `create_login` and `save_key`). Such a
+    ///       value is in the own store of the maker's server, which the page of the vault does not show, so this
+    ///       program does not judge it. A page with no such list is sent too.
+    ///    c. The lines have no such agent, or the agent has no machine. The program sends the give: the hub refuses an
+    ///       agent that it does not have, and writes the grant for one with no machine. The door is no agent of the
+    ///       lines, so a give to it is sent.
+    ///    d. The agent is no worker and no lead (its `role`): the fleet manager, also on a server that it shares with
+    ///       workers. The hub's reconciler counts only what workers and leads hold.
+    ///    e. The agent's machine is not in `machines` of the vault's page, or it does not take deliveries now (it has
+    ///       no pin, or another one): `held` then shows no copy of that machine.
+    /// 4. The owner signed a grant of the secret for an agent of that machine: this agent or another one.
+    /// 5. That machine's vault holds a copy of the secret already, by the hub's own records.
+    ///
+    /// False for every other give (6): nothing is sent, and `grantAccess` says `grantNotSigned`.
+    ///
+    /// The page of the vault is read first, and the team only when the page and the pool did not settle the give, so
+    /// a give that is sent makes as few reads as it can. The hub reads the vault at least once a minute, and soon
+    /// after a signed statement, so its reading can be that much older than the owner's last signature. A hub that
+    /// does not answer, and a generation that moved two times, are this program's own errors, as for each of its
+    /// reads, and lines of the team of another shape are `teamShape`: nothing is sent then. This is the program's own
+    /// check and no gate (OWNER-MCP-BOUNDARY.md section 7).
+    func secretReaches(_ what: String, _ agent: String, _ level: JSONValue, on hub: OwnerHub) throws -> Bool {
+        guard let reading = try vaultRead(on: hub) else { return true }                                    // 1
+        let reference = PyText.asciiLower(what)
+        if reading.pool.contains(where: { PyText.same($0, reference) }) { return true }     // 2: needs no machine
+        let page = try hub.get("/ui/team", "a read of the team").data
+        // 3a: the hub answers in its own words for a secret that the catalog does not have, and for a level that does
+        // not fit it.
+        let catalog = page?.object?["logins"]?.object
+        let use = PyText.same(level.string, "use"), read = PyText.same(level.string, "read")
+        guard let entry = catalog?.first(where: { PyText.same($0.key, reference) })?.value.object, use || read,
+              !read || PyText.same(entry["kind"]?.string, "api_key") else { return true }
+        if Self.madeByAnAgent(page, reference) { return true }      // 3b: a secret that an agent made is not judged
+        let lines = try Self.teamLines(page)
+        guard let line = lines.first(where: { PyText.same($0.0, agent) })?.1 else { return true }          // 3c
+        // `team_part(line, "machine", str)`: no machine when it is absent or empty, a refusal when it is no text.
+        guard let found = line.first(where: { PyText.same($0.key, "machine") })?.value, found.truthy else {
+            return true                                                                                    // 3c
+        }
+        guard case .string(let machine) = found else { throw OwnerRefusal(Self.teamShape) }
+        let role = line.first(where: { PyText.same($0.key, "role") })?.value.string
+        guard PyText.same(role, "worker") || PyText.same(role, "lead") else { return true }                // 3d
+        guard reading.machines.first(where: { PyText.same($0.machine, machine) })?.takes == true else {
+            return true                                                                                    // 3e
+        }
+        if reading.grants.contains(where: { PyText.same($0.login, reference) && PyText.same($0.machine, machine) }) {
+            return true                                                                                    // 4
+        }
+        let copies = reading.held.first(where: { PyText.same($0.machine, machine) })?.references ?? []
+        return copies.contains(where: { PyText.same($0, reference) })                                      // 5, else 6
+    }
+
     /// `_team_command`: one command that moves `team.json`, with the SHA-256 of the file that it is built on, read
     /// again immediately before it.
     func teamCommand(_ route: String, _ body: [String: JSONValue], _ what: String, _ args: [String: JSONValue],
@@ -182,14 +349,92 @@ extension OwnerTools {
         return try hub.command(route, body, what, requestID: args["request_id"])
     }
 
-    /// `share_resource`: `POST /ui/resources`, the owner's standing for one resource. It changes no grant.
+    /// `owner_mcp.py`'s SHARE_NOT_SIGNED: the words when `share_resource` does not send a standing for a secret
+    /// (`standingReaches`). One fixed sentence, which quotes no reference and no word of the hub. Its end asks for no
+    /// second call: the app's own control signs the secret into the pool and writes the standing itself.
+    static let shareNotSigned = "On this fleet the central vault sends a secret's value to a server only for a grant "
+        + "that the owner's app signed for an agent on that server, or for a secret that the owner signed into the "
+        + "grantable pool. By the hub's last reading, this secret is not in the signed pool, the owner signed no grant "
+        + "of it for a server, and no server's vault holds a copy of it. A standing from here would let the fleet "
+        + "manager give the secret and, by that reading, bring its value to no server, so nothing was sent. The owner "
+        + "sets who may give the secret in the Founderizer app: on Secrets, the secret's card, Who may give it. The "
+        + "app signs that and writes the standing, and nothing more is needed from here then."
+
+    /// `DOOR_MACHINE`: the name under which the owner's signed grant for the door stands in the central vault
+    /// (`hub.py` `DOOR_PIN`). The door is no server that an agent of the fleet works on, so such a grant brings no
+    /// give of the manager to a server.
+    static let doorMachine = "door"
+
+    /// `standing_reaches`: **a standing for a secret is sent unless the hub's own reading shows that no give from it
+    /// could bring the value to a server.** `POST /ui/resources` writes the standing into the fleet's list with no
+    /// signature, and the fleet manager can then give the secret to a worker or a lead. But on a fleet with a central
+    /// vault, a server's vault gets a secret only when the owner signed it into the grantable pool, or signed a grant
+    /// of it for an agent of that server, and only the owner's app signs: its own control signs the pool statement
+    /// first and writes the standing after. This is the twin of `secretReaches`, for every server at once, because a
+    /// standing names no agent: it refuses only what the reading shows as useless, and it sends each standing that it
+    /// cannot judge. `shareResource` makes the two reads: `reading` is the page of the vault (`vaultRead`; 1: a page
+    /// that cannot judge is sent), and `page` is the team's (`GET /ui/team`), the one read that also gives the command
+    /// its base. True when the standing is sent, which is each of these, in this order:
+    ///
+    /// 2. The reference is in the grantable pool that the owner signed.
+    /// 3. a. The catalog (`logins`) has no entry for the secret, `most` is not `use` or `read`, or the page has no
+    ///       `logins` object. The hub then answers in its own words.
+    ///    b. An agent made the secret, or the page has no list of such secrets (`madeByAnAgent`).
+    /// 4. The owner signed a grant of the secret for an agent of any server: a give of the manager to an agent on
+    ///    that server is delivered. A grant for the door (`doorMachine`) does not count: no give of the manager
+    ///    reaches it.
+    /// 5. The vault of any server holds a copy of the secret already, by the hub's own records.
+    /// 6. A server's entry has something missing (no pin or another one, no access to its vault, an older vault or
+    ///    helper, no fresh report): for such a server the hub itself does not say what its vault holds.
+    ///
+    /// False for every other standing (7): nothing is sent, and `shareResource` says `shareNotSigned`. A fleet with no
+    /// worker and no lead has no server in the page of the vault, so with nothing signed its standing is refused too.
+    /// References are compared in lower case, as the vault compares them. This is the program's own check and no gate
+    /// (OWNER-MCP-BOUNDARY.md section 7).
+    static func standingReaches(_ reading: VaultReading, _ page: JSONValue?, _ what: String,
+                                _ most: JSONValue) -> Bool {
+        let reference = PyText.asciiLower(what)
+        if reading.pool.contains(where: { PyText.same($0, reference) }) { return true }                    // 2
+        // 3a: the hub answers in its own words.
+        let catalog = page?.object?["logins"]?.object
+        guard catalog?.first(where: { PyText.same($0.key, reference) })?.value.object != nil,
+              PyText.same(most.string, "use") || PyText.same(most.string, "read") else { return true }
+        if madeByAnAgent(page, reference) { return true }           // 3b: a secret that an agent made is not judged
+        return reading.grants.contains(where: {                                                            // 4
+            PyText.same($0.login, reference) && !PyText.same($0.machine, doorMachine)
+        })
+            || reading.held.contains(where: { $0.references.contains(where: { PyText.same($0, reference) }) })     // 5
+            || reading.machines.contains(where: { !$0.takes })                                             // 6, else 7
+    }
+
+    /// `share_resource`: `POST /ui/resources`, the owner's standing for one resource. It changes no grant. A standing
+    /// for a secret that the hub's reading of the central vault shows as one from which no give could bring the value
+    /// to a server is not sent (`standingReaches`). Only a `max` for a resource that the hub reads as a secret is
+    /// judged: the hub takes a resource with spaces around it and in any case (`hub.py` `ui_resource`), so the kind is
+    /// read here as the hub reads it. Then the page of the vault is read first, and the one read of the team that
+    /// every standing makes for its base serves the rule too. Taking the entry back (no `max`) is never refused and
+    /// makes no read of the vault, and neither does a standing for a resource of another kind.
     func shareResource(_ args: [String: JSONValue], on hub: OwnerHub) throws -> JSONValue? {
+        let resource = args["resource"] ?? .null, most = args["max"] ?? .null
         var policy: JSONValue = .null
-        if let most = args["max"], !most.isNull {
+        if !most.isNull {
             policy = .object(["max": most, "to": args["to"].flatMap { $0.truthy ? $0 : nil } ?? .string("workers")])
         }
-        return try teamCommand("/ui/resources", ["resource": args["resource"] ?? .null, "policy": policy],
-                               "the standing of this resource", args, on: hub)
+        var reading: VaultReading?, what = ""
+        if !policy.isNull, case .string(let text) = resource {
+            let (kind, rest) = PyText.partition(PyText.asciiLower(PyText.strip(text)), ":")
+            if PyText.same(kind, "secret") {
+                what = rest
+                reading = try vaultRead(on: hub)    // 1: nil when the page cannot judge, and then the standing is sent
+            }
+        }
+        let page = try hub.get("/ui/team", "a read of the team").data
+        if let reading, !Self.standingReaches(reading, page, what, most) {
+            throw OwnerRefusal(Self.shareNotSigned)
+        }
+        return try hub.command("/ui/resources", ["resource": resource, "policy": policy,
+                                                 "base_sha256": try OwnerHub.teamSHA256(of: page)],
+                               "the standing of this resource", requestID: args["request_id"])
     }
 
 
@@ -425,6 +670,13 @@ enum PyText {
     }
 
     static func contains(_ text: String, _ scalar: Unicode.Scalar) -> Bool { text.unicodeScalars.contains(scalar) }
+
+    /// `owner_mcp.py`'s `lower_reference`: a text with A to Z in lower case, and every other code point as it is. A
+    /// secret's reference is ASCII, and the two programs must lower each text the same way: `lowercased()` and
+    /// Python's `str.lower()` do not agree on every letter.
+    static func asciiLower(_ text: String) -> String {
+        string(text.unicodeScalars.map { (0x41...0x5A).contains($0.value) ? Unicode.Scalar($0.value + 32)! : $0 })
+    }
 }
 
 /// **The media type of a file that the agent attaches with no `mime`**, by its ending in lower case, from the table

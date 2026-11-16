@@ -191,8 +191,8 @@ struct GitHubAppSection: View {
             note = (receipt.replaced == true ? String(l10n: "Your hub uses this App now. Delete the .pem file you downloaded.")
                     : String(l10n: "Your hub has your GitHub App. Delete the .pem file you downloaded."), false)
             await refresh()
-        } catch let HubError.refusal(_, words) {
-            note = (words, true)
+        } catch let HubError.refusal(refused) {
+            note = (refused.words, true)
         } catch {
             note = (String(l10n: "The hub did not take the App. Try again."), true)
         }
@@ -208,8 +208,8 @@ struct GitHubAppSection: View {
                                                                client: store.installation)
             note = (String(l10n: "The App file is gone. Your agents get no token until you save another."), false)
             await refresh()
-        } catch let HubError.refusal(_, words) {
-            note = (words, true)
+        } catch let HubError.refusal(refused) {
+            note = (refused.words, true)
         } catch {
             note = (String(l10n: "The hub did not take that. Try again."), true)
         }

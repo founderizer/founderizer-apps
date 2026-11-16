@@ -106,11 +106,11 @@ struct MobileKeyTests {
 
     @Test("The two refusals of an enrollment ask for different steps")
     func enrollmentRefusals() {
-        let notADevice = MobileError.refusal(status: 403, auth: nil,
-                                             message: "127.0.0.1 is not an owner device. See \"owner_devices\" in team.json.")
-        let wrongCode = MobileError.refusal(status: 403, auth: nil, message: "that code is not valid")
-        let tooMany = MobileError.refusal(status: 429, auth: nil,
-                                          message: "too many wrong codes; wait an hour, then make a new code")
+        let notADevice = MobileError.refusal(
+            HubRefusal(status: 403, hubWords: "127.0.0.1 is not an owner device. See \"owner_devices\" in team.json."), auth: nil)
+        let wrongCode = MobileError.refusal(HubRefusal(status: 403, hubWords: "that code is not valid"), auth: nil)
+        let tooMany = MobileError.refusal(
+            HubRefusal(status: 429, hubWords: "too many wrong codes; wait an hour, then make a new code"), auth: nil)
         #expect(MobileError.enrollWords(notADevice) != MobileError.enrollWords(wrongCode))
         #expect(MobileError.enrollWords(notADevice).contains("does not know this phone"))
         #expect(MobileError.enrollWords(notADevice).contains("Mac"))
@@ -138,10 +138,10 @@ struct MobileKeyTests {
     @Test("A refusal that the hub decided ends a request; one that may still arrive does not")
     func definitiveRefusals() {
         for status in [400, 403, 404, 409, 413, 415, 422, 429, 503] {
-            #expect(MobileError.refusal(status: status, auth: nil, message: "").isDefinitive)
+            #expect(MobileError.refusal(HubRefusal(status: status, hubWords: ""), auth: nil).isDefinitive)
         }
         for status in [500, 502, 504] {
-            #expect(!MobileError.refusal(status: status, auth: nil, message: "").isDefinitive)
+            #expect(!MobileError.refusal(HubRefusal(status: status, hubWords: ""), auth: nil).isDefinitive)
         }
         #expect(!MobileError.noAnswer.isDefinitive)
     }
@@ -210,13 +210,12 @@ struct NeedPressTests {
 
     @Test("Each refusal says why the answer did not go, in its own words")
     func eachRefusalHasItsOwnWords() {
-        let answered = NeedPress.words(MobileError.refusal(status: 409, auth: nil,
-                                                           message: "owner request is already answered"), need: 7)
-        let changed = NeedPress.words(MobileError.refusal(status: 409, auth: nil,
-                                                          message: "hub generation changed; refresh state before sending"),
-                                      need: 7)
-        let gone = NeedPress.words(MobileError.refusal(status: 404, auth: nil, message: "owner request does not exist"),
-                                   need: 7)
+        let answered = NeedPress.words(MobileError.refusal(HubRefusal(status: 409, hubWords: "owner request is already answered"),
+                                                           auth: nil), need: 7)
+        let changed = NeedPress.words(MobileError.refusal(
+            HubRefusal(status: 409, hubWords: "hub generation changed; refresh state before sending"), auth: nil), need: 7)
+        let gone = NeedPress.words(MobileError.refusal(HubRefusal(status: 404, hubWords: "owner request does not exist"),
+                                                       auth: nil), need: 7)
         let silent = NeedPress.words(MobileError.noAnswer, need: 7)
         // The words name no number of the hub's (fix round 3, item 47): the title names the agent.
         #expect(answered == "Already answered.")
@@ -226,7 +225,7 @@ struct NeedPressTests {
         #expect(silent.contains("did not answer"))
         #expect(Set([answered, changed, gone, silent]).count == 4)
         // A refusal of this phone's key names the step, as everywhere else in the app.
-        #expect(NeedPress.words(MobileError.refusal(status: 403, auth: "device_key_mismatch", message: ""), need: 7)
+        #expect(NeedPress.words(MobileError.refusal(HubRefusal(status: 403, hubWords: ""), auth: "device_key_mismatch"), need: 7)
                 == MobileError.authWords("device_key_mismatch"))
     }
 

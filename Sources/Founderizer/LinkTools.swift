@@ -3,10 +3,10 @@ import FleetCore
 import FleetOwnerAPI
 import Foundation
 
-/// **The app's side of the link's write tools** (`OwnerLinkTools` in FleetOwnerAPI; the secrets plan, step B): a thin
-/// adapter from the tool's logic (`SaveBotToken.answer`, tested there with stand-ins) to the app's own engine, on the
-/// board of `SetupChannel`. Nothing of it shows on the screen, and nothing of a request (its line, its fields, its
-/// value part) is written to the app's log.
+/// **The app's side of the link's write tools** (`OwnerLinkTools` in FleetOwnerAPI; the secrets plan, steps B and
+/// E): a thin adapter from each tool's logic (`SaveBotToken.answer`, `PrepareReport.answer`, `SaveSecret.answer`,
+/// tested there with stand-ins) to the app's own engine, on the board of `SetupChannel`. Nothing of it shows on the
+/// screen, and nothing of a request (its line, its fields, its value part) is written to the app's log.
 ///
 /// **`save_bot_token`** sends the token as the Discord page's Save does (`DiscordBotPage.save()`): only while the
 /// store's reading is current and has a database, with the store's hub, database and installation, through
@@ -14,6 +14,14 @@ import Foundation
 /// fleet's chat apps page lists (`ChatAppsClient.read`), whose bridge state also decides `replace`. It takes no command
 /// lock: the app does the write, as its form does. With `from` clipboard the app reads `NSPasteboard.general` itself,
 /// last, and clears it after a save that the hub confirmed (step C).
+///
+/// **`save_secret`** saves a new login or API key as Add secret's form does for a new value with no grant
+/// (`SecretEntryView`): the item is sealed here to the central vault's key, only while that key is the one that this
+/// Mac pinned; the hub gets the entry of its list (`SecretEntryView.register`, as it is); and the hub passes the
+/// sealed copy on to the vault (`VaultClient.intake`). It gives the secret to no agent, replaces nothing and sets no
+/// site itself. Its work outlives its call, in a table of its own (`LinkWork`). The desk is `secretDesk`, closure by
+/// closure.
+///
 /// **A text that the owner's own agent wrote for the report form** (`prepare_problem_report`): the form takes it, and
 /// says whether it shows it or keeps the owner's own text.
 struct ReportAsk: Equatable {
@@ -74,6 +82,141 @@ enum LinkTools {
         board.add(set: OwnerSetupTools.set, tool: PrepareReport.name, value: .none) { fields, value in
             await PrepareReport.answer(fields: fields, value: value, desk: reports)
         }
+        // `save_secret`: a new login or API key into the central vault. One table of work for the tool, which lives
+        // as long as the board: a save that its call left goes on there, and a later call reads its state.
+        let secrets = secretDesk(store: store)
+        let work = LinkWork()
+        board.add(set: OwnerSetupTools.set, tool: SaveSecret.name, value: .optional) { fields, value in
+            await SaveSecret.answer(fields: fields, value: value, desk: secrets, work: work)
+        }
+    }
+
+    // ------------------------------------------------------------ the vault (`save_secret`)
+
+    /// The form's own kind for the tool's. No default: a third kind of the tool is a build error here.
+    nonisolated static func kind(_ kind: SaveSecret.Kind) -> LoginSecret.Kind {
+        switch kind {
+        case .login: return .login
+        case .apiKey: return .apiKey
+        }
+    }
+
+    /// **The secret of the tool's fields as the form's own type holds it** (`SecretOfFields` in FleetCore): the one
+    /// helper for the check of the fields, the maker of the item and the address of the hub's step.
+    nonisolated static func form(_ fields: SaveSecret.Fields) -> SecretOfFields {
+        SecretOfFields(kind: kind(fields.kind), env: fields.env, url: fields.url, username: fields.username)
+    }
+
+    /// The tool's answer for the key to seal to. No default: a sixth answer of `VaultSealKey` is a build error here.
+    /// The tool's own sixth answer, `moved`, is no answer of that rule: the desk gives it before the rule is asked.
+    nonisolated static func sealKey(_ key: VaultSealKey) -> SaveSecret.SealKey {
+        switch key {
+        case .key(let recipient): return .key(recipient)
+        case .noVault: return .noVault
+        case .noPin: return .noPin
+        case .otherKey: return .otherKey
+        case .noRecovery: return .noRecovery
+        }
+    }
+
+    /// The tool's answer for the room in the list. No default, as `sealKey`.
+    nonisolated static func room(_ room: SecretRoom) -> SaveSecret.Room {
+        switch room {
+        case .free: return .free
+        case .held: return .held
+        case .full: return .full
+        case .unread: return .unread
+        }
+    }
+
+    /// **The hub's features for one save**: the store's, only while the store still shows the hub and the database
+    /// that the save sends with (`ShownFeatures`). nil says one thing only: the app's reading moved (another hub,
+    /// another database, no state or no store). A hub that names no features, while the store shows it, is the
+    /// empty list.
+    static func features(of store: FleetStore?, at place: Place) -> [String]? {
+        guard let store else { return nil }
+        return ShownFeatures.of(store.state?.ui_features, hub: store.hub, database: store.state?.db,
+                                sendsTo: (place.hub, place.database))
+    }
+
+    /// **The app's engine for `save_secret`**, closure by closure (`SaveSecret.Desk`). Each request ends by the time
+    /// limit of its own client, so no run of the work waits without a bound. No closure keeps a reference to an
+    /// item's bytes, and none writes anything of a request to the log.
+    static func secretDesk(store: @escaping @MainActor () -> FleetStore?) -> SaveSecret.Desk<Place> {
+        let vault = VaultClient(), lists = HubClient()
+        return SaveSecret.Desk<Place>(
+            // The form's own type on the fields alone, asked with a stand-in for the value that is no secret; the
+            // title and the variable are read only from a secret that the type took. The maker of the item asks
+            // the type again with the value itself, and hands out the type's own bytes: it keeps no reference.
+            secret: { fields in
+                let typed = form(fields)
+                guard let name = typed.name(standIn: String(repeating: "x", count: SaveSecret.valueLeast)) else {
+                    return nil
+                }
+                let draft = SaveSecret.Draft(title: name.title, kind: fields.kind, variable: name.variable)
+                return SaveSecret.Secret(draft: draft) { text in typed.item(value: text) }
+            },
+            // As `save_bot_token`'s, and only while the hub serves Add secret's form (`SecretEntryView.isOffered`).
+            ready: {
+                guard let store = store(), store.isFresh, let database = store.state?.db,
+                      SecretEntryView.isOffered(by: store) else { return nil }
+                return Place(hub: store.hub, database: database, client: store.installation)
+            },
+            // The vault's reading (20 seconds for a request, 30 in all), the pin that the form uses, through the
+            // reading's fleet id, and the served features. A read that failed is thrown as it is.
+            //
+            // **A store that moved during the read is `moved`, before the rule is asked.** The app shows another
+            // hub or database now, so its features are not those of the hub that this call reads: "no vault is
+            // served" is not known then. A hub that the store still shows and that does not name the feature is
+            // `noVault`, by the rule.
+            sealKey: { place in
+                let reading = try await vault.reading(hub: place.hub, database: place.database)
+                guard let shown = features(of: store(), at: place) else { return .moved }
+                let pin = reading?.fleetID.flatMap { CentralVaultPins.recipient(hub: place.hub, fleet: $0) }
+                return sealKey(VaultSealKey.of(reading, served: shown.contains(CentralVault.feature), pin: pin))
+            },
+            // The list's read (10 seconds for a request, 15 in all). A read that failed is thrown as it is.
+            room: { place, draft in
+                let team = try await lists.team(hub: place.hub, database: place.database)
+                return room(SecretRoom.of(title: draft.title, kind: kind(draft.kind), logins: team.logins, but: nil))
+            },
+            seal: { item, key in try? AgeSeal.seal(item, to: key) },
+            // The form's own hub step, as it is: the salts (10 and 15 seconds), then the entry (20 and 30), under a
+            // new request id of the hub at each call (`SecretsClient.add`). **`address:` gives an API key its
+            // site**: without it the hub gets no address, and a key of a well-known service gets none. It goes only
+            // for an API key (the form's own rule; never for a login), and only while the store still shows this
+            // place's hub and database. The tool sets no site itself.
+            register: { place, reference, draft, fields, item in
+                let address = form(fields).address(features: features(of: store(), at: place))
+                do {
+                    try await SecretEntryView.register(reference, title: draft.title, kind: kind(draft.kind),
+                                                       variable: draft.variable, address: address, value: item,
+                                                       hub: place.hub, database: place.database,
+                                                       installation: place.client)
+                } catch {
+                    throw failure(error)                  // a refusal carries the hub's own status, and no other
+                }
+            },
+            // The vault's step, with no statement (20 seconds for a request, 30 in all).
+            intake: { place, reference, sealed in
+                do {
+                    _ = try await vault.intake(hub: place.hub, database: place.database, client: place.client,
+                                               login: reference, ciphertext: sealed)
+                } catch {
+                    throw failure(error)
+                }
+            },
+            // **Started, and not waited for.** `FleetStore.refresh()` waits for a read that is on its way and for
+            // its own read after it, and that read does more than its request; the work must end without it. The
+            // entry is in the hub by now: the app's pages show it when this read ends.
+            refresh: {
+                guard let store = store() else { return }
+                Task { @MainActor in await store.refresh() }
+            },
+            newReference: { "bws://" + UUID().uuidString.lowercased() },
+            // The same gate and the same two functions as `save_bot_token`.
+            readClipboard: { gate.read { readPasteboard() } },
+            clearClipboard: { count in clearPasteboard(ifStill: count) })
     }
 
     // ------------------------------------------------------------ the report form (`prepare_problem_report`)
@@ -125,12 +268,13 @@ enum LinkTools {
 
     // ------------------------------------------------------------ the clipboard (`from` clipboard)
 
-    /// One read at a time: a call that comes while macOS's question of an earlier one is up gets `busy`.
+    /// One read at a time: a call that comes while macOS's question of an earlier one is up gets `busy`. One gate
+    /// for `save_bot_token` and `save_secret`: the clipboard is one, whichever tool reads it.
     private static let gate = SaveBotToken.ClipboardGate()
 
-    /// **One read of the clipboard**, for `save_bot_token` with `from` clipboard, which reads it only after every other
-    /// check passed. On macOS 15.4 and later the owner's setting can deny the app the clipboard (`accessBehavior`):
-    /// then nothing is read. Else the change count, the text, and the change count again; when the two counts differ,
+    /// **One read of the clipboard**, for `save_bot_token` and `save_secret` with `from` clipboard, which read it only
+    /// after every other check passed. On macOS 15.4 and later the owner's setting can deny the app the clipboard
+    /// (`accessBehavior`): then nothing is read. Else the change count, the text, and the change count again; when the two counts differ,
     /// something wrote the clipboard during the read, and the read gives nothing. **It reads one time and never
     /// again**: when macOS asks, each read of new content is one more question, and one call brings one question at
     /// most. Nothing of the clipboard goes to a log.
@@ -142,24 +286,24 @@ enum LinkTools {
     /// thread, and on a thread that is not the main one it ends the app with an exception (`-[HIRunLoopSemaphore
     /// wait:] has been invoked on a secondary thread`). So this read is never moved to another thread. While the alert
     /// is up, the main thread is held in it. "Don't Allow Paste" gives nil, which is `nothing` here. A call whose
-    /// caller went away before or during the wait sends nothing (`SaveBotToken.answer` checks for a cancel before and
-    /// after the read).
+    /// caller went away before or during the wait sends nothing (`SaveBotToken.answer` and `SaveSecret.answer` check
+    /// for a cancel before and after the read).
     static func readPasteboard() -> SaveBotToken.Clipboard {
         let board = NSPasteboard.general
         if #available(macOS 15.4, *), board.accessBehavior == .alwaysDeny { return .notAllowed }
         let before = board.changeCount
         let text = board.string(forType: .string)
         guard board.changeCount == before else { return .nothing }
-        // A text above a value part's bound is no token: it never goes on to the tool's checks. Its length here is
-        // the text's own stored count (UTF-16 units), with no pass over a clipboard of any size; the tool's logic
-        // then holds it to the bound in bytes.
+        // A text above a value part's bound is no token and no secret's value: it never goes on to the tool's checks.
+        // Its length here is the text's own stored count (UTF-16 units), with no pass over a clipboard of any size;
+        // the tool's logic then holds it to the bound in bytes. The text goes on as it is: nothing is taken off it.
         guard let text, !text.isEmpty, (text as NSString).length <= OwnerChannel.valueMax else { return .nothing }
         return .text(text, count: before)
     }
 
     /// **Clears the clipboard after a confirmed save**, only when its change count is still the read's, and says
     /// whether it cleared. The limit that stays: a process that writes the clipboard between the compare and the clear
-    /// loses its text, and a clipboard manager's history keeps its own copy of the token.
+    /// loses its text, and a clipboard manager's history keeps its own copy of the token or of the secret's value.
     static func clearPasteboard(ifStill count: Int) -> Bool {
         let board = NSPasteboard.general
         guard board.changeCount == count else { return false }
@@ -171,7 +315,7 @@ enum LinkTools {
     /// read.
     nonisolated static func failure(_ error: Error) -> SaveBotToken.HubFailure {
         switch error {
-        case HubError.refusal(let status, let words): return .refused(status, words)
+        case HubError.refusal(let refused): return .refused(refused.status, refused.hubWords)
         case is URLError, HubError.unavailable: return .noAnswer
         default: return .unreadable
         }

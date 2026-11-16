@@ -35,16 +35,23 @@ public struct SecretImport: Sendable, Equatable {
         }
     }
 
-    /// One item that can become a secret. `problem` is why the vaults cannot read it as it is, in Add secret's words:
-    /// such a row is shown and cannot be chosen.
+    /// One item that can become a secret. `problem` is why the vaults cannot read it as it is, or why the central
+    /// vault would never take it (`LoginSecret.vaultProblem`, the owner's choice C42), in Add secret's words: such a
+    /// row is shown and cannot be chosen.
     public struct Row: Identifiable, Sendable, Equatable {
         public let id: Int
         public let secret: LoginSecret
         /// The vault of the password manager that holds the item, where the file names one (a 1Password `.1pux`;
         /// a `.csv` and a Bitwarden file name none).
         public let vault: String?
-        public var problem: String? { secret.problem }
-        public init(id: Int, secret: LoginSecret, vault: String? = nil) { self.id = id; self.secret = secret; self.vault = vault }
+        /// Read one time, at the row's birth: the page draws each row again at each change of the view, and
+        /// `vaultProblem` makes the item's value and reads it, so a large export would make the page slow. `secret` is
+        /// a `let`, so this cannot go stale.
+        public let problem: String?
+        public init(id: Int, secret: LoginSecret, vault: String? = nil) {
+            self.id = id; self.secret = secret; self.vault = vault
+            problem = secret.problem ?? secret.vaultProblem
+        }
     }
 
     /// The kinds of items that are not imported, and how many of each.

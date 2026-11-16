@@ -195,7 +195,7 @@ final class MCPAdding {
                 do {
                     message = (try await work(current, db), false)
                     break
-                } catch HubError.refusal(409, _) where attempt == 1 {
+                } catch let error as HubError where error.conflict && attempt == 1 {
                     current = try await client.read(hub: hub, database: db)
                 }
             }
@@ -212,7 +212,7 @@ final class MCPAdding {
     }
 
     private static func reason(_ error: Error) -> String {
-        if case HubError.refusal(_, let text) = error { return text }
+        if case HubError.refusal(let refused) = error { return refused.words }
         if error is URLError { return String(l10n: "The hub did not answer. Look at the list before you try again.") }
         return error.localizedDescription
     }

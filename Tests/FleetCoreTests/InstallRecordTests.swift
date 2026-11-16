@@ -99,7 +99,7 @@ struct InstallRecordTests {
             == "It stopped at “Join the fleet”.")
         #expect(InstallRecord.words(of: InstallError.noClaimCode, host: host) == InstallError.noClaimCode.errorDescription)
         #expect(InstallRecord.words(of: MacLinkError.refused("Homebrew printed this."), host: host) == nil)
-        #expect(InstallRecord.words(of: HubError.refusal(403, "owner only"), host: host) == nil)
+        #expect(InstallRecord.words(of: HubError.refusal(HubRefusal(status: 403, hubWords: "owner only")), host: host) == nil)
         #expect(InstallRecord.words(of: URLError(.timedOut), host: host) == nil)
     }
 
@@ -117,7 +117,7 @@ struct InstallRecordTests {
         #expect(InstallRecord.Stop.of(MacLinkError.unreadable) == .macUnreadable)
         #expect(InstallRecord.Stop.of(MacLinkError.notAnAddress) == .cannotStart)
         #expect(InstallRecord.Stop.of(HubError.unavailable) == .hubUnreached)
-        #expect(InstallRecord.Stop.of(HubError.refusal(403, "owner only")) == .hubRefused)
+        #expect(InstallRecord.Stop.of(HubError.refusal(HubRefusal(status: 403, hubWords: "owner only"))) == .hubRefused)
         #expect(InstallRecord.Stop.of(HubError.invalidAddress) == .hubRefused)
         #expect(InstallRecord.Stop.of(HubError.invalidResponse) == .hubRefused)
         #expect(InstallRecord.Stop.of(URLError(.timedOut)) == .hubUnreached)

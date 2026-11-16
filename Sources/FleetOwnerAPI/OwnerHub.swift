@@ -539,10 +539,10 @@ public final class OwnerHub: @unchecked Sendable {
         answer.status == 409 && (answer.error ?? "").contains("generation")
     }
 
-    /// One owner read route, with the generation that it asks for. `/ui/state` takes none. `query`: the route's own
-    /// words, in their order; a null is left out.
-    public func get(_ route: String, _ what: String, query: [(String, JSONValue)] = [],
-                    transfer: Transfer = .call) throws -> HubAnswer {
+    /// One owner read route, with the generation that it asks for, and its answer whatever its status
+    /// (`owner_mcp.py`'s `answered`): a hub with a new generation is read again once. `/ui/state` takes none. `query`:
+    /// the route's own words, in their order; a null is left out.
+    func answered(_ route: String, query: [(String, JSONValue)] = [], transfer: Transfer = .call) throws -> HubAnswer {
         func once() throws -> HubAnswer {
             var words: [(String, String)] = route == "/ui/state" ? [] : [("db", try generation())]
             words += query.filter { !$0.1.isNull }.map { ($0.0, $0.1.pythonText) }
@@ -554,6 +554,13 @@ public final class OwnerHub: @unchecked Sendable {
             try generation(fresh: true)
             answer = try once()
         }
+        return answer
+    }
+
+    /// One owner read route (`answered`), and the hub's own refusal for every answer that is not a 200.
+    public func get(_ route: String, _ what: String, query: [(String, JSONValue)] = [],
+                    transfer: Transfer = .call) throws -> HubAnswer {
+        let answer = try answered(route, query: query, transfer: transfer)
         guard answer.status == 200 else { throw refusal(answer, what) }
         if route == "/ui/state" { noteFeatures(answer.data) }
         return answer
@@ -593,7 +600,12 @@ public final class OwnerHub: @unchecked Sendable {
 
     /// `GET /ui/team`'s SHA-256 of `team.json`, which every command that moves it carries.
     func teamSHA256() throws -> JSONValue {
-        let team = try get("/ui/team", "a read of the team").data
+        try Self.teamSHA256(of: get("/ui/team", "a read of the team").data)
+    }
+
+    /// The same of a read of the team that the caller made already (`share_resource`, whose one read also serves its
+    /// rule for a secret): `page["sha256"]` as `owner_mcp.py` reads it.
+    static func teamSHA256(of team: JSONValue?) throws -> JSONValue {
         guard let team, team.object != nil else { throw NotSent(reason: "'NoneType' object is not subscriptable") }
         guard let sha = team["sha256"] else { throw NotSent(reason: "'sha256'") }
         return sha

@@ -41,6 +41,43 @@ import Testing
         #expect(MessageAttachment.mime(forName: "a") == nil)
     }
 
+    /// CHAT-APPS.md 20: an agent's message can carry a spreadsheet, a Word file or a presentation. The apps read and
+    /// open them; the owner's own plus, his drop and the hub's upload of his files take none of them.
+    @Test func anAgentsOfficeFileIsReadButNeverSentByTheOwner() throws {
+        let sheet = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        let slides = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        let word = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        for (mime, symbol) in [(sheet, "tablecells"), (slides, "rectangle.on.rectangle"), (word, "doc.text")] {
+            let file = try self.file(["mime": mime, "name": "Prices.xlsx"])
+            try file.validate()
+            #expect(file.symbol == symbol)
+            #expect(!file.isImage)
+            #expect(MessageAttachment.types[mime] == nil)
+        }
+        #expect(MessageAttachment.mime(forName: "Prices.xlsx") == nil)
+        #expect(throws: AttachmentError.self) { try self.file(["mime": "application/x-msdownload"]).validate() }
+    }
+
+    /// A report and a conversation line carry the files of the agent's words; a hub from before them sends none.
+    @Test func aReportAndAConversationLineCarryTheAgentsFiles() throws {
+        let file: [String: Any] = ["id": 41, "name": "Invoice October.pdf", "mime": "application/pdf", "size": 182,
+                                   "sha256": String(repeating: "b", count: 64), "created": 1000.0, "kept": NSNull()]
+        let report: [String: Any] = ["id": 3, "agent": "studio", "text": "Here is the invoice.", "about": "",
+                                     "created": 1000.0, "in_reply_to": NSNull(), "delivery": NSNull(),
+                                     "pushed": true, "attachments": [file]]
+        let decoded = try JSONDecoder().decode(ManagerReport.self, from: JSONSerialization.data(withJSONObject: report))
+        #expect(decoded.attachments?.map(\.id) == [41])
+        var older = report
+        older.removeValue(forKey: "attachments")
+        #expect(try JSONDecoder().decode(ManagerReport.self, from: JSONSerialization.data(withJSONObject: older))
+            .attachments == nil)
+        let line: [String: Any] = ["id": "CM-7", "who": "agent", "text": "Here is the list.", "created": 1000.0,
+                                   "read_at": NSNull(), "in_reply_to": "CM-6", "need": NSNull(), "delivery": NSNull(),
+                                   "attachments": [file]]
+        let item = try JSONDecoder().decode(ConversationItem.self, from: JSONSerialization.data(withJSONObject: line))
+        #expect(item.attachments?.first?.name == "Invoice October.pdf")
+    }
+
     @Test func aNameTravelsAsTheHubKeepsIt() {
         #expect(MessageAttachment.safeName("mockup.png", mime: "image/png") == "mockup.png")
         #expect(MessageAttachment.safeName("../../etc/passwd", mime: "text/plain") == "__.._etc_passwd.txt")

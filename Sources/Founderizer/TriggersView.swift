@@ -33,7 +33,8 @@ struct TriggersView: View {
         if !rows.isEmpty {
             FormSection("On a schedule") {
                 ForEach(rows) { trigger in
-                    FormRow(trigger.task.title, symbol: "clock.arrow.circlepath", detail: when(trigger),
+                    // A rule that sends a ready text says what goes where (WAKEUPS-INTERFACE.md 8): "Send to you".
+                    FormRow(trigger.task.send?.title ?? trigger.task.title, symbol: "clock.arrow.circlepath", detail: when(trigger),
                             warning: trouble(trigger)).accessibilityIdentifier("schedule-\(trigger.id)")
                 }
             }

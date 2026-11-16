@@ -537,7 +537,7 @@ struct PeopleWordsTests {
     }
 
     @Test func aRefusalOfTheHubIsGivenInTheHubsOwnWords() {
-        #expect(People.reason(HubError.refusal(409, "this fleet already has 200 people"))
+        #expect(People.reason(HubError.refusal(HubRefusal(status: 409, hubWords: "this fleet already has 200 people")))
                 == "The hub said: this fleet already has 200 people.")
         #expect(People.reason(URLError(.timedOut)).contains("can still have done it"))
     }

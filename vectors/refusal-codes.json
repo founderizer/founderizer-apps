@@ -1,0 +1,58 @@
+{
+  "about": "The hub's refusal words by code (refusal_words.WORDS), as the hub writes them, with {name} where a name goes. A refusal answers error (these words), code and, when its words hold a name, names. An app shows its own words for a code that it knows, and error for any other. Each app's table has a case for every code here, with the same English.",
+  "made_by": "app/vectors/make_vectors.py",
+  "code_letters": "a-z 0-9 _",
+  "code_length": [
+    2,
+    40
+  ],
+  "name_most": 200,
+  "codes": {
+    "hub_changed": "hub generation changed; refresh state",
+    "hub_changed_sending": "hub generation changed; refresh state before sending",
+    "team_changed": "team.json changed meanwhile; reload it",
+    "team_changed_lines": "team.json changed meanwhile; reload the reporting lines",
+    "no_such_agent": "no such agent",
+    "no_such_server": "no such server",
+    "no_such_task": "no such task",
+    "login_as_text": "a registered login cannot be sent as text",
+    "login_as_file": "a registered login cannot be sent as a file",
+    "login_not_shown": "registered login text cannot be displayed",
+    "command_reused": "request_id was already used for a different command",
+    "command_reused_message": "request_id was already used for an owner message; send the answer with a new one",
+    "command_reused_file": "request_id was already used for another file",
+    "command_reused_content": "request_id was already used for different content or recipient",
+    "command_interrupted": "this command was interrupted and the hub does not know what came of it. Read the thing it was about, and send the command again with a new request_id if it did not take effect",
+    "revision_unreadable": "the hub cannot read its own revision",
+    "server_silent": "{server} sent no reading in the last 10 minutes: check that it is on",
+    "server_no_service": "{server} has no server service: it did not join with a join code",
+    "request_answered": "owner request is already answered",
+    "request_unknown": "owner request does not exist",
+    "request_unknown_ended": "owner request does not exist: a request whose task ended is gone with it",
+    "not_owner_device": "{address} is not an owner device. See \"owner_devices\" in team.json.",
+    "not_owner_device_no_code": "{address} is not an owner device, and that is not a code for a new one",
+    "agent_mid_turn": "{agent} is in the middle of a turn. Move it when the turn ends.",
+    "agent_open_signin": "{agent} has an open sign-in. Finish it or let it run out, then try again.",
+    "time_passed": "this time has passed; change the time first"
+  },
+  "holes": {
+    "server_silent": [
+      "server"
+    ],
+    "server_no_service": [
+      "server"
+    ],
+    "not_owner_device": [
+      "address"
+    ],
+    "not_owner_device_no_code": [
+      "address"
+    ],
+    "agent_mid_turn": [
+      "agent"
+    ],
+    "agent_open_signin": [
+      "agent"
+    ]
+  }
+}

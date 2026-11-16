@@ -93,7 +93,7 @@ final class UpdatesModel {
         do {
             try await call(HubClient(), store.hub, database)
             await read(store: store)
-        } catch let HubError.refusal(_, words) { error = words }
+        } catch let HubError.refusal(refused) { error = refused.words }
         catch { self.error = String(l10n: "The hub has not answered. Try again.") }
     }
 }

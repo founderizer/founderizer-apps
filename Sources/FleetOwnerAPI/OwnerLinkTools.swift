@@ -10,15 +10,38 @@ import Foundation
 /// "No, local only"). It comes from a file or a pipe on this Mac, which the program reads itself (`ValueSource`), and
 /// goes to the app as the value part after the request line (`OwnerChannel.Value`); or from the clipboard, which the
 /// app reads itself, in its own process (the secrets plan, step C). No tool gives a value back.
+///
+/// **The three tools.** `save_bot_token` (below): a Discord bot's token to the hub. `prepare_problem_report`
+/// (`OwnerProblemReport.swift`): the agent's own text into the app's report form, with no value. `save_secret`
+/// (`OwnerSaveSecret.swift`, `OwnerSaveSecretApp.swift`): a new login or API key into the fleet's central vault,
+/// with work that outlives its call (`LinkWork`).
 public enum OwnerLinkTools {
-    public static let names = [SaveBotToken.name, PrepareReport.name]
-    public static let tools: [OwnerTable.Tool] = [SaveBotToken.tool, PrepareReport.tool]
+    public static let names = [SaveBotToken.name, PrepareReport.name, SaveSecret.name]
+    public static let tools: [OwnerTable.Tool] = [SaveBotToken.tool, PrepareReport.tool, SaveSecret.tool]
 
     /// **The program's words for a link write whose request went out and got no answer**: each tool's own, because
-    /// what may have happened is its own (a token saved, a report shown).
+    /// what may have happened is its own (a token saved, a report shown, a save of a secret begun).
+    ///
+    /// **A case for each tool, by its name, and no tool's words for another one.** A name with no case gets
+    /// `notKnownOther`, which says only that the outcome is not known: it names no tool and no effect. Only a tool
+    /// that `names` gains with no case here can get it, and a test holds that each name has words of its own.
+    /// `save_secret`'s words here are those of a save whose caller gave the id. The program gives two other forms
+    /// itself (`AppLink.call`, `notKnown`): the one with the id, for a save whose id it made, and the words of a
+    /// read of a save's state (`SaveSecret.notKnownState`).
     public static func notKnownHere(_ tool: String) -> String {
-        tool == PrepareReport.name ? PrepareReport.notKnownHere : SaveBotToken.notKnownHere
+        switch tool {
+        case SaveBotToken.name: return SaveBotToken.notKnownHere
+        case PrepareReport.name: return PrepareReport.notKnownHere
+        case SaveSecret.name: return SaveSecret.notKnownHere
+        default: return notKnownOther
+        }
     }
+
+    /// The words for a lost answer of a link write that has no words of its own (`notKnownHere(_:)`): what the call
+    /// asked for may be done or not, and nothing here says which, so the caller reads before it calls again.
+    static let notKnownOther = "The Founderizer app did not answer in time, or the link ended, so the outcome of this "
+        + "call is not known: the app may have done what the call asked. Read what the call changes before you call "
+        + "again."
 
     /// **Whether a field's name is one of a value's kind**: it holds value, password, key, token or secret, in any
     /// letter case. Such a field is refused whatever it holds, with `neverAField`.
@@ -170,14 +193,16 @@ public enum SaveBotToken {
         name: name, description: """
             Saves the token of a Discord bot of the fleet on the hub, or deletes it. account: the id of a Discord chat \
             account that the fleet has already (fleet_read page chat_apps); this tool does not make the account. The \
-            token is never a field of this tool and never a word of a command line: it comes from this Mac, from a \
+            token is never a field of this tool and never a word of a command line. You never see it, type it or \
+            repeat it, and you never ask the owner to paste it into a chat. It comes from this Mac, from a \
             file or a pipe that founderizer-cli reads and sends to the Founderizer app as a part after the request, or \
             from the clipboard, which the app reads itself. from file, with path: a regular file \
             of this Mac that holds only the token (at most 64 KiB). from stdin: only with founderizer-cli write, the \
-            standard input from a program's pipe, never an echo or a here-string of the token; the MCP form refuses \
+            standard input from a program's pipe (never pbpaste or another read of the clipboard: for the clipboard, \
+            use from clipboard), never an echo or a here-string of the token; the MCP form refuses \
             it. from clipboard: the app reads the clipboard itself, after every other check passed, once the owner \
-            copied the bot's token in Discord's Developer Portal and said so; never ask the owner to paste the token \
-            into a chat, and never read the clipboard yourself. When macOS asks whether Founderizer may access the \
+            copied the bot's token in Discord's Developer Portal and said so; never read the clipboard yourself. \
+            When macOS asks whether Founderizer may access the \
             pasteboard, the owner presses Allow Paste. After a clipboard save the app clears the clipboard when \
             nothing else changed it since the read, and the answer's clipboard says cleared or kept. replace true is \
             needed only when the bot is connected now: then the hub holds a token that works, and \

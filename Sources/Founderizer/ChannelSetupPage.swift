@@ -8,13 +8,18 @@ import SwiftUI
 //
 //   WhatsApp   1. Link <agent>'s WhatsApp number: the QR code of the bridge.
 //   Discord    1. Add a Discord bot for <agent>, 2. Add it to your server (`DiscordBotPage`).
-//   Both       then "Write to <agent> from your phone" (or "from your Discord"), the owner's own link;
-//              "Who else can write to <agent>?"; and "<agent> is on WhatsApp" (or Discord), with Done.
+//   Both       then "Who can write to <agent>?", with You first: a click on You opens "Write to <agent> from your
+//              phone" (or "from your Discord"), the owner's own link; and "<agent> is on WhatsApp" (or Discord), with
+//              Done. An agent that no person can write to (the fleet's manager) has the owner's own link in place of
+//              the tiles.
 //
 // He named three faults of the cards before these steps: "it says remove number when I haven't entered or linked any,
 // it shows Removed outside of the card all the time", and "I need an entire experience, including choosing who each
 // can talk to". So nothing of a channel stays when he leaves before a phone linked, and a change that worked is the
-// card's own new state.
+// card's own new state. On 15 November 2026 he asked for himself among the people who can write: "there should be an
+// option to add the owner himself! ... like the same person who created the hub and talks to the agents on the app".
+// To the mock of the You tile he chose "Only the You tile": his own link opens from that tile, and no longer by itself
+// before the tiles.
 
 /// Which steps stand in place of an agent's People page.
 enum ChannelSetup: Equatable {
@@ -202,18 +207,22 @@ struct WhatsAppSetupPage: View {
 
 /// **The steps that both apps share, after the channel is connected.**
 ///
-///   1. **Write to <agent> from your phone** (or "from your Discord"): the owner's own link. The hub makes a one-time
+///   1. **Who can write to <agent>?** (only for an agent that people can reach: not the fleet's manager, and not one
+///      that cannot hold a conversation) **You** first, then each person of the fleet as a tile, and New person. You is
+///      ticked while the owner has an ID of this app, and is then no button: the hub knows that ID on every account of
+///      the app. Else a click on You opens step two, which comes back here with You ticked. A click on a person gives
+///      the person this agent, and asks first for their number or ID of this app when they have none. A person who
+///      could write here already is ticked and is no button: their own page changes that. New person opens Add person,
+///      with this agent.
+///   2. **Write to <agent> from your phone** (or "from your Discord"): the owner's own link. The hub makes a one-time
 ///      code once it knows where the code goes (this agent's own number, or its bot); for WhatsApp a QR code opens the
 ///      chat with that number, with the message ready, and for Discord the message stands with Copy over Open Discord.
 ///      Until then the title is moving words. The page goes on by itself when the hub has bound the sender, and makes
-///      a new code by itself when one ends. Skip is the one quiet link under it.
-///   2. **Who else can write to <agent>?** (only for an agent that people can reach: not the fleet's manager, and not
-///      one that cannot hold a conversation) Each person of the fleet as a tile. A click gives the person this agent,
-///      and asks first for their number or ID of this app when they have none. A person who could write here already
-///      is ticked and is no button: their own page changes that. New person opens Add person, with this agent.
+///      a new code by itself when one ends. Back goes to the tiles. For an agent with no tiles this page is the first
+///      step, with Skip as the one quiet link under it, and an owner who has an ID of this app already passes over it.
 ///   3. **<agent> is on WhatsApp**: what these steps did, and Done.
 ///
-/// From a connected card's menu (Link my phone, Link my Discord) the page is step one alone (`flow` false).
+/// From a connected card's menu (Link my phone, Link my Discord) the page is step two alone (`flow` false).
 /// The accounts and the people are the Channels page's own readings, which it reads again every 2 seconds while
 /// these steps show.
 struct ChannelFollowSteps: View {
@@ -226,7 +235,7 @@ struct ChannelFollowSteps: View {
     let close: () -> Void
 
     private enum Page: Equatable { case me, who, handle(Int), newPerson, done }
-    /// What a tick of step two wrote for one person: it is undone when the tick goes.
+    /// What a tick of the tiles wrote for one person: it is undone when the tick goes.
     private struct Tick: Equatable {
         var agent = false
         var handle: PersonInput.HandleInput?
@@ -258,16 +267,20 @@ struct ChannelFollowSteps: View {
     private var canWrite: Bool { store.isFresh && store.state?.db != nil && writing == nil }
     /// People can write to a worker and to a lead that can hold a conversation, never to the fleet's manager (the hub
     /// refuses it) and not to an agent that other people cannot reach yet (`People.cannotChat`): such an agent's steps
-    /// have no "Who else".
+    /// have no tiles, and the owner's own link stands in their place.
     private var takesPeople: Bool {
         guard let one = store.state?.agents.first(where: { $0.name == agent }), ["worker", "lead"].contains(one.role) else { return false }
         return People.cannotChat(role: one.role, runtime: one.runtime, active: one.active) == nil
     }
-    /// The step after the owner's own link.
+    /// The step after the owner's own link: back to the tiles that opened it, or the end.
     private var next: Page { takesPeople ? .who : .done }
-    /// The page that shows. **It is whole in its first frame**: in the steps of a new channel, an owner who can write
-    /// from this app already has no first step, and the page opens on the next one.
-    private var page: Page { chosen ?? (flow && ownerLinked ? next : .me) }
+    /// The page that shows. **It is whole in its first frame**: the steps of a new channel open on the tiles; for an
+    /// agent with no tiles they open on the owner's own link, or on the end when the owner can write from this app
+    /// already.
+    private var page: Page { chosen ?? (flow ? (takesPeople ? .who : (ownerLinked ? .done : .me)) : .me) }
+    /// Skip stands under the owner's own link only where that link is a step of its own: in the steps of an agent with
+    /// no tiles. Opened from You, the page's Back is the way out.
+    private var skips: Bool { flow && !takesPeople }
     /// The hub knows where a code of this app goes: the agent's own number, or its bot's ID.
     private var hasAddress: Bool { account?.isConnected == true && (account?.user ?? account?.name) != nil }
 
@@ -308,14 +321,14 @@ struct ChannelFollowSteps: View {
     private func back() {
         problem = nil
         switch page {
-        case .me: close()
-        case .who: if ownerLinked { close() } else { chosen = .me }
+        case .me: if flow && takesPeople { chosen = .who } else { close() }
+        case .who: close()
         case .handle, .newPerson: chosen = .who
         case .done: if takesPeople { chosen = .who } else if ownerLinked { close() } else { chosen = .me }
         }
     }
 
-    // MARK: one — the owner's own link
+    // MARK: the owner's own link
 
     /// Where the code goes: this agent's own number or bot, and no other agent's.
     private var target: URL? {
@@ -347,7 +360,7 @@ struct ChannelFollowSteps: View {
                         Link(destination: target) { Text("Open Discord") }
                             .buttonStyle(FleetPrimaryButtonStyle()).accessibilityIdentifier("channel-me-open")
                     }
-                    if flow { skip }
+                    if skips { skip }
                 }
             }
         } else if let problem {
@@ -359,12 +372,12 @@ struct ChannelFollowSteps: View {
                         .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
                         .accessibilityIdentifier("channel-me-again")
                 }
-                if flow { skip }
+                if skips { skip }
             }
         } else {
-            // No code yet. In the steps of a new channel, Skip is there too: nothing holds him on a wait.
+            // No code yet. Where the link is a step of its own, Skip is there too: nothing holds him on a wait.
             SetupStep(title: String(l10n: "Getting your code"), waits: true) { mark } content: {
-                if flow { skip }
+                if skips { skip }
             }
             .accessibilityIdentifier("channel-me-waiting")
         }
@@ -387,9 +400,9 @@ struct ChannelFollowSteps: View {
         .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(FleetStyle.line, lineWidth: 0.5))
     }
 
-    /// While step one shows: a code once the hub knows where it goes, a new one when the one there ended, and the way
-    /// on when the hub bound the sender. It looks once a second, at the readings that the Channels page keeps. After a
-    /// refusal it waits for Try again.
+    /// While the owner's own link shows: a code once the hub knows where it goes, a new one when the one there ended,
+    /// and the way on when the hub bound the sender. It looks once a second, at the readings that the Channels page
+    /// keeps. After a refusal it waits for Try again.
     private func watchLink() async {
         while !Task.isCancelled {
             if page == .me, problem == nil, store.isFresh {
@@ -417,19 +430,21 @@ struct ChannelFollowSteps: View {
             let new = try await chat.makeCode(hub: store.hub, database: db, client: store.installation, app: app)
             guard store.state?.db == db else { return }
             // A code is of use only with where it goes: this agent's own number or bot.
+            // A refusal is said only on the link page: one that comes after he went back to the tiles is not a line
+            // under them, and the link's next visit asks again.
             guard new.targets.contains(where: { $0.account == id && $0.link != nil }) else {
                 code = nil
-                problem = String(l10n: "The hub gave no code.")
+                if page == .me { problem = String(l10n: "The hub gave no code.") }
                 return
             }
             before = Set(people.handles(of: app).map(\.key)); made = Date(); code = new
         } catch {
             code = nil
-            problem = ChatAppWords.reason(error)
+            if page == .me { problem = ChatAppWords.reason(error) }
         }
     }
 
-    // MARK: two — who else
+    // MARK: the tiles
 
     /// The person can write to this agent from this app: the agent is theirs, the hub lets them talk to it, and they
     /// have a number or an ID of the app.
@@ -438,8 +453,10 @@ struct ChannelFollowSteps: View {
     }
 
     private var who: some View {
-        SetupStep(title: String(l10n: "Who else can write to \(name)?")) { mark } content: {
+        SetupStep(title: String(l10n: "Who can write to \(name)?")) { mark } content: {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 12)], spacing: 12) {
+                // You first, once the hub's people are read: the owner's own IDs come in that reading.
+                if people != nil { you }
                 ForEach(people?.peopleList ?? []) { tile($0) }
                 // Add person chooses between the hub's roles: its tile is there once they are read.
                 if people?.roleList.isEmpty == false { newPerson }
@@ -454,6 +471,23 @@ struct ChannelFollowSteps: View {
         }
     }
 
+    /// **You**: the owner, on the same tile as a person, with no second line. Ticked while the owner has an ID of this
+    /// app, and then no button, as a person who could write here before is: the hub knows that ID on every account of
+    /// the app. Else a click opens the owner's own link, which comes back here once the hub has bound the sender.
+    private var you: some View {
+        Button {
+            guard canWrite else { return }
+            problem = nil; chosen = .me
+        } label: {
+            face(Text("You"), Text(verbatim: " "), on: ownerLinked)
+        }
+        .buttonStyle(FleetCardButtonStyle())
+        .disabled(ownerLinked || !canWrite)
+        .accessibilityLabel(Text("You"))
+        .accessibilityValue(ownerLinked ? Text("Chosen") : Text("Not chosen"))
+        .accessibilityIdentifier("channel-who-you")
+    }
+
     /// One person: their name and what they are to him, and a check mark while they can write to this agent here.
     private func tile(_ person: PeopleSnapshot.Person) -> some View {
         let on = reaches(person), mine = ticked[person.id] != nil
@@ -463,20 +497,7 @@ struct ChannelFollowSteps: View {
             guard !on || mine else { return }
             Task { if on { await untick(person) } else { await tick(person) } }
         } label: {
-            VStack(spacing: 8) {
-                Image(systemName: "person.crop.circle").font(IconMetrics.symbol(34, weight: .light)).foregroundStyle(FleetStyle.muted)
-                    .frame(height: GlyphSize.hero).accessibilityHidden(true)
-                Text(person.name).fontWeight(.medium).foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle)
-                Text(person.roleWord).foregroundStyle(FleetStyle.muted).lineLimit(1)
-            }
-            .padding(.vertical, 18).padding(.horizontal, 12).frame(maxWidth: .infinity).contentShape(Rectangle())
-            .overlay(alignment: .topTrailing) {
-                if on {
-                    Image(systemName: "checkmark").font(IconMetrics.symbol(12, weight: .semibold))
-                        .foregroundStyle(FleetStyle.text).padding(12)
-                }
-            }
-            .overlay(RoundedRectangle(cornerRadius: FormMetrics.radius).strokeBorder(on ? FleetStyle.accent : .clear, lineWidth: 1.5))
+            face(Text(person.name), Text(person.roleWord), on: on)
         }
         .buttonStyle(FleetCardButtonStyle())
         // No button for who could write here before, or while a write is on its way: a card of this look does not fade.
@@ -484,6 +505,25 @@ struct ChannelFollowSteps: View {
         .accessibilityLabel(person.name)
         .accessibilityValue(on ? Text("Chosen") : Text("Not chosen"))
         .accessibilityIdentifier("channel-who-\(person.id)")
+    }
+
+    /// The face of a tile of somebody who can write here: the person mark, the name and a second line, and while they
+    /// can write here a check mark and the accent edge.
+    private func face(_ name: Text, _ detail: Text, on: Bool) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: "person.crop.circle").font(IconMetrics.symbol(34, weight: .light)).foregroundStyle(FleetStyle.muted)
+                .frame(height: GlyphSize.hero).accessibilityHidden(true)
+            name.fontWeight(.medium).foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle)
+            detail.foregroundStyle(FleetStyle.muted).lineLimit(1)
+        }
+        .padding(.vertical, 18).padding(.horizontal, 12).frame(maxWidth: .infinity).contentShape(Rectangle())
+        .overlay(alignment: .topTrailing) {
+            if on {
+                Image(systemName: "checkmark").font(IconMetrics.symbol(12, weight: .semibold))
+                    .foregroundStyle(FleetStyle.text).padding(12)
+            }
+        }
+        .overlay(RoundedRectangle(cornerRadius: FormMetrics.radius).strokeBorder(on ? FleetStyle.accent : .clear, lineWidth: 1.5))
     }
 
     private var newPerson: some View {
@@ -602,7 +642,7 @@ struct ChannelFollowSteps: View {
         if await write(person, handle: draft) { draft = .init(); chosen = .who }
     }
 
-    // MARK: three — connected
+    // MARK: the end
 
     /// What these steps did, each line ticked: the channel, the owner's own link, and each person they gave it to
     /// (a tick, or New person) who can write here now.

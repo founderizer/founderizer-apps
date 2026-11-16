@@ -200,7 +200,10 @@ private struct DeliveryIcon: View {
 enum ChatAppWords {
     /// A refusal in the hub's words, or a write without an answer that can still arrive.
     static func reason(_ error: Error) -> String {
-        if case HubError.refusal(_, let text) = error { return String(l10n: "The hub said: \(text.hasSuffix(".") ? text : text + ".")") }
+        if case HubError.refusal(let refused) = error {
+            let text = refused.words
+            return String(l10n: "The hub said: \(text.hasSuffix(".") ? text : text + ".")")
+        }
         if error is URLError { return String(l10n: "No answer from the hub. It can still do it: look again before you try again.") }
         return error.localizedDescription
     }

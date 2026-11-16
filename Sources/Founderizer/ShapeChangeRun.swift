@@ -159,7 +159,9 @@ final class ShapeChangeRun {
         let fleet = hub
         // The choice reads the offer and then the account's servers; Make the server takes only once both are read.
         for _ in 0..<600 where cloud.stage != .making && cloud.stage != .joining {
-            if let failure = cloud.failure { throw Stop(words: failure) }
+            // A list that could not be read is read again by the model itself, for a page: this run stops, and so does
+            // that reading.
+            if let failure = cloud.failure { cloud.cancel(); throw Stop(words: failure) }
             cloud.makeNew(for: fleet, made: { [weak self] name, id in
                 self?.built[index] = name
                 MadeServers.note(name, id: id, hub: fleet)
@@ -170,7 +172,8 @@ final class ShapeChangeRun {
         while reached[index] == nil, cloud.failure == nil, cloud.stage == .making || cloud.stage == .joining {
             try await Task.sleep(for: .seconds(1))
         }
-        if let failure = cloud.failure { throw Stop(words: failure) }
+        // A build that stopped with nothing left at the provider reads the list again (`FleetCloudModel.build`).
+        if let failure = cloud.failure { cloud.cancel(); throw Stop(words: failure) }
         if reached[index] == nil { throw Stop(words: String(l10n: "The new server did not join your network. Try again.")) }
     }
 
@@ -211,11 +214,11 @@ final class ShapeChangeRun {
                 let team = try await HubClient().team(hub: hub, database: database)
                 return try await HubClient().moveAgent(hub: hub, database: database, client: store.installation, agent: agent,
                                                        sha256: team.sha256, server: server, runtime: runtime).job
-            } catch let HubError.refusal(status, words) where status == 409 &&
-                        (words.contains("middle of a turn") || words.contains("open sign-in") || words.contains("team.json changed")) {
+            } catch let HubError.refusal(refused) where refused.status == 409 &&
+                        (refused.means(.agentMidTurn) || refused.means(.agentOpenSignIn) || refused.means(.teamChanged)) {
                 try await Task.sleep(for: .seconds(10))
-            } catch let HubError.refusal(_, words) {
-                throw Stop(words: words)
+            } catch let HubError.refusal(refused) {
+                throw Stop(words: refused.words)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {

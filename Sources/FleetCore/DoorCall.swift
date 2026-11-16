@@ -261,7 +261,7 @@ public enum DoorModeCommand {
         guard status == 409, let answer = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
               let number = answer["at"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
               let at = number as? Int else { return nil }
-        return Newer(at: at, words: String((answer["error"] as? String ?? HubError.unexplained).prefix(500)))
+        return Newer(at: at, words: HubRefusal.read(status: status, body: body).hubWords)
     }
 
     /// The receipt, checked against what was sent.

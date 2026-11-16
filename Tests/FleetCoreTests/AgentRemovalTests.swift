@@ -114,8 +114,8 @@ struct AgentRemovalTests {
             _ = try await HubClient().removeAgent(hub: URL(string: "http://127.0.0.1:\(refused.port)")!, database: "db",
                                                   client: "test", agent: "juno", sha256: String(repeating: "a", count: 64))
             Issue.record("a refusal was taken")
-        } catch let HubError.refusal(status, words) {
-            #expect(status == 409 && words == "Juno has open tasks.")
+        } catch let HubError.refusal(refused) {
+            #expect(refused.status == 409 && refused.hubWords == "Juno has open tasks.")
         }
         await #expect(throws: HubError.self) {      // a name the hub would refuse never leaves this Mac
             try await HubClient().removeAgent(hub: URL(string: "http://127.0.0.1:1")!, database: "db", client: "test",

@@ -765,10 +765,7 @@ public struct ServerGrantClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String ?? "Unexpected HTTP response."
-            throw HubError.refusal(response.statusCode, String(message.prefix(500)))
-        }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
     }
 }
 
@@ -790,7 +787,7 @@ public struct DoorSetupClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, response) = try await session.hubData(for: request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         guard data.count <= 1_048_576 else { throw HubError.invalidResponse }
         let view = try JSONDecoder().decode(DoorAccess.HubDoor.self, from: data)
         guard view.db == database else { throw HubError.invalidResponse }
@@ -807,7 +804,7 @@ public struct DoorSetupClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
     }
 
     /// `POST /ui/door/secrets` (plan 13, item 4): the hub's two secrets, which the door made. The hub keeps them only
@@ -822,7 +819,7 @@ public struct DoorSetupClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
     }
 
     /// `POST /ui/door/host` (API 1.100): what this Mac's round did on one server, `installed`, `passed` or `failed`,
@@ -839,7 +836,7 @@ public struct DoorSetupClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
     }
 
     /// `POST /ui/door/github-app` (API 1.94): the ID of an App that this app made with GitHub's manifest flow, once the
@@ -855,11 +852,6 @@ public struct DoorSetupClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
-    }
-
-    private static func words(_ data: Data) -> String {
-        let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
-        return String((message ?? "Unexpected HTTP response.").prefix(500))
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
     }
 }

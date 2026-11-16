@@ -17,6 +17,13 @@ import SwiftUI
 /// **The same board is an agent's own Tasks part** (`scope`, `AgentTab.tasks`; the owner's yes of 6 November 2026 to its
 /// mockup, in place of the Activity card of the chat's panel): that agent's tasks only, so it has the Period filter and
 /// no Agent filter, and no agent's name on its cards.
+///
+/// **For all agents, one card is one thing that he asked for** (`HubState.board`; his "Both places" of 15 November 2026
+/// to its picture, after "I am not interested in the specific individual tasks to be done but in the thing I asked for
+/// to be done"): the name of what he asked for, and under it the agent that he asked. The tasks of it are behind the
+/// card, which opens the one that matters now: the task that waits for him, else the task in work, else the open one
+/// that moved last, else the one that moved last (`Ask.lead`). A task that no message of his began is a card of its own, as before, and so is every task
+/// on the board of one agent.
 struct ActivityBoard: View {
     @Bindable var store: FleetStore
     /// The agent whose own Tasks part this board is, or nil for the board of the main sidebar.
@@ -39,7 +46,7 @@ struct ActivityBoard: View {
 
     var body: some View {
         let state = store.state
-        let board = state?.activity(agent: agent.isEmpty ? nil : agent, period: period) ?? [:]
+        let board = items(state)
         FleetPage(scope == nil ? String(l10n: "Tasks") : AgentTab.tasks.heading, fills: true, wide: true) {
             filters(state?.activityAgents(saved: chosen) ?? [])
             if let state, !board.isEmpty { lanes(board, state: state) }
@@ -48,6 +55,14 @@ struct ActivityBoard: View {
                 Spacer(minLength: 0)
             }
         } actions: { EmptyView() }
+    }
+
+    /// The board's cards: for all agents, one for each thing that he asked for and one for every other task; for one
+    /// agent, that agent's tasks.
+    private func items(_ state: HubState?) -> [ActivityColumn: [BoardItem]] {
+        guard let state else { return [:] }
+        if agent.isEmpty { return state.board(period: period) }
+        return state.activity(agent: agent, period: period).mapValues { $0.map(BoardItem.task) }
     }
 
     /// The period and the agent: two dropdowns on one line. An agent's own board has the period alone.
@@ -65,11 +80,11 @@ struct ActivityBoard: View {
         }
     }
 
-    private func lanes(_ board: [ActivityColumn: [FleetTask]], state: HubState) -> some View {
+    private func lanes(_ board: [ActivityColumn: [BoardItem]], state: HubState) -> some View {
         let holds = (state.holds ?? []).filter { $0.state != "released" }
         let limited = Set(state.agents.filter { $0.limit != nil }.map(\.name))
         let waits = state.ownerWaits, subtasks = state.subtaskWaits
-        let ended = EndedTasks(board[.done] ?? [])
+        let ended = EndedTasks(items: board[.done] ?? [])
         let count = CGFloat(ActivityColumn.allCases.count)
         return GeometryReader { proxy in
             // **Lanes shrink to the window, and a lane is never cut** (T-17): the lanes that show share the whole
@@ -78,18 +93,35 @@ struct ActivityBoard: View {
             let width = (proxy.size.width - Self.spacing * (shown - 1)) / shown
             let row = HStack(alignment: .top, spacing: Self.spacing) {
                 lane(.inProgress, count: board[.inProgress]?.count ?? 0) {
-                    ForEach(board[.inProgress] ?? []) { task in
-                        // A task in work says nothing more; one that stalled or lost its session says so.
-                        let word = task.stateWord(holds: holds, limited: limited.contains(task.owner))
-                        card(task, wait: nil, state: state, why: word == TaskWords.working ? nil : word)
+                    ForEach(board[.inProgress] ?? []) { item in
+                        switch item {
+                        case .task(let task):
+                            // A task in work says nothing more; one that stalled or lost its session says so.
+                            let word = task.stateWord(holds: holds, limited: limited.contains(task.owner))
+                            card(task, wait: nil, state: state, why: word == TaskWords.working ? nil : word)
+                        case .ask(let ask):
+                            // As a task in work: nothing more, unless its task in work stalled or lost its session.
+                            let word = ask.working?.stateWord(holds: holds, limited: limited.contains(ask.working?.owner ?? ""))
+                            askCard(ask, state: state, why: word == TaskWords.working ? nil : word)
+                        }
                     }
                 }.frame(width: width)
                 lane(.waiting, count: board[.waiting]?.count ?? 0) {
-                    ForEach(board[.waiting] ?? []) { task in
-                        let reason = waits[task.id] == nil
-                            ? why(task, holds: holds, limited: limited.contains(task.owner), subtasks: subtasks[task.id], now: state.time) : nil
-                        // Its hover and VoiceOver say what the card says, never "Working" (`words`).
-                        card(task, wait: waits[task.id], state: state, why: reason, words: subtasks[task.id] != nil ? reason : nil)
+                    ForEach(board[.waiting] ?? []) { item in
+                        switch item {
+                        case .task(let task):
+                            let reason = waits[task.id] == nil
+                                ? why(task, holds: holds, limited: limited.contains(task.owner), subtasks: subtasks[task.id], now: state.time) : nil
+                            // Its hover and VoiceOver say what the card says, never "Working" (`words`).
+                            card(task, wait: waits[task.id], state: state, why: reason, words: subtasks[task.id] != nil ? reason : nil)
+                        case .ask(let ask):
+                            // Why it waits, when it does not wait for him: the earliest time until which a task of it
+                            // is parked, else the word of its open task that moved last.
+                            let lead = ask.open.filter { $0.parked_until != nil }.min { ($0.parked_until ?? 0) < ($1.parked_until ?? 0) } ?? ask.open.first
+                            askCard(ask, state: state, why: ask.wait != nil ? nil : lead.map {
+                                why($0, holds: holds, limited: limited.contains($0.owner), subtasks: subtasks[$0.id], now: state.time)
+                            })
+                        }
                     }
                 }.frame(width: width)
                 lane(.done, count: board[.done]?.count ?? 0) { endedRows(ended, state: state, narrow: width < EndedRow.narrow) }.frame(width: width)
@@ -123,10 +155,30 @@ struct ActivityBoard: View {
             // The request itself, on Needs you, where he answers it.
             request = { store.selectedNeed = id; store.destination = .needs }
         }
-        return ActivityCard(task: task, owner: scope == nil ? task.owner : nil, ownerLine: wait?.words, why: why,
+        return ActivityCard(title: task.title, identifier: "activity-task-\(task.id)", requestIdentifier: "activity-request-\(task.id)",
+                            owner: scope == nil ? task.owner : nil, ownerLine: wait?.words, why: why,
                             words: wait?.words ?? words ?? task.stateWord(in: state), openRequest: request) {
             store.destination = .task(task.id)
         }.opensTask(task.id, store: store)
+    }
+
+    /// **One thing that he asked for, on one card**, with the look of a task's card: its name, under it the agent that
+    /// he asked, what it waits for from him in orange, or `why` it waits at the end of the agent's line. The card opens
+    /// the task of it that matters now (`Ask.lead`); the other tasks of it are in that task's thread and in Ended.
+    @ViewBuilder private func askCard(_ ask: Ask, state: HubState, why: String?) -> some View {
+        if let lead = ask.lead {
+            ActivityCard(title: ask.title, identifier: "activity-ask-\(ask.id)", requestIdentifier: "activity-ask-request-\(ask.id)",
+                         owner: ask.agent, ownerLine: ask.wait?.words, why: why,
+                         words: ask.wait?.words ?? why ?? lead.stateWord(in: state), openRequest: request(ask)) {
+                store.destination = .task(lead.id)
+            }.opensTask(lead.id, store: store)
+        }
+    }
+
+    /// Opens the request that a thing he asked for waits on, on Needs you, where he answers it; nil when it waits for none.
+    private func request(_ ask: Ask) -> (() -> Void)? {
+        guard case .request(let id, _) = ask.wait else { return nil }
+        return { store.selectedNeed = id; store.destination = .needs }
     }
 
     /// Why a task waits, at the end of its agent's line: until when its agent parked it, else its one state word
@@ -145,10 +197,11 @@ struct ActivityBoard: View {
     /// **Ended: the results that did not succeed, and one row that opens the others** by day, the runs of one schedule
     /// as one row.
     @ViewBuilder private func endedRows(_ ended: EndedTasks, state: HubState, narrow: Bool) -> some View {
-        ForEach(ended.failed) { task in
-            EndedRow(title: task.title, owner: scope == nil ? task.owner : nil, badge: task.failedResult, stacked: narrow) {
-                store.destination = .task(task.id)
-            }.opensTask(task.id, store: store).accessibilityIdentifier("activity-task-\(task.id)")
+        // A task, or one thing that he asked for under its own name, with the task of it that did not succeed.
+        ForEach(ended.failedRows) { row in
+            EndedRow(title: row.title, owner: scope == nil ? row.owner : nil, badge: row.task.failedResult, stacked: narrow) {
+                store.destination = .task(row.task.id)
+            }.opensTask(row.task.id, store: store).accessibilityIdentifier("activity-task-\(row.task.id)")
         }
         if ended.rest > 0 {
             Button { showsRest.toggle() } label: {
@@ -225,7 +278,11 @@ struct ActivityBoard: View {
 /// agent's own board every card is that agent's, so no card names it (`owner` nil). **The same card stands in the lane
 /// of Needs you** for a task that only the owner can move (`NeedsBoard`).
 struct ActivityCard: View {
-    let task: FleetTask
+    /// The task's title, or the name of the thing that he asked for.
+    let title: String
+    /// The card's name for a check of the app, and the name of its request's line.
+    let identifier: String
+    let requestIdentifier: String
     /// The card names its agent under its title: on every board but an agent's own.
     let owner: String?
     /// What it waits for from the owner, or nil.
@@ -241,7 +298,7 @@ struct ActivityCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(task.title).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(2).multilineTextAlignment(.leading)
+            Text(title).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(2).multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let ownerLine {
                 // Orange is what needs him (D-8), and here it is words, because the words are the news.
@@ -249,7 +306,7 @@ struct ActivityCard: View {
                     Button(action: openRequest) {
                         Text(ownerLine).lineLimit(1).padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
                     }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).foregroundStyle(.orange)
-                        .help("Open this request on Needs you").accessibilityIdentifier("activity-request-\(task.id)")
+                        .help("Open this request on Needs you").accessibilityIdentifier(requestIdentifier)
                 } else {
                     Text(ownerLine).lineLimit(1).foregroundStyle(.orange)
                 }
@@ -277,13 +334,13 @@ struct ActivityCard: View {
         .focusable(interactions: .activate)
         .contentShape(.focusEffect, RoundedRectangle(cornerRadius: FormMetrics.radius))
         .onKeyPress(keys: [.return, .space], phases: .down) { _ in open(); return .handled }
-        .help("\(task.title)\n\(words)")
+        .help("\(title)\n\(words)")
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel([task.title, owner?.agentLabel, words].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel([title, owner?.agentLabel, words].compactMap { $0 }.joined(separator: ", "))
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(.default, open)
         .accessibilityActions { if let openRequest { Button("Open the request", action: openRequest) } }
-        .accessibilityIdentifier("activity-task-\(task.id)")
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -328,8 +385,9 @@ struct EndedRow: View {
     static let height: CGFloat = 36, inset: CGFloat = 10
     /// A lane under this width stacks a row's red word under its title.
     static let narrow: CGFloat = 300
-    /// The red of a result that failed, light enough to read on its capsule (fix round 3, item 57: 4.64:1).
-    private static let failedWords = Color(red: 1, green: 0x6B / 255, blue: 0x6B / 255)
+    /// The red of a result that failed, light enough to read on its capsule (fix round 3, item 57: 4.64:1). The card
+    /// Asked of a chat's panel writes the word of a failed result in it too.
+    static let failedWords = Color(red: 1, green: 0x6B / 255, blue: 0x6B / 255)
 
     /// The red word of a result that did not succeed, on its capsule.
     private func word(_ badge: String) -> some View {

@@ -281,8 +281,9 @@ final class OwnerRefusalTests {
         #expect(tools.refused("nothing_here") == "No tool named nothing_here.")
         #expect(hub.seen.isEmpty)
         #expect(!tools.listed.contains { $0.name == "which_hub" })
-        // And the three setup tools and the link's two write tools (save_bot_token, prepare_problem_report).
-        #expect(tools.listed.count == 67 + 3 + 2 && tools.listed.contains { $0.name == "save_profile" })
+        // And the three setup tools and the link's three write tools (save_bot_token, prepare_problem_report,
+        // save_secret).
+        #expect(tools.listed.count == 67 + 3 + 3 && tools.listed.contains { $0.name == "save_profile" })
     }
 
     /// A table of a newer `owner_mcp.py` can name a `swift` tool that this program's code does not have: that tool is
@@ -316,7 +317,8 @@ final class OwnerRefusalTests {
         #expect(reads == ["fleet_overview", "fleet_read", "search_history", "see_costs", "setup_state", "setup_show",
                          "setup_diagnosis"])
         let writes = tools.listed.filter { OwnerTools.verb(of: $0) == .write }
-        #expect(writes.count == 63 + 2)                     // and the link's two: save_bot_token, prepare_problem_report
+        // And the link's three: save_bot_token, prepare_problem_report, save_secret.
+        #expect(writes.count == 63 + 3)
         #expect(writes.allSatisfy { $0.annotations["readOnlyHint"] == .bool(false) })
         #expect(OwnerTools.verb(of: Fixture.table.tool("install_hub")!) == nil)
     }

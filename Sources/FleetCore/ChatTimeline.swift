@@ -117,5 +117,6 @@ extension OwnerMessage {
         client = request.client
         origin = nil
         attachments = nil
+        asked = nil
     }
 }

@@ -124,9 +124,9 @@ final class AddAgentModel {
                 watchJob(store: store)
                 await store.refresh()
                 return
-            } catch let HubError.refusal(status, words) {
-                if status == 409, attempt == 0, words.contains("team.json changed") { continue }
-                error = words; return
+            } catch let HubError.refusal(refused) {
+                if refused.status == 409, attempt == 0, refused.means(.teamChanged) { continue }
+                error = refused.words; return
             } catch { self.error = String(l10n: "The hub has not answered. Look at the server's page before you try again."); return }
         }
     }
@@ -146,7 +146,7 @@ final class AddAgentModel {
                                                            server: server.name, sha256: team.sha256, agent: agent, runtime: runtime,
                                                            role: self.role, reportsTo: nil)
             watchJob(store: store)
-        } catch let HubError.refusal(_, words) { error = words }
+        } catch let HubError.refusal(refused) { error = refused.words }
         catch { self.error = String(l10n: "The hub has not answered. Try again.") }
     }
 

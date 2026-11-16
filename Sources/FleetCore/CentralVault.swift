@@ -304,7 +304,7 @@ public final class VaultClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         if response.statusCode == 404 { return nil }
-        guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         guard data.count <= 1_048_576 else { throw HubError.invalidResponse }
         let reading = try JSONDecoder().decode(VaultReading.self, from: data)
         guard reading.db == database, Set(reading.machines.map(\.machine)).count == reading.machines.count else {
@@ -387,7 +387,7 @@ public final class VaultClient: Sendable {
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         if let newer = DoorModeCommand.newer(status: response.statusCode, body: data) { throw newer }
-        guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         return try DoorModeCommand.receipt(data, requestID: requestID, client: client, host: host, mode: mode, at: at)
     }
 
@@ -408,13 +408,8 @@ public final class VaultClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else { throw HubError.refusal(response.statusCode, Self.words(data)) }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         return data
-    }
-
-    private static func words(_ data: Data) -> String {
-        let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String ?? HubError.unexplained
-        return String(message.prefix(500))
     }
 }
 
@@ -487,14 +482,29 @@ public enum CentralVaultRemote {
     /// (`AppUpdate`: the approve key, the spare and the early key, never a key that the hub names) go into that file
     /// first, so the clone's own code checks the hub's signed release with them; its checkout then puts the release's
     /// own key files in their place. A clone of that release or later has `early-key.pub`, and the step does nothing.
-    static func bridge(in kit: String = rootKit) -> String {
-        let keys = (AppUpdate.shippedKeys + "\n" + AppUpdate.earlyKeys).split(separator: "\n")
+    ///
+    /// **The second part: root's clone on a hub from before its installer made one** (hub release of 15 November
+    /// 2026; until then nothing made the first clone, and each root step of this app stopped there at its first
+    /// command). Where the clone has no `hubsetup.py` and the installer's own tree has one (`InstallPlan.hubKit`,
+    /// root's own folder, never the hub user's checkout), `kit-clone` runs from that tree first. It makes the clone
+    /// only at the hub's signed release, with the release keys of root's own tree: it gets no word for a clone
+    /// without a signed release, which only the hub's installer gives. A hub that has taken no release yet has no
+    /// manifest, so the step stops there with `kit-clone`'s own words, and the run with it. On a hub that has the
+    /// clone, the part does nothing. The part has no "$" (`HubTCP.program`).
+    ///
+    /// `tree` and `keys` have other values only in the tests: the installer's tree, and the text of this build's keys.
+    /// A build with no key writes no file, because it would trust nothing, and its bridge is the second part alone.
+    static func bridge(in kit: String = rootKit, installer tree: String = InstallPlan.hubKit,
+                       keys text: String = AppUpdate.shippedKeys + "\n" + AppUpdate.earlyKeys) -> String {
+        let keys = text.split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { Data(base64Encoded: $0)?.count == 32 }
-        guard !keys.isEmpty else { return ":" }          // a build with no key writes no file: it would trust nothing
+        let clone = "if ! test -e \(kit)/hubsetup.py && test -e \(tree)/hubsetup.py; then "
+            + "python3 \(tree)/hubsetup.py kit-clone || exit 1; fi"
+        guard !keys.isEmpty else { return clone }
         let file = "\(kit)/release-key.pub"
         return "if test -d \(kit)/.git && ! test -e \(kit)/early-key.pub; then printf '%s\\n' "
-            + keys.map { "'\($0)'" }.joined(separator: " ") + " > \(file) || exit 1; fi"
+            + keys.map { "'\($0)'" }.joined(separator: " ") + " > \(file) || exit 1; fi; " + clone
     }
 
     /// The read of one server's vault key: the path that its configuration names, and the one line of that file that

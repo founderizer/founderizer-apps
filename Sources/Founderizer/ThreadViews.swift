@@ -272,8 +272,19 @@ struct ManagerView: View {
     /// (`message_owner`) looks like any other** (D-2, the owner's yes of 28 October 2026): its "Sent first" line said
     /// what the conversation already shows, a message under no question of his.
     private func reportRow(_ report: ManagerReport) -> some View {
-        AgentReply(text: report.text, time: report.created,
-                   detail: report.delivery.map { AnyView(DeliveryLine(store: store, delivery: $0)) })
+        AgentReply(text: report.text, time: report.created, detail: reportDetail(report))
+    }
+
+    /// Under a reply: the files that the agent sent with it (CHAT-APPS.md 20; the owner's "Yes, build it" of 15
+    /// November 2026), drawn as his own files are drawn under his messages, and its delivery icons when it went to a
+    /// channel.
+    private func reportDetail(_ report: ManagerReport) -> AnyView? {
+        let files = report.attachments ?? []
+        guard !files.isEmpty || report.delivery != nil else { return nil }
+        return AnyView(VStack(alignment: .leading, spacing: 8) {
+            if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .leading, keeps: false) }
+            if let delivery = report.delivery { DeliveryLine(store: store, delivery: delivery) }
+        })
     }
 }
 

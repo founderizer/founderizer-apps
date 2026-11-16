@@ -426,14 +426,10 @@ public final class IntegrationsClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else {
-            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error ?? "Unexpected HTTP response."
-            throw HubError.refusal(response.statusCode, String(message.prefix(500)))
-        }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         return data
     }
 
-    private struct ErrorBody: Decodable { let error: String }
 }
 
 private final class NoRedirect: NSObject, URLSessionTaskDelegate, Sendable {

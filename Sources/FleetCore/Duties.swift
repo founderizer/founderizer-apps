@@ -288,10 +288,7 @@ public final class DutiesClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else {
-            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error ?? "Unexpected HTTP response."
-            throw HubError.refusal(response.statusCode, String(message.prefix(500)))
-        }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         let receipt = try JSONDecoder().decode(DutyReceipt.self, from: data)
         guard receipt.ok, receipt.request_id == requestID, receipt.client == client else {
             throw HubError.invalidResponse
@@ -304,12 +301,8 @@ public final class DutiesClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, response) = try await session.hubData(for: request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else {
-            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error ?? "Unexpected HTTP response."
-            throw HubError.refusal(response.statusCode, String(message.prefix(500)))
-        }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         return data
     }
 
-    private struct ErrorBody: Decodable { let error: String }
 }

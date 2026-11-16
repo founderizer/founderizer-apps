@@ -470,6 +470,82 @@ struct CentralVaultTests {
         }
     }
 
+    /// **Root's clone on a hub from before its installer made one** (15 November 2026): a new hub had no clone, and
+    /// each root step of this app stopped at its first command, "python3: can't open file". The bridge's second part
+    /// runs `kit-clone` from the installer's own tree first, only where the clone has no `hubsetup.py`. The other
+    /// root programs take the bridge, so they get the part with it. The shell text runs here, in `/bin/sh`, on two
+    /// folders that stand in for root's clone and for the installer's tree, with a stand-in `hubsetup.py`.
+    @Test func theBridgeMakesRootsCloneFromTheInstallersTreeWhereThereIsNone() throws {
+        let part = "if ! test -e /usr/local/lib/founderizer-kit/hubsetup.py && test -e /root/fleet-kit/hubsetup.py; then "
+            + "python3 /root/fleet-kit/hubsetup.py kit-clone || exit 1; fi"
+        #expect(CentralVaultRemote.bridge().hasSuffix("; fi; " + part))
+        #expect(!CentralVaultRemote.bridge().contains("$"))        // a user who is not root runs it through `sudo -i`
+        #expect(CentralVaultRemote.bridge(keys: "") == part)       // a build with no key: the part alone, no ":" before it
+        #expect(CentralVaultRemote.bridge(keys: "not a key\n") == part)
+        #expect(InstallPlan.hubKit == "/root/fleet-kit")
+
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("bridge-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: base) }
+        // The installer's stand-in: it writes each call down. With `makes` it makes the clone's `hubsetup.py`, as a
+        // first clone at the hub's signed release does; without it, it stops as a hub with no release.json does.
+        let standIn = #"""
+            import os, sys
+            here = os.path.dirname(os.path.abspath(__file__))
+            with open(os.path.join(here, "calls"), "a") as log:
+                log.write(" ".join(sys.argv[1:]) + "\n")
+            if os.path.exists(os.path.join(here, "makes")):
+                with open(os.path.join(os.path.dirname(here), "kit", "hubsetup.py"), "w") as made:
+                    made.write("# the clone's own\n")
+                print("Founderizer: root's own clone is at release 2026.11.495 (0123456789ab)")
+                sys.exit(0)
+            print("Founderizer install stopped: the hub's checkout /home/fleet/fleet-pilot carries no release.json "
+                  "that can be read", file=sys.stderr)
+            sys.exit(1)
+            """#
+        func hub(clone: Bool, tree: Bool, makes: Bool = false) throws -> (kit: URL, tree: URL) {
+            let folder = base.appendingPathComponent(UUID().uuidString)
+            let kit = folder.appendingPathComponent("kit"), installer = folder.appendingPathComponent("fleet-kit")
+            try fm.createDirectory(at: kit, withIntermediateDirectories: true)
+            try fm.createDirectory(at: installer, withIntermediateDirectories: true)
+            if clone { try Data("# the clone's own\n".utf8).write(to: kit.appendingPathComponent("hubsetup.py")) }
+            if tree { try Data(standIn.utf8).write(to: installer.appendingPathComponent("hubsetup.py")) }
+            if makes { try Data().write(to: installer.appendingPathComponent("makes")) }
+            return (kit, installer)
+        }
+        // The bridge, and after it a command that stands for the program's own first command.
+        func run(_ at: (kit: URL, tree: URL)) throws -> (status: Int32, said: String, calls: [String]) {
+            let shell = Process(), pipe = Pipe()
+            shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+            shell.arguments = ["-c", CentralVaultRemote.bridge(in: at.kit.path, installer: at.tree.path) + "; echo the-next-command"]
+            shell.standardOutput = pipe
+            shell.standardError = pipe
+            try shell.run()
+            let said = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            shell.waitUntilExit()
+            let calls = (try? String(contentsOf: at.tree.appendingPathComponent("calls"), encoding: .utf8)) ?? ""
+            return (shell.terminationStatus, said, calls.split(separator: "\n").map(String.init))
+        }
+
+        // A hub that has the clone, as each hub that its installer gave one and the owner's own: the part does nothing.
+        var ran = try run(try hub(clone: true, tree: true, makes: true))
+        #expect(ran.status == 0 && ran.calls.isEmpty && ran.said == "the-next-command\n", "sh said: \(ran.said)")
+        // A hub from before, after its first release: the installer's `kit-clone` runs one time, and the run goes on.
+        let before = try hub(clone: false, tree: true, makes: true)
+        ran = try run(before)
+        #expect(ran.status == 0 && ran.calls == ["kit-clone"], "sh said: \(ran.said)")
+        #expect(ran.said.hasSuffix("the-next-command\n") && fm.fileExists(atPath: before.kit.appendingPathComponent("hubsetup.py").path))
+        ran = try run(before)                                      // a second run finds the clone and calls nothing
+        #expect(ran.status == 0 && ran.calls == ["kit-clone"] && ran.said == "the-next-command\n")
+        // A hub from before that has taken no release: the step stops with `kit-clone`'s own words, and nothing runs after it.
+        ran = try run(try hub(clone: false, tree: true))
+        #expect(ran.status == 1 && ran.calls == ["kit-clone"])
+        #expect(ran.said.contains("carries no release.json") && !ran.said.contains("the-next-command"), "sh said: \(ran.said)")
+        // A hub with no installer's tree either: the part does nothing, and the program's own first command says why.
+        ran = try run(try hub(clone: false, tree: false))
+        #expect(ran.status == 0 && ran.calls.isEmpty && ran.said == "the-next-command\n")
+    }
+
     @Test func theInstallsLastLineIsItsAnswer() {
         let fresh = "age-keygen: wrote /var/lib/fleet-vault-central/age.key\nCreated symlink …\n"
             + #"{"ok": true, "recipient": "\#(Self.recipient)", "store_recipient": "\#(Self.recipient)", "fleet": "0f1e2d3c4b5a6978"}"# + "\n"

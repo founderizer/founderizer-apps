@@ -681,7 +681,10 @@ struct KnowledgePage: View {
     }
 
     private static func reason(_ error: Error) -> String {
-        if case HubError.refusal(_, let text) = error { return String(l10n: "Not done. The hub said: \(text.hasSuffix(".") ? text : text + ".")") }
+        if case HubError.refusal(let refused) = error {
+            let text = refused.words
+            return String(l10n: "Not done. The hub said: \(text.hasSuffix(".") ? text : text + ".")")
+        }
         if error is URLError { return unanswered }
         return error.localizedDescription
     }

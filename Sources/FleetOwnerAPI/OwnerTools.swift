@@ -215,53 +215,89 @@ public final class OwnerTools: @unchecked Sendable {
         }
     }
 
-    /// **A write of the link** (`save_bot_token`): its fields checked, its value read on this Mac from its source, and
-    /// one call to the app with the fields (never `path`) and the value part; with `from` clipboard, the fields alone,
-    /// because the app reads the clipboard itself. Every refusal here is a fixed sentence
-    /// that quotes nothing of the request. The value's bytes are wiped when the call ends (`OwnerChannel.Value`).
+    /// **A write of the link** (`save_bot_token`, `prepare_problem_report`, `save_secret`): its fields checked, its
+    /// value read on this Mac from its source, and one call to the app with the fields (never `path`) and the value
+    /// part; with `from` clipboard, the fields alone, because the app reads the clipboard itself. Every refusal here
+    /// is a fixed sentence that quotes nothing of the request. The value's bytes are wiped when the call ends
+    /// (`OwnerChannel.Value`).
+    ///
+    /// **Each tool has its own branch, by its name**, and the last one is `save_bot_token`'s by its name too: a link
+    /// tool with no branch gets no other tool's plan and no other tool's words.
     func linkWrite(_ name: String, _ arguments: JSONValue?) -> (text: String, isError: Bool) {
         if let arguments, !arguments.isNull, arguments.object == nil {
             return ("\(name) takes one JSON object of its fields. Nothing was sent.", true)
         }
-        // `prepare_problem_report` has one field and no value: the text is the agent's own words, and no secret.
-        if name == PrepareReport.name {
+        switch name {
+        case PrepareReport.name:
+            // `prepare_problem_report` has one field and no value: the text is the agent's own words, and no secret.
             switch PrepareReport.read(arguments?.object ?? [:]) {
             case .failure(let refusal): return (refusal.text, true)
             case .success(let text): return context.appLink.call(tool: name, fields: ["text": .string(text)])
             }
+        case SaveSecret.name:
+            // `save_secret`: the plan (which makes the id of a new save that gave none, before any source is read),
+            // the value from the plan's source, and one call. A read of a save's state has no source, so it reads
+            // no file and not the standard input.
+            //
+            // The words for a lost answer. A read of a state (no source) has its own: it began no save, and the
+            // same read again is the next step. For a save, the words hold the id only when the program made it:
+            // the caller that gave an id has it.
+            let plan: SaveSecret.Plan
+            switch SaveSecret.plan(arguments?.object ?? [:], standardInputFree: standardInputFree) {
+            case .failure(let refusal): return (refusal.text, true)
+            case .success(let made): plan = made
+            }
+            let notKnown = plan.source == nil ? SaveSecret.notKnownState
+                : plan.made.map { SaveSecret.notKnownHereWithID($0) }
+            switch valuePart(from: plan.source, stdinInMCP: SaveSecret.stdinInMCP) {
+            case .failure(let refusal): return (refusal.text, true)
+            case .success(let value):
+                return context.appLink.call(tool: name, fields: plan.send, value: value, notKnown: notKnown)
+            }
+        case SaveBotToken.name:
+            let plan: SaveBotToken.Plan
+            switch SaveBotToken.plan(arguments?.object ?? [:]) {
+            case .failure(let refusal): return (refusal.text, true)
+            case .success(let made): plan = made
+            }
+            switch valuePart(from: plan.source, stdinInMCP: SaveBotToken.stdinInMCP) {
+            case .failure(let refusal): return (refusal.text, true)
+            case .success(let value): return context.appLink.call(tool: name, fields: plan.send, value: value)
+            }
+        default:
+            // A name of `OwnerLinkTools.names` with no branch here (none today; a test holds that): it gets no other
+            // tool's plan. Nothing was read and nothing was sent. The name is the program's own, so it quotes nothing.
+            return ("\(name) has no part in this program yet. Nothing was sent.", true)
         }
-        let plan: SaveBotToken.Plan
-        switch SaveBotToken.plan(arguments?.object ?? [:]) {
-        case .failure(let refusal): return (refusal.text, true)
-        case .success(let made): plan = made
-        }
-        var value: OwnerChannel.Value?
-        switch plan.source {
-        case nil:
-            break
+    }
+
+    /// **The value part of a link write, read on this Mac from its source**: a regular file or the standard input
+    /// (`ValueSource`), or none. One read for `save_bot_token` and `save_secret`, so that the two take a path, a
+    /// pipe and a terminal in the same way and with the same sentences.
+    /// - No source (a delete of `save_bot_token`, a read of a save's state of `save_secret`) and `clipboard` (the
+    ///   app reads the clipboard itself) read nothing: no file, and not one look at the standard input.
+    /// - `file`: the path as the file tools take it ("~", a relative path, a NUL), and then only a regular file.
+    /// - `stdin`: only while the standard input is free for a value (`founderizer-cli write`); in the MCP form it
+    ///   carries the protocol, and the tool's own sentence (`stdinInMCP`) says so.
+    private func valuePart(from source: SaveBotToken.Source?,
+                           stdinInMCP: String) -> Result<OwnerChannel.Value?, OwnerChannel.Refusal> {
+        switch source {
+        case nil, .clipboard?:
+            return .success(nil)
         case .file(let given)?:
             let place: String
             do {
                 place = try localPlace(given)              // "~", a relative path and a NUL as the file tools take them
             } catch let refusal as OwnerRefusal {
-                return (refusal.text, true)
+                return .failure(.init(refusal.text))
             } catch {
-                return (ValueSource.notOpened, true)
+                return .failure(.init(ValueSource.notOpened))
             }
-            switch ValueSource.file(place) {
-            case .failure(let refusal): return (refusal.text, true)
-            case .success(let read): value = read
-            }
-        case .clipboard?:
-            break                                          // the app reads the clipboard itself: no value part
+            return ValueSource.file(place).map(Optional.some)
         case .stdin?:
-            guard standardInputFree else { return (SaveBotToken.stdinInMCP, true) }
-            switch ValueSource.standardInput(context.standardInput) {
-            case .failure(let refusal): return (refusal.text, true)
-            case .success(let read): value = read
-            }
+            guard standardInputFree else { return .failure(.init(stdinInMCP)) }
+            return ValueSource.standardInput(context.standardInput).map(Optional.some)
         }
-        return context.appLink.call(tool: name, fields: plan.send, value: value)
     }
 
     func run(_ tool: OwnerTable.Tool, _ args: [String: JSONValue], on hub: OwnerHub) throws -> JSONValue? {

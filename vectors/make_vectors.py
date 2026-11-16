@@ -16,8 +16,10 @@ variable, each of the two tests holds the committed file equal to what the Swift
 Each vector is made with the code that checks it on the hub's side: the canonical text with `vault.canonical`, the
 owner's signature with the P-256 arithmetic and the strict DER reading of `vault.py` (`owner_signed`), the release
 manifests with the Ed25519 of `releases.py` and the line formats of `releases.signed_text` and `autopublish.app_text`,
-and the device binding with the shape check of `hub.device_signing`. Each vector is checked with that code before it
-is written, so a file here is never something that the hub would read otherwise.
+the device binding with the shape check of `hub.device_signing`, and the refusal codes with the table of
+`refusal_words.py` (`refusal-codes.json`: each code of a refusal with the hub's English, which an app holds to the case
+of its own table). Each vector is checked with that code before it is written, so a file here is never something that
+the hub would read otherwise.
 
 Nothing is random: every key comes from a fixed label, and the P-256 signature takes its nonce by RFC 6979. So a run
 writes the same bytes each time, and `--check` proves that the committed files are what the hub's code makes now.
@@ -413,6 +415,39 @@ def release_manifests(releases, autopublish):
             "message_hex": message.hex(), "message_signature": b64(good), "loose": loose}
 
 
+# ---------------------------------------------------------------- the refusal codes
+
+def refusal_codes():
+    """The hub's refusal words by code (refusal_words.WORDS): the English as the hub writes it, with `{name}` where a
+    name goes. An app that knows a code shows its own words for it, and the hub's English for any other; the app's
+    test holds each code to a case of the app's own table with the same English, so that a word that moves on the
+    hub's side fails a test and never a screen. A name is a text of at most `name_most` characters or a whole number.
+    No real name is in it: the words are the hub's, and a name stands in `{}`."""
+    sys.path.insert(0, ROOT)
+    import refusal_words
+    codes, holes = {}, {}
+    for code, english in refusal_words.WORDS.items():
+        if not refusal_words.CODE.fullmatch(code):
+            raise SystemExit(f"{code!r} is not a code: small letters, digits and _, 2 to 40 characters")
+        names = refusal_words.holes(english)
+        if not all(refusal_words.HOLE.fullmatch(name) for name in names):
+            raise SystemExit(f"the words of {code} hold a hole that is no plain name")
+        if refusal_words.words(code, {name: "<" + name + ">" for name in names}) != \
+                english.format(**{name: "<" + name + ">" for name in names}):
+            raise SystemExit(f"the hub gives other words for {code} than its table")
+        codes[code] = english
+        if names:
+            holes[code] = list(names)
+    if len(set(codes.values())) != len(codes):
+        raise SystemExit("two codes have the same English: one code for each sentence")
+    return {"about": "The hub's refusal words by code (refusal_words.WORDS), as the hub writes them, with {name} where "
+                     "a name goes. A refusal answers error (these words), code and, when its words hold a name, "
+                     "names. An app shows its own words for a code that it knows, and error for any other. Each "
+                     "app's table has a case for every code here, with the same English.",
+            "made_by": MADE_BY, "code_letters": "a-z 0-9 _", "code_length": [2, 40],
+            "name_most": refusal_words.NAME_MOST, "codes": codes, "holes": holes}
+
+
 # ---------------------------------------------------------------- the files
 
 def files():
@@ -420,7 +455,8 @@ def files():
     made = {"canonical-json.json": canonical_cases(vault),
             "owner-statement.json": owner_statement(hub, vault),
             "device-binding.json": device_binding(hub, vault),
-            "release-manifests.json": release_manifests(releases, autopublish)}
+            "release-manifests.json": release_manifests(releases, autopublish),
+            "refusal-codes.json": refusal_codes()}
     # ASCII only, so that every character class travels as an escape that no editor or git setting changes.
     return {name: (json.dumps(value, indent=2, ensure_ascii=True) + "\n").encode("ascii")
             for name, value in made.items()}

@@ -66,8 +66,8 @@ final class OwnerMCPTests {
         #expect(hello["instructions"] == .string(Fixture.table.instructions))
         let listed = try #require(said.first { $0["id"] == .int(2) }?["result"]?["tools"]?.array)
         // The 54 of the table, the four reads and the nine writes, the two setup tools of the link to the app, and
-        // the link's two write tools (save_bot_token, prepare_problem_report).
-        #expect(listed.count == 72)
+        // the link's three write tools (save_bot_token, prepare_problem_report, save_secret).
+        #expect(listed.count == 73)
         for tool in listed {
             let name = tool["name"]?.string ?? ""
             #expect(tool["annotations"]?["readOnlyHint"]
@@ -169,7 +169,7 @@ final class OwnerCLITests {
     @Test func toolsGivesOneLineEachOrOneToolInFull() throws {
         let executable = try program()
         let (status, out, _) = run(["tools"], executable: executable)
-        #expect(status == 0 && out.count == 72)
+        #expect(status == 0 && out.count == 73)
         #expect(out.contains("write check_machine: Have one machine take its reading now."))
         #expect(out.contains { $0.hasPrefix("call fleet_overview: ") })
         #expect(out.filter { $0.hasPrefix("call ") }.count == 7)
@@ -321,7 +321,49 @@ final class OwnerWriteTests {
         #expect(MediaType.guess("a.png", [:]) == "application/octet-stream")      // no table of its own
     }
 
+    /// **A give of a secret, where the parity fixture cannot reach** (`secretReaches`): a hub that gives no answer to
+    /// the read of the vault, or to the read of the team, is the program's own error, as for each of its reads, and no
+    /// grant is sent. With an answer to both, the same give is refused in the fixed sentence.
+    @Test func aGiveOfASecretIsNotSentWhenAReadOfItsRuleGetsNoAnswer() throws {
+        let hub = StandInHub(features: Fixture.everyFeature)
+        let tools = Fixture.tools(hub, home: home)
+        let secret = "bws://aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+        let give: [String: JSONValue] = ["resource": .string("secret:" + secret),
+                                         "agent": .string("worker-1"), "level": .string("use")]
+        // A central vault with nothing signed, a secret of the catalog that no agent made, and a worker on a server
+        // that takes deliveries.
+        let page: JSONValue = .object([
+            "central": .object(["ok": .bool(true), "pool": .array([]), "grants": .array([])]), "error": .null,
+            "machines": .array([.object(["machine": .string("web-1"), "missing": .array([])])]),
+            "held": .object(["web-1": .array([])])])
+        let team: JSONValue = .object([
+            "sha256": .string("sha-1"),
+            "logins": .object([secret: .object(["title": .string("SHOP_API_KEY"), "kind": .string("api_key")])]),
+            "created_logins": .array([]),
+            "lines": .array([.object(["agent": .string("worker-1"), "role": .string("worker"),
+                                      "machine": .string("web-1")])])])
+        hub.answer = { $0.path == "/ui/vault" ? (200, page) : $0.path == "/ui/team" ? (200, team) : nil }
+
+        hub.failWith = { $0.path == "/ui/vault" ? .cannotConnectToHost : nil }
+        let none = try #require(tools.refused("grant_access", give))
+        #expect(none.hasPrefix("The hub at \(hub.base) did not answer ("))
+        hub.failWith = { $0.path == "/ui/team" ? .networkConnectionLost : nil }
+        let lost = try #require(tools.refused("grant_access", give))
+        #expect(lost.hasPrefix("The call to the hub at \(hub.base) was lost: "))
+        hub.failWith = nil
+        #expect(tools.refused("grant_access", give) == OwnerTools.grantNotSigned)
+        #expect(!hub.seen.contains { $0.method == "POST" })
+        // An end of the hold goes in that state, with no read of the vault and none of the team.
+        let before = hub.seen.count
+        var back = give
+        back["level"] = .null
+        #expect(tools.refused("grant_access", back) == nil)
+        #expect(hub.seen.dropFirst(before).map(\.path) == ["/ui/secrets/grant"])
+    }
+
     @Test func textIsReadAsPythonReadsIt() {
+        // `lower_reference`: only A to Z change, so each text is lowered as `owner_mcp.py` lowers it.
+        #expect(PyText.asciiLower("bws://AbC-\u{391}\u{3A3}-Z@[`{") == "bws://abc-\u{391}\u{3A3}-z@[`{")
         #expect(PyText.partition("repo:\u{301}x", ":") == ("repo", "\u{301}x"))
         #expect(PyText.strip(" \u{3000}a b\u{85}") == "a b" && PyText.strip("\"a\"", only: "\"") == "a")
         #expect(!PyText.same("\u{e9}", "e\u{301}") && "\u{e9}" == "e\u{301}")

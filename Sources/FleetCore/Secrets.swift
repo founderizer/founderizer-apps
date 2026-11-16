@@ -92,6 +92,24 @@ public struct LoginSecret: Equatable, Sendable {
         return nil
     }
 
+    /// Why the central vault cannot take this secret although the form can make it, or nil (the owner's choice C42). A
+    /// save checks it before anything is sent, and an import row shows it as its reason: with no check, the list kept an
+    /// entry that never got its value. Its value gets no fingerprint (`SecretFingerprint.printable`), so the hub
+    /// registers none and refuses the intake; or its address is an AI provider's own sign-in site, which the vaults
+    /// refuse for a login and for an API key with an address (`vault.py` `check_login`, `ProviderSites`). nil while
+    /// `problem` has a value, which comes first. It cuts and changes nothing of the value, and no text repeats it.
+    public var vaultProblem: String? {
+        guard problem == nil, let value = try? value() else { return nil }
+        if (try? SecretFingerprint.printable(value))?.isEmpty != false {
+            return String(l10n: "The central vault takes a value only with a fingerprint, and this one has none: it has fewer than 8 characters or holds white space. Nothing was sent.")
+        }
+        let address = trimmed.url
+        guard !address.isEmpty, let host = URLComponents(string: address)?.host, ProviderSites.contains(host: host) else { return nil }
+        return kind == .login
+            ? String(l10n: "This address is an AI provider's own sign-in site, and Founderizer Vault keeps no login for it: you sign in there with your own account. Nothing was sent.")
+            : String(l10n: "This service address is an AI provider's own sign-in site, and Founderizer Vault takes no key with it. Give the address of the service's API, or no service address. Nothing was sent.")
+    }
+
     /// The item value: one JSON object, for the vault writer only.
     public func value() throws -> Data {
         guard problem == nil else { throw HubError.invalidResponse }
@@ -131,6 +149,25 @@ public struct LoginSecret: Equatable, Sendable {
             !($0.properties.isWhitespace || (0x1c...0x1f).contains($0.value) || $0 == "-" || $0 == "=")
         }
         return !clean.isEmpty && clean.allSatisfy { ("A"..."Z").contains($0) || ("2"..."7").contains($0) }
+    }
+}
+
+/// **The AI providers' own sign-in sites**, with their subdomains, and the key sites under them that stay allowed: a
+/// copy of `vault.py` `PROVIDER_SITES` and `PROVIDER_KEY_SITES`, because the central vault decides what it takes
+/// (`check_login`, for a login and for an API key with an address). Fleet keeps no secret for such a site: the owner
+/// signs in there with their own account. `provider-sites.json` beside the tests, which a Python test reads against
+/// `vault.provider_site` and `SecretTests` against this copy, holds the two equal.
+enum ProviderSites {
+    static let sites = ["claude.ai", "claude.com", "chatgpt.com", "auth.openai.com", "x.ai"]
+    static let keySites = ["platform.claude.com", "api.x.ai"]
+
+    /// True for a host of `sites` or under one, and not of `keySites` or under one, by `vault.py` `provider_site`: in
+    /// any case, and with no dot at its end.
+    static func contains(host: String) -> Bool {
+        var name = host.lowercased()
+        while name.hasSuffix(".") { name.removeLast() }
+        func under(_ site: String) -> Bool { name == site || name.hasSuffix("." + site) }
+        return !keySites.contains(where: under) && sites.contains(where: under)
     }
 }
 
@@ -302,6 +339,17 @@ public struct SecretFingerprint: Equatable, Sendable {
     /// again from what it opens and refuses a value whose own fingerprints are not these, so one rule in two languages
     /// must give one answer. Nothing of the value is in the result.
     public static func of(_ value: Data, salts: SecretSalts) throws -> [SecretFingerprint] {
+        try printable(value).map { kind, text in
+            let digest = SHA256.hash(data: Data(((kind == "password" ? salts.password : salts.totp) + text).utf8))
+            return SecretFingerprint(kind: kind, hash: digest.map { String(format: "%02x", $0) }.joined(), len: text.unicodeScalars.count)
+        }
+    }
+
+    /// The parts of one item value that get a fingerprint, by the rule of `of`: the password, the seed as typed, and
+    /// the seed in its canonical form when that differs, each only with 8 or more characters and no white space. None
+    /// is a value that the central vault never takes, because the hub then registers no fingerprint for it
+    /// (`LoginSecret.vaultProblem`, the owner's choice C42). Nothing of the value is changed.
+    static func printable(_ value: Data) throws -> [(kind: String, text: String)] {
         guard let item = try? JSONSerialization.jsonObject(with: value) as? [String: Any],
               let password = item["password"] as? String, !password.isEmpty else { throw HubError.invalidResponse }
         var values = [("password", password)]
@@ -310,10 +358,8 @@ public struct SecretFingerprint: Equatable, Sendable {
             let seed = canonicalSeed(totp)
             if !seed.unicodeScalars.elementsEqual(totp.unicodeScalars) { values.append(("totp", seed)) }
         }
-        return values.filter { $0.1.unicodeScalars.count >= 8 && !$0.1.unicodeScalars.contains(where: isWhitespace) }.map { kind, text in
-            let digest = SHA256.hash(data: Data(((kind == "password" ? salts.password : salts.totp) + text).utf8))
-            return SecretFingerprint(kind: kind, hash: digest.map { String(format: "%02x", $0) }.joined(), len: text.unicodeScalars.count)
-        }
+        return values.filter { $0.1.unicodeScalars.count >= 8 && !$0.1.unicodeScalars.contains(where: isWhitespace) }
+            .map { (kind: $0.0, text: $0.1) }
     }
 
     /// Python's white space (`str.isspace`, `\s`): Unicode's, and the four ASCII separators U+001C to U+001F.
@@ -647,10 +693,7 @@ public final class SecretsClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, response) = try await session.hubData(for: request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String ?? "Unexpected HTTP response."
-            throw HubError.refusal(response.statusCode, String(message.prefix(500)))
-        }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         guard data.count <= 1_048_576 else { throw HubError.invalidResponse }
         return data
     }
@@ -664,10 +707,7 @@ public final class SecretsClient: Sendable {
         let (data, response) = try await (chosen ?? session).hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String ?? "Unexpected HTTP response."
-            throw HubError.refusal(response.statusCode, String(message.prefix(500)))
-        }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         return data
     }
 }

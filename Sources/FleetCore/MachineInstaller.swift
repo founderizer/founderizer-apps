@@ -171,7 +171,7 @@ public actor MachineInstaller {
         do {
             _ = try await HubClient().stateReading(at: hub)
             return .serves
-        } catch HubError.refusal(403, _) {
+        } catch let HubError.refusal(refused) where refused.status == 403 {
             return .refuses
         } catch {
             return .silent

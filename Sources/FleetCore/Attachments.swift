@@ -47,6 +47,11 @@ public struct MessageAttachment: Decodable, Identifiable, Sendable, Equatable {
                                "text/markdown": "md", "text/csv": "csv", "application/json": "json"]
     public static let sizeLimit = 25 * 1024 * 1024
     public static let perMessage = 4
+    /// The types that an agent's message can carry besides `types` (CHAT-APPS.md 20): an app reads and opens them, and
+    /// the owner sends none of them himself, so the plus and the hub's own upload do not take them.
+    public static let agentTypes = ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+                                    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx"]
 
     public var isImage: Bool { mime.hasPrefix("image/") }
 
@@ -90,7 +95,7 @@ public struct MessageAttachment: Decodable, Identifiable, Sendable, Equatable {
 
     /// What the hub said about this file is a file that an app may ask for.
     public func validate() throws {
-        guard id > 0, !name.isEmpty, name.utf8.count <= 200, Self.types[mime] != nil,
+        guard id > 0, !name.isEmpty, name.utf8.count <= 200, (Self.types[mime] ?? Self.agentTypes[mime]) != nil,
               size > 0, size <= Self.sizeLimit, sha256.count == 64,
               sha256.allSatisfy({ $0.isHexDigit && ($0.isNumber || $0.isLowercase) }), created > 0,
               kept.map({ $0.at > 0 && $0.knowledge?.isEmpty != true }) != false
@@ -118,6 +123,8 @@ public struct MessageAttachment: Decodable, Identifiable, Sendable, Equatable {
         case let m where m.hasPrefix("image/"): "photo"
         case "application/pdf": "doc.richtext"
         case "application/zip": "doc.zipper"
+        case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "tablecells"
+        case "application/vnd.openxmlformats-officedocument.presentationml.presentation": "rectangle.on.rectangle"
         default: "doc.text"
         }
     }

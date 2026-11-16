@@ -599,6 +599,9 @@ struct SecretEntryView: View {
         guard !busy else { return }
         message = nil
         if let problem = login.problem { message = problem; return }
+        // C42: a value that the central vault never takes, said before anything is sent, so the list keeps no entry
+        // with no value; Save stays as it is, so the owner reads why here
+        if let problem = login.vaultProblem { message = problem; return }
         guard let context else { message = String(l10n: "No current status of this hub. Nothing was sent."); return }
         guard let central else { phase = .noVault; return }
         busy = true
@@ -677,7 +680,7 @@ struct SecretEntryView: View {
                                     value: value, hub: context.hub, database: context.db, installation: store.installation)
         } catch {
             // The hub takes no new secret while the central vault does not answer: nothing was sent.
-            if case HubError.refusal(503, _) = error { central = nil; phase = .noVault; return }
+            if case HubError.refusal(let refused) = error, refused.status == 503 { central = nil; phase = .noVault; return }
             message = String(l10n: "The hub did not register this secret. \(text(error)) Save again to try once more."); return
         }
         clear(); centralLogin = nil
@@ -774,7 +777,7 @@ struct SecretEntryView: View {
                 progress.answered = true; progress.answerProblem = nil
             } catch {
                 // A request that had its answer already, here or on another of this Mac's views of it, takes no other.
-                if case HubError.refusal(409, let words) = error, words.contains("already answered") {
+                if case HubError.refusal(let refused) = error, refused.status == 409, refused.means(.requestAnswered) {
                     progress.answered = true; progress.answerProblem = nil; progress.answerNote = String(l10n: "It had an answer already.")
                 } else { progress.answerProblem = text(error) }
             }
@@ -833,7 +836,7 @@ struct SecretEntryView: View {
             await store.refresh()
             onDone(nil)
         } catch {
-            if case HubError.refusal(409, _) = error { declineID = UUID() }      // the request had its answer; a new one is another command
+            if case HubError.refusal(let refused) = error, refused.status == 409 { declineID = UUID() }      // the request had its answer; a new one is another command
             message = String(l10n: "The decline did not reach the hub. \(text(error))")
         }
     }

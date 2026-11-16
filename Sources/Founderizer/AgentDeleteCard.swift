@@ -77,9 +77,9 @@ struct AgentDeleteCard: View {
                 leave(agent, for: receipt.server, store: store)
                 await store.refresh()
                 return nil
-            } catch let HubError.refusal(status, words) {
-                if status == 409, attempt == 0, words.contains("team.json changed") { continue }
-                return words
+            } catch let HubError.refusal(refused) {
+                if refused.status == 409, attempt == 0, refused.means(.teamChanged) { continue }
+                return refused.words
             } catch {
                 return String(l10n: "The hub has not answered. Try again.")
             }

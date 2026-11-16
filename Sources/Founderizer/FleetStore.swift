@@ -1778,11 +1778,9 @@ final class FleetStore {
 
     /// Removes a save that the hub refused from the outbox, and gives the hub's words.
     private func refused(_ request: PendingRequest) -> SaveResult {
-        let refusal = request.refusal ?? ""
-        guard let status = HubError.refusalStatus(in: refusal) else { return .refused(refusal) }
+        guard let refusal = request.refusedByHub else { return .refused(request.refusal ?? "") }
         discardRefused()
-        let words = HubError.refusalWords(in: refusal) ?? refusal
-        return status == 409 ? .conflict(words) : .refused(words)
+        return refusal.status == 409 ? .conflict(refusal.words) : .refused(refusal.words)
     }
 
     /// A reply came in this agent's chat after the owner last had that chat open.
@@ -1876,7 +1874,7 @@ final class FleetStore {
                 await transmit(next, rebased: true)
                 return
             }
-            if case HubError.refusal(422, _) = error {
+            if case HubError.refusal(let refused) = error, refused.status == 422 {
                 secretRefusals += 1
                 draft = ""
                 answers = [:]
@@ -1885,9 +1883,9 @@ final class FleetStore {
                 do { pending = try outbox.rejectSecret(matching: request.requestID, drafts: .standard) }
                 catch { storageError = String(l10n: "Cannot remove rejected text from local storage. Sending is blocked.") }
                 sendError = String(l10n: "The hub refused registered login text.")
-            } else if let error = error as? HubError, error.definitiveRefusal || error.conflict {
+            } else if let error = error as? HubError, case .refusal(let refusal) = error, error.definitiveRefusal || error.conflict {
                 var refused = request
-                refused.refusal = error.localizedDescription
+                refused.refuse(refusal)
                 do { try outbox.save(refused); pending = refused }
                 catch { storageError = String(l10n: "Cannot save the refusal. The original request is retained.") }
                 sendError = error.localizedDescription

@@ -31,12 +31,12 @@ struct ConnectedAppsTests {
         #expect(ConnectedApps.keepsReading(after: CancellationError()))
         #expect(ConnectedApps.keepsReading(after: HubError.unavailable))
         for status in [500, 501, 502, 503, 504, 408, 429] {
-            #expect(ConnectedApps.keepsReading(after: HubError.refusal(status, "")))
+            #expect(ConnectedApps.keepsReading(after: HubError.refusal(HubRefusal(status: status, hubWords: ""))))
         }
         // the hub answered: the route or the feature is not there, the caller is not the owner, or the answer is
         // none that this app reads
         for status in [400, 403, 404, 409, 422, 499] {
-            #expect(!ConnectedApps.keepsReading(after: HubError.refusal(status, "Connected apps are not in this release of the hub.")))
+            #expect(!ConnectedApps.keepsReading(after: HubError.refusal(HubRefusal(status: status, hubWords: "Connected apps are not in this release of the hub."))))
         }
         #expect(!ConnectedApps.keepsReading(after: HubError.invalidResponse))
         #expect(!ConnectedApps.keepsReading(after: HubError.invalidAddress))

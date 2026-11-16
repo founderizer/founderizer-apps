@@ -256,6 +256,11 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     public let doing: String?
     public let stalled_since: Double?
     public let stalled_reason: String?
+    /// **The owner's own message that this task comes from** (owner feature `asks`, hub 1.182), as that message's
+    /// `request_id`, or nil: work that no message of his began (a wake-up, a duty's case, a review), or an older hub. A
+    /// follow-up and a subtask have the ask of their task, so every task of one thing that he asked for carries one
+    /// value (`HubState.asks`).
+    public let ask: String?
 
     public var isTerminal: Bool { ["completed", "failed", "rejected", "canceled"].contains(state) }
     /// Who checks the result, by the name the app gives everywhere: an agent's capitalised ("Accepted by Manager"),
@@ -493,6 +498,8 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// The number of the agent's question that this item carries to the owner, or nil. A task that waits on that
     /// question ("Q-68" in its `waiting_on`) waits for his answer to this item (`HubState.ownerWaits`).
     public let question: Int?
+    /// Owner feature `asks`: the `request_id` of his message whose work waits for his answer to this item, or nil.
+    public let ask: String?
     /// Owner feature `secret_requests`: what a `request_secret` item asks for (its `kind` is `secret`), and nil on
     /// every other item. It names a secret and never holds a value.
     public let secret: NeedSecret?
@@ -616,6 +623,9 @@ public struct OwnerMessage: Decodable, Identifiable, Sendable, Equatable {
     /// Owner feature `attachments`: the files that went with this message, in the order the owner picked them.
     public let attachments: [MessageAttachment]?
     public var attachmentIDs: [Int] { (attachments ?? []).map(\.id) }
+    /// Owner feature `asks`: the name of what he asked for in this message, as his list shows it, or nil for a message
+    /// that no task names. The first task of the message writes it, once.
+    public let asked: String?
     public var id: String { request_id }
 }
 
@@ -632,6 +642,8 @@ public struct ManagerReport: Decodable, Identifiable, Sendable, Equatable {
     /// Chat apps round 2: the agent wrote this to the owner first (`message_owner`); it answers no message.
     public let pushed: HubFlag?
     public var isPushed: Bool { pushed?.value == true }
+    /// CHAT-APPS.md 20: the files that the agent sent with these words. A hub from before that round sends none.
+    public let attachments: [MessageAttachment]?
 }
 
 public struct SendReceipt: Decodable, Sendable {

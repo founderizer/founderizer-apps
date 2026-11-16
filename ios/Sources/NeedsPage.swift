@@ -827,7 +827,7 @@ struct NeedFooter: View {
     /// owner discards a refused one.
     private func stoppedLine(_ request: PendingRequest) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            if let refusal = request.refusal {
+            if let refusal = request.notSentLine {
                 ComposerNote(words: refusal, isWarning: true)
                 // Each action only while it can act, never grey (review B2i).
                 TextAction(title: String(l10n: "Discard"), font: .caption) { store.discardRefused() }

@@ -625,6 +625,16 @@
         }
       }
     },
+    "%@ has an open sign-in. Finish it or let it run out, then try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ tiene un inicio de sesión abierto. Termínalo o deja que caduque y vuelve a intentarlo."
+          }
+        }
+      }
+    },
     "%@ has it, but it has no vault access yet, so it cannot use it now. %@" : {
       "localizations" : {
         "es" : {
@@ -655,12 +665,22 @@
         }
       }
     },
-    "%@ has no server of the smallest types free near you now. Try again later." : {
+    "%@ has no server free now." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ no tiene ahora ningún servidor libre de los tipos más pequeños cerca de ti. Vuelve a intentarlo más tarde."
+            "value" : "%@ no tiene ningún servidor libre ahora."
+          }
+        }
+      }
+    },
+    "%@ has no server service: it did not join with a join code" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no tiene servicio de servidor: no se unió con una línea de unión."
           }
         }
       }
@@ -785,6 +805,16 @@
         }
       }
     },
+    "%@ is in the middle of a turn. Move it when the turn ends." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ está trabajando ahora. Muévelo cuando termine."
+          }
+        }
+      }
+    },
     "%@ is in your fleet" : {
       "localizations" : {
         "es" : {
@@ -851,6 +881,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ no es una clave que pueda leer."
+          }
+        }
+      }
+    },
+    "%@ is not an owner device, and that is not a code for a new one" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no es un dispositivo del propietario, y eso no es un código para uno nuevo."
+          }
+        }
+      }
+    },
+    "%@ is not an owner device. See \"owner_devices\" in team.json." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no es un dispositivo del propietario. Consulta «owner_devices» en team.json."
           }
         }
       }
@@ -1331,6 +1381,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ se ejecuta en su servidor."
+          }
+        }
+      }
+    },
+    "%@ sent no reading in the last 10 minutes: check that it is on" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no envió ninguna lectura en los últimos 10 minutos: comprueba que esté encendido."
           }
         }
       }
@@ -2340,6 +2400,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld te esperan"
+          }
+        }
+      }
+    },
+    "%lld waiting" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld en espera"
           }
         }
       }
@@ -4326,6 +4396,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Preguntar por «%@»"
+          }
+        }
+      }
+    },
+    "Asked" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lo que pediste"
           }
         }
       }
@@ -9286,6 +9366,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dirección del hub"
+          }
+        }
+      }
+    },
+    "Hub refused the request (%lld): %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El hub rechazó la solicitud (%lld): %@"
           }
         }
       }
@@ -15300,6 +15390,16 @@
         }
       }
     },
+    "Reminder for %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recordatorio para %@"
+          }
+        }
+      }
+    },
     "Removal of %@ failed" : {
       "localizations" : {
         "es" : {
@@ -16846,6 +16946,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enviar este mensaje a %@"
+          }
+        }
+      }
+    },
+    "Send to %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mensaje para %@"
+          }
+        }
+      }
+    },
+    "Send to you" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mensaje para ti"
           }
         }
       }
@@ -18826,6 +18946,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No se pudo abrir esa imagen."
+          }
+        }
+      }
+    },
+    "That server is not free at %@ any more." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ese servidor ya no está libre en %@."
           }
         }
       }
@@ -22680,6 +22810,16 @@
         }
       }
     },
+    "This address is an AI provider's own sign-in site, and Founderizer Vault keeps no login for it: you sign in there with your own account. Nothing was sent." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta dirección es el sitio de inicio de sesión propio de un proveedor de IA, y Founderizer Vault no guarda ningún inicio de sesión para él: ahí inicias sesión con tu propia cuenta. No se envió nada."
+          }
+        }
+      }
+    },
     "This address is the owner's own Mac, which needs no key. Forget this phone's key in Settings." : {
       "localizations" : {
         "es" : {
@@ -23710,6 +23850,16 @@
         }
       }
     },
+    "This service address is an AI provider's own sign-in site, and Founderizer Vault takes no key with it. Give the address of the service's API, or no service address. Nothing was sent." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta dirección del servicio es el sitio de inicio de sesión propio de un proveedor de IA, y Founderizer Vault no acepta ninguna clave con ella. Escribe la dirección de la API del servicio, o deja la dirección del servicio vacía. No se envió nada."
+          }
+        }
+      }
+    },
     "This setup prompt is not supported." : {
       "localizations" : {
         "es" : {
@@ -23976,6 +24126,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ubuntu 22.04, 24.04 o 26.04, o Debian 12 o 13, con acceso de root. Founderizer configura su usuario, las actualizaciones de seguridad, la red privada y el firewall."
+          }
+        }
+      }
+    },
+    "Unexpected HTTP response." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Respuesta HTTP inesperada."
           }
         }
       }
@@ -25450,12 +25610,12 @@
         }
       }
     },
-    "Who else can write to %@?" : {
+    "Who can write to %@?" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "¿Quién más puede escribir a %@?"
+            "value" : "¿Quién puede escribir a %@?"
           }
         }
       }
@@ -26740,6 +26900,26 @@
         }
       }
     },
+    "a registered login cannot be sent as a file" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un inicio de sesión registrado no se puede enviar como archivo."
+          }
+        }
+      }
+    },
+    "a registered login cannot be sent as text" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un inicio de sesión registrado no se puede enviar como texto."
+          }
+        }
+      }
+    },
     "agents are signed out" : {
       "localizations" : {
         "es" : {
@@ -26836,6 +27016,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "https://example.com/page"
+          }
+        }
+      }
+    },
+    "hub generation changed; refresh state" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El hub cambió. Actualiza y vuelve a intentarlo."
+          }
+        }
+      }
+    },
+    "hub generation changed; refresh state before sending" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El hub cambió. Actualiza antes de enviar."
           }
         }
       }
@@ -26980,6 +27180,36 @@
         }
       }
     },
+    "no such agent" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No existe ese agente."
+          }
+        }
+      }
+    },
+    "no such server" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No existe ese servidor."
+          }
+        }
+      }
+    },
+    "no such task" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No existe esa tarea."
+          }
+        }
+      }
+    },
     "not in the sample" : {
       "localizations" : {
         "es" : {
@@ -27026,6 +27256,86 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "o"
+          }
+        }
+      }
+    },
+    "owner request does not exist" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La solicitud no existe."
+          }
+        }
+      }
+    },
+    "owner request does not exist: a request whose task ended is gone with it" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La solicitud no existe: una solicitud cuya tarea terminó desaparece con ella."
+          }
+        }
+      }
+    },
+    "owner request is already answered" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La solicitud ya tiene respuesta."
+          }
+        }
+      }
+    },
+    "registered login text cannot be displayed" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El texto de un inicio de sesión registrado no se puede mostrar."
+          }
+        }
+      }
+    },
+    "request_id was already used for a different command" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El request_id ya se usó para otro comando."
+          }
+        }
+      }
+    },
+    "request_id was already used for an owner message; send the answer with a new one" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El request_id ya se usó para un mensaje del propietario; envía la respuesta con uno nuevo."
+          }
+        }
+      }
+    },
+    "request_id was already used for another file" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El request_id ya se usó para otro archivo."
+          }
+        }
+      }
+    },
+    "request_id was already used for different content or recipient" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El request_id ya se usó para otro contenido u otro destinatario."
           }
         }
       }
@@ -27150,6 +27460,26 @@
         }
       }
     },
+    "team.json changed meanwhile; reload it" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La configuración del equipo cambió mientras tanto. Vuelve a cargarla."
+          }
+        }
+      }
+    },
+    "team.json changed meanwhile; reload the reporting lines" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La configuración del equipo cambió mientras tanto. Vuelve a cargar las líneas de reporte."
+          }
+        }
+      }
+    },
     "the account is locked." : {
       "localizations" : {
         "es" : {
@@ -27200,6 +27530,16 @@
         }
       }
     },
+    "the hub cannot read its own revision" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El hub no puede leer su propia revisión."
+          }
+        }
+      }
+    },
     "the install's answer" : {
       "localizations" : {
         "es" : {
@@ -27246,6 +27586,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "este Mac no puede leer ese archivo."
+          }
+        }
+      }
+    },
+    "this command was interrupted and the hub does not know what came of it. Read the thing it was about, and send the command again with a new request_id if it did not take effect" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este comando se interrumpió y el hub no sabe en qué quedó. Revisa aquello a lo que se refería y, si no surtió efecto, vuelve a enviar el comando con un request_id nuevo."
           }
         }
       }

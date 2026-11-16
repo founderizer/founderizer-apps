@@ -629,7 +629,8 @@ final class OwnerLinkProgramTests {
         #expect(tool.inputSchema["required"] == .array([.string("account")]))
         #expect(OwnerTools.verb(of: tool) == .write)
         #expect(OwnerCLI.setupTools == ["setup_state", "setup_show", "setup_diagnosis"])
-        #expect(OwnerLinkTools.names == ["save_bot_token", "prepare_problem_report"])
+        #expect(OwnerLinkTools.names == ["save_bot_token", "prepare_problem_report", "save_secret"])
+        #expect(OwnerLinkTools.tools.map(\.name) == OwnerLinkTools.names)
         #expect(Fixture.table.tool(SaveBotToken.name) == nil)
         let (status, out, _) = try run(["tools"], ValueLink())
         #expect(status == 0 && out.contains { $0.hasPrefix("write save_bot_token: Saves the token of a Discord bot") })
@@ -1095,7 +1096,7 @@ struct OwnerSaveBotTokenTests {
             return found
         }
         let tools = OwnerSetupTools.tools + OwnerLinkTools.tools
-        #expect(tools.count == 5)
+        #expect(tools.count == 6)
         for tool in tools {
             for name in names(tool.inputSchema) {
                 #expect(!OwnerLinkTools.namedLikeAValue(name), "\(tool.name): \(name)")
@@ -1229,6 +1230,27 @@ struct OwnerSaveBotTokenClipboardTests {
         let description = SaveBotToken.tool.description
         #expect(description.contains("never read the clipboard yourself"))
         #expect(description.contains("which the app reads itself") && description.contains("the owner presses Allow Paste"))
+        // **The part about the token and its three sources, held word for word**, between the sentence before it
+        // and the one after it. Two rules in it hold for every source: the token never goes through a chat, and a
+        // pipe is never a read of the clipboard (`pbpaste` would put the token on a pipe with no gate).
+        let part = "The token is never a field of this tool and never a word of a command line. You never see it, type "
+            + "it or repeat it, and you never ask the owner to paste it into a chat. It comes from this Mac, from a "
+            + "file or a pipe that founderizer-cli reads and sends to the Founderizer app as a part after the request, "
+            + "or from the clipboard, which the app reads itself. from file, with path: a regular file of this Mac "
+            + "that holds only the token (at most 64 KiB). from stdin: only with founderizer-cli write, the standard "
+            + "input from a program's pipe (never pbpaste or another read of the clipboard: for the clipboard, use "
+            + "from clipboard), never an echo or a here-string of the token; the MCP form refuses it. from clipboard: "
+            + "the app reads the clipboard itself, after every other check passed, once the owner copied the bot's "
+            + "token in Discord's Developer Portal and said so; never read the clipboard yourself."
+        #expect(description.contains("this tool does not make the account. " + part + " When macOS asks whether "
+                                     + "Founderizer may access the pasteboard, the owner presses Allow Paste."))
+        // Each rule is said one time.
+        for rule in ["into a chat", "paste it", "never read the clipboard yourself", "pbpaste",
+                     "never a field of this tool", "the MCP form refuses it"] {
+            #expect(description.components(separatedBy: rule).count == 2, "\(rule)")
+        }
+        #expect(!description.contains("paste the token"))
+        #expect(!description.contains("\n") && !description.contains("  "))
     }
 
     /// **A read of the clipboard prints as hidden** in every way that Swift prints a value: its text is a secret, or

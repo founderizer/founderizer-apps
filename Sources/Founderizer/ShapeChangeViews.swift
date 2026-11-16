@@ -57,7 +57,7 @@ import SwiftUI
                 _ = try await HubClient().keepShape(hub: store.hub, database: database, client: store.installation,
                                                     sha256: team.sha256, step: step)
                 return true
-            } catch HubError.refusal(409, _) {
+            } catch let error as HubError where error.conflict {
                 continue
             } catch {
                 return false

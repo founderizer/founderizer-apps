@@ -10,8 +10,8 @@ import Testing
 // the hub's own sentence reaches the row where the hub wrote one — and only the screen's own line where it did not.
 
 struct ReadingTests {
-    private let refused = HubError.refusal(403, "this Mac is not the owner's machine")
-    private let silent = HubError.refusal(503, HubError.unexplained)
+    private let refused = HubError.refusal(HubRefusal(status: 403, hubWords: "this Mac is not the owner's machine"))
+    private let silent = HubError.refusal(HubRefusal(status: 503, hubWords: HubError.unexplained))
 
     private func rules(_ id: Int = 4) throws -> [FleetTrigger] {
         let fields: [String: Any] = [
@@ -54,7 +54,7 @@ struct ReadingTests {
         #expect(old.lastReadingWarning ==
                 "this Mac is not the owner's machine. These rows can be old; Founderizer tries again every 15 seconds.")
         // A second failure keeps the same rows and takes the newer reason.
-        let again = old.after(nil, reason: HubError.said(HubError.refusal(503, "the hub is restarting")))
+        let again = old.after(nil, reason: HubError.said(HubError.refusal(HubRefusal(status: 503, hubWords: "the hub is restarting"))))
         #expect(again.rules == list && again.reason == "the hub is restarting")
         // And a read that works clears it.
         #expect(again.after(list) == .current(list))

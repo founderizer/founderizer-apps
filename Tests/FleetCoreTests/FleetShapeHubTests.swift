@@ -104,9 +104,9 @@ struct FleetShapeHubTests {
             _ = try await HubClient().keepShape(hub: URL(string: "http://127.0.0.1:\(hub.port)")!, database: "db",
                                                 client: "test", sha256: String(repeating: "a", count: 64), step: .one)
             Issue.record("the refusal was taken as a receipt")
-        } catch let HubError.refusal(status, words) {
-            #expect(status == 409)
-            #expect(words.contains("The hub runs on a Mac"))
+        } catch let HubError.refusal(refused) {
+            #expect(refused.status == 409)
+            #expect(refused.hubWords.contains("The hub runs on a Mac"))
         }
     }
 

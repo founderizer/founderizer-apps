@@ -6,8 +6,9 @@ import Foundation
 enum MobileError: LocalizedError, Sendable, Equatable {
     case invalidAddress
     case invalidResponse
-    /// The hub refused. `auth` is its reason when the refusal is about this device's key.
-    case refusal(status: Int, auth: String?, message: String)
+    /// The hub refused, with what it said as one value (`HubRefusal`, as in the Mac app: its status, its English line,
+    /// its code and the names inside it). `auth` is its reason when the refusal is about this device's key.
+    case refusal(HubRefusal, auth: String?)
     /// The hub answers nothing at `GET /ui/mobile`: it is from before the phone's routes.
     case noPhoneRoutes
     case noAnswer
@@ -18,8 +19,8 @@ enum MobileError: LocalizedError, Sendable, Equatable {
         case .invalidResponse: String(l10n: "The hub's answer does not match the phone's API.")
         // The hub's reason as a sentence, and no status code: "atlas is in setup" reads "The hub refused it: Atlas is
         // in setup." The code stays in the error for what the app decides from it.
-        case .refusal(_, let auth, let message):
-            auth.map(MobileError.authWords) ?? String(l10n: "The hub refused it: \(MobileError.sentence(message))")
+        case .refusal(let refusal, let auth):
+            auth.map(MobileError.authWords) ?? String(l10n: "The hub refused it: \(MobileError.sentence(of: refusal))")
         case .noPhoneRoutes: String(l10n: "This hub does not have the phone's routes yet. The Mac app still works with it.")
         // The Mac's words for the same failure, both sentences, so both apps say it one way (fix round 2, item 35).
         case .noAnswer: String(l10n: "Your hub did not answer. Check that its server is on.")
@@ -30,8 +31,26 @@ enum MobileError: LocalizedError, Sendable, Equatable {
     /// in setup." It read "The hub refused it: Atlas is in setup.", eight words with no "not" in them. A refusal of
     /// this phone's key keeps its own words, which say what to do.
     var notSentWords: String {
-        guard case .refusal(_, nil, let message) = self else { return localizedDescription }
-        return String(l10n: "Not sent: \(Self.sentence(message))")
+        guard case .refusal(let refusal, nil) = self else { return localizedDescription }
+        return Self.notSent(refusal)
+    }
+
+    /// "Not sent: Atlas is in setup.": a refusal of the hub in a few words, **made from its fields at the moment it
+    /// is read** and so in the language of that day (`sentence(of:)`). A request that the hub refused keeps the
+    /// refusal as fields, never these words (`PendingRequest.notSentLine`).
+    static func notSent(_ refusal: HubRefusal) -> String {
+        String(l10n: "Not sent: \(Self.sentence(of: refusal))")
+    }
+
+    /// **What the hub refused, as a sentence of this phone.** The words of the refusal are the app's own for a code
+    /// that it knows, in the language of the device, and the hub's English for every other (`HubRefusal.words`).
+    /// The hub's English is made a sentence here, as it always was: the first letter in upper case and a full stop
+    /// at the end. The app's own words are a sentence already, and a name in them (a server, an agent) stays as the
+    /// hub wrote it. A refusal that carried no words says it in the phone's own sentence, not the Mac's "Unexpected
+    /// HTTP response.".
+    static func sentence(of refusal: HubRefusal) -> String {
+        guard let said = refusal.said else { return String(l10n: "The hub gave no reason.") }
+        return refusal.words == refusal.hubWords ? sentence(said) : said
     }
 
     /// The hub's words as a sentence: the first letter in upper case and a full stop at the end.
@@ -45,13 +64,13 @@ enum MobileError: LocalizedError, Sendable, Equatable {
     /// may still come is never definitive: it keeps its number and the owner can retry it.
     var isDefinitive: Bool {
         if case .noPhoneRoutes = self { return true }
-        guard case .refusal(let status, _, _) = self else { return false }
-        return [400, 403, 404, 409, 413, 415, 422, 429, 503].contains(status)
+        guard case .refusal(let refusal, _) = self else { return false }
+        return [400, 403, 404, 409, 413, 415, 422, 429, 503].contains(refusal.status)
     }
 
     /// The hub's `auth` value, when it named one.
     var auth: String? {
-        guard case .refusal(_, let auth, _) = self else { return nil }
+        guard case .refusal(_, let auth) = self else { return nil }
         return auth
     }
 
@@ -61,10 +80,12 @@ enum MobileError: LocalizedError, Sendable, Equatable {
     /// not know had 24, and the page's own line already says where the Mac makes a code.
     static func enrollWords(_ error: MobileError) -> String {
         switch error {
-        case .refusal(429, _, _):
+        case .refusal(let refusal, _) where refusal.status == 429:
             return tooManyCodes
-        case .refusal(403, _, let message):
-            return message.lowercased().contains("owner device")
+        case .refusal(let refusal, _) where refusal.status == 403:
+            // By the hub's code, and by the old English phrase for a hub that sends none (`HubRefusal.means`): the
+            // words of a refusal are for the owner to read, and in Spanish they are not the hub's.
+            return refusal.means(.notOwnerDevice)
                 ? String(l10n: "Your hub does not know this phone. Add it on your Mac.")
                 : codeDidNotWork
         default:
@@ -99,6 +120,29 @@ enum MobileError: LocalizedError, Sendable, Equatable {
         default:
             String(l10n: "The hub refused this phone (\(auth)).")
         }
+    }
+}
+
+extension PendingRequest {
+    /// **The line under a request that did not go, as the phone says it**: "Not sent: Atlas is in setup." One helper
+    /// for the three places that show it (Settings, a chat, Needs you). A request that the hub refused keeps the
+    /// refusal as its fields (`refuse(_:)`: status, the hub's line, code and names), and this line is **made from them
+    /// when it is read**, in the language of that day and with the app's own words for a code that it knows
+    /// (`MobileError.notSent`), never kept as words. The stored text `refusal` shows only where there are no fields:
+    /// a request that an older version of the phone refused, whose words were made when it was written, and a refusal
+    /// of this phone's key, whose own words say what to do. nil for a request that no refusal stopped:
+    /// `refusal != nil` stays the mark that a request waits for Discard or Try again.
+    var notSentLine: String? {
+        guard let stored = refusal else { return nil }
+        return refusedByHub.map(MobileError.notSent) ?? stored
+    }
+
+    /// The hub's refusal, or the phone's own, stopped this request. **What the hub refused is kept as its fields**
+    /// (`refuse(_:)`), and the words are made when the owner reads them (`notSentLine`). A refusal of this phone's key
+    /// keeps the phone's own words, which say what to do, and so does an error of the phone's own that is no refusal:
+    /// they are kept as text, as they always were.
+    mutating func refuse(because error: MobileError) {
+        if case .refusal(let hubRefused, nil) = error { refuse(hubRefused) } else { refusal = error.notSentWords }
     }
 }
 
@@ -150,19 +194,20 @@ final class MobileClient: Sendable {
     }
 
     /// What the hub's answer means. `false` is 304: the fleet did not change and there is no body. Every refusal
-    /// carries the hub's own words and, for a device, its `auth` reason.
+    /// carries what the hub said (`HubRefusal.read`, the one decoder: its words, its code and its names) and, for a
+    /// device, its `auth` reason, which that decoder does not read.
     static func check(_ response: HTTPURLResponse, data: Data) throws -> Bool {
         switch response.statusCode {
         case 200: return true
         case 304: return false
         default:
             let body = try? JSONDecoder().decode(RefusalBody.self, from: data)
-            throw MobileError.refusal(status: response.statusCode, auth: body?.auth,
-                                      message: String((body?.error ?? String(l10n: "The hub gave no reason.")).prefix(500)))
+            throw MobileError.refusal(HubRefusal.read(status: response.statusCode, body: data), auth: body?.auth)
         }
     }
 
-    private struct RefusalBody: Decodable { let error: String?; let auth: String? }
+    /// The one field of a refusal's body that `HubRefusal.read` leaves to the phone: why this device's key was refused.
+    private struct RefusalBody: Decodable { let auth: String? }
 
     /// **Every request of the phone goes through here, and in the app that hosts the unit tests none leaves this Mac**
     /// (review B9i): whatever path asks — a read, a send, a link, a file, a press on a ping — a request to any other

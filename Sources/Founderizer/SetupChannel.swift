@@ -206,7 +206,8 @@ enum AppFront {
 
 /// **The app's side of the link with its program** (`OwnerChannel` in FleetOwnerAPI; the plan's section 3.4): a local
 /// socket in the app's own folder of the user's Library, on which the program inside this bundle (`founderizer-cli`)
-/// asks the running app its reads (`setup_state`, `setup_show`, `setup_diagnosis`) and one write (`save_bot_token`). The
+/// asks the running app its reads (`setup_state`, `setup_show`, `setup_diagnosis`) and its three writes
+/// (`save_bot_token`, `prepare_problem_report`, `save_secret`; `LinkTools`). The
 /// listener runs on a queue of its own; the answers come on the
 /// main actor, from the store (`SetupBoard`). Nothing of it shows on the screen.
 ///
@@ -214,9 +215,13 @@ enum AppFront {
 /// Developer ID program of this app's own team with the identifier `com.founderizer.cli`; in a test build only the exact
 /// program of this own bundle. That proves which program calls, not who wanted the call: each process of the owner's
 /// user can start the program. So the safety of the link is in what its tools can do: they read typed facts, and
-/// `setup_show` asks macOS to bring one of this app's own pages to the front; none presses, rents or pays. The one that
-/// carries a secret, `save_bot_token` (`LinkTools`), sends a Discord bot's token to the hub's route that any process of
-/// the owner's user reaches already. Proved with the released, Developer ID signed build (14 November 2026).
+/// `setup_show` asks macOS to bring one of this app's own pages to the front; none presses, rents or pays. Two carry a
+/// secret (`LinkTools`). `save_bot_token` sends a Discord bot's token to the hub's route that any process of the
+/// owner's user reaches already. `save_secret` adds a new entry to the hub's list of secrets and passes its value,
+/// sealed to the central vault's key, on to the vault: through the hub's routes that any process of the owner's
+/// user reaches already, so it gives such a process no new power; it gives the secret to no agent, replaces nothing
+/// and sets no site itself. Proved with the released, Developer ID signed build (14 November 2026), before
+/// `save_secret` was on the link: that tool is not run in a signed build yet.
 @MainActor
 final class SetupChannel {
     static let shared = SetupChannel()
@@ -245,7 +250,8 @@ final class SetupChannel {
                                },
                                // The bundle's Info.plist on the disk now: an update swaps the bundle at its path.
                                diskBuild: { ProgramPlace.build(of: Bundle.main.bundleURL) })
-        // The link's write tools (`save_bot_token`), on the same board and the same store.
+        // The link's write tools (`save_bot_token`, `prepare_problem_report`, `save_secret`), on the same board and
+        // the same store.
         LinkTools.add(to: board, store: { [weak self] in self?.store })
         return board
     }()

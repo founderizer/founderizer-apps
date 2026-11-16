@@ -14,10 +14,10 @@ import Testing
     do {
         _ = try await HubClient().health(hub: hub, database: "db")
         Issue.record("The stand-in answered 403, so the read cannot succeed.")
-    } catch let HubError.refusal(status, words) {
-        #expect(status == 403)
-        #expect(words == "this Mac is not the owner's machine")
-        #expect(HubError.said(HubError.refusal(status, words)) == "this Mac is not the owner's machine")
+    } catch let HubError.refusal(refused) {
+        #expect(refused.status == 403)
+        #expect(refused.hubWords == "this Mac is not the owner's machine")
+        #expect(HubError.said(HubError.refusal(refused)) == "this Mac is not the owner's machine")
     }
     #expect(refusal.received.starts(with: Data("GET /ui/health?db=db HTTP/1.1\r\n".utf8)))
 }
@@ -27,10 +27,10 @@ import Testing
     do {
         _ = try await HubClient().machines(hub: URL(string: "http://127.0.0.1:\(refusal.port)")!, database: "db")
         Issue.record("The stand-in answered 503, so the read cannot succeed.")
-    } catch let HubError.refusal(status, words) {
-        #expect(status == 503 && words == HubError.unexplained)
+    } catch let HubError.refusal(refused) {
+        #expect(refused.status == 503 && refused.hubWords == HubError.unexplained)
         // Nothing of the hub's to show, so the screen keeps its own line instead of printing a number.
-        #expect(HubError.said(HubError.refusal(status, words)) == nil)
+        #expect(HubError.said(HubError.refusal(refused)) == nil)
     }
 }
 
@@ -38,10 +38,10 @@ import Testing
     let body = Data(#"{"error":"hub generation changed; refresh state"}"#.utf8)
     #expect(HubClient.readRefusal(status: 409, body: body, checkedOutputs: true) as? ArtifactError == .stale)
     #expect(HubClient.readRefusal(status: 422, body: body, checkedOutputs: true) as? ArtifactError == .refusedText)
-    guard case let HubError.refusal(status, words) = HubClient.readRefusal(status: 500, body: body, checkedOutputs: true) else {
+    guard case let HubError.refusal(refused) = HubClient.readRefusal(status: 500, body: body, checkedOutputs: true) else {
         Issue.record("A status the outputs do not act on carries the hub's words."); return
     }
-    #expect(status == 500 && words == "hub generation changed; refresh state")
+    #expect(refused.status == 500 && refused.hubWords == "hub generation changed; refresh state")
 }
 
 // Only the checked outputs act on 409 and 422. Every other read is a screen that cannot reload an output list, and
@@ -49,16 +49,16 @@ import Testing
 @Test func a409OnEveryOtherReadCarriesTheHubsOwnSentence() throws {
     let body = Data(#"{"error":"hub generation changed; refresh state"}"#.utf8)
     for status in [409, 422] {
-        guard case let HubError.refusal(code, words) = HubClient.readRefusal(status: status, body: body, checkedOutputs: false) else {
+        guard case let HubError.refusal(refused) = HubClient.readRefusal(status: status, body: body, checkedOutputs: false) else {
             Issue.record("A \(status) outside the checked outputs carries the hub's words, not the outputs' sentence."); return
         }
-        #expect(code == status && words == "hub generation changed; refresh state")
+        #expect(refused.status == status && refused.hubWords == "hub generation changed; refresh state")
     }
     // And with no words of its own it is still its own status, never the outputs' sentence.
-    guard case let HubError.refusal(code, words) = HubClient.readRefusal(status: 409, body: Data(), checkedOutputs: false) else {
+    guard case let HubError.refusal(refused) = HubClient.readRefusal(status: 409, body: Data(), checkedOutputs: false) else {
         Issue.record("A 409 with an empty body is a refusal with its status."); return
     }
-    #expect(code == 409 && words == HubError.unexplained)
+    #expect(refused.status == 409 && refused.hubWords == HubError.unexplained)
 }
 
 @Test func theGenerationChangedReachesTheScreenThatReadTheTriggers() async throws {
@@ -74,23 +74,23 @@ import Testing
 }
 
 @Test func theWordsOfARefusalAreBoundedAndNeverEmpty() throws {
-    #expect(HubClient.words(in: Data()) == HubError.unexplained)
-    #expect(HubClient.words(in: Data("not json".utf8)) == HubError.unexplained)
-    #expect(HubClient.words(in: Data(#"{"error":"   "}"#.utf8)) == HubError.unexplained)
+    #expect(HubRefusal.read(status: 400, body: Data()).hubWords == HubError.unexplained)
+    #expect(HubRefusal.read(status: 400, body: Data("not json".utf8)).hubWords == HubError.unexplained)
+    #expect(HubRefusal.read(status: 400, body: Data(#"{"error":"   "}"#.utf8)).hubWords == HubError.unexplained)
     let long = String(repeating: "a", count: 900)
-    #expect(HubClient.words(in: Data(#"{"error":"\#(long)"}"#.utf8)).count == 500)
+    #expect(HubRefusal.read(status: 400, body: Data(#"{"error":"\#(long)"}"#.utf8)).hubWords.count == 500)
 }
 
 @Test func onlyTheFinalRefusalsAreFinalAndA409IsItsOwnQuestion() {
     for status in [400, 403, 404, 413, 415, 422, 503] {
-        #expect(HubError.refusal(status, "no").definitiveRefusal)
-        #expect(!HubError.refusal(status, "no").conflict)
+        #expect(HubError.refusal(HubRefusal(status: status, hubWords: "no")).definitiveRefusal)
+        #expect(!HubError.refusal(HubRefusal(status: status, hubWords: "no")).conflict)
     }
     // A 409 is a refusal, but the hub also answers it to a write whose base simply moved, so it is not final.
-    #expect(!HubError.refusal(409, "the profile changed meanwhile; reload it").definitiveRefusal)
-    #expect(HubError.refusal(409, "the profile changed meanwhile; reload it").conflict)
-    #expect(!HubError.refusal(500, "server error").definitiveRefusal)
-    #expect(!HubError.refusal(500, "server error").conflict)
+    #expect(!HubError.refusal(HubRefusal(status: 409, hubWords: "the profile changed meanwhile; reload it")).definitiveRefusal)
+    #expect(HubError.refusal(HubRefusal(status: 409, hubWords: "the profile changed meanwhile; reload it")).conflict)
+    #expect(!HubError.refusal(HubRefusal(status: 500, hubWords: "server error")).definitiveRefusal)
+    #expect(!HubError.refusal(HubRefusal(status: 500, hubWords: "server error")).conflict)
     #expect(!HubError.invalidResponse.definitiveRefusal && !HubError.invalidResponse.conflict)
     #expect(HubError.said(HubError.unavailable) == nil)
 }

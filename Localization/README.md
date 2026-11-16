@@ -38,7 +38,14 @@ The plan: `~/dev/founderizer-plans/app-localization-plan.md`.
   `String(l10n:)` where it is made.
 - **Only the apps' own words.** An agent's text, the hub's text and every value that goes to the hub, that the app
   compares or that it signs stay as they are. Example: the door card's title and answers (`DoorCall`) are compared
-  with the hub's card in English.
+  with the hub's card in English. **One exception: the words of a refusal whose code the app knows** (the owner's
+  "Yes, as shown" of 16 November 2026; UI-API.md 1.181). `Sources/FleetCore/RefusalWords.swift` has one case for each
+  code of `vectors/refusal-codes.json`, and the key of each is the hub's English, with `%@` where the hub has a
+  `{name}` (a name stays as the hub wrote it). On a device in English, for a code that the table does not have, for a
+  refusal that lacks a name and for a key with no words in the language, the hub's own line shows, so the English is
+  the hub's character for character. A new code of the hub gets its case and its Spanish in the same commit, and the
+  owner's yes to the words of its slice comes first; until then its name is in `RefusalWordsVectorsTests.waiting`. A
+  line that decides something never reads these words: it reads `HubRefusal.means(_:)`, which reads the code.
 - A name of a product or a service ("GitHub", "Tailscale") has an entry with the same words in Spanish.
 - **A word with two meanings gets a key of its own for one of them**, with its English apart, so the English stays the
   same: `String(localized: "Off (a server)", defaultValue: "Off", bundle: Localized.bundle, locale: Localized.digits)`

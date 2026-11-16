@@ -58,7 +58,7 @@ public struct BuildRecord: Codable, Equatable, Sendable, Identifiable {
             switch error {
             case .leftBehind: return .leftBehind
             case .unreachable, .notUnderstood: return .notKnown
-            case .notAToken, .noToken, .tokenNotAccepted, .readOnlyToken, .rateLimited, .refused, .noRoom, .notReady,
+            case .notAToken, .noToken, .tokenNotAccepted, .readOnlyToken, .rateLimited, .refused, .noRoom, .taken, .notReady,
                  .notAServerName, .notAPublicKey, .notAnAuthKey: return .nothing
             }
         }

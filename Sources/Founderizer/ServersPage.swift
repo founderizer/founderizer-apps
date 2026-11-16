@@ -676,7 +676,7 @@ struct ServerPage: View {
             // Package 4 of the vault's gates: this Mac signs no pin of that machine again, and sends its unpin by itself.
             store.vaultModel().removed(server.name, store: store)
             store.destination = .settings(.servers)
-        } catch let HubError.refusal(_, words) { error = words }
+        } catch let HubError.refusal(refused) { error = refused.words }
         catch { self.error = String(l10n: "The hub has not answered. Try again.") }
     }
 

@@ -85,7 +85,7 @@ final class GoogleConnecting {
     }
 
     private func reason(_ error: Error) -> String {
-        if case HubError.refusal(_, let words) = error { return words }
+        if case HubError.refusal(let refused) = error { return refused.words }
         if error is URLError { return String(l10n: "The hub did not answer. Look at the accounts before you try again.") }
         return error.localizedDescription
     }

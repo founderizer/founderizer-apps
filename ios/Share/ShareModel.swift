@@ -231,7 +231,7 @@ final class ShareModel {
             for file in files { file.forget() }
             finish()
         } catch {
-            if case MobileError.refusal(422, _, _) = error {
+            if case MobileError.refusal(let refusal, _) = error, refusal.status == 422 {
                 // The hub does not say which words are a login: the words go from this phone, as the app's do.
                 pending = nil
                 text = ""

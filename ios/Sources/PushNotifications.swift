@@ -175,13 +175,16 @@ enum NeedPress {
         // A failure of the phone itself says only where to go on: its system words are no news to the owner.
         guard let error = error as? MobileError else { return String(l10n: "Open Founderizer to answer.") }
         switch error {
-        case .refusal(409, _, let message) where message.contains("already answered"):
+        // What a refusal means is read from its code (`HubRefusal.means`), and for a hub that sends none from the old
+        // English phrase: its words are for the owner to read, and in Spanish they are not the hub's. The status is
+        // this line's own test.
+        case .refusal(let refusal, _) where refusal.status == 409 && refusal.means(.requestAnswered):
             return String(l10n: "Already answered.")
-        case .refusal(409, _, let message) where message.contains("generation"):
+        case .refusal(let refusal, _) where refusal.status == 409 && refusal.means(.hubChanged):
             return String(l10n: "The hub's records changed after the ping. Open Founderizer and answer there.")
-        case .refusal(404, _, _):
+        case .refusal(let refusal, _) where refusal.status == 404:
             return String(l10n: "This request is no longer on the hub.")
-        case .refusal(_, let auth?, _):
+        case .refusal(_, let auth?):
             return MobileError.authWords(auth)
         case .noAnswer:
             return String(l10n: "Your hub did not answer. Open Founderizer to answer.")

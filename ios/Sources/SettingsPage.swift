@@ -147,7 +147,7 @@ struct SettingsPage: View {
         } else if let pending = store.pending {
             Section {
                 DetailRow(title: store.pendingSummary,
-                          detail: pending.refusal ?? store.sendError ?? String(l10n: "It waits for its receipt."),
+                          detail: pending.notSentLine ?? store.sendError ?? String(l10n: "It waits for its receipt."),
                           value: pending.refusal == nil ? String(l10n: "Waiting") : String(l10n: "Refused"), valueColor: Brand.warning)
                 if !pending.text.isEmpty {
                     Text(verbatim: pending.text).font(.footnote).foregroundStyle(Brand.muted)

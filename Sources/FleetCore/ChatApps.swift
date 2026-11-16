@@ -284,8 +284,8 @@ public struct ChannelCard: Equatable, Sendable {
     /// Orange: the owner has something to do.
     public var needsOwner: Bool { status.tone == .problem }
 
-    /// The owner has no ID of this app yet, and this card's account can take the owner's code: the channel's steps
-    /// then ask for it ("Write to <agent> from your phone"), and the card's menu has Link my phone (or Link my Discord).
+    /// The owner has no ID of this app yet, and this card's account can take the owner's code: the card's menu then has
+    /// Link my phone (or Link my Discord), the owner's own link ("Write to <agent> from your phone").
     public func asksForOwnerLink(_ people: PeopleSnapshot?) -> Bool {
         kind == .connected && people.map { $0.handles(of: app).isEmpty } == true
     }
@@ -885,16 +885,12 @@ public final class ChatAppsClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else {
-            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error ?? "Unexpected HTTP response."
-            throw HubError.refusal(response.statusCode, String(message.prefix(500)))
-        }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         guard data.count <= 4_194_304 else { throw HubError.invalidResponse }
         return data
     }
 
     private struct TeamVersion: Decodable { let db: String; let sha256: String }
-    private struct ErrorBody: Decodable { let error: String }
 }
 
 private final class ChatNoRedirect: NSObject, URLSessionTaskDelegate, Sendable {

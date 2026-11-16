@@ -14,9 +14,10 @@ import SwiftUI
 ///      of how that stood before it, with Open Developer Portal, is gone.
 ///   2. **Add Mia to your server**: Invite to server.
 ///   3. For a new bot, the steps that both apps share (`ChannelFollowSteps`; the owner's "Yes, build it" of 14 November
-///      2026 to their mock): "Write to Mia from your Discord", "Who else can write to Mia?" and "Mia is on Discord",
-///      with Done, back to the Channels list, whose card says Connected. A hub that does not serve the people keeps the
-///      page before them: **Mia is connected**, the steps done, and Done.
+///      2026 to their mock, and his choice of 15 November 2026 of the You tile): "Who can write to Mia?", where You
+///      opens "Write to Mia from your Discord", and "Mia is on Discord", with Done, back to the Channels list, whose
+///      card says Connected. A hub that does not serve the people keeps the page before them: **Mia is connected**,
+///      the steps done, and Done.
 ///
 /// Opened from the card of a bot that is connected (Change token), the page is the bot's connected state, with
 /// Change token and Invite to server under it; Fix token opens on the token step. Save adds the account
@@ -77,7 +78,7 @@ struct DiscordBotPage: View {
     var body: some View {
         Group {
             if following || (adding && follows && page == .done) {
-                // A new bot that is connected and on his server: the owner's own link, who else, and the end.
+                // A new bot that is connected and on his server: who can write to the agent, You first, and the end.
                 ChannelFollowSteps(store: store, app: "discord", agent: agent, flow: true, refresh: refresh, close: close)
             } else {
                 // Back to the channels stands at the page's top left, where every setup page has it.

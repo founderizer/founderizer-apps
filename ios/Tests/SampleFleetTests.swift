@@ -113,7 +113,10 @@ struct SampleFleetTests {
             store.setAnswerDraft("Refund it", for: 1)
             store.setDraft("Offer the customer a voucher instead.", for: "wren")
             await store.send(to: "wren")
-            #expect(store.pending?.refusal == "Not sent: This is a sample.")
+            // The request is marked as refused, and its line is made from the refusal's fields when it is read.
+            #expect(store.pending?.refusal != nil && store.pending?.notSentLine == "Not sent: This is a sample.")
+            // It was kept as the hub's refusal: its status and its words, the sample's own, and no code.
+            #expect(store.pending?.hubRefusal == HubRefusal(status: 409, hubWords: SampleHub.refusal))
             let composer = MobileStore.stageKey(agent: "wren")
             await store.stage(Data("x".utf8), name: "note.txt", mime: "text/plain", for: composer)
             #expect(store.fileError == "Not sent: This is a sample.")
@@ -137,7 +140,8 @@ struct SampleFleetTests {
             await store.refresh()
             store.setDraft("Offer the customer a voucher instead.", for: "wren")
             await store.send(to: "wren")
-            #expect(store.pending?.refusal == "Not sent: This is a sample.")
+            // The request is marked as refused, and its line is made from the refusal's fields when it is read.
+            #expect(store.pending?.refusal != nil && store.pending?.notSentLine == "Not sent: This is a sample.")
             // No Leave: the app ends inside the sample, and starts again.
             let next = MobileStore()
             #expect(next.pending == nil && !next.sample && next.hasNoHub)

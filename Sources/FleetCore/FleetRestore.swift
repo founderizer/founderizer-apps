@@ -738,7 +738,7 @@ extension HubClient {
         let (data, response) = try await transfer.upload(for: OwnerMacKey.authorized(request), fromFile: file)
         guard let http = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard http.statusCode == 200 else {
-            throw HubError.refusal(http.statusCode, HubClient.words(in: data))
+            throw HubError.refusal(.read(status: http.statusCode, body: data))
         }
         let receipt = try JSONDecoder().decode(RestoreReceipt.self, from: data)
         guard receipt.ok, receipt.records_bytes > 0 else { throw HubError.invalidResponse }

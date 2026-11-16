@@ -41,6 +41,24 @@ final class OwnerEdgeTests {
         #expect(none.hasSuffix("Check that it runs and that this Mac is on the fleet's private network."))
     }
 
+    /// `share_resource` of a secret whose read of the vault gets no answer sends nothing: the branch that the parity
+    /// fixture cannot hold, because its stand-in hub always answers.
+    @Test func aStandingForASecretWhoseReadOfTheVaultGetsNoAnswerSendsNothing() throws {
+        let hub = StandInHub(features: Fixture.everyFeature)
+        hub.failWith = { $0.path == "/ui/vault" ? .cannotConnectToHost : nil }
+        let tools = Fixture.tools(hub, home: home)
+        let none = try #require(tools.refused("share_resource", ["resource": .string("secret:bws://example-1"),
+                                                                 "max": .string("use")]))
+        #expect(none.hasPrefix("The hub at \(hub.base) did not answer ("))
+        #expect(hub.seen.map(\.path).filter { $0 != "/ui/state" } == ["/ui/vault"])
+        hub.failWith = { $0.path == "/ui/vault" ? .networkConnectionLost : nil }
+        let lost = try #require(tools.refused("share_resource", ["resource": .string("secret:bws://example-1"),
+                                                                 "max": .string("use")]))
+        #expect(lost.hasPrefix("The call to the hub at \(hub.base) was lost")
+                || lost.hasPrefix("The hub at \(hub.base) did not answer"))
+        #expect(!hub.seen.contains { $0.method == "POST" || $0.path == "/ui/team" })
+    }
+
     // ------------------------------------------------------------ a hub in trouble
 
     @Test func aHubInTroubleIsSaidInItsOwnWords() throws {

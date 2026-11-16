@@ -970,7 +970,7 @@ struct FleetView: View {
     @ViewBuilder private var pendingBar: some View {
         if let pending = store.pending {
             VStack(alignment: .leading, spacing: 8) {
-                Text(pending.refusal.map(Self.notSent) ?? String(l10n: "Not sent"))
+                Text(pending.refusal == nil ? String(l10n: "Not sent") : Self.notSent(pending))
                     .font(FormMetrics.detailTitle).foregroundStyle(.orange).textSelection(.enabled)
                 if pending.refusal == nil {
                     Text("Your hub did not confirm it. Sending it again does not send it twice.").font(FormMetrics.detail)
@@ -1011,8 +1011,8 @@ struct FleetView: View {
 
     /// "Not sent: Atlas is in setup." — the hub's own words of a refusal as a sentence after "Not sent:", without its
     /// status ("Hub refused the request (409): …"), as the phone says it.
-    private static func notSent(_ refusal: String) -> String {
-        let words = (HubError.refusalWords(in: refusal) ?? refusal).trimmingCharacters(in: .whitespacesAndNewlines)
+    private static func notSent(_ pending: PendingRequest) -> String {
+        let words = (pending.refusedByHub?.words ?? pending.refusal ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard let last = words.last else { return String(l10n: "Not sent") }
         let sentence = words.prefix(1).uppercased() + words.dropFirst() + (".!?".contains(last) ? "" : ".")
         return String(l10n: "Not sent: \(sentence)")

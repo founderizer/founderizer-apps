@@ -72,7 +72,8 @@ final class OwnerGuideTests {
     /// **The guide names a tool only when the program has it, with the verb that takes it**: a tool that left the
     /// table, or that changed from a read to a write, fails here and not in an owner's session.
     @Test func theGuideNamesOnlyToolsOfTheProgramWithTheirOwnVerb() {
-        // The program's own list: the table's tools and the two that ask the running app (`setup_state`, `setup_show`).
+        // The program's own list: the table's tools, the three reads that ask the running app (`setup_state`,
+        // `setup_show`, `setup_diagnosis`) and the link's three writes (`OwnerLinkTools`).
         let table = OwnerTools.programTable(Fixture.table)
         let tools = named("`([a-z]+(?:_[a-z]+)+)`").subtracting(["first_run", "no_change"])
         #expect(tools.count >= 7)
@@ -82,7 +83,7 @@ final class OwnerGuideTests {
         for (verb, name) in [("call", "fleet_overview"), ("call", "fleet_read"), ("write", "send_message"),
                              ("call", "setup_state"), ("call", "setup_show"), ("call", "setup_diagnosis"),
                              ("write", "save_chat_account"),
-                             ("write", "save_bot_token")] {
+                             ("write", "save_bot_token"), ("write", "save_secret")] {
             #expect(OwnerGuide.text.contains("~/.founderizer/cli \(verb) \(name)"))
             #expect(table.tool(name).flatMap(OwnerTools.verb(of:))?.rawValue == verb)
         }
@@ -112,8 +113,9 @@ final class OwnerGuideTests {
     }
 
     /// **A Discord bot's token moves from the clipboard, never through the chat** (the secrets plan, step C): the guide
-    /// names `save_bot_token` with its verb and `from` clipboard, still forbids a token in the chat, and still sends
-    /// every other secret to the app's own field.
+    /// names `save_bot_token` with its verb and `from` clipboard, and still forbids a token in the chat. A bot's token
+    /// is one of two kinds that the agent can move (the other, a new login or API key, has its own test below), and
+    /// every other secret still goes into the app's own field.
     @Test func theGuideMovesABotTokenFromTheClipboardAndNeverThroughTheChat() {
         let text = OwnerGuide.text
         let guide = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
@@ -129,17 +131,232 @@ final class OwnerGuideTests {
         #expect(guide.contains("Never read the clipboard yourself, also after a refusal"))
         #expect(guide.contains("that is for this one step")
                 && guide.contains("and the owner did not just paste into the app themselves, the owner presses Don't Allow Paste"))
-        #expect(guide.contains("One kind you can move without seeing it: a Discord bot's token, with `save_bot_token`, "
-                               + "where the app or its program reads it and you do not"))
+        // **Two kinds, and no more**: the rule names both tools, and no sentence says any more that a bot's token is
+        // the one secret that the agent can move.
+        #expect(guide.contains("The owner types or pastes each one into the Founderizer app's own field. Two kinds you "
+                               + "can move without seeing them: a Discord bot's token, with `save_bot_token`, and a new "
+                               + "login or a new API key of the fleet, with `save_secret`. There the app or its program "
+                               + "reads the value and you do not (see \"A Discord bot's token\" and \"A new login or a "
+                               + "new API key\" below)."))
+        #expect(guide.contains("A Discord bot's token is one of the two kinds of secret that you can move, and you "
+                               + "never see it."))
+        #expect(!guide.contains("One kind you can move") && !guide.contains("the one secret that you can move"))
         #expect(guide.contains("You never ask for, see, type, read or repeat a secret, in any form"))
         // The page that lists the chat accounts is a page of the table, and the account's object is given whole.
         #expect(text.contains(#"'{"page": "chat_apps"}'"#) && Fixture.table.pages["chat_apps"] != nil)
         #expect(text.contains(#"'{"id": "discord-<agent>", "account": {"app": "discord", "label": "<a name for the bot>", "agents": ["<agent>"], "unknown": "ignore", "enabled": true}}'"#))
         #expect(guide.contains("Never echo a token into a pipe, and never write a token in a command line"))
-        #expect(guide.contains("Every other secret (a provider's token, a login, an API key) still goes into the app's own field"))
+        // A login and an API key are no longer on the list of what goes only into the app's own field.
+        #expect(guide.contains("Every other secret (a provider's token or a Tailscale key that a page of a setup asks "
+                               + "for, a server's password, a sign-in code) still goes into the app's own field, by "
+                               + "the owner's hand."))
+        #expect(!guide.contains("Every other secret (a provider's token, a login, an API key)"))
         // The steps stand with the fleet that runs, after the setup's pages.
         let steps = (text as NSString).range(of: "## A Discord bot's token").location
         #expect(steps != NSNotFound && steps > (text as NSString).range(of: "## A fleet that runs").location)
+    }
+
+    /// **A new login or a new API key moves with `save_secret`, and never through the chat** (the secrets plan, step
+    /// E; `OwnerSaveSecret.swift`): the guide names the tool with its verb, the three sources of the value, the rule
+    /// of the one line end, the request id of a save that takes longer than its call, the four refusals that need the
+    /// owner, and what only the owner does in the app. The words that the guide repeats of the tool are the tool's
+    /// own, and each example call of the guide is a call that the tool's own plan takes.
+    @Test func theGuideSavesANewLoginOrKeyWithItsValueFromThisMacOnly() throws {
+        let text = OwnerGuide.text
+        let guide = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        // The section stands after the bot token's, and before the one for a hub that does not answer.
+        let start = try #require(guide.range(of: "## A new login or a new API key"))
+        let end = try #require(guide.range(of: "## When the hub does not answer, or a setup stopped"))
+        #expect(try #require(guide.range(of: "## A Discord bot's token")).upperBound < start.lowerBound
+                && start.upperBound < end.lowerBound)
+        let section = String(guide[start.upperBound..<end.lowerBound])
+        #expect(OwnerTools.verb(of: SaveSecret.tool) == .write)
+        #expect(section.contains("`~/.founderizer/cli tools save_secret`"))
+        for rule in ["A new login or a new API key of the fleet is the other kind of secret that you can move, and "
+                        + "you never see its value.",
+                     "`save_secret` saves it into the fleet's central vault. It saves only a new secret: it replaces "
+                        + "nothing, and it gives the secret to no agent.",
+                     // The fields are no secret, and they are the secret's name in the list.
+                     "A login's name in the fleet's list of secrets is the host of its address with its user name, "
+                        + "and a key's name is its variable name: put nothing secret in these fields.",
+                     "The tool sets no site. For a key with an https address the hub can set the key's site from its "
+                        + "own table of well-known services, and `fleet_read` with the page `team` shows whether it "
+                        + "did.",
+                     // The value: never a field, a command line or the chat, and three sources on this Mac.
+                     "The value (a login's password, or the key) is never a field of the tool, never a word of a "
+                        + "command line and never a word of this chat. It comes from this Mac, from one of three "
+                        + "sources:",
+                     "- The clipboard. Ask the owner to copy the value, with no space and no line end around it, and "
+                        + "to say when it is copied. Tell them never to paste it into this chat.",
+                     "The app reads the clipboard itself, last and one time, and clears it after the save when "
+                        + "nothing else changed it. Never read the clipboard yourself, also after a refusal.",
+                     "When macOS asks whether Founderizer may access the pasteboard, the owner presses Allow Paste, "
+                        + "for this one step only: what \"A Discord bot's token\" says of that question holds here "
+                        + "too.",
+                     "- A file. When the owner keeps the value in a file, use `\"from\": \"file\"` with `\"path\"` "
+                        + "and the file that the owner names. The program reads the file. You never open it.",
+                     "- A program's pipe. `\"from\": \"stdin\"` goes only with `~/.founderizer/cli write`, and only "
+                        + "for the output of a program that the owner named for it. Never `pbpaste`, never `cat` of "
+                        + "a file (name the file with `\"path\"`), and never an echo or a here-string of the value.",
+                     // The one line end, and nothing else.
+                     "The app changes nothing in a value. From a file or a pipe, the value is the one line that the "
+                        + "text holds: the app takes off the one line end at its very end, and nothing else.",
+                     "The clipboard's text is taken as it is, so a line end after a copied value is refused too.",
+                     "A space or a tab at the start or at the end, an empty line after the value and a text of two "
+                        + "lines are refused, from each source.",
+                     "After such a refusal, do not open the file and do not look at the value: ask the owner to keep "
+                        + "only the value in the file, or to copy it again with nothing around it.",
+                     // A save that takes longer than its call, and the request id.
+                     "A save can take longer than its call. When the answer says \"state\" \"running\", the save goes "
+                        + "on in the app: do not start it again. Read its state with only the \"request_id\" of that "
+                        + "answer:",
+                     "Read again after some seconds, until \"state\" is \"done\" or a refusal comes. Such a read "
+                        + "changes nothing.",
+                     "A refusal of `save_secret` is a fixed sentence of the app or of its program. When it says a "
+                        + "next step, do that step, and no other.",
+                     "When it asks for the same call again, send the same fields and the same \"from\" again. When "
+                        + "you gave a \"request_id\", or the refusal names one, send that id with them: the save that "
+                        + "began goes on, and nothing is made twice.",
+                     "The same call with another id, or with none after a refusal named one, is a new save.",
+                     "When a refusal tells you to remove an entry with `save_login`, remove only the entry whose "
+                        + "reference that refusal names.",
+                     // The end of a save: no value in an answer, and no agent holds the secret.
+                     "When \"state\" is \"done\", the secret is in the vault. The answer has its \"reference\", its "
+                        + "\"title\" and its \"kind\", and after a save from the clipboard \"clipboard\": "
+                        + "\"cleared\" or \"kept\". No answer has the value, its length or a fingerprint of it.",
+                     // The tool refuses the give that the hub's reading shows as never delivered, and only that one.
+                     "No agent holds the new secret. Do not give it to an agent with `grant_access`: a grant from "
+                        + "this program has no signature of the owner's, and the central vault sends a value only "
+                        + "for a grant that the app signed or for a secret of the grantable pool; "
+                        + "`share_resource` does not sign a secret into that pool, only the owner's app does.",
+                     "The tool refuses a give that the hub's reading of the vault shows as never delivered, and it "
+                        + "sends a give that it cannot judge, so a give that it sends does not prove that the value "
+                        + "arrived. Tell the owner to give the secret in the Founderizer app, on Secrets, where the "
+                        + "app signs the grant.",
+                     // A grant from this program that is in the list already: the owner's repair, in the app.
+                     "If a grant from this program is in the list already, the owner takes it back there and gives "
+                        + "it again, so that the app signs it.",
+                     // The four refusals that need the owner.
+                     "Some refusals need the owner. For four of them:",
+                     "- It says that this Mac pinned no key of the central vault yet: the owner sets up Founderizer "
+                        + "Vault in the app on this Mac. Go on when the owner says that it is done.",
+                     "- It says that the central vault answers with another key than the one that this Mac pinned: "
+                        + "tell the owner, and save nothing until the owner knows why. Never set the vault up again "
+                        + "to get past it, and never send the owner to do that.",
+                     "- It says that the central vault holds no recovery key yet: the owner finishes Founderizer "
+                        + "Vault's setup in the app.",
+                     "- It says that the list has a secret of this name already: `save_secret` saves only a new "
+                        + "secret, and the owner replaces a secret in Founderizer, on Secrets. Do not remove an entry "
+                        + "by its name to save it again.",
+                     // What stays the owner's, in the app.
+                     "What `save_secret` does not do, and the owner does in the Founderizer app, on Secrets: a new "
+                        + "value for a secret that the list has already (a replace); a login with a seed for one-time "
+                        + "codes, with \"Add 2FA code\"; and giving a secret to an agent."] {
+            #expect(section.contains(rule), "the guide lost: \(rule)")
+        }
+        // The same rule where the guide names `grant_access`, outside this section, in the words of the tool's own
+        // refusal (`OwnerTools.grantNotSigned`): the pool, a grant signed for an agent on that server, and a copy that
+        // the server's vault holds already. The guide sends every other secret to the app.
+        let gives: String = "`grant_access` gives an agent something that the fleet already holds. On a fleet with "
+            + "a central vault, it refuses a give of a secret when the hub's reading of the vault shows that the value "
+            + "would reach no server: the secret is not in the grantable pool, the owner signed no grant of it for an "
+            + "agent on that agent's server, and that server's vault holds no copy of it. The owner gives such a "
+            + "secret to an agent in the app, on Secrets (see \"A new login or a new API key\")."
+        #expect(guide.contains(gives))
+        for part in ["this secret is not in the pool", "the owner signed no grant of it for this agent's server",
+                     "that server's vault holds no copy of it", "nothing was sent",
+                     "The owner gives the secret to the agent in the Founderizer app, on Secrets: the app signs the "
+                        + "grant and writes it into the list, and nothing more is needed from here then.",
+                     "If the owner put the secret into the grantable pool a moment ago, call grant_access again in a "
+                        + "minute"] {
+            #expect(OwnerTools.grantNotSigned.contains(part), "the refusal lost: \(part)")
+        }
+        // The agent cannot see whether a value reached a server, so no sentence leads it to take back a grant that
+        // can work, and the refusal asks for a second call only for the pool, because the app's own give writes the
+        // grant into the list itself.
+        for never in ["takes such a grant back", "If the owner signed it there a moment ago"] {
+            #expect(!guide.contains(never) && !OwnerTools.grantNotSigned.contains(never), "still said: \(never)")
+        }
+        // No sentence says that an agent can read a login, or that the tool gives a secret to one.
+        for never in ["can read a login", "reads a login", "gives the secret to an agent", "gives it to the agent"] {
+            #expect(!guide.contains(never), "the guide says: \(never)")
+        }
+
+        // **The guide's words of the tool are the tool's own.** The value's form is the description's sentence, the
+        // endings of a key's name are the tool's list, and each of the four refusals begins as the guide says it.
+        #expect(section.contains("The value is \(SaveSecret.valueForm)."))
+        #expect(SaveSecret.tool.description.contains("The value is \(SaveSecret.valueForm)."))
+        #expect(section.contains("with \(SaveSecret.listed(SaveSecret.keySuffixes)) at its end"))
+        for (refusal, said) in [(SaveSecret.noPin, "This Mac pinned no key of the central vault yet"),
+                                (SaveSecret.otherKey, "The central vault answers with another key than the one "
+                                    + "that this Mac pinned"),
+                                (SaveSecret.noRecovery, "The central vault holds no recovery key yet"),
+                                (SaveSecret.held, "The list has a secret of this name already")] {
+            #expect(refusal.hasPrefix(said))
+            #expect(section.contains("- It says that \(said.prefix(1).lowercased())\(said.dropFirst()):"))
+        }
+        #expect(SaveSecret.noPin.contains("The owner sets up Founderizer Vault in the app on this Mac."))
+        #expect(SaveSecret.otherKey.contains("save nothing until the owner knows why: do not set the vault up again "
+                                             + "to get past this"))
+        #expect(SaveSecret.noRecovery.contains("The owner finishes Founderizer Vault's setup in the app."))
+        #expect(SaveSecret.held.contains("save_secret saves only a new one: the owner replaces a secret in "
+                                         + "Founderizer, on Secrets."))
+        #expect(SaveSecret.noSeedYet.contains("in Founderizer, on Secrets, with Add 2FA code"))
+        // The words of the app that the section names are words of the app's own table.
+        let table = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Localization/Localizable.xcstrings")
+        let strings = try JSONSerialization.jsonObject(with: Data(contentsOf: table)) as? [String: Any]
+        let keys = Set((strings?["strings"] as? [String: Any] ?? [:]).keys)
+        for word in ["Secrets", "Add 2FA code", "Founderizer Vault"] {
+            #expect(keys.contains(word), "the app has no words \(word) any more")
+            #expect(section.contains(word))
+        }
+
+        // **The rule of the one line end is the tool's own** (`SaveSecret.value(of:line:)`): one line end at the very
+        // end of a file's or a pipe's text goes, and nothing else does; the clipboard's text is taken as it is.
+        let made = "example-value"
+        #expect(SaveSecret.value(of: made + "\n", line: true) == made)
+        #expect(SaveSecret.value(of: made + "\r\n", line: true) == made)
+        #expect(SaveSecret.value(of: made, line: false) == made)
+        #expect(SaveSecret.value(of: made + "\n", line: false) == nil)
+        for refused in [" " + made, made + " ", made + "\t", made + "\n\n", made + "\n" + made] {
+            #expect(SaveSecret.value(of: refused, line: true) == nil)
+            #expect(SaveSecret.value(of: refused, line: false) == nil)
+        }
+
+        // **Each example call of the guide is a call that the tool takes**: read from the guide's own text, with a
+        // made-up word in the place of each word in angle brackets.
+        let calls = try NSRegularExpression(pattern: "`~/\\.founderizer/cli write save_secret '(\\{[^'\\n]*\\})'`")
+        let whole = text as NSString
+        let examples = calls.matches(in: text, range: NSRange(location: 0, length: whole.length)).map {
+            whole.substring(with: $0.range(at: 1))
+        }
+        #expect(examples.count == 3)
+        let id = "00000000-0000-4000-8000-000000000001"
+        var plans: [SaveSecret.Plan] = []
+        for example in examples {
+            var json = example
+            for (mark, word) in [("<VARIABLE_NAME>", "EXAMPLE_API_KEY"),
+                                 ("<the address of its sign-in page>", "https://example.com/login"),
+                                 ("<the user name>", "owner@example.com"), ("<the id of that answer>", id)] {
+                json = json.replacingOccurrences(of: mark, with: word)
+            }
+            #expect(!json.contains("<"), "an example has a word in angle brackets that this test does not know")
+            let fields = try #require(JSONValue.parse(json)?.object)
+            // No example has a field named like a value: a value is never a field.
+            #expect(!fields.keys.contains(where: OwnerLinkTools.namedLikeAValue))
+            switch SaveSecret.plan(fields, standardInputFree: true, newID: { id }) {
+            case .success(let plan): plans.append(plan)
+            case .failure(let refusal): Issue.record("the tool refuses the guide's example: \(refusal.text)")
+            }
+        }
+        try #require(plans.count == 3)
+        // A new API key and a new login from the clipboard, and a read of a save's state.
+        #expect(plans[0].source == .clipboard && plans[0].send["kind"] == .string("api_key")
+                && plans[0].send["env"] == .string("EXAMPLE_API_KEY") && plans[0].made == id)
+        #expect(plans[1].source == .clipboard && plans[1].send["kind"] == .string("login")
+                && plans[1].send["username"] == .string("owner@example.com"))
+        #expect(plans[2] == SaveSecret.Plan(send: ["request_id": .string(id)], source: nil, made: nil))
     }
 
     /// **Each page title and each button that the guide names is a word of the app's own table** (`Localizable.xcstrings`):

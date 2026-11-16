@@ -441,6 +441,57 @@ struct SecretTests {
         #expect(sent.count == 2 && sent[0]["address"] as? String == "https://api.example.test" && !sent[1].keys.contains("address"))
     }
 
+    /// The owner's choice C42: a secret that the central vault would never take is refused before anything is sent, with
+    /// its sentence. A value with no fingerprint (fewer than 8 characters, or white space, also one newline at its end)
+    /// and an address on an AI provider's own sign-in site, for a login and for an API key. Nothing of a value is cut.
+    @Test func aSecretThatTheCentralVaultNeverTakesIsRefusedBeforeAnythingIsSent() throws {
+        let noPrint = "The central vault takes a value only with a fingerprint, and this one has none: it has fewer than "
+            + "8 characters or holds white space. Nothing was sent."
+        let loginSite = "This address is an AI provider's own sign-in site, and Founderizer Vault keeps no login for it: "
+            + "you sign in there with your own account. Nothing was sent."
+        let keySite = "This service address is an AI provider's own sign-in site, and Founderizer Vault takes no key with "
+            + "it. Give the address of the service's API, or no service address. Nothing was sent."
+        func key(_ change: (inout LoginSecret) -> Void = { _ in }) -> LoginSecret {
+            var value = LoginSecret()
+            value.kind = .apiKey; value.env = "EXAMPLE_API_KEY"; value.password = "sk-synthetic-CANARY-9d2f"
+            change(&value)
+            return value
+        }
+        let good = login { $0.password = "synthetic-pass-phrase-9d2f" }
+        #expect(key().problem == nil && key().vaultProblem == nil && good.vaultProblem == nil)
+        #expect(login().vaultProblem == noPrint)                         // the helper's pass phrase has spaces
+        for password in ["short", "1234567", "sk-with space-9d2f", "sk-synthetic-CANARY-9d2f\n", "\tsk-synthetic-CANARY-9d2f",
+                         "sk-synthetic-CANARY-9d2f\u{1d}"] {
+            #expect(key { $0.password = password }.vaultProblem == noPrint, "\(password.debugDescription)")
+            #expect(login { $0.password = password }.vaultProblem == noPrint, "\(password.debugDescription)")
+            #expect(!(key { $0.password = password }.vaultProblem ?? "").contains(password))
+        }
+        // nothing of the value is cut: the item that a save would seal keeps its newline
+        let pasted = try #require(try JSONSerialization.jsonObject(with: key { $0.password = "sk-synthetic-CANARY-9d2f\n" }
+            .value()) as? [String: String])
+        #expect(pasted["password"] == "sk-synthetic-CANARY-9d2f\n")
+        #expect(key { $0.password = "12345678" }.vaultProblem == nil)                    // eight characters are enough
+        #expect(login { $0.password = "short"; $0.totp = "JBSWY3DPEHPK3PXP" }.vaultProblem == nil)    // the seed has one
+        #expect(key { $0.password = "" }.vaultProblem == nil && key { $0.password = "" }.problem != nil)   // problem first
+        // an AI provider's own sign-in site: a login that Fleet never uses, and a key with an address it never takes
+        #expect(login { $0.password = "synthetic-pass-phrase-9d2f"; $0.url = "https://claude.ai/login" }.vaultProblem == loginSite)
+        #expect(login { $0.password = "synthetic-pass-phrase-9d2f"; $0.url = "https://WWW.ChatGPT.com/" }.vaultProblem == loginSite)
+        #expect(key { $0.url = "https://x.ai/api" }.vaultProblem == keySite)
+        #expect(key { $0.url = "https://console.x.ai" }.vaultProblem == keySite)
+        for url in ["", "https://api.x.ai/v1", "https://platform.claude.com/settings/keys", "https://platform.openai.com/api-keys",
+                    "https://api.example.test"] {
+            #expect(key { $0.url = url }.vaultProblem == nil, "\(url)")
+        }
+        #expect(login { $0.password = "synthetic-pass-phrase-9d2f"; $0.url = "https://platform.claude.com/login" }.vaultProblem == nil)
+        // the copy of the vault's two lists answers each host of the shared file as vault.py does
+        // (test_key_table.ProviderSites holds the file to vault.provider_site)
+        let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("provider-sites.json")
+        let read = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        let hosts = try #require(read["hosts"] as? [String: Bool])
+        #expect(hosts.count >= 20)
+        for (host, expected) in hosts { #expect(ProviderSites.contains(host: host) == expected, "\(host)") }
+    }
+
     @Test func saltsReceiptsAndTheCatalogAreChecked() throws {
         func salts(_ fields: [String: String]) throws -> SecretSalts { try JSONDecoder().decode(SecretSalts.self, from: JSONSerialization.data(withJSONObject: fields)) }
         let good = try salts(["login": reference, "password": String(repeating: "1", count: 32), "totp": String(repeating: "2", count: 32)])

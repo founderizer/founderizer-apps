@@ -26,7 +26,17 @@ public struct PendingRequest: Codable, Equatable, Sendable {
     public fileprivate(set) var text: String
     public let createdAt: Date
     public let client: String
+    /// Set when the request was refused: **the mark that it waits for the owner's Discard or Try again**, and the words
+    /// that an older version of the app kept for it, "Hub refused the request (409): ..." in English, which
+    /// `HubError.refusalStatus(in:)` reads back. A version that has `hubRefusal` writes both (`refuse(_:)`), so that
+    /// every reader of the mark, the iPhone's among them, stands as it did. Read the refusal through `refusedByHub`.
     public var refusal: String?
+    /// **The hub's refusal of this request as fields** (the design `hub-refusal-words-design.md`): its status, its English
+    /// line, its code and its names, as `HubRefusal` has them. The app's words for it are made when the owner reads
+    /// them, in the language of that day, and never kept: a refusal that was written in Spanish could not be read
+    /// back by its prefix, and a hub's English line must stay the hub's. nil for a request that was never refused and
+    /// for one that an older version refused (its words are in `refusal`).
+    public var hubRefusal: HubRefusal?
 
     public init(hub: URL, database: String, client: String, needID: Int? = nil, choice: Int? = nil, choices: [Int]? = nil, recipient: String? = nil, replacesRequestID: String? = nil, command: OwnerCommand? = nil, attachments: [Int] = [], approval: (statement: String, signature: String)? = nil, text: String) {
         requestID = UUID()
@@ -65,6 +75,30 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         createdAt = try saved.decode(Date.self, forKey: .createdAt)
         client = try saved.decode(String.self, forKey: .client)
         refusal = try saved.decodeIfPresent(String.self, forKey: .refusal)
+        // A request that an older version of the app saved has its refusal in `refusal`, as text.
+        hubRefusal = try saved.decodeIfPresent(HubRefusal.self, forKey: .hubRefusal)
+    }
+
+    /// The hub refused this request: its fields, and the English text that older readers and the mark `refusal` stand on.
+    public mutating func refuse(_ refusal: HubRefusal) {
+        hubRefusal = refusal
+        self.refusal = HubError.refusalText(refusal)
+    }
+
+    /// **The hub's refusal of this request, as the apps read it**: the fields where this version wrote them, else the
+    /// text that an older version kept, read back by its English prefix (`HubError.refusalStatus(in:)`); nil for a
+    /// request that was never refused and for words that are the app's own (a door card's refusal, registered login
+    /// text), which no status stands in front of.
+    public var refusedByHub: HubRefusal? {
+        if let hubRefusal { return hubRefusal }
+        guard let refusal, let status = HubError.refusalStatus(in: refusal) else { return nil }
+        return HubRefusal(status: status, hubWords: HubError.refusalWords(in: refusal) ?? refusal)
+    }
+
+    /// The refusal as one line for a screen, "Hub refused the request (409): ..." in the language of the device, with the
+    /// app's words for the hub's code where it has them; for words that no status stands in front of, those words.
+    public var refusalLine: String? {
+        refusedByHub.map { HubError.refusal($0).localizedDescription } ?? refusal
     }
 
     public var route: String { command?.route ?? needID.map { "ui/needs/\($0)" } ?? "ui/messages" }

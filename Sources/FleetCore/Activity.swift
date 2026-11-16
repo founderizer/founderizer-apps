@@ -112,20 +112,29 @@ extension HubState {
     /// that waited for his answer for 8 days left the board.
     public func activity(agent: String?, period: ActivityPeriod, calendar: Calendar = .current) -> [ActivityColumn: [FleetTask]] {
         let start = period.start(now: Date(timeIntervalSince1970: time), calendar: calendar)?.timeIntervalSince1970 ?? -.infinity
-        let held = Set((holds ?? []).filter { $0.state != "released" }.map(\.task))
-        let limited = Set(agents.filter { $0.limit != nil }.map(\.name))
-        let owner = ownerOnly, waits = ownerWaits, subtasks = subtaskWaits
+        let waits = ownerWaits, column = taskColumns
         var columns: [ActivityColumn: [FleetTask]] = [:]
         for task in tasks where (agent == nil || task.owner == agent) && (task.activityTime >= start || waits[task.id] != nil) {
-            let column = task.activityColumn(held: held.contains(task.id) || limited.contains(task.owner), needsOwner: owner.contains(task.id),
-                                             waitsForSubtasks: subtasks[task.id] != nil)
-            columns[column, default: []].append(task)
+            columns[column[task.id] ?? .waiting, default: []].append(task)
         }
         var sorted = columns.mapValues { $0.sorted { ($0.activityTime, $0.id) > ($1.activityTime, $1.id) } }
         if let waiting = sorted[.waiting] {
             sorted[.waiting] = waiting.filter { waits[$0.id] != nil } + waiting.filter { waits[$0.id] == nil }
         }
         return sorted
+    }
+
+    /// **Each task's column on the board**, by task: one reading of the holds, the usage limits, what only the owner
+    /// can move and the open subtasks, for the board's tasks and for the things that he asked for (`asks`), so that a
+    /// card of several tasks stands where its tasks stood.
+    var taskColumns: [Int: ActivityColumn] {
+        let held = Set((holds ?? []).filter { $0.state != "released" }.map(\.task))
+        let limited = Set(agents.filter { $0.limit != nil }.map(\.name))
+        let owner = ownerOnly, subtasks = subtaskWaits
+        return Dictionary(tasks.map { task in
+            (task.id, task.activityColumn(held: held.contains(task.id) || limited.contains(task.owner), needsOwner: owner.contains(task.id),
+                                          waitsForSubtasks: subtasks[task.id] != nil))
+        }) { first, _ in first }
     }
 
     /// The tasks that only the owner can move, by id: an outcome that is not known, a stop that was not confirmed.
@@ -230,9 +239,26 @@ public struct EndedTasks: Sendable {
     public struct Group: Identifiable, Sendable {
         public let title: String
         public let tasks: [FleetTask]
+        /// For the row of one thing that he asked for: the agent that he asked. nil for every other row.
+        public let agent: String?
         /// Its oldest task: a run that ends later joins the row at its head, and the row he opened stays open.
         public var id: Int { tasks[tasks.count - 1].id }
-        public var owner: String { tasks[0].owner }
+        public var owner: String { agent ?? tasks[0].owner }
+
+        init(title: String, tasks: [FleetTask], agent: String? = nil) {
+            self.title = title
+            self.tasks = tasks
+            self.agent = agent
+        }
+    }
+
+    /// One result that he must see: a task, under its own title and agent, or one thing that he asked for, under its
+    /// name and the agent that he asked, with the task of it whose result did not succeed.
+    public struct Failed: Identifiable, Sendable {
+        public let title: String
+        public let owner: String
+        public let task: FleetTask
+        public var id: Int { task.id }
     }
 
     /// One calendar day of this Mac, by its first moment, with its rows, newest first.
@@ -244,6 +270,8 @@ public struct EndedTasks: Sendable {
 
     /// The results that are not a success, newest first: failed, rejected, not accepted.
     public let failed: [FleetTask]
+    /// The same results as rows: a task, or the thing that he asked for whose task it is (`Failed`).
+    public let failedRows: [Failed]
     /// Every other ended task, newest day first.
     public let days: [Day]
     /// How many tasks `days` holds.
@@ -251,16 +279,47 @@ public struct EndedTasks: Sendable {
 
     /// `tasks`: the Ended column, newest first.
     public init(_ tasks: [FleetTask], calendar: Calendar = .current) {
-        failed = tasks.filter(\.endedBadly)
-        let others = tasks.filter { !$0.endedBadly }
+        self.init(items: tasks.map(BoardItem.task), calendar: calendar)
+    }
+
+    /// `items`: the Ended column of the board for all agents, newest first (`HubState.board`). **One thing that he
+    /// asked for is one row**: among the results that he must see when the task that has its last word did not
+    /// succeed (`Ask.failed`), else behind "more" on the day that it ended, where the row opens its tasks
+    /// as the row of a schedule's runs does. It counts as one in `rest`.
+    public init(items: [BoardItem], calendar: Calendar = .current) {
+        var failedRows: [Failed] = [], others: [BoardItem] = []
+        for item in items {
+            switch item {
+            case .task(let task):
+                if task.endedBadly { failedRows.append(Failed(title: task.title, owner: task.owner, task: task)) } else { others.append(item) }
+            case .ask(let ask):
+                if let task = ask.failed { failedRows.append(Failed(title: ask.title, owner: ask.agent, task: task)) } else { others.append(item) }
+            }
+        }
+        self.failedRows = failedRows
+        failed = failedRows.map(\.task)
         rest = others.count
         var days: [Day] = []
-        var day: (start: Double, tasks: [FleetTask])?
-        func close() { if let day { days.append(Day(start: day.start, groups: Self.groups(day.tasks))) } }
-        for task in others {
-            let start = calendar.startOfDay(for: Date(timeIntervalSince1970: task.activityTime)).timeIntervalSince1970
+        var day: (start: Double, items: [BoardItem])?
+        func close() {
+            guard let day else { return }
+            var tasks: [FleetTask] = [], groups: [Group] = []
+            for item in day.items {
+                switch item {
+                case .task(let task): tasks.append(task)
+                case .ask(let ask): groups.append(Group(title: ask.title, tasks: ask.tasks, agent: ask.agent))
+                }
+            }
+            // With no thing that he asked for, the rows are the day's own, in their order, as before.
+            let rows = groups.isEmpty ? Self.groups(tasks) : (Self.groups(tasks) + groups).sorted {
+                ($0.tasks[0].activityTime, $0.tasks[0].id) > ($1.tasks[0].activityTime, $1.tasks[0].id)
+            }
+            days.append(Day(start: day.start, groups: rows))
+        }
+        for item in others {
+            let start = calendar.startOfDay(for: Date(timeIntervalSince1970: item.activityTime)).timeIntervalSince1970
             if day?.start != start { close(); day = (start, []) }
-            day?.tasks.append(task)
+            day?.items.append(item)
         }
         close()
         self.days = days

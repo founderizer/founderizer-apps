@@ -23,7 +23,7 @@ public enum ConnectedApps {
         if error is URLError || error is CancellationError { return true }
         switch error as? HubError {
         case .unavailable?: return true
-        case .refusal(let status, _)?: return status >= 500 || status == 408 || status == 429
+        case .refusal(let refused)?: return refused.status >= 500 || refused.status == 408 || refused.status == 429
         default: return false
         }
     }

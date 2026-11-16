@@ -205,10 +205,23 @@ final class FleetCloudModel {
     private func tell() { onState?(stage, stopped, use, provider) }
     /// "Servers in another project?": the next token replaces the one this Mac holds for Hetzner.
     private(set) var anotherProject = false
+    /// **The provider took this Mac's token in this run of the page** (`sendToken`, or `open` with the token that this
+    /// Mac holds): the page never asks for it again, whatever stops later, until the provider refuses the token itself,
+    /// Back ends the page (`cancel`), or "Servers in another project?" asks for another one (the owner, 15 November
+    /// 2026: "it goes back to the Hetzner Token page to show the error message, and asks for the token again!! when it
+    /// is already there!").
+    private(set) var tokenTaken = false
+    /// The offers that the provider refused as taken in this run (`CloudError.taken`), by `CloudOffer.key`: the list
+    /// that is read next offers the next free server, of any size that fits, also when it costs more.
+    private var taken: Set<String> = []
     private var work: Task<Void, Never>?
 
     /// How long a new server has to join the private network after it was made, and how often it is looked for.
     static let joinWithin = 300.0, lookEvery = 5.0
+    /// **A list that could not be read is read again by itself**, a minute apart, at most this many times: a
+    /// provider's free servers come and go by the minute (Hetzner, 5 November 2026: none free at 15:52, free again at
+    /// 16:00), and the page has no press for it (AGENTS.md: what can run by itself runs under the hood).
+    static let readsAgain = 30, readAgainAfter = Duration.seconds(60)
 
     /// Where each provider makes the token, for the step's one link.
     static func tokenPage(_ provider: CloudProvider) -> URL {
@@ -230,7 +243,7 @@ final class FleetCloudModel {
         guard work == nil, !token.isEmpty else { return }
         listing += 1
         failure = nil; stopped = nil; self.provider = provider; self.use = use; anotherProject = false
-        offer = nil; existing = []; chosen = nil; stage = .choosing
+        offer = nil; existing = []; chosen = nil; taken = []; stage = .choosing
         work = Task { [weak self] in
             guard let self else { return }
             defer { if !Task.isCancelled { work = nil } }
@@ -242,6 +255,7 @@ final class FleetCloudModel {
                 return
             }
             guard !Task.isCancelled else { return }
+            tokenTaken = true
             await read(provider, use: use)
         }
     }
@@ -251,8 +265,8 @@ final class FleetCloudModel {
     func open(_ provider: CloudProvider, use: CloudServerUse) {
         guard work == nil else { return }
         listing += 1
-        failure = nil; stopped = nil; self.provider = provider; self.use = use
-        offer = nil; existing = []; chosen = nil; stage = .choosing
+        failure = nil; stopped = nil; self.provider = provider; self.use = use; tokenTaken = true
+        offer = nil; existing = []; chosen = nil; taken = []; stage = .choosing
         work = Task { [weak self] in
             guard let self else { return }
             defer { if !Task.isCancelled { work = nil } }
@@ -263,26 +277,47 @@ final class FleetCloudModel {
     /// The new server's offer and the account's servers, read together. A list that cannot be read leaves the new
     /// server alone, which is the step as it was before the list.
     ///
+    /// **A list that cannot be read keeps the page the server's**, with the line of why: the token's own refusal asks
+    /// for a token again, and anything else (no server free now, no network, a provider that asks to wait) is read
+    /// again by itself (`readsAgain`), while the title's words move. A line that a stopped build left stands until
+    /// the next read gives another one or the next press.
+    ///
     /// **A read that `cancel` ended writes nothing more** (Back while the token or the list is read): its page is
     /// gone, and the model is the next try's. It wrote the failure of a request that Back itself had ended, which
     /// the next page showed as its own line, and which `stopped` gave the app's own program as a stop.
     private func read(_ provider: CloudProvider, use: CloudServerUse) async {
         let servers = CloudServers(provider: provider)
-        async let listed = try? servers.servers()
-        do {
-            let offer = try await servers.offer(use: use)
+        for round in 0...Self.readsAgain {
+            if round > 0 { try? await Task.sleep(for: Self.readAgainAfter) }
             guard !Task.isCancelled else { return }
-            self.offer = offer
-            let existing = await listed ?? []
-            guard !Task.isCancelled else { return }
-            self.existing = existing
-        } catch {
-            _ = await listed
-            guard !Task.isCancelled else { return }
-            failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            stopped = .choosing
-            stage = .token
+            async let listed = try? servers.servers()
+            do {
+                let offer = try await servers.offer(use: use, except: taken)
+                guard !Task.isCancelled else { return }
+                // A line of this read's own earlier round says nothing true any more.
+                if round > 0 { failure = nil; stopped = nil }
+                self.offer = offer
+                let existing = await listed ?? []
+                guard !Task.isCancelled else { return }
+                self.existing = existing
+                return
+            } catch {
+                _ = await listed
+                guard !Task.isCancelled else { return }
+                failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                // The token's own refusal is the stop of the token, as a refusal of the paste is.
+                if CloudStop.refusesToken(error) {
+                    stopped = .token
+                    tokenTaken = false
+                    stage = .token
+                    return
+                }
+                stopped = .choosing
+            }
         }
+        // Read again as often as it may: the page stops looking, with its line and no moving title, until the next
+        // press on the provider's card opens the list again.
+        stage = .token
     }
 
     /// The account's server chosen in the list, or nil for the new one.
@@ -299,7 +334,9 @@ final class FleetCloudModel {
         failure = nil; stopped = nil; stage = .making
         work = Task { [weak self] in
             guard let self else { return }
-            defer { work = nil }
+            // A build that `cancel` ended leaves `work` to the next try, which can start before this one returns: a
+            // stopped build reads the list again here (`read`).
+            defer { if !Task.isCancelled { work = nil } }
             await build(provider, use: use, offer: offer, hub: hub, made: made, then: install)
         }
     }
@@ -321,7 +358,8 @@ final class FleetCloudModel {
     func askAnotherProject() {
         guard work == nil else { return }
         listing += 1
-        anotherProject = true; failure = nil; stopped = nil; offer = nil; existing = []; chosen = nil; stage = .token
+        anotherProject = true; tokenTaken = false; taken = []
+        failure = nil; stopped = nil; offer = nil; existing = []; chosen = nil; stage = .token
     }
 
     /// **The server, made with nothing typed**: a name no device of the network has, this Mac's own SSH key, a join key
@@ -338,6 +376,8 @@ final class FleetCloudModel {
         // The stage that this build reached, for `stopped`: `stage` itself is `token` again once `cancel` ended its page.
         var reached = Stage.making
         var kept: BuildRecord?
+        // What stopped the build, when a step of it failed (not a server that did not join).
+        var stoppedBy: Error?
         func keep() { if let kept { BuildRecords.shared.write(kept) } }
         do {
             let name = FleetOnTailscale.freeName(in: await MacNetwork.status() ?? "{}")
@@ -393,12 +433,28 @@ final class FleetCloudModel {
             failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             // What the call for the server left at the provider, when it is the call that failed.
             kept?.callEnded(with: error)
+            stoppedBy = error
         }
         // No join that this Mac saw: the build stopped, or its page ended it. Nothing is kept of a try that stopped
         // before the call for its server began.
         kept?.end(cancelled: Task.isCancelled)
         keep()
         stopped = reached
+        // **A stop after the provider took the token never asks for it again** (the owner, 15 November 2026). When this
+        // try left nothing at the provider, the page is the choice again, read anew, with this stop's line over its
+        // press: the next free server, with its price, when the one shown was taken meanwhile. A server that was made,
+        // a provider's refusal (which can be its own fault answer, with the server made all the same), a call whose end
+        // is not known, and a thing that the app could not delete stay at `token`, where the page shows the line alone
+        // (`CloudStop.readsListAgain`).
+        if !Task.isCancelled, reached == .making, let error = stoppedBy, CloudStop.readsListAgain(after: error, called: kept != nil) {
+            if case CloudError.taken = error { taken.insert(offer.key) }
+            listing += 1
+            self.offer = nil; existing = []; chosen = nil
+            stage = .choosing
+            await read(provider, use: use)
+            return
+        }
+        if let error = stoppedBy, CloudStop.refusesToken(error) { tokenTaken = false }
         stage = .token
     }
 
@@ -406,7 +462,7 @@ final class FleetCloudModel {
     func cancel() {
         listing += 1
         work?.cancel(); work = nil; failure = nil; stopped = nil; stage = .token; provider = nil; tokenText = ""
-        offer = nil; existing = []; chosen = nil; anotherProject = false
+        offer = nil; existing = []; chosen = nil; anotherProject = false; tokenTaken = false; taken = []
     }
 }
 

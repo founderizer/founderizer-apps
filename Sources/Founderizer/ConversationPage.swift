@@ -104,13 +104,25 @@ struct ConversationPage: View {
                                             : nil))
             case "agent":
                 .message(ReadChatMessage(id: item.id, ours: true, who: .agent(agent), text: item.text, markdown: false,
-                                         created: item.created,
-                                         under: item.delivery.map { AnyView(ConversationDeliveryLine(store: store, delivery: $0, app: head?.app)) }))
+                                         created: item.created, under: agentUnder(item)))
             default:
                 .note(ReadChatNote(id: item.id, created: item.created, symbol: Self.symbol(item),
                                    who: item.said(person: person, agent: agent), state: item.actionState, text: item.text))
             }
         }
+    }
+
+    /// Under the agent's words: the files that it sent with them (CHAT-APPS.md 20; the owner's "Yes, build it" of 15
+    /// November 2026), drawn as his own files are drawn, and how the words were delivered.
+    private func agentUnder(_ item: ConversationItem) -> AnyView? {
+        let files = item.attachments ?? []
+        guard !files.isEmpty || item.delivery != nil else { return nil }
+        return AnyView(VStack(alignment: .trailing, spacing: 8) {
+            if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .trailing, keeps: false) }
+            if let delivery = item.delivery {
+                ConversationDeliveryLine(store: store, delivery: delivery, app: head?.app)
+            }
+        })
     }
 
     /// The mark of a line in the middle: his own answer, or what the agent asked him for.

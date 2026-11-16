@@ -111,7 +111,7 @@ enum DoorCallSigning {
             } catch let newer as DoorModeCommand.Newer where attempt == 0 {
                 newest = max(newer.at, newest ?? newer.at)
             } catch let newer as DoorModeCommand.Newer {
-                throw HubError.refusal(409, newer.words)
+                throw HubError.refusal(HubRefusal(status: 409, hubWords: newer.words))
             }
         }
         throw ModeFailure.clock

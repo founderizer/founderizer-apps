@@ -530,8 +530,8 @@ struct AccessSettings: View {
                 return String(l10n: "Founderizer cannot give this kind yet.")
             }
             return nil
-        } catch let HubError.refusal(_, words) {
-            return words
+        } catch let HubError.refusal(refused) {
+            return refused.words
         } catch let stop as GrantSigning.Stop {
             return stop.errorDescription ?? String(l10n: "The hub did not take this change. Try again.")
         } catch {

@@ -139,7 +139,7 @@ struct MachineAccessRecord: View {
                     message = (String(l10n: "The fleet reaches \(machine) as \(form.trimmedUser) from now on."), false)
                     asking = false
                     break
-                } catch HubError.refusal(409, _) where attempt == 1 {
+                } catch let error as HubError where error.conflict && attempt == 1 {
                     current = try await client.team(hub: hub, database: db)
                     team = current
                 }
@@ -149,7 +149,8 @@ struct MachineAccessRecord: View {
     }
 
     private static func reason(_ error: Error) -> String {
-        if case HubError.refusal(_, let text) = error {
+        if case HubError.refusal(let refused) = error {
+            let text = refused.words
             return String(l10n: "Not done. The hub said: \(text.hasSuffix(".") ? text : text + ".")")
         }
         if error is URLError { return unanswered }

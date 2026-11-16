@@ -429,15 +429,106 @@ struct CloudServersTests {
         #expect(second.location == "ams3")
         #expect(busy.calls("POST", "/v2/account/keys").isEmpty)
         #expect(busy.calls("POST", "/v2/droplets").compactMap { $0.object?["ssh_keys"] as? [Int] } == [[512189], [512189]])
-        // When no region can, DigitalOcean's own words say why.
+        // When no region can, DigitalOcean's own words say why: the six regions of the smallest size, then the two of
+        // the next size up.
         let none = Self.digitalOcean()
         none.clear("POST", "/v2/droplets")
         none.answer("POST", "/v2/droplets", 422, "{\"id\":\"unprocessable_entity\",\"message\":\"Size is not available in this region.\"}")
         await #expect(throws: CloudError.refused(.digitalOcean, "Size is not available in this region.")) {
             try await Self.make(.digitalOcean, none)
         }
-        #expect(none.calls("POST", "/v2/droplets").count == 6)
+        #expect(none.calls("POST", "/v2/droplets").count == 8)
         #expect(!none.calls.contains { $0.method == "DELETE" })
+    }
+
+    /// The owner, 15 November 2026: "it should still show some servers even if more expensive". DigitalOcean offered
+    /// its one smallest size only, and nothing when that size was not free near the Mac.
+    @Test func digitalOceanOffersTheNextSizeUpWhenTheSmallestIsNotFree() async throws {
+        let ocean = ProviderStandIn()
+        ocean.answer("GET", "/v2/sizes", 200, "{\"sizes\":["
+                     + "{\"slug\":\"s-1vcpu-512mb-10gb\",\"memory\":512,\"vcpus\":1,\"disk\":10,\"price_monthly\":4,"
+                     + "\"regions\":[\"fra1\"],\"available\":true},"
+                     + "{\"slug\":\"s-1vcpu-1gb\",\"memory\":1024,\"vcpus\":1,\"disk\":25,\"price_monthly\":6,"
+                     + "\"regions\":[\"fra1\"],\"available\":false},"
+                     + "{\"slug\":\"gpu-h100x1-80gb\",\"memory\":245760,\"vcpus\":20,\"disk\":720,\"price_monthly\":2000,"
+                     + "\"regions\":[\"fra1\"],\"available\":true},"
+                     + "{\"slug\":\"s-2vcpu-2gb\",\"memory\":2048,\"vcpus\":2,\"disk\":60,\"price_monthly\":18,"
+                     + "\"regions\":[\"fra1\",\"ams3\"],\"available\":true},"
+                     + "{\"slug\":\"s-1vcpu-2gb\",\"memory\":2048,\"vcpus\":1,\"disk\":50,\"price_monthly\":12,"
+                     + "\"regions\":[\"nyc3\",\"ams3\"],\"available\":true}]}")
+        let servers = Self.servers(.digitalOcean, ocean)
+        // Too small, not free and a GPU are left out: the cheapest that fits, nearest first (Amsterdam for Berlin).
+        let hub = try await servers.offer(use: .hub)
+        #expect(hub.type == "s-1vcpu-2gb" && hub.location == "ams3" && hub.monthlyPrice == 12)
+        // That one taken in Amsterdam: the same size in New York, then the next size up.
+        let next = try await servers.offer(use: .hub, except: [hub.key])
+        #expect(next.type == "s-1vcpu-2gb" && next.location == "nyc3")
+        let up = try await servers.offer(use: .hub, except: [hub.key, next.key])
+        #expect(up.type == "s-2vcpu-2gb" && up.location == "fra1" && up.monthlyPrice == 18)
+        await #expect(throws: CloudError.noRoom(.digitalOcean)) {
+            try await servers.offer(use: .hub, except: [hub.key, next.key, up.key, "s-2vcpu-2gb@ams3"])
+        }
+        #expect(ocean.calls.allSatisfy { $0.method == "GET" }, "reading what would be made makes nothing")
+    }
+
+    /// The size that the owner said yes to, which its region cannot take now: nothing is made, and the page reads the
+    /// next free one (`CloudError.taken`). Another refusal keeps DigitalOcean's own words.
+    @Test func aDropletSizeTakenMeanwhileIsSaidSoAndMakesNothing() async throws {
+        let chosen = CloudOffer(provider: .digitalOcean, type: "s-1vcpu-1gb", location: "fra1", cores: 1, memoryGB: 1,
+                                diskGB: 25, monthlyPrice: 6, currency: "USD")
+        let busy = Self.digitalOcean()
+        busy.clear("POST", "/v2/droplets")
+        busy.answer("POST", "/v2/droplets", 422, "{\"id\":\"unprocessable_entity\",\"message\":\"Size is not available in this region.\"}")
+        await #expect(throws: CloudError.taken(.digitalOcean)) {
+            try await Self.servers(.digitalOcean, busy).createServer(name: "hub-1", use: .hub, publicKey: Self.publicKey,
+                                                                      authKey: Self.authKey, offer: chosen)
+        }
+        #expect(busy.calls("POST", "/v2/droplets").count == 1 && busy.calls("POST", "/v2/firewalls").isEmpty)
+        let limit = Self.digitalOcean()
+        limit.clear("POST", "/v2/droplets")
+        limit.answer("POST", "/v2/droplets", 422, "{\"id\":\"unprocessable_entity\",\"message\":\"creating this droplet will exceed your droplet limit\"}")
+        await #expect(throws: CloudError.refused(.digitalOcean, "creating this droplet will exceed your droplet limit")) {
+            try await Self.servers(.digitalOcean, limit).createServer(name: "hub-1", use: .hub, publicKey: Self.publicKey,
+                                                                       authKey: Self.authKey, offer: chosen)
+        }
+        // With none chosen, such a refusal ends the try at once: no other size or region is asked.
+        let limited = Self.digitalOcean()
+        limited.clear("POST", "/v2/droplets")
+        limited.answer("POST", "/v2/droplets", 422, "{\"id\":\"unprocessable_entity\",\"message\":\"creating this droplet will exceed your droplet limit\"}")
+        await #expect(throws: CloudError.refused(.digitalOcean, "creating this droplet will exceed your droplet limit")) {
+            try await Self.make(.digitalOcean, limited)
+        }
+        #expect(limited.calls("POST", "/v2/droplets").count == 1)
+        // An image that a region lacks is no size taken.
+        let image = CloudCall.Answer(status: 422, object: ["id": "unprocessable_entity", "message": "Image is not available in this region."],
+                                     text: "")
+        #expect(!CloudServers.saysUnavailable(image))
+    }
+
+    /// **What a stop of the server's page leads to** (the owner, 15 November 2026: the page "asks for the token
+    /// again!! when it is already there!"): only the token's own refusal asks for a token, and only a stop that leaves
+    /// nothing at the provider shows the list again with its press.
+    @Test func aStopAsksForTheTokenOnlyWhenTheTokenIsRefused() {
+        let tokens: [CloudError] = [.notAToken(.hetzner), .noToken(.vultr), .tokenNotAccepted(.akamai), .readOnlyToken(.digitalOcean)]
+        for error in tokens { #expect(CloudStop.refusesToken(error)) }
+        let others: [any Error] = [CloudError.noRoom(.hetzner), CloudError.taken(.hetzner), CloudError.unreachable(.hetzner),
+                                   CloudError.rateLimited(.vultr), CloudError.refused(.hetzner, "x"),
+                                   FleetKeyError.fleetKeyEnded, URLError(.timedOut)]
+        for error in others { #expect(!CloudStop.refusesToken(error)) }
+        // After the call for the server: taken, none free, deleted after it did not come up, or asked to wait.
+        let again: [CloudError] = [.taken(.hetzner), .noRoom(.digitalOcean), .notReady(.akamai), .rateLimited(.vultr)]
+        for error in again { #expect(CloudStop.readsListAgain(after: error, called: true)) }
+        // A refusal can be the provider's own fault answer, after which the server can be there: the line alone. So
+        // are a call whose end is not known, what could not be deleted, and the token's refusal.
+        let alone: [any Error] = [CloudError.refused(.digitalOcean, "502 Bad Gateway"), CloudError.unreachable(.hetzner),
+                                  CloudError.notUnderstood(.vultr), CloudError.leftBehind(.hetzner, reason: "x", left: ["y"]),
+                                  CloudError.tokenNotAccepted(.hetzner), URLError(.timedOut)]
+        for error in alone { #expect(!CloudStop.readsListAgain(after: error, called: true)) }
+        // Before the call: anything but the network's own key, which no press on the page can mend.
+        #expect(CloudStop.readsListAgain(after: URLError(.timedOut), called: false))
+        #expect(CloudStop.readsListAgain(after: FleetKeyError.unreachable, called: false))
+        #expect(!CloudStop.readsListAgain(after: FleetKeyError.fleetKeyEnded, called: false))
+        #expect(!CloudStop.readsListAgain(after: FleetKeyError.noFleetKey, called: false))
     }
 
     @Test func aDropletThatFailsIsTakenBackAndTheKeyStays() async throws {
@@ -498,7 +589,7 @@ struct CloudServersTests {
         }
         let all: [CloudError] = [.notAToken(.hetzner), .noToken(.hetzner), .tokenNotAccepted(.digitalOcean), .readOnlyToken(.hetzner),
                                  .readOnlyToken(.digitalOcean), .rateLimited(.hetzner), .unreachable(.hetzner),
-                                 .refused(.hetzner, "x"), .notUnderstood(.digitalOcean), .noRoom(.hetzner), .notReady(.hetzner),
+                                 .refused(.hetzner, "x"), .notUnderstood(.digitalOcean), .noRoom(.hetzner), .taken(.hetzner), .notReady(.hetzner),
                                  .notAServerName, .notAPublicKey, .notAnAuthKey, .leftBehind(.hetzner, reason: "x", left: ["y"]),
                                  .readOnlyToken(.vultr), .readOnlyToken(.akamai), .tokenNotAccepted(.vultr),
                                  .tokenNotAccepted(.akamai), .notAToken(.akamai), .leftBehind(.vultr, reason: "x", left: ["y"])]
@@ -534,15 +625,29 @@ extension CloudServersTests {
             name: "hub-1", use: .hub, publicKey: Self.publicKey, authKey: Self.authKey, offer: chosen)
         #expect(server.location == "nbg1")
         #expect(hetzner.calls("POST", "/v1/servers").count == 1)
-        // One that is no longer free there makes nothing at all, not another one: the owner said yes to that one.
+        // One that is no longer free there makes nothing at all, not another one: the owner said yes to that one. It is
+        // taken, and the page shows him the next free one before anything is made.
         let elsewhere = CloudOffer(provider: .hetzner, type: "cx23", location: "hel1", cores: 2, memoryGB: 4, diskGB: 40,
                                    monthlyPrice: 5, currency: "EUR")
         let gone = Self.hetzner()
-        await #expect(throws: CloudError.noRoom(.hetzner)) {
+        await #expect(throws: CloudError.taken(.hetzner)) {
             try await Self.servers(.hetzner, gone).createServer(name: "hub-1", use: .hub, publicKey: Self.publicKey,
                                                                  authKey: Self.authKey, offer: elsewhere)
         }
         #expect(gone.calls("POST", "/v1/servers").isEmpty && gone.calls("POST", "/v1/firewalls").isEmpty)
+        // Listed as free, and refused as taken when it is asked for: its firewall goes, and nothing else is made.
+        let refused = Self.hetzner()
+        refused.clear("POST", "/v1/servers")
+        refused.answer("POST", "/v1/servers", 412, "{\"error\":{\"code\":\"resource_unavailable\",\"message\":\"unavailable\"}}")
+        await #expect(throws: CloudError.taken(.hetzner)) {
+            try await Self.servers(.hetzner, refused).createServer(name: "hub-1", use: .hub, publicKey: Self.publicKey,
+                                                                    authKey: Self.authKey, offer: chosen)
+        }
+        #expect(refused.calls("POST", "/v1/servers").count == 1)
+        #expect(refused.calls.filter { $0.method == "DELETE" }.map(\.path) == ["/v1/firewalls/77"])
+        // The next offer leaves the taken one out.
+        let next = try await Self.servers(.hetzner, Self.hetzner()).offer(use: .hub, except: [chosen.key])
+        #expect(next.key != chosen.key)
     }
 
     @Test func theServersOfAHetznerProjectAreListedPageByPage() async throws {

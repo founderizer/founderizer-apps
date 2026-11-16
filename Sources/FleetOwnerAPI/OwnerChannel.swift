@@ -20,8 +20,8 @@ import Security
 /// a process id alone and never a path alone (not run with a Developer ID signed build yet). **What this check is worth,
 /// said plainly:** it proves which program calls, not who wanted the call. Each process of the owner's user can start the
 /// program and give it any request, so the safety of the link is in what its tools can do: none of them rents, pays or
-/// presses, and the one that carries a secret (`save_bot_token`) sends it to the hub's route that any process of the
-/// owner's user reaches already.
+/// presses, and the two that carry a secret (`save_bot_token`, `save_secret`) send it to the hub's routes that any
+/// process of the owner's user reaches already.
 ///
 /// **The rule that the tools of later slices rest on.** A check of the peer's signature cannot prove which process writes
 /// on a socket: a parent that shares a socket with a child that became our program writes on it as well. So no tool of

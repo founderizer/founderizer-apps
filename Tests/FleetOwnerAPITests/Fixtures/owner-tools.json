@@ -643,28 +643,33 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Say that the vault of one Linux server swaps keys (on true), or take that word back (on false). Give it only after root ran `hubsetup.py vault --swap` on that server, and take it back when that step is undone: the hub does not check the server. The word changes only what the hub says: the settings check does not count a key that swaps there as a key in the agent's sessions, and the agent's start text says that the variable holds a placeholder. It opens nothing, and no vault reads it.",
+   "description": "The owner's yes or off for the key swap of one Linux server, or neither again. On: the owner's Mac app switches that server's vault on at its next round, also while an agent there reads a key that has a site. Off: the app switches it off, and each session that runs there with a placeholder gets no key until its next start. Rule: neither, and the app goes by the rule, which switches a server on only where no agent reads a key that has a site. The hub's word that the server swaps comes only from the app's own reading of the vault, never from this tool.",
    "feature": null,
    "fields": [
-    "on"
+    "wish"
    ],
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
-     "on": {
-      "type": "boolean"
-     },
      "request_id": {
       "description": "A UUID. Give the same one again only to send a command once more after an answer was lost; otherwise leave it out.",
       "type": "string"
      },
      "server": {
       "type": "string"
+     },
+     "wish": {
+      "enum": [
+       "on",
+       "off",
+       "rule"
+      ],
+      "type": "string"
      }
     },
     "required": [
      "server",
-     "on"
+     "wish"
     ],
     "type": "object"
    },
@@ -673,7 +678,7 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/servers/{server}/key-swap",
-   "what": "the key swap word of this server"
+   "what": "the owner's wish for the key swap of this server"
   },
   {
    "annotations": {
@@ -1503,7 +1508,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Give one agent a resource the fleet already holds, or end that hold with level null: repo:<owner/name> read|write|deploy (deploy also runs its workflows), secret:bws://<uuid> use|read, drive:<email> read|write|write_shared, gmail:<email> read|write|send, tool:<name> use. The grant is the authorization: the agent then does what that access allows, and the hub records who gave what to whom. A repository that the hub's GitHub App does not reach comes back with unreached: the GitHub page where the owner adds it to the App. A server (server:<name> read|fix) is not given here: the owner's app gives each server that carries a business's Tailscale tag to that business's DevOps agent (or the manager while it has none), because it also puts the host's parts in place.",
+   "description": "Give one agent a resource the fleet already holds, or end that hold with level null: repo:<owner/name> read|write|deploy (deploy also runs its workflows), secret:bws://<uuid> use|read, drive:<email> read|write|write_shared, gmail:<email> read|write|send, tool:<name> use. The grant is the authorization: the agent then does what that access allows, and the hub records who gave what to whom. A repository that the hub's GitHub App does not reach comes back with unreached: the GitHub page where the owner adds it to the App. On a fleet with a central vault, the vault sends a secret's value to an agent's server only when the owner signed the secret into the grantable pool, or signed a grant of it in the app for an agent on that server: a give that the hub's reading of the vault shows as neither, for a server whose vault holds no copy of it, is refused and nothing is sent, and the owner gives that secret in the Founderizer app, on Secrets. A give that the reading cannot judge is sent, and an end of a hold (level null) always goes. A server (server:<name> read|fix) is not given here: the owner's app gives each server that carries a business's Tailscale tag to that business's DevOps agent (or the manager while it has none), because it also puts the host's parts in place.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -1538,7 +1543,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "The owner's standing for one resource in the grantable pool: the manager may hand it out itself up to max. Leave max out to take the entry back, so the owner alone gives this resource. It changes no grant of its own.",
+   "description": "The owner's standing for one resource in the grantable pool: the manager may hand it out itself up to max. Leave max out to take the entry back, so the owner alone gives this resource. It changes no grant of its own. On a fleet with a central vault, a standing for a secret is refused, and nothing is sent, when the hub's reading of the vault shows that no give of the manager from it could bring the value to a server (the secret is not in the signed pool, the owner signed no grant of it for a server, and no server's vault holds a copy of it): the owner then sets who may give that secret in the Founderizer app, on Secrets (Who may give it), where the app signs. A standing that the reading cannot judge is sent, and taking the entry back always goes; for a secret, the owner's signed pool statement then stays in the vault until the app ends it.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2974,7 +2979,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Pause, resume, delete, run now or check now one wake-up rule. On an agent's rule with a check, run_now runs the check now and wakes the agent only for what is new, as a scheduled run does; on any other rule it starts the rule's task now. check_now runs the check once and wakes nobody. Read a run's result with fleet_read(page=\"trigger\").",
+   "description": "Pause, resume, delete, run now or check now one wake-up rule. On an agent's rule with a check, run_now runs the check now and wakes the agent only for what is new, as a scheduled run does; on a rule that sends a ready text it sends the text now, also into a person's chat for a reminder, and a one-time one then ends; on any other rule it starts the rule's task now. check_now runs the check once and wakes nobody. Read a run's result with fleet_read(page=\"trigger\").",
    "feature": "triggers",
    "fields": [
     "action"
@@ -3164,5 +3169,5 @@
    "name": "take_backup"
   }
  ],
- "version": "04ab80692f162eef13b41ab3762cd30a03b29c78abc8f03fb661338c7337dc71"
+ "version": "3d499100e8fabe1d0a2cd6d981c9257daf39e4bd74b75c2d49c66601f10c9b4e"
 }

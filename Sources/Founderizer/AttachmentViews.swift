@@ -179,6 +179,9 @@ struct MessageFilesView: View {
     @Bindable var store: FleetStore
     let files: [MessageAttachment]
     var alignment: HorizontalAlignment = .trailing
+    /// The keep presses under each file, for his own files. An agent's file (CHAT-APPS.md 20) shows the file alone:
+    /// the element that he approved has no presses under it.
+    var keeps = true
     @State private var hovered: Int?
 
     var body: some View {
@@ -193,7 +196,7 @@ struct MessageFilesView: View {
                     if let problem = store.fileProblems[file.id] {
                         Text(problem).font(ChatStyle.detail).foregroundStyle(.orange).padding(.vertical, 2)
                     }
-                    KeepFileRow(store: store, file: file, hovered: hovered == file.id)
+                    if keeps { KeepFileRow(store: store, file: file, hovered: hovered == file.id) }
                 }
                 .contentShape(Rectangle())
                 .onHover { over in

@@ -91,7 +91,7 @@ extension HubClient {
         guard let http = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard http.statusCode == 200 else {
             try? FileManager.default.removeItem(at: temporary)
-            throw FleetCopyError.refused(http.statusCode, Self.refusal(at: temporary))
+            throw FleetCopyError.refused(http.statusCode, Self.refusal(at: temporary, status: http.statusCode))
         }
         let folder = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("founderizer-copy-" + UUID().uuidString)
@@ -132,10 +132,9 @@ extension HubClient {
 
     private struct CopyReceipt: Decodable { let ok: Bool; let backup: FleetHealth.Backup }
 
-    /// What the hub said when it refused, from the body it wrote to the download file.
-    private static func refusal(at file: URL) -> String {
-        guard let data = try? Data(contentsOf: file), data.count <= 8192,
-              let body = try? JSONDecoder().decode(ErrorBody.self, from: data) else { return "" }
-        return body.error
+    /// What the hub said when it refused, from the body it wrote to the download file: its words, or "" when it said none.
+    private static func refusal(at file: URL, status: Int) -> String {
+        guard let data = try? Data(contentsOf: file), data.count <= 8192 else { return "" }
+        return HubRefusal.read(status: status, body: data).said ?? ""
     }
 }

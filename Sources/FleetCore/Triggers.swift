@@ -185,10 +185,12 @@ public struct TriggerTask: Codable, Equatable, Sendable {
     public var done_when: String
     public var needs: String
     public var goal_id: Int?
+    /// A rule that sends a ready text in place of a task (WAKEUPS-INTERFACE.md 8): read only, the hub writes it.
+    public var send: TriggerSend?
     public init(title: String = "", details: String = "", done_when: String = "", needs: String = "none", goal_id: Int? = nil) {
         self.title = title; self.details = details; self.done_when = done_when; self.needs = needs; self.goal_id = goal_id
     }
-    enum CodingKeys: String, CodingKey { case title, details, done_when, needs, goal_id }
+    enum CodingKeys: String, CodingKey { case title, details, done_when, needs, goal_id, send }
     public func encode(to encoder: Encoder) throws {
         var data = encoder.container(keyedBy: CodingKeys.self)
         try data.encode(title, forKey: .title); try data.encode(details, forKey: .details)
@@ -203,6 +205,25 @@ public struct TriggerTask: Codable, Equatable, Sendable {
     public var isValid: Bool {
         !normalized.title.isEmpty && title.count <= 200 && !title.contains("\n") && !title.contains("\r") && details.count <= 8000 &&
         !normalized.done_when.isEmpty && done_when.count <= 2000 && ["none", "browser", "screen"].contains(needs) && (goal_id == nil || goal_id! > 0)
+    }
+}
+
+/// Where a rule that sends sends its text (WAKEUPS-INTERFACE.md 8): `owner`, `conversation` (one person's own
+/// reminder) or `chat` (a group or a channel of a chat app), with the name of the person, group or channel.
+public struct TriggerSend: Codable, Equatable, Sendable {
+    public let to: String
+    public let name: String?
+
+    /// The row's title in "On a schedule": what goes where, in the app's own words. nil for a target that this
+    /// version does not know: the row then shows the hub's title.
+    public var title: String? {
+        let name = (self.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        switch to {
+        case "owner": return String(l10n: "Send to you")
+        case "chat" where !name.isEmpty: return String(l10n: "Send to \(name)")
+        case "conversation" where !name.isEmpty: return String(l10n: "Reminder for \(name)")
+        default: return nil
+        }
     }
 }
 

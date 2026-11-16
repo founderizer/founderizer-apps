@@ -18,6 +18,21 @@ struct SecretImportTests {
         return url
     }
 
+    /// The owner's choice C42: a row whose value the central vault would never take shows why and cannot be chosen, as a
+    /// row with a problem: a connection string with spaces gets no fingerprint, and a login on an AI provider's own
+    /// sign-in site is one that no vault keeps.
+    @Test func aRowThatTheCentralVaultNeverTakesShowsWhyAndCannotBeChosen() {
+        var key = LoginSecret()
+        key.kind = .apiKey; key.env = "EXAMPLE_DB_CONNECTION_STRING_KEY"; key.password = "Host=db.example.test; Password=synthetic"
+        let spaced = SecretImport.Row(id: 0, secret: key)
+        #expect(key.problem == nil && spaced.problem == key.vaultProblem && spaced.problem != nil)
+        key.password = "Host=db.example.test;Password=synthetic"
+        #expect(SecretImport.Row(id: 1, secret: key).problem == nil)
+        var login = LoginSecret()
+        login.url = "https://claude.ai/login"; login.username = "owner@example.test"; login.password = "synthetic-pass-phrase-9d2f"
+        #expect(SecretImport.Row(id: 2, secret: login).problem == login.vaultProblem && login.vaultProblem != nil)
+    }
+
     @Test func aBitwardenFileGivesRowsThatAddSecretWouldSave() throws {
         let directory = try folder()
         defer { try? FileManager.default.removeItem(at: directory) }

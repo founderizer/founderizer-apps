@@ -1,0 +1,29 @@
+{
+  "about": "Hosts, and whether each is an AI provider's own sign-in site by vault.py provider_site (the owner's choice C42). test_key_table.ProviderSites holds these answers to vault.py, and SecretTests holds FleetCore's ProviderSites to them.",
+  "hosts": {
+    "claude.ai": true,
+    "CLAUDE.AI": true,
+    "www.claude.ai": true,
+    "claude.ai.": true,
+    "claude.com": true,
+    "www.claude.com": true,
+    "chatgpt.com": true,
+    "www.chatgpt.com": true,
+    "auth.openai.com": true,
+    "login.auth.openai.com": true,
+    "x.ai": true,
+    "console.x.ai": true,
+    "platform.claude.com": false,
+    "www.platform.claude.com": false,
+    "api.x.ai": false,
+    "eu.api.x.ai": false,
+    "platform.openai.com": false,
+    "api.openai.com": false,
+    "openai.com": false,
+    "console.anthropic.com": false,
+    "example.com": false,
+    "notclaude.ai": false,
+    "claude.ai.example.com": false,
+    "chatgpt.com.example.net": false
+  }
+}

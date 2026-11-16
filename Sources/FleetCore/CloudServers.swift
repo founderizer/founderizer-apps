@@ -121,13 +121,19 @@ public struct CloudServers: Sendable {
     /// **The server this app would make, with what it costs a month**, for the step that asks before anything is made
     /// (the owner, 5 November 2026: "we can't be adding servers blindly, we need to ASK the user before these actions
     /// to confirm, they need to know!"). It is the first of the provider's offers now, and `createServer` given it makes
-    /// that one or nothing.
-    public func offer(use: CloudServerUse) async throws -> CloudOffer {
+    /// that one or nothing. `except`: the `CloudOffer.key` of each offer that the provider refused as taken in this
+    /// run (`CloudError.taken`), so the next one is the next free server, of any size that fits, also when it costs
+    /// more (the owner, 15 November 2026: "it should still show some servers even if more expensive").
+    public func offer(use: CloudServerUse, except: Set<String> = []) async throws -> CloudOffer {
         let call = try heldCall()
-        guard let first = try await offers(use, call).first else { throw CloudError.noRoom(provider) }
+        guard let first = try await offers(use, call).first(where: { !except.contains(Self.key($0.type, $0.location)) })
+        else { throw CloudError.noRoom(provider) }
         return CloudOffer(provider: provider, type: first.type, location: first.location, cores: first.cores,
                           memoryGB: first.memoryGB, diskGB: first.diskGB, monthlyPrice: first.price, currency: first.currency)
     }
+
+    /// One offer's name in a set of offers: its type and its location.
+    static func key(_ type: String, _ location: String) -> String { "\(type)@\(location)" }
 
     /// Every offer of this provider for what the server is for, the one to show first first.
     private func offers(_ use: CloudServerUse, _ call: CloudCall) async throws -> [Offer] {
@@ -257,6 +263,13 @@ public struct CloudServers: Sendable {
         return offers.filter { $0.type == chosen.type && $0.location == chosen.location }
     }
 
+    /// **No server could be made of the offers tried**: the one the owner said yes to is taken now (`taken`, and the
+    /// page shows him the next free one, with its price, before anything is made); with none shown, nothing that fits
+    /// is free (`noRoom`).
+    static func none(of chosen: CloudOffer?, at provider: CloudProvider) -> CloudError {
+        chosen == nil ? .noRoom(provider) : .taken(provider)
+    }
+
     // MARK: - Hetzner Cloud
 
     /// The firewall first, so the server has it from its first boot; then the server, on the first offer the provider
@@ -265,7 +278,7 @@ public struct CloudServers: Sendable {
                          _ call: CloudCall) async throws -> CloudServer {
         let keyID = try await hetznerKey(key, call)
         let offers = Self.only(offer, in: try await hetznerOffers(use, call))
-        guard !offers.isEmpty else { throw CloudError.noRoom(provider) }
+        guard !offers.isEmpty else { throw Self.none(of: offer, at: provider) }
         let firewall = try await call.send("POST", "firewalls", body: [
             "name": made.firewallName, "rules": [[String: Any]](), "labels": ["founderizer": use.rawValue]])
         guard let firewallID = (firewall["firewall"] as? [String: Any])?["id"] as? Int else {
@@ -295,7 +308,7 @@ public struct CloudServers: Sendable {
                                    location: offer.location, monthlyPrice: offer.price, currency: offer.currency,
                                    firewallID: String(firewallID))
             }
-            throw CloudError.noRoom(provider)
+            throw Self.none(of: offer, at: provider)
         } catch {
             throw await undo(made, after: error, call)
         }
@@ -388,7 +401,7 @@ public struct CloudServers: Sendable {
                               _ call: CloudCall) async throws -> CloudServer {
         let keyID = try await digitalOceanKey(key, call)
         let offers = Self.only(offer, in: try await digitalOceanOffers(use, call))
-        guard !offers.isEmpty else { throw CloudError.noRoom(provider) }
+        guard !offers.isEmpty else { throw Self.none(of: offer, at: provider) }
         var made = made
         do {
             var taken: (id: Int, offer: Offer)?
@@ -397,8 +410,9 @@ public struct CloudServers: Sendable {
                 let answer = try await call.answer("POST", "droplets", body: [
                     "name": made.name, "region": offer.location, "size": offer.type, "image": provider.image,
                     "ssh_keys": [keyID], "user_data": userData])
-                // DigitalOcean's answer for a size that a region cannot take now: the next offer.
-                if answer.status == 422 { refusal = answer; continue }
+                // DigitalOcean's answer for a size that a region cannot take now: the next offer. Its other 422s (a
+                // limit) end the try at once, in its own words.
+                if Self.saysUnavailable(answer) { refusal = answer; continue }
                 guard answer.ok else { throw call.failure(answer) }
                 guard let id = (answer.object["droplet"] as? [String: Any])?["id"] as? Int else {
                     throw CloudError.notUnderstood(provider)
@@ -406,7 +420,11 @@ public struct CloudServers: Sendable {
                 taken = (id, offer)
                 break
             }
-            guard let taken else { throw refusal.map(call.failure) ?? CloudError.noRoom(provider) }
+            guard let taken else {
+                // The size that the owner said yes to, which this region cannot take now: the page shows the next one.
+                if offer != nil, let refusal, Self.saysUnavailable(refusal) { throw CloudError.taken(provider) }
+                throw refusal.map(call.failure) ?? Self.none(of: offer, at: provider)
+            }
             made.server = String(taken.id)
             let firewall = try await call.send("POST", "firewalls", body: [
                 "name": made.firewallName, "outbound_rules": Self.outbound, "droplet_ids": [taken.id]])
@@ -445,18 +463,48 @@ public struct CloudServers: Sendable {
         throw answer.ok ? CloudError.notUnderstood(provider) : call.failure(answer)
     }
 
-    /// Its droplet for the use, in each region where DigitalOcean has it now, nearest first, with what it costs a month.
+    /// Each of DigitalOcean's sizes that fits the use, in each region near the Mac where DigitalOcean has it now,
+    /// cheapest first and, at one price, its smallest droplet for the use first and then the nearest region, with what
+    /// it costs a month. Every size that fits, not only the smallest: when that one is not free near the Mac, the
+    /// next free one is offered, also when it costs more (the owner, 15 November 2026).
     private func digitalOceanOffers(_ use: CloudServerUse, _ call: CloudCall) async throws -> [Offer] {
         let listed = try await call.send("GET", "sizes", query: [URLQueryItem(name: "per_page", value: "200")])
-        let type = CloudProvider.digitalOceanSize(for: use)
-        guard let size = ((listed["sizes"] as? [[String: Any]]) ?? []).first(where: { $0["slug"] as? String == type }),
-              size["available"] as? Bool != false, let number = size["price_monthly"] as? NSNumber,
-              let price = Decimal(string: number.stringValue, locale: Locale(identifier: "en_US_POSIX")) else { return [] }
-        let regions = Set((size["regions"] as? [String]) ?? [])
-        return provider.near(zone).filter(regions.contains).map {
-            Offer(type: type, location: $0, price: price, currency: "USD", cores: size["vcpus"] as? Int,
-                  memoryGB: (size["memory"] as? NSNumber).map { $0.doubleValue / 1024 }, diskGB: size["disk"] as? Int)
+        let smallest = CloudProvider.digitalOceanSize(for: use)
+        let near = provider.near(zone)
+        var offers: [(offer: Offer, first: Bool, place: Int, order: Int)] = []
+        for (order, size) in ((listed["sizes"] as? [[String: Any]]) ?? []).enumerated() {
+            guard Self.digitalOceanFits(size, use), let type = size["slug"] as? String,
+                  let number = size["price_monthly"] as? NSNumber,
+                  let price = Decimal(string: number.stringValue, locale: Locale(identifier: "en_US_POSIX")) else { continue }
+            let regions = Set((size["regions"] as? [String]) ?? [])
+            for (place, region) in near.enumerated() where regions.contains(region) {
+                offers.append((Offer(type: type, location: region, price: price, currency: "USD", cores: size["vcpus"] as? Int,
+                                     memoryGB: (size["memory"] as? NSNumber).map { $0.doubleValue / 1024 },
+                                     diskGB: size["disk"] as? Int), type == smallest, place, order))
+            }
         }
+        return offers.sorted {
+            ($0.offer.price, $0.first ? 0 : 1, $0.place, $0.order) < ($1.offer.price, $1.first ? 0 : 1, $1.place, $1.order)
+        }.map(\.offer)
+    }
+
+    /// A size of DigitalOcean's that can take what the server is for: one that may be ordered now, with no GPU, the
+    /// memory that the server check asks of that use, room for the system and the install, and a monthly price.
+    static func digitalOceanFits(_ size: [String: Any], _ use: CloudServerUse) -> Bool {
+        let need = use == .hub ? ServerCheck.hubMemory : ServerCheck.agentMemory
+        guard size["available"] as? Bool != false, let slug = size["slug"] as? String, !slug.hasPrefix("gpu-"),
+              let memory = size["memory"] as? Int, memory >= need.megabytes, let disk = size["disk"] as? Int, disk >= 20,
+              let cost = (size["price_monthly"] as? NSNumber)?.doubleValue, cost > 0 else { return false }
+        return true
+    }
+
+    /// DigitalOcean's refusal of a droplet whose size the region cannot take now: its 422, in words such as "Size is not
+    /// available in this region." Its other 422s (a limit, an image that the region lacks, a wrong field) say something
+    /// else, and all of them have the same `id`.
+    static func saysUnavailable(_ answer: CloudCall.Answer) -> Bool {
+        let words = answer.says.lowercased()
+        return answer.status == 422 && words.contains("size")
+            && (words.contains("not available") || words.contains("unavailable"))
     }
 
     /// Reads the droplet until it runs with its public IPv4 address, for at most `waitReads` reads.
@@ -482,7 +530,7 @@ public struct CloudServers: Sendable {
                        _ call: CloudCall) async throws -> CloudServer {
         let keyID = try await vultrKey(key, call)
         let system = try await vultrSystem(call)
-        guard let chosen = Self.only(offer, in: try await vultrOffers(use, call)).first else { throw CloudError.noRoom(provider) }
+        guard let chosen = Self.only(offer, in: try await vultrOffers(use, call)).first else { throw Self.none(of: offer, at: provider) }
         let firewall = try await call.send("POST", "firewalls", body: ["description": made.firewallName])
         guard let firewallID = (firewall["firewall_group"] as? [String: Any])?["id"] as? String, !firewallID.isEmpty else {
             throw CloudError.notUnderstood(provider)
@@ -627,7 +675,7 @@ public struct CloudServers: Sendable {
     /// default would otherwise get a Linode with no firewall at all.
     private func akamai(_ made: Made, use: CloudServerUse, key: SSHPublicKey, userData: String, offer: CloudOffer?,
                         _ call: CloudCall) async throws -> CloudServer {
-        guard let chosen = Self.only(offer, in: try await akamaiOffers(use, call)).first else { throw CloudError.noRoom(provider) }
+        guard let chosen = Self.only(offer, in: try await akamaiOffers(use, call)).first else { throw Self.none(of: offer, at: provider) }
         let firewall = try await call.send("POST", "networking/firewalls", body: [
             "label": made.firewallName, "tags": [Self.tag(use)],
             "rules": ["inbound_policy": "DROP", "outbound_policy": "ACCEPT", "inbound": [Any](), "outbound": [Any]()]])
@@ -1234,6 +1282,9 @@ public struct CloudOffer: Equatable, Sendable {
 
     /// The city and country of its location, in this app's own words ("Nuremberg, Germany").
     public var place: String { provider.place(location) }
+
+    /// Its name in a set of offers (`CloudServers.offer(use:except:)`).
+    public var key: String { CloudServers.key(type, location) }
 }
 
 /// **One server that the provider's account holds already**, as its provider lists it.
@@ -1265,6 +1316,40 @@ public struct CloudExisting: Equatable, Sendable, Identifiable {
     }
 }
 
+/// **What a stop of a server's page leads to** (`FleetCloudModel` in the app): the token asked for again, or the list
+/// read again with its press. The owner, 15 November 2026, of a page that asked for the token after "no server free":
+/// "asks for the token again!! when it is already there!"
+public enum CloudStop {
+    /// The provider's refusal of the token itself, after which the page asks for a token again: every other stop keeps
+    /// the token that the provider took.
+    public static func refusesToken(_ error: Error) -> Bool {
+        switch error as? CloudError {
+        case .notAToken, .noToken, .tokenNotAccepted, .readOnlyToken: true
+        default: false
+        }
+    }
+
+    /// **A build's stop after which the list is read again, with its press**: nothing of the try can be at the provider,
+    /// and another press can do better. The server that the owner said yes to is taken (the next free one shows), none
+    /// is free, it did not come up and was deleted, or the provider asked to wait; before the call for the server
+    /// (`called` false), anything but the network's own key, which no press on that page can mend. Every other stop
+    /// keeps the line alone: a provider's refusal can be its own fault answer (a 502), after which the server can be
+    /// there all the same (`BuildRecord.AtProvider`), and a press at once could make a second one.
+    public static func readsListAgain(after error: Error, called: Bool) -> Bool {
+        if let error = error as? CloudError {
+            switch error {
+            case .taken, .noRoom, .notReady, .rateLimited: return called
+            default: return false
+            }
+        }
+        guard !called else { return false }
+        switch error as? FleetKeyError {
+        case .fleetKeyEnded, .noFleetKey: return false
+        default: return true
+        }
+    }
+}
+
 public enum CloudError: LocalizedError, Equatable, Sendable {
     /// What was pasted is not a token of this provider.
     case notAToken(CloudProvider)
@@ -1284,6 +1369,9 @@ public enum CloudError: LocalizedError, Equatable, Sendable {
     case notUnderstood(CloudProvider)
     /// The provider has no type that fits free in any location now.
     case noRoom(CloudProvider)
+    /// The server that the owner said yes to is not free any more: the provider refused it as taken, or no longer lists
+    /// it as free. Nothing was made; the next offer is the next free server.
+    case taken(CloudProvider)
     /// The server did not come up in time.
     case notReady(CloudProvider)
     /// What the caller gave is not of the shape a server needs.
@@ -1309,8 +1397,9 @@ public enum CloudError: LocalizedError, Equatable, Sendable {
         case .unreachable(let provider): String(l10n: "\(provider.name) could not be reached. Check this Mac's connection to the internet.")
         case .refused(let provider, let says): String(l10n: "\(provider.name) refused: \(says)")
         case .notUnderstood(let provider): String(l10n: "\(provider.name) answered something this app does not understand.")
-        case .noRoom(let provider):
-            String(l10n: "\(provider.name) has no server of the smallest types free near you now. Try again later.")
+        // Every size that fits was asked, in every location: "smallest" and "near you" were not what was looked at.
+        case .noRoom(let provider): String(l10n: "\(provider.name) has no server free now.")
+        case .taken(let provider): String(l10n: "That server is not free at \(provider.name) any more.")
         case .notReady(let provider): String(l10n: "The server did not come up at \(provider.name) in time, so it was deleted. Try again.")
         case .notAServerName: String(l10n: "Use a name of 2 to 31 characters: a-z, 0-9 and -, starting with a letter and not ending in -.")
         case .notAPublicKey: String(l10n: "This app's SSH public key could not be read.")

@@ -73,7 +73,7 @@ final class RepositoryPicking {
         } catch {
             guard store.hub == hub, store.state?.db == database, (store.reading(Self.listName) as RepositoryList?) == nil
             else { return }
-            if case HubError.refusal(_, let words) = error { unread = words } else { unread = String(l10n: "Founderizer cannot read GitHub now.") }
+            if case HubError.refusal(let refused) = error { unread = refused.words } else { unread = String(l10n: "Founderizer cannot read GitHub now.") }
         }
     }
 
@@ -115,14 +115,14 @@ final class RepositoryPicking {
                                                                     access: choice)
                 words = nil
                 break
-            } catch HubError.refusal(409, let refused) where attempt == 1 {
+            } catch let HubError.refusal(refused) where refused.status == 409 && attempt == 1 {
                 guard let fresh = try? await AccessSettings.readResources(store, agent: agent, hub: hub, database: database)
-                else { words = refused; break }
+                else { words = refused.words; break }
                 reading = fresh
                 repos = repos.filter { !Self.held(fresh, agent: agent).contains($0) }
                 if repos.isEmpty { words = nil; break }
-            } catch let HubError.refusal(_, refused) {
-                words = refused
+            } catch let HubError.refusal(refused) {
+                words = refused.words
                 break
             } catch is URLError {
                 words = Self.unanswered

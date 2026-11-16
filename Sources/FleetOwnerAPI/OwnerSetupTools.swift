@@ -725,8 +725,14 @@ public struct AppLink: Sendable {
     /// **One tool on the link**: the app's answer as JSON text, or a refusal in words. When nothing listens, the app of
     /// this program's own bundle starts, and the request goes again after each `pause`, `tries` times at most; nothing
     /// was sent before, so nothing is done twice. `value`: the value part, kept for those tries too.
-    public func call(tool: String, fields: [String: JSONValue],
-                     value: OwnerChannel.Value? = nil) -> (text: String, isError: Bool) {
+    ///
+    /// `notKnown`: the words for a link write whose request went out and got no answer, when the caller has words
+    /// for this one call (`save_secret` with an id that the program made: the words then hold that id; and a read
+    /// of a save's state, which began no save). nil for the tool's own words (`OwnerLinkTools.notKnownHere`). The
+    /// words are used only in that one case: an answer of the app goes back as it is, and this function searches
+    /// no answer's text and adds nothing to one.
+    public func call(tool: String, fields: [String: JSONValue], value: OwnerChannel.Value? = nil,
+                     notKnown: String? = nil) -> (text: String, isError: Bool) {
         let request = OwnerChannel.Request(set: OwnerSetupTools.set, tool: tool, fields: fields)
         var reach = exchange(request, value)
         if reach == .nothingListens {
@@ -741,11 +747,12 @@ public struct AppLink: Sendable {
             if reach == .busy { reach = .nothingListens }
         }
         // **A link write whose request went out and got no answer** may have done its work (a token sent, a report
-        // shown): it gets its tool's own "not known" words (`OwnerLinkTools.notKnownHere`), never "call the tool
-        // again" alone. The setup tools keep their words.
+        // shown, a save of a secret begun): it gets the caller's words for this call (`notKnown`), or its tool's own
+        // "not known" words (`OwnerLinkTools.notKnownHere`), never "call the tool again" alone. The setup tools keep
+        // their words, whatever the caller gave.
         if OwnerLinkTools.names.contains(tool), case .failed(let words) = reach,
            [ChannelClient.noAnswer, ChannelClient.closedNoAnswer, ChannelClient.unreadable].contains(words) {
-            return (OwnerLinkTools.notKnownHere(tool), true)
+            return (notKnown ?? OwnerLinkTools.notKnownHere(tool), true)
         }
         switch reach {
         case .answer(.result(let value)):

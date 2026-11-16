@@ -331,7 +331,7 @@ final class FirstRunModel {
             return store.connectionError.map { HubReach.withoutAddress($0, hub: store.hub) }
         }
         let reach = HubReach.words(error, hub: nil)
-        if case .refusal(let status, _)? = error as? HubError, status != 404 { return reach.says }
+        if case .refusal(let refused)? = error as? HubError, refused.status != 404 { return reach.says }
         return reach.line
     }
 
@@ -458,7 +458,8 @@ struct FirstRunView: View {
         let choosing = cloud.stage == .choosing
         let waits = cloudBuilds || (choosing && cloud.offer == nil)
         if cloudBuilds { return Head(title: String(l10n: "Building your fleet"), key: "Building your fleet", waits: waits) }
-        if choosing {
+        // After the token was taken, a stop leaves the page the server's: its title too.
+        if choosing || cloud.tokenTaken {
             return Head(title: String(l10n: "Your hub's server at \(provider.name)"), key: "Your hub's server at %@",
                         waits: waits)
         }
@@ -826,7 +827,8 @@ struct FirstRunView: View {
             } else if choosing {
                 CloudChoice(cloud: cloud, job: .hub, fleet: [], makeNew: { cloud.makeNew { startInstall($0) } },
                             use: useExisting)
-            } else {
+            } else if !cloud.tokenTaken {
+                // A token that the provider took is never asked for again on this page (`FleetCloudModel.tokenTaken`).
                 SetupSteps.token(provider)
                 PasteField(placeholder: String(l10n: "Paste it here"), text: $cloud.tokenText,
                            accepts: { $0.count >= 20 && !$0.contains(" ") }) {
@@ -834,7 +836,8 @@ struct FirstRunView: View {
                 }
                 .accessibilityIdentifier("first-run-cloud-token")
             }
-            if let failure = cloud.failure { SetupWarning(failure) }
+            // While the list shows, its own press carries the line (`CloudChoice`).
+            if let failure = cloud.failure, !choosing || cloud.offer == nil { SetupWarning(failure) }
         }
     }
 

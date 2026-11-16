@@ -370,10 +370,10 @@ struct AgentSetupWizard: View {
                 await store.refresh()
                 renaming = false
                 return
-            } catch let HubError.refusal(status, words) {
-                if status == 409, attempt == 0, words.contains("team.json changed") { continue }
+            } catch let HubError.refusal(refused) {
+                if refused.status == 409, attempt == 0, refused.means(.teamChanged) { continue }
                 store.noteRenamed(from: agent, to: nil)
-                refusal = words; renaming = false; return
+                refusal = refused.words; renaming = false; return
             } catch {
                 // No answer: the hub can have the new name. The next reading says which name it is, and the page
                 // goes with it.
@@ -412,9 +412,9 @@ struct AgentSetupWizard: View {
                     await read()
                 }
                 return
-            } catch let HubError.refusal(status, words) {
-                if status == 409, attempt == 0, words.contains("team.json changed") { continue }
-                refusal = words; return
+            } catch let HubError.refusal(refused) {
+                if refused.status == 409, attempt == 0, refused.means(.teamChanged) { continue }
+                refusal = refused.words; return
             } catch {
                 // No answer: the hub can have the step. The read says so, and the page then goes on by it.
                 refusal = String(l10n: "The hub has not answered. Try again.")
@@ -635,7 +635,7 @@ struct AgentSetupWizard: View {
                 _ = try await HubClient().addServerAgent(hub: store.hub, database: database, client: store.installation,
                                                          server: server, sha256: team.sha256, agent: agent,
                                                          runtime: provider, role: role, reportsTo: nil)
-            } catch let HubError.refusal(_, words) { refusal = words }
+            } catch let HubError.refusal(refused) { refusal = refused.words }
             catch { refusal = String(l10n: "The hub has not answered. Try again.") }
         case .prepare:
             switchingTo = provider; askedSwitch = false
@@ -645,7 +645,7 @@ struct AgentSetupWizard: View {
             do {
                 _ = try await HubClient().prepareServerRuntime(hub: store.hub, database: database, client: store.installation,
                                                                server: server, agent: agent, runtime: provider)
-            } catch let HubError.refusal(_, words) { refusal = words; switchingTo = nil }
+            } catch let HubError.refusal(refused) { refusal = refused.words; switchingTo = nil }
             catch { refusal = String(l10n: "The hub has not answered. Try again."); switchingTo = nil }
         }
         askedSignIn = start.signsIn && refusal == nil
@@ -663,9 +663,9 @@ struct AgentSetupWizard: View {
                                                     agent: agent, sha256: team.sha256, server: server, runtime: provider)
                 await store.refresh()
                 return
-            } catch let HubError.refusal(status, words) {
-                if status == 409, attempt == 0, words.contains("team.json changed") { continue }
-                refusal = words; return
+            } catch let HubError.refusal(refused) {
+                if refused.status == 409, attempt == 0, refused.means(.teamChanged) { continue }
+                refusal = refused.words; return
             } catch { refusal = String(l10n: "The hub has not answered. Try again."); return }
         }
     }

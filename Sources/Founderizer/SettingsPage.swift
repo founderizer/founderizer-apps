@@ -413,9 +413,9 @@ private struct DefaultModelsSection: View {
                     latest = fresh
                     reloaded(fresh)
                 }
-            } catch let HubError.refusal(_, words) {
+            } catch let HubError.refusal(refused) {
                 guard wanted[runtime] == value else { continue }
-                states[runtime] = .failed(words)
+                states[runtime] = .failed(refused.words)
             } catch {
                 guard wanted[runtime] == value else { continue }
                 unanswered[runtime] = id

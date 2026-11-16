@@ -284,8 +284,8 @@ public enum ProfileSaveOutcome: Equatable, Sendable {
     public init?(pending: PendingRequest?, command: OwnerCommand) {
         guard let pending, pending.command == command else { return nil }
         guard let refusal = pending.refusal else { self = .waiting; return }
-        let words = HubError.refusalWords(in: refusal) ?? refusal
-        self = HubError.refusalStatus(in: refusal) == 409 ? .changedMeanwhile(words) : .refused(words)
+        guard let refused = pending.refusedByHub else { self = .refused(refusal); return }
+        self = refused.status == 409 ? .changedMeanwhile(refused.words) : .refused(refused.words)
     }
 }
 
@@ -300,6 +300,11 @@ extension HubError {
         guard digits.count == 3, rest.dropFirst(3).hasPrefix("):") else { return nil }
         return Int(digits)
     }
+
+    /// **What the outbox keeps of a refusal beside its fields** (`PendingRequest.refuse(_:)`): the English of
+    /// `errorDescription` with the hub's own line, whatever the language of the device. It is read back by its prefix,
+    /// and the words that the owner reads are made from the fields when he reads them.
+    public static func refusalText(_ refusal: HubRefusal) -> String { "\(refusalPrefix)\(refusal.status)): \(refusal.hubWords)" }
 
     /// The hub's own words in a refusal, after its status; nil for other words.
     public static func refusalWords(in text: String) -> String? {

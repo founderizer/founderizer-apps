@@ -104,7 +104,7 @@ struct ProviderView: View {
     /// A refused switch of this agent that the outbox keeps.
     private var refusal: String? {
         guard let pending = store.pending, case .agentRuntime(let name, _, _)? = pending.command, name == agent else { return nil }
-        return pending.refusal
+        return pending.refusalLine
     }
     /// Why the store cannot send now, when nothing else says it. **A request on its way is not a reason** (fix round
     /// 2, item 99): a save of the same card said "A saved request is waiting." here in orange while it went, and the
@@ -294,7 +294,7 @@ struct ProviderView: View {
         do {
             _ = try await HubClient().prepareServerRuntime(hub: hub, database: database, client: store.installation,
                                                            server: server, agent: agent, runtime: runtime)
-        } catch let HubError.refusal(_, words) { prepareError = words }
+        } catch let HubError.refusal(refused) { prepareError = refused.words }
         catch { prepareError = String(l10n: "The hub has not answered. Look at the server's page before you try again.") }
         await refresh()
     }

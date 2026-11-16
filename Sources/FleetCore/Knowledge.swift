@@ -202,7 +202,7 @@ public final class KnowledgeClient: Sendable {
             do {
                 _ = try await HubClient().command(request)
                 return
-            } catch HubError.refusal(409, _) where attempt == 1 {
+            } catch let error as HubError where error.conflict && attempt == 1 {
                 let list = try await HubClient().profiles(hub: hub, database: database)
                 guard let fresh = list.profiles.first(where: { $0.agent == profile.agent }) else { throw HubError.invalidResponse }
                 profile = fresh
@@ -226,14 +226,10 @@ public final class KnowledgeClient: Sendable {
         let (data, response) = try await session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
-        guard response.statusCode == 200 else {
-            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error ?? "Unexpected HTTP response."
-            throw HubError.refusal(response.statusCode, String(message.prefix(500)))
-        }
+        guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
         return data
     }
 
-    private struct ErrorBody: Decodable { let error: String }
 }
 
 private final class NoRedirect: NSObject, URLSessionTaskDelegate, Sendable {

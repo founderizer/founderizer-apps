@@ -174,9 +174,9 @@ struct TeamProfileTests {
 
         // The store keeps a definitive refusal with the client's words; the editor reads the 409 from them.
         var refused = request
-        refused.refusal = HubError.refusal(409, "the profile changed meanwhile; reload it").localizedDescription
+        refused.refusal = HubError.refusal(HubRefusal(status: 409, hubWords: "the profile changed meanwhile; reload it")).localizedDescription
         #expect(ProfileSaveOutcome(pending: refused, command: edit.command) == .changedMeanwhile("the profile changed meanwhile; reload it"))
-        refused.refusal = HubError.refusal(400, "a line in Responsible for starts like a section title (**...**)").localizedDescription
+        refused.refusal = HubError.refusal(HubRefusal(status: 400, hubWords: "a line in Responsible for starts like a section title (**...**)")).localizedDescription
         #expect(ProfileSaveOutcome(pending: refused, command: edit.command) == .refused("a line in Responsible for starts like a section title (**...**)"))
         #expect(ProfileSaveOutcome(pending: request, command: edit.command) == .waiting)
         #expect(ProfileSaveOutcome(pending: request, command: .profile(agent: "studio", sha256: base)) == nil)
@@ -248,11 +248,11 @@ struct TeamProfileTests {
         do {
             _ = try await HubClient().command(request)
             Issue.record("The stand-in answered 409, so the save cannot succeed.")
-        } catch HubError.refusal(let status, let words) {
-            #expect(status == 409 && words == "the profile changed meanwhile; reload it")
+        } catch HubError.refusal(let refused) {
+            #expect(refused.status == 409 && refused.hubWords == "the profile changed meanwhile; reload it")
             // A profile is a whole form the owner wrote against the version he read, so this one is his to see
             // again: `rebasesSafely` says no, and nothing is sent a second time behind his back.
-            #expect(HubError.refusal(status, words).conflict && !HubError.refusal(status, words).definitiveRefusal)
+            #expect(HubError.refusal(refused).conflict && !HubError.refusal(refused).definitiveRefusal)
             #expect(!edit.command.rebasesSafely && edit.command.rebased(to: .file(sha256: later)) == nil)
         }
         let message = conflict.received

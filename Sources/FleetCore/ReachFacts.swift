@@ -93,10 +93,10 @@ public enum ReachFacts {
             case .invalidAddress: return .invalidAddress
             case .invalidResponse: return .unreadable
             case .unavailable: return .noConnection
-            case .refusal(let status, _):
-                if status == 403 { return .refusedThisMac }
-                if status == 404 { return .notAHub }
-                return (500...599).contains(status) ? .hubError : .refused
+            case .refusal(let refused):
+                if refused.status == 403 { return .refusedThisMac }
+                if refused.status == 404 { return .notAHub }
+                return (500...599).contains(refused.status) ? .hubError : .refused
             }
         }
         if error is DecodingError { return .unreadable }

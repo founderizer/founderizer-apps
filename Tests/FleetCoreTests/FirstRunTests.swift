@@ -79,18 +79,18 @@ struct FirstRunTests {
     }
 
     @Test func aHubThatAnswersSomebodyElseSaysSo() {
-        let refused = HubReach.words(HubError.refusal(403, "owner only"), hub: hub)
+        let refused = HubReach.words(HubError.refusal(HubRefusal(status: 403, hubWords: "owner only")), hub: hub)
         #expect(refused.says.contains("does not serve its pages to this Mac"))
         #expect(refused.next?.contains("Claim it from this Mac") == true)
         // Never the hub's own words in brackets (fix round 3, item 50).
         #expect(refused.line.contains("owner only") == false)
-        let elsewhere = HubReach.words(HubError.refusal(404, "no"), hub: hub)
+        let elsewhere = HubReach.words(HubError.refusal(HubRefusal(status: 404, hubWords: "no")), hub: hub)
         #expect(elsewhere.says.contains("it is not a Founderizer hub"))
         let typed = HubReach.words(HubError.invalidAddress, hub: nil)
         #expect(typed.says == "That is not a hub address.")
         #expect(typed.next?.contains("http://100.84.1.2:8765") == true)
         // No status code in a line of his (review B8, fix round 2): it said "Your hub refused this read (503)."
-        let starting = HubReach.words(HubError.refusal(503, "The hub is starting."), hub: hub)
+        let starting = HubReach.words(HubError.refusal(HubRefusal(status: 503, hubWords: "The hub is starting.")), hub: hub)
         #expect(starting.says == "Your hub refused this read." && starting.next == "The hub is starting.")
     }
 
@@ -114,11 +114,11 @@ struct FirstRunTests {
         for fast in [URLError.Code.cannotConnectToHost, .networkConnectionLost, .cannotFindHost, .notConnectedToInternet] {
             #expect(HubReach.worthAgain(URLError(fast)), "\(fast)")
         }
-        #expect(HubReach.worthAgain(HubError.refusal(503, "The hub is starting.")))
+        #expect(HubReach.worthAgain(HubError.refusal(HubRefusal(status: 503, hubWords: "The hub is starting."))))
         #expect(HubReach.worthAgain(HubError.unavailable))
         #expect(!HubReach.worthAgain(URLError(.timedOut)))
         #expect(!HubReach.worthAgain(URLError(.cancelled)))
-        #expect(!HubReach.worthAgain(HubError.refusal(404, "no")))
+        #expect(!HubReach.worthAgain(HubError.refusal(HubRefusal(status: 404, hubWords: "no"))))
         #expect(!HubReach.worthAgain(HubError.invalidAddress))
         #expect(!HubReach.worthAgain(CancellationError()))
         #expect(HubReach.triesAgain == 3)

@@ -812,7 +812,7 @@ struct ChatPage: View {
             if store.delivered?.requestID == request.requestID {
                 // Sent: the hub confirmed it, and the message itself takes this place with the chat's next read.
                 Text(fleetTime(request.createdAt.timeIntervalSince1970)).font(.caption2).foregroundStyle(Brand.muted)
-            } else if let refusal = request.refusal {
+            } else if let refusal = request.notSentLine {
                 // One line, as "Not sent · Try again" (fix round 3, item 29).
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(refusal).font(.caption2).foregroundStyle(Brand.warning)

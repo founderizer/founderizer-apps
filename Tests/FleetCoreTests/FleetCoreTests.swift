@@ -110,8 +110,8 @@ private func receiptRow(_ request: PendingRequest) -> [String: Any] {
 }
 
 @Test func refusalAndUnknownOutcomeAreDistinct() {
-    #expect(HubError.refusal(403, "not the owner's machine").definitiveRefusal)
-    #expect(!HubError.refusal(500, "server error").definitiveRefusal)
+    #expect(HubError.refusal(HubRefusal(status: 403, hubWords: "not the owner's machine")).definitiveRefusal)
+    #expect(!HubError.refusal(HubRefusal(status: 500, hubWords: "server error")).definitiveRefusal)
     #expect(!HubError.invalidResponse.definitiveRefusal)
 }
 
