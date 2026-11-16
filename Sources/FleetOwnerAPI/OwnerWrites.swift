@@ -180,18 +180,22 @@ extension OwnerTools {
     }
 
     /// `owner_mcp.py`'s GRANT_NOT_SIGNED: the words when `grant_access` does not send a give of a secret
-    /// (`secretReaches`). One fixed sentence, which quotes no reference, no agent's name and no word of the hub. Its
-    /// end names only the pool: the app's own give of a secret signs the grant and writes it into the list itself, so
-    /// a call from here after it would add nothing, and could change the level that the owner chose.
+    /// (`secretReaches`). One fixed sentence, which quotes no reference, no agent's name and no word of the hub. It
+    /// names `grant_secret` (`GrantSecret`), the link tool with which the app signs the grant, by where it is (the
+    /// Mac where the app runs, with the whole command): the same words are the Python server's, which has no such
+    /// tool, so they say no "from here". Its end names only the pool: a give that the app signed is in the list
+    /// already, so a second call of `grant_access` after it would add nothing, and could change the level that was
+    /// chosen.
     static let grantNotSigned = "On this fleet the central vault sends a secret's value to a server only for a grant "
         + "that the owner's app signed for an agent on that server, or for a secret that the owner signed into the "
         + "grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it "
         + "for this agent's server, and that server's vault holds no copy of it. A grant from here would show the "
         + "secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was "
-        + "sent. The owner gives the secret to the agent in the Founderizer app, on Secrets: the app signs the grant "
-        + "and writes it into the list, and nothing more is needed from here then. If the owner put the secret into "
-        + "the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once "
-        + "a minute."
+        + "sent. On the Mac where the Founderizer app runs, its program gives the secret with the owner's signature "
+        + "(~/.founderizer/cli write grant_secret): the app signs the grant with the owner's key and writes it into "
+        + "the list, as the owner's own Give on Secrets does, and the owner can also give it there. After either, "
+        + "grant_access needs no second call. If the owner put the secret into the grantable pool a moment ago, call "
+        + "grant_access again in a minute: the hub reads the vault at least once a minute."
 
     /// `vault_reading`: what `secretReaches` and `standingReaches` read of `GET /ui/vault` (`hub.py` `vault_view`),
     /// with each reference in lower case.

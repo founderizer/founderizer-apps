@@ -149,7 +149,7 @@ struct PersonAgentsCard: View {
 
     /// The hub decides who can chat; its own line wins wherever it gave one.
     private func why(_ agent: FleetAgent) -> String? {
-        says[agent.name] ?? People.cannotChat(role: agent.role, runtime: agent.runtime, active: agent.active)
+        says[agent.name] ?? People.cannotChat(role: agent.role, runtime: agent.runtime, active: agent.active, provider: agent.modelProvider)
     }
 
     /// The reason, after the colon that follows the names, starts in lower case where its first word is an ordinary one.

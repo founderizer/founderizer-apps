@@ -65,12 +65,29 @@ final class CentralVaultModel {
     private var addedHere: Set<String> = []
     /// The tries of each unpin that has not reached the central vault: one that fails waits `VaultTries.wait`, for ever.
     private var unpins: [String: VaultTries] = [:]
+    /// **The key swap's own step** (Part B, app patch 2): this Mac's records on the disk (`KeySwapState`, also the
+    /// tries of the update above, so that they outlive a start), the servers whose pin this session signed since their
+    /// last key swap step (the weekly re-sign is one of its events), and the server rows that its stops give.
+    private var keySwap = KeySwapState.load()
+    private var resigned: Set<String> = []
+    private(set) var keySwapNeeds: [VaultServerNeed] = []
+    /// The central vault's owner keys and fleet as this session last read them on the hub's machine, and when: read
+    /// again only before a step (at most once in `KeySwapPlan.wait`), for the owner's Try again, and once in
+    /// `keySwapKeysEvery`, so a round with no step opens no SSH session.
+    private var keySwapKeys: (central: KeySwapCentral?, at: Date)?
+    private static let keySwapKeysEvery: Double = 6 * 3600
 
     init(hub: URL) { self.hub = hub }
 
     /// The central vault serves this hub now: it sends each server its secrets by grant, so the page shows no second
     /// way to put a copy into a machine's vault.
     var inUse: Bool { served == true && reading?.central?.ok == true }
+
+    /// The server rows of the Secrets page: each one whose trust gave up, then each other one whose key swap step needs
+    /// the owner. One row for a server: the trust's reason first.
+    var serverRows: [VaultServerNeed] {
+        plan.servers + keySwapNeeds.filter { need in !plan.servers.contains { $0.machine == need.machine } }
+    }
 
     // MARK: the poll
 
@@ -102,6 +119,7 @@ final class CentralVaultModel {
             case .trust(let machines): for machine in machines { await trust(machine, store) }
             case .nothing, .takeOver:
                 await keepTCPWindow(store)
+                if case .nothing = plan.step { await keySwapRound(store) }
                 return
             }
         }
@@ -123,6 +141,12 @@ final class CentralVaultModel {
             // for each wait, not one each minute, and after a real restore a server whose try failed waits its due time.
         }
         if fresh?.program != updateFor { update = nil }       // the tries were for another release's program
+        if update == nil, let fleet = fresh?.fleetID, let program = fresh?.program,
+           let kept = keySwap.update(fleet: fleet), kept.program == program {
+            // a start of the app keeps the tries of the update to this program (the design, change 3)
+            update = VaultTries(failures: kept.tries.failures, last: kept.tries.last, reason: kept.tries.reason)
+            updateFor = program
+        }
         self.database = database
         served = fresh != nil
         reading = fresh
@@ -248,6 +272,7 @@ final class CentralVaultModel {
             switch step {
             case .install: await model.installOwn(store)
             case .recover: await model.recover(store)
+            case .update: await model.updateOwn(store)
             default: break
             }
         }
@@ -261,6 +286,16 @@ final class CentralVaultModel {
         run(machine, store) { model in
             model.added(machine)
             await model.trust(machine, store)
+            if let fleet = model.reading?.fleetID { model.changeKeySwap { $0.tryAgain(server: machine, fleet: fleet) } }
+        }
+    }
+
+    /// Try again on a server's row that its key swap step gave: its tries and its hold go, and its step runs once now.
+    func retryKeySwap(server machine: String, _ store: FleetStore) {
+        guard !working, let fleet = reading?.fleetID else { return }
+        run(machine, store) { model in
+            model.changeKeySwap { $0.tryAgain(server: machine, fleet: fleet) }
+            await model.keySwapRound(store, only: machine)
         }
     }
 
@@ -323,6 +358,11 @@ final class CentralVaultModel {
                                        reason: String(l10n: "The central vault on the hub's server holds another Mac's owner key."))
         }
         updateFor = program
+        if let fleet = reading?.fleetID {
+            let kept = update.map { KeySwapUpdate(program: program, tries: KeySwapTries(failures: $0.failures, last: $0.last,
+                                                                                         reason: $0.reason)) }
+            changeKeySwap { $0.setUpdate(kept, fleet: fleet) }
+        }
     }
 
     /// **The hub's TCP window** (`HubTCP.round`), at the end of a round: once for each hub, the step's own run as root
@@ -370,6 +410,124 @@ final class CentralVaultModel {
         let target = try await self.target(machine, database: database, record: reading?.hub?.reach)
         return try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target, program: program),
                                         timeout: 900)
+    }
+
+    // MARK: the key swap's own step (Part B, app patch 2)
+
+    /// **One key swap step at the end of a round** (`KeySwapPlan.next`): on one server, the keys step (the owner keys
+    /// and the fleet of the central vault's own file on the hub's server, or the reading alone when that file cannot be
+    /// read), and the switch after it when the table wants one and the keys step's answer lets it. Each answer goes into
+    /// this Mac's record on the disk at once, and its reading to the hub. `only`: the owner's Try again on that server's
+    /// row. Its stops give the rows of the Secrets page (`keySwapNeeds`).
+    private func keySwapRound(_ store: FleetStore, only: String? = nil) async {
+        guard store.hub == hub, store.isFresh, let database = store.state?.db, database == self.database,
+              store.state?.ui_features?.contains(KeySwapPlan.feature) == true, let fleet = reading?.fleetID,
+              let rows = try? await KeySwapClient().rows(hub: hub, database: database) else { return }
+        keySwap = KeySwapState.load()                   // the model of another hub address can have written it
+        let removed = facts.removed
+        defer { keySwapNeeds = KeySwapPlan.needs(rows, records: keySwap.records(fleet: fleet), removed: removed) }
+        var keyFacts = KeySwapFacts(central: keySwapKeys?.central, hubProgram: reading?.program,
+                                    records: keySwap.records(fleet: fleet), removed: removed, resignDue: resigned,
+                                    now: Date().timeIntervalSince1970)
+        let mine = only.map { name in rows.filter { $0.name == name } } ?? rows
+        var next = KeySwapPlan.next(mine, facts: keyFacts)
+        let age = keySwapKeys.map { Date().timeIntervalSince($0.at) } ?? .infinity
+        // a list that could not be read is read again after `wait` also when no step is due, so one failed read never
+        // holds each switch for `keySwapKeysEvery`
+        if only != nil || age >= Self.keySwapKeysEvery
+            || (age >= KeySwapPlan.wait && (next != nil || keySwapKeys?.central == nil)) {
+            let read = await keySwapCentral(database: database)
+            keySwapKeys = (read, Date())
+            keyFacts.central = read
+            next = KeySwapPlan.next(mine, facts: keyFacts)
+        }
+        let central = keyFacts.central
+        guard let step = next, let row = rows.first(where: { $0.name == step.server }) else { return }
+        resigned.remove(step.server)
+        let keys = await keySwapStep(row, KeySwapRemote.keys(step.keys, fleet: step.fleet), keys: step.keys, fleet: step.fleet,
+                                     store: store, database: database, fleetID: fleet)
+        guard let to = step.then, let keys, KeySwapPlan.switchMayFollow(keys, central: central) else { return }
+        _ = await keySwapStep(row, KeySwapRemote.turn(to), keys: step.keys, fleet: step.fleet, store: store,
+                              database: database, fleetID: fleet)
+    }
+
+    /// One root step on one server, its record and its reading to the hub; its answer, or nil when it did not reach
+    /// the server.
+    private func keySwapStep(_ row: KeySwapServer, _ program: String?, keys: [String], fleet: String?, store: FleetStore,
+                             database: String, fleetID: String) async -> KeySwapAnswer? {
+        let earlier = keySwap.records(fleet: fleetID)[row.name], now = Date().timeIntervalSince1970
+        do {
+            guard let program else { throw Stop(String(l10n: "Founderizer cannot write the install for this owner key.")) }
+            let target = try await self.target(row.name, database: database)
+            guard await MacNetwork.device(of: target.host) == row.name else {
+                throw Stop(String(l10n: "This Mac's Tailscale does not say that \(target.host) is \(row.name). Founderizer pinned nothing."))
+            }
+            let output = try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target, program: program),
+                                                  timeout: 600)
+            if output.lines.contains(where: { $0.contains("Host key verification failed") }) {
+                throw Stop(Self.unread(output, machine: row.name, what: ""))
+            }
+            let answer = KeySwapAnswer.read(output.output, status: output.status)
+            let record = KeySwapPlan.record(answer, after: earlier, wish: row.wish, keys: keys, fleet: fleet, at: now)
+            changeKeySwap { $0.set(record, server: row.name, fleet: fleetID) }
+            await keySwapTell(row, answer: answer, store: store, database: database)
+            return answer
+        } catch {
+            let record = KeySwapPlan.record(stop: Self.words(error), after: earlier, at: now)
+            changeKeySwap { $0.set(record, server: row.name, fleet: fleetID) }
+            return nil
+        }
+    }
+
+    /// The owner keys and the fleet of the central vault, read as root on the hub's machine from the vault's own file,
+    /// or nil: then only the reading runs, and no switch. These keys become owner keys of each server's vault, the trust
+    /// of each handover, so the read is bound to the hub's machine by this Mac's own knowledge and not by the hub's pages
+    /// (the manager's read of 16 November): this Mac's Tailscale names the connection's host as the hub's machine, and
+    /// names the host of this Mac's own hub address as that same machine, and the file's fleet is the fleet that this
+    /// Mac reads. The install and the update of the central vault need less: there this Mac gives its own public key,
+    /// and it pins the vault's key only when the hub then names that same key.
+    private func keySwapCentral(database: String) async -> KeySwapCentral? {
+        let machine: String
+        if let own = reading?.hub?.machine {
+            machine = own
+        } else {
+            guard let machines = try? await HubClient().machines(hub: hub, database: database).machines else { return nil }
+            machine = CentralVault.hubMachine(in: machines)
+        }
+        guard let fleet = reading?.fleetID, let address = hub.host,
+              let target = try? await self.target(machine, database: database, record: reading?.hub?.reach),
+              await MacNetwork.device(of: target.host) == machine, await MacNetwork.device(of: address) == machine,
+              let answer = try? await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target,
+                                                                                                   program: KeySwapRemote.central),
+                                                     timeout: 120),
+              let central = KeySwapRemote.central(in: answer.output), central.fleet == fleet else { return nil }
+        return central
+    }
+
+    /// The reading of one step to the hub (`POST /ui/servers/<server>/key-swap-reading`): what a good step read, or the
+    /// word as the hub has it with the step's own reason. A put-back says that the vault does not swap. An older program
+    /// and a step with no line send nothing: the next step sends. A refused version of team.json is read again once.
+    private func keySwapTell(_ row: KeySwapServer, answer: KeySwapAnswer, store: FleetStore, database: String) async {
+        let swaps: Bool, reason: String?
+        switch answer.outcome {
+        case .done(_, let said, _, _): (swaps, reason) = (said, nil)
+        case .stopped(let said, let undone): (swaps, reason) = (undone ? false : row.word ?? false, said)
+        case .olderProgram, .unread: return
+        }
+        for _ in 0..<2 {
+            guard let sha256 = try? await HubClient().team(hub: hub, database: database).sha256 else { return }
+            if (try? await KeySwapClient().reading(hub: hub, database: database, client: store.installation, server: row.name,
+                                                   sha256: sha256, swaps: swaps, reason: reason)) != nil { return }
+        }
+    }
+
+    /// One change of the key swap's records, made to the file as it is now and written back at once: the model of
+    /// another hub address may have changed it since this model read it.
+    private func changeKeySwap(_ change: (inout KeySwapState) -> Void) {
+        var state = KeySwapState.load()
+        change(&state)
+        keySwap = state
+        try? state.save()
     }
 
     /// The install on the hub's machine, from root's own clone there, the pin of the key it printed, and the hub's
@@ -479,6 +637,7 @@ final class CentralVaultModel {
             confirmedPins[name] = found
             signedAt[name] = Date().timeIntervalSince1970
             servers[name] = nil
+            resigned.insert(name)           // the key swap step reads that server's vault again
         } catch {
             servers[name] = VaultTries.failed(after: servers[name], at: Date().timeIntervalSince1970, reason: Self.words(error))
         }
@@ -529,22 +688,26 @@ final class CentralVaultModel {
 }
 
 /// **The top of the Secrets page, only while the central vault needs the owner**: the Founderizer Vault row when an
-/// automatic step gave up (its "!" and Retry) or when the vault is not this Mac's to act on (Set up), and one row for
-/// each server the automatic trust gave up on (its "!" and Retry). With everything in order there is no row at all.
+/// automatic step gave up (its "!" and Retry; the update too, after six tries) or when the vault is not this Mac's to
+/// act on (Set up), and one row for each server that the automatic trust or the key swap's step gave up on (its "!" and
+/// Retry; a put-back of the key swap at once). With everything in order there is no row at all.
 struct CentralVaultSection: View {
     @Bindable var store: FleetStore
     @Bindable var model: CentralVaultModel
 
     var body: some View {
-        if model.plan.vault != nil || !model.plan.servers.isEmpty {
+        if model.plan.vault != nil || !model.serverRows.isEmpty {
             FormSection {
                 if let need = model.plan.vault {
                     FormRow("Founderizer Vault", symbol: "lock.shield") { vaultControl(need) }
                         .accessibilityIdentifier("vault-row")
                 }
-                ForEach(model.plan.servers) { server in
+                ForEach(model.serverRows) { server in
+                    let trust = model.plan.servers.contains { $0.machine == server.machine }
                     FormRow(server.machine, symbol: "server.rack") {
-                        control(row: server.machine, reason: server.reason, words: String(l10n: "Try again")) { model.retry(server: server.machine, store) }
+                        control(row: server.machine, reason: server.reason, words: String(l10n: "Try again")) {
+                            if trust { model.retry(server: server.machine, store) } else { model.retryKeySwap(server: server.machine, store) }
+                        }
                     }.accessibilityIdentifier("vault-server-\(server.machine)")
                 }
             }

@@ -53,6 +53,26 @@ struct ProviderAccountSection: View {
     /// sign-in** (`POST /ui/machines/<agent>/signin`), which is one mechanism and was only ever on the Machines page
     /// under the word "Sign in" — a name for the first one, not for the thing he wanted.
     @ViewBuilder private func accountRow(_ agentState: FleetAgent) -> some View {
+        if let account = agentState.model_account {
+            modelAccountRow(account)
+        } else {
+            planAccountRow(agentState)
+        }
+    }
+
+    /// **The Account row of an agent on a key or a model server** (picture 6, his "Yes, as shown"): "Key", or the
+    /// server's address written as an address, where a plan has its email; no Switch account and no Sign in, because
+    /// there is no sign-in.
+    private func modelAccountRow(_ account: AgentModelAccount) -> some View {
+        // The orange line under Account (picture 7): the key has no credit, or its model server does not answer.
+        let trouble = line?.account_problem?.words
+        return FormRow("Account", symbol: "person.crop.circle", warning: trouble ?? signInFailure) {
+            Text(account.accountWords).font(account.kind == "server" ? FormMetrics.text.monospaced() : FormMetrics.text)
+                .foregroundStyle(FleetStyle.muted).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+        }.accessibilityIdentifier("provider-account")
+    }
+
+    @ViewBuilder private func planAccountRow(_ agentState: FleetAgent) -> some View {
         let facts = self.facts(agentState)
         let replacing = machine?.needsSignIn != true
         FormRow("Account", symbol: "person.crop.circle", detail: facts.accountDetail, warning: signInFailure) {
@@ -123,6 +143,19 @@ struct ProviderAccountSection: View {
     /// "Not read since 8:42" under it did not undo that: his signed-out manager sat at a full week it could no
     /// longer spend. The row says the reading is not current, and the bars come back with the reading.
     @ViewBuilder private func usageRow(_ agentState: FleetAgent) -> some View {
+        if let account = agentState.model_account {
+            // **A key and a model server have no allowance** (picture 6): "Paid per use" or "Local model", no bars.
+            let hold = UsageBar.bars(for: store.state?.agents ?? [], time: time, isFresh: store.isFresh)[agent]?.limit
+            FormRow("Usage", symbol: "gauge.with.dots.needle.50percent",
+                    warning: hold.map { String(l10n: "Usage limit until \(fleetComingTime($0.until, now: time))") }) {
+                Text(account.usageWords).foregroundStyle(FleetStyle.muted)
+            }.accessibilityIdentifier("agent-usage")
+        } else {
+            planUsageRow(agentState)
+        }
+    }
+
+    @ViewBuilder private func planUsageRow(_ agentState: FleetAgent) -> some View {
         let limits = agentState.accountLimits
         let current = store.isFresh && limits.map { !$0.isStale(at: time) } == true
         let windows = agentState.local_model == true || !current ? [] : limits?.ownWindows(at: time) ?? []

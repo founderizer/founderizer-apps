@@ -257,7 +257,22 @@ public struct MachineVerification: Decodable, Sendable {
         public let state: String
         public let detail: String
         public let required: Bool?
+        /// The stable name of the detail's words, on the `account` item of an agent on a key or a model server (the
+        /// coordinator's decision D7), and the names that fill them (`not_offered`). nil on every other item.
+        public let code: String?
+        public let names: [String: String]?
         public var id: String { kind + "/" + ref }
+
+        enum CodingKeys: String, CodingKey { case kind, ref, state, detail, required, code, names }
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            kind = try values.decode(String.self, forKey: .kind); ref = try values.decode(String.self, forKey: .ref)
+            state = try values.decode(String.self, forKey: .state); detail = try values.decode(String.self, forKey: .detail)
+            required = try values.decodeIfPresent(Bool.self, forKey: .required)
+            // A code or names that will not read are none: they never hide the check.
+            code = (try? values.decodeIfPresent(String.self, forKey: .code)) ?? nil
+            names = (try? values.decodeIfPresent([String: String].self, forKey: .names)) ?? nil
+        }
     }
     /// The hub's `holds` decides whether the check is still current; without it, the check must have run at the hub's
     /// revision or at the one its machine runs now.

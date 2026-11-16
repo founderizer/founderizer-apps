@@ -51,6 +51,31 @@ struct PageHistoryTests {
         #expect(history.back.isEmpty)
     }
 
+    /// **A place that shows as another page** (`FleetStore.standIn`, review N1): the chat place of an agent on a model
+    /// account shows as its detail page, and that move is no step. Back from the detail page goes to the page before the
+    /// chat place, and Forward comes back to the detail page. As an ordinary step, Back opened the chat place, which moved
+    /// to the detail page again: Back did nothing.
+    @Test func aPlaceThatShowsAsAnotherPageIsNoStep() {
+        var history = PageHistory<String>()
+        history.went(from: "tasks", to: "chat.iris")
+        // The move to "detail.iris" is no step: nothing is written to the history.
+        #expect(history.goBack(from: "detail.iris") == "tasks")
+        #expect(history.back.isEmpty)
+        #expect(history.goForward(from: "tasks") == "detail.iris")
+        // Back to the chat place by a step (it was on the list before): it moves to the detail page with no step, and
+        // the next Back goes on to the page before it.
+        var older = PageHistory<String>()
+        older.went(from: "tasks", to: "chat.iris")
+        older.went(from: "chat.iris", to: "agents")
+        #expect(older.goBack(from: "agents") == "chat.iris")
+        #expect(older.goBack(from: "detail.iris") == "tasks")
+        // The old move, an ordinary step: Back opens the chat place again.
+        var step = PageHistory<String>()
+        step.went(from: "tasks", to: "chat.iris")
+        step.went(from: "chat.iris", to: "detail.iris")
+        #expect(step.goBack(from: "detail.iris") == "chat.iris")
+    }
+
     @Test func aRenamedPageKeepsItsPlace() {
         var history = PageHistory<String>()
         history.went(from: "server.worker-1", to: "tasks")

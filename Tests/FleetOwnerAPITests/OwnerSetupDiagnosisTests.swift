@@ -69,10 +69,10 @@ struct OwnerSetupDiagnosisTests {
         let read: Set<String> = ["failure", "read_ended", "answered_this_launch", "answered_before", "has_reading",
                                  "seconds_since_answer"]
         let build: Set<String> = ["stage", "stopped_at", "stop_shows", "use", "provider", "seconds_in_stage"]
-        let install: Set<String> = ["state", "kind", "step", "stop", "waits_for_network", "steps_done", "steps_planned",
-                                    "seconds_in_step"]
-        let last: Set<String> = ["kind", "outcome", "step", "stop", "waits_for_network", "steps_done", "steps_planned",
-                                 "seconds_ago"]
+        let install: Set<String> = ["state", "kind", "step", "stop", "cause", "waits_for_network", "steps_done",
+                                    "steps_planned", "seconds_in_step"]
+        let last: Set<String> = ["kind", "outcome", "step", "stop", "cause", "waits_for_network", "steps_done",
+                                 "steps_planned", "seconds_ago"]
         let builds: Set<String> = ["unjoined", "server", "left_behind", "not_known", "newest_seconds_ago"]
         let appBuild: Set<String> = ["running", "on_disk", "offered", "state"]
         let secretWords = try! NSRegularExpression(pattern: "token|key|pass|secret|code|address|account|mail|user|host",
@@ -139,7 +139,7 @@ struct OwnerSetupDiagnosisTests {
                                                      "provider": .string("vultr"), "seconds_in_stage": .int(2)]))
         #expect(json["install"] == .object(["state": .string("running"), "kind": .string("server"),
                                             "step": .string("network"), "stop": .string("none"),
-                                            "waits_for_network": .bool(false),
+                                            "cause": .string("none"), "waits_for_network": .bool(false),
                                             "steps_done": .int(1), "steps_planned": .int(4),
                                             "seconds_in_step": .int(3)]))
         // The keys of the last install, with a hub of each kind: it shows while the model holds no install.
@@ -158,7 +158,8 @@ struct OwnerSetupDiagnosisTests {
         let kept = Self.diagnosis(lastInstall: Self.stoppedLast).json(change: 1, workSeconds: .init(lastInstall: 75))
         #expect(kept["last_install"] == .object(["kind": .string("join"), "outcome": .string("stopped"),
                                                  "step": .string("verify"), "stop": .string("no_checklist"),
-                                                 "waits_for_network": .bool(false), "steps_done": .int(3),
+                                                 "cause": .string("none"), "waits_for_network": .bool(false),
+                                                 "steps_done": .int(3),
                                                  "steps_planned": .int(4), "seconds_ago": .int(75)]))
         // With an install in the model, in any state: null, whatever the record says.
         for held in [Self.runningInstall,
@@ -286,7 +287,8 @@ struct OwnerSetupDiagnosisTests {
                                                     "use": .null, "provider": .null, "seconds_in_stage": .null]))
         // A stop's kind and a wait for the network are said only of a state that is `stopped`.
         #expect(json["install"] == .object(["state": .null, "kind": .null, "step": .string("other"),
-                                            "stop": .string("none"), "waits_for_network": .bool(false),
+                                            "stop": .string("none"), "cause": .string("none"),
+                                            "waits_for_network": .bool(false),
                                             "steps_done": .int(9), "steps_planned": .int(0),
                                             "seconds_in_step": .null]))
         // The same for a kept record: a kind or an outcome outside its list is null, a step or a stop `other`.
@@ -295,7 +297,8 @@ struct OwnerSetupDiagnosisTests {
                                       stepsPlanned: -3)
         #expect(Self.diagnosis(lastInstall: record).json(change: 1, workSeconds: .init(lastInstall: 9))["last_install"]
                 == .object(["kind": .null, "outcome": .null, "step": .string("other"), "stop": .string("none"),
-                            "waits_for_network": .bool(false), "steps_done": .int(9), "steps_planned": .int(0),
+                            "cause": .string("none"), "waits_for_network": .bool(false), "steps_done": .int(9),
+                            "steps_planned": .int(0),
                             "seconds_ago": .int(9)]))
         var halted = record
         halted.outcome = "stopped"
@@ -307,6 +310,35 @@ struct OwnerSetupDiagnosisTests {
                                     stepsPlanned: 4)
             #expect(Self.diagnosis(install: held).json(change: 1)["install"]?["stop"] == .string(stop))
         }
+        // **A cause only for the installer's own stop** (`stopsWithCause`): each cause of this version passes as
+        // itself there, also in a kept record; a text outside the list is `other`, never itself; every other stop,
+        // an install that did not stop and a record that does not say stopped have `none`, whatever the model gave.
+        for cause in SetupDiagnosis.installCauses {
+            for stop in SetupDiagnosis.stopsWithCause {
+                let held = SetupInstall(state: "stopped", kind: "server", step: "join", stop: stop, cause: cause,
+                                        stepsDone: 2, stepsPlanned: 4)
+                #expect(Self.diagnosis(install: held).json(change: 1)["install"]?["cause"] == .string(cause))
+                let kept = SetupLastInstall(kind: "join", outcome: "stopped", step: "join", stop: stop, cause: cause,
+                                            stepsDone: 2, stepsPlanned: 4)
+                #expect(Self.diagnosis(lastInstall: kept).json(change: 1)["last_install"]?["cause"]
+                        == .string(cause))
+            }
+        }
+        let strange = SetupInstall(state: "stopped", kind: "server", step: "join", stop: "installer_stopped",
+                                   cause: "Could not get the Founderizer repository from git://100.64.0.7:9418",
+                                   stepsDone: 2, stepsPlanned: 4)
+        #expect(Self.diagnosis(install: strange).json(change: 1)["install"]?["cause"] == .string("other"))
+        for stop in SetupDiagnosis.installStops where !SetupDiagnosis.stopsWithCause.contains(stop) {
+            let held = SetupInstall(state: "stopped", kind: "server", step: "join", stop: stop,
+                                    cause: "code_not_fetched", stepsDone: 2, stepsPlanned: 4)
+            #expect(Self.diagnosis(install: held).json(change: 1)["install"]?["cause"] == .string("none"))
+        }
+        let running = SetupInstall(state: "running", kind: "server", step: "join", stop: "installer_stopped",
+                                   cause: "code_not_fetched", stepsDone: 2, stepsPlanned: 4)
+        #expect(Self.diagnosis(install: running).json(change: 1)["install"]?["cause"] == .string("none"))
+        let cut = SetupLastInstall(kind: "join", outcome: "interrupted", step: "join", stop: "installer_stopped",
+                                   cause: "code_not_fetched", stepsDone: 2, stepsPlanned: 4)
+        #expect(Self.diagnosis(lastInstall: cut).json(change: 1)["last_install"]?["cause"] == .string("none"))
         // Seconds below 0 are null; a stopped install has no seconds; a build at token has none.
         let stopped = SetupInstall(state: "stopped", kind: "hub", step: "claim", stop: "login_refused", stepsDone: 6,
                                    stepsPlanned: 9)
@@ -364,6 +396,13 @@ struct OwnerSetupDiagnosisTests {
         // fails here until the answer, the tool's words and the guide have it.
         #expect(SetupDiagnosis.installStops == ["none"] + InstallRecord.Stop.allCases.map(\.rawValue))
         #expect(SetupDiagnosis.installStops.last == "other" && Set(SetupDiagnosis.installStops).count == 21)
+        // **The installer's own reasons are the app's own names, with `none` first**, and only two kinds of a stop
+        // carry one: a name that the app gets later fails here until the answer, the tool's words and the guide
+        // have it.
+        #expect(SetupDiagnosis.installCauses == ["none"] + InstallCause.allCases.map(\.rawValue))
+        #expect(SetupDiagnosis.stopsWithCause == [InstallRecord.Stop.installerStopped.rawValue,
+                                                  InstallRecord.Stop.macRefused.rawValue])
+        #expect(SetupDiagnosis.stopsWithCause.isSubset(of: Set(SetupDiagnosis.installStops)))
         #expect(SetupDiagnosis.lastInstallKinds == InstallRecord.Kind.allCases.map(\.rawValue))
         #expect(SetupDiagnosis.lastInstallOutcomes == InstallRecord.Outcome.allCases.map(\.rawValue))
         // What a build left at its provider, without `nothing`, which is no unjoined build.
@@ -607,6 +646,7 @@ struct OwnerSetupDiagnosisTests {
                      SetupDiagnosis.hubDevices, SetupDiagnosis.windows, SetupDiagnosis.buildStages,
                      SetupDiagnosis.uses, SetupDiagnosis.providers, SetupDiagnosis.installStates,
                      SetupDiagnosis.installKinds, SetupDiagnosis.installSteps, SetupDiagnosis.installStops,
+                     SetupDiagnosis.installCauses,
                      SetupDiagnosis.lastInstallKinds, SetupDiagnosis.lastInstallOutcomes,
                      SetupDiagnosis.unjoinedBuilds, SetupAppBuild.states] {
             #expect(bare.contains(list.joined(separator: ", ")), "the words lack the list \(list)")
@@ -615,7 +655,7 @@ struct OwnerSetupDiagnosisTests {
                       "seconds_since_answer", "first_run_build", "add_server_build", "stage", "stopped_at",
                       "stop_shows", "use", "provider", "seconds_in_stage", "install", "state", "kind", "step", "stop",
                       "steps_done", "steps_planned", "seconds_in_step", "app_build", "running", "on_disk", "offered",
-                      "waits_for_network", "last_install", "outcome", "seconds_ago", "builds", "unjoined"] {
+                      "waits_for_network", "cause", "last_install", "outcome", "seconds_ago", "builds", "unjoined"] {
             let pattern = try NSRegularExpression(pattern: "(?<![A-Za-z_])\(value)(?![A-Za-z_])")
             #expect(pattern.firstMatch(in: words, range: NSRange(words.startIndex..., in: words)) != nil,
                     "the words lack \(value)")

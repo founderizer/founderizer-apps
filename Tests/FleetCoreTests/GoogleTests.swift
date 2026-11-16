@@ -172,6 +172,21 @@ struct GoogleTests {
         #expect(GoogleCommand.access(sha256: sha, account: owner, service: .drive, access: [:]).route == "ui/team/google")
     }
 
+    /// The one line under the wait for the browser (the owner's "Yes, as drawn" of 15 November 2026): only for
+    /// Founderizer's own Google app, and only while Google has not verified it (UI-API.md 1.185).
+    @Test func theWaitSaysHowToPassGooglesWarningOnlyWhileFounderizersAppIsNotVerified() throws {
+        let url = try #require(URL(string: "https://accounts.google.com/o/oauth2/v2/auth?state=s"))
+        #expect(GoogleConnectStart(url: url, state: "s", app: "founderizer", verified: false).hint
+                == "If Google says that it has not verified Founderizer, press Advanced, then Go to Founderizer.")
+        #expect(GoogleConnectStart(url: url, state: "s", app: "founderizer", verified: true).hint == nil)
+        #expect(GoogleConnectStart(url: url, state: "s", app: "own", verified: nil).hint == nil)
+        #expect(GoogleConnectStart(url: url, state: "s", app: "founderizer", verified: nil).hint == nil)
+        #expect(GoogleConnectStart(url: url, state: "s").hint == nil)          // a hub from before 1.185
+        // The Connect sends no client: the hub has Founderizer's (its release brings the ID, founderizer.com the secret).
+        let fields = try sent(.connect(redirectURI: "http://127.0.0.1:53111/", service: .gmail, account: nil))
+        #expect(fields["client"] == nil)
+    }
+
     @Test func theListenerReadsGooglesAnswer() {
         #expect(GoogleCallback.parse("GET /?state=abc&code=4/0Ab_c-d&scope=x HTTP/1.1") == .code("4/0Ab_c-d", state: "abc"))
         #expect(GoogleCallback.parse("GET /?code=4%2F0Ab%20x&state=a%2Bb HTTP/1.1") == .code("4/0Ab x", state: "a+b"))

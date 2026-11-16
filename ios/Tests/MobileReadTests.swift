@@ -856,3 +856,53 @@ struct MobileChatTests {
         #expect(ChatsPage.waitingRequest(agent: "iris", last: try last(50), items: [asked], open: open, answered: []) == nil)
     }
 }
+
+/// What he asked for in a chat is one row there, on the phone as on the Mac (the owner, 16 November 2026: "this tasks
+/// should also show inside the conversation!!", and "the Mac and the iPhone"): FleetCore's rules, read from the phone's
+/// heads and chat items. Explicit test data only. On the main actor, as the chat's own functions are.
+@MainActor
+struct MobileAskTests {
+    private func item(_ json: String) throws -> MobileChatItem {
+        try JSONDecoder().decode(MobileChatItem.self, from: Data(json.utf8))
+    }
+
+    private func head(_ fields: [String: Any]) throws -> MobileTaskHead {
+        var row: [String: Any] = ["id": 7, "title": "Read the clock", "state": "working", "owner": "vps",
+                                  "requester": "manager", "goal": "", "needs": "none", "attempt": 1, "created": 10.0,
+                                  "started": 12.0, "last_activity": 30.0]
+        for (key, value) in fields { row[key] = value }
+        return try JSONDecoder().decode(MobileTaskHead.self, from: JSONSerialization.data(withJSONObject: row))
+    }
+
+    @Test("A head carries its ask, its parent and its park, and reads as FleetCore's task")
+    func aHeadIsFleetCoresTask() throws {
+        let task = try #require(try head(["ask": "abc-1", "parent": 3, "parked_until": 900.0, "works": false]).fleetTask)
+        #expect(task.ask == "abc-1" && task.parent == 3 && task.parked_until == 900 && task.works == false)
+        // A hub from before them sends none.
+        let older = try #require(try head([:]).fleetTask)
+        #expect(older.ask == nil && older.parent == nil)
+    }
+
+    @Test("The row of what he asked stands under the reply of its turn, with the name the read gives it")
+    func aRowUnderTheReply() throws {
+        let asked = try item(#"{"kind": "message", "ts": 10, "id": "abc-1", "text": "What time is it in UTC?", "client": "founderizer-ios/1/x"}"#)
+        let reply = try item(#"{"kind": "report", "ts": 11, "id": 5, "text": "I opened a task for it.", "in_reply_to": "abc-1"}"#)
+        let later = try item(#"{"kind": "message", "ts": 20, "id": "abc-2", "text": "Thanks", "client": "founderizer-ios/1/x"}"#)
+        let lines = [asked, reply, later]
+        let entries = ChatPage.entries(lines, agent: "vps", names: ["abc-1": "Show the UTC time"])
+        let task = try #require(try head(["ask": "abc-1", "works": true, "doing": "Reads the clock"]).fleetTask)
+        let reading = HubState(phoneTime: 40, db: "gen-1", agents: [FleetAgent(phoneName: "vps", role: "worker",
+                               runtime: "claude", limit: nil)], tasks: [task], needs: [],
+                               messages: entries.compactMap { if case .message(let message) = $0 { message } else { nil } },
+                               holds: [], outcomes: [])
+        let asks = ChatPage.asks(in: entries, places: ChatRequestPlaces(), agent: "vps", reading: reading)
+        let rows = ChatPage.rows(lines, needs: [], places: ChatRequestPlaces(), asks: asks)
+        #expect(rows.map(\.id) == ["run-message-abc-1", "run-report-5", "ask-abc-1", "run-message-abc-2"])
+        guard case .ask(let row) = rows[2] else { Issue.record("no row of the ask"); return }
+        #expect(row.title == "Show the UTC time" && row.line == "Reads the clock" && row.moves && row.task == 7)
+        // While the chat waits for the reply to his message, the row waits too, and comes with the reply.
+        let alone = ChatPage.asks(in: Array(entries.prefix(1)), places: ChatRequestPlaces(), agent: "vps",
+                                  reading: reading, waitsOn: "abc-1")
+        #expect(alone.isEmpty)
+    }
+}

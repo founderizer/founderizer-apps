@@ -745,6 +745,15 @@ struct AgentAccount {
 
     @MainActor init(_ agent: FleetAgent, store: FleetStore) {
         let time = store.state?.time ?? 0
+        // **An agent on a key or a model server** (picture 9, his "Yes, as shown"): the AI that he picked, and "Key" or
+        // the model server's address where a plan has its email; no usage, because neither has an allowance.
+        if let account = agent.model_account, let picked = agent.modelProvider {
+            provider = picked.label
+            name = account.accountWords
+            help = [picked.label, account.kind == "server" ? account.address : nil].compactMap { $0 }.joined(separator: " · ")
+            usage = ""; old = false; usageHelp = ""
+            return
+        }
         provider = providerName(agent.runtime)
         let address = AccountEmail(limits: agent.accountLimits, at: time, fresh: store.isFresh,
                                    features: store.state?.ui_features ?? [])
@@ -795,7 +804,7 @@ struct AgentAccountLine: View {
     var body: some View {
         let account = AgentAccount(agent, store: store)
         let name = HStack(spacing: 6) {
-            ProviderIcon(runtime: agent.runtime, size: 14)
+            ProviderIcon(runtime: agent.runtime, provider: agent.modelProvider, size: 14)
             Text(account.name).lineLimit(1).truncationMode(.middle)
         }.help(account.help)
         // **The shares are never cut** (T-17: "5 h · 34…" at every width): their column is as wide as two windows at

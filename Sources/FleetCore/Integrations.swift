@@ -46,6 +46,10 @@ public struct IntegrationsSnapshot: Decodable, Sendable {
         public let access_ends: Double?
         /// A refused refresh, or what is wrong with the hub's MCP file.
         public let problem: String?
+        /// A definite end of its access (the server refused the saved access for good, or an access that cannot renew
+        /// ran out), where a new sign-in helps and no outage is meant (owner API 1.187, `MCP.signIn`). nil on a hub
+        /// from before it.
+        public let ended: Bool?
 
         /// What the server runs, in one line: its command and arguments, or its URL.
         public var detail: String { url ?? ([command ?? ""] + (args ?? [])).joined(separator: " ") }

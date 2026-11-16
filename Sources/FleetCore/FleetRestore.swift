@@ -186,13 +186,13 @@ public struct RestoreAfterwards: Sendable, Equatable {
         } else {
             noGitHub = true
         }
-        if let google = held.google, google.present, google.accounts != 0 || google.client == true {
+        if let google = held.google, google.present, google.accounts != 0 {
             let accounts = google.accounts
             let detail = accounts.map {
                 $0 == 1
-                    ? String(l10n: "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your Google account and which agent had which level, so nothing has to be remembered. You need the Desktop client file again.")
-                    : String(l10n: "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your \($0) Google accounts and which agent had which level, so nothing has to be remembered. You need the Desktop client file again.")
-            } ?? String(l10n: "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your Google accounts and which agent had which level, so nothing has to be remembered. You need the Desktop client file again.")
+                    ? String(l10n: "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your Google account and which agent had which level, so nothing has to be remembered.")
+                    : String(l10n: "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your \($0) Google accounts and which agent had which level, so nothing has to be remembered.")
+            } ?? String(l10n: "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your Google accounts and which agent had which level, so nothing has to be remembered.")
             steps.append(Step(
                 title: String(l10n: "Google, one account at a time"),
                 detail: detail,

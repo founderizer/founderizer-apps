@@ -129,6 +129,9 @@ extension ReachFacts {
         public var step: InstallStepName
         /// nil unless the install stands stopped.
         public var stop: InstallRecord.Stop?
+        /// Why the installer stopped itself, as a fixed name (`InstallCause`): nil unless the install stands stopped
+        /// with the installer's own reason.
+        public var cause: InstallCause?
         /// The install stopped only because the server is not on the owner's private network, and its page asks for
         /// the network's connection in place of "Try again" (`MachineInstallModel.needsNetworkKey`).
         public var waitsForNetwork: Bool
@@ -138,11 +141,13 @@ extension ReachFacts {
         public var since: Date?
 
         public init(state: InstallState, kind: InstallKind, step: InstallStepName, stop: InstallRecord.Stop?,
-                    waitsForNetwork: Bool = false, stepsDone: Int, stepsPlanned: Int, since: Date?) {
+                    cause: InstallCause? = nil, waitsForNetwork: Bool = false, stepsDone: Int, stepsPlanned: Int,
+                    since: Date?) {
             self.state = state
             self.kind = kind
             self.step = step
             self.stop = stop
+            self.cause = cause
             self.waitsForNetwork = waitsForNetwork
             self.stepsDone = stepsDone
             self.stepsPlanned = stepsPlanned
@@ -181,10 +186,12 @@ extension ReachFacts {
         public var stop: InstallRecord.Stop?
         /// The install's page asks for the private network's connection (`MachineInstallModel.needsNetworkKey`).
         public var waitsForNetwork: Bool
+        /// The fixed name of the installer's own reason (`MachineInstallModel.cause`), or nil.
+        public var cause: InstallCause?
 
         public init(way: String, running: Bool, failed: Bool, ended: Bool, job: String? = nil,
                     steps: [InstallProgress], planned: [String], runningStep: String?, since: Date,
-                    stop: InstallRecord.Stop?, waitsForNetwork: Bool) {
+                    stop: InstallRecord.Stop?, waitsForNetwork: Bool, cause: InstallCause? = nil) {
             self.way = way
             self.running = running
             self.failed = failed
@@ -196,6 +203,7 @@ extension ReachFacts {
             self.since = since
             self.stop = stop
             self.waitsForNetwork = waitsForNetwork
+            self.cause = cause
         }
     }
 
@@ -208,7 +216,7 @@ extension ReachFacts {
     ///   (`InstallRecord.Stop.of`), and never by a word that the Mac sent.
     /// - The stop: the model's own kind while the install stands stopped, and `other` for a stop with no kind (the
     ///   model gives one with each stop). An install that runs, that ended or that its page ended has none. The wait
-    ///   for the network counts only with a stop.
+    ///   for the network and the installer's own reason (`cause`) count only with a stop.
     public static func install(_ link: InstallLink) -> InstallFacts? {
         guard link.running || link.failed || link.ended || !link.steps.isEmpty else { return nil }
         let state: InstallState = link.running ? .running : link.failed ? .stopped : link.ended ? .done : .none
@@ -233,6 +241,7 @@ extension ReachFacts {
         let done = link.steps.filter { $0.state == .done }.count
         let planned = link.planned.isEmpty ? link.steps.count : link.planned.count
         return InstallFacts(state: state, kind: kind, step: step, stop: stopped ? link.stop ?? .other : nil,
+                            cause: stopped ? link.cause : nil,
                             waitsForNetwork: stopped && link.waitsForNetwork, stepsDone: min(done, longestPlan),
                             stepsPlanned: min(planned, longestPlan),
                             // Only while a step runs: an install that waits for its first step has no step's seconds.
@@ -255,6 +264,8 @@ extension ReachFacts {
         public var outcome: InstallRecord.Outcome
         /// nil unless the outcome is `stopped`.
         public var stop: InstallRecord.Stop?
+        /// The installer's own reason as a fixed name (`InstallRecord.cause`): nil unless the outcome is `stopped`.
+        public var cause: InstallCause?
         /// The install stopped only because the server was not on the owner's private network.
         public var waitsForNetwork: Bool
         /// The step where it stood: the one that failed, else the one that ran; `none` for an install that ended
@@ -266,10 +277,12 @@ extension ReachFacts {
         public var lastChange: Date
 
         public init(kind: InstallRecord.Kind, outcome: InstallRecord.Outcome, stop: InstallRecord.Stop?,
-                    waitsForNetwork: Bool, step: InstallStepName, stepsDone: Int, stepsPlanned: Int, lastChange: Date) {
+                    cause: InstallCause? = nil, waitsForNetwork: Bool, step: InstallStepName, stepsDone: Int,
+                    stepsPlanned: Int, lastChange: Date) {
             self.kind = kind
             self.outcome = outcome
             self.stop = stop
+            self.cause = cause
             self.waitsForNetwork = waitsForNetwork
             self.step = step
             self.stepsDone = stepsDone
@@ -293,10 +306,10 @@ extension ReachFacts {
         return records.first { $0.hub == hub }
     }
 
-    /// **A record's facts.** The stop and the wait for the network count only for a record that says `stopped`. The
-    /// planned steps are the plan's own count for a hub and for a join, and never less than the steps that the
-    /// record has; a Mac's installer names its own steps, so its count is the record's steps. Each count is capped at
-    /// the longest plan, as an install's counts are.
+    /// **A record's facts.** The stop, its cause and the wait for the network count only for a record that says
+    /// `stopped`. The planned steps are the plan's own count for a hub and for a join, and never less than the steps
+    /// that the record has; a Mac's installer names its own steps, so its count is the record's steps. Each count is
+    /// capped at the longest plan, as an install's counts are.
     public static func lastInstall(_ record: InstallRecord) -> LastInstall {
         let stopped = record.outcome == .stopped
         let stood: InstallRecord.StepID?
@@ -312,7 +325,7 @@ extension ReachFacts {
         case .mac: plan = 0
         }
         return LastInstall(kind: record.kind, outcome: record.outcome, stop: stopped ? record.stop ?? .other : nil,
-                           waitsForNetwork: stopped && record.waitsForNetwork,
+                           cause: stopped ? record.cause : nil, waitsForNetwork: stopped && record.waitsForNetwork,
                            step: stood.map { installStep($0.rawValue) } ?? .none,
                            stepsDone: min(record.steps.filter { $0.state == .done }.count, longestPlan),
                            stepsPlanned: min(max(plan, record.steps.count), longestPlan),

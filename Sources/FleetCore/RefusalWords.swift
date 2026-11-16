@@ -36,6 +36,7 @@ enum RefusalWords {
     static func sentence(_ code: String, _ names: [String: RefusalName],
                          say: (String.LocalizationValue) -> String) -> String? {
         let server = names["server"]?.written, address = names["address"]?.written, agent = names["agent"]?.written
+        let provider = names["provider"]?.written
         switch code {
         case "hub_changed":
             return say("hub generation changed; refresh state")
@@ -93,6 +94,33 @@ enum RefusalWords {
         case "agent_open_signin":
             guard let agent else { return nil }
             return say("\(agent) has an open sign-in. Finish it or let it run out, then try again.")
+        // **An account with a key or a model server** (the AI providers build; `hub.ACCOUNT_WORDS`, UI-API.md 1.165 and
+        // 1.175, decision D7): the owner's approved words of round 2, sentences 1 to 8 (ai-providers-step-5-answers.md).
+        // The hub keeps them apart from `refusal_words.py` until the lane AI providers B moves them into it, so they
+        // are not in `app/vectors/refusal-codes.json` yet (`ModelAccountsTests` holds them to the hub's English).
+        case "plain_http":
+            return say("Plain http works only over Tailscale or on the agent's own server. Use that machine's Tailscale address, or https.")
+        case "address":
+            return say("Write the address as http:// or https://, then the host, and a port and a path if it has them.")
+        case "pooled":
+            return say("The fleet manager may give this key. Set it to You alone in Settings › Secrets, then save again.")
+        case "placement":
+            return say("Founderizer no longer has this key or address. Start again from Add agent.")
+        case "open":
+            guard let server else { return nil }
+            return say("\(server) has an agent on a model server with no key, so it takes no other agent. Choose another server.")
+        case "change":
+            guard let agent, let provider else { return nil }
+            return say("\(agent) stays on \(provider). For another AI, add a new agent.")
+        case "change_server":
+            guard let agent else { return nil }
+            return say("\(agent) stays on its model server. For another AI, add a new agent.")
+        case "mac":
+            guard let server, let provider else { return nil }
+            return say("\(server) is a Mac. An agent on \(provider) needs a Linux server: choose another one.")
+        case "older":
+            guard let server else { return nil }
+            return say("\(server) runs an older Founderizer that cannot do this yet. It updates itself when it has no job; then try again.")
         default:
             return nil
         }

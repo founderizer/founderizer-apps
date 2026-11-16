@@ -165,7 +165,12 @@ public enum OwnerSetupTools {
             another try from this Mac ends the same way; for kind mac, whose steps come from that Mac, the kind is \
             the app's own and never a word that the Mac sent); waits_for_network (true when the install stopped \
             only because the server is not on the owner's private network: its page then asks for the network's \
-            connection); steps_done \
+            connection); cause, the app's own name for the reason that the installer itself gave, read from its stop \
+            sentence and never given in its words, only when stop is installer_stopped or mac_refused (for kind mac \
+            only from that Mac's sealed state), else none: none, needs_root, system_not_supported, no_systemd, \
+            hub_no_answer, code_not_fetched, join_code_refused, server_name_refused, hub_busy, private_network, \
+            firewall, agent_users, vault, updates, service, hub_claim, agent_program, homebrew, wrong_mac_user, other \
+            (other: a reason that this list does not know); steps_done \
             and steps_planned, whole numbers; seconds_in_step (null while no step runs). The words of a stop stay in \
             the app. \
             last_install: the newest install for this hub that the app kept a record of on this Mac (with hub \
@@ -173,7 +178,7 @@ public enum OwnerSetupTools {
             is given only while install is null, and it is null with no record: kind: hub, join, mac (join is a \
             server that joins the fleet); outcome: running, done, stopped, cancelled, interrupted (cancelled: its \
             page ended it; interrupted: the app quit, crashed or was updated while it ran); step, the step where \
-            it stood, and stop, each of the same list as in install; waits_for_network; steps_done and \
+            it stood, stop and cause, each of the same list as in install; waits_for_network; steps_done and \
             steps_planned; seconds_ago (whole seconds since the record's last change: the install's end, or the \
             last change of a step for one that was cut off). \
             builds: whole numbers from the app's kept records of the servers that it asked a provider for, of every \

@@ -67,6 +67,11 @@ struct ManagerView: View {
         guard index + 1 < rows.count, case .entry(let next) = rows[index + 1] else { return nil }
         return next
     }
+    /// The row under the one at `index` is the row of a thing that he asked for too.
+    private static func askFollows(_ index: Int, in rows: [ChatPart]) -> Bool {
+        guard index + 1 < rows.count, case .ask = rows[index + 1] else { return false }
+        return true
+    }
     /// Over the first message: the room the pill over the conversation stands in.
     private static let topInset: CGFloat = 26 + ChatAgentPill.bottom
     /// **The room under the chat's last row, over the composer** (the owner, 15 November 2026, with a picture of the
@@ -108,6 +113,20 @@ struct ManagerView: View {
     /// his message to the agent that asked (`kind` "answer").
     private var mine: [OwnerNeed] { (store.state?.needs ?? []).filter { $0.by == agent } }
 
+    /// **What he asked this agent for in this chat, each as a row of its own** (the owner, 16 November 2026: "this
+    /// tasks should also show inside the conversation!! like in codex or claude code!"; `ChatAskPlaces`): under the
+    /// agent's reply of the turn in which the work began, where it stays when the work ends.
+    private var asks: [Ask] { store.asks.filter { $0.agent == agent } }
+    /// The message of his whose reply the chat's moving "Thinking" waits for: his newest message, not an answer to a
+    /// request (`ChatWaiting`'s own rule). A usage limit or a quiet machine waits for nothing that comes soon.
+    private func waitsOn(_ entries: [ChatEntry]) -> String? {
+        guard waiting?.moving == true else { return nil }
+        for entry in entries.reversed() {
+            if case .message(let message) = entry, message.kind == "message" { return message.request_id }
+        }
+        return nil
+    }
+
     /// What this chat is waiting for, or nil. Every part of it is already read: the hub's own answer about the
     /// owner's last message (`pendingChat`), this Mac's own request on its way, and the two things that stop the
     /// agent running at all — its usage limit and its machine going quiet.
@@ -119,6 +138,8 @@ struct ManagerView: View {
     }
 
     var body: some View {
+        // Read once for the rows and for the chat's end, which follows a row that comes.
+        let asks = self.asks
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: Self.entrySpacing - Self.footer) {
@@ -134,7 +155,9 @@ struct ManagerView: View {
                     let byID = Dictionary(needs.map { ($0.id, $0) }) { first, _ in first }
                     // **One list of rows, the entries and the cards, each under its own id** (`ChatPart`): a card keeps
                     // its view, with the cursor in its answer, when an entry that comes moves it to another place.
-                    let rows = places.rows(of: held)
+                    // The row of each thing that he asked for in this chat stands under its turn's reply.
+                    let rows = ChatAskPlaces.rows(places.rows(of: held), asks: asks, waitsOn: waitsOn(held))
+                    let askByID = Dictionary(asks.map { ($0.id, $0) }) { first, _ in first }
                     // A card counts for the marks of a day or an hour as a message does, by the time it was raised.
                     let times = ChatRequestPlaces.times(of: rows, raised: byID.mapValues(\.raised))
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
@@ -144,6 +167,13 @@ struct ManagerView: View {
                         switch row {
                         case .request(let id):
                             if let need = byID[id] { requestCard(need, spoken: places.spoken.contains(id)) }
+                        case .ask(let id):
+                            if let ask = askByID[id] {
+                                // Rows under one reply stand 8 points apart, as the cards of a lane of Tasks.
+                                ChatAskLine(store: store, row: ChatAskRow(ask, agent: agent, state: store.state))
+                                    .padding(.bottom, Self.footer - (Self.askFollows(index, in: rows) ? Self.entrySpacing - 8 : 0))
+                                    .id(row.id)
+                            }
                         case .entry(.message(let message)):
                             // The room under his message is counted to the row under it: a reply, or a card.
                             messageRow(message).padding(.bottom, Self.gap(under: message, before: Self.entry(after: index, in: rows),
@@ -194,6 +224,10 @@ struct ManagerView: View {
             // A match of the search card: the chat draws back to it and shows it in its middle.
             .onChange(of: store.chatFocus, initial: true) { _, focus in reveal(focus, proxy) }
             .onChange(of: requests.map(\.id)) { _, _ in
+                if end.followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
+            }
+            // A row of a thing that he asked for comes under the newest reply, as a card does.
+            .onChange(of: asks.map(\.id)) { _, _ in
                 if end.followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
             }
             // The line appears and goes under his last message, so the view follows it as it does a reply.

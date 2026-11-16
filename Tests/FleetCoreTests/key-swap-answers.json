@@ -1,0 +1,11 @@
+{
+  "about": "The lines of vault.py configure that the owner's app reads (Part B, app patch 2), as configure_main prints them: test_key_swap.AnswerLines makes and holds them, and KeySwapPlanTests reads each one with KeySwapAnswer.read.",
+  "answers": {
+    "kept part": "{\"ok\": false, \"reason\": \"The vault's proxy of this machine is activating 0 seconds after its start. Read `journalctl -u fleet-vault-swap -n 30` on this machine: a proxy that does not start says why on its first line. The configuration keeps the part, which it had before this step, so a key that has a site is not given to a session until this is repaired.\"}",
+    "lock": "{\"ok\": false, \"reason\": \"Another step changes this machine's vault now, so this one changed nothing. Try again in a minute.\"}",
+    "made": "{\"ok\": true, \"state\": \"made\", \"swaps\": true, \"swaps_from\": \"the socket for the proxy of the broker that runs now, and the proxy's service\", \"owner_keys\": 1, \"fleet\": true, \"changed\": [\"the proxy's user\", \"the configuration\", \"the proxy\"]}",
+    "put back": "{\"ok\": false, \"reason\": \"The vault's proxy of this machine is activating 0 seconds after its start. Read `journalctl -u fleet-vault-swap -n 30` on this machine: a proxy that does not start says why on its first line. So this step put the configuration back as it was and stopped the proxy: the key swap is not switched on, and each key reaches a session as a value, as before.\", \"undone\": true}",
+    "refused": "{\"ok\": false, \"reason\": \"This vault is of another fleet (fedcba9876543210), so nothing changed.\"}",
+    "there": "{\"ok\": true, \"state\": \"there\", \"swaps\": true, \"swaps_from\": \"the socket for the proxy of the broker that runs now, and the proxy's service\", \"owner_keys\": 1, \"fleet\": true, \"changed\": []}"
+  }
+}

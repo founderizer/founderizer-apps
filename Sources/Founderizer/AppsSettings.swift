@@ -232,10 +232,27 @@ struct AppsSettings: View {
         // Can use to another's, or to another hub. A new hub generation closes the list too: its reading is kept by
         // generation, so the open card would wait for ever on the old one.
         .onChange(of: "\(store.hub)\n\(store.state?.db ?? "")\n\(agent ?? "")") { repositories.close() }
-        // The MCP servers' form keeps its state here, where the page always is (`MCPAdding`).
+        // The MCP servers' form keeps its state here, where the page always is (`MCPAdding`). Its servers are read
+        // again on the lists' clock, so the mark and Sign in again of a row stay true while the page shows.
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/mcp") {
-            if agent == nil && hasMCP && (only == nil || only == .mcp) { await mcp.start(store: store) }
+            guard agent == nil && hasMCP && (only == nil || only == .mcp) else { return }
+            await mcp.start(store: store)
+            while !Task.isCancelled {
+                do { _ = try await store.nap(15) } catch { return }
+                await mcp.refresh(store: store)
+            }
         }
+    }
+
+    /// **Sign in again on the row of a server whose access ended** (the owner's "Yes, all three" and "Row and Needs
+    /// you", 15 November 2026): an MCP server that signs in with the hub's Connect, whose access ended or was refused,
+    /// that has no connection, or whose access cannot renew and ends within 14 days of the hub's time, gets the warning
+    /// mark and Sign in again on its row (`MCPSignInAgain`). The fleet's page only, which keeps the form's state; the
+    /// reading of the page's first frame until the form's own is in.
+    private func renewal(_ resource: FleetResource) -> AnyView? {
+        guard agent == nil, resource.kind == "tool", let tool = (mcp.snapshot ?? integrations)?.tools?[resource.what],
+              let reason = tool.signIn(at: store.state?.time) else { return nil }
+        return AnyView(MCPSignInAgain(store: store, model: mcp, name: resource.what, title: tool.title, reason: reason))
     }
 
     /// While the hub does not answer nothing is read: the lists' failed line, never "Reading…". **Not while the
@@ -262,7 +279,7 @@ struct AppsSettings: View {
             AccessSettings(store: store, kinds: [group.kind], agent: nil).id("\(group.kind)/\(connects)")
         case .mcp:
             if mcp.shows { MCPAddSection(store: store, shared: mcp) }
-            AccessSettings(store: store, kinds: [group.kind], agent: nil)
+            AccessSettings(store: store, kinds: [group.kind], agent: nil, accessory: renewal)
         }
     }
 
@@ -325,7 +342,7 @@ struct AppsSettings: View {
                 }
                 if agent == nil && mcp.shows { MCPAddSection(store: store, shared: mcp) }
             }
-            AccessSettings(store: store, kinds: ["tool"], agent: agent, lead: FleetSpace.inside)
+            AccessSettings(store: store, kinds: ["tool"], agent: agent, lead: FleetSpace.inside, accessory: renewal)
         }
     }
 

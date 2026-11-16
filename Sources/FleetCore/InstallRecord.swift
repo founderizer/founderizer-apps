@@ -192,6 +192,10 @@ public struct InstallRecord: Codable, Equatable, Sendable, Identifiable {
     /// The page's one orange line, for the owner's own eyes on this Mac (see the type's own words): the plan's
     /// redactions applied again, and `saysLimit` characters at most.
     public internal(set) var says: String?
+    /// **Why the installer stopped itself, as a fixed name** (`InstallCause`), read from its own stop sentence and
+    /// never kept in its words: only for a stop of the kind `installerStopped`, or a Mac's stop that its sealed state
+    /// gave. nil for every other record, and for a record that an app from before this field wrote.
+    public internal(set) var cause: InstallCause?
 
     public init(id: UUID = UUID(), kind: Kind, hub: String?, host: String, launch: String = AppLaunch.id,
                 at began: Date = Date()) {
@@ -208,6 +212,7 @@ public struct InstallRecord: Codable, Equatable, Sendable, Identifiable {
         stop = nil
         waitsForNetwork = false
         says = nil
+        cause = nil
     }
 
     /// **The step that the install stopped at**: the one that failed, else the one that ran. nil for an install that
@@ -294,17 +299,19 @@ public struct InstallLog: Sendable {
     }
 
     /// **The install stopped.** `says` is the line that its caller chose to keep (`InstallRecord.words(of:host:)`: the
-    /// app's own words, or none); here it loses the plan's secrets again and is cut. An install that its page ended
-    /// (`cancel`) stays `cancelled`: the error of the work that it cut off is no stop. The secrets that this log held
-    /// for that line go with the end, as the install's own key does.
+    /// app's own words, or none); here it loses the plan's secrets again and is cut. `cause`: the fixed name of the
+    /// installer's own reason (`InstallCause`), or nil. An install that its page ended (`cancel`) stays `cancelled`:
+    /// the error of the work that it cut off is no stop. The secrets that this log held for that line go with the end,
+    /// as the install's own key does.
     @discardableResult
-    public mutating func stop(_ stop: InstallRecord.Stop, says: String?, waitsForNetwork: Bool = false,
-                              at time: Date = Date()) -> Bool {
+    public mutating func stop(_ stop: InstallRecord.Stop, says: String?, cause: InstallCause? = nil,
+                              waitsForNetwork: Bool = false, at time: Date = Date()) -> Bool {
         guard record.outcome != .cancelled else { return false }
         let before = record
         record.outcome = .stopped
         record.ended = time
         record.stop = stop
+        record.cause = cause
         record.waitsForNetwork = waitsForNetwork
         record.says = says.map(kept)
         hides = []
@@ -328,7 +335,7 @@ public struct InstallLog: Sendable {
         guard record.outcome == .stopped else { return false }
         record.outcome = .running
         record.ended = nil
-        record.stop = nil; record.says = nil; record.waitsForNetwork = false
+        record.stop = nil; record.says = nil; record.cause = nil; record.waitsForNetwork = false
         for place in record.steps.indices where record.steps[place].state == .failed {
             record.steps[place].state = .running
             record.steps[place].ended = nil

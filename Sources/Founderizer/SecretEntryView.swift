@@ -18,6 +18,17 @@ struct SecretPreset: Identifiable {
     var tell: String?
     /// A key that the owner pasted into a chat and saves here instead. It goes into the form's field and nowhere else.
     var key: String?
+    /// **The key page of an agent on a key or a model server** (the AI providers build, picture 3, his "Yes, as
+    /// shown"): the vault's own form on a step, its Key field and Save alone, for a new key of this variable name
+    /// and site, which no agent holds yet. The add gives the new agent its grant after the agent exists.
+    var keyStep = false
+
+    /// The preset of a key page: the variable name and the key's site, which the page sets under the hood.
+    static func keyStep(variable: String, site: String) -> SecretPreset {
+        var preset = SecretPreset()
+        preset.kind = .apiKey; preset.env = variable; preset.url = site; preset.keyStep = true
+        return preset
+    }
 
     init(tell: String? = nil, key: String? = nil, give: [String: SecretGrant] = [:]) { self.tell = tell; self.key = key; self.give = give }
 
@@ -187,8 +198,16 @@ struct SecretEntryView: View {
     /// The form stands under the title of a step: the request at hand on Needs you (`NeedStep`).
     @Environment(\.stepText) private var stepText
 
-    init(store: FleetStore, preset: SecretPreset = SecretPreset(), compact: Bool = false, onDone: @escaping (String?) -> Void) {
+    /// A key page's line from the add after the save (the hub's refusal of the account or of the agent, round 2
+    /// sentences 4, 6, 7 and 8), and its Save again, which goes on with the key that the vault has already: the form's
+    /// one orange line and its one button, so the page keeps its look.
+    private let note: String?
+    private let again: (() -> Void)?
+
+    init(store: FleetStore, preset: SecretPreset = SecretPreset(), compact: Bool = false, note: String? = nil,
+         again: (() -> Void)? = nil, onDone: @escaping (String?) -> Void) {
         self.store = store; self.preset = preset; self.compact = compact; self.onDone = onDone
+        self.note = note; self.again = again
         _hub = State(initialValue: store.hub); _database = State(initialValue: store.state?.db)
         // The form shows at once and waits for the central vault's key before Save; a hub without it shows the row.
         _phase = State(initialValue: store.state?.ui_features?.contains(CentralVault.feature) == true ? .form : .noVault)
@@ -208,15 +227,15 @@ struct SecretEntryView: View {
     private var features: [String] { store.state?.ui_features ?? [] }
     private var isRequest: Bool { preset.need != nil }
     /// A request's form on a step: what it draws stands in the middle, as a step's field and its button do.
-    private var onStep: Bool { stepText != nil && isRequest }
+    private var onStep: Bool { stepText != nil && (isRequest || preset.keyStep) }
     /// **On a step, a request that names all but the value is the fields for the value alone** (the owner's yes of 11
     /// November 2026 to the picture of a request at hand: a Key field, Save, Decline): its site, and for a key its
     /// variable, stand in the request's own title. Any other request keeps the rows of its card there.
-    private var fieldsAlone: Bool { onStep && knowsSite && (login.kind == .login || !preset.env.isEmpty) }
+    private var fieldsAlone: Bool { onStep && knowsSite && (login.kind == .login || !preset.env.isEmpty) || preset.keyStep }
     /// Save can go: the vault's key is known, and what he typed is a login or a key.
     private var canSave: Bool { !busy && central != nil && login.problem == nil && context != nil }
     /// A request that names its site keeps it: the card's title already says the host, so the form asks for no address.
-    private var knowsSite: Bool { isRequest && !preset.url.isEmpty }
+    private var knowsSite: Bool { (isRequest || preset.keyStep) && !preset.url.isEmpty }
     /// A request whose proposal names one agent is for that agent: the save gives it what it asked for, with no list.
     private var forOneAgent: Bool { isRequest && preset.give.count == 1 }
     private var need: OwnerNeed? { preset.need.flatMap { id in store.state?.needs.first { $0.id == id } } }
@@ -248,10 +267,17 @@ struct SecretEntryView: View {
             case .form:
                 if !fitting.isEmpty { fits }
                 form
-                if !holders.isEmpty && !forOneAgent { accessChoice.disabled(busy) }
+                if !holders.isEmpty && !forOneAgent && !preset.keyStep { accessChoice.disabled(busy) }
+            // A key page goes on by itself once the vault has the key: until then its field and its moving words.
+            // **While the vault takes the key: "Saving…" and no button** (review M3); a failed intake is the form's one
+            // orange line, with Save again for the same reference.
+            case .saved where preset.keyStep:
+                stepField(String(l10n: "Key"), text: .constant(""), secure: true, id: "secret-password").disabled(true)
+                // In the middle, as the field's own wait stands (`stepFields`).
+                waitRow.fixedSize()
             case .saved(let progress): saved(progress)
             }
-            if let message {
+            if let message = message ?? keyStepProblem ?? (busy ? nil : note) {
                 Text(message).font(FormMetrics.onStep(onStep ? stepText : nil) ?? FormMetrics.detail).foregroundStyle(.orange)
                     .multilineTextAlignment(onStep ? .center : .leading).fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled).accessibilityIdentifier("secret-message")
@@ -299,8 +325,21 @@ struct SecretEntryView: View {
 
     /// **The same actions under a request at hand, in the middle** (`onStep`): Save, the step's one button, and Decline
     /// as the quiet link under it, where a step has its way back; after a save, Try again and Done.
+    /// Why the intake of a key page's key failed, once nothing runs (review M3).
+    private var keyStepProblem: String? {
+        guard preset.keyStep, !busy, case .saved(let progress) = phase else { return nil }
+        return progress.sealedProblem
+    }
+
     @ViewBuilder private var stepActions: some View {
-        if case .saved(let progress) = phase {
+        if case .saved(let progress) = phase, preset.keyStep {
+            // A key page has no Done and no Try again: Save again sends the same sealed key under the same reference,
+            // and the page goes on by itself once the vault has it.
+            if !busy && !progress.isDone {
+                Button(saveLabel) { if !SecondClick.isNow { Task { await proceed(progress) } } }.buttonStyle(FleetPrimaryButtonStyle())
+                    .accessibilityIdentifier("secret-save")
+            }
+        } else if case .saved(let progress) = phase {
             HStack(spacing: 8) {
                 if !progress.isDone {
                     Button("Try again") { Task { await proceed(progress) } }.buttonStyle(FleetOutlineButtonStyle())
@@ -312,12 +351,18 @@ struct SecretEntryView: View {
         } else {
             VStack(spacing: 14) {
                 // The second click of a double-click on the request before this one presses nothing here (`SecondClick`).
-                if phase == .form {
+                if phase == .form, let again {
+                    // The key is in the vault already: Save goes on with it.
+                    Button(saveLabel) { if !SecondClick.isNow { again() } }.buttonStyle(FleetPrimaryButtonStyle())
+                        .disabled(busy).accessibilityIdentifier("secret-save")
+                } else if phase == .form {
                     Button(saveLabel) { if !SecondClick.isNow { Task { await save() } } }.buttonStyle(FleetPrimaryButtonStyle())
                         .disabled(!canSave).accessibilityIdentifier("secret-save")
                 }
-                SetupLink(String(l10n: "Decline")) { if !SecondClick.isNow { Task { await decline() } } }.disabled(busy || context == nil)
-                    .help("Tell \(need?.by.agentLabel ?? String(l10n: "the agent")) that you do not give it").accessibilityIdentifier("secret-decline")
+                if isRequest {
+                    SetupLink(String(l10n: "Decline")) { if !SecondClick.isNow { Task { await decline() } } }.disabled(busy || context == nil)
+                        .help("Tell \(need?.by.agentLabel ?? String(l10n: "the agent")) that you do not give it").accessibilityIdentifier("secret-decline")
+                }
             }
         }
     }
@@ -791,6 +836,12 @@ struct SecretEntryView: View {
         await store.refresh()
         // From the chat, the message under the conversation says it all: the form goes once every step is done.
         if progress.isDone && progress.tell != nil && !progress.given.contains(where: \.warning) {
+            onDone(progress.login)
+        }
+        // A key page goes on once the vault has the key: the add's next writes are its page's (the account, the agent
+        // and its grant), and the form shows its field again for a line of theirs.
+        if preset.keyStep && progress.isDone {
+            phase = .form
             onDone(progress.login)
         }
     }

@@ -234,7 +234,7 @@ struct AddPersonView: View {
     /// can) and says why on hover, faded.
     private func agentTile(_ one: FleetAgent) -> some View {
         let chosen = input.agents.contains(one.name)
-        let why = People.cannotChat(role: one.role, runtime: one.runtime, active: one.active)
+        let why = People.cannotChat(role: one.role, runtime: one.runtime, active: one.active, provider: one.modelProvider)
         return Button {
             var names = input.agents.filter { $0 != one.name }
             if !chosen { names.append(one.name) }

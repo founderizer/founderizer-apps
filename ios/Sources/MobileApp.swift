@@ -52,6 +52,7 @@ struct MobileRoot: View {
                             case .agent(let agent): AgentPage(store: store, agent: agent)
                             case .settings: SettingsPage(store: store)
                             case .enroll: EnrollPage(store: store)
+                            case .task(let id): TaskPage(store: store, id: id)
                             }
                         }
                 }
@@ -107,4 +108,6 @@ enum ChatsRoute: Hashable {
     case chat(String)
     case agent(String)
     case settings, enroll
+    /// A task that a row of a chat opens: what he asked for there (`ChatAskRow`).
+    case task(Int)
 }

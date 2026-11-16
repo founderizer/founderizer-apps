@@ -340,11 +340,13 @@ struct AgentSetupView: View {
         let setup = store.providerSetup(hub: store.hub, database: store.state?.db, agent: agent)
         let open = changeOpen(state)
         let switching = providerSwitching(state)
-        return FormRow("AI provider", mark: ProviderIcon(runtime: state.runtime, size: 18),
+        return FormRow("AI provider", mark: ProviderIcon(runtime: state.runtime, provider: state.modelProvider, size: 18),
                        warning: switching ? String(l10n: "Switching to \(providerName(state.runtime))…") : nil) {
             HStack(spacing: FleetSpace.actions) {
                 Text(providerWords(state)).foregroundStyle(FleetStyle.muted).lineLimit(1)
-                if features.contains("agent_setup") {
+                // **No Change for an agent on a key or a model server** (picture 6, his "Yes, as shown"): it cannot
+                // switch to Claude or ChatGPT in this version.
+                if features.contains("agent_setup"), state.modelProvider == nil {
                     if !open {
                         SetupMark(setup: setup, subject: String(l10n: "The provider setup"), place: String(l10n: "Select Change on the AI provider row to see it."))
                     }
@@ -357,7 +359,7 @@ struct AgentSetupView: View {
 
     /// The agent's provider switches now: the AI provider row says "Switching to …" under its title.
     private func providerSwitching(_ state: FleetAgent) -> Bool {
-        ProviderState(configured: state.runtime, machine: model.machine, at: time).switchingFrom != nil
+        state.modelProvider == nil && ProviderState(configured: state.runtime, machine: model.machine, at: time).switchingFrom != nil
     }
 
     /// The provider, then the model and the reasoning that the agent runs, its own or the owner's default where its
@@ -367,6 +369,12 @@ struct AgentSetupView: View {
         let (own, level) = if case .model(let value, let level)? = model.shown(.model) { (value, level) } else { (line?.model, line?.effort) }
         let runs = followed(own, level)
         let shown = runs.model.map { chosen in model.machine?.models?.options.first { $0.model == chosen }?.display_name ?? chosen }
+        // **An agent on a key or a model server: the AI that he picked and its model** (picture 6): "Gemini ·
+        // gemini-4-carbon · High", "Model server · qwen3-coder-30b"; never its program (his answer 12).
+        if let provider = state.modelProvider {
+            let named = runs.model.flatMap { ModelAccount.shownModel($0, provider: provider) }
+            return ([provider.label] + [named, runs.effort.map(reasoningName)].compactMap { $0 }).joined(separator: " · ")
+        }
         return ([providerName(state.runtime)] + [shown, runs.effort.map(reasoningName)].compactMap { $0 }).joined(separator: " · ")
     }
 
@@ -387,7 +395,7 @@ struct AgentSetupView: View {
     }
 
     private func changeOpen(_ state: FleetAgent) -> Bool {
-        guard features.contains("agent_setup") else { return false }
+        guard features.contains("agent_setup"), state.modelProvider == nil else { return false }
         let setup = store.providerSetup(hub: store.hub, database: store.state?.db, agent: agent)
         return changing ?? setup.reopens(current: state.runtime)
     }

@@ -690,8 +690,9 @@ public struct VaultLogin: Sendable {
 /// and stays allowed.
 enum VaultProviderSites {
     static let sites = ["claude.ai", "claude.com", "chatgpt.com", "auth.openai.com", "x.ai"]
-    /// An API console under one of the sites, where a key is read (`PROVIDER_KEY_SITES`): it stays allowed.
-    static let keySites = ["platform.claude.com"]
+    /// An API console or a paid API under one of the sites, where a key is read (`PROVIDER_KEY_SITES`): it stays
+    /// allowed. `api.x.ai` is Grok's paid API, whose key an agent on a Grok key runs with (the AI providers build).
+    static let keySites = ["platform.claude.com", "api.x.ai"]
 
     /// True for one of the sites or a subdomain of one, in any case and with or without a final dot, unless it is a
     /// console of `keySites` (`provider_site`).

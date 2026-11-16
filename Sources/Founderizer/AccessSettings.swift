@@ -39,6 +39,11 @@ struct AccessSettings: View {
     /// **The room over it, under its group's heading** (`AppsSettings`), and none while it draws nothing (margins row
     /// 20). The empty list took the group's 10 points, and Apps' four groups stood 60 apart.
     var lead: CGFloat = 0
+    /// **A mark and a control of the page's own at the end of a row** (Settings › Apps › MCP servers: the warning mark
+    /// and Sign in again of a server whose access ended, `MCPSignInAgain`), or nil for a row that has none. It stands
+    /// over the row as the − does, so its click is its own, in the room that the row keeps for it. nil draws every row
+    /// as before.
+    var accessory: ((FleetResource) -> AnyView?)? = nil
     /// The store's (`FleetStore.reading`), the fleet's pages' and each agent's under its own name (`name`): the list he
     /// saw last shows in the first frame when he comes back, and the read that starts then changes only what changed.
     private var reading: ResourceList? {
@@ -262,6 +267,7 @@ struct AccessSettings: View {
     private func row(_ resource: FleetResource, kind: ResourceKind, reading: ResourceList) -> some View {
         let standing = StandingRows.words(resource.standing, reading: reading, kind: resource.kind)
         let unreached = reading.unreachedPage(resource) != nil
+        let extra = accessory?(resource)
         return Button { note = nil; shown = ShownResource(id: resource.id) } label: {
             HStack(spacing: 12) {
                 IconTile(symbol: Self.symbol(resource.kind))
@@ -285,6 +291,8 @@ struct AccessSettings: View {
                     Image(systemName: "exclamationmark.triangle.fill").font(IconMetrics.symbol(13)).foregroundStyle(.orange)
                         .help(Self.unreachedWords).accessibilityHidden(true)
                 }
+                // The room of the page's accessory, which stands over the row (`accessory`).
+                if let extra { extra.hidden().accessibilityHidden(true) }
                 // An agent's row keeps the room of its −, which stands over the row (`take`).
                 if agent == nil {
                     Image(systemName: "info.circle").font(IconMetrics.symbol(14)).foregroundStyle(FleetStyle.muted).accessibilityHidden(true)
@@ -300,6 +308,25 @@ struct AccessSettings: View {
         .accessibilityIdentifier("resource-\(resource.id)")
         .overlay(alignment: .trailing) {
             if let agent { take(resource, from: agent).padding(.trailing, FormMetrics.rowInset) }
+        }
+        .overlay(alignment: .trailing) {
+            // In its room: the row's last mark stands after it, as in the row.
+            if let extra {
+                HStack(spacing: 12) {
+                    extra
+                    accessoryRoom
+                }.padding(.trailing, FormMetrics.rowInset)
+            }
+        }
+    }
+
+    /// What stands after the page's accessory in a row, unseen: the room of the fleet's ⓘ, or of an agent's −, so the
+    /// accessory over the row stands where the row keeps its room.
+    @ViewBuilder private var accessoryRoom: some View {
+        if agent == nil {
+            Image(systemName: "info.circle").font(IconMetrics.symbol(14)).hidden().accessibilityHidden(true)
+        } else {
+            Color.clear.frame(width: IconMetrics.side, height: IconMetrics.side)
         }
     }
 
@@ -509,6 +536,9 @@ struct AccessSettings: View {
                 _ = try await IntegrationsClient().saveTool(hub: hub, database: database, client: client,
                                                             sha256: sha256, tool: resource.what,
                                                             agents: resource.toolAgents(giving: agent, level: level))
+                // The owner, 15 November 2026 ("Yes, give the keys too"): the server's keys go with it (MCPKeyGrants).
+                try await MCPKeyGrants.follow(resource.what, agent: agent, giving: level != nil, store: store,
+                                              hub: hub, database: database)
             case "secret":
                 // Signed for the central vault before the hub's grant, and its end after it (`GrantSigning`).
                 let grant = level.flatMap(SecretGrant.init(rawValue:))

@@ -16,8 +16,23 @@ struct RefusalWordsVectorsTests {
     /// hub's code is already in the vectors (COORDINATION.md rule 8), the app shows the hub's English for it, as for any
     /// code that it does not know, and the code is named here so that the test that holds every other code to a case
     /// stays green meanwhile. A code in this list that has a case is a fault: the case takes it out of the list.
-    /// Waiting now: `time_passed` (rules that send, UI-API.md 1.184).
-    private static let waiting: Set<String> = ["time_passed"]
+    /// Waiting now: `time_passed` (rules that send, UI-API.md 1.184), and the seven of Google's Connect and Disconnect
+    /// (UI-API.md 1.185): `google_file_mode`, `google_file_unreadable`, `google_no_client`, `google_no_secret`,
+    /// `connect_stale`, `google_refused` and `google_revoked_during`; and the twelve of the MCP form (UI-API.md 1.187):
+    /// `package_unknown`, `package_unread`, `package_registry_away`, `package_record_large`, `package_no_record`,
+    /// `package_no_version`, `package_too_new`, `package_too_new_older`, `package_none_old`, `mcp_registry_away`,
+    /// `mcp_registry_no_list` and `mcp_no_endpoints`; and `server_name_kept`, a server named door (UI-API.md 1.188).
+    private static let waiting: Set<String> = [
+        "time_passed",
+        "google_file_mode", "google_file_unreadable", "google_no_client", "google_no_secret", "connect_stale",
+        "google_refused", "google_revoked_during",
+        // the lane "Any MCP server: install and sign-in" (UI-API.md 1.187): the form shows the hub's English until the
+        // owner's yes to their words
+        "package_unknown", "package_unread", "package_registry_away", "package_record_large", "package_no_record",
+        "package_no_version", "package_too_new", "package_too_new_older", "package_none_old", "mcp_registry_away",
+        "mcp_registry_no_list", "mcp_no_endpoints",
+        "server_name_kept",
+    ]
 
     /// The codes that have a case: every code of the hub's table that is not waiting.
     private static func known(_ table: RefusalVectors.Table) -> [String] {

@@ -159,7 +159,7 @@ final class MachineInstallModel {
                                runningStep: steps.contains { $0.step == runningStep && $0.state == .running }
                                    ? runningStep : nil,
                                since: runningSince,
-                               stop: stop, waitsForNetwork: needsNetworkKey)
+                               stop: stop, waitsForNetwork: needsNetworkKey, cause: cause)
     }
     /// What Tailscale said when this Mac tried to mint the key from the credential it holds. A credential that was
     /// ended or that expired leads to the same one question, and this is the line that says why it is being asked
@@ -170,6 +170,9 @@ final class MachineInstallModel {
     /// **Why the install stopped, as a fixed kind** (`InstallRecord.Stop`), beside `failure`, whose words are for the
     /// owner's eyes: nil exactly when `failure` is nil.
     private(set) var stop: InstallRecord.Stop?
+    /// **Why the installer stopped itself, as a fixed name** (`InstallCause`): read from its own stop sentence at the
+    /// stop, and from a Mac's sealed state only. nil with no stop, and for a stop that the installer did not give.
+    private(set) var cause: InstallCause?
     /// **The kept record of this install** (`InstallRecord`), written at each change of a step's state and at the end,
     /// so that what happened can be read after this page is gone, after a restart and after an update of the app. It
     /// stays with the model after the end for a step's report that comes late, until the next install or `again`.
@@ -351,12 +354,12 @@ final class MachineInstallModel {
                     record(state)
                     // A stop is not the end: a Try again at that Mac goes on from it, and this screen goes with it.
                     if state.failed {
-                        if failure == nil { finish(error: MacLinkError.refused(state.says)) }
+                        if failure == nil { finish(error: MacLinkError.refused(state.says), sealed: state.says) }
                         continue
                     }
                     if failure != nil {
                         running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil
-                        stop = nil
+                        stop = nil; cause = nil
                         // The record runs again, and holds the link code again for a line that it may keep.
                         if log?.goOn() == true { log?.hide([code]); keepRecord() }
                     }
@@ -487,7 +490,7 @@ final class MachineInstallModel {
     /// A new install begins: no stop, and a new record. `server`: the name that the owner gave it, on a hub that asks
     /// for one; else the hub names it at its join.
     private func begin(_ kind: InstallRecord.Kind, hub: String?, host: String, server: String? = nil) {
-        stop = nil
+        stop = nil; cause = nil
         var log = InstallLog(kind: kind, hub: hub, host: host)
         log.place(server: server)
         self.log = log
@@ -506,7 +509,9 @@ final class MachineInstallModel {
         return claimedAddress().map { (try? HubClient.address($0))?.absoluteString ?? $0 }
     }
 
-    private func finish(error: Error) {
+    /// `sealed`: the stop sentence of a Mac's sealed state, the one sentence of another Mac that a cause is read from
+    /// (a refusal that came in the clear may be a stranger's).
+    private func finish(error: Error, sealed: String? = nil) {
         let says = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         failure = (error as? InstallError)?.plain(host: target.host) ?? says
         failureDetail = says
@@ -524,8 +529,14 @@ final class MachineInstallModel {
         let kind: InstallRecord.Stop = error is NetworkKeyRefused ? .networkKeyRefused : .of(error)
         stop = kind
         // A server's address is the one that the install reached; a Mac's record keeps its installer's address.
-        log?.place(hub: log?.record.kind == .hub ? claimedHub() : nil, host: log?.record.kind == .mac ? nil : target.host)
-        log?.stop(kind, says: InstallRecord.words(of: error, host: target.host), waitsForNetwork: needsNetworkKey)
+        // **The record's kind is read before the call**: a call through `log?.` holds `log` for its whole length,
+        // also while its arguments are read, so a read of `log` in them stopped the app (SIGABRT, Swift's check of
+        // exclusive access) at each install that stopped, from 0.1.243 on (a user's report of 16 November 2026).
+        let recorded = log?.record.kind
+        log?.place(hub: recorded == .hub ? claimedHub() : nil, host: recorded == .mac ? nil : target.host)
+        cause = InstallCause.of(error, sealed: sealed)
+        log?.stop(kind, says: InstallRecord.words(of: error, host: target.host), cause: cause,
+                  waitsForNetwork: needsNetworkKey)
         keepRecord()
     }
 
@@ -550,7 +561,7 @@ final class MachineInstallModel {
         job = nil
         server = nil; made = nil
         // The record of the install that ended stays in its file; this model writes it no more.
-        stop = nil; log = nil
+        stop = nil; cause = nil; log = nil
     }
 }
 

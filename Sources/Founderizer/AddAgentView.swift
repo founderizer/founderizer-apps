@@ -29,6 +29,8 @@ final class AddAgentModel {
     private(set) var busy = false
     private(set) var error: String?
     @ObservationIgnored private var watch: Task<Void, Never>?
+    /// **The pages after Other models** (the AI providers build): the page he is on, and Back goes one page back.
+    let other = OtherModels()
 
     /// The install goes on, or waits for the owner's sign-in.
     var running: Bool { receipt != nil && (job == nil || job?.isOpen == true) }
@@ -44,13 +46,15 @@ final class AddAgentModel {
         self.server = server
         picked = server != nil
         error = nil
+        // A new form starts at its own step: the pages after Other models of a visit before are gone.
+        other.leave()
     }
 
     /// The server he pressed on the first step.
     func pick(_ server: String) { self.server = server; picked = true; error = nil }
 
     /// Back to the first step.
-    func unpick() { picked = false; error = nil }
+    func unpick() { picked = false; error = nil; other.leave() }
 
     func reset() {
         guard !running else { return }
@@ -61,6 +65,7 @@ final class AddAgentModel {
     private func forget() {
         watch?.cancel(); watch = nil
         receipt = nil; job = nil; error = nil; name = ""; server = nil; picked = false; role = "worker"; reportsTo = nil
+        other.leave()
     }
 
     func read(store: FleetStore) async {
@@ -131,6 +136,50 @@ final class AddAgentModel {
         }
     }
 
+    /// **The agent on an account with a kind, in the order of spec 3.1** (the key is in the vault already, by the
+    /// vault's own form): the account, then the agent with it, then the agent's read grant of the key, which this Mac
+    /// signs as it signs each grant. Nil when the agent is added; else the line for the last page, in the app's own
+    /// words for a refusal whose code it knows (round 2, sentences 4, 6, 7 and 8).
+    func start(store: FleetStore, provider: ModelProvider, secret: String?, address: String?, model: String?) async -> String? {
+        guard !busy, problem == nil, let server, let database = store.state?.db else { return nil }
+        busy = true; error = nil
+        defer { busy = false }
+        let name = key, hub = store.hub
+        runtime = provider.runtime; role = "worker"; reportsTo = nil
+        // A change of team.json elsewhere between the read and the request: read it again, and send once more.
+        for attempt in 0..<2 {
+            do {
+                let team = try await HubClient().team(hub: hub, database: database)
+                self.team = team
+                let id = other.account ?? provider.accountID(agent: name, taken: Set((team.accounts ?? [:]).keys))
+                other.account = id
+                let entry = TeamAccount(provider: provider.rawValue, title: provider.title, kind: provider.kind, secret: secret,
+                                        address: address, model: model)
+                let saved = try await HubClient().saveModelAccount(hub: hub, database: database, client: store.installation,
+                                                                   sha256: team.sha256, id: id, entry: entry)
+                receipt = try await HubClient().addServerAgent(hub: hub, database: database, client: store.installation,
+                                                               server: server, sha256: saved, agent: name, account: id)
+                job = nil
+                watchJob(store: store)
+                if let secret {
+                    // The grant needs the agent, so it comes after it (`ModelAccountGrant`: signed first, then the
+                    // hub's). One that fails leaves the agent added: its check then says that the vault gave no key, and
+                    // Try again on its setup page gives the grant again before it asks for the check (review M4).
+                    try? await ModelAccountGrant.give(secret, to: name, store: store, hub: hub, database: database)
+                }
+                await store.refresh()
+                return nil
+            } catch let HubError.refusal(refused) {
+                if refused.status == 409, attempt == 0, refused.means(.teamChanged) { continue }
+                // **Sentence 3 stands under the name field** (round 2, item 14), where Add agent shows a refusal of
+                // the server: the pages after Other models go, and the line is the name step's ("" to the page).
+                if refused.isOpenServer { other.leave(); error = refused.words; return "" }
+                return refused.words
+            } catch { return String(l10n: "The hub has not answered. Look at the server's page before you try again.") }
+        }
+        return nil
+    }
+
     /// The install again, after a failure: the same agent, server and provider.
     func retry(store: FleetStore, server: ServerEntry, job: ServerJob) async {
         guard let agent = job.agent, let runtime = job.runtime else { return }
@@ -190,6 +239,9 @@ struct AddAgentView: View {
                 }
             } else if let receipt = model.receipt, !handingOff {
                 FleetPage("Add agent") { progress(receipt) }
+            } else if model.picked, model.other.page != nil {
+                // The pages after Other models, under their own marks and titles.
+                OtherModelsPages(store: store, model: model, add: addOnAccount, adding: model.busy || handingOff)
             } else {
                 step
             }
@@ -206,10 +258,13 @@ struct AddAgentView: View {
         }
     }
 
-    /// The step by its fixed name (`AppPlace`, `setup_state`'s `place`): nil on the hub's line that it cannot add agents.
+    /// The step by its fixed name (`AppPlace`, `setup_state`'s `place`): nil on the hub's line that it cannot add agents,
+    /// and **nil on the pages after Other models** (review M5): a key, an address or a model is typed there, so the
+    /// owner's own agent reads "add_agent" (the page is not known) and never takes such a page for the name step.
     private var placeStep: AppPlace.AddAgentStep? {
         guard store.state?.ui_features?.contains(Servers.feature) == true else { return nil }
         if model.receipt != nil || model.busy || handingOff { return .progress }
+        if model.picked, model.other.page != nil { return nil }
         return model.picked ? .name : .server
     }
 
@@ -293,6 +348,14 @@ struct AddAgentView: View {
                         .accessibilityHint(line)
                         .accessibilityIdentifier("add-agent-ai-\(ai.rawValue)")
                 }
+                // **Other models** (picture 1, his "Yes, as shown"): under Claude and ChatGPT, for a Linux server that the
+                // hub says takes such an agent, in their cards' look. A Mac server keeps its two cards.
+                if model.selected?.takesModelAccounts == true, store.state?.ui_features?.contains(ModelProvider.feature) == true {
+                    let line = String(l10n: "With an API key, or on your own model server.")
+                    card(mark: "ellipsis", title: String(l10n: "Other models"), help: line) { model.other.open(.choices) }
+                        .accessibilityHint(line)
+                        .accessibilityIdentifier("add-agent-ai-other")
+                }
             }
         }
     }
@@ -313,6 +376,22 @@ struct AddAgentView: View {
         }
         .buttonStyle(FleetCardButtonStyle())
         .help(help ?? "")
+    }
+
+    /// An AI's card whose mark is a symbol (Other models): in a 28-point square, as a logo stands, so its card has the
+    /// height of the cards over it.
+    private func card(mark symbol: String, title: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol).font(IconMetrics.symbol(18)).foregroundStyle(FleetStyle.text)
+                    .frame(width: 28, height: 28).accessibilityHidden(true)
+                Text(title).font(SetupMetrics.choiceFont).foregroundStyle(FleetStyle.text)
+                Spacer(minLength: 8)
+            }
+            .padding(18).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+        }
+        .buttonStyle(FleetCardButtonStyle())
+        .help(help)
     }
 
     /// An AI's card: its real logo or logos and its name.
@@ -342,16 +421,36 @@ struct AddAgentView: View {
         Task {
             handingOff = configure != nil
             await model.start(store: store, runtime: runtime)
-            guard let agent = model.receipt?.agent, let configure,
-                  AgentSetupFlow.shows(store.state?.agents.first { $0.name == agent }, features: store.state?.ui_features ?? [])
-            else { handingOff = false; return }
-            // Add agent that he closed meanwhile does not open again: the agent's row opens its setup, which fills the
-            // window as adding it does.
-            store.noteAdding(agent)
-            guard store.destination == .addAgent else { handingOff = false; return }
-            store.addedAgent = agent
-            configure(agent)
+            handOff()
         }
+    }
+
+    /// **The press on the last page after Other models**: the agent on an account with that provider, then its setup
+    /// page, as for an agent on a plan. A refusal is that page's one orange line, and the page stays.
+    private func addOnAccount(_ provider: ModelProvider) {
+        let other = model.other
+        Task {
+            handingOff = configure != nil
+            let line = await model.start(store: store, provider: provider,
+                                         secret: other.secretOf == provider ? other.secret : nil,
+                                         address: provider == .own ? other.checkedAddress : nil,
+                                         model: provider.sellsManyMakers ? provider.accountModel(other.modelName) : nil)
+            if let line { if !line.isEmpty { other.line = line }; handingOff = false; return }
+            handOff()
+        }
+    }
+
+    /// The agent is added: its own setup page takes the window, or the install's rows on a hub without those pages.
+    private func handOff() {
+        guard let agent = model.receipt?.agent, let configure,
+              AgentSetupFlow.shows(store.state?.agents.first { $0.name == agent }, features: store.state?.ui_features ?? [])
+        else { handingOff = false; return }
+        // Add agent that he closed meanwhile does not open again: the agent's row opens its setup, which fills the
+        // window as adding it does.
+        store.noteAdding(agent)
+        guard store.destination == .addAgent else { handingOff = false; return }
+        store.addedAgent = agent
+        configure(agent)
     }
 
     @ViewBuilder private func progress(_ receipt: ServerAgentReceipt) -> some View {
@@ -411,8 +510,12 @@ struct ServerJobView: View {
         }
     }
 
+    /// **The AI that the owner picked**, for the install of an agent on a key or a model server (his answer 12: "The
+    /// name I picked"), else the program's name, as before.
+    private var providerWords: String { job.provider_label.map(Servers.providerLabel) ?? providerName(job.runtime ?? "") }
+
     private var title: String {
-        let agent = job.agent?.agentLabel ?? String(l10n: "The agent"), provider = providerName(job.runtime ?? "")
+        let agent = job.agent?.agentLabel ?? String(l10n: "The agent"), provider = providerWords
         if job.kind == "prepare" {
             return job.state == "done" ? String(l10n: "\(provider) is ready on \(server)") : job.state == "failed" ?
                 String(l10n: "The preparation of \(provider) stopped") : String(l10n: "Preparing \(provider) on \(server)")
@@ -426,7 +529,7 @@ struct ServerJobView: View {
     }
 
     private func stepTitle(_ id: String, _ title: String) -> String {
-        id == "runtime" ? String(l10n: "AI provider: \(providerName(job.runtime ?? ""))") : title
+        id == "runtime" ? String(l10n: "AI provider: \(providerWords)") : title
     }
 
     private var order: [String] { Servers.steps(job, onMac: onMac).map(\.id) }

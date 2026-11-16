@@ -56,12 +56,14 @@ public enum People {
     /// Why an agent cannot hold a conversation, in a line, before the owner puts it on a person's list. The hub
     /// decides this (`agents[].says` of `GET /ui/people`) and its own line always wins; this one is for an agent
     /// that is not on the list yet, where the hub says nothing.
-    public static func cannotChat(role: String, runtime: String, active: Bool?) -> String? {
+    /// `provider`: the AI that the owner picked for an agent on a key or a model server, which the line names in the
+    /// place of its program (his answer 12; review M8).
+    public static func cannotChat(role: String, runtime: String, active: Bool?, provider: ModelProvider? = nil) -> String? {
         if role == "manager" { return String(l10n: "The fleet's manager never talks with other people.") }
         if active == false { return String(l10n: "This agent is still in setup.") }
         if runtime != "claude" {
             // The provider's own name, "Codex" (fix round 3, item 37: it said "codex").
-            return String(l10n: "A session of \(providerName(runtime)) cannot be locked down to a conversation yet, so other people never reach it.")
+            return String(l10n: "A session of \(provider?.label ?? providerName(runtime)) cannot be locked down to a conversation yet, so other people never reach it.")
         }
         return nil
     }

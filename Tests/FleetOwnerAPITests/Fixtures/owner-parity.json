@@ -32,6 +32,7 @@
     }
    ],
    "arguments": {
+    "account": "account-1",
     "agent": "agent-1",
     "reports_to": "reports_to-1",
     "role": "worker",
@@ -81,6 +82,7 @@
     },
     {
      "body": {
+      "account": "account-1",
       "agent": "agent-1",
       "base_sha256": "team-sha-1",
       "db": "g1",
@@ -2190,7 +2192,11 @@
    ],
    "arguments": {
     "account": "account-1",
+    "address": "address-1",
     "delete": true,
+    "kind": "key",
+    "login": "login-1",
+    "model": "model-1",
     "provider": "provider-1",
     "title": "title-1"
    },
@@ -2238,9 +2244,13 @@
     {
      "body": {
       "account": "account-1",
+      "address": "address-1",
       "base_sha256": "team-sha-1",
       "db": "g1",
       "delete": true,
+      "kind": "key",
+      "login": "login-1",
+      "model": "model-1",
       "provider": "provider-1",
       "request_id": "<rid1>",
       "title": "title-1"
@@ -13592,7 +13602,7 @@
    "name": "grant_access: a secret, entries of that list that name no reference",
    "older_hub": 0,
    "outcome": {
-    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. The owner gives the secret to the agent in the Founderizer app, on Secrets: the app signs the grant and writes it into the list, and nothing more is needed from here then. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
+    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. On the Mac where the Founderizer app runs, its program gives the secret with the owner's signature (~/.founderizer/cli write grant_secret): the app signs the grant with the owner's key and writes it into the list, as the owner's own Give on Secrets does, and the owner can also give it there. After either, grant_access needs no second call. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
    },
    "requests": [
     {
@@ -14721,7 +14731,7 @@
    "name": "grant_access: a secret, a lead with nothing signed and no copy",
    "older_hub": 0,
    "outcome": {
-    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. The owner gives the secret to the agent in the Founderizer app, on Secrets: the app signs the grant and writes it into the list, and nothing more is needed from here then. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
+    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. On the Mac where the Founderizer app runs, its program gives the secret with the owner's signature (~/.founderizer/cli write grant_secret): the app signs the grant with the owner's key and writes it into the list, as the owner's own Give on Secrets does, and the owner can also give it there. After either, grant_access needs no second call. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
    },
    "requests": [
     {
@@ -15463,7 +15473,7 @@
    "name": "grant_access: a secret, a grant signed only for another server",
    "older_hub": 0,
    "outcome": {
-    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. The owner gives the secret to the agent in the Founderizer app, on Secrets: the app signs the grant and writes it into the list, and nothing more is needed from here then. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
+    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. On the Mac where the Founderizer app runs, its program gives the secret with the owner's signature (~/.founderizer/cli write grant_secret): the app signs the grant with the owner's key and writes it into the list, as the owner's own Give on Secrets does, and the owner can also give it there. After either, grant_access needs no second call. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
    },
    "requests": [
     {
@@ -15689,7 +15699,7 @@
    "name": "grant_access: a secret, a copy only in the vault of another server",
    "older_hub": 0,
    "outcome": {
-    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. The owner gives the secret to the agent in the Founderizer app, on Secrets: the app signs the grant and writes it into the list, and nothing more is needed from here then. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
+    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. On the Mac where the Founderizer app runs, its program gives the secret with the owner's signature (~/.founderizer/cli write grant_secret): the app signs the grant with the owner's key and writes it into the list, as the owner's own Give on Secrets does, and the owner can also give it there. After either, grant_access needs no second call. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
    },
    "requests": [
     {
@@ -15786,7 +15796,7 @@
    "name": "grant_access: a secret, nothing signed and no copy",
    "older_hub": 0,
    "outcome": {
-    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. The owner gives the secret to the agent in the Founderizer app, on Secrets: the app signs the grant and writes it into the list, and nothing more is needed from here then. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
+    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. On the Mac where the Founderizer app runs, its program gives the secret with the owner's signature (~/.founderizer/cli write grant_secret): the app signs the grant with the owner's key and writes it into the list, as the owner's own Give on Secrets does, and the owner can also give it there. After either, grant_access needs no second call. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
    },
    "requests": [
     {
@@ -15883,7 +15893,7 @@
    "name": "grant_access: a secret at read, nothing signed and no copy",
    "older_hub": 0,
    "outcome": {
-    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. The owner gives the secret to the agent in the Founderizer app, on Secrets: the app signs the grant and writes it into the list, and nothing more is needed from here then. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
+    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. On the Mac where the Founderizer app runs, its program gives the secret with the owner's signature (~/.founderizer/cli write grant_secret): the app signs the grant with the owner's key and writes it into the list, as the owner's own Give on Secrets does, and the owner can also give it there. After either, grant_access needs no second call. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
    },
    "requests": [
     {
@@ -15980,7 +15990,7 @@
    "name": "grant_access: a secret that is a login, nothing signed and no copy",
    "older_hub": 0,
    "outcome": {
-    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. The owner gives the secret to the agent in the Founderizer app, on Secrets: the app signs the grant and writes it into the list, and nothing more is needed from here then. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
+    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. On the Mac where the Founderizer app runs, its program gives the secret with the owner's signature (~/.founderizer/cli write grant_secret): the app signs the grant with the owner's key and writes it into the list, as the owner's own Give on Secrets does, and the owner can also give it there. After either, grant_access needs no second call. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
    },
    "requests": [
     {
@@ -16156,7 +16166,7 @@
    "name": "grant_access: a secret, a reference with letters that are not ASCII",
    "older_hub": 0,
    "outcome": {
-    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. The owner gives the secret to the agent in the Founderizer app, on Secrets: the app signs the grant and writes it into the list, and nothing more is needed from here then. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
+    "refusal": "On this fleet the central vault sends a secret's value to a server only for a grant that the owner's app signed for an agent on that server, or for a secret that the owner signed into the grantable pool. By the hub's last reading, this secret is not in the pool, the owner signed no grant of it for this agent's server, and that server's vault holds no copy of it. A grant from here would show the secret as given in the fleet's list and, by that reading, bring its value to no server, so nothing was sent. On the Mac where the Founderizer app runs, its program gives the secret with the owner's signature (~/.founderizer/cli write grant_secret): the app signs the grant with the owner's key and writes it into the list, as the owner's own Give on Secrets does, and the owner can also give it there. After either, grant_access needs no second call. If the owner put the secret into the grantable pool a moment ago, call grant_access again in a minute: the hub reads the vault at least once a minute."
    },
    "requests": [
     {

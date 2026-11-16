@@ -46,7 +46,12 @@ final class MobileStore {
         if case .chat(let name) = chatRoute.last { return name }
         return nil
     }
-    var openTask: Int? { taskRoute.last }
+    /// The task whose page is on screen: the last page of the Chats stack, when a row of a chat opened a task
+    /// (`ChatsRoute.task`), else the Tasks stack's.
+    var openTask: Int? {
+        if tab == .chats, case .task(let id) = chatRoute.last { return id }
+        return taskRoute.last
+    }
     /// A chat or a task is open, so the app reads more often.
     var detailIsOpen: Bool { openChat != nil || openTask != nil }
     /// Seconds between two reads. A waiting request reads often too, so its receipt shows soon.
@@ -58,7 +63,76 @@ final class MobileStore {
 
     private(set) var snapshot: MobileSnapshot? {
         // Each agent's role, for every line of the app that names an agent (`AgentNames`), as on the Mac.
-        didSet { AgentNames.shared.read((snapshot?.agents ?? []).map { ($0.name, $0.title) }) }
+        didSet {
+            AgentNames.shared.read((snapshot?.agents ?? []).map { ($0.name, $0.title) })
+            // The heads that carry an ask as FleetCore's tasks, once for each reading: a chat reads them at every
+            // frame (`asks(in:)`). A reading with no ask costs nothing.
+            readAskTasks()
+        }
+    }
+    /// **The heads of every ended task** (`GET /ui/mobile/ended`), read while a chat is open, and again only when their
+    /// mark changes (`endedMark`): what he asked for in a chat stays there when its work ends, and the main read holds
+    /// the last 20 that ended.
+    /// Only the ended heads that carry an ask are kept, with the names of their asks.
+    @ObservationIgnored private var endedHeads: [MobileTaskHead] = []
+    @ObservationIgnored private var endedNames: [String: String] = [:]
+    @ObservationIgnored private var endedMark: String?
+    /// When a read of the ended heads last failed: the next one waits a minute.
+    @ObservationIgnored private var endedFailed: Date?
+
+    /// The tasks of the asks, from the open heads, the recent ones and every ended one that the phone read.
+    private func readAskTasks() {
+        let open = (snapshot?.tasks ?? []) + (snapshot?.recent ?? [])
+        var seen = Set<Int>()
+        let heads = (open + endedHeads).filter { seen.insert($0.id).inserted }
+        askIDs = Set(heads.compactMap { $0.ask?.lowercased() }.filter { !$0.isEmpty })
+        askTasks = askIDs.isEmpty ? [] : heads.filter { ($0.ask ?? "").isEmpty == false }.compactMap(\.fleetTask)
+        askRowsKept = [:]
+    }
+
+    /// Reads the ended heads while a chat is open, on a hub that names asks, when their mark moved since the last read
+    /// of them: only a chat draws them. **It is never the reading's fault**: a read that fails says nothing, keeps what
+    /// the phone had, and is tried again a minute later, so a slow or large answer never makes the hub look away.
+    private func readEnded(hub requested: URL, database: String) async {
+        guard openChat != nil, features.contains("asks"), features.contains("mobile_ended"),
+              let mark = snapshot?.ended_mark, mark != endedMark,
+              endedFailed.map({ Date().timeIntervalSince($0) > 60 }) ?? true
+        else { return }
+        do {
+            let page = try await client.ended(at: requested, key: key, database: database)
+            guard requested == hub, snapshot?.db == database else { return }
+            endedHeads = page.tasks.filter { ($0.ask ?? "").isEmpty == false }
+            endedNames = page.asked ?? [:]
+            endedMark = page.mark
+            endedFailed = nil
+            readAskTasks()
+        } catch {
+            endedFailed = Date()
+        }
+    }
+    /// The open and the recent task heads as FleetCore's tasks, when one of them carries an ask, else none.
+    @ObservationIgnored private var askTasks: [FleetTask] = []
+    /// The asks that those heads name, by request_id in lower case.
+    @ObservationIgnored private var askIDs: Set<String> = []
+    /// Each chat's rows of its asks, with what they were made of: a chat draws again at each key that he types.
+    @ObservationIgnored private var askRowsKept: [String: (made: String, rows: [String: [ChatAskRow]])] = [:]
+
+    /// **Whether a message of these lines began an ask that the reading names**, or corrects one: a chat with none
+    /// reads nothing more for its rows.
+    func asksHere(_ lines: [MobileChatItem]) -> Bool {
+        guard !askIDs.isEmpty else { return false }
+        return lines.contains { line in
+            line.kind == .message && (askIDs.contains(line.key.lowercased())
+                                      || line.replaces.map { askIDs.contains($0.lowercased()) } == true)
+        }
+    }
+
+    /// The rows of a chat's asks, made again only when the reading or what they are made of changes (`made`).
+    func askRows(_ agent: String, made: String, make: () -> [String: [ChatAskRow]]) -> [String: [ChatAskRow]] {
+        if let kept = askRowsKept[agent], kept.made == made { return kept.rows }
+        let rows = make()
+        askRowsKept[agent] = (made, rows)
+        return rows
     }
     /// The tag of the body that `snapshot` came from. The next read sends it, and an unchanged fleet answers 304.
     @ObservationIgnored private var etag: String?
@@ -660,6 +734,7 @@ final class MobileStore {
             }
             readChangedChats(hub: requested, database: database)
             try await holding(requested) { try await confirmPending(hub: requested, database: database) }
+            await readEnded(hub: requested, database: database)
             lastRead = Date()
             // The read answered: the reading is current again, and the next read's hold follows this one's time.
             lastRequestTook = slowestRequest
@@ -917,6 +992,11 @@ final class MobileStore {
     /// Everything that belonged to one hub generation goes: its pages, its cursors and its tag. The waiting request
     /// stays, because it names its own hub and generation and Settings says so.
     private func forgetGeneration(keepSnapshot: Bool = false) {
+        // The ended heads belong to the generation they were read in.
+        endedHeads = []
+        endedNames = [:]
+        endedMark = nil
+        endedFailed = nil
         if !keepSnapshot { snapshot = nil; snapshotAt = nil }
         stopWatching()
         etag = nil
@@ -1330,6 +1410,33 @@ final class MobileStore {
     func agent(_ name: String) -> MobileAgent? { snapshot?.agents.first { $0.name == name } }
     /// The conversation with one agent, oldest last, as far as the phone has read it.
     func items(for agent: String) -> [MobileChatItem] { chatItems[agent] ?? [] }
+
+    /// The name of each thing that he asked for that the reading's heads name, by his message's request_id.
+    var askNames: [String: String] { endedNames.merging(snapshot?.asked ?? [:]) { _, current in current } }
+
+    /// **What he asked for in the chat of `entries`** (owner feature asks; the owner, 16 November 2026: "this tasks
+    /// should also show inside the conversation!!", and "the Mac and the iPhone"): FleetCore's asks (`HubState.asks`)
+    /// of the tasks that the phone holds — the open ones, the 20 that ended last and every ended one that it read
+    /// (`readEnded`) — whose message stands in these entries, read with the requests, holds, outcomes and usage limits
+    /// of the reading, as the Mac reads them. nil while none is held.
+    func askReading(in entries: [ChatEntry]) -> HubState? {
+        guard let snapshot, !askTasks.isEmpty else { return nil }
+        var here = Set<String>()
+        var messages: [OwnerMessage] = []
+        for entry in entries {
+            if case .message(let message) = entry {
+                here.insert(message.request_id.lowercased())
+                messages.append(message)
+            }
+        }
+        // A correction stands for the message that it replaced (`ChatAskPlaces`).
+        for message in messages { if let replaced = message.replaces_request_id { here.insert(replaced.lowercased()) } }
+        guard askTasks.contains(where: { $0.ask.map { here.contains($0.lowercased()) } == true }) else { return nil }
+        let agents = snapshot.agents.map { FleetAgent(phoneName: $0.name, role: $0.role, runtime: $0.runtime, limit: $0.limit) }
+        return HubState(phoneTime: snapshot.time, db: snapshot.db, agents: agents, tasks: askTasks,
+                        needs: snapshot.needs + (snapshot.answered_needs ?? []), messages: messages,
+                        holds: snapshot.holds, outcomes: snapshot.outcomes)
+    }
     /// This chat was read at least once on this hub generation: before that, it is not empty, it is not read yet.
     func hasRead(chat agent: String) -> Bool { chatItems[agent] != nil }
 

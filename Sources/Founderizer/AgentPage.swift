@@ -163,16 +163,20 @@ struct AgentPage: View {
 
     private func select(_ tab: AgentTab) { open(tab == .chat ? .agent(agent) : .agentDetail(agent, tab)) }
 
-    /// Back to chat, then the agent: its glyph with its status, and its name.
+    /// Back to chat, then the agent: its glyph with its status, and its name. An agent whose chat place shows as this
+    /// page has no Back to chat (`FleetStore.chatShowsDetail`); its name keeps its place, because the button only
+    /// stands over the space above it.
     private var head: some View {
         let presence = store.state?.agents.first { $0.name == agent }?.presence(
             isFresh: store.isFresh, serverTime: store.state?.time ?? 0,
             openTasks: store.state?.tasks.filter { $0.owner == agent && !$0.isTerminal } ?? [], holds: store.state?.holds ?? []) ?? .unknown
         return ZStack(alignment: .topLeading) {
-            Button { open(.agent(agent)) } label: {
-                Label("Back to chat", systemImage: "chevron.left").font(FormMetrics.text).foregroundStyle(FleetStyle.muted)
-                    .padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
-            }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).accessibilityIdentifier("agent-back-to-chat")
+            if !store.chatShowsDetail(agent) {
+                Button { open(.agent(agent)) } label: {
+                    Label("Back to chat", systemImage: "chevron.left").font(FormMetrics.text).foregroundStyle(FleetStyle.muted)
+                        .padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
+                }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).accessibilityIdentifier("agent-back-to-chat")
+            }
             // **The name on the page title's line, as Settings' heading** (margins rows 3 and 4): its glyph stands in
             // front of it, centred on its line, so the glyph's height moves no word. **The name begins where the rows'
             // words begin** (row 16: 3.5 pt after them), with the glyph at a row's size.

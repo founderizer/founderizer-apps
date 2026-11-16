@@ -111,8 +111,15 @@ public struct ServerEntry: Decodable, Identifiable, Sendable {
     /// How the fleet reaches this server, by its own record (owner API 1.173); nil from a hub before it, whose rows do
     /// not say. `reach` reads it.
     public let access: ServerAccess?
+    /// **The providers of an account with a kind that this server can take now** (owner API 1.186, `model_accounts`):
+    /// each of them for a Linux server whose service's reading has `model_accounts`, else none. nil from a hub before
+    /// it. Add agent offers its Other models card only for a server that has them, so it shows no card that the hub
+    /// would refuse (spec 9.4).
+    public let model_providers: [String]?
     public var id: String { name }
     public var isMac: Bool { kind == "mac" }
+    /// Add agent's Other models card: a Linux server that the hub says takes such an agent.
+    public var takesModelAccounts: Bool { !isMac && !(model_providers ?? []).isEmpty }
     public var symbol: String { isMac ? "desktopcomputer" : "server.rack" }
 
     /// **What this row says of the fleet's record of how it reaches this server**, read as `MachineReach` reads a
@@ -332,6 +339,56 @@ public struct ServerJob: Decodable, Equatable, Sendable {
     /// True on a `failed` job whose sign-in step only waited too long for the owner (owner API 1.88). nil from a hub
     /// before it.
     public let timed_out: Bool?
+    /// **The rows of the install of an agent on a key or a model server** (owner API 1.186), in the order that the
+    /// server's service runs them: user, checkout, runtime, service, with no sign-in. nil for every other job, which
+    /// keeps its rows, and from a hub before it.
+    public let steps: [String]?
+    /// The AI that the owner picked for such an agent (Gemini, Grok, OpenCode Go, OpenRouter, Ollama Cloud, or Model
+    /// server), which the app names in the place of the program (his answer 12 of 14 November 2026). nil otherwise.
+    public let provider_label: String?
+    /// The stable name of `detail`'s words for such an install's four lines that name its AI (`install_looking`,
+    /// `install_installing`, `install_offline`, `install_failed`), and the names that fill them (`provider`,
+    /// `server`): the app shows its own string in the device's language (`shownDetail`).
+    public let code: String?
+    public let names: [String: String]?
+    /// `"none"` on every job of an agent on a key or a model server (owner API 1.186, as `GET /server/<name>/jobs` has
+    /// it): it has no sign-in. nil on every other job, and from a hub before it.
+    public let sign_in: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, agent, runtime, state, step, detail, prompt, created, updated, timed_out, steps, provider_label, code,
+             names, sign_in
+    }
+
+    /// The fields of before as before; **the five of the AI providers build each read apart** (review M12): one of
+    /// another type from a later hub is nil, and never costs the read of the servers.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(Int.self, forKey: .id); kind = try values.decode(String.self, forKey: .kind)
+        agent = try values.decodeIfPresent(String.self, forKey: .agent)
+        runtime = try values.decodeIfPresent(String.self, forKey: .runtime)
+        state = try values.decode(String.self, forKey: .state); step = try values.decodeIfPresent(String.self, forKey: .step)
+        detail = try values.decodeIfPresent(String.self, forKey: .detail)
+        prompt = try values.decodeIfPresent(Prompt.self, forKey: .prompt)
+        created = try values.decode(Double.self, forKey: .created); updated = try values.decode(Double.self, forKey: .updated)
+        timed_out = try values.decodeIfPresent(Bool.self, forKey: .timed_out)
+        steps = (try? values.decodeIfPresent([String].self, forKey: .steps)) ?? nil
+        provider_label = (try? values.decodeIfPresent(String.self, forKey: .provider_label)) ?? nil
+        code = (try? values.decodeIfPresent(String.self, forKey: .code)) ?? nil
+        names = (try? values.decodeIfPresent([String: String].self, forKey: .names)) ?? nil
+        sign_in = (try? values.decodeIfPresent(String.self, forKey: .sign_in)) ?? nil
+    }
+
+    /// The install of an agent on a key or on a model server.
+    public var hasNoSignIn: Bool {
+        sign_in == "none" || (kind == "install" && steps.map { !$0.contains("sign_in") } == true)
+    }
+
+    /// **The job's detail in the app's own words** where its code says which line it is, else as the hub gave it.
+    public var shownDetail: String? {
+        guard let code, let words = Servers.installLine(code, names: names ?? [:]) else { return detail }
+        return words
+    }
 
     public var isOpen: Bool { ["queued", "running", "needs_owner"].contains(state) }
 
@@ -413,6 +470,12 @@ public struct ServerAgentReceipt: Decodable, Sendable {
     public let runtime: String
     public let job: Int
     public let revision: String
+    public let sha256: String
+}
+
+/// The answer of `POST /ui/team/accounts`: the account and the version of team.json after the write.
+public struct ModelAccountReceipt: Decodable, Sendable {
+    public let account: String
     public let sha256: String
 }
 
@@ -569,10 +632,16 @@ public enum Servers {
     /// The words of a server whose Fleet is older than the hub's, which `mark` compares as `connected` is compared.
     public static let updateAvailable = String(l10n: "Update available")
 
+    /// **The hub's label of the AI that the owner picked, in the app's own words**: "Model server" is a word of the
+    /// app (Spanish too); the providers' names are names.
+    public static func providerLabel(_ label: String) -> String {
+        label == "Model server" ? ModelProvider.own.label : label
+    }
+
     /// The words of a job: its step, then its own detail.
     public static func jobWords(_ job: ServerJob) -> String {
         let agent = job.agent?.agentLabel ?? String(l10n: "The agent")
-        let prepare = job.kind == "prepare", provider = providerName(job.runtime ?? "")
+        let prepare = job.kind == "prepare", provider = job.provider_label.map(providerLabel) ?? providerName(job.runtime ?? "")
         if job.kind == "remove" { return removalWords(job, agent: agent) }
         switch job.state {
         case "queued": return prepare ? String(l10n: "The server starts to prepare \(provider) in a few seconds.") :
@@ -582,7 +651,7 @@ public enum Servers {
             : String(l10n: "The install of \(agent) ended: the server left Founderizer.")
         default: break
         }
-        if let detail = job.detail, !detail.isEmpty { return detail }
+        if let detail = job.shownDetail, !detail.isEmpty { return detail }
         switch job.step {
         case "user": return String(l10n: "The OS user of \(agent) on the server.")
         case "runtime": return prepare ? String(l10n: "\(provider) on the server.") : String(l10n: "The provider of \(agent).")
@@ -625,10 +694,37 @@ public enum Servers {
         ("service", String(l10n: "Its service")), ("files", String(l10n: "Its files")), ("user", String(l10n: "Its account")),
     ]
 
+    /// **The steps of the install of an agent on a key or a model server** (picture 10, his "Yes, as shown"): its
+    /// program comes from Founderizer's own copy, which needs the agent's folder first, and it has no sign-in.
+    public static let accountInstallSteps: [(id: String, title: String)] = [
+        ("user", String(l10n: "User")), ("checkout", String(l10n: "Checkout")), ("runtime", String(l10n: "AI provider")),
+        ("service", String(l10n: "Service")),
+    ]
+
+    /// **The four lines of the install of an agent on a key or a model server that name its AI** (owner API 1.186:
+    /// lane C's lines, with the provider that the owner picked, his answer 12), by their code; nil for another code.
+    public static func installLine(_ code: String, names: [String: String]) -> String? {
+        let provider = names["provider"].map(providerLabel) ?? "", server = names["server"] ?? ""
+        switch code {
+        case "install_looking": return String(l10n: "Looking for \(provider).")
+        case "install_installing": return String(l10n: "Installing \(provider).")
+        case "install_offline": return String(l10n: "\(provider) did not install: \(server) could not reach the internet. Try again when it can.")
+        case "install_failed": return String(l10n: "\(provider) did not install. Try again.")
+        default: return nil
+        }
+    }
+
     /// The steps of this job, in order. A Mac makes no user of its own for an agent — its agents are one Mac user's
     /// LaunchAgents — so that step is not among a Mac install's, and the screen does not mark it as done.
     public static func steps(_ job: ServerJob, onMac: Bool = false) -> [(id: String, title: String)] {
         if job.kind == "prepare" { return prepareSteps }
+        // An install or a rename of such an agent (review M8): item 10's rows, with no Sign-in row.
+        if job.hasNoSignIn, job.kind == "install" || job.kind == "rename" {
+            // The hub's own order of the rows, each with its title here; without `steps`, the order of picture 10.
+            let titles = Dictionary(uniqueKeysWithValues: accountInstallSteps.map { ($0.id, $0.title) })
+            let rows = job.steps.map { ids in ids.compactMap { id in titles[id].map { (id: id, title: $0) } } } ?? accountInstallSteps
+            return onMac ? rows.filter { $0.id != "user" } : rows
+        }
         let steps = job.kind == "remove" ? removeSteps : installSteps
         return onMac ? steps.filter { $0.id != "user" } : steps
     }

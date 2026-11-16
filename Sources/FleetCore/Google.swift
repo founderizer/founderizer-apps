@@ -351,6 +351,25 @@ public final class GoogleLoopback: Sendable {
 public struct GoogleConnectStart: Sendable {
     public let url: URL
     public let state: String
+    /// Whose Google app the Connect signs in to: `founderizer` (Founderizer's own: the hub's release brings its ID,
+    /// and founderizer.com its secret) or
+    /// `own` (a client of the hub's own file); nil from a hub from before Founderizer's Google app.
+    public let app: String?
+    /// Whether Google has verified Founderizer's app; nil for another app.
+    public let verified: Bool?
+
+    public init(url: URL, state: String, app: String? = nil, verified: Bool? = nil) {
+        self.url = url; self.state = state; self.app = app; self.verified = verified
+    }
+
+    /// **The one line under the wait while Google has not verified Founderizer's app** (the owner's "Yes, as drawn"
+    /// of 15 November 2026): Google then shows its warning page first, whose big button is "Back to safety". A
+    /// release says when Google has verified the app, and the line goes by itself.
+    public var hint: String? {
+        app == "founderizer" && verified == false
+            ? String(l10n: "If Google says that it has not verified Founderizer, press Advanced, then Go to Founderizer.")
+            : nil
+    }
 }
 
 /// The four writes, without the command fields.
@@ -395,8 +414,10 @@ public final class GoogleClient: Sendable {
         configuration.urlCredentialStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.timeoutIntervalForRequest = 90       // finish: the hub exchanges the code and reads the email at Google
-        configuration.timeoutIntervalForResource = 120
+        // The finish: the hub exchanges the code and reads the email at Google, and after a changed secret of
+        // Founderizer's app it reads founderizer.com and exchanges once more, each call up to 30 seconds.
+        configuration.timeoutIntervalForRequest = 160
+        configuration.timeoutIntervalForResource = 180
         session = URLSession(configuration: configuration, delegate: NoGoogleRedirect(), delegateQueue: nil)
     }
 
@@ -411,15 +432,15 @@ public final class GoogleClient: Sendable {
     }
 
     /// Starts a Connect of one service with the hub's client: of any account, or with `account` (a login hint) of that
-    /// account again. The hub asks only for that service's permission. Fleet opens only the consent page on
-    /// accounts.google.com.
+    /// account again. The hub asks for that service's permission, and in a fleet with accounts of an own client for
+    /// their services too (owner API 1.185). Fleet opens only the consent page on accounts.google.com.
     public func connect(hub: URL, database: String, client: String, redirectURI: String, service: GoogleService,
                         account: String?) async throws -> GoogleConnectStart {
         let receipt = try await write(.connect(redirectURI: redirectURI, service: service, account: account),
                                       hub: hub, database: database, client: client)
         guard let address = receipt.url, let url = URL(string: address), url.scheme == "https", url.host == "accounts.google.com",
               let state = receipt.state, !state.isEmpty else { throw HubError.invalidResponse }
-        return GoogleConnectStart(url: url, state: state)
+        return GoogleConnectStart(url: url, state: state, app: receipt.app, verified: receipt.verified)
     }
 
     /// Gives the hub Google's code. The answer is the email of the account that Google gave, and whether that account
@@ -457,6 +478,8 @@ public final class GoogleClient: Sendable {
         let client: String
         let url: String?
         let state: String?
+        let app: String?
+        let verified: Bool?
         let email: String?
         let connected: Bool?
         let replaced: Bool?

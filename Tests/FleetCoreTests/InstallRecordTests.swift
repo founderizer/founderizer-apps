@@ -223,6 +223,30 @@ struct InstallRecordTests {
                                                       "ended", "outcome", "stop", "waitsForNetwork", "says"])
         let step = (object?["steps"] as? [[String: Any]])?.first
         #expect(Set(step?.keys.map { $0 } ?? []) == ["id", "state", "began", "ended"])
+        // The installer's own reason is one more field, and only a fixed name.
+        var stopped = newLog()
+        stopped.stop(.installerStopped, says: nil, cause: .codeNotFetched, at: time(2))
+        let kept = try JSONSerialization.jsonObject(with: JSONEncoder().encode(stopped.record)) as? [String: Any]
+        #expect(kept?["cause"] as? String == "code_not_fetched")
+        #expect(Set(kept?.keys.map { $0 } ?? []) == ["id", "kind", "launch", "hub", "host", "steps", "began", "ended",
+                                                    "outcome", "stop", "waitsForNetwork", "cause"])
+    }
+
+    /// **The cause goes with its stop** (the plan `install-stop-cause-plan.md`): a stop keeps it, a Mac that goes on
+    /// after its stop drops it, an install that its page ended keeps none, and a stop with no cause has none.
+    @Test func theCauseGoesWithItsStop() {
+        var log = newLog(.mac)
+        log.note(step: "join", state: .failed, at: time(1))
+        log.stop(.macRefused, says: nil, cause: .homebrew, at: time(1))
+        #expect(log.record.cause == .homebrew && log.record.stop == .macRefused)
+        log.goOn()
+        #expect(log.record.cause == nil && log.record.stop == nil)
+        log.stop(.macUnreachable, says: nil, at: time(2))
+        #expect(log.record.cause == nil)
+        var cancelled = newLog()
+        cancelled.cancel(at: time(1))
+        do { let changed = cancelled.stop(.installerStopped, says: nil, cause: .vault, at: time(2)); #expect(!changed) }
+        #expect(cancelled.record.cause == nil && cancelled.record.outcome == .cancelled)
     }
 
     /// An install that ended well has no stop; the hub's address, the address reached and the server's name come when
@@ -312,6 +336,7 @@ struct InstallRecordTests {
         log.stop(.timedOut, says: nil, at: time(1))
         var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(log.record)) as? [String: Any])
         object["stop"] = "a_kind_of_later"
+        object["cause"] = "a_cause_of_later"
         object["steps"] = [["id": "a_step_of_later", "state": "failed", "began": 1_800_000_001_000.0, "ended": 1_800_000_001_000.0]]
         object["began"] = 1_800_000_000_000.0
         object["ended"] = 1_800_000_001_000.0
@@ -321,6 +346,12 @@ struct InstallRecordTests {
         let read = InstallRecords(folder: scratch.folder, launch: "second").all()
         #expect(read.count == 1 && read.first?.stop == .other && read.first?.stoppedAt == .other)
         #expect(read.first?.began == time(0) && read.first?.outcome == .stopped)
+        // A cause that this version does not know reads as `other`; a record from before the field has none.
+        #expect(read.first?.cause == .other)
+        object["cause"] = nil
+        try JSONSerialization.data(withJSONObject: object)
+            .write(to: scratch.folder.appendingPathComponent("\(log.record.id.uuidString.lowercased()).json"))
+        #expect(InstallRecords(folder: scratch.folder, launch: "third").all().first?.cause == nil)
     }
 
     // MARK: the folder

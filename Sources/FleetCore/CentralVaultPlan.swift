@@ -11,7 +11,8 @@ import Foundation
 ///
 /// It also brings the vault's program up to date with the hub's release (`update`), with the root step of the
 /// install, as a machine's server service does for its broker: the owner, 6 November 2026, "Nothing needs to be done
-/// by hand!". That step has no row: when its tries are used up it waits, without a word, for the next release.
+/// by hand!". After six tries of that step in a row, the Founderizer Vault row shows its reason, and the step is
+/// tried again each hour (Part B of the key swap, app patch 2, with the owner's yes to its sentence, C47).
 ///
 /// Three rules bound it. A step that fails waits 10 minutes and is tried again, at most 6 times in a row, and then
 /// waits for the owner (a re-sign of a kept pin shows its row then, and goes on each hour). The install runs only while the hub reads no central vault and the fleet has an SSH
@@ -115,7 +116,12 @@ public struct VaultPlan: Equatable, Sendable {
             else if facts.recovery?.isDue(at: facts.now) ?? true { return VaultPlan(step: .recover, servers: rows) }
         }
         // The vault runs another program than the hub's release: the install's root step again brings it up to date.
-        if reading.programBehind, facts.update?.isDue(at: facts.now) ?? true {
+        // After six tries in a row the row shows, and the step goes on each hour (C3).
+        if reading.programBehind, let tries = facts.update, tries.givenUp {
+            let row = VaultNeed.retry(.update, KeySwapWords.centralBehind(tries.reason))
+            if facts.now - tries.last >= Self.retryEvery { return VaultPlan(step: .update, vault: vault ?? row, servers: rows) }
+            vault = vault ?? row
+        } else if reading.programBehind, facts.update?.isDue(at: facts.now) ?? true {
             return VaultPlan(step: .update, vault: vault, servers: rows)
         }
         return VaultPlan(step: due.isEmpty ? .nothing : .trust(due), vault: vault, servers: rows)

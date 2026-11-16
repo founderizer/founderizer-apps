@@ -42,6 +42,16 @@ public struct SetupDiagnosis: Equatable, Sendable {
                                       "no_checklist", "check_stopped", "needs_sudo_password", "needs_ssh_password",
                                       "network_key_refused", "hub_refused", "hub_unreached", "mac_refused",
                                       "mac_unreachable", "mac_unreadable", "other"]
+    /// **Why the installer stopped itself**: `none`, then the app's fixed names of the installer's own reason
+    /// (`InstallCause`, in its order), read in the app from the installer's stop sentence and never given in its
+    /// words. Only a stop of the kind `installer_stopped` or `mac_refused` has one; a name that this list does not
+    /// have is given as `other`.
+    public static let installCauses = ["none", "needs_root", "system_not_supported", "no_systemd", "hub_no_answer",
+                                       "code_not_fetched", "join_code_refused", "server_name_refused", "hub_busy",
+                                       "private_network", "firewall", "agent_users", "vault", "updates", "service",
+                                       "hub_claim", "agent_program", "homebrew", "wrong_mac_user", "other"]
+    /// The kinds of a stop that carry the installer's own reason (`installCauses`).
+    public static let stopsWithCause: Set<String> = ["installer_stopped", "mac_refused"]
     /// What a kept record of an install is of (`InstallRecord.Kind`): `join` is a server that joins the fleet, which
     /// `installKinds` names `server`.
     public static let lastInstallKinds = ["hub", "join", "mac"]
@@ -213,25 +223,36 @@ private func steps(_ count: Int) -> JSONValue {
     .int(Int64(min(max(count, 0), SetupDiagnosis.longestPlan)))
 }
 
+/// **The installer's own reason of a stop** (`installCauses`): `none` unless `stop`, the stop's name as the answer
+/// gives it, is one of `stopsWithCause`; then the cause, or `other` for a name that the list does not have.
+private func stopCause(_ cause: String, stop: JSONValue) -> JSONValue {
+    guard case .string(let stop) = stop, SetupDiagnosis.stopsWithCause.contains(stop) else { return .string("none") }
+    return .string(SetupDiagnosis.installCauses.contains(cause) ? cause : "other")
+}
+
 /// **This app's own install of a server**: names of `SetupDiagnosis`'s lists, a boolean and two counts. The stop is
-/// the app's own kind of the error that ended the install; the stop's words stay in the app and are not in it.
+/// the app's own kind of the error that ended the install, and its cause the app's fixed name of the installer's own
+/// reason; the stop's words stay in the app and are not in it.
 public struct SetupInstall: Equatable, Sendable {
     public var state: String
     public var kind: String
     public var step: String
     public var stop: String
+    /// A name of `installCauses`.
+    public var cause: String
     /// The install stopped only because the server is not on the owner's private network, and its page asks for the
     /// network's connection.
     public var waitsForNetwork: Bool
     public var stepsDone: Int
     public var stepsPlanned: Int
 
-    public init(state: String, kind: String, step: String, stop: String, waitsForNetwork: Bool = false,
-                stepsDone: Int, stepsPlanned: Int) {
+    public init(state: String, kind: String, step: String, stop: String, cause: String = "none",
+                waitsForNetwork: Bool = false, stepsDone: Int, stepsPlanned: Int) {
         self.state = state
         self.kind = kind
         self.step = step
         self.stop = stop
+        self.cause = cause
         self.waitsForNetwork = waitsForNetwork
         self.stepsDone = stepsDone
         self.stepsPlanned = stepsPlanned
@@ -239,13 +260,15 @@ public struct SetupInstall: Equatable, Sendable {
 
     func json(seconds given: Int?) -> JSONValue {
         let state = named(state, in: SetupDiagnosis.installStates)
+        // Only an install that stopped has a stop's kind, and only a stop waits for the network or has a cause.
+        let stop: JSONValue = .string(state != .string("stopped") ? "none"
+                                      : SetupDiagnosis.installStops.contains(self.stop) ? self.stop : "other")
         return .object([
             "state": state,
             "kind": named(kind, in: SetupDiagnosis.installKinds),
             "step": .string(SetupDiagnosis.installSteps.contains(step) ? step : "other"),
-            // Only an install that stopped has a stop's kind, and only a stop waits for the network.
-            "stop": .string(state != .string("stopped") ? "none"
-                            : SetupDiagnosis.installStops.contains(stop) ? stop : "other"),
+            "stop": stop,
+            "cause": stopCause(cause, stop: stop),
             "waits_for_network": .bool(waitsForNetwork && state == .string("stopped")),
             "steps_done": steps(stepsDone),
             "steps_planned": steps(stepsPlanned),
@@ -266,16 +289,19 @@ public struct SetupLastInstall: Equatable, Sendable {
     public var step: String
     /// A name of `installStops`.
     public var stop: String
+    /// A name of `installCauses`.
+    public var cause: String
     public var waitsForNetwork: Bool
     public var stepsDone: Int
     public var stepsPlanned: Int
 
-    public init(kind: String, outcome: String, step: String, stop: String, waitsForNetwork: Bool = false,
-                stepsDone: Int, stepsPlanned: Int) {
+    public init(kind: String, outcome: String, step: String, stop: String, cause: String = "none",
+                waitsForNetwork: Bool = false, stepsDone: Int, stepsPlanned: Int) {
         self.kind = kind
         self.outcome = outcome
         self.step = step
         self.stop = stop
+        self.cause = cause
         self.waitsForNetwork = waitsForNetwork
         self.stepsDone = stepsDone
         self.stepsPlanned = stepsPlanned
@@ -283,13 +309,16 @@ public struct SetupLastInstall: Equatable, Sendable {
 
     func json(seconds given: Int?) -> JSONValue {
         let outcome = named(outcome, in: SetupDiagnosis.lastInstallOutcomes)
-        // Only a record that says stopped has a stop.
+        // Only a record that says stopped has a stop, and a cause.
         let stopped = outcome == .string("stopped")
+        let stop: JSONValue = .string(!stopped ? "none" : SetupDiagnosis.installStops.contains(self.stop) ? self.stop
+                                      : "other")
         return .object([
             "kind": named(kind, in: SetupDiagnosis.lastInstallKinds),
             "outcome": outcome,
             "step": .string(SetupDiagnosis.installSteps.contains(step) ? step : "other"),
-            "stop": .string(!stopped ? "none" : SetupDiagnosis.installStops.contains(stop) ? stop : "other"),
+            "stop": stop,
+            "cause": stopCause(cause, stop: stop),
             "waits_for_network": .bool(waitsForNetwork && stopped),
             "steps_done": steps(stepsDone),
             "steps_planned": steps(stepsPlanned),

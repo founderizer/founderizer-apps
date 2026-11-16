@@ -106,6 +106,8 @@ public struct ChatRequestPlaces: Sendable, Equatable {
             let own: Double? = switch row {
             case .entry(let entry): entry.created
             case .request(let need): raised[need]
+            // The row of a thing that he asked for stands under its turn's reply, at that reply's time.
+            case .ask: nil
             }
             times.append(max(own ?? 0, times.last ?? 0))
         }
@@ -121,11 +123,16 @@ public struct ChatRequestPlaces: Sendable, Equatable {
     }
 }
 
-/// One part of an agent's chat as it draws: an entry of the conversation, or the card of a request, by its number.
+/// One part of an agent's chat as it draws: an entry of the conversation, the card of a request, by its number, or the
+/// row of a thing that he asked for in this chat, by his message's request_id (`ChatAskPlaces`).
 public enum ChatPart: Identifiable, Equatable, Sendable {
-    case entry(ChatEntry), request(Int)
+    case entry(ChatEntry), request(Int), ask(String)
     public var id: String {
-        switch self { case .entry(let entry): entry.id; case .request(let need): "need-\(need)" }
+        switch self {
+        case .entry(let entry): entry.id
+        case .request(let need): "need-\(need)"
+        case .ask(let ask): "ask-\(ask)"
+        }
     }
 }
 

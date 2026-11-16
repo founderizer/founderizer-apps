@@ -264,7 +264,8 @@ struct AgentUsageLine: View {
             .padding(.leading, CGFloat(parts.small))
             Group {
                 if let agent, let account {
-                    ProviderIcon(runtime: agent.runtime, size: CGFloat(parts.logo)).help(ServerCards.accountHelp(account, bar: bar))
+                    ProviderIcon(runtime: agent.runtime, provider: agent.modelProvider, size: CGFloat(parts.logo))
+                        .help(agent.modelProvider == nil ? ServerCards.accountHelp(account, bar: bar) : account.help)
                 } else {
                     Color.clear.frame(height: 1)
                 }

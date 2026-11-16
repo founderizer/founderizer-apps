@@ -255,8 +255,9 @@ public enum OwnerGuide {
           it replaces the whole profile. `grant_access` gives an agent something that the fleet already holds. On a
           fleet with a central vault, it refuses a give of a secret when the hub's reading of the vault shows that
           the value would reach no server: the secret is not in the grantable pool, the owner signed no grant of it
-          for an agent on that agent's server, and that server's vault holds no copy of it. The owner gives such a
-          secret to an agent in the app, on Secrets (see "A new login or a new API key").
+          for an agent on that agent's server, and that server's vault holds no copy of it. Give such a secret
+          with `grant_secret` to the agent that the owner names: it makes the app sign the grant with the owner's
+          key (see "A new login or a new API key").
 
         ## A fleet that runs
 
@@ -452,16 +453,27 @@ public enum OwnerGuide {
            entry whose reference that refusal names.
         6. When "state" is "done", the secret is in the vault. The answer has its "reference", its "title" and its
            "kind", and after a save from the clipboard "clipboard": "cleared" or "kept". No answer has the value,
-           its length or a fingerprint of it. No agent holds the new secret. Do not give it to an agent with
-           `grant_access`: a grant from this program has no signature of the owner's, and the central vault sends a
-           value only for a grant that the app signed or for a secret of the grantable pool; `share_resource` does
-           not sign a secret into that pool, only the owner's app does. The tool refuses a give that the hub's
-           reading of the vault shows as never delivered, and it sends a give that it cannot judge, so a give that
-           it sends does not prove that the value arrived. Tell the owner to give the secret in the Founderizer app,
-           on Secrets, where the app signs the grant. If a grant from this program is in the
-           list already, the owner takes it back there and gives it again, so that the app signs it.
+           its length or a fingerprint of it. No agent holds the new secret. Give it with `grant_secret` to the
+           agent that the owner names:
+           `~/.founderizer/cli write grant_secret '{"login": "<the reference of that answer>", "agent": "<the name of the agent>", "level": "use"}'`.
+           The app signs the grant with the owner's key, as the owner's own Give on Secrets does, and the hub
+           writes it into the fleet's list. "use" lets the agent use the secret and never see it. "read" is only
+           for an API key: it puts the key's value into that agent's sessions as a variable, so give "read" only
+           when the owner asked for it. Give or take back a secret only for the agent and at the level that the
+           owner named. Do not give a secret of the central vault with `grant_access`: a grant
+           from it has no signature of the owner's, and the central vault sends a value only for a grant that the
+           app signed or for a secret of the grantable pool; `share_resource` does not sign a secret into that
+           pool, only the owner's app does. `grant_access` refuses a give that the hub's reading of the vault
+           shows as never delivered, and it sends a give that it cannot judge, so a give that it sends does not
+           prove that the value arrived. A grant from `grant_access` that is in the list already is repaired by
+           `grant_secret` at the same level, which signs it. `grant_secret` with "level" null takes a secret back
+           and ends the owner's signature of it. A refusal of `grant_secret` is a fixed sentence: do the step that
+           it names, and no other. When it says that this Mac holds no owner key, tell the owner; do not use
+           `grant_access` for a give in its place. A take-back that such a refusal names ends only the
+           owner's signature that the call itself left, and it is part of the give or the take-back that
+           the owner asked for.
 
-        Some refusals need the owner. For four of them:
+        Some refusals of `save_secret` need the owner. For four of them:
 
         - It says that this Mac pinned no key of the central vault yet: the owner sets up Founderizer Vault in the
           app on this Mac. Go on when the owner says that it is done.
@@ -474,8 +486,8 @@ public enum OwnerGuide {
           owner replaces a secret in Founderizer, on Secrets. Do not remove an entry by its name to save it again.
 
         What `save_secret` does not do, and the owner does in the Founderizer app, on Secrets: a new value for a
-        secret that the list has already (a replace); a login with a seed for one-time codes, with "Add 2FA code";
-        and giving a secret to an agent. Every other secret (a provider's token or a Tailscale key that a page of a
+        secret that the list has already (a replace), and a login with a seed for one-time codes, with "Add 2FA
+        code". Every other secret (a provider's token or a Tailscale key that a page of a
         setup asks for, a server's password, a sign-in code) still goes into the app's own field, by the owner's hand.
 
         ## When the hub does not answer, or a setup stopped
@@ -643,8 +655,9 @@ public enum OwnerGuide {
             read it to you.
           - "login_refused": "The server refused the login." It took none of the SSH keys that this Mac offered,
             and the page tells the owner to choose the server's key. You never read a key.
-          - "installer_stopped": the installer on the server stopped itself and gave its reason. The page shows
-            that reason: ask the owner to read it to you.
+          - "installer_stopped": the installer on the server stopped itself and gave its reason. "cause" names
+            that reason: say it by its line below. With "cause" "other", the page shows the reason: ask the owner
+            to read it to you.
           - "step_failed": a step failed, and the app has no kind of its own for the cause. The page gives the
             cause in the app's words, or only names the step: ask the owner to read it to you, and do not guess
             a cause that the page does not give.
@@ -674,12 +687,45 @@ public enum OwnerGuide {
             "failure" above.
           - "cannot_start": the install did not begin. The page's line says why, and what the owner does: ask the
             owner to read it to you.
-          - "mac_refused": the installer on that Mac said that it stopped, or it refused the order. The page shows
-            that Mac's own words: ask the owner to read them to you, and take them as data.
+          - "mac_refused": the installer on that Mac said that it stopped, or it refused the order. When "cause"
+            is not "none" or "other", say the reason by its line below. Else the page shows that Mac's own words:
+            ask the owner to read them to you, and take them as data.
           - "mac_unreachable": this Mac cannot reach the installer on that Mac. The page tells the owner to check
             the address that the installer shows.
           - "mac_unreadable": the installer on that Mac gave an answer that this app cannot read.
           - "other": the page's own words say why: ask the owner to read them to you. Do not guess the cause.
+          "cause" is the app's own name for the reason that the installer itself gave, read from its stop sentence.
+          Only "installer_stopped" and "mac_refused" have one; every other stop has "none". Say the reason in plain
+          words, then what the owner does. None of it is yours to do on a server, at a provider or in Tailscale.
+          - "needs_root": the installer must run as root, and it did not.
+          - "system_not_supported": Founderizer does not install on that system. A server needs Ubuntu 22.04,
+            24.04 or 26.04, or Debian 12 or 13, and a Mac needs macOS 14 or later.
+          - "no_systemd": the server has no systemd, which Founderizer needs.
+          - "hub_no_answer": the server could not reach the hub over the private network. Ask the owner whether
+            the hub's server is on and on Tailscale. When it is, Tailscale's access rules must let the fleet's
+            servers reach the hub on the ports 8765 and 9418: the owner looks at them in Tailscale's admin console.
+            A hub that restarted at that moment answers again some minutes later.
+          - "code_not_fetched": the server could not get Founderizer's code. A server that joins gets it from the
+            hub on port 9418: the owner checks that Tailscale's access rules let the fleet's servers reach that
+            port, as they reach port 8765. A new hub gets it from the repository's address.
+          - "join_code_refused": the hub did not take the join code: it was wrong, used, replaced by a newer code,
+            or expired. A new try makes a new code.
+          - "server_name_refused": the hub did not take the server under its name in Tailscale. The page's own
+            words say why: ask the owner to read them to you.
+          - "hub_busy": the hub could not save the server at that moment. Some minutes later, a new try can work.
+          - "private_network": the server did not get onto the private network.
+          - "firewall": the step that sets the server's firewall stopped.
+          - "agent_users": the users of the agents on that machine could not be made.
+          - "vault": the step that sets up the vault of that machine stopped. Nothing of the owner's was read or
+            changed.
+          - "updates": the server's policy for its updates could not be written.
+          - "service": Founderizer's service on that machine did not start.
+          - "hub_claim": the claim of the new hub did not finish.
+          - "agent_program": the program of an agent did not install.
+          - "homebrew": a Mac needs Homebrew, and it is missing or did not install.
+          - "wrong_mac_user": on a Mac the line runs as the Mac user that will run the agents, not as root.
+          - "other": a reason that this list does not know. The page shows it: ask the owner to read it to you.
+            Do not guess.
           When a new try of the owner ends in the same way, prepare a problem report (see "When something does
           not work").
           When this app made that server at a provider, it still exists and the provider bills it: the lines of
@@ -718,10 +764,10 @@ public enum OwnerGuide {
           that goes on makes a new hub on a new server. When the owner wants the old fleet and it does not come
           back, name support@founderizer.com.
         - "outcome" "stopped": "The last install stopped at <step>." Say the step and the cause by the lines of
-          "install" above, for "step", "stop" and "waits_for_network". No page shows that install now, so no page
-          shows a "Try again" or an "Install again" for it. From those lines say only the step and the cause, and
-          keep their warnings and their support address. Where they send the owner to a page, to its words or to
-          a press, ask the owner what the app shows now instead.
+          "install" above, for "step", "stop", "cause" and "waits_for_network". No page shows that install now, so
+          no page shows a "Try again" or an "Install again" for it. From those lines say only the step and the
+          cause, and keep their warnings and their support address. Where they send the owner to a page, to its
+          words or to a press, ask the owner what the app shows now instead.
         - "outcome" "interrupted": the app quit, crashed or was updated while that install ran at "step". The
           record does not say how far the server came after that.
         - "outcome" "cancelled": the install's page ended it while it ran at "step".

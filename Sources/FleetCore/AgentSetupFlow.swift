@@ -46,7 +46,11 @@ public enum AgentSetupFlow {
     /// The setup pages take the place of the chat and the Settings of this agent: it is not active, its machine
     /// reports it signed out, or it gets its first server (`places`), and the hub serves what they need.
     public static func shows(_ agent: FleetAgent?, features: [String], placing: Bool = false) -> Bool {
-        guard let agent, MachineLogin.canSignIn(agent.runtime), Self.features.allSatisfy(features.contains) else { return false }
+        guard let agent, Self.features.allSatisfy(features.contains) else { return false }
+        // **An agent on a key or a model server has no sign-in** (picture 8, his "Yes, as shown"): its setup is the
+        // install, then "Setting up", while it is not active.
+        if agent.modelProvider != nil { return agent.active == false }
+        guard MachineLogin.canSignIn(agent.runtime) else { return false }
         return agent.active == false || agent.signed_in == false || places(agent, features: features, placing: placing)
     }
 
@@ -60,6 +64,8 @@ public enum AgentSetupFlow {
                                    serverTime: Double, fresh: Bool) -> Bool {
         guard let agent else { return false }
         let setup = shows(agent, features: features, placing: placing)
+        // An agent on a key or a model server has no chat to wait for: its Runs on page follows its setup.
+        if adding, agent.modelProvider != nil { return !fresh || setup }
         if adding { return !fresh || setup || chatStarts(agent, serverTime: serverTime, fresh: fresh) }
         return setup && places(agent, features: features, placing: placing)
     }
@@ -68,6 +74,7 @@ public enum AgentSetupFlow {
     /// hub says nothing of that), or the hub no longer lists it.
     public static func addingEnds(_ agent: FleetAgent?, features: [String], placing: Bool = false) -> Bool {
         guard let agent else { return true }
+        if agent.modelProvider != nil { return !shows(agent, features: features, placing: placing) }
         return !shows(agent, features: features, placing: placing) && agent.chat_ready != false
     }
 
@@ -134,6 +141,14 @@ public enum AgentSetupFlow {
     /// whatever was chosen before: what the hub does now is what he sees. `switchingTo` is the other provider he
     /// chose on this visit, until the agent runs it. An agent that its machine reports signed in to its provider is
     /// activated by itself; any other agent starts with its provider, which says why it stopped.
+    /// **The page of an agent on a key or a model server** (picture 8): its install while it runs, then the activation
+    /// under "Setting up", with no sign-in page and no provider page. An install that stopped is the activation's page
+    /// too: its one orange line over Try again, as a stopped check is.
+    public static func accountPage(job: ServerJob?, runtime: String) -> AgentSetupPage {
+        if let job, job.isOpen { return .installing(runtime: job.runtime ?? runtime) }
+        return .activate
+    }
+
     public static func page(runtime: String, job: ServerJob?, machine: MachineStatus?, switchingTo: String?) -> AgentSetupPage {
         if let job, job.isOpen {
             let provider = job.runtime ?? runtime
@@ -163,22 +178,37 @@ public enum AgentSetupFlow {
     /// waited too long for him (`timed_out`), whether his own or a job's: the cards above the line are the way to
     /// start it again, and the line said only that he had not been there (the owner, 6 November 2026, of "No code
     /// came back in 14 minutes.": "that orange message does not make sense for the user! what is that?!").
-    public static func stopped(runtime: String, job: ServerJob?, machine: MachineStatus?) -> String? {
-        if signedIn(runtime: runtime, machine: machine) { return nil }
-        if let line = machine?.signInLine(working: false), line.warn { return machine?.login?.reason ?? line.says }
+    public static func stopped(runtime: String, job: ServerJob?, machine: MachineStatus?, provider: ModelProvider? = nil) -> String? {
+        if provider == nil, signedIn(runtime: runtime, machine: machine) { return nil }
+        if provider == nil, let line = machine?.signInLine(working: false), line.warn { return machine?.login?.reason ?? line.says }
         if let job, job.state == "failed", job.timed_out != true {
-            return offline(job.detail, runtime: runtime, server: machine?.machine) ?? trimmed(job.detail) ?? String(l10n: "The install stopped.")
+            // The install of an agent on a key or a model server says which line it stopped on (owner API 1.186): the
+            // words without the step that the button under them is.
+            if let provider, let code = job.code {
+                switch code {
+                case "install_offline":
+                    let place = job.names?["server"] ?? machine?.machine
+                    return place.map { String(l10n: "\(provider.label) did not install: \($0) could not reach the internet.") }
+                        ?? String(l10n: "\(provider.label) did not install: its server could not reach the internet.")
+                case "install_failed": return String(l10n: "\(provider.label) did not install.")
+                default: break
+                }
+            }
+            return offline(job.detail, runtime: runtime, server: machine?.machine, provider: provider) ?? trimmed(job.shownDetail)
+                ?? String(l10n: "The install stopped.")
         }
         return nil
     }
 
     /// **An install that could not reach the internet, in plain words.** The hub's detail carries the system's own
     /// code ("Codex did not install: npm could not reach the registry (ETIMEDOUT)."): the owner reads what failed and
-    /// where, and the hub's own words stay on the line's hover.
-    static func offline(_ detail: String?, runtime: String, server: String?) -> String? {
+    /// where, and the hub's own words stay on the line's hover. An agent on a key or a model server is named by the AI
+    /// that he picked, never by its program (his answer 12).
+    static func offline(_ detail: String?, runtime: String, server: String?, provider: ModelProvider? = nil) -> String? {
         guard let detail, ["ETIMEDOUT", "ECONNRESET", "EAI_AGAIN"].contains(where: detail.contains) else { return nil }
-        if let server { return String(l10n: "\(providerName(runtime)) did not install: \(server) could not reach the internet.") }
-        return String(l10n: "\(providerName(runtime)) did not install: its server could not reach the internet.")
+        let name = provider?.label ?? providerName(runtime)
+        if let server { return String(l10n: "\(name) did not install: \(server) could not reach the internet.") }
+        return String(l10n: "\(name) did not install: its server could not reach the internet.")
     }
 
     /// The hub's words without the step they end with: the provider cards are that step ("Codex did not sign in
@@ -228,6 +258,13 @@ public enum AgentSetupFlow {
     /// requires and that did not pass, with the check's own detail.
     public static func blocker(_ result: MachineVerification?) -> String? {
         guard let item = result?.items.first(where: { $0.required == true && $0.state != "ok" }) else { return nil }
+        // **The check of a key or a model server says its sentence alone** (picture 4, item 4): no prefix of the
+        // account's id. Its code gives the app's own words; a code with none here, its detail as the hub wrote it.
+        if item.kind == "account" {
+            if let code = item.code, let words = ModelAccountWords.check(code, names: item.names ?? [:]) { return words }
+            let detail = item.detail.trimmingCharacters(in: .whitespacesAndNewlines)
+            return detail.isEmpty ? nil : detail
+        }
         let title = item.ref.replacingOccurrences(of: "_", with: " ").capitalized
         let detail = item.detail.trimmingCharacters(in: .whitespacesAndNewlines)
         return detail.isEmpty ? String(l10n: "\(title) did not pass.") : "\(title): \(detail)"

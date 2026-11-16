@@ -75,7 +75,8 @@ final class OwnerSaveSecretProgramTests {
         #expect(tool.annotations == .object(["readOnlyHint": .bool(false)]))
         #expect(tool.inputSchema["required"] == nil && tool.inputSchema["additionalProperties"] == .bool(false))
         #expect(OwnerTools.verb(of: tool) == .write)
-        #expect(tools.listed.last?.name == SaveSecret.name)
+        // The last tool but one: `grant_secret` came after it.
+        #expect(tools.listed.suffix(2).map(\.name) == [SaveSecret.name, GrantSecret.name])
         #expect(Fixture.table.tool(SaveSecret.name) == nil)
         let (status, out, _) = try run(["tools"], ValueLink())
         #expect(status == 0)
@@ -332,6 +333,7 @@ final class OwnerSaveSecretProgramTests {
         #expect(OwnerLinkTools.notKnownHere(SaveBotToken.name) == SaveBotToken.notKnownHere)
         #expect(OwnerLinkTools.notKnownHere(PrepareReport.name) == PrepareReport.notKnownHere)
         #expect(OwnerLinkTools.notKnownHere(SaveSecret.name) == SaveSecret.notKnownHere)
+        #expect(OwnerLinkTools.notKnownHere(GrantSecret.name) == GrantSecret.notKnownHere)
         let own = OwnerLinkTools.names.map(OwnerLinkTools.notKnownHere)
         #expect(Set(own).count == OwnerLinkTools.names.count)
         #expect(!own.contains(OwnerLinkTools.notKnownOther))
@@ -379,6 +381,10 @@ final class OwnerSaveSecretProgramTests {
         #expect(tools.call(SaveBotToken.name, .object([:])) == (SaveBotToken.account, true))
         #expect(tools.call(PrepareReport.name, .object([:])) == (PrepareReport.textWord, true))
         #expect(tools.call(SaveSecret.name, .object([:])) == (SaveSecret.kindWord, true))
+        #expect(tools.call(GrantSecret.name, .object([:])) == (GrantSecret.loginWord, true))
+        // A field of `grant_secret` is no field of save_secret, and the other way round.
+        #expect(tools.call(SaveSecret.name, .object(["login": .string("x")])) == (SaveSecret.only, true))
+        #expect(tools.call(GrantSecret.name, .object(["kind": .string("api_key")])) == (GrantSecret.only, true))
         // A field that only the bot token's tool takes is no field of save_secret, and the other way round.
         #expect(tools.call(SaveSecret.name, .object(["account": .string("discord-example")])) == (SaveSecret.only, true))
         #expect(tools.call(SaveBotToken.name, .object(["account": .string("discord-example"),

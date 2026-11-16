@@ -118,7 +118,7 @@ struct AgentsPage: View {
             .lineLimit(1).truncationMode(.middle).frame(maxWidth: .infinity, alignment: .leading)
             .help(server?.help ?? "")
         let provider = HStack(spacing: 6) {
-            ProviderIcon(runtime: agent.runtime, size: 14)
+            ProviderIcon(runtime: agent.runtime, provider: agent.modelProvider, size: 14)
             Text(account.name).foregroundStyle(FleetStyle.muted).lineLimit(1).truncationMode(.middle)
         }.frame(maxWidth: .infinity, alignment: .leading).help(account.help)
         // The least widths are the ideal ones too, so the one line is the row's shape for as long as they fit; the

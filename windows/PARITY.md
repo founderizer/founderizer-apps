@@ -61,6 +61,8 @@ Mac, and a device route is all that the PC reaches.
 | `mcp` | waits (2.4) | |
 | `mcp_check` | waits (2.4) | |
 | `mcp_program` | waits (2.4) | |
+| `mcp_packages` | waits (2.4) | |
+| `mcp_find` | waits (2.4) | |
 | `servers` | waits (2.1) | |
 | `responsibilities` | waits (step 2) | duties |
 | `server_prepare` | waits (2.1) | |

@@ -133,6 +133,21 @@ private func manifest(_ fields: [String: Any]) throws -> FleetManifest {
     #expect(said.contains("no Google account connected") && said.contains("no MCP server connected"))
 }
 
+/// A Google file that held its own client and no account asks for nothing, and the Google step names no client file:
+/// a new hub connects with Founderizer's own client: its release brings the ID, and founderizer.com the secret (owner
+/// API 1.185).
+@Test func aGoogleClientAloneIsNothingToPutBack() throws {
+    let after = RestoreAfterwards(try manifest(["hub_only": [
+        "google": ["present": true, "accounts": 0, "client": true], "github_app": ["present": false],
+        "mcp": ["present": false], "attachments": ["present": false]]]))
+    #expect(after.knows)
+    #expect(after.steps.isEmpty)
+    #expect(after.nothing?.contains("no GitHub App, no Google account, no connected MCP server") == true)
+    let held = try ChosenCopy.read(fixtureCopy()).afterwards
+    #expect(held.steps[1].title == "Google, one account at a time")
+    #expect(!held.steps[1].detail.contains("client file"))
+}
+
 @Test func aHubThatHadNoneOfThemSaysSo() throws {
     let after = RestoreAfterwards(try manifest(["hub_only": [
         "google": ["present": false], "github_app": ["present": false],

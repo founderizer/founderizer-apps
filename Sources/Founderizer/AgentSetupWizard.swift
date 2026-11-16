@@ -106,6 +106,9 @@ struct AgentSetupWizard: View {
     private var time: Double { store.state?.time ?? 0 }
     private var line: FleetAgent? { store.state?.agents.first { $0.name == agent } }
     private var runtime: String { line?.runtime ?? "codex" }
+    /// **The AI that he picked for an agent on a key or a model server** (picture 8): its install, then "Setting up",
+    /// with no sign-in page and no provider page. nil for an agent on a plan.
+    private var modelProvider: ModelProvider? { line?.modelProvider }
     private var server: ServerEntry? { servers?.server(of: agent) }
     private var job: ServerJob? { AgentSetupFlow.job(of: agent, on: server, active: signingInAgain) }
     private var machine: MachineStatus? { machines?.machines.first { $0.agent == agent } }
@@ -171,6 +174,7 @@ struct AgentSetupWizard: View {
             case .server: return placeOn == nil ? .server : .provider
             }
         }
+        if modelProvider != nil { return AgentSetupFlow.accountPage(job: job, runtime: runtime) }
         return AgentSetupFlow.page(runtime: runtime, job: job, machine: machine, switchingTo: switchingTo)
     }
 
@@ -286,8 +290,9 @@ struct AgentSetupWizard: View {
                       })
     }
 
-    /// The provider's own icon, over the title of each page about it.
-    private func mark(_ provider: String) -> some View { ProviderIcon(runtime: provider, size: SetupMetrics.mark) }
+    /// The provider's own icon, over the title of each page about it: for an agent on a key or a model server, the AI
+    /// that he picked (picture 8: "Installing Gemini on app-1", Gemini's logo).
+    private func mark(_ provider: String) -> some View { ProviderIcon(runtime: provider, provider: modelProvider, size: SetupMetrics.mark) }
 
     /// The name of the page he is on. Each one says what it asks, so no page needs a line to explain itself.
     private var title: String {
@@ -298,7 +303,7 @@ struct AgentSetupWizard: View {
         case .provider: String(l10n: "\(name)'s AI provider")
         // With the step of the server's job that runs, once it reports one: "Installing Codex on app-1 · 2 of 5".
         case .installing(let provider):
-            AgentSetupFlow.installing(providerName(provider), on: serverName, job: job, onMac: server?.isMac == true)
+            AgentSetupFlow.installing(modelProvider?.label ?? providerName(provider), on: serverName, job: job, onMac: server?.isMac == true)
         case .switching: String(l10n: "Setting up \(name)")
         case .signIn(let provider): String(l10n: "Sign in to \(providerName(provider))")
         case .activate: String(l10n: "Activate \(name)")
@@ -573,9 +578,18 @@ struct AgentSetupWizard: View {
         case stopped(String?)
     }
 
+    /// **The install of an agent on a key or a model server stopped**: the activation's page says why, in one orange
+    /// line over Try again, which runs the install again (picture 8: "If the check stops: Activate Iris, one orange
+    /// line, Try again, as today"). Such an agent has no provider page, where a plan's agent sees it.
+    private var installStopped: String? {
+        guard let modelProvider, let job, job.kind == "install", job.state == "failed" else { return nil }
+        return AgentSetupFlow.stopped(runtime: runtime, job: job, machine: machine, provider: modelProvider)
+    }
+
     private var activationState: ActivationState {
         if busy || activating || checking || loading { return .runs }
         if let refusal { return .stopped(refusal) }
+        if let installStopped { return .stopped(installStopped) }
         if permits { return askedActivation && !activated ? .stopped(nil) : .runs }
         // The check goes next, or it has no answer yet.
         guard let asked = askedCheck, let check = machine?.check, check.id > asked, !check.isPending else { return .runs }
@@ -738,7 +752,7 @@ struct AgentSetupWizard: View {
         unreadReads = 0
         guard store.canWrite else { return }
         // Once on each visit: a check that fails or an activation the hub refuses is asked again only by Try again.
-        if page == .activate, !signingInAgain, !placing, !checking, !loading, refusal == nil {
+        if page == .activate, !signingInAgain, !placing, !checking, !loading, refusal == nil, installStopped == nil {
             if permits, !askedActivation {
                 askedActivation = true
                 await activate()
@@ -777,10 +791,51 @@ struct AgentSetupWizard: View {
         step = kept
     }
 
-    /// After a stop: the check and the activation run again by themselves, as on a first visit.
+    /// After a stop: the check and the activation run again by themselves, as on a first visit; a stopped install of
+    /// an agent on a key or a model server runs again first, on the same account.
     private func tryAgain() {
         refusal = nil; askedCheck = nil; askedActivation = false; activated = false
+        if installStopped != nil { Task { await installAgain() }; return }
+        // **A check that found no key gives the grant again first** (review M4), under the hood: a grant that failed
+        // after the add left team.json and the vault without it. Then the check, as on a first visit.
+        if let secret = noKeyGrant { Task { await grantAgain(secret); await follow() }; return }
         Task { await follow() }
+    }
+
+    /// The key of this agent's account, when its last check stopped on the account item's `no_key`.
+    private var noKeyGrant: String? {
+        guard modelProvider != nil, let item = machine?.verify?.items.first(where: { $0.kind == "account" }),
+              item.state != "ok", item.code == "no_key" else { return nil }
+        return team?.modelAccount(of: agent)?.secret
+    }
+
+    private func grantAgain(_ secret: String) async {
+        guard !busy, let database = store.state?.db else { return }
+        busy = true
+        defer { busy = false }
+        guard await store.writable() else { return }
+        // A failure here leaves the check to say it again: no line of its own (no new element).
+        try? await ModelAccountGrant.give(secret, to: agent, store: store, hub: store.hub, database: database)
+    }
+
+    /// The install of an agent on a key or a model server again: the same command, server and account. The server
+    /// repeats only what is missing.
+    private func installAgain() async {
+        guard !busy, let database = store.state?.db, let server = server?.name else { return }
+        busy = true
+        defer { busy = false }
+        guard await store.writable() else { return }
+        do {
+            let team = try await HubClient().team(hub: store.hub, database: database)
+            guard let account = team.members.first(where: { $0.agent == agent })?.account else {
+                refusal = String(l10n: "Founderizer cannot read the team now. Try again."); return
+            }
+            let role = team.lines.first { $0.agent == agent }?.role == "lead" ? "lead" : "worker"
+            _ = try await HubClient().addServerAgent(hub: store.hub, database: database, client: store.installation, server: server,
+                                                     sha256: team.sha256, agent: agent, account: account, role: role)
+        } catch let HubError.refusal(refused) { refusal = refused.words }
+        catch { refusal = String(l10n: "The hub has not answered. Try again.") }
+        await read()
     }
 
     /// Reads the servers, the machines and the team: every 2 seconds while something goes on, else every 5.

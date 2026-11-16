@@ -552,17 +552,22 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Put a new agent on an available server. The hub writes the agent and its profile in one commit and makes the install job; read servers to follow its steps.",
+   "description": "Put a new agent on an available server. The hub writes the agent and its profile in one commit and makes the install job; read servers to follow its steps. Give runtime, or, for an agent on an API key or on the owner's own model server, account and no runtime: the agent then runs the program of that account, on a Linux server whose model_providers in servers names the account's provider.",
    "feature": "servers",
    "fields": [
     "agent",
     "runtime",
+    "account",
     "role",
     "reports_to"
    ],
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "account": {
+      "description": "The ID of an account that save_account saved with a kind (key or server).",
+      "type": "string"
+     },
      "agent": {
       "type": "string"
      },
@@ -597,7 +602,6 @@
     "required": [
      "server",
      "agent",
-     "runtime",
      "role"
     ],
     "type": "object"
@@ -1285,7 +1289,34 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Revoke one Google account's connection at Google and remove its entry. The grants in team.json stay, so no agent reaches that account until the owner connects it again in the app.",
+   "description": "Connect one service of a Google account to the fleet, as the app's Connect account does: Gmail or Google Drive, each a Connect of its own. It opens Google's page in the owner's browser on this Mac and waits up to 10 minutes while the owner chooses the account and presses Allow there, so tell the owner first. While Google has not verified Founderizer's app, Google shows a warning page first: the owner presses Advanced, then Go to Founderizer. Google's code goes to this server's own listener and on to the hub, and never to you. account: the email of an account to connect again; leave it out for a new one. The account then has no agent: give it with grant_access, as gmail:<email> or drive:<email>. In a fleet that shares one Google account with another fleet, disconnect_google ends it in both, because Google revokes the account's whole grant to Founderizer's app. A call of this tool can run for many minutes. This server runs one call at a time: another call that you send meanwhile waits for this call to end. So wait for its answer before you call a tool of this server again.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "account": {
+      "type": "string"
+     },
+     "service": {
+      "enum": [
+       "gmail",
+       "drive"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "service"
+    ],
+    "type": "object"
+   },
+   "kind": "absent",
+   "name": "connect_google"
+  },
+  {
+   "annotations": {
+    "readOnlyHint": false
+   },
+   "description": "Revoke one Google account's connection at Google and remove its entry. The grants in team.json stay, so no agent reaches that account until the owner connects it again in the app. Google revokes the account's whole grant to the Google app that connected it (Founderizer's app, for each account connected since the hub has it), so a fleet that shares this Google account with another fleet (a test hub, too) loses it in both.",
    "feature": "google",
    "fields": [
     "account"
@@ -1508,7 +1539,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Give one agent a resource the fleet already holds, or end that hold with level null: repo:<owner/name> read|write|deploy (deploy also runs its workflows), secret:bws://<uuid> use|read, drive:<email> read|write|write_shared, gmail:<email> read|write|send, tool:<name> use. The grant is the authorization: the agent then does what that access allows, and the hub records who gave what to whom. A repository that the hub's GitHub App does not reach comes back with unreached: the GitHub page where the owner adds it to the App. On a fleet with a central vault, the vault sends a secret's value to an agent's server only when the owner signed the secret into the grantable pool, or signed a grant of it in the app for an agent on that server: a give that the hub's reading of the vault shows as neither, for a server whose vault holds no copy of it, is refused and nothing is sent, and the owner gives that secret in the Founderizer app, on Secrets. A give that the reading cannot judge is sent, and an end of a hold (level null) always goes. A server (server:<name> read|fix) is not given here: the owner's app gives each server that carries a business's Tailscale tag to that business's DevOps agent (or the manager while it has none), because it also puts the host's parts in place.",
+   "description": "Give one agent a resource the fleet already holds, or end that hold with level null: repo:<owner/name> read|write|deploy (deploy also runs its workflows), secret:bws://<uuid> use|read, drive:<email> read|write|write_shared, gmail:<email> read|write|send, tool:<name> use. The grant is the authorization: the agent then does what that access allows, and the hub records who gave what to whom. A repository that the hub's GitHub App does not reach comes back with unreached: the GitHub page where the owner adds it to the App. On a fleet with a central vault, the vault sends a secret's value to an agent's server only when the owner signed the secret into the grantable pool, or signed a grant of it in the app for an agent on that server: a give that the hub's reading of the vault shows as neither, for a server whose vault holds no copy of it, is refused and nothing is sent: on the Mac where the Founderizer app runs, grant_secret of its program (~/.founderizer/cli) gives that secret with the owner's signature, as the owner does in the app, on Secrets. A give that the reading cannot judge is sent, and an end of a hold (level null) always goes. A server (server:<name> read|fix) is not given here: the owner's app gives each server that carries a business's Tailscale tag to that business's DevOps agent (or the manager while it has none), because it also puts the host's parts in place.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -1726,12 +1757,16 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "One runtime account of the fleet: its provider and the owner's own title for it, or delete true to take it out. Agents that share an account share one allowance.",
+   "description": "One runtime account of the fleet: its provider and the owner's own title for it, or delete true to take it out. Agents that share an account share one allowance. With kind, an account that an agent added with account runs on: key, an API key in the vault (provider google, xai, opencode-go, openrouter or ollama-cloud), or server, the owner's own model server (provider own, with its address). Each write is the whole entry. The key itself never goes through a tool: it enters the vault only through the owner's app, and login takes only its bws://<uuid> reference.",
    "feature": null,
    "fields": [
     "account",
     "provider",
     "title",
+    "kind",
+    "login",
+    "address",
+    "model",
     "delete"
    ],
    "inputSchema": {
@@ -1740,8 +1775,27 @@
      "account": {
       "type": "string"
      },
+     "address": {
+      "description": "Only for server: http:// or https://, a host, and a port and a path if it has them. Plain http only on the loopback or a Tailscale address.",
+      "type": "string"
+     },
      "delete": {
       "type": "boolean"
+     },
+     "kind": {
+      "enum": [
+       "key",
+       "server"
+      ],
+      "type": "string"
+     },
+     "login": {
+      "description": "Only the bws://<uuid> reference of an API key of logins, never the key: needed for key, and for a server that has a key.",
+      "type": "string"
+     },
+     "model": {
+      "description": "The model as its program names it: <provider>/<name> (own/<name> for server; a name with no part before it for xai). Needed for opencode-go, openrouter and ollama-cloud.",
+      "type": "string"
      },
      "provider": {
       "type": "string"
@@ -3169,5 +3223,5 @@
    "name": "take_backup"
   }
  ],
- "version": "3d499100e8fabe1d0a2cd6d981c9257daf39e4bd74b75c2d49c66601f10c9b4e"
+ "version": "84cd7bf5080027bd9cc46d303ae4cc07b4e5a9bce3506a94a07c28456f3e766d"
 }

@@ -6,15 +6,38 @@ private let loginRef = "^bws://[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
 private let tag = "^[a-z0-9-]{1,30}$"
 private func matches(_ value: String, _ pattern: String) -> Bool { value.range(of: pattern, options: .regularExpression) != nil }
 
-/// The owner's label of one paid account. Counting follows the provider's identity, not this label.
+/// The owner's label of one paid account. Counting follows the provider's identity, not this label. **An account with
+/// a kind** (owner API 1.165, the AI providers build) is an agent's AI by an API key (`kind` "key", the key's
+/// reference in `secret`) or by the owner's own model server (`kind` "server", its `address`, and `secret` when it has
+/// a key), with the `model` that he named (`ModelAccount`). A label of today has none of the four.
 public struct TeamAccount: Codable, Equatable, Sendable {
     public var provider: String
     public var title: String
-    public init(provider: String = "", title: String = "") { self.provider = provider; self.title = title }
-    enum CodingKeys: String, CodingKey { case provider, title }
+    public var kind: String?
+    /// The `bws://<uuid>` reference of the key, never its value.
+    public var secret: String?
+    public var address: String?
+    public var model: String?
+    public init(provider: String = "", title: String = "", kind: String? = nil, secret: String? = nil,
+                address: String? = nil, model: String? = nil) {
+        self.provider = provider; self.title = title; self.kind = kind; self.secret = secret; self.address = address
+        self.model = model
+    }
+    enum CodingKeys: String, CodingKey { case provider, title, kind, secret, address, model }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         provider = try values.decode(String.self, forKey: .provider); title = try values.decodeIfPresent(String.self, forKey: .title) ?? ""
+        // A field of a kind that will not read leaves the entry a label: it never hides the team.
+        kind = (try? values.decodeIfPresent(String.self, forKey: .kind)) ?? nil
+        secret = (try? values.decodeIfPresent(String.self, forKey: .secret)) ?? nil
+        address = (try? values.decodeIfPresent(String.self, forKey: .address)) ?? nil
+        model = (try? values.decodeIfPresent(String.self, forKey: .model)) ?? nil
+    }
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(provider, forKey: .provider); try values.encode(title, forKey: .title)
+        try values.encodeIfPresent(kind, forKey: .kind); try values.encodeIfPresent(secret, forKey: .secret)
+        try values.encodeIfPresent(address, forKey: .address); try values.encodeIfPresent(model, forKey: .model)
     }
 }
 

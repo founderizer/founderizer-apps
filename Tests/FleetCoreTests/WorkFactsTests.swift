@@ -167,7 +167,7 @@ struct WorkFactsTests {
         }
         #expect(fields == ["way: String", "running: Bool", "failed: Bool", "ended: Bool", "job: String?",
                            "steps: [Step]", "planned: [String]", "runningStep: String?", "since: Date",
-                           "stop: InstallRecord.Stop?", "waitsForNetwork: Bool"])
+                           "stop: InstallRecord.Stop?", "waitsForNetwork: Bool", "cause: InstallCause?"])
         // The model's own line: the kind, and neither of its two texts of a stop.
         let model = try String(contentsOf: file.appendingPathComponent("Sources/Founderizer/MachineInstallView.swift"),
                                encoding: .utf8)
@@ -181,11 +181,11 @@ struct WorkFactsTests {
     static func link(way: String = "linux", running: Bool = false, failed: Bool = false, ended: Bool = false,
                      job: InstallJob? = nil, steps: [(String, InstallProgress.State)] = [], planned: [String] = [],
                      runningStep: String? = nil, stop: InstallRecord.Stop? = nil,
-                     waitsForNetwork: Bool = false) -> ReachFacts.InstallLink {
+                     waitsForNetwork: Bool = false, cause: InstallCause? = nil) -> ReachFacts.InstallLink {
         ReachFacts.InstallLink(way: way, running: running, failed: failed, ended: ended, job: job?.rawValue,
                                steps: steps.map { InstallProgress(step: $0.0, title: "Example", says: "", state: $0.1) },
                                planned: planned, runningStep: runningStep, since: start, stop: stop,
-                               waitsForNetwork: waitsForNetwork)
+                               waitsForNetwork: waitsForNetwork, cause: cause)
     }
 
     static let joinIDs = ["read", "network", "join", "verify"]
@@ -424,6 +424,36 @@ struct WorkFactsTests {
         #expect(ended.outcome == .cancelled && ended.step == .read && ended.stop == nil)
         let runs = ReachFacts.lastInstall(Self.record(.join, steps: [("read", .done), ("network", .running)]))
         #expect(runs.outcome == .running && runs.step == .network && runs.stop == nil && runs.stepsDone == 1)
+    }
+
+    /// **The installer's own reason passes only with a stop** (the plan `install-stop-cause-plan.md`): from the model's
+    /// facts and from a kept record alike, and never from an install that runs, ended or was cut off.
+    @Test func theCausePassesOnlyWithAStop() throws {
+        let stopped = Self.link(failed: true, steps: [("read", .done), ("network", .done), ("join", .failed)],
+                                planned: Self.joinIDs, stop: .installerStopped, cause: .codeNotFetched)
+        #expect(ReachFacts.install(stopped)?.cause == .codeNotFetched)
+        let running = Self.link(running: true, steps: [("read", .running)], planned: Self.joinIDs, runningStep: "read",
+                                cause: .codeNotFetched)
+        #expect(ReachFacts.install(running)?.cause == nil)
+        let ended = Self.link(ended: true, steps: Self.joinIDs.map { ($0, .done) }, planned: Self.joinIDs,
+                              cause: .codeNotFetched)
+        #expect(ReachFacts.install(ended)?.cause == nil)
+        let kept = Self.record(.join, steps: [("read", .done), ("network", .done), ("join", .failed)]) {
+            $0.stop(.installerStopped, says: nil, cause: .codeNotFetched, at: Self.start.addingTimeInterval(9))
+        }
+        #expect(ReachFacts.lastInstall(kept).cause == .codeNotFetched)
+        #expect(ReachFacts.lastInstall(kept.cutOff()).cause == nil)
+        // A record whose outcome is not stopped gives none, whatever its file holds.
+        for outcome in ["done", "cancelled", "running"] {
+            var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(kept)) as? [String: Any])
+            object["outcome"] = outcome
+            let read = try JSONDecoder().decode(InstallRecord.self, from: JSONSerialization.data(withJSONObject: object))
+            #expect(read.cause == .codeNotFetched && ReachFacts.lastInstall(read).cause == nil, "\(outcome)")
+        }
+        let plain = Self.record(.join, steps: [("read", .failed)]) {
+            $0.stop(.serverUnreached, says: nil, at: Self.start.addingTimeInterval(3))
+        }
+        #expect(ReachFacts.lastInstall(plain).cause == nil)
     }
 
     /// **A Mac's record names its own steps**: a name that no plan has is `other`, the counts are capped at the longest

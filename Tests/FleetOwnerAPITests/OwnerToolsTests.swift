@@ -14,7 +14,7 @@ struct OwnerTableTests {
         #expect(kinds[.swift] == 13)
         #expect(kinds[.later] == nil)
         #expect(Set(table.tools.filter { $0.kind == .swift }.map(\.name)) == OwnerTools.written)
-        #expect(kinds[.absent] == 6)
+        #expect(kinds[.absent] == 7)           // the six of the app's own pages, and connect_google (owner API 1.178)
         #expect(table.tools.filter(\.kind.built).count == 54)
         #expect(table.version.count == 64)
         let check = try #require(table.tool("check_machine"))
@@ -281,9 +281,9 @@ final class OwnerRefusalTests {
         #expect(tools.refused("nothing_here") == "No tool named nothing_here.")
         #expect(hub.seen.isEmpty)
         #expect(!tools.listed.contains { $0.name == "which_hub" })
-        // And the three setup tools and the link's three write tools (save_bot_token, prepare_problem_report,
-        // save_secret).
-        #expect(tools.listed.count == 67 + 3 + 3 && tools.listed.contains { $0.name == "save_profile" })
+        // And the three setup tools and the link's four write tools (save_bot_token, prepare_problem_report,
+        // save_secret, grant_secret).
+        #expect(tools.listed.count == 67 + 3 + 4 && tools.listed.contains { $0.name == "save_profile" })
     }
 
     /// A table of a newer `owner_mcp.py` can name a `swift` tool that this program's code does not have: that tool is
@@ -317,8 +317,8 @@ final class OwnerRefusalTests {
         #expect(reads == ["fleet_overview", "fleet_read", "search_history", "see_costs", "setup_state", "setup_show",
                          "setup_diagnosis"])
         let writes = tools.listed.filter { OwnerTools.verb(of: $0) == .write }
-        // And the link's three: save_bot_token, prepare_problem_report, save_secret.
-        #expect(writes.count == 63 + 3)
+        // And the link's four: save_bot_token, prepare_problem_report, save_secret, grant_secret.
+        #expect(writes.count == 63 + 4)
         #expect(writes.allSatisfy { $0.annotations["readOnlyHint"] == .bool(false) })
         #expect(OwnerTools.verb(of: Fixture.table.tool("install_hub")!) == nil)
     }

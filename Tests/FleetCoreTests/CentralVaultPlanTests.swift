@@ -137,9 +137,10 @@ struct CentralVaultPlanTests {
     }
 
     /// UI-API 1.87: the vault runs another program than the hub's release, so this Mac runs the install's root step
-    /// again by itself. Its tries wait ten minutes, six at most, and then it waits without a row: the next release's
-    /// program starts them again (CentralVaultModel). A vault that is not this Mac's is never updated by itself.
-    @Test func aVaultBehindTheHubsReleaseIsUpdatedByItselfWithNoRow() throws {
+    /// again by itself. Its tries wait ten minutes, six at most; then the Founderizer Vault row shows its reason in the
+    /// owner's sentence (C47), and the step goes on each hour (C3). The next release's program starts the tries again
+    /// (CentralVaultModel). A vault that is not this Mac's is never updated by itself.
+    @Test func aVaultBehindTheHubsReleaseIsUpdatedByItselfAndShowsItsRowAfterSixTries() throws {
         let release = String(repeating: "a", count: 64), running = String(repeating: "b", count: 64)
         let behind = try Self.reading(central: Self.vaultKey, recovery: true, source: running, program: release)
         #expect(behind.programBehind)
@@ -147,8 +148,13 @@ struct CentralVaultPlanTests {
         let once = VaultTries.failed(after: nil, at: Self.now, reason: "The install on hub stopped: no clone.")
         #expect(VaultPlan.of(behind, facts: Self.mine(update: once, now: Self.now + 599)) == VaultPlan(step: .trust(["worker4", "newbox"])))
         #expect(VaultPlan.of(behind, facts: Self.mine(update: once, now: Self.now + 600)) == VaultPlan(step: .update))
-        let used = Self.gaveUp("The install on hub stopped: no clone.")
-        #expect(VaultPlan.of(behind, facts: Self.mine(update: used, now: Self.now + 86_400)) == VaultPlan(step: .trust(["worker4", "newbox"])))
+        let used = Self.gaveUp("The install on hub stopped: no clone.")          // six, the last a minute ago
+        let row = VaultNeed.retry(.update, "The central vault does not run the program of the hub's release yet: The "
+                                  + "install on hub stopped: no clone.")
+        #expect(VaultPlan.of(behind, facts: Self.mine(update: used)) == VaultPlan(step: .trust(["worker4", "newbox"]), vault: row))
+        #expect(VaultPlan.of(behind, facts: Self.mine(update: used, now: Self.now + 3539))
+                == VaultPlan(step: .trust(["worker4", "newbox"]), vault: row))
+        #expect(VaultPlan.of(behind, facts: Self.mine(update: used, now: Self.now + 3540)) == VaultPlan(step: .update, vault: row))
         // The same program, or a side that says nothing, is no update.
         #expect(VaultPlan.of(try Self.reading(central: Self.vaultKey, recovery: true, source: release, program: release),
                              facts: Self.mine()) == VaultPlan(step: .trust(["worker4", "newbox"])))

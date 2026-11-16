@@ -291,6 +291,17 @@ final class MobileClient: Sendable {
         return page
     }
 
+    /// `GET /ui/mobile/ended` (hub 1.166): the head of every ended task. What he asked for in a chat stays in it when
+    /// its work ends (`ChatAskRow`), and the main read holds only the last 20 that ended.
+    func ended(at hub: URL, key: String?, database: String) async throws -> MobileEndedPage {
+        let (data, _) = try await perform(Self.request("ui/mobile/ended", hub: hub, key: key,
+                                                       query: [URLQueryItem(name: "db", value: database)]))
+        guard data.count <= 8_000_000 else { throw MobileError.invalidResponse }
+        let page = try JSONDecoder().decode(MobileEndedPage.self, from: data)
+        guard page.db == database else { throw MobileError.invalidResponse }
+        return page
+    }
+
     /// `GET /ui/mobile/task/<id>`: the task itself and its notes after `since`.
     func task(at hub: URL, key: String?, database: String, id: Int, since: Int) async throws -> MobileTaskPage {
         guard id > 0, since >= 0 else { throw MobileError.invalidResponse }

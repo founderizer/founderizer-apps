@@ -793,10 +793,11 @@ struct OwnerSaveSecretPlanTests {
 /// **The words of `save_secret`**: the tool as the program will list it, its description, and its fixed sentences
 /// (the secrets plan, step E1).
 struct OwnerSaveSecretWordsTests {
-    /// **The tool is a write with no required field, and it is listed, last.** A read of a save's state sends only
+    /// **The tool is a write with no required field, and it is listed.** A read of a save's state sends only
     /// `request_id`, so the schema has no `required` list. The tool is the third of `OwnerLinkTools.names` and
-    /// `tools`, one time in each, so the program lists it and sends it to the app.
-    @Test func theToolIsAWriteWithNoRequiredFieldAndIsListedLast() throws {
+    /// `tools`, one time in each, so the program lists it and sends it to the app. (It was the last one until
+    /// `grant_secret` came after it.)
+    @Test func theToolIsAWriteWithNoRequiredFieldAndIsListed() throws {
         let tool = SaveSecret.tool
         #expect(tool.name == "save_secret" && SaveSecret.name == "save_secret" && tool.what == "save_secret")
         #expect(tool.annotations == .object(["readOnlyHint": .bool(false)]))
@@ -815,10 +816,10 @@ struct OwnerSaveSecretWordsTests {
         #expect(tool.firstSentence == "Saves a new login or a new API key of the fleet into the fleet's central vault.")
         #expect(SaveSecret.Kind.login.rawValue == LoginSecret.Kind.login.rawValue)
         #expect(SaveSecret.Kind.apiKey.rawValue == LoginSecret.Kind.apiKey.rawValue)
-        #expect(OwnerLinkTools.names.last == SaveSecret.name && OwnerLinkTools.names.count == 3)
+        #expect(OwnerLinkTools.names.firstIndex(of: SaveSecret.name) == 2 && OwnerLinkTools.names.count == 4)
         #expect(OwnerLinkTools.names.filter { $0 == SaveSecret.name }.count == 1)
-        #expect(OwnerLinkTools.tools.last?.name == SaveSecret.name && OwnerLinkTools.tools.count == 3)
-        #expect(OwnerLinkTools.tools.last?.description == tool.description)
+        #expect(OwnerLinkTools.tools.count == 4 && OwnerLinkTools.tools[2].name == SaveSecret.name)
+        #expect(OwnerLinkTools.tools[2].description == tool.description)
         // Not a tool of owner_mcp.py's table: a tool of the program only.
         #expect(Fixture.table.tool(SaveSecret.name) == nil)
     }

@@ -317,8 +317,22 @@ final class FleetStore {
     var state: HubState? {
         // Each agent's role, for every line of the app that names an agent (`AgentNames`): the owner, 10 November
         // 2026, chose the role as an agent's main label.
-        didSet { AgentNames.shared.read((state?.agents ?? []).map { ($0.name, $0.title) }) }
+        didSet {
+            AgentNames.shared.read((state?.agents ?? []).map { ($0.name, $0.title) })
+            askCache = nil
+        }
     }
+    /// **What he asked for (`HubState.asks`), read once for each reading**: an agent's chat reads it at each of its
+    /// frames, and it walks every task of the fleet.
+    var asks: [Ask] {
+        // The view that asks reads `state`, so a new reading draws it again.
+        guard let state else { return [] }
+        if let askCache { return askCache }
+        let read = state.asks
+        askCache = read
+        return read
+    }
+    @ObservationIgnored private var askCache: [Ask]?
     private(set) var chatTimeline = ChatTimeline()
     /// The page this app opens on when somebody asked for one with
     /// `-openPage settings.<tab> | agent.<name>.<section> | task.<id> | needs | tasks | …`, which is how one screen can
@@ -500,6 +514,15 @@ final class FleetStore {
     /// One page back, ⌘[: the newest page he left that can still open.
     func goBack() {
         guard let page = history.goBack(from: destination, canOpen: canOpen) else { return }
+        stepping = true; destination = page; stepping = false
+    }
+
+    /// **A place that shows as another page**: the window goes to `page`, and the history takes no step for it. An agent
+    /// on a key or a model server has no chat in version 1, so its chat place shows as its detail page (review M2): an
+    /// ordinary write there put the chat place on the Back list, so Back opened it, the move ran again, and Back did
+    /// nothing (review N1). With this, Back goes to the page before the chat place.
+    func standIn(_ page: Destination) {
+        guard page != destination else { return }
         stepping = true; destination = page; stepping = false
     }
 
@@ -937,6 +960,13 @@ final class FleetStore {
     /// **The setup takes the place of this agent's chat and of its Runs on** (`AgentSetupFlow.shows`).
     func setupShows(_ agent: String) -> Bool {
         AgentSetupFlow.shows(state?.agents.first { $0.name == agent }, features: state?.ui_features ?? [], placing: placing(agent))
+    }
+    /// **This agent's chat place shows as its detail page**: it is on a key or a model server, which has no chat in
+    /// version 1 (review M2), and its setup does not show there. The window moves there (`standIn`), and the detail page
+    /// has no "Back to chat", which would lead to the same page (the live test's finding F4; the owner's "Yes, hide it"
+    /// of 16 November 2026).
+    func chatShowsDetail(_ agent: String) -> Bool {
+        state?.agents.first { $0.name == agent }?.modelProvider != nil && !setupShows(agent)
     }
     /// **The server that joined for an agent with no server yet**, by the same key: its provider's press gives it that
     /// server. This Mac keeps it, so an app that starts again between the join and that press opens on the provider, and

@@ -13,10 +13,23 @@ import SwiftUI
 struct ProviderIcon: View {
     let runtime: String
     var size: CGFloat = 22
+    /// **The AI that the owner picked for an agent on a key or a model server** (the AI providers build): its logo and
+    /// its name in the place of the program's (his answer 12), and the server symbol for his own model server.
+    var provider: ModelProvider?
+
+    init(runtime: String, size: CGFloat = 22) { self.runtime = runtime; self.size = size }
+    init(provider: ModelProvider, size: CGFloat = 22) { runtime = provider.runtime; self.size = size; self.provider = provider }
+    /// The agent's own AI: its account's provider when it has one, else its runtime's.
+    init(runtime: String, provider: ModelProvider?, size: CGFloat = 22) { self.runtime = runtime; self.size = size; self.provider = provider }
+
+    private var name: String { provider?.label ?? providerName(runtime) }
 
     var body: some View {
         Group {
-            if let image = ProviderLogo.image(runtime) {
+            if provider == .own {
+                // The model server's mark is the server symbol, as the Server row has it.
+                Image(systemName: "server.rack").font(IconMetrics.symbol(size * 0.72)).foregroundStyle(FleetStyle.text)
+            } else if let image = ProviderLogo.image(provider?.logo ?? runtime) {
                 image.resizable().interpolation(.high).aspectRatio(contentMode: .fit)
             } else {
                 Image(systemName: "cpu").font(IconMetrics.symbol(size * 0.46, weight: .medium))
@@ -24,7 +37,7 @@ struct ProviderIcon: View {
                     .background(FleetStyle.bubble, in: RoundedRectangle(cornerRadius: size * 0.2))
             }
         }.frame(width: size, height: size)
-            .help(providerName(runtime)).accessibilityLabel(providerName(runtime))
+            .help(name).accessibilityLabel(name)
     }
 }
 
@@ -79,6 +92,9 @@ extension FleetAgent {
         if active == false { return .setup }
         if !helperIsRecent(serverTime: serverTime) { return .offline }
         if let problem { return .attention(problem.short) }
+        // **The key has no credit, or its model server does not answer** (picture 7, his "Yes, as shown"): the dot
+        // that the app shows today for an agent that needs him, with the words on hover.
+        if let trouble = account_problem { return .attention(trouble.words) }
         if limit != nil { return .limited }
         let marks = openTasks.filter { $0.owner == name }.map { $0.mark(holds: holds) }
         if thinking || marks.contains(where: \.inWork) { return isFresh ? .working : .workingAtLastRead }

@@ -10,7 +10,7 @@ struct GoogleConnectStatus: View {
     var body: some View {
         FormSection {
             if let busy = model.busy {
-                FormRow(busy) {
+                FormRow(busy, detail: model.hint) {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
                         if model.running != nil {
@@ -31,14 +31,18 @@ struct GoogleConnectStatus: View {
 ///
 /// The account is the unit, as it is on the hub: `POST /ui/google/connect` names no agent, and the account the owner
 /// connects is the fleet's. Who may use it, and at what level, is the item's own control — one account, as many
-/// agents as the owner gives it to. The Connect opens a listener on 127.0.0.1, the consent page of that one service
-/// in the browser, and gives the code back to the hub, which keeps the refresh token and never hands it out. It asks
-/// for one service's permission only, and Google keeps what the account allowed before.
+/// agents as the owner gives it to. The Connect opens a listener on 127.0.0.1, Google's consent page in the
+/// browser, and gives the code back to the hub, which keeps the refresh token and never hands it out. It asks
+/// for one service's permission (in a fleet with accounts of an own client, for theirs too), and Google keeps what the
+/// account allowed before.
 @MainActor @Observable
 final class GoogleConnecting {
     /// The Connect that can still stop: until the browser has answered.
     private(set) var running: Task<Void, Never>?
     private(set) var busy: String?
+    /// The detail of the wait for the browser while Google has not verified Founderizer's app
+    /// (`GoogleConnectStart.hint`): how to pass Google's warning page. Only during that wait.
+    private(set) var hint: String?
     private(set) var note: (text: String, warning: Bool)?
     @ObservationIgnored private let client = GoogleClient()
 
@@ -69,9 +73,11 @@ final class GoogleConnecting {
             let start = try await client.connect(hub: hub, database: database, client: installation,
                                                  redirectURI: loopback.redirectURI, service: service, account: nil)
             busy = String(l10n: "Waiting for the sign-in in your browser…")
+            hint = start.hint
             NSWorkspace.shared.open(start.url)
             let code = try await loopback.code(state: start.state)
             running = nil
+            hint = nil
             busy = String(l10n: "Saving…")
             let email = try await client.finish(hub: hub, database: database, client: installation,
                                                 state: start.state, code: code).email
@@ -81,6 +87,7 @@ final class GoogleConnecting {
             note = Task.isCancelled ? (String(l10n: "Connect stopped."), false) : (reason(error), true)
         }
         busy = nil
+        hint = nil
         running = nil
     }
 

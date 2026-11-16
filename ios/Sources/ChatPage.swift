@@ -109,6 +109,9 @@ struct ChatPage: View {
                 let rows = self.rows
                 // His time stands under the newest run, also when a card follows it.
                 let newest = rows.last { $0.isRun }?.id
+                // The chat's last row for a reply's arrival: the row of what he asked for, which comes with the reply
+                // and stands under it, takes no line's place.
+                let lastShown = rows.last { !$0.isAsk }?.id
                 let arrived = store.arrivals[agent] ?? [:]
                 VStack(alignment: .leading, spacing: 10) {
                     // **A chat that opened with nothing read says so after a second** (fix round 2, item 104): the one
@@ -123,7 +126,7 @@ struct ChatPage: View {
                             if let stamp = run.stamp { stampLine(stamp) }
                             // **A reply takes the waiting line's place in one cross-fade** (D-6, fix round 3d): the
                             // line went, and its place stood empty for three frames before the reply's fade began.
-                            let arrival = Self.arrival(of: run, isLast: row.id == rows.last?.id,
+                            let arrival = Self.arrival(of: run, isLast: row.id == lastShown,
                                                        arrived: Set(arrived.keys),
                                                        line: taken?.run == row.id ? taken?.line
                                                            : lineShowing ? lastLine : nil)
@@ -139,6 +142,9 @@ struct ChatPage: View {
                             NeedCard(store: store, need: need,
                                      answerFiles: items.last { $0.answer_to == need.id }?.attachments ?? [],
                                      spoken: spoken)
+                        case .ask(let ask):
+                            // What he asked for here, under the reply of its turn: a tap opens its task.
+                            AskLine(store: store, row: ask)
                         }
                     }
                     // **What the answer waits for** ("Thinking"), its room kept from the send's first frame (fix round 2,
@@ -261,7 +267,7 @@ struct ChatPage: View {
             // The line as it shows. The frame that a reply comes in still holds the line before it, so the reply takes
             // that line's place; once the line has gone, the run that took it keeps its words to its cross-fade's end.
             .onChange(of: shownLine, initial: true) { old, now in
-                if let old, now == nil, let last = rows.last, case .run(let run) = last,
+                if let old, now == nil, let last = rows.last(where: { !$0.isAsk }), case .run(let run) = last,
                    Self.arrival(of: run, isLast: true, arrived: Set((store.arrivals[agent] ?? [:]).keys),
                                 line: old).taking != nil {
                     taken = (last.id, old)
@@ -473,13 +479,17 @@ struct ChatPage: View {
     enum Row: Identifiable {
         case run(Run)
         case request(OwnerNeed, stamp: Double?, spoken: Bool)
+        /// The row of a thing that he asked for in this chat (`ChatAskRow`), under the agent's reply of its turn.
+        case ask(ChatAskRow)
         var id: String {
             switch self {
             case .run(let run): "run-" + run.id
             case .request(let need, _, _): "request-\(need.id)"
+            case .ask(let row): "ask-" + row.id
             }
         }
         var isRun: Bool { if case .run = self { true } else { false } }
+        var isAsk: Bool { if case .ask = self { true } else { false } }
     }
 
     /// **The places of this agent's requests among the items: each where it was raised** (the owner, 14 November 2026:
@@ -535,7 +545,10 @@ struct ChatPage: View {
     /// 103), because its card shows it. **A card counts for the marks of a day or an hour as a message does**, by the
     /// time it was raised, and never earlier than the row over it (the reply of its turn stands over it and came
     /// after it).
-    static func rows(_ lines: [MobileChatItem], needs: [OwnerNeed], places: ChatRequestPlaces) -> [Row] {
+    /// `asks`: the rows of the things that he asked for in this chat, by the id of the row they stand under
+    /// (`asks(in:places:reading:)`): an item's ("message-<request>", "report-<number>") or a card's ("need-<number>").
+    static func rows(_ lines: [MobileChatItem], needs: [OwnerNeed], places: ChatRequestPlaces,
+                     asks: [String: [ChatAskRow]] = [:]) -> [Row] {
         let byID = Dictionary(needs.map { ($0.id, $0) }) { first, _ in first }
         var rows: [Row] = []
         var run: [MobileChatItem] = []
@@ -558,6 +571,7 @@ struct ChatPage: View {
                 let time = max(need.raised, previous ?? need.raised)
                 rows.append(.request(need, stamp: mark(at: time), spoken: places.spoken.contains(need.id)))
                 previous = time
+                rows += (asks["need-\(need.id)"] ?? []).map(Row.ask)
             }
         }
 
@@ -574,6 +588,11 @@ struct ChatPage: View {
             if run.isEmpty { stamp = mark(at: item.ts) }
             run.append(item)
             previous = max(item.ts, previous ?? item.ts)
+            // The row of what he asked for stands right under its turn's reply, or his message: a run ends there.
+            if let mine = asks[item.id], !mine.isEmpty {
+                close()
+                rows += mine.map(Row.ask)
+            }
             if let under = places.after[item.id], !under.isEmpty {
                 close()
                 cards(under)
@@ -590,13 +609,18 @@ struct ChatPage: View {
     /// how the rule knows his own words while the reading still has their request open: the phone reads the chat and
     /// the requests one after the other, so for a moment an answer stands beside its open request, and one that he
     /// wrote on this phone must not be taken for a pressed option whose words it happens to have.
-    static func entries(_ items: [MobileChatItem], agent: String, written: Set<String> = []) -> [ChatEntry] {
+    /// `names`: the name of each thing that he asked for, by his message's request_id (`MobileSnapshot.asked`).
+    static func entries(_ items: [MobileChatItem], agent: String, written: Set<String> = [],
+                        names: [String: String] = [:]) -> [ChatEntry] {
         items.compactMap { item in
             switch item.kind {
             case .message:
                 var object: [String: Any] = ["request_id": item.key, "kind": "message", "text": item.text,
                                              "event_id": written.contains(item.key.lowercased()) ? 0 : 1,
                                              "created": item.ts, "client": item.client ?? "", "recipient": agent]
+                // What he asked for: the name of the work it began, and the message that a correction replaced.
+                if let asked = names[item.key] ?? names[item.key.lowercased()] { object["asked"] = asked }
+                if let replaced = item.replaces { object["replaces_request_id"] = replaced }
                 if let need = item.answer_to {
                     object["kind"] = "answer"
                     object["need_id"] = need
@@ -668,8 +692,46 @@ struct ChatPage: View {
     private var rows: [Row] {
         let requests = self.requests
         let lines = self.lines
-        return Self.rows(lines, needs: requests,
-                         places: Self.places(of: requests, in: lines, agent: agent, written: written))
+        let places = Self.places(of: requests, in: lines, agent: agent, written: written)
+        return Self.rows(lines, needs: requests, places: places, asks: askRows(lines, places: places))
+    }
+
+    /// **The rows of what he asked for in this chat**, by the row they stand under: nothing for a chat where no message
+    /// began an ask that the reading names, and made once for each reading and each change of the chat's messages or
+    /// of what the chat waits for, not at each key that he types.
+    private func askRows(_ lines: [MobileChatItem], places: ChatRequestPlaces) -> [String: [ChatAskRow]] {
+        guard store.asksHere(lines) else { return [:] }
+        let waitsOn = waitingLine?.waiting.moving == true
+            ? lines.last { $0.kind == .message && $0.answer_to == nil }?.key : nil
+        let made = [store.snapshot.map { "\($0.db) \($0.time)" } ?? "", "\(lines.count)", lines.first?.id ?? "",
+                    lines.last?.id ?? "", waitsOn ?? "", places.hidden.sorted().joined(separator: ","),
+                    written.sorted().joined(separator: ",")]
+            .joined(separator: "|")
+        return store.askRows(agent, made: made) {
+            let entries = Self.entries(lines, agent: agent, written: written, names: store.askNames)
+            return Self.asks(in: entries, places: places, agent: agent, reading: store.askReading(in: entries),
+                             waitsOn: waitsOn)
+        }
+    }
+
+    /// **Where the row of each thing that he asked for in this chat stands** (FleetCore's `ChatAskPlaces`, the Mac's own
+    /// rule; the owner, 16 November 2026: "this tasks should also show inside the conversation!!"): by the id of the row
+    /// it stands under, with what it says (`ChatAskRow`). Nothing without a reading that holds an ask of this chat.
+    static func asks(in entries: [ChatEntry], places: ChatRequestPlaces, agent: String,
+                     reading: HubState?, waitsOn: String? = nil) -> [String: [ChatAskRow]] {
+        guard let reading else { return [:] }
+        let asks = reading.asks
+        let byID = Dictionary(asks.map { ($0.id, $0) }) { first, _ in first }
+        var under: [String: [ChatAskRow]] = [:]
+        var last: String?
+        for part in ChatAskPlaces.rows(places.rows(of: entries), asks: asks, waitsOn: waitsOn) {
+            if case .ask(let id) = part {
+                if let last, let ask = byID[id] { under[last, default: []].append(ChatAskRow(ask, agent: agent, state: reading)) }
+            } else {
+                last = part.id
+            }
+        }
+        return under
     }
 
     /// The run ends with the message that his correction on its way changes where it stands.
@@ -1265,3 +1327,57 @@ private struct CodeStrip: View {
     }
 }
 
+
+/// **The row of one thing that he asked for, in the agent's chat** (`ChatAskRow`, `ChatAskPlaces`; the owner, 16 November
+/// 2026: "this tasks should also show inside the conversation!! like in codex or claude code!", and to its picture:
+/// what he asked in that chat, a tap opens the task, the Mac and the iPhone): the Mac's row on the phone — its mark in
+/// the colours of a task's mark (`MobileStore.color`), its name on one line and one line under it, on the surface of a
+/// card in the shape of a card of the chat (`NeedCard.shape`), with the chevron of a row that opens a page.
+private struct AskLine: View {
+    @Bindable var store: MobileStore
+    let row: ChatAskRow
+    @ScaledMetric(relativeTo: .title3) private var markWidth: CGFloat = 22
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// Until when its work is parked, in the words of a task's page ("Until 15:00"), else its own line.
+    private var line: String {
+        guard let until = row.until else { return row.line }
+        return String(l10n: "Until \(comingTime(until, now: store.hubNow))")
+    }
+    /// What VoiceOver reads under the title.
+    private var words: String { row.until == nil ? row.words : line }
+
+    var body: some View {
+        Button {
+            if let task = row.task { store.chatRoute.append(.task(task)) }
+        } label: {
+            // At the accessibility text sizes the mark stands over the title, as on the rows of Tasks, and the words
+            // take as many lines as they need.
+            let large = typeSize.isAccessibilitySize
+            HStack(spacing: 12) {
+                (large ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) : AnyLayout(HStackLayout(spacing: 12))) {
+                    Image(systemName: row.symbol).font(.title3).symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(MobileStore.color(row.tint)).frame(width: large ? nil : markWidth)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(row.title).lineLimit(large ? nil : 1).foregroundStyle(.primary)
+                        // The word of a result that did not succeed is red, as on Tasks; every other line is muted.
+                        Text(line).font(.footnote).lineLimit(large ? nil : 1)
+                            .foregroundStyle(row.tint == .failed ? Color.red : Brand.muted)
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Brand.muted)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Brand.surface, in: NeedCard.shape(onPage: false))
+            .overlay(NeedCard.shape(onPage: false).strokeBorder(Brand.cardEdge, lineWidth: 1))
+            .contentShape(NeedCard.shape(onPage: false))
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([row.title, words].filter { !$0.isEmpty }.joined(separator: ", "))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("chat-ask-\(row.id)")
+    }
+}

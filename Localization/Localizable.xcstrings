@@ -455,12 +455,42 @@
         }
       }
     },
+    "%@ did not install." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo instalar %@."
+          }
+        }
+      }
+    },
+    "%@ did not install. Try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo instalar %@. Vuelve a intentarlo."
+          }
+        }
+      }
+    },
     "%@ did not install: %@ could not reach the internet." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "No se pudo instalar %@: %@ no pudo conectar con internet."
+          }
+        }
+      }
+    },
+    "%@ did not install: %@ could not reach the internet. Try again when it can." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo instalar %@: %@ no pudo conectar con internet. Vuelve a intentarlo cuando pueda."
           }
         }
       }
@@ -625,6 +655,16 @@
         }
       }
     },
+    "%@ has an agent on a model server with no key, so it takes no other agent. Choose another server." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ tiene un agente en un servidor de modelos sin clave, así que no admite ningún otro agente. Elige otro servidor."
+          }
+        }
+      }
+    },
     "%@ has an open sign-in. Finish it or let it run out, then try again." : {
       "localizations" : {
         "es" : {
@@ -661,6 +701,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ no tiene acceso"
+          }
+        }
+      }
+    },
+    "%@ has no model named %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no tiene ningún modelo llamado %@."
+          }
+        }
+      }
+    },
+    "%@ has no model named %@. Delete %@, then add it again with another model." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no tiene ningún modelo llamado %@. Elimina a %@ y vuelve a añadirlo con otro modelo."
           }
         }
       }
@@ -711,6 +771,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ lo tiene"
+          }
+        }
+      }
+    },
+    "%@ is a Mac. An agent on %@ needs a Linux server: choose another one." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ es un Mac. Un agente con %@ necesita un servidor Linux: elige otro."
           }
         }
       }
@@ -1175,6 +1245,16 @@
         }
       }
     },
+    "%@ needs no sign-in. Founderizer added it with no sign-in." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no necesita iniciar sesión. Founderizer lo añadió sin inicio de sesión."
+          }
+        }
+      }
+    },
     "%@ needs your sign-in" : {
       "localizations" : {
         "es" : {
@@ -1365,6 +1445,16 @@
         }
       }
     },
+    "%@ runs an older Founderizer that cannot do this yet. It updates itself when it has no job; then try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ tiene una versión anterior de Founderizer que aún no puede hacerlo. Se actualiza sola cuando no tiene ningún trabajo; después, vuelve a intentarlo."
+          }
+        }
+      }
+    },
     "%@ runs an older version" : {
       "localizations" : {
         "es" : {
@@ -1461,6 +1551,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@: sin avance"
+          }
+        }
+      }
+    },
+    "%@ stays on %@. For another AI, add a new agent." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ se queda con %@. Para otra IA, añade un agente nuevo."
+          }
+        }
+      }
+    },
+    "%@ stays on its model server. For another AI, add a new agent." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ se queda en su servidor de modelos. Para otra IA, añade un agente nuevo."
           }
         }
       }
@@ -2950,6 +3060,16 @@
         }
       }
     },
+    "A model that runs on your own machine." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un modelo que se ejecuta en tu propia máquina."
+          }
+        }
+      }
+    },
     "A name is at most %lld characters." : {
       "localizations" : {
         "es" : {
@@ -3440,6 +3560,16 @@
         }
       }
     },
+    "Add API key, then copy it" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulsa Add API key y copia la clave"
+          }
+        }
+      }
+    },
     "Add MCP server" : {
       "localizations" : {
         "es" : {
@@ -3496,6 +3626,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Añade una regla tuya."
+          }
+        }
+      }
+    },
+    "Add a setting" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir un ajuste"
           }
         }
       }
@@ -6310,6 +6450,16 @@
         }
       }
     },
+    "Copy the name of a model" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia el nombre de un modelo"
+          }
+        }
+      }
+    },
     "Copy the reference" : {
       "localizations" : {
         "es" : {
@@ -6400,6 +6550,26 @@
         }
       }
     },
+    "Create API Key, then copy it" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulsa Create API Key y copia la clave"
+          }
+        }
+      }
+    },
+    "Create API key, then copy it" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulsa Create API key y copia la clave"
+          }
+        }
+      }
+    },
     "Create Token, then copy it" : {
       "localizations" : {
         "es" : {
@@ -6416,6 +6586,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Crea un Personal Access Token"
+          }
+        }
+      }
+    },
+    "Create a key, then copy it" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crea una clave y cópiala"
           }
         }
       }
@@ -7560,6 +7740,16 @@
         }
       }
     },
+    "Find a server" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar un servidor"
+          }
+        }
+      }
+    },
     "Find out why" : {
       "localizations" : {
         "es" : {
@@ -8330,6 +8520,16 @@
         }
       }
     },
+    "Founderizer installs npm and PyPI programs itself: write the line with npx or uvx." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Founderizer instala por sí mismo los programas de npm y PyPI: escribe la línea con npx o uvx."
+          }
+        }
+      }
+    },
     "Founderizer is asking the hub about %@." : {
       "localizations" : {
         "es" : {
@@ -8470,6 +8670,16 @@
         }
       }
     },
+    "Founderizer no longer has this key or address. Start again from Add agent." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Founderizer ya no tiene esta clave ni esta dirección. Vuelve a empezar desde Añadir agente."
+          }
+        }
+      }
+    },
     "Founderizer on %@ reported %@." : {
       "localizations" : {
         "es" : {
@@ -8586,6 +8796,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Founderizer vuelve a leer los secretos cuando el hub responda."
+          }
+        }
+      }
+    },
+    "Founderizer runs no Docker image: use the server's npm or PyPI package." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Founderizer no ejecuta imágenes de Docker: usa el paquete npm o PyPI del servidor."
           }
         }
       }
@@ -9380,6 +9600,16 @@
         }
       }
     },
+    "If Google says that it has not verified Founderizer, press Advanced, then Go to Founderizer." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si Google dice que no ha verificado Founderizer, pulsa Configuración avanzada y luego Ir a Founderizer."
+          }
+        }
+      }
+    },
     "If this hub replaces one you lost, put your copy back first." : {
       "localizations" : {
         "es" : {
@@ -9676,6 +9906,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Instalando %@ en %@ · %lld de %lld"
+          }
+        }
+      }
+    },
+    "Installing %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Instalando %@."
           }
         }
       }
@@ -10150,6 +10390,16 @@
         }
       }
     },
+    "Its context is smaller than 64,000 tokens." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Su contexto es menor de 64.000 tokens."
+          }
+        }
+      }
+    },
     "Its files" : {
       "localizations" : {
         "es" : {
@@ -10206,6 +10456,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Su clave deja de funcionar al instante. %@ solo vuelve con un código nuevo."
+          }
+        }
+      }
+    },
+    "Its model server does not answer." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Su servidor de modelos no responde."
           }
         }
       }
@@ -11120,6 +11380,16 @@
         }
       }
     },
+    "Looking for %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscando %@."
+          }
+        }
+      }
+    },
     "Lower cost" : {
       "localizations" : {
         "es" : {
@@ -11476,6 +11746,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Modelo solicitado"
+          }
+        }
+      }
+    },
+    "Model server" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Servidor de modelos"
           }
         }
       }
@@ -12270,6 +12550,16 @@
         }
       }
     },
+    "No model here passed a tool call." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ningún modelo de este servidor superó una llamada a una herramienta."
+          }
+        }
+      }
+    },
     "No model list for %@ yet." : {
       "localizations" : {
         "es" : {
@@ -12436,6 +12726,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nada de secretos: pueden sacárselo al agente."
+          }
+        }
+      }
+    },
+    "No server matches the search." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ningún servidor coincide con la búsqueda."
           }
         }
       }
@@ -13620,12 +13920,42 @@
         }
       }
     },
+    "Open [API Keys](%@) in SpaceXSI Console" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre [API Keys](%@) en SpaceXSI Console"
+          }
+        }
+      }
+    },
     "Open [API Tokens](%@) in Akamai" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abre [API Tokens](%@) en Akamai"
+          }
+        }
+      }
+    },
+    "Open [API keys](%@) in Ollama" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre [API keys](%@) en Ollama"
+          }
+        }
+      }
+    },
+    "Open [API keys](%@) in OpenRouter" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre [API keys](%@) en OpenRouter"
           }
         }
       }
@@ -13650,12 +13980,62 @@
         }
       }
     },
+    "Open [Google AI Studio](%@)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre [Google AI Studio](%@)"
+          }
+        }
+      }
+    },
     "Open [Keys](%@) in Tailscale" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abre [Keys](%@) en Tailscale"
+          }
+        }
+      }
+    },
+    "Open [Models](%@) in Ollama" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre [Models](%@) en Ollama"
+          }
+        }
+      }
+    },
+    "Open [Models](%@) in OpenCode" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre [Models](%@) en OpenCode"
+          }
+        }
+      }
+    },
+    "Open [Models](%@) in OpenRouter" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre [Models](%@) en OpenRouter"
+          }
+        }
+      }
+    },
+    "Open [Personal API keys](%@) in OpenCode" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre [Personal API keys](%@) en OpenCode"
           }
         }
       }
@@ -13706,6 +14086,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abrir el enlace"
+          }
+        }
+      }
+    },
+    "Open models" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelos abiertos"
           }
         }
       }
@@ -13960,6 +14350,16 @@
         }
       }
     },
+    "Other models" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otros modelos"
+          }
+        }
+      }
+    },
     "Our channel answered %lld when your fleet last asked. Your fleet asks again by itself." : {
       "localizations" : {
         "es" : {
@@ -14106,6 +14506,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Propietario"
+          }
+        }
+      }
+    },
+    "Paid per use" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pago por uso"
           }
         }
       }
@@ -14466,6 +14876,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fijar arriba"
+          }
+        }
+      }
+    },
+    "Plain http works only over Tailscale or on the agent's own server. Use that machine's Tailscale address, or https." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El http sin cifrar solo funciona por Tailscale o en el propio servidor del agente. Usa la dirección de Tailscale de esa máquina, o https."
           }
         }
       }
@@ -16636,6 +17056,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Busca y lee los archivos"
+          }
+        }
+      }
+    },
+    "Searching…" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscando…"
           }
         }
       }
@@ -19340,6 +19770,16 @@
         }
       }
     },
+    "The central vault does not run the program of the hub's release yet: %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La bóveda central aún no ejecuta el programa de la versión del hub: %@."
+          }
+        }
+      }
+    },
     "The central vault on the hub's server holds another Mac's owner key." : {
       "localizations" : {
         "es" : {
@@ -19936,6 +20376,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El gestor del equipo puede dar %@ a %@, como máximo %@."
+          }
+        }
+      }
+    },
+    "The fleet manager may give this key. Set it to You alone in Settings › Secrets, then save again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El gestor del equipo puede dar esta clave. Ponla en Solo tú en Ajustes › Secretos y vuelve a guardar."
           }
         }
       }
@@ -20940,12 +21390,32 @@
         }
       }
     },
+    "The key after %@ goes in a row of its own, never in the line." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La clave después de %@ va en una fila propia, nunca en la línea."
+          }
+        }
+      }
+    },
     "The key for the private network is not a Tailscale auth key." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "La clave para la red privada no es una clave de autenticación de Tailscale."
+          }
+        }
+      }
+    },
+    "The key has no credit." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La clave no tiene saldo."
           }
         }
       }
@@ -20986,6 +21456,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La clave sigue bloqueada: este teléfono no comprobó que estás aquí (%lld)."
+          }
+        }
+      }
+    },
+    "The key swap is not switched on: %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El intercambio de claves no está activado: %@."
           }
         }
       }
@@ -21510,16 +21990,6 @@
         }
       }
     },
-    "The program reads it as" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El programa la lee como"
-          }
-        }
-      }
-    },
     "The prompt" : {
       "localizations" : {
         "es" : {
@@ -21536,6 +22006,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El proveedor de %@."
+          }
+        }
+      }
+    },
+    "The provider refused the key." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El proveedor rechazó la clave."
           }
         }
       }
@@ -22216,6 +22696,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El usuario con el que accedes a este servidor por SSH."
+          }
+        }
+      }
+    },
+    "The vault gave no key for this account." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La bóveda no dio ninguna clave para esta cuenta."
           }
         }
       }
@@ -23640,12 +24130,32 @@
         }
       }
     },
+    "This server answers with no key, and more than one agent can reach it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este servidor responde sin clave, y más de un agente puede acceder a él."
+          }
+        }
+      }
+    },
     "This server cannot reach %@ over HTTPS. Let it make outgoing HTTPS connections." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este servidor no puede conectar con %@ por HTTPS. Permite que haga conexiones HTTPS salientes."
+          }
+        }
+      }
+    },
+    "This server does not answer." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este servidor no responde."
           }
         }
       }
@@ -23836,6 +24346,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La bóveda de este servidor abrió este inicio de sesión en la comprobación."
+          }
+        }
+      }
+    },
+    "This server's vault program is older than the hub's release. The server brings it up to date by itself." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El programa de la bóveda de este servidor es más antiguo que la versión del hub. El servidor lo pone al día por sí solo."
           }
         }
       }
@@ -24240,32 +24760,32 @@
         }
       }
     },
-    "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your %lld Google accounts and which agent had which level, so nothing has to be remembered. You need the Desktop client file again." : {
+    "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your %lld Google accounts and which agent had which level, so nothing has to be remembered." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hasta que vuelva, todas las herramientas de Drive y Gmail de todos los agentes se detienen. Tus archivos y tu correo no se tocan: es un inicio de sesión. En la copia figuran tus %lld cuentas de Google y qué agente tenía qué nivel, así que no hay que recordar nada. Necesitas de nuevo el archivo del cliente de escritorio."
+            "value" : "Hasta que vuelva, todas las herramientas de Drive y Gmail de todos los agentes se detienen. Tus archivos y tu correo no se tocan: es un inicio de sesión. En la copia figuran tus %lld cuentas de Google y qué agente tenía qué nivel, así que no hay que recordar nada."
           }
         }
       }
     },
-    "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your Google account and which agent had which level, so nothing has to be remembered. You need the Desktop client file again." : {
+    "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your Google account and which agent had which level, so nothing has to be remembered." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hasta que vuelva, todas las herramientas de Drive y Gmail de todos los agentes se detienen. Tus archivos y tu correo no se tocan: es un inicio de sesión. En la copia figura tu cuenta de Google y qué agente tenía qué nivel, así que no hay que recordar nada. Necesitas de nuevo el archivo del cliente de escritorio."
+            "value" : "Hasta que vuelva, todas las herramientas de Drive y Gmail de todos los agentes se detienen. Tus archivos y tu correo no se tocan: es un inicio de sesión. En la copia figura tu cuenta de Google y qué agente tenía qué nivel, así que no hay que recordar nada."
           }
         }
       }
     },
-    "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your Google accounts and which agent had which level, so nothing has to be remembered. You need the Desktop client file again." : {
+    "Until it is back, every Drive and Gmail tool of every agent stops. Your files and your mail are untouched — this is a sign-in. The copy names your Google accounts and which agent had which level, so nothing has to be remembered." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hasta que vuelva, todas las herramientas de Drive y Gmail de todos los agentes se detienen. Tus archivos y tu correo no se tocan: es un inicio de sesión. En la copia figuran tus cuentas de Google y qué agente tenía qué nivel, así que no hay que recordar nada. Necesitas de nuevo el archivo del cliente de escritorio."
+            "value" : "Hasta que vuelva, todas las herramientas de Drive y Gmail de todos los agentes se detienen. Tus archivos y tu correo no se tocan: es un inicio de sesión. En la copia figuran tus cuentas de Google y qué agente tenía qué nivel, así que no hay que recordar nada."
           }
         }
       }
@@ -25680,6 +26200,36 @@
         }
       }
     },
+    "With a key from a seller." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Con una clave de un vendedor."
+          }
+        }
+      }
+    },
+    "With an API key, or on your own model server." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Con una clave de API o en tu propio servidor de modelos."
+          }
+        }
+      }
+    },
+    "With an API key." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Con una clave de API."
+          }
+        }
+      }
+    },
     "With the agent's tools" : {
       "localizations" : {
         "es" : {
@@ -25816,6 +26366,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Escritura compartida"
+          }
+        }
+      }
+    },
+    "Write the address as http:// or https://, then the host, and a port and a path if it has them." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribe la dirección con http:// o https://, después el host, y un puerto y una ruta si los tiene."
           }
         }
       }
@@ -26106,6 +26666,86 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tu Discord"
+          }
+        }
+      }
+    },
+    "Your Gemini key" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu clave de Gemini"
+          }
+        }
+      }
+    },
+    "Your Grok key" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu clave de Grok"
+          }
+        }
+      }
+    },
+    "Your Ollama key" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu clave de Ollama"
+          }
+        }
+      }
+    },
+    "Your Ollama model" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu modelo de Ollama"
+          }
+        }
+      }
+    },
+    "Your OpenCode Go key" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu clave de OpenCode Go"
+          }
+        }
+      }
+    },
+    "Your OpenCode Go model" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu modelo de OpenCode Go"
+          }
+        }
+      }
+    },
+    "Your OpenRouter key" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu clave de OpenRouter"
+          }
+        }
+      }
+    },
+    "Your OpenRouter model" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu modelo de OpenRouter"
           }
         }
       }
@@ -26790,6 +27430,36 @@
         }
       }
     },
+    "Your model server" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu servidor de modelos"
+          }
+        }
+      }
+    },
+    "Your model server has no model named %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu servidor de modelos no tiene ningún modelo llamado %@."
+          }
+        }
+      }
+    },
+    "Your model server's key" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La clave de tu servidor de modelos"
+          }
+        }
+      }
+    },
     "Your network has the tag %@ again." : {
       "localizations" : {
         "es" : {
@@ -26826,6 +27496,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tu propia dirección"
+          }
+        }
+      }
+    },
+    "Your own model server" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu propio servidor de modelos"
           }
         }
       }
@@ -27296,6 +27976,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El texto de un inicio de sesión registrado no se puede mostrar."
+          }
+        }
+      }
+    },
+    "remote" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "remoto"
           }
         }
       }

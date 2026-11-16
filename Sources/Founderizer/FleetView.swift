@@ -98,7 +98,7 @@ struct FleetView: View {
                     if pendingBarShows { pendingBar }
                     // A correction of a sent message takes the composer's place, in the chat of that message only: on
                     // another page it does not show, so it cannot look like a message to another agent.
-                    if case .agent(let name) = store.destination, setupAgent == nil, startingAgent == nil {
+                    if case .agent(let name) = store.destination, setupAgent == nil, startingAgent == nil, accountAgent == nil {
                         if let editing = store.editingMessage, editing.chatRecipient == name { editMessagePanel(editing) }
                         else { composer() }
                     }
@@ -110,7 +110,7 @@ struct FleetView: View {
                 .overlay(alignment: .top) { if !store.destination.ownsSidebar { FleetNotices(store: store) } }
                 // The panel of an agent's chat, and the facts of a task in a task thread. Neither is hidden and
                 // neither waits to be asked for: the two pages that have a panel show it, every other page has none.
-                if let name = chatAgent, setupAgent == nil, startingAgent == nil, store.state != nil {
+                if let name = chatAgent, setupAgent == nil, startingAgent == nil, accountAgent == nil, store.state != nil {
                     Rule(vertical: true)
                     AgentStatusPanel(store: store, agent: name) { openAgent(name, .settings) }
                         .id("\(store.hub)/\(name)")
@@ -123,6 +123,9 @@ struct FleetView: View {
             }
         }
         .font(FleetStyle.body)
+        // Such an agent's chat place is its detail page: the window's place moves there, so no composer and no panel.
+        // The move is no step of the history (`standIn`), so Back goes to the page before the chat place (review N1).
+        .onChange(of: accountAgent, initial: true) { _, name in if let name { store.standIn(.agentDetail(name, .settings)) } }
         .foregroundStyle(FleetStyle.text)
         .background(FleetStyle.canvas)
         .tint(FleetStyle.accent)
@@ -217,6 +220,14 @@ struct FleetView: View {
 
     /// The agent whose chat shows, or nil.
     private var chatAgent: String? { if case .agent(let name) = store.destination { name } else { nil } }
+
+    /// **An agent on a key or a model server, whose chat's place shows** (pictures 6 and 8 of the AI providers build):
+    /// it has no chat in version 1, so it opens on its detail page (the page that Settings opens), with no composer and
+    /// no status panel (review M2). Nil while its setup shows, and for every other agent (`FleetStore.chatShowsDetail`).
+    private var accountAgent: String? {
+        guard let name = chatAgent, store.chatShowsDetail(name) else { return nil }
+        return name
+    }
 
     /// Every agent's presence as its sidebar row reads it, for the glyphs that are given none (`AgentGlyph`).
     private var glyphPresences: [String: AgentPresence] {
@@ -582,6 +593,12 @@ struct FleetView: View {
                 Group {
                     if setupAgent == name {
                         AgentSetupWizard(store: store, agent: name).id("\(store.hub)/\(name)/setup")
+                    } else if accountAgent == name {
+                        // **An agent on a key or a model server has no chat in version 1** (picture 8, his "Yes, as
+                        // shown"): at the end of its setup, and each time it opens, its detail page shows, in the frame
+                        // before the place moves there (`accountAgent`).
+                        AgentPage(store: store, team: team, agent: name, destination: .agentDetail(name, .settings)) { store.destination = $0 }
+                            .id("\(store.hub)/\(name)/runs-on")
                     } else if startingAgent == name {
                         ChatSettingUp(agent: name).id("\(store.hub)/\(name)/starting")
                     } else {

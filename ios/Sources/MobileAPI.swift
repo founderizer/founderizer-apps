@@ -36,6 +36,12 @@ struct MobileSnapshot: Decodable, Sendable {
     /// The heads of the open tasks, and `recent` the heads of the last 20 that ended.
     let tasks: [MobileTaskHead]
     let recent: [MobileTaskHead]
+    /// A short value that changes whenever the heads of every ended task (`GET /ui/mobile/ended`, hub 1.166) would. A
+    /// hub from before it sends none.
+    let ended_mark: String?
+    /// **The name of each thing that he asked for that a head names** (owner feature asks, hub 1.189), by his message's
+    /// request_id: the name of its row in his chat (`ChatAskRow`). A hub from before it sends none.
+    let asked: [String: String]?
     /// The holds that are not released and the outcomes that nobody resolved: both stop work.
     let holds: [TaskHold]
     let outcomes: [TaskOutcome]
@@ -216,6 +222,29 @@ struct MobileTaskHead: Decodable, Identifiable, Sendable {
     let works: Bool?
     /// **What its running turn does now, in plain words** (hub 1.148, as `FleetTask.doing` on the Mac), or nil.
     let doing: String?
+    /// The task that it is a subtask of (hub 1.162), until when its agent parked it (hub 1.161), and **the owner's
+    /// message that its work began from** (owner feature asks, hub 1.189), as the Mac's `FleetTask` has them. A hub
+    /// from before them sends none.
+    let parent: Int?
+    let parked_until: Double?
+    let ask: String?
+
+    /// **The head as FleetCore's task**, for the rules that both apps share (what he asked for in a chat:
+    /// `HubState.asks`, `ChatAskRow`). What the head does not carry is empty, as the hub writes it.
+    var fleetTask: FleetTask? {
+        var row: [String: Any] = ["id": id, "title": title, "details": "", "done_when": "", "needs": needs ?? "none",
+                                  "goal": goal ?? "", "owner": owner, "requester": requester, "state": state,
+                                  "created": created, "attempt": attempt, "restarts": 0,
+                                  "nudge_level": nudge_level ?? 0, "stop_sent": 0]
+        let more: [String: Any?] = ["accepted": accepted, "started": started, "last_activity": last_activity,
+                                    "delivered": delivered, "checked_at": checked_at, "waiting_on": waiting_on,
+                                    "follows": follows, "stalled_since": stalled_since, "missing_since": missing_since,
+                                    "works": works, "doing": doing, "parent": parent, "parked_until": parked_until,
+                                    "ask": ask]
+        for (key, value) in more { if let value { row[key] = value } }
+        guard let data = try? JSONSerialization.data(withJSONObject: row) else { return nil }
+        return try? JSONDecoder().decode(FleetTask.self, from: data)
+    }
 
     var isTerminal: Bool { ["completed", "failed", "rejected", "canceled"].contains(state) }
     /// The time of the task's last activity, or its created time while it has not started.
@@ -232,6 +261,15 @@ struct MobileTaskHead: Decodable, Identifiable, Sendable {
         default: nil
         }
     }
+}
+
+/// `GET /ui/mobile/ended` (hub 1.166): the head of every ended task, and the mark of the read that it is of.
+struct MobileEndedPage: Decodable, Sendable {
+    let db: String
+    let mark: String
+    let tasks: [MobileTaskHead]
+    /// The name of each ask that these heads name (hub 1.189), by its message's request_id.
+    let asked: [String: String]?
 }
 
 /// `GET /ui/mobile/chat/<agent>`: one page of a conversation, oldest first, at most 30 items.

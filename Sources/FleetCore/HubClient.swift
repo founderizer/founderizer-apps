@@ -586,6 +586,42 @@ public final class HubClient: Sendable {
         return receipt
     }
 
+    /// `POST /ui/servers/<server>/agents` with `account` (owner API 1.175): a new agent on an account with a kind,
+    /// whose program the hub takes from the account, so no `runtime` goes. Its install has no sign-in step.
+    public func addServerAgent(hub: URL, database: String, client: String, requestID: UUID = UUID(), server: String,
+                               sha256: String, agent: String, account: String, role: String = "worker") async throws -> ServerAgentReceipt {
+        guard server.range(of: Servers.machinePattern, options: .regularExpression) != nil,
+              agent.range(of: AgentPlacement.namePattern, options: .regularExpression) != nil,
+              account.range(of: "^[a-z][a-z0-9-]{1,30}$", options: .regularExpression) != nil,
+              sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil,
+              ["worker", "lead"].contains(role) else { throw HubError.invalidResponse }
+        let fields: [String: Any] = ["base_sha256": sha256, "agent": agent, "account": account, "role": role, "reports_to": NSNull()]
+        let receipt = try JSONDecoder().decode(ServerAgentReceipt.self, from: await ownerCommand(
+            "ui/servers/\(server)/agents", hub: hub, database: database, client: client, requestID: requestID, fields: fields))
+        guard receipt.ok, receipt.request_id.lowercased() == requestID.uuidString.lowercased(), receipt.agent == agent,
+              receipt.server == server, receipt.job > 0 else { throw HubError.invalidResponse }
+        return receipt
+    }
+
+    /// `POST /ui/team/accounts` of an account with a kind (owner API 1.165): the whole entry, against the version
+    /// `sha256` of team.json. A refusal carries its code and names (`HubRefusal`; the app's words: `RefusalWords`).
+    public func saveModelAccount(hub: URL, database: String, client: String, requestID: UUID = UUID(), sha256: String,
+                                 id: String, entry: TeamAccount) async throws -> String {
+        guard id.range(of: "^[a-z][a-z0-9-]{1,30}$", options: .regularExpression) != nil,
+              sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil,
+              let kind = entry.kind, ["key", "server"].contains(kind) else { throw HubError.invalidResponse }
+        var fields: [String: Any] = ["base_sha256": sha256, "account": id, "provider": entry.provider, "title": entry.title,
+                                     "kind": kind]
+        if let secret = entry.secret { fields["secret"] = secret }
+        if let address = entry.address { fields["address"] = address }
+        if let model = entry.model { fields["model"] = model }
+        let receipt = try JSONDecoder().decode(ModelAccountReceipt.self, from: await ownerCommand(
+            "ui/team/accounts", hub: hub, database: database, client: client, requestID: requestID, fields: fields))
+        guard receipt.account == id, receipt.sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil
+        else { throw HubError.invalidResponse }
+        return receipt.sha256
+    }
+
     /// `POST /ui/servers/<server>/prepare`: the server's own service prepares `runtime` for an agent on it, before the
     /// owner switches the agent: it installs that provider when the server has none and signs it in. It changes no
     /// agent; the switch stays its own command. A failed preparation goes again with a new request.

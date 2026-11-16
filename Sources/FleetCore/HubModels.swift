@@ -144,7 +144,17 @@ public struct FleetAgent: Decodable, Identifiable, Sendable {
     /// does not: the chat then says "Not answering" under his message, as it does for a server that is silent
     /// (`chatWaiting`). false or nil: it is not late, or the hub is older than this field.
     public let chat_undelivered: Bool?
+    /// **Its account with a kind** (the AI providers build): the AI that the owner picked for it, by a key or on his own
+    /// model server, and that server's address. nil for an agent on a plan, and from a hub before it. A field that will
+    /// not read is none: it never hides the agent.
+    public let model_account: AgentModelAccount?
+    /// **Its account cannot work now** (owner API 1.186, item 7 of the AI providers' pictures): the key has no credit,
+    /// or its model server does not answer. nil while it works, for an agent on a plan, and from a hub before it.
+    public let account_problem: AccountProblem?
     public var id: String { name }
+    /// The AI that the owner picked for an agent on a key or a model server, which the app names in the place of its
+    /// program (his answer 12 of 14 November 2026); nil for an agent on a plan.
+    public var modelProvider: ModelProvider? { model_account.flatMap { ModelProvider(rawValue: $0.provider) } }
     public var accountLimits: AccountLimits? { local_model == true ? nil : usage?.limits }
     /// The email of the provider account of the agent's own (primary) route, from a current reading of its configured
     /// provider. nil: unknown, a local model, or an old reading. The screen route has its own account:
@@ -153,7 +163,7 @@ public struct FleetAgent: Decodable, Identifiable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case name, role, title, runtime, active, direct_chat, local_model, reports_to, can, last_seen, alive_ts, client_seen, alive, client, usage, limit,
-             signed_in, chat_ready, placed, turn_ended_after, chat_undelivered
+             signed_in, chat_ready, placed, turn_ended_after, chat_undelivered, model_account, account_problem
     }
 
     public init(from decoder: Decoder) throws {
@@ -180,6 +190,8 @@ public struct FleetAgent: Decodable, Identifiable, Sendable {
         placed = try data.decodeIfPresent(Bool.self, forKey: .placed) ?? true
         turn_ended_after = try data.decodeIfPresent(Double.self, forKey: .turn_ended_after)
         chat_undelivered = try data.decodeIfPresent(Bool.self, forKey: .chat_undelivered)
+        model_account = (try? data.decodeIfPresent(AgentModelAccount.self, forKey: .model_account)) ?? nil
+        account_problem = (try? data.decodeIfPresent(AccountProblem.self, forKey: .account_problem)) ?? nil
         // Bad telemetry must not block chat or hide the rest of the fleet state.
         do {
             let reading = try data.decodeIfPresent(AgentUsage.self, forKey: .usage)
