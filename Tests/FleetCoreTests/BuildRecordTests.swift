@@ -318,6 +318,58 @@ struct BuildRecordTests {
         #expect(third.unjoined(hub: hub).isEmpty)
     }
 
+    /// **"Use this server" proves its server by the provider's id** (the lane "Unfinished setup", 15 November 2026): a
+    /// first run's server that stopped before this Mac saw it on the private network has no hub, so the name of a later
+    /// install finds no record, and the id closes it, with the hub that the install proved. The same id at another
+    /// provider, a build that still runs, an id that no build has, and a record that joined that hub already change
+    /// nothing.
+    @Test func anInstallOnAServerOfTheListClosesItsBuildByItsId() {
+        let scratch = Scratch()
+        defer { scratch.remove() }
+        let records = BuildRecords(folder: scratch.folder, launch: "now")
+        let firstRun = stopped("worker-3", id: "4750", hub: nil, at: 0)
+        var elsewhere = build("worker-3", hub: nil, provider: .vultr, at: 100)
+        elsewhere.made(id: "4750", at: time(108))
+        elsewhere.end(at: time(408))
+        var running = build("worker-5", hub: nil, at: 200)
+        running.made(id: "4760", at: time(208))
+        for record in [firstRun, elsewhere, running] { records.write(record) }
+
+        records.noteJoined(name: "worker-3", hub: hub, at: time(900))
+        #expect(records.unjoined(hub: nil).count == 2)
+
+        records.noteJoined(serverID: "4750", provider: .hetzner, hub: hub, at: time(1000))
+        let closed = records.all().first { $0.id == firstRun.id }
+        #expect(closed?.outcome == .joined && closed?.hub == hub && closed?.ended == time(1000))
+        #expect(records.unjoined(hub: hub).isEmpty)
+        #expect(records.all().first { $0.id == elsewhere.id }?.outcome == .stopped)
+
+        let before = records.changes
+        records.noteJoined(serverID: "4760", provider: .hetzner, hub: hub, at: time(1100))
+        records.noteJoined(serverID: "4799", provider: .hetzner, hub: hub, at: time(1100))
+        records.noteJoined(serverID: "4750", provider: .hetzner, hub: hub, at: time(1200))
+        records.noteJoined(serverID: "", provider: .hetzner, hub: hub, at: time(1200))
+        #expect(records.changes == before)
+        #expect(records.all().first { $0.id == running.id }?.outcome == .running)
+    }
+
+    /// A server that joined one fleet and that the install of another fleet took ("Use this server" in a new first run)
+    /// is that fleet's now: the record's hub moves with the install's proof, and the record keeps its end.
+    @Test func aServerThatAnotherFleetTookIsThatFleetsNow() {
+        let scratch = Scratch()
+        defer { scratch.remove() }
+        let records = BuildRecords(folder: scratch.folder, launch: "now")
+        var joined = build("worker-6", at: 0)
+        joined.made(id: "4770", at: time(8))
+        joined.joined(at: time(90))
+        records.write(joined)
+        let other = "http://100.64.0.9:8765/"
+        records.noteJoined(serverID: "4770", provider: .hetzner, hub: other, at: time(5000))
+        let moved = records.all().first
+        #expect(moved?.hub == other && moved?.outcome == .joined && moved?.ended == time(90))
+        #expect(records.unjoined(hub: hub).isEmpty && records.unjoined(hub: other).isEmpty)
+    }
+
     /// The two kinds of record have their own folders and their own signs of change: a build's file in the folder of
     /// the installs is no install, and a write of a build posts the builds' sign only.
     @Test func aBuildAndAnInstallAreNeverReadAsEachOther() throws {

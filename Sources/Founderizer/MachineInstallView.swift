@@ -236,6 +236,15 @@ final class MachineInstallModel {
     /// **The step of the first run's slider** (`FirstRunModel.serversStep`), for the hub to keep from its first install
     /// on; nil for an install whose owner did not come through that page. The first run sets it before each install.
     var shape: ServersStep?
+    /// **The manager's AI program** (`FirstRunModel.chosenAI`): with `oneServer` the hub's installer puts it on the
+    /// hub's own server (`hub.sh --runtime`); nil for an install whose owner did not choose one. The first run sets it
+    /// before each install.
+    var runtime: String?
+    /// **The server of the provider's list that this install runs on** ("Use this server"), by its provider and its id
+    /// there, or nil: the install's end proves that server's build record by its id (`BuildRecords.noteJoined(serverID:)`),
+    /// which a first run's record with no hub needs (the lane "Unfinished setup", 15 November 2026). The page that
+    /// starts the install sets it after `use`, and `again` takes it away.
+    var provenServer: (provider: CloudProvider, id: String)?
 
     /// Installs the hub itself: the first machine of a fleet, which has no hub to ask for a line. The claim at its
     /// end proves this Mac's own address to that hub, and the app then connects to it.
@@ -253,7 +262,7 @@ final class MachineInstallModel {
                 try await mintKey(for: "hub")
                 let plan = InstallPlan.hub(target: target, source: source.trimmingCharacters(in: .whitespaces),
                                            authKey: authKey.isEmpty ? nil : authKey, managerName: managerName,
-                                           oneServer: oneServer, shape: shape)
+                                           oneServer: oneServer, shape: shape, runtime: runtime)
                 try await run(plan: plan, store: store, machine: "hub")
             }
         }
@@ -358,13 +367,11 @@ final class MachineInstallModel {
     func linkMac(store: FleetStore, withAgent: Bool = true, named: String? = nil) {
         guard !running, let database = store.state?.db else { return }
         guard let installer = MacInstallerClient.address(macHost), let code = ClaimCode.read(linkCode) else {
-            failure = MacLinkError.notAnAddress.errorDescription; failureDetail = nil
-            stop = .cannotStart; cause = nil     // no cause of a stop before this one stands for this one
+            cannotLink(MacLinkError.notAnAddress.errorDescription)
             return
         }
         guard Servers.setsUpMacs(store.state?.ui_features) else {
-            failure = String(l10n: "Your hub needs the newest Founderizer first: Settings, Updates."); failureDetail = nil
-            stop = .cannotStart; cause = nil
+            cannotLink(String(l10n: "Your hub needs the newest Founderizer first: Settings, Updates."))
             return
         }
         // A hub with `server_names` names this Mac by its name in Tailscale at its join, so its code is made with no
@@ -375,7 +382,9 @@ final class MachineInstallModel {
         // it once this Mac has joined.
         firstAgent = withAgent ? named ?? AddAgentModel.freeName(taken: Set(store.state?.agents.map(\.name) ?? [])) : nil
         work?.cancel()      // the reading of the order before this one
-        running = true; failure = nil; failureDetail = nil; steps = []; planned = []; checklist = nil
+        // No wait for the network of an install before this one, as the two other installs begin: with it still
+        // set, this link was drawn as the network's question while it ran and after its good end (`MachineInstallRun`).
+        running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; checklist = nil
         job = .join
         server = asks ? machine : nil; made = nil
         begin(.mac, hub: store.hub.absoluteString, host: installer.host ?? "", server: asks ? machine : nil)
@@ -505,7 +514,12 @@ final class MachineInstallModel {
             InstallEnds.note(machine, address: reached.host, hub: store.hub)
             // A server that this Mac made for this hub and never saw join did join after all (`BuildRecord`): by the
             // hub that this install began with.
-            BuildRecords.shared.noteJoined(name: machine, hub: log?.record.hub ?? store.hub.absoluteString)
+            let hub = log?.record.hub ?? store.hub.absoluteString
+            BuildRecords.shared.noteJoined(name: machine, hub: hub)
+            // A server of the provider's list is proved by its id too, also when its record has no hub.
+            if let proven = provenServer {
+                BuildRecords.shared.noteJoined(serverID: proven.id, provider: proven.provider, hub: hub)
+            }
         }
         if plan.job == .hub, let claimed = claimedAddress() {
             hubAddress = claimed
@@ -519,6 +533,11 @@ final class MachineInstallModel {
             // a key that this very install already used.
             InstallTargets.remember(reached, machine: machine, hub: store.hub)
             MachineChecks.remember(answer, machine: machine, hub: store.hub)
+            // The hub's own server, when "Use this server" chose it in the first run: by its id, for the hub's address
+            // that the claim gave.
+            if let proven = provenServer {
+                BuildRecords.shared.noteJoined(serverID: proven.id, provider: proven.provider, hub: store.hub.absoluteString)
+            }
         }
     }
 
@@ -555,6 +574,17 @@ final class MachineInstallModel {
                                     : progress.state == .failed ? .failed : .running) == true
         if progress.step == "claim", progress.state == .done, log?.place(hub: claimedHub()) == true { changed = true }
         if changed { keepRecord() }
+    }
+
+    /// **A Mac's link that cannot start**: its own line and its own kind of stop, with no cause and no wait for the
+    /// network of the install before it. While that wait stayed set, `setup_diagnosis` said that the install waits
+    /// for the network beside `cannot_start` (seen by a review of the lane "Agent install", 15 November 2026). The
+    /// steps, the checklist and the record of the install before it stay as they are, as before: the page's Back
+    /// does not start the model again (`AddServerView`), which is not this function's to change.
+    private func cannotLink(_ words: String?) {
+        failure = words; failureDetail = nil
+        needsNetworkKey = false; networkFailure = nil
+        stop = .cannotStart; cause = nil     // no cause of a stop before this one stands for this one
     }
 
     /// A new install begins: no stop, and a new record. `server`: the name that the owner gave it, on a hub that asks
@@ -630,7 +660,7 @@ final class MachineInstallModel {
         runCount += 1
         steps = []; planned = []; checklist = nil; failure = nil; failureDetail = nil; hubAddress = nil; needsNetworkKey = false; networkFailure = nil
         job = nil
-        server = nil; made = nil
+        server = nil; made = nil; provenServer = nil
         // The record of the install that ended stays in its file; this model writes it no more.
         stop = nil; cause = nil; log = nil
     }

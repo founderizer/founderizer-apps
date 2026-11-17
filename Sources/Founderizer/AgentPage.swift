@@ -167,9 +167,10 @@ struct AgentPage: View {
     /// page has no Back to chat (`FleetStore.chatShowsDetail`); its name keeps its place, because the button only
     /// stands over the space above it.
     private var head: some View {
+        let tasks = store.state?.tasks.filter { $0.owner == agent && !$0.isTerminal } ?? []
         let presence = store.state?.agents.first { $0.name == agent }?.presence(
-            isFresh: store.isFresh, serverTime: store.state?.time ?? 0,
-            openTasks: store.state?.tasks.filter { $0.owner == agent && !$0.isTerminal } ?? [], holds: store.state?.holds ?? []) ?? .unknown
+            isFresh: store.isFresh, serverTime: store.state?.time ?? 0, openTasks: tasks, holds: store.state?.holds ?? [],
+            waits: store.state?.ownerWaits(of: tasks) ?? [:]) ?? .unknown
         return ZStack(alignment: .topLeading) {
             if !store.chatShowsDetail(agent) {
                 Button { open(.agent(agent)) } label: {

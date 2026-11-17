@@ -285,7 +285,7 @@ extension FormRow where Control == EmptyView {
 }
 
 extension FormRow {
-    /// **A row whose detail ends in a link** (Settings › General › Error reports, "… Privacy ↗"): the other inits, and
+    /// **A row whose detail ends in a link** (Settings › Help › Help improve Founderizer, "… Privacy ↗"): the other inits, and
     /// every row that they make, stay as they were. Its literal title is looked up, as `LocalizedTitles.swift` does.
     init(_ title: String.LocalizationValue, symbol: String, detail: String, link: FormLink, warning: String? = nil,
          @ViewBuilder control: () -> Control) {

@@ -1310,6 +1310,7 @@ struct OwnerMacKeyTests {
             "GitHubManifest.swift": "GitHub's API", "MacNetwork.swift": "Tailscale's download", "CloudServers.swift": "a cloud's API",
             "OwnerMacKey.swift": "the key itself: hubData and the registration",
             "GuideProgram.swift": "an AI provider's own download of its program",
+            "SellerModels.swift": "a seller's public list of its models (OpenCode Go, OpenRouter, Ollama), with no key",
             "OwnerHub.swift": "the program inside the app, which reads the key for its own request (OwnerKeyTests)",
         ]
         #expect(Self.bareSends(in: "session.data(for: request)") == 1)

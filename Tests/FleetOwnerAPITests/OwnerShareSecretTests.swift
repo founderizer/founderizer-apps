@@ -387,8 +387,9 @@ struct OwnerShareSecretFieldTests {
 
 /// **The words of `share_secret`**: the tool as the program lists it, its description, and its fixed sentences.
 struct OwnerShareSecretWordsTests {
-    /// **The tool is a write with two required fields and no value, and it is listed last**: the fifth of
+    /// **The tool is a write with two required fields and no value, and it is listed last but one**: the fifth of
     /// `OwnerLinkTools.names` and `tools`, one time in each, and no tool of `owner_mcp.py`'s table.
+    /// (`answer_secret_request` came after it.)
     @Test func theToolIsAWriteWithTwoRequiredFieldsAndIsListedLast() throws {
         let tool = ShareSecret.tool
         #expect(tool.name == "share_secret" && ShareSecret.name == "share_secret" && tool.what == "share_secret")
@@ -404,14 +405,14 @@ struct OwnerShareSecretWordsTests {
         #expect(tool.feature == nil && tool.route.isEmpty && !tool.requestIDFromArguments && tool.fields.isEmpty)
         #expect(tool.firstSentence == "Sets who may give one secret of the fleet, with the owner's signature, as Who "
                 + "may give it on the Founderizer app's Secrets page does.")
-        #expect(OwnerLinkTools.names.last == ShareSecret.name && OwnerLinkTools.names.count == 5)
+        #expect(OwnerLinkTools.names.firstIndex(of: ShareSecret.name) == 4 && OwnerLinkTools.names.count == 6)
         #expect(OwnerLinkTools.names.filter { $0 == ShareSecret.name }.count == 1)
         #expect(OwnerLinkTools.tools.map(\.name) == OwnerLinkTools.names)
-        #expect(OwnerLinkTools.tools.last?.description == tool.description)
-        // Not a tool of owner_mcp.py's table: a tool of the program only. The program lists it last.
+        #expect(OwnerLinkTools.tools[4].description == tool.description)
+        // Not a tool of owner_mcp.py's table: a tool of the program only. The program lists it last but one.
         #expect(Fixture.table.tool(ShareSecret.name) == nil)
         let listed = OwnerTools.programTable(Fixture.table).tools.filter { $0.kind.listed }
-        #expect(listed.last?.name == ShareSecret.name)
+        #expect(listed.suffix(2).map(\.name) == [ShareSecret.name, AnswerSecret.name])
         #expect(listed.filter { $0.name == ShareSecret.name }.count == 1)
         // It has its own words for a lost answer.
         #expect(OwnerLinkTools.notKnownHere(ShareSecret.name) == ShareSecret.notKnownHere)
@@ -658,7 +659,7 @@ struct OwnerShareSecretWordsTests {
         }
         let hubSaid = GrantSecret.withHubWords(ShareSecret.poolRefused, status: 409, "an account's key")
         let others = OwnerLinkTools.names.filter { $0 != ShareSecret.name }
-        #expect(others.count == 4)
+        #expect(others.count == 5)
         for words in before + after + notes + [hubSaid, notSigned] {
             for other in others { #expect(!words.contains(other), "\(words)") }
             for never in ["read a login", "reads a login", "read the login", "reads the login", "read the secret",
@@ -1653,18 +1654,18 @@ final class OwnerShareSecretProgramTests {
         return (status, out.all, errors)
     }
 
-    /// **The tool is a write of the program alone, and the last one of its list**: taken by `write` and by the MCP
-    /// form, refused by `call`, and no tool of `owner_mcp.py`'s table.
+    /// **The tool is a write of the program alone, and the last one of its list but one** (`answer_secret_request`
+    /// came after it): taken by `write` and by the MCP form, refused by `call`, and no tool of `owner_mcp.py`'s table.
     @Test func theToolIsAWriteOfTheProgramAloneAndTheLastOne() throws {
         let tools = OwnerTools(table: Fixture.table, context: context(ValueLink()))
         let tool = try #require(tools.listed.first { $0.name == ShareSecret.name })
         #expect(tool.annotations == .object(["readOnlyHint": .bool(false)]))
         #expect(OwnerTools.verb(of: tool) == .write)
-        #expect(tools.listed.last?.name == ShareSecret.name)
+        #expect(tools.listed.suffix(2).map(\.name) == [ShareSecret.name, AnswerSecret.name])
         #expect(Fixture.table.tool(ShareSecret.name) == nil)
         let (status, out, _) = try run(["tools"], ValueLink())
         #expect(status == 0)
-        #expect(out.last == "write share_secret: " + ShareSecret.tool.firstSentence)
+        #expect(out.dropLast().last == "write share_secret: " + ShareSecret.tool.firstSentence)
         #expect(out.filter { $0.hasPrefix("write share_secret") }.count == 1)
         let (one, full, _) = try run(["tools", "share_secret"], ValueLink())
         #expect(one == 0 && full.contains(ShareSecret.tool.description))
@@ -1748,7 +1749,7 @@ final class OwnerShareSecretProgramTests {
         mcp.finish()
         let said = lines.wait(for: 3)
         let listed = try #require(said.first { $0["id"] == .int(1) }?["result"]?["tools"]?.array)
-        let tool = try #require(listed.last)
+        let tool = try #require(listed.dropLast().last)
         #expect(tool["name"] == .string("share_secret"))
         #expect(tool["annotations"]?["readOnlyHint"] == .bool(false))
         #expect(tool["inputSchema"]?["required"] == .array([.string("login"), .string("max")]))

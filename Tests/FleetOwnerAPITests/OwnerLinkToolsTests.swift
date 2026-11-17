@@ -630,7 +630,7 @@ final class OwnerLinkProgramTests {
         #expect(OwnerTools.verb(of: tool) == .write)
         #expect(OwnerCLI.setupTools == ["setup_state", "setup_show", "setup_diagnosis"])
         #expect(OwnerLinkTools.names == ["save_bot_token", "prepare_problem_report", "save_secret", "grant_secret",
-                                         "share_secret"])
+                                         "share_secret", "answer_secret_request"])
         #expect(OwnerLinkTools.tools.map(\.name) == OwnerLinkTools.names)
         #expect(Fixture.table.tool(SaveBotToken.name) == nil)
         let (status, out, _) = try run(["tools"], ValueLink())
@@ -1097,7 +1097,7 @@ struct OwnerSaveBotTokenTests {
             return found
         }
         let tools = OwnerSetupTools.tools + OwnerLinkTools.tools
-        #expect(tools.count == 8)
+        #expect(tools.count == 9)
         for tool in tools {
             for name in names(tool.inputSchema) {
                 #expect(!OwnerLinkTools.namedLikeAValue(name), "\(tool.name): \(name)")

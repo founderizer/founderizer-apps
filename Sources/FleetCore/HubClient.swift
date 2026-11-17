@@ -729,7 +729,7 @@ public final class HubClient: Sendable {
                                  fields: ["automatic": on])
     }
 
-    /// `GET /ui/error-reports` (owner feature `error_reports`): whether Settings › General › Error reports is on.
+    /// `GET /ui/error-reports` (owner feature `error_reports`): whether Settings › Help › Help improve Founderizer is on.
     public func errorReports(hub: URL, database: String) async throws -> ErrorReportsState {
         var parts = URLComponents(url: hub.appendingPathComponent("ui/error-reports"), resolvingAgainstBaseURL: false)!
         parts.queryItems = [.init(name: "db", value: database)]

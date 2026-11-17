@@ -3,7 +3,7 @@ import Observation
 import SwiftUI
 
 /// The hub's switch of error reports (`GET` and `POST /ui/error-reports`, owner feature `error_reports`), which
-/// Settings › General › Error reports draws. Its write goes as the Automatic updates switch's goes (`UpdatesModel`): an
+/// Settings › Help › Help improve Founderizer draws. Its write goes as the Automatic updates switch's goes (`UpdatesModel`): an
 /// owner command with its request id, the hub's own words for a refusal, and "Try again" for an answer that did not
 /// come; then a reading of the switch. **The switch shows only what the hub said** (the screen review of 16 November
 /// 2026): its reading, or the hub's receipt of a save, never the value of a press before the hub answered it.
@@ -17,7 +17,7 @@ final class ErrorReportsModel {
 
     init(state: ErrorReportsState? = nil) { self.state = state }
 
-    /// **Reads the switch every 15 seconds while General shows.** `SettingsPage` runs it, and not the section: the
+    /// **Reads the switch every 15 seconds while Help shows.** `SettingsPage` runs it, and not the section: the
     /// section draws nothing before a reading, and a view that draws nothing runs no task of its own.
     func poll(store: FleetStore) async {
         while !Task.isCancelled {
@@ -32,7 +32,7 @@ final class ErrorReportsModel {
         store.pageModel(name) { ErrorReportsModel(state: store.reading(name)) }
     }
 
-    /// What one visit of General said goes with it: a refusal's words. The reading stays.
+    /// What one visit of Help said goes with it: a refusal's words. The reading stays.
     func left() { if !busy { error = nil } }
 
     func read(store: FleetStore) async {
@@ -67,14 +67,16 @@ final class ErrorReportsModel {
     }
 }
 
-/// **Settings › General › Error reports** (the owner's "Yes, as drawn" of 16 November 2026, to
-/// `P3-error-reports-switch.png`), under Updates while the hub offers the switch. **Its row stands only with a reading
-/// of the hub, and its switch is that reading** (as Updates draws its rows only with one): with no reading there is no
-/// row, never a switch that says off while the hub may have it on, and no line that says that it cannot be read.
+/// **Settings › Help › Error reports** (the owner's "Yes, as drawn" of 16 November 2026, to
+/// `P3-error-reports-switch.png`, as a group of General under Updates; and his "Build A" of the same day, to the picture
+/// that moved it to Help, under Report a problem, as Help improve Founderizer), while the hub offers the switch. **Its
+/// row stands only with a reading of the hub, and its switch is that reading** (as Updates draws its rows only with
+/// one): with no reading there is no row, never a switch that says off while the hub may have it on, and no line that
+/// says that it cannot be read.
 struct ErrorReportsSection: View {
     @Bindable var store: FleetStore
     private var model: ErrorReportsModel { ErrorReportsModel.of(store) }
-    /// The switch, read before General first opens (`PagePrefetch`), so that it stands as the hub has it in the first frame.
+    /// The switch, read before Help first opens (`PagePrefetch`), so that it stands as the hub has it in the first frame.
     static let prefetch = PagePrefetch(ErrorReportsModel.name, feature: ErrorReportsState.feature) {
         try await HubClient().errorReports(hub: $0, database: $1)
     }
@@ -89,8 +91,10 @@ struct ErrorReportsSection: View {
     }
 }
 
-/// **The section as drawn**, with no store: one row, its symbol `ladybug`, the title, one detail line that ends in the
-/// privacy page, and a small switch that stands as the hub has it. A save that was refused or got no answer is the
+/// **The section as drawn**, with no store: one row, its symbol `ladybug`, the title, one detail line that says what
+/// goes and to whom and ends in the privacy page, and a small switch that stands as the hub has it. The title says what
+/// the switch is for; the detail says what it sends (the owner, 16 November 2026: "it should be something like Help to
+/// make Founderizer better, right? more than just the developers?"). A save that was refused or got no answer is the
 /// row's warning.
 struct ErrorReportsRows: View {
     let on: Bool
@@ -100,10 +104,10 @@ struct ErrorReportsRows: View {
 
     var body: some View {
         FormSection("Error reports") {
-            FormRow("Send to Founderizer's developers", symbol: "ladybug",
-                    detail: String(l10n: "Error codes, versions and counts. Never your work, names or keys."),
+            FormRow("Help improve Founderizer", symbol: "ladybug",
+                    detail: String(l10n: "Sends error codes, versions and counts to Founderizer. Never your work, names or keys."),
                     link: FormLink(String(l10n: "Privacy"), url: ErrorReport.privacyPage), warning: warning) {
-                Toggle("Send to Founderizer's developers", isOn: Binding(get: { on }, set: { turn($0) }))
+                Toggle("Help improve Founderizer", isOn: Binding(get: { on }, set: { turn($0) }))
                     .toggleStyle(.switch).controlSize(.small).labelsHidden()
                     .disabled(!enabled).accessibilityIdentifier("error-reports-send")
             }

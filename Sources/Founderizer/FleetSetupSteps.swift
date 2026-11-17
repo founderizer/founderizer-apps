@@ -296,9 +296,12 @@ final class FleetCloudModel {
                 guard !Task.isCancelled else { return }
                 // A line of this read's own earlier round says nothing true any more.
                 if round > 0 { failure = nil; stopped = nil }
-                self.offer = offer
+                // **The offer and the account's servers come together**: an offer alone showed the new server's page
+                // (the first run's "Your fleet", or `CloudChoice`'s new server alone) with its press for an account
+                // whose list was still on its way.
                 let existing = await listed ?? []
                 guard !Task.isCancelled else { return }
+                self.offer = offer
                 self.existing = existing
                 return
             } catch {
@@ -750,6 +753,41 @@ struct CloudChoice: View {
         }
         .buttonStyle(.plain).disabled(!usable).opacity(usable ? 1 : 0.45)
         .accessibilityAddTraits(chosen ? .isSelected : [])
+    }
+}
+
+/// **The first run's page "Your fleet"** (slice 2 of the one wizard; the owner's "that is brilliant!" of 16 November
+/// 2026 to the build page's picture): the fleet as the slider's page drew it, each server that the press makes with its
+/// size and its price under it (`CloudOffer.brief`), and one press for all of them, "Make the server" on 1 server and
+/// "Make 2 servers" with the manager's own server (`ServersStep.firstPress`). It takes the place of the new server
+/// alone (`CloudChoice`'s rows of size, place and price), and shows once each offer is read; the line over the press
+/// and the link to another project stay as there.
+struct FirstFleetChoice: View {
+    @Bindable var cloud: FleetCloudModel
+    /// The model of the manager's own server, on 2 servers and 1 per agent; nil on 1 server.
+    var managers: FleetCloudModel?
+    let plan: FleetPlan
+    let step: ServersStep
+    let make: () -> Void
+
+    var body: some View {
+        if let hub = cloud.offer, managers == nil || managers?.offer != nil {
+            VStack(spacing: SetupMetrics.gap) {
+                ServerBoxes(plan: plan, step: step, under: [hub.brief, managers?.offer?.brief])
+                    .accessibilityIdentifier("first-run-fleet")
+                SetupAction {
+                    // Why the press made nothing (`FleetCloudModel.stop`), over the press, as in `CloudChoice`.
+                    if cloud.stage == .choosing, let failure = cloud.failure { SetupWarning(failure) }
+                    Button(step.firstPress) { make() }
+                        .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
+                        .accessibilityIdentifier("cloud-choice-press")
+                    if cloud.provider == .hetzner {
+                        SetupLink(String(l10n: "Servers in another project?")) { cloud.askAnotherProject() }
+                            .accessibilityIdentifier("cloud-choice-project")
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -281,5 +281,19 @@ struct CloudChoiceTests {
         #expect(ocean.size == "1 vCPU · 2 GB · 50 GB")
         #expect(ocean.row == "2 GB · Frankfurt · \(ocean.monthly)")
     }
+
+    /// **The line under a server on the first run's page "Your fleet"**, as the build page's picture has it: Hetzner's
+    /// type and the price; another provider's memory in place of the type. No place and no disk.
+    @Test func theLineUnderAServerOfTheFleetIsItsTypeAndItsPrice() {
+        let offer = CloudOffer(provider: .hetzner, type: "cx23", location: "nbg1", cores: 2, memoryGB: 4, diskGB: 40,
+                               monthlyPrice: Decimal(string: "5.49")!, currency: "EUR")
+        #expect(offer.brief == "CX23 · \(offer.monthly)")
+        let ocean = CloudOffer(provider: .digitalOcean, type: "s-1vcpu-2gb", location: "fra1", cores: 1, memoryGB: 2,
+                               diskGB: 50, monthlyPrice: 12, currency: "USD")
+        #expect(ocean.brief == "2 GB · \(ocean.monthly)")
+        let bare = CloudOffer(provider: .vultr, type: "vc2-1c-1gb", location: "fra", cores: nil, memoryGB: nil,
+                              diskGB: nil, monthlyPrice: 5, currency: "USD")
+        #expect(bare.brief == bare.monthly)
+    }
 }
 #endif

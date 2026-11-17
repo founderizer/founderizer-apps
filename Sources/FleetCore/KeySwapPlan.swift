@@ -370,9 +370,12 @@ public struct KeySwapState: Codable, Equatable, Sendable {
             .appendingPathComponent("Founderizer/key-swap.json")
     }
 
-    /// The records in `file`, or none when there is no file or it cannot be read: the same as a new Mac's.
+    /// The records in `file`, or none when there is no file or it cannot be read: the same as a new Mac's. Only a
+    /// regular file of at most `KeptFile.largestRecord` bytes is read, with no wait (`KeptFile`): a named pipe, a
+    /// folder or a larger file in its place is a file that cannot be read.
     public static func load(_ file: URL = Self.file) -> KeySwapState {
-        guard let data = try? Data(contentsOf: file), let state = try? JSONDecoder().decode(Self.self, from: data) else {
+        guard let data = KeptFile.bytes(of: file, atMost: KeptFile.largestRecord),
+              let state = try? JSONDecoder().decode(Self.self, from: data) else {
             return KeySwapState()
         }
         return state

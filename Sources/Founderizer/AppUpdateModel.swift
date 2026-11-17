@@ -240,7 +240,9 @@ final class AppAutoUpdate {
         do {
             try await installer.install(build)
             failure = nil
-            AppAutoUpdate.relaunch(installer.bundle)
+            // He was away from the app as the install began: the new build starts behind the app he works in, which
+            // keeps his keys; in front when he came back to this app during the install.
+            AppAutoUpdate.relaunch(installer.bundle, front: NSApp.isActive)
         } catch {
             failure = (error as? LocalizedError)?.errorDescription
                 ?? String(l10n: "The update stopped, and nothing on this Mac changed.")
@@ -248,10 +250,13 @@ final class AppAutoUpdate {
         }
     }
 
-    /// Start the new build and leave.
-    static func relaunch(_ bundle: URL) {
+    /// Start the new build and leave. `front`: the new build comes to the front, as after his press. **An install of
+    /// its own, while he is away, starts it behind the app he works in** (the review of the owner's "Build ideas 1–5" of
+    /// 16 November 2026): it came to the front, so the keys that he typed there went to its chat's box, which takes them.
+    static func relaunch(_ bundle: URL, front: Bool = true) {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
+        configuration.activates = front
         NSWorkspace.shared.openApplication(at: bundle, configuration: configuration) { _, _ in
             Task { @MainActor in NSApplication.shared.terminate(nil) }
         }

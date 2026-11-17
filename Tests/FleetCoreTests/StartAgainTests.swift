@@ -723,7 +723,7 @@ struct StartAgainTests {
         for key in ["ownerAccessInPlace", "serverHardening"] {
             defaults.set(["\(mine) worker-2 100.64.0.9": "aa", "\(theirs) worker-9 100.64.0.99": "bb"], forKey: key)
         }
-        for key in ["pinnedAgents", "fleetIdsByHub"] { defaults.set([mine: "one", theirs: "two"], forKey: key) }
+        for key in ["pinnedAgents", "fleetIdsByHub", "lastPages"] { defaults.set([mine: "one", theirs: "two"], forKey: key) }
         for key in ["machineChecklists", "machineInstallTargets"] {
             let table = ["\(mine)|worker-2": ["host": "100.64.0.9", "readAt": 784_123_456.5],
                          "\(theirs)|worker-9": ["host": "100.64.0.99", "readAt": 784_123_457.25, "port": 22]]
@@ -771,7 +771,7 @@ struct StartAgainTests {
         for key in ["ownerAccessInPlace", "serverHardening"] {
             #expect(defaults.dictionary(forKey: key) as? [String: String] == ["\(theirs) worker-9 100.64.0.99": "bb"], "\(key)")
         }
-        for key in ["pinnedAgents", "fleetIdsByHub"] { #expect(defaults.dictionary(forKey: key) as? [String: String] == [theirs: "two"], "\(key)") }
+        for key in ["pinnedAgents", "fleetIdsByHub", "lastPages"] { #expect(defaults.dictionary(forKey: key) as? [String: String] == [theirs: "two"], "\(key)") }
         for key in ["machineChecklists", "machineInstallTargets"] {
             // The other hub's entry is whole, with its numbers as they were.
             let kept = json(key, defaults)
@@ -806,6 +806,7 @@ struct StartAgainTests {
         // All else of the hub goes as in every run.
         #expect(defaults.string(forKey: "hubAddress") == nil && MadeServers.kept(hub: hub, in: defaults).isEmpty)
         #expect((defaults.dictionary(forKey: "pinnedAgents") as? [String: String])?[mine] == nil)
+        #expect((defaults.dictionary(forKey: "lastPages") as? [String: String])?[mine] == nil)
         #expect(defaults.object(forKey: "doorHosts|\(mine)|db1") == nil)
     }
 

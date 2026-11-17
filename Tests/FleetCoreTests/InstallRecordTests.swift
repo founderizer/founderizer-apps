@@ -537,6 +537,101 @@ struct InstallRecordTests {
         #expect(InstallRecords(folder: scratch.folder, launch: "later").all() == [written[4], written[3], written[2]])
     }
 
+    /// **Only a regular file is read as a record.** A link in a record's place was read through, whatever it led to:
+    /// this test fails on the read of before by that (run on 16 November 2026). A named pipe says size 0, and a
+    /// reader that waits for its writer would hold the folder's one read for ever; macOS 27's own reader refuses a
+    /// pipe at once, so there the two pipes of this test hold the rule and do not fail the read of before. Each
+    /// such file is passed over, and stays where it is.
+    @Test func onlyARegularFileIsReadAsARecord() throws {
+        let scratch = Scratch()
+        defer { scratch.remove() }
+        let outside = FileManager.default.temporaryDirectory.appendingPathComponent("install-records-outside-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: outside) }
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        func file(_ record: InstallRecord) -> URL { scratch.folder.appendingPathComponent("\(record.id.uuidString.lowercased()).json") }
+        // Three records as the app writes them.
+        var logs = [newLog(at: 0), newLog(at: 10), newLog(at: 20)]
+        let first = InstallRecords(folder: scratch.folder, launch: "now")
+        for index in logs.indices { logs[index].done(at: time(Double(index * 10 + 1))); first.write(logs[index].record) }
+        let real = logs[0].record, linked = logs[1].record, piped = logs[2].record
+        // The second record's file stands outside the folder, behind a link of its name.
+        let moved = outside.appendingPathComponent("kept.json")
+        try FileManager.default.moveItem(at: file(linked), to: moved)
+        try FileManager.default.createSymbolicLink(at: file(linked), withDestinationURL: moved)
+        // The third record's place is a named pipe that holds the record's own bytes, with its writer still open: a
+        // reader that reads a pipe gets a whole record from it, and then waits.
+        let bytes = try Data(contentsOf: file(piped))
+        try FileManager.default.removeItem(at: file(piped))
+        #expect(mkfifo(file(piped).path, 0o600) == 0)
+        let writer = Darwin.open(file(piped).path, O_RDWR | O_NONBLOCK)
+        try #require(writer >= 0)
+        var writerOpen = true
+        defer { if writerOpen { Darwin.close(writer) } }
+        let sent = bytes.withUnsafeBytes { Darwin.write(writer, $0.baseAddress, $0.count) }
+        #expect(sent == bytes.count)
+        // A named pipe that nobody writes to, which is the fault as it was reported: a reader that opens it in the
+        // plain way stands until a writer comes.
+        let silent = scratch.folder.appendingPathComponent("\(UUID().uuidString.lowercased()).json")
+        #expect(mkfifo(silent.path, 0o600) == 0)
+        // And a folder with a record's kind of name.
+        let folderName = "\(UUID().uuidString.lowercased()).json"
+        try FileManager.default.createDirectory(at: scratch.folder.appendingPathComponent(folderName), withIntermediateDirectories: true)
+
+        // Every read of a pipe runs beside the test, so that a read which waits for a pipe fails the test and does
+        // not hold it: the folder's read, and then the bytes of each pipe.
+        final class Read: @unchecked Sendable {
+            var records: [InstallRecord] = []
+            var ofPipes: [Data?] = []
+        }
+        let read = Read(), done = DispatchSemaphore(value: 0)
+        let later = InstallRecords(folder: scratch.folder, launch: "later")
+        let pipes = [file(piped), silent]
+        DispatchQueue.global().async {
+            read.records = later.all()
+            read.ofPipes = pipes.map { InstallRecords.bytes(of: $0) }
+            done.signal()
+        }
+        let returned = done.wait(timeout: .now() + 5) == .success
+        // The first pipe's writer goes: a read that waited for that pipe's end ends now.
+        Darwin.close(writer)
+        writerOpen = false
+        // While a read still waits at a pipe, a writer comes and goes there, at each pipe in turn and a counted
+        // number of times, so that no thread of this test stays behind. With no reader at a pipe the open fails.
+        var ended = returned
+        for _ in 0..<40 where !ended {
+            for pipe in pipes {
+                let release = Darwin.open(pipe.path, O_WRONLY | O_NONBLOCK)
+                guard release >= 0 else { continue }
+                Thread.sleep(forTimeInterval: 0.05)
+                Darwin.close(release)
+            }
+            ended = done.wait(timeout: .now() + 0.2) == .success
+        }
+        #expect(returned, "a read waited for a named pipe")
+        #expect(ended, "a read still waits for a named pipe")
+        #expect(read.records == [real])
+        // A pipe gives no bytes at all: not its own, and not an empty file's.
+        #expect(read.ofPipes.count == 2 && read.ofPipes.allSatisfy { $0 == nil })
+        // Nothing was taken away.
+        let names = Set(try FileManager.default.contentsOfDirectory(atPath: scratch.folder.path))
+        #expect(names == [file(real).lastPathComponent, file(linked).lastPathComponent, file(piped).lastPathComponent,
+                          silent.lastPathComponent, folderName])
+
+        // The bytes of one file: a regular file whole, up to the largest record; nothing for a file that is larger,
+        // that is not there, or that is no regular file.
+        let realBytes = try Data(contentsOf: file(real)), movedBytes = try Data(contentsOf: moved)
+        #expect(!realBytes.isEmpty && InstallRecords.bytes(of: file(real)) == realBytes)
+        #expect(!movedBytes.isEmpty && InstallRecords.bytes(of: moved) == movedBytes)
+        #expect(InstallRecords.bytes(of: file(linked)) == nil)
+        #expect(InstallRecords.bytes(of: scratch.folder.appendingPathComponent(folderName)) == nil)
+        #expect(InstallRecords.bytes(of: scratch.folder.appendingPathComponent("no-such-file.json")) == nil)
+        let largest = outside.appendingPathComponent("largest.json"), larger = outside.appendingPathComponent("larger.json")
+        try Data(repeating: 0x20, count: InstallRecords.largestFile).write(to: largest)
+        try Data(repeating: 0x20, count: InstallRecords.largestFile + 1).write(to: larger)
+        #expect(InstallRecords.bytes(of: largest)?.count == InstallRecords.largestFile)
+        #expect(InstallRecords.bytes(of: larger) == nil)
+    }
+
     /// The record that is written now is never the one that goes, also when it is the oldest: it stays past the limit
     /// until the next write of another record.
     @Test func theRecordThatIsWrittenNowStays() {

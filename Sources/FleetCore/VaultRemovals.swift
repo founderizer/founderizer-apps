@@ -60,8 +60,11 @@ public struct VaultRemovals: Codable, Equatable, Sendable {
     }
 
     /// The record in `file`, or an empty one when there is none or it cannot be read: the same as a new Mac's.
+    /// Only a regular file of at most `KeptFile.largestRecord` bytes is read, with no wait (`KeptFile`): a named
+    /// pipe, a folder or a larger file in its place is a file that cannot be read.
     public static func load(_ file: URL = Self.file) -> VaultRemovals {
-        guard let data = try? Data(contentsOf: file), let record = try? JSONDecoder().decode(Self.self, from: data) else {
+        guard let data = KeptFile.bytes(of: file, atMost: KeptFile.largestRecord),
+              let record = try? JSONDecoder().decode(Self.self, from: data) else {
             return VaultRemovals()
         }
         return record

@@ -272,5 +272,19 @@ extension CloudOffer {
         parts.append(monthly)
         return parts.joined(separator: " · ")
     }
+
+    /// **The line under a server on the first run's page "Your fleet"** (slice 2 of the one wizard): "CX23 · €5.49 a
+    /// month", as the build page's picture has it. A provider whose type the app does not show gives the server's
+    /// memory in its place, as `row` does.
+    public var brief: String {
+        var parts: [String] = []
+        if provider == .hetzner {
+            parts.append(type.uppercased())
+        } else if let memoryGB {
+            parts.append(CloudExisting.size(Int((memoryGB * 1024).rounded())))
+        }
+        parts.append(monthly)
+        return parts.joined(separator: " · ")
+    }
 }
 #endif

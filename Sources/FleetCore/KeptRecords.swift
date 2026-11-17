@@ -131,21 +131,42 @@ public final class KeptRecords<Record: KeptRecord>: @unchecked Sendable {
     private func file(_ id: UUID) -> URL { folder.appendingPathComponent("\(id.uuidString.lowercased()).json") }
 
     /// With the lock held: the records of the folder, read at the first call. A file that is no record of this
-    /// version, or that is larger than a record can be, is passed over and stays.
+    /// version, that is larger than a record can be, or that is no regular file (`bytes`), is passed over and stays.
     private func loaded() -> [UUID: Record] {
         if let records { return records }
         var found: [UUID: Record] = [:]
         let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
         for name in names where name.hasSuffix(".json") {
-            let file = folder.appendingPathComponent(name)
-            guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int,
-                  size <= Self.largestFile, let data = try? Data(contentsOf: file),
+            // No folder: with no such word the URL's own maker may look at the file by its name, through a link.
+            guard let data = Self.bytes(of: folder.appendingPathComponent(name, isDirectory: false)),
                   let record = try? keptDecoder().decode(Record.self, from: data),
                   name == "\(record.id.uuidString.lowercased()).json" else { continue }
             found[record.id] = record
         }
         records = found
         return found
+    }
+
+    /// **A file's bytes, only when it is a regular file of at most `largestFile` bytes**; else nil.
+    ///
+    /// The read is `KeptFile`'s, with no step through a link: the file is opened with no wait, and then the opened
+    /// file itself is asked what it is. So a named pipe, a device, a folder or a link in a record's place is passed
+    /// over, and at most one byte more than a record can have is read.
+    /// Before, the file's size was read by its name and the file was then read whole, by the system's own reader:
+    ///
+    /// - **A link** passed the size check with its own few bytes and was then read through, whatever it led to
+    ///   (measured on 16 November 2026: a record behind a link was read).
+    /// - **A named pipe** says size 0, and what its read does was the system's to decide. macOS 27 refuses it at
+    ///   once (measured the same day). A system whose reader waits for the pipe's writer would hold the folder's one
+    ///   read for ever, and with it each reader that waits for that read: every request of the owner's own agent
+    ///   (`SetupChannel`, which reads the folders beside the app's start), and the app's main thread at its first own
+    ///   use of a record. The app runs from macOS 15 on, which was not measured; a reviewer read in the public source
+    ///   of Foundation that its reader opened a file with a wait before its version 6.2 (not measured either). So
+    ///   the rule is the app's own now, and no system's.
+    ///
+    /// Only a program of this Mac's own user can put such a file there.
+    static func bytes(of file: URL) -> Data? {
+        KeptFile.bytes(of: file, atMost: largestFile, followsLinks: false)
     }
 
     /// With the lock held: the record's file, whole, for its user only. False when it did not reach the disk.

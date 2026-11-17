@@ -1066,7 +1066,7 @@ struct OwnerShowRulesTests {
             "AttachmentViews.swift: .keyDown",                      // Command and V with a file: asks `holdsKeys`
             "FleetMenu.swift: kinds",                               // the app's menu while it is open (four, below)
             "FleetMenu.swift: [.rightMouseDown, .leftMouseDown]",   // a right click opens the app's menu: asks `reaches`
-            "FleetView.swift: .keyDown",                            // Command with 1 to 9, the steps: asks `holdsKeys`
+            "FleetView.swift: .keyDown",                            // ⌘1 to 9, the steps, ⌥⇧↓, typing: asks `holdsKeys`
             "NeedsBoard.swift: .keyDown",                           // the page keys and Escape: ask `holdsKeys`
             "SecretRequestViews.swift: .keyDown",                   // Command and V with a key: asks `holdsKeys`
             "SetupChannel.swift: [.leftMouseDown, .rightMouseDown, .otherMouseDown]",   // the hold's own: `reaches`

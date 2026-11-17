@@ -154,11 +154,26 @@ public struct Outbox: Sendable {
 
     public init(file: URL) { self.file = file }
 
+    /// The request that waits, or nil when the system's own look finds no file of that name, as before: no file, a
+    /// link that leads to none or to itself, a folder above it that this user may not search. A file that goes away
+    /// between that look and the read is no request either; before, its read threw.
+    ///
+    /// **What the look finds and the read does not take is never "no request"**: it throws, as it did. A file that
+    /// is larger than a saved request can be throws `invalidRecord`. A named pipe, a folder or a file that cannot be
+    /// opened throws the system's kind of error (`KeptFile.systemError`). Sending is then blocked, and `save`,
+    /// `clear` and `rejectSecret` read first: they write and remove nothing there.
+    ///
+    /// Only a regular file is read, with no wait, and never more than one byte over the limit (`KeptFile`). Before,
+    /// the file was read whole by the system's own reader, whatever it was, and its size was checked only after it
+    /// was whole in memory. The app reads it on its main thread at its start.
     public func load() throws -> PendingRequest? {
         guard FileManager.default.fileExists(atPath: file.path) else { return nil }
-        let data = try Data(contentsOf: file)
-        guard data.count <= 262_144 else { throw OutboxError.invalidRecord }
-        return try JSONDecoder().decode(PendingRequest.self, from: data)
+        switch KeptFile.read(file, atMost: 262_144) {
+        case .missing: return nil      // gone between the look and the read
+        case .bytes(let data): return try JSONDecoder().decode(PendingRequest.self, from: data)
+        case .refused(.tooLarge): throw OutboxError.invalidRecord
+        case .refused(let refusal): throw KeptFile.systemError(refusal, file: file)
+        }
     }
 
     public func save(_ request: PendingRequest) throws {

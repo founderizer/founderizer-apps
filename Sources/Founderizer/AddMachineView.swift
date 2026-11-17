@@ -114,6 +114,11 @@ struct AddServerView: View {
     @State private var ended: [String: String] = [:]
     /// The servers that this Mac made for this hub, with their ids at the provider (`MadeServers`).
     @State private var madeKept: [String: String] = [:]
+    /// **The server of the provider's list that "Use this server" took**, by its provider, its id and the address that
+    /// its install goes to: that install proves its build record by the id (`MachineInstallModel.provenServer`).
+    @State private var reusedServer: (provider: CloudProvider, id: String, address: String)?
+    /// The server that the first run made for this agent, once these pages looked at it (`installFirst`).
+    @State private var firstTried: FleetStore.MadeServer?
     /// The list that shows already had its one suggestion of a server to take again.
     @State private var suggested = false
     /// The hub is asked whether it answers, before a server is made (`makeServer`); `makeAsked` counts the presses, and
@@ -222,6 +227,8 @@ struct AddServerView: View {
             if let firstToReuse, chooses, !suggested, cloud.chosen == nil { cloud.chosen = firstToReuse; suggested = true }
         }
         .task(id: makeAsked) { if makeAsked > makeTaken { makeTaken = makeAsked; await makeServer() } }
+        // The server that the first run made for this agent: its install starts by itself (`installFirst`).
+        .task(id: firstServer) { if let firstServer { await installFirst(firstServer) } }
     }
 
     /// The provider's list of servers shows.
@@ -564,6 +571,8 @@ struct AddServerView: View {
     /// VPS, at its public address.
     private func useExisting(_ server: CloudExisting) {
         var address = server.ipv4
+        // Read before `cancel`, which forgets the provider.
+        let provider = cloud.provider
         switch reuse(server) {
         // A free server of the fleet whose install this Mac saw end: the agent that waits takes it, with no install.
         case .place(let name):
@@ -576,6 +585,7 @@ struct AddServerView: View {
         // first, at its address on the private network, for its user and its password.
         case .install(let onNetwork):
             if made.contains(server.name.lowercased()) {
+                if let provider { reusedServer = (provider, server.id, onNetwork) }
                 cloud.cancel()
                 startInstall(InstallTarget(host: onNetwork, user: "root", port: 22, identityFile: AppSSHKey.path()))
                 return
@@ -586,6 +596,7 @@ struct AddServerView: View {
             guard server.unfit(for: .join, fleet: Set(taken.map { $0.lowercased() })) == nil else { return }
         }
         guard let address else { return }
+        reusedServer = provider.map { ($0, server.id, address) }
         cloud.cancel(); vps.reset()
         vps.addressText = address
         page = .vps
@@ -631,6 +642,31 @@ struct AddServerView: View {
     /// The first server of the list that the fleet can take again, by its id at the provider: only in an agent's own
     /// setup, where a server is what the page is for. Add server makes no suggestion.
     private var firstToReuse: String? { placing == nil ? nil : cloud.existing.first { reuse($0) != nil }?.id }
+
+    /// **The server that the first run made for this agent** (`FleetStore.madeServer`; slice 2 of the one wizard, where
+    /// one press made every server of the fleet).
+    private var firstServer: FleetStore.MadeServer? { placing.flatMap { store.madeServer($0.agent) } }
+
+    /// **Its install starts by itself**, as "Use this server" starts the install of a server that this Mac made: as
+    /// root, with this Mac's own key, at its address on the private network, with no VPS page and no second server.
+    /// Only from the first page with nothing running, and once for each opening of these pages (`firstTried`). A
+    /// server that is not on this Mac's network at that address now, or that the hub has already, leaves the pages as
+    /// they were, and the provider's list offers it there (`MadeServers`, which the first run noted for this hub). The
+    /// note goes only as the install starts, with no wait between the two: its change gives this task a new id, which
+    /// ends the task that runs.
+    private func installFirst(_ server: FleetStore.MadeServer) async {
+        guard let placing, firstTried != server, page == .ways, !model.running, cloud.stage == .token else { return }
+        firstTried = server
+        let devices = FleetOnTailscale.devices(in: await MacNetwork.status() ?? "{}")
+        guard devices.contains(where: {
+            $0.name.lowercased() == server.name.lowercased() && $0.online && $0.address == server.address
+        }) else { return }
+        if let database = store.state?.db, let read = try? await HubClient().servers(hub: store.hub, database: database),
+           read.servers.contains(where: { $0.name.lowercased() == server.name.lowercased() }) { return }
+        guard !Task.isCancelled, page == .ways, !model.running, cloud.stage == .token else { return }
+        store.noteMadeServer(nil, for: placing.agent)
+        startInstall(InstallTarget(host: server.address, user: "root", port: 22, identityFile: AppSSHKey.path()))
+    }
 
     /// This Mac's own network and what it kept of its installs, for `reuse`, and the hub's list where the page has
     /// none yet: its own read comes every 15 seconds.
@@ -698,6 +734,8 @@ struct AddServerView: View {
         // A hub from before `server_names` takes the server's name, which no page asks for now: the one it suggests.
         if asksName, nameProblem != nil { model.name = Servers.suggestedName(taken: taken) }
         model.use(target, sudo: sudo)
+        // The server of the list that "Use this server" took, when the install goes to its address.
+        model.provenServer = reusedServer.flatMap { $0.address == target.host ? ($0.provider, $0.id) : nil }
         model.installMachine(store: store)
         // The install page is the install: a start that the model refused (no hub to ask for a line) stays here.
         if model.running { page = .install }

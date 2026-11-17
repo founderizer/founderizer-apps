@@ -5,8 +5,8 @@ import Foundation
 
 /// **The app's side of the link's write tools** (`OwnerLinkTools` in FleetOwnerAPI; the secrets plan, steps B and
 /// E): a thin adapter from each tool's logic (`SaveBotToken.answer`, `PrepareReport.answer`, `SaveSecret.answer`,
-/// `GrantSecret.answer`, `ShareSecret.answer`, tested there with stand-ins) to the app's own engine, on the board of
-/// `SetupChannel`.
+/// `GrantSecret.answer`, `ShareSecret.answer`, `AnswerSecret.answer`, tested there with stand-ins) to the app's own
+/// engine, on the board of `SetupChannel`.
 /// Nothing of it shows on the screen, and nothing of a request (its line, its fields, its value part) is written
 /// to the app's log.
 ///
@@ -28,8 +28,8 @@ import Foundation
 /// (`SecretsPage.grant`): the owner's signed statement through `GrantSigning.send` (`POST /ui/vault/grant`) and the
 /// hub's grant through `SecretsClient.grant` (`POST /ui/secrets/grant`), in the page's own order. It asks the owner
 /// nothing (the owner's "No touch" of 15 November 2026), and it signs only for the server of its own one read of
-/// the team. One call writes at a time, in a line of its own (`GrantSecret.Line`). The desk is `grantDesk`, closure
-/// by closure.
+/// the team. One call writes at a time, in the line that it shares with `answer_secret_request` (`GrantSecret.Line`).
+/// The desk is `grantDesk`, closure by closure.
 ///
 /// **`share_secret`** sets who may give one secret, or ends it, as "Who may give it" of the Secrets page does
 /// (`SecretsPage.saveStanding`): the owner's signed `pool` statement through `GrantSigning.send(pool:...)`
@@ -37,6 +37,13 @@ import Foundation
 /// the page's own order. It asks the owner nothing, and it writes against the base of its own read of the
 /// resources. One call of it writes at a time, in a line of its own (an instance of `ShareSecret.Line`). The desk is
 /// `shareDesk`, closure by closure.
+///
+/// **`answer_secret_request`** answers one request of an agent for a secret with a secret of the list, as "Answer with
+/// it" of the request's form does (`SecretEntryView.answerWith` and `proceed`): each give of the call as
+/// `grant_secret`'s, through the same two functions, and then the answer through `SecretsClient.answer`
+/// (`POST /ui/needs/<need>/secret`), in the form's own order. It asks the owner nothing, it answers no request that is
+/// for the door, and it takes no give back. Both tools write grants, so they share one line of writes: the one
+/// instance of `GrantSecret.Line` that `add` makes. The desk is `answerDesk`, closure by closure.
 ///
 /// **A text for the report form**: one that the owner's own agent wrote (`prepare_problem_report`), or the app's own
 /// words of the problem that a button reports (the manager band's Report a problem). The form takes it, and says
@@ -109,12 +116,19 @@ enum LinkTools {
         board.add(set: OwnerSetupTools.set, tool: SaveSecret.name, value: .optional) { fields, value in
             await SaveSecret.answer(fields: fields, value: value, desk: secrets, work: work)
         }
-        // `grant_secret`: one secret to one agent with the owner's signature, or its end. One line of writes for
-        // the tool, which lives as long as the board: one call writes at a time, and its writes end without it.
+        // `grant_secret`: one secret to one agent with the owner's signature, or its end. One line of writes, which
+        // lives as long as the board: one call writes at a time, and its writes end without it. The line is also
+        // `answer_secret_request`'s (below): both tools write grants, and their writes must not cross.
         let grants = grantDesk(store: store)
         let line = GrantSecret.Line()
         board.add(set: OwnerSetupTools.set, tool: GrantSecret.name, value: .none) { fields, value in
             await GrantSecret.answer(fields: fields, value: value, desk: grants, line: line)
+        }
+        // `answer_secret_request`: the signed gives of one call and the answer of an agent's request for a secret,
+        // in the same line of writes as `grant_secret`.
+        let answers = answerDesk(store: store)
+        board.add(set: OwnerSetupTools.set, tool: AnswerSecret.name, value: .none) { fields, value in
+            await AnswerSecret.answer(fields: fields, value: value, desk: answers, line: line)
         }
         // `share_secret`: who may give one secret, with the owner's signature, or its end. A line of writes of the
         // tool's own, which lives as long as the board: one call of it writes at a time, and its writes end without it.
@@ -264,12 +278,13 @@ enum LinkTools {
     }
 
     /// **The fleet's list as the tool reads it**, from one read of the team: each secret of the catalog with its
-    /// kind, its variable name and its grants, and each agent with its role and the server that the hub names for
-    /// it. nil for a page with no catalog that the app can read: the tool then says that the list was not read.
+    /// kind, its variable name, its title (which only `answer_secret_request` reads) and its grants, and each
+    /// agent with its role and the server that the hub names for it. nil for a page with no catalog that the app
+    /// can read: the tool then says that the list was not read.
     nonisolated static func fleetList(_ team: TeamSnapshot) -> GrantSecret.Team? {
         guard let logins = team.logins else { return nil }
         let secrets = logins.mapValues {
-            GrantSecret.Team.Secret(apiKey: $0.isAPIKey, env: $0.env, grants: $0.grants ?? [:])
+            GrantSecret.Team.Secret(apiKey: $0.isAPIKey, env: $0.env, title: $0.title, grants: $0.grants ?? [:])
         }
         let agents = team.members.map {
             ($0.agent, GrantSecret.Team.Agent(role: $0.role, machine: $0.placement?.machine))
@@ -342,6 +357,92 @@ enum LinkTools {
                         GrantSecret.Receipt.Access(before: $0.before, after: $0.after, missing: $0.missing)
                     }
                     return GrantSecret.Receipt(changed: receipt.changed, access: access)
+                } catch {
+                    throw failure(error)
+                }
+            },
+            // Started, and not waited for, as `secretDesk`'s.
+            refresh: {
+                guard let store = store() else { return }
+                Task { @MainActor in await store.refresh() }
+            })
+    }
+
+    // ------------------------------------------------------------ a signed answer (`answer_secret_request`)
+
+    /// **The app's engine for `answer_secret_request`**, closure by closure (`AnswerSecret.Desk`). Each request ends
+    /// by the time limit of its own client (the state's read and the team's read 10 seconds for a request and 15 in
+    /// all; the vault's read, the signed statement, the hub's grant and the answer 20 and 30 each), so the writes of a
+    /// call, which run without their caller, never wait without a bound. No closure writes anything of a request to
+    /// the log, and none shows anything on the screen.
+    static func answerDesk(store: @escaping @MainActor () -> FleetStore?) -> AnswerSecret.Desk<Place> {
+        let vault = VaultClient(), lists = HubClient(), secrets = SecretsClient()
+        return AnswerSecret.Desk<Place>(
+            // As `grantDesk`'s: a current reading with a database, and a hub that serves the Secrets page.
+            ready: {
+                guard let store = store(), store.isFresh, let database = store.state?.db,
+                      SecretEntryView.isOffered(by: store) else { return nil }
+                return Place(hub: store.hub, database: database, client: store.installation)
+            },
+            // As `grantDesk`'s: a store that moved is nil.
+            signs: { place in features(of: store(), at: place).map { $0.contains(GrantSigning.feature) } },
+            // One read of the hub's state, whole (it has no query for one database), and the tool's own read of its
+            // bytes for the item of this id and the place's database. A read that failed is thrown as it is. The
+            // state can be large, so the parse runs off the main actor.
+            request: { place, need in
+                let reading = try await lists.stateReading(at: place.hub)
+                let data = reading.data, database = place.database
+                return await Task.detached {
+                    AnswerSecret.request(in: data, need: need, database: database)
+                }.value
+            },
+            // The list's read of `grantDesk`, with each secret's title. A read that failed is thrown as it is, and
+            // a page with no catalog too.
+            team: { place in
+                guard let found = fleetList(try await lists.team(hub: place.hub, database: place.database)) else {
+                    throw HubError.invalidResponse
+                }
+                return found
+            },
+            // The vault's reading, as `grantDesk`'s.
+            vault: { place in vaultFacts(try await vault.reading(hub: place.hub, database: place.database)) },
+            holdsKey: { fleet in OwnerKeychain.isHeld(fleet: fleet) },
+            isMachine: { CentralVault.isMachine($0) },
+            // One statement, made, signed and sent, as `grantDesk`'s.
+            sign: { place, statement in
+                do {
+                    try await GrantSigning.send(grantOn: statement.machine, login: statement.login,
+                                                agent: statement.agent, fleet: statement.fleet,
+                                                client: place.client, hub: place.hub, database: place.database)
+                } catch is GrantSigning.NotSigned {
+                    throw GrantSecret.NotSigned()
+                } catch {
+                    throw failure(error)                  // a refusal carries the hub's own status and its words
+                }
+            },
+            // The hub's grant at a level, under a new request id of the hub at each call. Never an end.
+            grant: { place, login, agent, wanted in
+                do {
+                    let receipt = try await secrets.grant(hub: place.hub, database: place.database,
+                                                          client: place.client, login: login, agent: agent,
+                                                          grant: level(wanted))
+                    let access = receipt.vault.map {
+                        GrantSecret.Receipt.Access(before: $0.before, after: $0.after, missing: $0.missing)
+                    }
+                    return GrantSecret.Receipt(changed: receipt.changed, access: access)
+                } catch {
+                    throw failure(error)
+                }
+            },
+            // The answer of the request, under a new request id of the app at each call. The hub's words to the
+            // agent come back in the receipt and go nowhere from here. The hub's refusal of a request that has its
+            // answer (its code `request_answered`, as the form reads it) is the tool's own error.
+            answer: { place, need, login in
+                do {
+                    _ = try await secrets.answer(hub: place.hub, database: place.database, client: place.client,
+                                                 need: need, requestID: UUID(), login: login)
+                } catch HubError.refusal(let refused) where refused.status == 409 && refused.means(.requestAnswered) {
+                    throw AnswerSecret.Answered()
                 } catch {
                     throw failure(error)
                 }

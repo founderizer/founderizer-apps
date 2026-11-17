@@ -99,7 +99,8 @@ struct StagedFilesStrip: View {
     }
 
     @ViewBuilder private func picture(_ file: FleetStore.StagedFile) -> some View {
-        if file.mime.hasPrefix("image/"), let data = try? Data(contentsOf: store.stagedURL(file)),
+        if file.mime.hasPrefix("image/"),
+           let data = KeptFile.bytes(of: store.stagedURL(file), atMost: MessageAttachment.sizeLimit),
            let small = MessageAttachment.thumbnail(data, maxPixels: 64) {
             Image(decorative: small, scale: 1).resizable().aspectRatio(contentMode: .fill)
                 .frame(width: 26, height: 26).clipShape(RoundedRectangle(cornerRadius: FormMetrics.inner))

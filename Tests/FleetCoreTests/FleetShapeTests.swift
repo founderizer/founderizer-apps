@@ -247,15 +247,20 @@ struct FleetShapeTests {
     }
 
     /// The steps on Back's line: each page of the first way has its step, a build and an install show their own steps,
-    /// and the pages after "Name your manager" show none on the way of the owner's own agent.
+    /// and the pages after "Name your manager" show none on the way of the owner's own agent. **The AI provider comes
+    /// after the name and before the servers, and the VPS's step is "VPS"** (the owner's yes of 16 November 2026 to the
+    /// one wizard's line), so that "AI provider" and "Provider" never stand in one line.
     @Test func theStepsOfTheFirstRun() {
         #expect(FirstRunSteps.inFlow == FirstRunSteps.allCases)
-        #expect(FirstRunSteps.inFlow.map(\.name) == ["Manager", "Servers", "Network", "Provider", "Build"])
-        #expect(FirstRunSteps.names == ["Manager", "Servers", "Network", "Provider", "Build"])
+        #expect(FirstRunSteps.inFlow.map(\.name) == ["Manager", "AI provider", "Servers", "Network", "VPS", "Build"])
+        #expect(FirstRunSteps.names == ["Manager", "AI provider", "Servers", "Network", "VPS", "Build"])
+        // The first two steps are the manager's own setup's first two, by the same words.
+        #expect(Array(FirstRunSteps.names.prefix(2)) == Array(ManagerSetupSteps.names.prefix(2)))
         let steps: [(String, FirstRunSteps?)] = [
-            ("name", .manager), ("servers", .servers), ("network", .network), ("key", .network), ("cloud", .provider),
-            ("token", .provider), ("vps", .provider), ("machine", .provider), ("building", nil), ("installing", nil),
-            ("welcome", nil), ("paste", nil), ("done", nil), ("restore", nil), ("address", nil), ("", nil)]
+            ("name", .manager), ("aiProvider", .aiProvider), ("servers", .servers), ("network", .network),
+            ("key", .network), ("cloud", .vps), ("token", .vps), ("vps", .vps), ("machine", .vps), ("building", nil),
+            ("installing", nil), ("welcome", nil), ("paste", nil), ("done", nil), ("restore", nil), ("address", nil),
+            ("", nil)]
         for (page, step) in steps {
             #expect(FirstRunSteps.of(page: page, named: true) == step, "\(page)")
             #expect(FirstRunSteps.of(page: page, named: false) == (page == "name" ? .manager : nil), "\(page)")
@@ -264,6 +269,47 @@ struct FleetShapeTests {
         for (page, _) in steps {
             if let step = FirstRunSteps.of(page: page, named: true) { #expect(FirstRunSteps.inFlow.contains(step)) }
         }
+    }
+
+    /// **The first run's one press** (slice 2 of the one wizard): on 1 server it makes the hub's server alone, with the
+    /// words of before; on 2 servers and 1 per agent it makes the manager's own server too, and its words say so.
+    @Test func theFirstRunsPressMakesEveryServerOfItsStep() {
+        #expect(!ServersStep.one.managersOwnServer)
+        #expect(ServersStep.two.managersOwnServer && ServersStep.each.managersOwnServer)
+        #expect(ServersStep.one.firstPress == "Make the server")
+        #expect(ServersStep.two.firstPress == "Make 2 servers" && ServersStep.each.firstPress == "Make 2 servers")
+    }
+
+    /// **The manager's AI provider is asked once** (`FirstRunHandover`): a manager with no server keeps the first run's
+    /// choice for its setup; a manager that this first run put on the hub's own server with that program gets its
+    /// sign-in at the hand-over, once, and only while the hub takes a write; every other case hands over at once.
+    @Test func theFirstRunHandsItsAIProviderOver() {
+        typealias H = FirstRunHandover
+        // No choice in this first run, or no manager in the hub's state: nothing.
+        #expect(H.of(chosen: nil, placed: false, runtime: "claude", installedOneServer: true, writes: true, asked: false) == .none)
+        #expect(H.of(chosen: nil, placed: true, runtime: "codex", installedOneServer: true, writes: true, asked: false) == .none)
+        #expect(H.of(chosen: "codex", placed: nil, runtime: nil, installedOneServer: true, writes: true, asked: false) == .none)
+        // A manager with no server: its setup gets the choice, whatever else holds.
+        for oneServer in [true, false] {
+            for writes in [true, false] {
+                for asked in [true, false] {
+                    #expect(H.of(chosen: "codex", placed: false, runtime: "claude", installedOneServer: oneServer,
+                                 writes: writes, asked: asked) == .keep("codex"))
+                }
+            }
+        }
+        // One server, installed by this first run with the chosen program, a hub that takes a write: the sign-in.
+        #expect(H.of(chosen: "codex", placed: true, runtime: "codex", installedOneServer: true, writes: true, asked: false)
+                == .signIn("codex"))
+        #expect(H.of(chosen: "claude", placed: true, runtime: "claude", installedOneServer: true, writes: true, asked: false)
+                == .signIn("claude"))
+        // Once: a second call while it is on its way hands over at once.
+        #expect(H.of(chosen: "codex", placed: true, runtime: "codex", installedOneServer: true, writes: true, asked: true) == .none)
+        // A hub that takes no write now, another program on the server, or a hub that this first run did not install:
+        // the window goes on at once, and the setup's provider page is where a press asks.
+        #expect(H.of(chosen: "codex", placed: true, runtime: "codex", installedOneServer: true, writes: false, asked: false) == .none)
+        #expect(H.of(chosen: "codex", placed: true, runtime: "claude", installedOneServer: true, writes: true, asked: false) == .none)
+        #expect(H.of(chosen: "codex", placed: true, runtime: "codex", installedOneServer: false, writes: true, asked: false) == .none)
     }
 
     /// The steps of the manager's own setup: each page of an agent's setup has its place in the line, the AI provider

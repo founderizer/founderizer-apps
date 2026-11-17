@@ -64,6 +64,15 @@ public enum OwnerWait: Equatable, Sendable {
         case .signIn: String(l10n: "Sign-in needed")
         }
     }
+
+    /// **The words of an agent's status dot while a task of it waits for him** (the owner, 16 November 2026, of two
+    /// orange dots whose words said "Waiting for Lead" and "Waiting for Manager": "these orange badges are
+    /// confusing", then "on hover on the side and also on the right hand side panel, so its easier to understand!"): the
+    /// request that it waits on, by its title, says that it is his; the other waits say what he does already.
+    public var statusWords: String {
+        if case .request(_, let title) = self { return String(l10n: "Waits for you: \(title)") }
+        return words
+    }
 }
 
 extension FleetTask {
@@ -147,14 +156,18 @@ extension HubState {
     /// not confirmed, and for an open task the request it waits on — `waiting_on` names the request itself ("N-53") or
     /// the question that the request carries to him ("Q-68", the request's `question`) — or its agent's sign-in. A
     /// task that waits for an agent's answer is not in it.
-    public var ownerWaits: [Int: OwnerWait] {
+    public var ownerWaits: [Int: OwnerWait] { ownerWaits(of: tasks) }
+
+    /// The same for some tasks only, such as one agent's open tasks (`FleetAgent.presence`): each row of the sidebar
+    /// reads its own agent's, not the fleet's hundreds.
+    public func ownerWaits(of some: [FleetTask]) -> [Int: OwnerWait] {
         let unknown = Set((outcomes ?? []).filter { $0.state == "unknown" }.map(\.task))
         let unconfirmed = Set((holds ?? []).filter { $0.state == "not_confirmed" }.map(\.task))
         let open = needs.filter(\.isOpen)
         let byID = Dictionary(open.map { ($0.id, $0) }) { first, _ in first }
         let byQuestion = Dictionary(open.compactMap { need in need.question.map { ($0, need) } }) { first, _ in first }
         var waits: [Int: OwnerWait] = [:]
-        for task in tasks {
+        for task in some {
             if unknown.contains(task.id) { waits[task.id] = .outcome; continue }
             if unconfirmed.contains(task.id) { waits[task.id] = .stop; continue }
             guard !task.isTerminal else { continue }

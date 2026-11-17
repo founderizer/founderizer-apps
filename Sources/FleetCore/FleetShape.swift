@@ -41,6 +41,16 @@ public enum ServersStep: String, Codable, Sendable, CaseIterable {
 }
 
 extension ServersStep {
+    /// **What the first run's one press makes** (slice 2 of the one wizard; the owner's "that is brilliant!" of 16
+    /// November 2026 to the build page's picture, where one press made every server of the fleet): the hub's server,
+    /// and with 2 servers or 1 per agent the manager's own server too. On 1 server the manager runs on the hub's server.
+    public var managersOwnServer: Bool { self != .one }
+
+    /// That press, in the picture's words: "Make the server" or "Make 2 servers".
+    public var firstPress: String { managersOwnServer ? String(l10n: "Make 2 servers") : String(l10n: "Make the server") }
+}
+
+extension ServersStep {
     /// **The step where a fleet stands now**, from where its agents run (`places`, the hub's list): every agent that
     /// the slider moves on the hub's own server is 1 server; the hub alone and all of them on one other server is 2
     /// servers; the hub alone and each of them alone is 1 per agent. A fleet whose one such agent is alone on its
@@ -128,26 +138,30 @@ public enum ManagerSetupSteps: Int, CaseIterable, Sendable {
 }
 
 /// **The steps of the first run**, which each of its pages after the welcome page shows on Back's line
-/// (`SetupProgress`): the manager's name, the servers of the fleet, this Mac on the private network, the provider of the
-/// fleet's server, and the build.
+/// (`SetupProgress`): the manager's name, its AI provider, the servers of the fleet, this Mac on the private network,
+/// the VPS of the fleet's server, and the build. The AI provider comes after the name and before the servers (the
+/// owner, 16 November 2026: "agent onboarding should ask first for the name and AI provider before the server page",
+/// and his yes of the same day to the pictures of one wizard in `~/dev/founderizer-plans/one-wizard-build-page/`).
+/// "VPS" is the step that was "Provider", so that "AI provider" and "Provider" never stand in one line.
 public enum FirstRunSteps: Int, CaseIterable, Sendable {
-    case manager, servers, network, provider, build
+    case manager, aiProvider, servers, network, vps, build
 
     public var name: String {
         switch self {
         case .manager: String(l10n: "Manager")
+        case .aiProvider: String(l10n: "AI provider")
         case .servers: String(l10n: "Servers")
         case .network: String(l10n: "Network")
-        case .provider: String(l10n: "Provider")
+        case .vps: String(l10n: "VPS")
         case .build: String(l10n: "Build")
         }
     }
 
     public static var names: [String] { allCases.map(\.name) }
 
-    /// **The steps that the first run has now**: all five, since the page "Your fleet's servers" is in it (a hub's own
-    /// server takes a whole fleet since release 2026.11.474). A step that has no page is never in this list.
-    public static let inFlow: [FirstRunSteps] = [.manager, .servers, .network, .provider, .build]
+    /// **The steps that the first run has now**: all six, since the page of the manager's AI provider is in it. A step
+    /// that has no page is never in this list.
+    public static let inFlow: [FirstRunSteps] = [.manager, .aiProvider, .servers, .network, .vps, .build]
 
     /// **The step of a page**, by the page's name of `setup_state`, or nil for a page that shows no steps: the welcome
     /// page and the page of the owner's own agent; a build and an install, which show their own steps and their minutes
@@ -158,11 +172,37 @@ public enum FirstRunSteps: Int, CaseIterable, Sendable {
     public static func of(page: String, named: Bool) -> FirstRunSteps? {
         switch page {
         case "name": .manager
+        case "aiProvider": named ? .aiProvider : nil
         case "servers": named ? .servers : nil
         case "network", "key": named ? .network : nil
-        case "cloud", "token", "vps", "machine": named ? .provider : nil
+        case "cloud", "token", "vps", "machine": named ? .vps : nil
         default: nil
         }
+    }
+}
+
+/// **What the first run does with the manager's AI provider when it hands the window over** (`FirstRunView.finish`):
+/// the owner chose it on the first run's page, so the manager's setup does not ask for it a second time.
+public enum FirstRunHandover: Equatable, Sendable {
+    /// The manager has no server yet: its setup gets the provider with its server (`FleetStore.noteProvider`).
+    case keep(String)
+    /// This first run's installer put the manager on the hub's own server with that program: the first run asks for
+    /// its sign-in, and hands the window over when that request has its answer.
+    case signIn(String)
+    /// Nothing to give: the window goes on at once.
+    case none
+
+    /// `chosen`: the provider of this first run (`FirstRunModel.chosenAI`), or nil. `placed` and `runtime`: the hub's
+    /// manager as its state gives it, or nil with no manager there. `installedOneServer`: this first run installed the
+    /// hub with "1 server". `writes`: the hub takes a write now (`FleetStore.canWrite`), so that the request has its
+    /// answer within the hub client's own limit; a hub that does not take one is no reason to hold the window.
+    /// `asked`: the sign-in is on its way already, so a second call hands over at once.
+    public static func of(chosen: String?, placed: Bool?, runtime: String?, installedOneServer: Bool, writes: Bool,
+                          asked: Bool) -> FirstRunHandover {
+        guard let chosen, let placed else { return .none }
+        if !placed { return .keep(chosen) }
+        guard installedOneServer, runtime == chosen, writes, !asked else { return .none }
+        return .signIn(chosen)
     }
 }
 

@@ -154,8 +154,10 @@ public enum GrantSecret {
     /// It names no take-back: which of the two keys the agent reads is the owner's to say.
     static let readsTwice = "That agent already reads another API key of the same variable name, and a session has "
         + "one value for one name. Ask the owner which of the two keys that agent reads. Nothing was sent."
-    static let busy = "Another call of grant_secret is at its writes now. Call again when it has answered. Nothing "
-        + "was sent."
+    /// **One sentence for the two tools that write grants** (`AnswerSecret.busy` is this text): they share one
+    /// line of writes, so the call that holds it can be a call of either tool.
+    static let busy = "Another call of grant_secret or answer_secret_request is at its writes now. Call again when "
+        + "it has answered. Nothing was sent."
     /// The call's connection ended before its first write. Nobody reads this.
     static let ended = "The call ended before its first write. Nothing was sent."
 
@@ -316,12 +318,17 @@ public enum GrantSecret {
             public let apiKey: Bool
             /// An API key's variable name.
             public let env: String?
+            /// The entry's title in the list (a login's is its host, " · " and its user name), or nil for a read
+            /// that did not take it. `grant_secret` does not read it; `answer_secret_request` reads it for its
+            /// rule of a secret that fits a request (`AnswerSecret.Request.fits`).
+            public let title: String?
             /// The agents that hold it, each with its level as the hub wrote it.
             public let grants: [String: String]
 
-            public init(apiKey: Bool, env: String? = nil, grants: [String: String] = [:]) {
+            public init(apiKey: Bool, env: String? = nil, title: String? = nil, grants: [String: String] = [:]) {
                 self.apiKey = apiKey
                 self.env = env
+                self.title = title
                 self.grants = grants
             }
         }
@@ -501,10 +508,13 @@ public enum GrantSecret {
         }
     }
 
-    /// **The tool's one line of writes.** One object for the tool, which lives as long as the board.
+    /// **The one line of writes of the tools that write grants**: `grant_secret` and `answer_secret_request`
+    /// (`AnswerSecret`). One object for the two tools, which lives as long as the board (`LinkTools.add` makes it
+    /// and gives it to both).
     ///
     /// **One call writes at a time.** Two calls whose writes cross can end with a grant in the list whose signature
-    /// the other call ended. So while the writes of one call run, another call gets `busy`, and sends nothing.
+    /// the other call ended, and both tools write grants. So while the writes of one call run, another call of
+    /// either tool gets `busy`, and sends nothing.
     ///
     /// **The writes are not the call's.** A call of the link is one connection, and the listener cancels the call's
     /// task when the connection ends (`ChannelListener`). A cancel that reached a request of the app's clients
@@ -649,37 +659,85 @@ public enum GrantSecret {
         }
     }
 
-    /// **The writes of a give**: the signed `grant`, then the hub's grant, and after a certain refusal of that
-    /// grant one more read of the list and, only when it shows no grant, the signed `ungrant`.
+    /// **How one give ended**, as the two tools that give read it (`grant_secret`, and `answer_secret_request` for
+    /// each agent of its `give`). Each tool maps an end to its own words. The cases with a status carry the hub's
+    /// own status (under 500) and its own words.
+    enum GiveEnd: Equatable, Sendable {
+        /// The vault took the signed grant, and the hub took its grant: the hub's receipt.
+        case given(Receipt)
+        /// This Mac holds the key, and the app could not sign with it now. Nothing was sent.
+        case notSignedNow
+        /// The signed grant, a certain refusal: the vault kept nothing, and the list was not asked.
+        case signRefused(Int, String)
+        /// The signed grant, no known outcome. The list was not asked.
+        case signNotKnown
+        /// The signed grant taken, the hub's grant with no known outcome.
+        case grantNotKnown
+        /// The hub's grant refused, the list read again with no grant, and the signed end taken.
+        case refusedTakenBack(Int, String)
+        /// The same, when the signed end did not go.
+        case refusedSignatureLeft(Int, String)
+        /// The hub's grant refused, and the list read again has a grant of this secret for this agent.
+        case refusedListHasOne(Int, String)
+        /// The hub's grant refused, and the list could not be read again.
+        case refusedListUnread(Int, String)
+    }
+
+    /// **The writes of one give**, for both tools: the signed `grant`, then the hub's grant, and after a certain
+    /// refusal of that grant one more read of the list and, only when it shows no grant, the signed `ungrant`.
+    /// `sign` makes, signs and sends one statement; `grant` is the hub's grant at the give's level; `team` is one
+    /// read of the list. Each is a closure of the calling tool's own desk.
+    @MainActor
+    static func give(login: String, agent: String, fleet: String, server: String,
+                     sign: (Statement) async throws -> Void, grant: () async throws -> Receipt,
+                     team: () async throws -> Team) async -> GiveEnd {
+        let statement = Statement(fleet: fleet, login: login, agent: agent, machine: server)
+        switch await sent({ try await sign(statement) }) {
+        case .took: break
+        // The caller's check said that this Mac holds the key: the words do not say that it holds none.
+        case .notSigned: return .notSignedNow
+        case .refused(let status, let said): return .signRefused(status, said)
+        case .notKnown: return .signNotKnown
+        }
+        switch await sent({ try await grant() }) {
+        case .took(let receipt):
+            return .given(receipt)
+        case .notSigned, .notKnown:
+            return .grantNotKnown
+        case .refused(let status, let said):
+            // The list as it is now, and never as the call's first read had it.
+            guard let now = try? await team() else { return .refusedListUnread(status, said) }
+            guard now.secrets[login]?.grants[agent] == nil else { return .refusedListHasOne(status, said) }
+            let end = Statement(fleet: fleet, login: login, agent: agent, machine: nil)
+            guard case .took = await sent({ try await sign(end) }) else { return .refusedSignatureLeft(status, said) }
+            return .refusedTakenBack(status, said)
+        }
+    }
+
+    /// **The writes of a give of this tool** (`give(login:agent:fleet:server:sign:grant:team:)`), and this tool's
+    /// words for each end.
     @MainActor
     private static func give<Place>(_ read: Read, _ level: Level, fleet: String, server: String, place: Place,
                                     desk: Desk<Place>) async -> OwnerChannel.Answer {
-        let grant = Statement(fleet: fleet, login: read.login, agent: read.agent, machine: server)
-        switch await sent({ try await desk.sign(place, grant) }) {
-        case .took: break
-        // The check of step 4 said that this Mac holds the key: the words do not say that it holds none.
-        case .notSigned: return .refused(notSignedNow)
-        case .refused(let status, let said): return .refused(withHubWords(signRefused, status: status, said))
-        case .notKnown: return .refused(signNotKnown)
-        }
-        switch await sent({ try await desk.grant(place, read.login, read.agent, level) }) {
-        case .took(let receipt):
+        let end = await give(login: read.login, agent: read.agent, fleet: fleet, server: server,
+                             sign: { try await desk.sign(place, $0) },
+                             grant: { try await desk.grant(place, read.login, read.agent, level) },
+                             team: { try await desk.team(place) })
+        switch end {
+        case .given(let receipt):
             await desk.refresh()
             return .result(result(read, server: server, receipt))
-        case .notSigned, .notKnown:
-            return .refused(grantNotKnown)
-        case .refused(let status, let said):
-            // The list as it is now, and never as the call's first read had it.
-            guard let now = try? await desk.team(place) else {
-                return .refused(withHubWords(grantRefusedListUnread, status: status, said))
-            }
-            guard now.secrets[read.login]?.grants[read.agent] == nil else {
-                return .refused(withHubWords(grantRefusedListHasOne, status: status, said))
-            }
-            let end = Statement(fleet: fleet, login: read.login, agent: read.agent, machine: nil)
-            guard case .took = await sent({ try await desk.sign(place, end) }) else {
-                return .refused(withHubWords(grantRefusedSignatureLeft, status: status, said))
-            }
+        case .notSignedNow: return .refused(notSignedNow)
+        case .signRefused(let status, let said): return .refused(withHubWords(signRefused, status: status, said))
+        case .signNotKnown: return .refused(signNotKnown)
+        case .grantNotKnown: return .refused(grantNotKnown)
+        case .refusedListUnread(let status, let said):
+            return .refused(withHubWords(grantRefusedListUnread, status: status, said))
+        case .refusedListHasOne(let status, let said):
+            return .refused(withHubWords(grantRefusedListHasOne, status: status, said))
+        case .refusedSignatureLeft(let status, let said):
+            return .refused(withHubWords(grantRefusedSignatureLeft, status: status, said))
+        case .refusedTakenBack(let status, let said):
             return .refused(withHubWords(grantRefusedTakenBack, status: status, said))
         }
     }

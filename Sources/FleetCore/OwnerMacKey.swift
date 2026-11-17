@@ -92,8 +92,11 @@ public enum OwnerMacKey {
         text.range(of: "^[A-Za-z0-9_-]{32,128}$", options: .regularExpression) != nil
     }
 
+    /// The key in `file`, or nil: at most 256 bytes of a regular file, read with no wait (`KeptFile`). Before, the
+    /// file was read whole, whatever it was, and its size was checked after that; this read runs for each request
+    /// of the app to its hub. The limit is the one from before: a key's file has at most 128 letters and a line end.
     static func key(in file: URL) -> String? {
-        guard let data = try? Data(contentsOf: file), data.count <= 256,
+        guard let data = KeptFile.bytes(of: file, atMost: 256),
               let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
               isKey(text) else { return nil }
         return text

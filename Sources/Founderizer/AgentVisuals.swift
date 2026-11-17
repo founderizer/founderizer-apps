@@ -87,8 +87,13 @@ extension FleetAgent {
     /// page is the one sign of an old reading, and the words that name a state say "Last reading" where they need to.
     /// **Only its motion rests**: an agent at work by an old reading is `workingAtLastRead`, its colour as last read
     /// and its glyph still, because a moving glyph says that the work goes on now.
-    func presence(isFresh: Bool, serverTime: Double, openTasks: [FleetTask], holds: [TaskHold], problem: AgentAttention? = nil,
-                  thinking: Bool = false) -> AgentPresence {
+    ///
+    /// **A task that waits for him says so, and what for** (`waits`, `HubState.ownerWaits(of:)`; the owner, 16 November
+    /// 2026, of two orange dots: "these orange badges are confusing", then "on hover on the side and also on the right
+    /// hand side panel"): "Waits for you: <his request's title>", before a task that waits for an agent's answer. The
+    /// dot said "Waiting for Lead" while the question had gone up to a card of his in Needs you.
+    func presence(isFresh: Bool, serverTime: Double, openTasks: [FleetTask], holds: [TaskHold], waits: [Int: OwnerWait],
+                  problem: AgentAttention? = nil, thinking: Bool = false) -> AgentPresence {
         if active == false { return .setup }
         if !helperIsRecent(serverTime: serverTime) { return .offline }
         if let problem { return .attention(problem.short) }
@@ -96,8 +101,10 @@ extension FleetAgent {
         // that the app shows today for an agent that needs him, with the words on hover.
         if let trouble = account_problem { return .attention(trouble.words) }
         if limit != nil { return .limited }
-        let marks = openTasks.filter { $0.owner == name }.map { $0.mark(holds: holds) }
+        let mine = openTasks.filter { $0.owner == name }
+        let marks = mine.map { $0.mark(holds: holds) }
         if thinking || marks.contains(where: \.inWork) { return isFresh ? .working : .workingAtLastRead }
+        if let wait = mine.lazy.compactMap({ waits[$0.id] }).first { return .attention(wait.statusWords) }
         if let waiting = marks.first(where: \.attention) { return .attention(waiting.words) }
         return .online
     }

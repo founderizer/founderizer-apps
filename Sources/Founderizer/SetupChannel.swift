@@ -206,8 +206,9 @@ enum AppFront {
 
 /// **The app's side of the link with its program** (`OwnerChannel` in FleetOwnerAPI; the plan's section 3.4): a local
 /// socket in the app's own folder of the user's Library, on which the program inside this bundle (`founderizer-cli`)
-/// asks the running app its reads (`setup_state`, `setup_show`, `setup_diagnosis`) and its five writes
-/// (`save_bot_token`, `prepare_problem_report`, `save_secret`, `grant_secret`, `share_secret`; `LinkTools`). The
+/// asks the running app its reads (`setup_state`, `setup_show`, `setup_diagnosis`) and its six writes
+/// (`save_bot_token`, `prepare_problem_report`, `save_secret`, `grant_secret`, `share_secret`,
+/// `answer_secret_request`; `LinkTools`). The
 /// listener runs on a queue of its own; the answers come on the
 /// main actor, from the store (`SetupBoard`). Nothing of it shows on the screen.
 ///
@@ -223,15 +224,19 @@ enum AppFront {
 /// and sets no site itself. Proved with the released, Developer ID signed build (14 November 2026), before
 /// `save_secret` was on the link; `save_secret` ran in the released build 0.1.275 on a test fleet (16 November 2026).
 ///
-/// **Two tools sign, and that is a new power.** `grant_secret` makes this app sign the owner's grant of a secret of
+/// **Three tools sign, and that is a new power.** `grant_secret` makes this app sign the owner's grant of a secret of
 /// the list to a worker or a lead, or its end, with the owner key of this Mac and with no question to the owner (the
 /// owner, 15 November 2026: "No touch"). So each process of the owner's user can bring a secret's value to an
 /// agent's server, and with `read` an API key into that agent's sessions. `share_secret` makes this app sign a secret
 /// of the list into the grantable pool, or out of it, in the same way, and the hub then lets the fleet manager give
-/// it to any worker or lead, at most at the level that the call names. `OWNER-MCP-BOUNDARY.md`, section 7b, has the
+/// it to any worker or lead, at most at the level that the call names. `answer_secret_request` makes this app sign
+/// the gives of one call as `grant_secret` does, and then answer an agent's open request for a secret with a secret
+/// of the list that fits it. `OWNER-MCP-BOUNDARY.md`, section 7b, has the
 /// powers, their traces and their limits. `grant_secret` ran in the released build 0.1.275 on a test fleet (16
-/// November 2026): the signed give, the value on a worker's server, and the signed end. `share_secret` ran in a test
-/// build only, which reads no owner key, so its signature is not seen yet.
+/// November 2026): the signed give, the value on a worker's server, and the signed end. `share_secret` ran in the released
+/// build 0.1.293 on a test fleet (16 November 2026): the signed pool statement, the delivery through the pool, and
+/// the take-back with the copy taken back. `answer_secret_request` ran in the released build 0.1.300 on a test fleet
+/// (17 November 2026): the signed give with the answer, the key's copy on a worker's server, and the refusals.
 @MainActor
 final class SetupChannel {
     static let shared = SetupChannel()
@@ -261,7 +266,7 @@ final class SetupChannel {
                                // The bundle's Info.plist on the disk now: an update swaps the bundle at its path.
                                diskBuild: { ProgramPlace.build(of: Bundle.main.bundleURL) })
         // The link's write tools (`save_bot_token`, `prepare_problem_report`, `save_secret`, `grant_secret`,
-        // `share_secret`), on the same board and the same store.
+        // `share_secret`, `answer_secret_request`), on the same board and the same store.
         LinkTools.add(to: board, store: { [weak self] in self?.store })
         return board
     }()
@@ -688,6 +693,19 @@ final class SetupChannel {
                   target: target.map { targetState($0, in: store) }, buttonDown: buttonDown)
     }
 
+    /// **A page that the app may open by itself as it starts** (the page he left, `FleetStore.keptPage`): a place of
+    /// `setup_show`'s list as it would show now, with `setup_show`'s own checks of that place (`targetState`): the hub
+    /// lists it, it has the part that was asked for, no setup shows in its place, and the hub offers its section of
+    /// Settings.
+    static func opensAtStart(_ page: Destination, in store: FleetStore) -> Bool {
+        let target = place(of: store, showing: page)
+        guard SetupShow.isTarget(target), targetState(target, in: store) == .has else { return false }
+        if case .settings(let section) = target {
+            return SettingsTab.available(features: store.state?.ui_features ?? []).map(settingsPage).contains(section)
+        }
+        return true
+    }
+
     /// **What the store says of a place that `setup_show` was asked to open**: an agent that the hub lists, with the
     /// part that was asked for (`AgentTab.available`, the list of the details' own sidebar), and whose own page draws
     /// its chat and not its setup or its "Setting up"; a task that the hub has. Every other place is the rules' own.
@@ -745,6 +763,7 @@ final class SetupChannel {
         case .apps: .apps
         case .people: .people
         case .team: .team
+        case .help: .help
         }
     }
 

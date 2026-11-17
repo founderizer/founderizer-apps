@@ -10,6 +10,9 @@ struct FleetView: View {
     @State private var team = TeamModel()
     /// The chat's box has the keyboard: the guard of a pasted key watches it then (`KeyPasteGuard`).
     @FocusState private var composerFocused: Bool
+    /// The correction's field has the keyboard. **A value of its own**: with the box's, the correction that took the
+    /// box's place while the box had the keyboard set a value that was true already, and so took no keyboard.
+    @FocusState private var correctionFocused: Bool
     /// The composers whose key the owner chose to keep in the message: no second question while it is there.
     @State private var keyAllowed: Set<String> = []
     /// The agent whose chat just took the place of its setup: its box takes the keyboard as it shows (the owner, 26
@@ -147,6 +150,38 @@ struct FleetView: View {
         .onChange(of: setupAgent ?? startingAgent) { before, after in
             if let before, after == nil, chatAgent == before { focusChat = before }
         }
+        // **A chat that opens gives its box the keyboard** (the owner, 16 November 2026: "when I click on an agent on the
+        // sidebar, focus should be on the text input directly!!"): from its row, ⌘1–9, ⌥⌘↑↓, Back and Forward, a search
+        // result or a notification. One whose setup shows takes it when its chat comes (`focusChat`). **Also the chat
+        // that the app starts on, and the chat that shows when he comes back to the window** (the owner's "Build ideas
+        // 1–5" of 16 November 2026): by ⌘Tab, the Dock or a card that closed, while no field or control has the keys.
+        // A click that brings the window decides by itself where the cursor goes.
+        .onChange(of: chatAgent, initial: true) { _, name in if let name { focusChat = name } }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+            guard let window = note.object as? NSWindow, window.identifier?.rawValue == SetupChannel.fleetWindow,
+                  let name = boxAgent,
+                  ![.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(NSApp.currentEvent?.type) else { return }
+            Task {
+                // **A moment later**: a click that brought the window has put the cursor where it went, and the hold
+                // of a front from outside, whose sign can come after the front, has begun (`AppFront`).
+                try? await Task.sleep(for: .milliseconds(250))
+                guard window.isKeyWindow, boxAgent == name, !AppFront.holdsKeys, NSEvent.pressedMouseButtons == 0,
+                      !ComposerCaret.keysTaken(in: window) else { return }
+                focusChat = name
+            }
+        }
+        // **A correction of the chat that shows ended** (sent, cancelled or refused): its box takes the keyboard back,
+        // once the correction's line has gone, while no other field has it. One of another chat, which can end at a
+        // later reading, moves no cursor.
+        .onChange(of: store.editingMessage?.chatRecipient) { before, now in
+            guard let before, now == nil, boxAgent == before else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(50))
+                guard boxAgent == before, let window = NSApp.windows.first(where: { $0.identifier?.rawValue == SetupChannel.fleetWindow }),
+                      !ComposerCaret.keysTaken(in: window) else { return }
+                focusChat = before
+            }
+        }
         // Add secret over the window: a chat's key button, or the guard of a key that the owner pasted.
         .fleetModal(item: $store.secretForm) { preset in SecretFormCard(store: store, preset: preset) }
         // Delete… from an agent's menu, over the window as the search card is, with the glyphs the window gives.
@@ -217,10 +252,58 @@ struct FleetView: View {
     /// status panel at the right. Every other section is in its details.
     private func openAgent(_ name: String, _ tab: AgentTab) {
         store.destination = tab == .chat ? .agent(name) : .agentDetail(name, tab)
+        // A press on the chat that shows already gives its box the keyboard back too; a box that has it keeps its cursor.
+        if tab == .chat && !composerFocused { focusChat = name }
     }
 
     /// The agent whose chat shows, or nil.
     private var chatAgent: String? { if case .agent(let name) = store.destination { name } else { nil } }
+
+    /// The agent whose chat shows with its box or its correction's line under it, or nil: as `body` draws it, with no
+    /// first run, welcome page, setup or wizard in its place.
+    private var lineAgent: String? {
+        guard let name = chatAgent, store.launched || store.state != nil, !firstRun, !store.welcomeCovers,
+              !store.fillsWindow(store.destination), setupAgent == nil, startingAgent == nil, accountAgent == nil
+        else { return nil }
+        return name
+    }
+
+    /// The agent whose chat's box shows, or nil: no correction stands in its place.
+    private var boxAgent: String? { lineAgent.flatMap { store.editingMessage?.chatRecipient == $0 ? nil : $0 } }
+
+    /// **A key typed in a chat while no field has the cursor goes into its box** (the owner's "Build ideas 1–5" of 16
+    /// November 2026, of "Typing anywhere in a chat goes into the box"), or into the correction's line while that
+    /// stands in the box's place: the field takes the keyboard, and the key and the ones after it go to it again once
+    /// it has it, at the end of its words (`ComposerCaret`). False when neither shows.
+    private func typeIntoBox(_ event: NSEvent) -> Bool {
+        guard let name = lineAgent else { return false }
+        if store.editingMessage?.chatRecipient == name {
+            guard !store.sending, store.pending == nil else { return false }
+            ComposerCaret.hold(event)
+            correctionFocused = true
+            ComposerCaret.toEnd(of: store.editText, in: ComposerCaret.correction)
+            return true
+        }
+        guard store.canChat(with: name) else { return false }
+        ComposerCaret.hold(event)
+        composerFocused = true
+        ComposerCaret.toEnd(of: store.composerText(for: name), in: ComposerCaret.box(name))
+        return true
+    }
+
+    /// **⌥⇧↓ opens the next chat with a new reply** (the owner's "Build ideas 1–5" of 16 November 2026), in the
+    /// sidebar's order after the agent whose page shows, and round to the top; from another page the first one. On
+    /// another page only while no field has the keys (`fieldHasKeys`): ⌥⇧↓ selects to a paragraph's end there. False
+    /// when no other chat has one: the key is then the field's again.
+    private func openNextReply(_ names: [String], fieldHasKeys: Bool) -> Bool {
+        guard !names.isEmpty, chatAgent != nil || !fieldHasKeys else { return false }
+        let at = store.destination.agentName.flatMap { names.firstIndex(of: $0) } ?? -1
+        let next = (1...names.count).lazy.map { names[(at + $0) % names.count] }
+            .first { $0 != chatAgent && store.hasNewReply(from: $0) }
+        guard let next else { return false }
+        openAgent(next, .chat)
+        return true
+    }
 
     /// **An agent on a key or a model server, whose chat's place shows** (pictures 6 and 8 of the AI providers build):
     /// it has no chat in version 1, so it opens on its detail page (the page that Settings opens), with no composer and
@@ -235,9 +318,10 @@ struct FleetView: View {
         guard let state = store.state else { return [:] }
         var presences: [String: AgentPresence] = [:]
         for agent in state.agents {
-            presences[agent.name] = agent.presence(isFresh: store.isFresh, serverTime: state.time,
-                                                   openTasks: state.tasks.filter { $0.owner == agent.name && !$0.isTerminal },
-                                                   holds: state.holds ?? [], thinking: store.thinks(agent.name))
+            let open = state.tasks.filter { $0.owner == agent.name && !$0.isTerminal }
+            presences[agent.name] = agent.presence(isFresh: store.isFresh, serverTime: state.time, openTasks: open,
+                                                   holds: state.holds ?? [], waits: state.ownerWaits(of: open),
+                                                   thinking: store.thinks(agent.name))
         }
         return presences
     }
@@ -319,6 +403,7 @@ struct FleetView: View {
             }.scrollIndicators(.hidden)
                 .background {
                     AgentKeys(names: agents.map(\.name)) { openAgent($0, .chat) } step: { stepAgent(agents.map(\.name), by: $0) }
+                        nextReply: { openNextReply(agents.map(\.name), fieldHasKeys: $0) } typed: { typeIntoBox($0) }
                 }
                 .padding(.top, 10)
             // **From where the rows' marks begin to where their counts end** (the margins of 30 October 2026, row 30):
@@ -495,9 +580,10 @@ struct FleetView: View {
     /// as the chat's "Thinking" does, and it has no dot. A dot is a problem.
     private func agentRow(_ agent: FleetAgent) -> some View {
         let providerSetup = store.providerSetup(hub: store.hub, database: store.state?.db, agent: agent.name)
-        let presence = agent.presence(isFresh: store.isFresh, serverTime: store.state?.time ?? 0,
-                                      openTasks: store.state?.tasks.filter { $0.owner == agent.name && !$0.isTerminal } ?? [],
-                                      holds: store.state?.holds ?? [], thinking: store.thinks(agent.name))
+        let open = store.state?.tasks.filter { $0.owner == agent.name && !$0.isTerminal } ?? []
+        let presence = agent.presence(isFresh: store.isFresh, serverTime: store.state?.time ?? 0, openTasks: open,
+                                      holds: store.state?.holds ?? [], waits: store.state?.ownerWaits(of: open) ?? [:],
+                                      thinking: store.thinks(agent.name))
         let reply = store.hasNewReply(from: agent.name)
         let selected = store.destination.agentName == agent.name
         // An old reading keeps the agent's look (fix round 2, item 2): VoiceOver hears that it is the last reading.
@@ -525,6 +611,9 @@ struct FleetView: View {
             // colour, so it parts the dot from the glyph on the selected row too.
             AgentAvatar(name: agent.name, presence: presence, size: ChatRow<EmptyView, EmptyView>.glyph,
                         surface: selected ? FleetStyle.bubble : FleetStyle.rail, moves: true)
+                // **The words of its dot show over the whole glyph** (the owner, 16 November 2026: "on hover on the
+                // side"): the dot alone is 6 points.
+                .help(StatusDot.shows(presence, reduceMotion: reduceMotion) ? presence.label : "")
         } trailing: {
             // The row stays one button for assistive apps: the marks' words are its value.
             // **A new reply is the violet 6-point dot at the row's end, with its name in semibold**: the unread dot, the
@@ -661,8 +750,7 @@ struct FleetView: View {
     private func editMessagePanel(_ message: OwnerMessage) -> some View {
         // The phone's words (T-33). The phone corrects only his newest message; this Mac corrects any it sent, so an
         // older one is "your message".
-        let newest = store.state?.messages.filter { $0.kind == "message" && $0.chatRecipient == message.chatRecipient }
-            .max { $0.created < $1.created }
+        let newest = store.newestMessage(to: message.chatRecipient)
         let inPlace = store.editsInPlace(message)
         let canSend = store.canWrite && !store.editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && store.editText.count <= 16_000
@@ -683,11 +771,19 @@ struct FleetView: View {
             }
             .font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
             .padding(.horizontal, ComposerCapsule<EmptyView, EmptyView>.inset)
-            ComposerCapsule(focus: $composerFocused) {
+            ComposerCapsule(focus: $correctionFocused) {
                 TextField("Correct your message", text: $store.editText, axis: .vertical)
                     .disabled(store.sending || store.pending != nil)
-                    .focused($composerFocused)
-                    .onAppear { composerFocused = true }
+                    .focused($correctionFocused)
+                    // The correction has the keyboard: the chat's box, which comes after it, does not ask for it then.
+                    .onAppear { focusChat = nil }
+                    // **A turn after it shows**: the box that goes in the same change took the keyboard away with it.
+                    .task {
+                        guard !AppFront.holdsKeys else { return }
+                        correctionFocused = true
+                        // Its words stay whole, with the cursor at their end, as a kept draft's do.
+                        ComposerCaret.toEnd(of: store.editText, in: ComposerCaret.correction)
+                    }
                     .accessibilityIdentifier("edit-message-text")
                     // The chat's keys: Return sends, Shift+Return makes a new line, Esc is Cancel.
                     .onKeyPress(keys: [.return], phases: .down) { press in
@@ -909,7 +1005,10 @@ struct FleetView: View {
                 .task(id: focusChat) {
                     guard let name = focusChat, name == store.chatAgent else { return }
                     focusChat = nil
+                    // Not after a front from outside, until the owner's click (`AppFront`): the page then takes no key.
+                    guard !AppFront.holdsKeys else { return }
                     composerFocused = true
+                    ComposerCaret.toEnd(of: store.composerText(for: name), in: ComposerCaret.box(name))
                 }
                 .accessibilityIdentifier("manager-message")
                 // Return sends, as in every chat; Shift+Return makes a new line. Command+Return still sends.
@@ -917,6 +1016,16 @@ struct FleetView: View {
                     if press.modifiers.contains(.shift) { return .ignored }
                     guard canSend else { return .handled }
                     sendChat(text.wrappedValue, composer: composer)
+                    return .handled
+                }
+                // **↑ in an empty box corrects his newest message of this chat**, as in a chat app (the owner's "Build
+                // ideas 1–5" of 16 November 2026): the correction's line takes the box's place, as its Correct does.
+                .onKeyPress(keys: [.upArrow], phases: .down) { press in
+                    // Not while a message is on its way, which is not in the reading yet, nor over another correction.
+                    guard press.modifiers.isDisjoint(with: [.shift, .control, .option, .command]), text.wrappedValue.isEmpty,
+                          !store.sending, store.pending == nil, store.editingMessage == nil,
+                          let newest = store.newestMessage(to: store.chatAgent), store.canEdit(newest) else { return .ignored }
+                    store.beginEdit(newest)
                     return .handled
                 }
                 .composerField(alone: !store.supportsAttachments)
@@ -1292,6 +1401,88 @@ struct ComposerCapsule<Above: View, Line: View>: View {
     }
 }
 
+/// **A kept draft is not selected when the chat's box takes the keyboard**: AppKit selects all of a field's words as it
+/// takes the keyboard from the code, so the next key would replace the draft. The cursor goes to the draft's end, as in
+/// a chat app. The field editor of the app's main window is the box's when it holds the draft's words: up to 25 waits
+/// of 20 ms for it, and nothing when no draft waits or the words changed first. **A wait is a task of its own**: the box
+/// is drawn again as its page opens, and that ended a `.task` of the box.
+///
+/// **The keys typed during a wait wait with it** (`hold`, from `AgentKeys`): the key that gave the box the keyboard
+/// when no field had it, and every key after it but ⌘1–9, ⌥⌘↑↓ and ⌥⇧↓. When the wait ends they go again, in their order and
+/// before any later key, to what has the keys then (`release`): so an accent, an input method, Delete, Return, ⌘Return
+/// and ⌘V act in the box as they would have, and none of them acts on a draft that is still selected. A wait that does
+/// not find the box sends them on as well, to where the keys are. A wait for another field (another chat opened during
+/// it) takes them on. **Known limits, each in a wait of 20 ms to 500 ms**: keys that go again after the app left the
+/// front, or while a hold of a front from outside began (`AppFront`), are lost.
+@MainActor
+private enum ComposerCaret {
+    /// The keys typed during the running wait, in their order.
+    private static var held: [NSEvent] = []
+    /// The running wait, by the field it waits for (`box`, `correction`).
+    private static var wait: (field: String, id: UUID)?
+    /// The times of the held keys that `release` sent again: the watch passes each of them on, once.
+    private static var resent: [TimeInterval] = []
+
+    /// The wait for an agent's box, and the one for the correction's line: no name of an agent is the second.
+    static func box(_ agent: String) -> String { "box \(agent)" }
+    static let correction = "correction"
+
+    /// A wait runs: the next key joins its keys, wherever the cursor is.
+    static var waits: Bool { wait != nil }
+
+    /// A field of the window has the cursor, or a control has the keys (Full Keyboard Access): typed keys are theirs.
+    static func keysTaken(in window: NSWindow) -> Bool {
+        guard let responder = window.firstResponder else { return false }
+        if let text = responder as? NSTextView { return text.isEditable }
+        return responder is NSControl
+    }
+
+    /// A key that waits with the running wait, or with the one that it begins.
+    static func hold(_ event: NSEvent) { held.append(event) }
+
+    /// A held key that `release` sent again: it goes on to what has the keys now.
+    static func isResent(_ event: NSEvent) -> Bool {
+        guard let at = resent.firstIndex(of: event.timestamp) else { return false }
+        resent.remove(at: at)
+        return true
+    }
+
+    static func toEnd(of draft: String, in field: String) {
+        // A wait for another field ends, and its keys wait on for this one: sent now, the field that takes the
+        // keyboard has its words selected, and they would replace them. Not its Return: it would send them to
+        // another chat.
+        if wait.map({ $0.field != field }) == true {
+            wait = nil
+            held.removeAll { [.carriageReturn, .enter].contains($0.specialKey) }
+        }
+        guard wait == nil, !draft.isEmpty || !held.isEmpty else { return }
+        let id = UUID()
+        wait = (field, id)
+        Task {
+            for _ in 0..<25 {
+                guard wait?.id == id else { return }
+                if let editor = NSApp.windows.first(where: { $0.identifier?.rawValue == SetupChannel.fleetWindow })?
+                    .firstResponder as? NSTextView, editor.isFieldEditor, editor.string == draft {
+                    editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+                    release()
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            if wait?.id == id { release() }
+        }
+    }
+
+    /// The wait ends: its keys go again, first in the queue and in their order.
+    private static func release() {
+        wait = nil
+        let keys = held
+        held = []
+        resent += keys.map(\.timestamp)
+        for key in keys.reversed() { NSApp.postEvent(key, atStart: true) }
+    }
+}
+
 extension ComposerCapsule where Above == EmptyView {
     init(focus: FocusState<Bool>.Binding? = nil, @ViewBuilder line: () -> Line) {
         self.init(focus: focus, above: { EmptyView() }, line: line)
@@ -1317,15 +1508,22 @@ extension View {
 /// the one before. They are a watch on this window's own keys, with no view he can reach and no menu item: the
 /// approved T-16 says "nothing on screen", and the hidden buttons they were took a Tab stop with Full Keyboard Access
 /// and a click in the empty sidebar. A key in another window — a card over the page, Report a problem — is not theirs.
+///
+/// **Two more** (the owner's "Build ideas 1–5" of 16 November 2026), with nothing on screen either: ⌥⇧↓ opens the next
+/// chat with a new reply (`nextReply`, told whether a field has the keys; false when it opens none), and a key typed in
+/// a chat while no field or control has the keys goes into its box (`typed`, false when no box shows). Neither while
+/// the app's menu is open, whose keys are its own (`FleetMenu`).
 private struct AgentKeys: NSViewRepresentable {
     let names: [String]
     let open: (String) -> Void
     let step: (Int) -> Void
+    let nextReply: (Bool) -> Bool
+    let typed: (NSEvent) -> Bool
 
     func makeNSView(context: Context) -> KeyWatch { KeyWatch() }
 
     func updateNSView(_ view: KeyWatch, context: Context) {
-        view.names = names; view.open = open; view.step = step
+        view.names = names; view.open = open; view.step = step; view.nextReply = nextReply; view.typed = typed
     }
 
     static func dismantleNSView(_ view: KeyWatch, coordinator: ()) { view.stop() }
@@ -1334,6 +1532,8 @@ private struct AgentKeys: NSViewRepresentable {
         var names: [String] = []
         var open: (String) -> Void = { _ in }
         var step: (Int) -> Void = { _ in }
+        var nextReply: (Bool) -> Bool = { _ in false }
+        var typed: (NSEvent) -> Bool = { _ in false }
         private var monitor: Any?
 
         // Nothing here takes a click, the keyboard's focus or a Tab stop.
@@ -1363,6 +1563,7 @@ private struct AgentKeys: NSViewRepresentable {
 
         private func take(_ event: NSEvent) -> Bool {
             guard !AppFront.holdsKeys else { return false }     // no key after a front from outside (`AppFront`)
+            if ComposerCaret.isResent(event) { return false }    // a key that waited for the box, sent again
             let keys = event.modifierFlags.intersection([.command, .option, .control, .shift])
             if keys == .command, let digit = event.charactersIgnoringModifiers.flatMap({ Int($0) }), (1...9).contains(digit) {
                 guard digit <= names.count else { return false }
@@ -1376,7 +1577,26 @@ private struct AgentKeys: NSViewRepresentable {
                 default: return false
                 }
             }
-            return false
+            guard let window, !FleetMenu.isOpen else { return false }
+            if keys == [.option, .shift], event.specialKey == .downArrow {
+                return nextReply(ComposerCaret.keysTaken(in: window))
+            }
+            // While the box takes the keyboard, every key waits for it (`ComposerCaret`), ⌘Return and ⌘V too.
+            if ComposerCaret.waits { ComposerCaret.hold(event); return true }
+            guard keys.isDisjoint(with: [.command, .control]), Self.types(event), !ComposerCaret.keysTaken(in: window)
+            else { return false }
+            return typed(event)
+        }
+
+        /// **A key that types**: words with no control character, or an accent that waits for its letter; no arrow,
+        /// function key, Return, Tab, Delete or Escape. A space alone does not begin it: a control that has the keys
+        /// with Full Keyboard Access presses on it.
+        private static func types(_ event: NSEvent) -> Bool {
+            guard event.specialKey == nil, let characters = event.characters else { return false }
+            if characters.isEmpty { return !(event.charactersIgnoringModifiers ?? "").isEmpty }
+            return characters != " " && characters.unicodeScalars.allSatisfy { scalar in
+                scalar.value >= 0x20 && scalar.value != 0x7F && !(0xF700...0xF8FF).contains(scalar.value)
+            }
         }
     }
 }

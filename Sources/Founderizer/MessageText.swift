@@ -362,8 +362,9 @@ struct MessageAction: View {
     }
 }
 
-/// An agent's reply with its hover footer below it on the left: Copy, then how long ago it came (`messageAge`). The
-/// footer has its own space in the reply, hidden until hover, so hover never resizes a message or moves the scroll.
+/// An agent's reply with its hover footer below it on the left: Copy, then how long ago it came (`messageAge`), in a
+/// chat under the last reply of a run only (`lastOfRun`). The footer has its own space in the reply, hidden until
+/// hover, so hover never resizes a message or moves the scroll.
 /// The text keeps its own selection and menu.
 struct AgentReply: View {
     /// The height of a reply's footer: the air above the icons and the row itself, regular in a chat, compact in a task
@@ -375,6 +376,9 @@ struct AgentReply: View {
     var compact = false
     /// A line under the text that always shows: the delivery of a reply to a chat app.
     var detail: AnyView?
+    /// False for a reply with another reply of its run right under it (`ChatPart.endsReplies`): it keeps the room of
+    /// the footer, so the chat's gaps stay, and shows nothing there on hover.
+    var lastOfRun = true
     @State private var hovered = false
     @State private var copied = false
 
@@ -386,14 +390,18 @@ struct AgentReply: View {
         VStack(alignment: .leading, spacing: gap) {
             MessageText(text: text, chat: true).equatable()
             if let detail { detail }
-            HStack(spacing: 10) {
-                MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: String(l10n: "Copy message"), height: row) {
-                    copyMessage(text); copied = true
-                }
-                if let time { Text(messageAge(time)).help(fleetDate(time)) }
-            }.font(ChatStyle.detail).foregroundStyle(FleetStyle.muted).frame(height: row)
-                .padding(.top, Self.footer(compact: compact) - row - gap)
-                .opacity(hovered ? 1 : 0).allowsHitTesting(hovered)
+            if lastOfRun {
+                HStack(spacing: 10) {
+                    MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: String(l10n: "Copy message"), height: row) {
+                        copyMessage(text); copied = true
+                    }
+                    if let time { Text(messageAge(time)).help(fleetDate(time)) }
+                }.font(ChatStyle.detail).foregroundStyle(FleetStyle.muted).frame(height: row)
+                    .padding(.top, Self.footer(compact: compact) - row - gap)
+                    .opacity(hovered ? 1 : 0).allowsHitTesting(hovered)
+            } else {
+                Color.clear.frame(height: Self.footer(compact: compact) - gap)
+            }
         }.contentShape(Rectangle()).onHover { hovered = $0; if !$0 { copied = false } }
     }
 }

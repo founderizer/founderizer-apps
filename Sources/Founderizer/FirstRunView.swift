@@ -37,8 +37,12 @@ final class FirstRunModel {
         /// initially we should ask the manager name? I would focus the onboarding in creating the manager", and "Yes,
         /// build it" to its picture).
         case name
-        /// "Your fleet's servers", the slider from the lower cost to the more secure, after the manager's name (his
-        /// "where is the slider with price <> security we designed", and "Steps first", of 15 November 2026).
+        /// "<Name>'s AI provider", the manager's own page of its AI provider, after its name (the owner, 16 November
+        /// 2026: "agent onboarding should ask first for the name and AI provider before the server page", and his yes
+        /// of the same day to the one wizard's line of steps: Manager, AI provider, Servers, Network, VPS, Build).
+        case aiProvider
+        /// "Your fleet's servers", the slider from the lower cost to the more secure, after the manager's AI provider
+        /// (his "where is the slider with price <> security we designed", and "Steps first", of 15 November 2026).
         case servers
         /// Tailscale on this Mac: the install ends in a claim to an address on the owner's own private network, so a
         /// Mac that is not on it cannot finish. Skipped when it already is.
@@ -69,13 +73,13 @@ final class FirstRunModel {
     /// would sweep away its own last screen.
     var holdsWindow: Bool {
         switch step {
-        case .welcome, .paste, .name, .servers, .network, .machine, .key, .cloud, .token, .vps: false
+        case .welcome, .paste, .name, .aiProvider, .servers, .network, .machine, .key, .cloud, .token, .vps: false
         case .installing, .address, .done, .restore: true
         }
     }
 
     /// The screen this wizard opens on. It is the first screen, the welcome page, unless somebody asked for another one
-    /// with `-firstRunStep <welcome|paste|name|servers|cloud|network|key|vps|machine|done|restore|address>`, which is how a screen of
+    /// with `-firstRunStep <welcome|paste|name|aiProvider|servers|cloud|network|key|vps|machine|done|restore|address>`, which is how a screen of
     /// this wizard can be looked at without walking to it. It is read from the start's arguments only (`asked`), which
     /// are not written to the app's settings, so it leaves no trace.
     var step: Step = FirstRunModel.asked ?? .welcome
@@ -100,9 +104,9 @@ final class FirstRunModel {
         case .welcome: .welcome
         case .paste: .paste
         case .cloud: .cloud
-        // The two pages of the first way before this Mac's network: both look for a fleet, neither is a start page,
-        // and no new build of the app goes in by itself on either.
-        case .name, .servers: .name
+        // The three pages of the first way before this Mac's network: each looks for a fleet, none is a start page,
+        // and no new build of the app goes in by itself on any.
+        case .name, .aiProvider, .servers: .name
         default: .other
         }
     }
@@ -114,6 +118,7 @@ final class FirstRunModel {
         case "welcome": return .welcome
         case "paste": return .paste
         case "name": return .name
+        case "aiProvider": return .aiProvider
         case "servers": return .servers
         case "network": return .network
         case "machine": return .machine
@@ -147,11 +152,37 @@ final class FirstRunModel {
     /// rule (`ManagerName.agentName`), or none for a first run that did not ask, whose manager is `manager` as before.
     var hubName: String? { named ? ManagerName.agentName(managerName) : nil }
 
-    /// Continue of "Name your manager": on to "Your fleet's servers".
+    /// Continue of "Name your manager": on to the manager's AI provider.
     func nameChosen() {
         guard ManagerName.agentName(managerName) != nil else { return }
         UserDefaults.standard.set(ManagerName.shown(managerName), forKey: Self.nameKey)
         named = true
+        start(.aiProvider)
+    }
+
+    /// The cards of the page of the manager's AI provider, in their order: the programs that the manager runs (`hub.sh
+    /// --runtime`), as the manager's own setup has them (`AgentSetupWizard`).
+    static let aiChoices = ["codex", "claude"]
+    /// **The manager's AI provider, as the owner chose it on its page**: the one that the page had the last time on this
+    /// Mac, or none. It is kept on this Mac from the press on, so that the card that he chose keeps its check mark
+    /// after Back and after a new start of the app.
+    private(set) var aiProvider = UserDefaults.standard.string(forKey: FirstRunModel.aiKey).flatMap {
+        FirstRunModel.aiChoices.contains($0) ? $0 : nil
+    }
+    static let aiKey = "firstRunAIProvider"
+    /// The owner went on from the page of the manager's AI provider in this first run.
+    private(set) var choseAI = false
+    /// **The AI provider that this first run gives on** (`claude` or `codex`), or nil when the owner did not go on from
+    /// its page in this first run: `setup_state` gives it, the hub's installer gets it with "1 server" (`hub.sh
+    /// --runtime`), and the manager's setup gets it after the build, so that it is asked once.
+    var chosenAI: String? { choseAI ? aiProvider : nil }
+
+    /// A press on a card of the manager's AI provider: on to "Your fleet's servers".
+    func aiChosen(_ provider: String) {
+        guard Self.aiChoices.contains(provider) else { return }
+        aiProvider = provider
+        UserDefaults.standard.set(provider, forKey: Self.aiKey)
+        choseAI = true
         start(.servers)
     }
 
@@ -168,6 +199,18 @@ final class FirstRunModel {
     var oneServer: Bool { shaped && serversStep == .one }
     /// The owner went on from "Your fleet's servers" in this first run: `setup_state` gives the choice from then on.
     private(set) var shaped = false
+
+    /// **The first run's one press makes the manager's own server too** (slice 2 of the one wizard; the owner's "that is
+    /// brilliant!" of 16 November 2026 to the build page's picture): on 2 servers and 1 per agent, when the owner came
+    /// through the slider's page. Else the manager's setup makes it, as before.
+    var makesManagersServer: Bool { shaped && serversStep.managersOwnServer }
+    /// The manager's own server that this run made under the hood (`FirstRunView.makeManagersServer`): its name and its
+    /// id at the provider from its build, then its name and its address on the private network once it is there.
+    var managersServerMade: (name: String, id: String?, provider: CloudProvider)?
+    var managersServer: FleetStore.MadeServer?
+    /// The hub's address that the newest try of the hub's server gives (`StartAgain.hubAddress`), for which the
+    /// manager's own server is kept.
+    var managersHub: URL?
 
     /// Continue of "Your fleet's servers": on to the VPS page, with this Mac's network and the fleet's key first when
     /// they are missing, as after a press on a card. Then the VPS page's own press needs neither, and the steps on
@@ -349,9 +392,9 @@ final class FirstRunModel {
         if step == .installing { began = true }
         // A program installed while the wizard showed counts when the welcome page shows again.
         if step == .welcome { foundPrograms = AgentPrograms.found() }
-        // The first run starts over on its welcome page: no way is taken, so no name and no layout are chosen. The
-        // two pages keep what he typed and set.
-        if step == .welcome { named = false; shaped = false }
+        // The first run starts over on its welcome page: no way is taken, so no name, no AI provider and no layout
+        // are chosen. The three pages keep what he typed, pressed and set.
+        if step == .welcome { named = false; choseAI = false; shaped = false }
     }
 }
 
@@ -369,11 +412,19 @@ struct FirstRunView: View {
     @State private var networkModel = PrivateNetworkModel()
     /// Putting a copy back, on the hub this wizard has just claimed.
     @State private var putBack = RestoreModel()
+    /// The manager's sign-in that the first run asks for at its end is on its way (`finish`).
+    @State private var signsIn = false
     /// This Mac on the private network, and the fleet's own Tailscale key.
     @State private var net = FleetNetworkModel()
     /// The fleet's VPS, made at a provider, or any VPS by its address.
     @State private var cloud = FleetCloudModel()
     @State private var vps = FleetVPSModel()
+    /// **The manager's own server, on 2 servers and 1 per agent** (`makeManagersServer`): its offer opens with the
+    /// hub's, and the same press makes it.
+    @State private var managerCloud = FleetCloudModel()
+    /// **The server of the account that "Use this server" chose for the hub**, by its provider, its id and its public
+    /// address: the hub's install there proves its build record by the id (`MachineInstallModel.provenServer`).
+    @State private var chosenServer: (provider: CloudProvider, id: String, address: String)?
     /// True in the window itself, false for the copy that Settings shows before there is a hub: only the window
     /// is held open for the wizard's last screens.
     var window = false
@@ -425,6 +476,9 @@ struct FirstRunView: View {
         .onChange(of: setupFirstRun, initial: true) { _, now in if window { store.setupSnapshot = now } }
         .onAppear { if window, cloud.onState == nil { cloud.onState = SetupChannel.reports(to: store, \.firstRunBuild) } }
         .onChange(of: store.setupAsk?.id, initial: true) { _, _ in take(store.setupAsk) }
+        // The manager's own server's offer opens with the hub's (`opensManagersChoice`).
+        .onChange(of: cloud.stage) { _, _ in opensManagersChoice() }
+        .onChange(of: cloud.tokenTaken) { _, _ in opensManagersChoice() }
         .onDisappear {
             guard window else { return }
             store.setupSnapshot = .none
@@ -454,12 +508,20 @@ struct FirstRunView: View {
     /// A provider's server is made (the page `building`).
     private var cloudBuilds: Bool { cloud.stage == .making || cloud.stage == .joining }
 
+    /// **The first run's page "Your fleet"** (slice 2 of the one wizard): the fleet that the one press makes, for an
+    /// owner who came through the slider's page and whose account has no server of its own. An account with servers
+    /// keeps its list, where the owner can take one of them for the hub.
+    private var showsFleet: Bool { model.shaped && cloud.existing.isEmpty }
+
     private func tokenHead(_ provider: CloudProvider) -> Head {
         let choosing = cloud.stage == .choosing
-        let waits = cloudBuilds || (choosing && cloud.offer == nil)
+        // The page "Your fleet" waits for the offer of the manager's own server too.
+        let managers = showsFleet && model.makesManagersServer && managerCloud.offer == nil
+        let waits = cloudBuilds || (choosing && (cloud.offer == nil || managers))
         if cloudBuilds { return Head(title: String(l10n: "Building your fleet"), key: "Building your fleet", waits: waits) }
         // After the token was taken, a stop leaves the page the server's: its title too.
         if choosing || cloud.tokenTaken {
+            if showsFleet { return Head(title: String(l10n: "Your fleet"), key: "Your fleet", waits: waits) }
             return Head(title: String(l10n: "Your hub's server at \(provider.name)"), key: "Your hub's server at %@",
                         waits: waits)
         }
@@ -522,6 +584,7 @@ struct FirstRunView: View {
         case .welcome: (name, title, works) = ("welcome", "Your own team of AI agents", model.busy)
         case .paste: (name, title, works) = ("paste", "Paste this in %@", model.busy)
         case .name: (name, title, works) = ("name", "Name your manager", false)
+        case .aiProvider: (name, title, works) = ("aiProvider", "%@'s AI provider", false)
         case .servers: (name, title, works) = ("servers", "Your fleet's servers", false)
         case .network: (name, head) = ("network", networkHead)
         case .key: (name, head) = ("key", keyHead)
@@ -541,7 +604,8 @@ struct FirstRunView: View {
         return SetupFirstRun(shows: true, page: page, title: title, works: works, began: model.began,
                              holdsWindow: model.holdsWindow, provider: provider,
                              atStart: WelcomeRules.atStart(model.page),
-                             layout: model.shaped ? FirstRunLayout(rawValue: model.serversStep.rawValue) : nil)
+                             layout: model.shaped ? FirstRunLayout(rawValue: model.serversStep.rawValue) : nil,
+                             aiProvider: model.chosenAI.flatMap(FirstRunAI.init(rawValue:)))
     }
 
     /// The page's name, as `setup_state` gives it and as the steps on Back's line read it (`FirstRunSteps.of`): a
@@ -551,6 +615,7 @@ struct FirstRunView: View {
         case .welcome: "welcome"
         case .paste: "paste"
         case .name: "name"
+        case .aiProvider: "aiProvider"
         case .servers: "servers"
         case .network: "network"
         case .key: "key"
@@ -607,16 +672,55 @@ struct FirstRunView: View {
     private func hold(_ holds: Bool) { if window { store.firstRunHolds = holds } }
 
     /// **Into the app, at the manager's chat**, and the wizard is done. Every way out of the wizard goes through here.
-    /// The manager is the fleet's one agent and is not signed in yet, so its chat is its setup's two provider cards
-    /// (`AgentSetupWizard`): the step that makes the first answer possible (D-3, the owner's yes of 28 October 2026;
-    /// both providers since 4 November 2026).
+    /// The manager is the fleet's one agent and is not signed in yet, so its chat is its setup (`AgentSetupWizard`): the
+    /// step that makes the first answer possible (D-3, the owner's yes of 28 October 2026; both providers since 4
+    /// November 2026).
+    ///
+    /// **The manager's AI provider that the owner chose in this first run is not asked again** (`FirstRunModel.chosenAI`).
+    /// A manager with no server gets it with its server: this Mac keeps it for the manager's setup
+    /// (`FleetStore.noteProvider`), which gives the two together by itself, as after a press on that provider's card
+    /// there. A manager that this first run's installer put on the hub's own server with that program ("1 server",
+    /// `hub.sh --runtime`) gets its sign-in now, as a press on that card asks for it, so that its setup opens on the
+    /// sign-in's steps. The window goes on when the hub has answered that request; a refusal leaves the setup on its
+    /// provider's page, where a press asks again. A hub that does not take a write at that moment gets no request, and
+    /// a second call while the request is on its way (the install page's own press) hands over at once
+    /// (`FirstRunHandover`).
     private func finish() {
-        store.firstRunHolds = false
-        let manager = store.state?.agents.first { $0.role == "manager" }?.name ?? "manager"
+        let line = store.state?.agents.first { $0.role == "manager" }
+        let manager = line?.name ?? "manager"
         // **A fleet on one server**: the installer of this first run put the manager on the hub's own server, so this
         // Mac never saw it with no server. Its first setup still fills the window and shows its steps, as the setup
         // of a manager that gets its first server does, until it runs (`FleetStore.noteFirstSetup`).
         if model.began, model.oneServer { store.noteFirstSetup(of: manager) }
+        // **The manager's own server that the one press made** is kept for this hub, whichever try made it: the setup of a
+        // manager with no server installs it by itself, and when no manager takes it (a later try chose 1 server), the
+        // provider's list of Add server and "Start again" still know it as this fleet's.
+        if model.managersServer != nil { keepManagersServer(for: store.hub) }
+        if line?.placed == false { noteManagersServer() }
+        switch FirstRunHandover.of(chosen: model.chosenAI, placed: line?.placed, runtime: line?.runtime,
+                                   installedOneServer: model.began && model.oneServer, writes: store.canWrite,
+                                   asked: signsIn) {
+        case .keep(let provider):
+            store.noteProvider(provider, for: manager)
+        case .signIn(let provider):
+            signsIn = true
+            Task {
+                // Only while the hub takes a write: the store then sends at once, and its request has its answer, or
+                // the hub's client gives up, within that client's own limit. So the window always goes on.
+                if store.canWrite {
+                    _ = await store.save(.machineSignin(agent: manager, runtime: provider, replace: false), queue: false)
+                }
+                leave(to: manager)
+            }
+            return
+        case .none: break
+        }
+        leave(to: manager)
+    }
+
+    /// The window is the app's again, at the manager's chat, where its setup shows until it runs.
+    private func leave(to manager: String) {
+        store.firstRunHolds = false
         store.destination = .agent(manager)
     }
 
@@ -639,6 +743,7 @@ struct FirstRunView: View {
             WelcomePage(programs: model.programs, setUp: { setUp() }, letAgent: { model.letAgent() })
         case .paste: PastePage(programs: model.programs, copied: model.promptCopied) { model.copyPrompt() }
         case .name: NameManagerPage(name: $model.managerName) { model.nameChosen() }
+        case .aiProvider: ManagerAIPage(name: model.managerName, marked: model.aiProvider) { model.aiChosen($0) }
         // The fleet is the hub and the manager at this point: the page draws the agents to come itself.
         case .servers:
             FleetServersPage(plan: FleetPlan(manager: model.managerName, agents: []), step: $model.serversStep) {
@@ -699,10 +804,15 @@ struct FirstRunView: View {
     private func back() {
         switch model.step {
         case .name: model.start(.welcome)
-        case .servers: model.start(.name)
+        case .aiProvider: model.start(.name)
+        case .servers: model.start(.aiProvider)
         case .network, .key: model.start(model.backFromNetwork)
         case .machine, .address: model.start(.cloud)
-        case .token: cloud.cancel(); model.start(.cloud)
+        // The manager's offer goes with the hub's; a build of the manager's server that runs is never ended here.
+        case .token:
+            cloud.cancel()
+            if managerCloud.stage == .choosing { managerCloud.cancel() }
+            model.start(.cloud)
         case .vps: vps.reset(); model.start(.cloud)
         // From a stopped install, to its form with what he typed (fix round 3, item 51): Back left the stop in place.
         case .installing: install.again(); vps.reset(); model.start(.cloud)
@@ -798,6 +908,7 @@ struct FirstRunView: View {
     /// VPS, at its public address.
     private func useExisting(_ server: CloudExisting) {
         guard let address = server.ipv4 else { return }
+        chosenServer = cloud.provider.map { ($0, server.id, address) }
         cloud.cancel(); vps.reset()
         vps.addressText = address; vps.tailnet = model.mac?.tailnet
         model.start(.vps)
@@ -810,20 +921,104 @@ struct FirstRunView: View {
         install.managerName = model.hubName
         install.oneServer = model.oneServer
         install.shape = model.shaped ? model.serversStep : nil
+        install.runtime = model.chosenAI
+        // The account's server that "Use this server" chose, when the install goes to its address.
+        install.provenServer = chosenServer.flatMap { $0.address == target.host ? ($0.provider, $0.id) : nil }
         install.installHub(store: store)
         model.start(.installing)
+    }
+
+    /// **One press makes every server of the fleet** (slice 2 of the one wizard): the hub's server, whose install
+    /// starts as soon as it is on the private network, and on 2 servers and 1 per agent the manager's own server, made
+    /// from that moment on (`makeManagersServer`).
+    private func makeFleet() {
+        let managers = model.makesManagersServer
+        cloud.makeNew { target in
+            startInstall(target)
+            if managers { makeManagersServer(hubOnNetwork: target.host) }
+        }
+    }
+
+    /// **The manager's own server, made under the hood once the hub's server is on the private network**: its name is
+    /// then not the hub's (`FleetOnTailscale.freeName` reads that network), and its build record and the provider's
+    /// note of it are kept for the hub's address that the claim gives (`StartAgain.hubAddress`), as the hub's own build
+    /// keeps its server. The manager's setup then installs it by itself (`FleetStore.madeServer`, `AddServerView`),
+    /// with no VPS page and no second server. A build that stops leaves that setup its own pages, where the provider's
+    /// list offers the server that this build made (`MadeServers`). A second try of the hub's server in this run takes
+    /// the manager's server of the first try again, for the new hub's address, and makes no other.
+    private func makeManagersServer(hubOnNetwork host: String) {
+        guard let future = StartAgain.hubAddress(onNetwork: host) else { return }
+        model.managersHub = future
+        if model.managersServer != nil {
+            keepManagersServer(for: future)
+            noteManagersServer()
+            return
+        }
+        // A build of it that still runs refuses this one, and its end keeps its server for this address.
+        guard let provider = managerCloud.provider else { return }
+        managerCloud.makeNew(for: future, made: { name, id in
+            model.managersServerMade = (name, id, provider)
+            MadeServers.note(name, id: id, hub: future)
+        }) { target in
+            guard let made = model.managersServerMade else { return }
+            model.managersServer = FleetStore.MadeServer(name: made.name, address: target.host)
+            // A newer try of the hub's server came while this build ran: the server is that hub's now.
+            if let newest = model.managersHub, newest != future { keepManagersServer(for: newest) }
+            noteManagersServer()
+        }
+    }
+
+    /// The manager's own server of this run, kept for another try's hub address: its note at the provider's list, and
+    /// its build record, by its id.
+    private func keepManagersServer(for hub: URL) {
+        guard let made = model.managersServerMade else { return }
+        MadeServers.note(made.name, id: made.id, hub: hub)
+        if let id = made.id { BuildRecords.shared.noteJoined(serverID: id, provider: made.provider, hub: hub.absoluteString) }
+    }
+
+    /// **The manager's own server goes to its setup** (`FleetStore.noteMadeServer`) once the hub has a manager with no
+    /// server: at the hand-over, or as the server comes on the private network after it.
+    private func noteManagersServer() {
+        guard let server = model.managersServer,
+              let manager = store.state?.agents.first(where: { $0.role == "manager" && !$0.placed })?.name else { return }
+        // Kept for the hub that it goes to, this one: also when another try of the hub's server made it, or when a
+        // later try took the account's list, whose press makes the hub's server alone.
+        keepManagersServer(for: store.hub)
+        store.noteMadeServer(server, for: manager)
+    }
+
+    /// **The manager's own server's offer opens with the hub's**, on 2 servers and 1 per agent: the same provider, once
+    /// the provider took the token. A build of that server that runs is never touched.
+    private func opensManagersChoice() {
+        guard model.makesManagersServer, case .token(let provider) = model.step, cloud.stage == .choosing,
+              cloud.tokenTaken else { return }
+        switch managerCloud.stage {
+        case .token:
+            managerCloud.open(provider, use: .agent)
+        case .choosing where managerCloud.provider != provider:
+            managerCloud.cancel()
+            managerCloud.open(provider, use: .agent)
+        case .choosing, .making, .joining:
+            break
+        }
     }
 
     private func token(_ provider: CloudProvider) -> some View {
         let building = cloudBuilds
         let choosing = cloud.stage == .choosing
         let head = tokenHead(provider)
-        return SetupStep(title: head.title, waits: head.waits) {
+        // The page "Your fleet" draws the slider page's boxes, at that page's width.
+        let width = choosing && showsFleet ? ShapeMetrics.serversWidth : SetupMetrics.width
+        return SetupStep(title: head.title, waits: head.waits, width: width) {
             // The provider's own logo over its pages, as Add server has it (the owner, 10 November 2026).
             CloudMark(provider: provider, size: SetupMetrics.mark)
         } content: {
             if building {
                 CloudBuilding(stage: cloud.stage, provider: cloud.provider, showsStatus: true)
+            } else if choosing, showsFleet {
+                FirstFleetChoice(cloud: cloud, managers: model.makesManagersServer ? managerCloud : nil,
+                                 plan: FleetPlan(manager: model.managerName, agents: []), step: model.serversStep,
+                                 make: makeFleet)
             } else if choosing {
                 CloudChoice(cloud: cloud, job: .hub, fleet: [], makeNew: { cloud.makeNew { startInstall($0) } },
                             use: useExisting)
@@ -838,6 +1033,11 @@ struct FirstRunView: View {
             }
             // While the list shows, its own press carries the line (`CloudChoice`).
             if let failure = cloud.failure, !choosing || cloud.offer == nil { SetupWarning(failure) }
+            // The offer of the manager's own server that could not be read: it is read again by itself.
+            if choosing, showsFleet, model.makesManagersServer, managerCloud.offer == nil,
+               let failure = managerCloud.failure, failure != cloud.failure {
+                SetupWarning(failure)
+            }
         }
     }
 

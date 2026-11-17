@@ -29,7 +29,7 @@ public enum AppPlace: Hashable, Sendable {
 
     /// A section of Settings, by the raw value of `SettingsTab` in the app (a test reads the app's source).
     public enum SettingsPage: String, CaseIterable, Sendable {
-        case general, servers, backup, status, secrets, knowledge, apps, people, team
+        case general, servers, backup, status, secrets, knowledge, apps, people, team, help
     }
 
     /// One app's page of Settings, Apps, by the raw value of `AppsGroup` in the app.

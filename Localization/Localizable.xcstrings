@@ -2124,6 +2124,16 @@
         }
       }
     },
+    "%lld done today" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld hechas hoy"
+          }
+        }
+      }
+    },
     "%lld failed" : {
       "localizations" : {
         "es" : {
@@ -7490,16 +7500,6 @@
         }
       }
     },
-    "Error codes, versions and counts. Never your work, names or keys." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Códigos de error, versiones y recuentos. Nunca tu trabajo, nombres ni claves."
-          }
-        }
-      }
-    },
     "Error reports" : {
       "localizations" : {
         "es" : {
@@ -9496,6 +9496,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Retenida"
+          }
+        }
+      }
+    },
+    "Help" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayuda"
+          }
+        }
+      }
+    },
+    "Help improve Founderizer" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayudar a mejorar Founderizer"
           }
         }
       }
@@ -11566,6 +11586,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Crear 1 servidor y mover 1 agente"
+          }
+        }
+      }
+    },
+    "Make 2 servers" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crear 2 servidores"
           }
         }
       }
@@ -15140,16 +15170,6 @@
         }
       }
     },
-    "Provider" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Proveedor"
-          }
-        }
-      }
-    },
     "Provider installed" : {
       "localizations" : {
         "es" : {
@@ -16326,6 +16346,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hay informes que esperan una decisión"
+          }
+        }
+      }
+    },
+    "Report…" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Informar…"
           }
         }
       }
@@ -17510,16 +17540,6 @@
         }
       }
     },
-    "Send to Founderizer's developers" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enviar a los desarrolladores de Founderizer"
-          }
-        }
-      }
-    },
     "Send to you" : {
       "localizations" : {
         "es" : {
@@ -17606,6 +17626,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enviando…"
+          }
+        }
+      }
+    },
+    "Sends error codes, versions and counts to Founderizer. Never your work, names or keys." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envía a Founderizer códigos de error, versiones y recuentos. Nunca tu trabajo, nombres ni claves."
           }
         }
       }
@@ -25910,6 +25940,16 @@
         }
       }
     },
+    "Waits for you: %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Te espera: %@"
+          }
+        }
+      }
+    },
     "Warning" : {
       "localizations" : {
         "es" : {
@@ -26456,6 +26496,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sin uno no puede contactar con %@."
+          }
+        }
+      }
+    },
+    "Work" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trabajo"
           }
         }
       }

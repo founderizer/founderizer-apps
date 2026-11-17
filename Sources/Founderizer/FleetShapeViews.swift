@@ -62,8 +62,9 @@ enum ShapeMetrics {
 ///
 /// **It asks for no AI provider** (the owner, 15 November 2026, of the two provider cards of picture 01: "the
 /// codex/claude etc will be on a future step because we're adding so many AI providers and options , right??? like
-/// grok google etc.. and during onboarding we don't even have a server yet!"): the manager's own setup asks for it,
-/// once its server runs.
+/// grok google etc.. and during onboarding we don't even have a server yet!"): the page after it does
+/// (`ManagerAIPage`), since his word of 16 November 2026 ("agent onboarding should ask first for the name and AI
+/// provider before the server page").
 struct NameManagerPage: View {
     @Binding var name: String
     /// The hub's own words when it refused the name (the manager's own setup, where Continue renames the manager).
@@ -91,6 +92,41 @@ struct NameManagerPage: View {
                     .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
                     .opacity(agentName == nil ? 0 : 1).disabled(agentName == nil || busy).accessibilityHidden(agentName == nil)
                     .accessibilityIdentifier("first-run-manager-continue")
+            }
+        }
+    }
+}
+
+// MARK: - The manager's AI provider
+
+/// **The page "<Name>'s AI provider" of the first run**, after "Name your manager" (the owner, 16 November 2026: "agent
+/// onboarding should ask first for the name and AI provider before the server page", and his yes of the same day to
+/// the one wizard's line of steps): the manager's own page of its AI provider (`AgentSetupWizard`), with its title, its
+/// one line and its two cards, under the manager's mark of "Name your manager". A press on a card is the way on. The
+/// card that the owner chose the last time on this Mac carries the check mark, as the name and the slider keep theirs;
+/// before the first choice on this Mac, none does.
+struct ManagerAIPage: View {
+    /// The manager's name, as the owner typed it on "Name your manager".
+    let name: String
+    /// The card with the check mark (`claude` or `codex`), or none.
+    let marked: String?
+    let choose: (String) -> Void
+
+    private var agentName: String { ManagerName.agentName(name) ?? ManagerName.fallback }
+    private var shown: String { ManagerName.shown(name) }
+
+    var body: some View {
+        SetupStep(title: String(l10n: "\(shown)'s AI provider"),
+                  detail: String(l10n: "The AI that \(shown) works with. You sign in with your own account.")) {
+            AgentGlyph(name: agentName, size: SetupMetrics.mark, dot: false)
+                .environment(\.glyphTeam, [agentName])
+        } content: {
+            HStack(alignment: .top, spacing: 14) {
+                ForEach(FirstRunModel.aiChoices, id: \.self) { provider in
+                    ProviderCard(provider: provider, marked: provider == marked, id: "first-run-ai-\(provider)") {
+                        choose(provider)
+                    }
+                }
             }
         }
     }
@@ -162,12 +198,21 @@ struct FleetServersPage: View {
 /// name over its box, a server that the change makes says "New server" and has an edge in the dots of the agents to
 /// come. While the change runs, an agent that is not on its new server yet is faint (`later`), and one that waits for
 /// the owner wears its dot (`waits`). Without `change`, the first run's pages are drawn as before.
+///
+/// **The servers that a press makes** (`under`, the first run's page "Your fleet"; slice 2 of the one wizard, the
+/// owner's "that is brilliant!" of 16 November 2026 to the build page's picture): a box with a line under it is a
+/// server that the press makes, with its edge in dots, and the line says its size and its price ("CX23 · €5.49 a
+/// month"). A box with none, an agent's server to come in "1 per agent", stays as before.
 struct ServerBoxes: View {
     let plan: FleetPlan
     let step: ServersStep
     var change: ShapeChangePlan?
     var later: Set<String> = []
     var waits: [String: AgentPresence] = [:]
+    /// The line under each box, by the box's place; nil, or no entry, for none.
+    var under: [String?] = []
+
+    private func line(_ index: Int) -> String? { under.indices.contains(index) ? under[index] : nil }
 
     /// `named`: an agent of a fleet that runs, by its own name (a later change).
     private enum Tile: Hashable { case hub, manager, agent(Int), next, named(String) }
@@ -199,42 +244,55 @@ struct ServerBoxes: View {
 
     var body: some View {
         CenteredRows(spacing: ShapeMetrics.serverGap) {
-            ForEach(Array(boxes.enumerated()), id: \.offset) { _, box in
-                VStack(spacing: 10) {
-                    HStack(spacing: 5) {
-                        Image(systemName: box.mac ? "desktopcomputer" : "server.rack").font(IconMetrics.symbol(ShapeMetrics.kindMark))
-                        Text(box.title ?? (box.mac ? String(l10n: "Mac") : String(l10n: "Server"))).font(ShapeMetrics.underFont)
-                    }
-                    .foregroundStyle(FleetStyle.muted).accessibilityHidden(true)
+            ForEach(Array(boxes.enumerated()), id: \.offset) { index, box in
+                VStack(spacing: 8) {
                     VStack(spacing: 10) {
-                        ForEach(Array(stride(from: 0, to: box.tiles.count, by: Self.row)), id: \.self) { start in
-                            HStack(alignment: .top, spacing: 4) {
-                                ForEach(Array(box.tiles[start..<min(start + Self.row, box.tiles.count)].enumerated()), id: \.offset) { _, tile in
-                                    VStack(spacing: 7) {
-                                        mark(tile)
-                                        Text(name(tile)).font(ShapeMetrics.nameFont)
-                                            .foregroundStyle(tile == .next ? FleetStyle.muted : FleetStyle.text)
-                                            .lineLimit(1).minimumScaleFactor(0.8)
+                        ZStack {
+                            // A box with a line under it is at least as wide as that line: the line of each box then
+                            // stands under its own box, and two lines of narrow boxes never read as one.
+                            if let line = line(index) { Text(line).font(ShapeMetrics.underFont).hidden() }
+                            HStack(spacing: 5) {
+                                Image(systemName: box.mac ? "desktopcomputer" : "server.rack").font(IconMetrics.symbol(ShapeMetrics.kindMark))
+                                Text(box.title ?? (box.mac ? String(l10n: "Mac") : String(l10n: "Server"))).font(ShapeMetrics.underFont)
+                            }
+                            .foregroundStyle(FleetStyle.muted).accessibilityHidden(true)
+                        }
+                        VStack(spacing: 10) {
+                            ForEach(Array(stride(from: 0, to: box.tiles.count, by: Self.row)), id: \.self) { start in
+                                HStack(alignment: .top, spacing: 4) {
+                                    ForEach(Array(box.tiles[start..<min(start + Self.row, box.tiles.count)].enumerated()), id: \.offset) { _, tile in
+                                        VStack(spacing: 7) {
+                                            mark(tile)
+                                            Text(name(tile)).font(ShapeMetrics.nameFont)
+                                                .foregroundStyle(tile == .next ? FleetStyle.muted : FleetStyle.text)
+                                                .lineLimit(1).minimumScaleFactor(0.8)
+                                        }
+                                        .frame(width: ShapeMetrics.serverTile)
+                                        .opacity(agent(tile).map(later.contains) == true ? 0.35 : 1)
                                     }
-                                    .frame(width: ShapeMetrics.serverTile)
-                                    .opacity(agent(tile).map(later.contains) == true ? 0.35 : 1)
                                 }
                             }
                         }
                     }
-                }
-                .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 12)
-                .background(ShapeMetrics.islandFill, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
-                .overlay {
-                    if box.new {
-                        RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(ShapeMetrics.line,
-                            style: StrokeStyle(lineWidth: ShapeMetrics.lineWidth, lineCap: .round, dash: ShapeMetrics.dots))
-                    } else {
-                        RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(ShapeMetrics.islandEdge, lineWidth: 0.5)
+                    .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 12)
+                    .background(ShapeMetrics.islandFill, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+                    .overlay {
+                        if box.new || line(index) != nil {
+                            RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(ShapeMetrics.line,
+                                style: StrokeStyle(lineWidth: ShapeMetrics.lineWidth, lineCap: .round, dash: ShapeMetrics.dots))
+                        } else {
+                            RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(ShapeMetrics.islandEdge, lineWidth: 0.5)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(box.title ?? (box.mac ? String(l10n: "A Mac") : String(l10n: "A server")))
+                    // Every box of a page with lines keeps the line's room, so that the boxes of a row stay level.
+                    if !under.isEmpty {
+                        Text(line(index) ?? " ").font(ShapeMetrics.underFont).foregroundStyle(FleetStyle.muted)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                            .accessibilityHidden(line(index) == nil)
                     }
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(box.title ?? (box.mac ? String(l10n: "A Mac") : String(l10n: "A server")))
             }
         }
         // Only a change's own states: without one, each glyph keeps what the window knows of its agent.

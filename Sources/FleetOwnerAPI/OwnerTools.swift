@@ -216,10 +216,11 @@ public final class OwnerTools: @unchecked Sendable {
     }
 
     /// **A write of the link** (`save_bot_token`, `prepare_problem_report`, `save_secret`, `grant_secret`,
-    /// `share_secret`): its fields checked, its value read on this Mac from its source, and one call to the app with
-    /// the fields (never `path`) and the value part; with `from` clipboard, the fields alone, because the app reads
-    /// the clipboard itself; for a tool with no value, the fields alone. Every refusal here is a fixed sentence that
-    /// quotes nothing of the request. The value's bytes are wiped when the call ends (`OwnerChannel.Value`).
+    /// `share_secret`, `answer_secret_request`): its fields checked, its value read on this Mac from its source,
+    /// and one call to the app with the fields (never `path`) and the value part; with `from` clipboard, the fields
+    /// alone, because the app reads the clipboard itself; for a tool with no value, the fields alone. Every refusal
+    /// here is a fixed sentence that quotes nothing of the request. The value's bytes are wiped when the call ends
+    /// (`OwnerChannel.Value`).
     ///
     /// **Each tool has its own branch, by its name**, and the last one is `save_bot_token`'s by its name too: a link
     /// tool with no branch gets no other tool's plan and no other tool's words.
@@ -247,6 +248,14 @@ public final class OwnerTools: @unchecked Sendable {
             // JSON null for a take-back. It reads no file and not the standard input. The app checks the fields
             // again, signs and writes.
             switch ShareSecret.plan(arguments?.object ?? [:]) {
+            case .failure(let refusal): return (refusal.text, true)
+            case .success(let send): return context.appLink.call(tool: name, fields: send)
+            }
+        case AnswerSecret.name:
+            // `answer_secret_request` has three fields and no value: the program checks them and sends them, with
+            // `need` as an integer and `give` as an object of the levels' words. It reads no file and not the
+            // standard input. The app checks the fields again, signs the gives, writes them and answers the request.
+            switch AnswerSecret.plan(arguments?.object ?? [:]) {
             case .failure(let refusal): return (refusal.text, true)
             case .success(let send): return context.appLink.call(tool: name, fields: send)
             }

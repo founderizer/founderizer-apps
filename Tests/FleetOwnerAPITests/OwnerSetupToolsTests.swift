@@ -61,10 +61,26 @@ struct OwnerSetupBoardTests {
         #expect(Self.facts(Self.page(.servers)).json(change: 1, map: true)["first_run"]?["layout"] == .null)
     }
 
+    /// **The manager's AI provider** is the owner's choice on the page `ai_provider` by its fixed name (the program's
+    /// name on a server, as `runtime` of `install_hub` has it), null before that choice and for a first run that does
+    /// not show.
+    @Test func theAIProviderIsAFixedNameOrNull() {
+        for provider in FirstRunAI.allCases {
+            var state = Self.page(.servers)
+            state.aiProvider = provider
+            #expect(Self.facts(state).json(change: 1, map: true)["first_run"]?["ai_provider"] == .string(provider.rawValue))
+            state.shows = false
+            #expect(Self.facts(state).json(change: 1, map: true)["first_run"]?["ai_provider"] == .null)
+        }
+        #expect(FirstRunAI.allCases.map(\.rawValue) == ["claude", "codex"])
+        #expect(Self.facts(Self.page(.aiProvider)).json(change: 1, map: true)["first_run"]?["ai_provider"] == .null)
+    }
+
     @Test func theAnswerHasTheseKeysAndNoOther() {
         let allowedTop: Set<String> = ["change", "app", "hub", "first_run", "programs", "place", "places", "over",
                                        "show", "in_front"]
-        let allowedFirst: Set<String> = ["shows", "page", "title", "works", "began", "holds_window", "provider", "layout"]
+        let allowedFirst: Set<String> = ["shows", "page", "title", "works", "began", "holds_window", "provider", "layout",
+                                         "ai_provider"]
         var states: [SetupFirstRun] = [.none]
         for page in FirstRunPage.allCases {
             for title in [nil] + FirstRunPage.titles.sorted() {
@@ -90,6 +106,7 @@ struct OwnerSetupBoardTests {
                     if let title = first["title"]?.string { #expect(FirstRunPage.titles.contains(title)) }
                     if let provider = first["provider"]?.string { #expect(SetupFacts.providers.contains(provider)) }
                     #expect(first["layout"] == .null)
+                    #expect(first["ai_provider"] == .null)
                     #expect(json["hub"] == .string(hub.rawValue))
                     #expect(json["place"] == .string("none") && json["places"] == .array([]))
                     #expect(json["over"] == .string("nothing"))
@@ -213,7 +230,7 @@ struct OwnerSetupBoardTests {
         #expect(json["first_run"] == .object(["shows": .bool(false), "page": .null, "title": .null,
                                               "works": .bool(false), "began": .bool(false),
                                               "holds_window": .bool(false), "provider": .null,
-                                              "layout": .null]))
+                                              "layout": .null, "ai_provider": .null]))
         #expect(json["app"] == .object(["version": .string("0.1.300"), "build": .int(301)]))
         #expect(json["programs"] == .array([.string("claude_code"), .string("codex")]))
     }
@@ -232,10 +249,11 @@ struct OwnerSetupBoardTests {
         let pattern = try NSRegularExpression(pattern: #"^\s*case (\w+)"#, options: .anchorsMatchLines)
         let cases = pattern.matches(in: body, range: NSRange(body.startIndex..., in: body))
             .map { (body as NSString).substring(with: $0.range(at: 1)) }
-        #expect(cases.count == 14)
+        #expect(cases.count == 15)
         #expect(Set(cases) == Set(FirstRunPage.ofStep.keys))
         #expect(Set(FirstRunPage.ofStep.values).union([.building]) == Set(FirstRunPage.allCases))
-        #expect(Set(FirstRunPage.allCases.map(\.rawValue)) == ["welcome", "paste", "name", "servers", "vps", "tailscale", "tailscale_key",
+        #expect(Set(FirstRunPage.allCases.map(\.rawValue)) == ["welcome", "paste", "name", "ai_provider", "servers", "vps",
+                                                               "tailscale", "tailscale_key",
                                                                "token", "building", "other_vps", "machine",
                                                                "installing", "address", "done", "restore"])
     }
@@ -390,8 +408,8 @@ struct OwnerSetupBoardTests {
     /// stays allowed.
     @Test func setupShowChangesThePageOnlyFromAStartPage() {
         let others = FirstRunPage.allCases.filter { !SetupShow.startPages.contains($0) }
-        #expect(Set(others) == [.name, .servers, .tailscale, .tailscaleKey, .token, .building, .otherVPS, .machine, .installing,
-                                .address, .done, .restore])
+        #expect(Set(others) == [.name, .aiProvider, .servers, .tailscale, .tailscaleKey, .token, .building, .otherVPS,
+                                .machine, .installing, .address, .done, .restore])
         for page in others {
             for target in ["welcome", "name"] {
                 let words = SetupShow.refusal(page: target, seen: page.rawValue, firstRun: Self.page(page))
@@ -550,7 +568,7 @@ final class OwnerSetupProgramTests {
 
     @Test func theTwoToolsAreReadsOfTheSetOwner() throws {
         let listed = tools(Link([.nothingListens])).listed
-        #expect(listed.count == 67 + 3 + 5)                 // and the link's five write tools
+        #expect(listed.count == 67 + 3 + 6)                 // and the link's six write tools
         for name in OwnerSetupTools.names {
             let tool = try #require(listed.first { $0.name == name })
             #expect(tool.annotations == .object(["readOnlyHint": .bool(true)]))
@@ -571,7 +589,7 @@ final class OwnerSetupProgramTests {
     @Test func toolsAndCallTakeThemAndWriteDoesNot() throws {
         let link = Link([.answer(.result(Self.state))])
         let (status, out, _) = try run(["tools"], link: link)
-        #expect(status == 0 && out.count == 75)
+        #expect(status == 0 && out.count == 76)
         #expect(out.filter { $0.hasPrefix("call ") }.count == 7)
         #expect(out.contains { $0.hasPrefix("call setup_state: Where the setup of the fleet stands") })
         #expect(out.contains { $0.hasPrefix("call setup_show: Asks macOS to bring the Founderizer app to the front") })

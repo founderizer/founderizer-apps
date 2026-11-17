@@ -58,8 +58,9 @@ enum GrantSigning {
     }
 
     /// **The error of `send` that says "not signed, and nothing was sent"**: the owner key of this Mac could not
-    /// be read, or it made no signature. It has no words: no view gets it, only the link tools `grant_secret` and
-    /// `share_secret` (`LinkTools.grantDesk`, `LinkTools.shareDesk`), which have their own.
+    /// be read, or it made no signature. It has no words: no view gets it, only the link tools `grant_secret`,
+    /// `share_secret` and `answer_secret_request` (`LinkTools.grantDesk`, `LinkTools.shareDesk`,
+    /// `LinkTools.answerDesk`), which have their own.
     struct NotSigned: Error {}
 
     /// **One statement of one agent's grant of one secret, made, signed with the owner key of this Mac and sent**,

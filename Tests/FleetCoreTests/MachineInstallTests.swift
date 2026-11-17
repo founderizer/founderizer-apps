@@ -940,6 +940,39 @@ struct MachineInstallTests {
         #expect(a.steps.map(\.id) == b.steps.map(\.id))
     }
 
+    /// **The manager's AI program goes to the installer with one server** (`hub.sh --runtime`, the first run's page of
+    /// the manager's AI provider): the installer puts the manager on the hub's own server with it, in the plan and in the
+    /// run, after the name. With the other steps the manager gets its program with its own server, as `install_hub` of
+    /// the owner's own agent has it, so the line is the line of before; and only the two programs that `hub.sh` takes
+    /// go into a line, which stands in single quotes on the server.
+    @Test func theInstallerGetsTheManagersProgramWithOneServer() throws {
+        func lines(_ runtime: String?, oneServer: Bool = true, name: String? = "juno") throws -> (plan: String, start: String) {
+            let plan = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: InstallPlan.defaultSource,
+                                       authKey: nil, managerName: name, oneServer: oneServer,
+                                       shape: oneServer ? .one : .two, runtime: runtime)
+            guard case .run(let check) = try #require(plan.steps.first { $0.id == "plan" }).action,
+                  case .detach(let start) = try #require(plan.steps.first { $0.id == "start" }).action
+            else { throw InstallError.step("plan", "the hub's plan has no plan step or no start step") }
+            return (check, start)
+        }
+        let before = try lines(nil)
+        for program in ["codex", "claude"] {
+            let one = try lines(program)
+            #expect(one.plan.hasSuffix("/hub.sh --check --manager-name juno --runtime \(program)"))
+            #expect(one.start.contains("/hub.sh --manager-name juno --runtime \(program) < /dev/null > "))
+            #expect(one.plan.replacingOccurrences(of: " --runtime \(program)", with: "") == before.plan)
+            #expect(one.start.replacingOccurrences(of: " --runtime \(program)", with: "") == before.start)
+            #expect(try lines(program, name: nil).plan.hasSuffix("/hub.sh --check --runtime \(program)"))
+            // Two servers, or one for each agent: no program in the line.
+            let two = try lines(program, oneServer: false), twoBefore = try lines(nil, oneServer: false)
+            #expect(two == twoBefore)
+            #expect(!two.plan.contains("--runtime") && !two.start.contains("--runtime"))
+        }
+        for bad in ["Codex", "grok", "", " codex", "codex'; reboot; '"] {
+            #expect(try lines(bad) == before, "\(bad)")
+        }
+    }
+
     /// **The hub keeps the slider's step from its first install on**: "2 servers" and "1 per agent" go into the plan
     /// and into the run as `FLEET_SHAPE_STEP`, before the word of the layout. "1 server" has no such word, because the
     /// word for one server writes the step and the installer refuses it with another step; and an install whose owner

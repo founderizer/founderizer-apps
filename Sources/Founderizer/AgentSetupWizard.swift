@@ -484,24 +484,10 @@ struct AgentSetupWizard: View {
     /// one; else the one that the agent has now.
     private var markedProvider: String { line?.placed == false ? store.chosenProvider(agent) ?? runtime : runtime }
 
+    /// A press while the hub cannot take a write waits for it (`choose`).
     private func card(_ provider: String) -> some View {
-        Button { Task { await choose(provider) } } label: {
-            HStack(spacing: 12) {
-                ProviderIcon(runtime: provider, size: 28)
-                Text(providerName(provider)).font(SetupMetrics.choiceFont).foregroundStyle(FleetStyle.text)
-                Spacer(minLength: 8)
-                if provider == markedProvider {
-                    Image(systemName: "checkmark").font(IconMetrics.symbol(12, weight: .semibold)).foregroundStyle(FleetStyle.muted)
-                        .accessibilityLabel("Now")
-                }
-            }
-            .padding(18).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-        }
-        .buttonStyle(FleetCardButtonStyle())
-        // **They keep their look while the page reads** (T-01): they went grey for 40 ms whenever another page's request
-        // was on its way. A press while the hub cannot take a write waits for it (`choose`).
-        .disabled(busy)
-        .accessibilityIdentifier("agent-setup-provider-\(provider)")
+        ProviderCard(provider: provider, marked: provider == markedProvider, busy: busy,
+                     id: "agent-setup-provider-\(provider)") { Task { await choose(provider) } }
     }
 
     // MARK: the sign-in

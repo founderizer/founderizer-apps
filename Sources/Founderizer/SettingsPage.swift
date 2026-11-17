@@ -13,8 +13,12 @@ import SwiftUI
 /// his agents work in are. **The fleet's and this Mac's updates were a tenth, Updates, until 15 November 2026** (the
 /// owner: "we can remove the settings > Updates page and move the automatic updates switch to General, where we can
 /// also see the current versions"): an update is taken from the sidebar's Update, and General has the rest.
+///
+/// **Help is the last section since 16 November 2026** (the owner's "Build A", to the picture of Settings › Help with
+/// Report a problem and Help improve Founderizer): the two ways to tell Founderizer about a problem, side by side. The
+/// switch of error reports was a group of General until then.
 enum SettingsTab: String, CaseIterable, Hashable {
-    case general, servers, backup, status, secrets, knowledge, apps, people, team
+    case general, servers, backup, status, secrets, knowledge, apps, people, team, help
 
     /// A section by its name, also by the names of the pages that became parts of a section: `mcps` is Apps,
     /// `updates` and `subscription`, which are gone, General, and `devices` Servers.
@@ -38,6 +42,7 @@ enum SettingsTab: String, CaseIterable, Hashable {
         case .people: String(l10n: "People")
         case .team: String(l10n: "Reporting lines")
         case .status: String(l10n: "System status")
+        case .help: String(l10n: "Help")
         }
     }
 
@@ -54,18 +59,21 @@ enum SettingsTab: String, CaseIterable, Hashable {
         case .people: "person.crop.circle"
         case .team: "arrow.triangle.branch"
         case .status: "waveform.path.ecg"
+        case .help: "lifepreserver"
         }
     }
 
     /// The sections that this hub offers. Two of them are always there: General, which is this Mac's own
     /// settings, and System status, which answers whether this Mac reaches the hub at all — and carries the one
-    /// field that puts that right, so it has to be reachable exactly when nothing else is.
+    /// field that puts that right, so it has to be reachable exactly when nothing else is. Help is always there too:
+    /// Report a problem needs no hub, and its window says what is wrong when the hub does not answer.
     static func available(features: [String]) -> [SettingsTab] {
         allCases.filter { tab in
             switch tab {
             case .general: true
             case .backup: true
             case .status: true
+            case .help: true
             case .servers: features.contains(Servers.feature) || features.contains("machines")
                 || features.contains(OwnerDevices.feature)
             case .secrets: features.contains("secrets")
@@ -118,6 +126,8 @@ struct SettingsPage: View {
     private var profile: OwnerProfilePage? {
         get { store.reading("profile.page") } nonmutating set { store.keep(newValue, as: "profile.page") }
     }
+    /// Report a problem's window, which Help's row opens as the Help menu does.
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         let tabs = SettingsTab.available(features: store.state?.ui_features ?? [])
@@ -146,6 +156,7 @@ struct SettingsPage: View {
                     case .people: PeoplePage(store: store)
                     case .team: TeamEditor(store: store)
                     case .status: HealthView(store: store)
+                    case .help: FleetPage("Help") { help }
                     }
                 }
             }
@@ -187,7 +198,7 @@ struct SettingsPage: View {
         }
         // The switch of error reports, read here and not by its section, which draws nothing before a reading.
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(shown.rawValue)/\(offersErrorReports)") {
-            guard shown == .general, offersErrorReports else { return }
+            guard shown == .help, offersErrorReports else { return }
             await ErrorReportsModel.of(store).poll(store: store)
         }
     }
@@ -246,11 +257,6 @@ struct SettingsPage: View {
             // versions"); Settings › Updates is gone. It reads the releases route, from a hub that has it; this Mac's
             // build shows from every hub.
             UpdatesSection(store: store)
-            // Error reports, off until he turns them on (his "Yes, as drawn" of 16 November 2026), while the hub has the
-            // switch (owner feature error_reports).
-            if store.state?.ui_features?.contains(ErrorReportsState.feature) == true {
-                ErrorReportsSection(store: store)
-            }
             // Owner feature default_models: a row for each provider that his servers report, and for one whose default
             // stays set while none does. No section while there is no row.
             if let defaults, !defaults.runtimes.isEmpty {
@@ -261,6 +267,22 @@ struct SettingsPage: View {
             if let channels, !channels.accounts.isEmpty {
                 ChannelsSettings(store: store, channels: channels).id(store.hub)
             }
+        }
+    }
+
+    /// **Settings › Help** (the owner's "Build A" of 16 November 2026, to its picture): Report a problem, whose Report…
+    /// opens the window that Help → Report a problem… opens, and under it the group Error reports with its one switch,
+    /// Help improve Founderizer, while the hub has the switch (owner feature error_reports). The row of Report a problem
+    /// stands with every hub and with none: the window needs no hub to say what is wrong.
+    @ViewBuilder private var help: some View {
+        FormSection {
+            FormRow("Report a problem", symbol: "exclamationmark.bubble") {
+                Button("Report…") { openWindow(id: FounderizerApp.reportWindow) }
+                    .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("help-report-problem")
+            }
+        }
+        if offersErrorReports {
+            ErrorReportsSection(store: store)
         }
     }
 }

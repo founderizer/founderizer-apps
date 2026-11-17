@@ -6,9 +6,10 @@ import MachO
 // ---------------------------------------------------------------- the switch
 
 /// **Error reports** (the owner's "Yes, as drawn" of 16 November 2026, to the picture `P3-error-reports-switch.png`):
-/// Settings › General › Error reports › Send to Founderizer's developers. It is off until the owner turns it on, and
-/// only that switch turns it on. While it is on, the crashes of this app that MetricKit gives it go to our own site as
-/// codes and counts (`ErrorReport`): no text of a crash, no work, no name and no key.
+/// Settings › Help › Error reports › Help improve Founderizer (in General until his "Build A" of the same day). It is
+/// off until the owner turns it on, and only that switch turns it on. While it is on, the crashes of this app that
+/// MetricKit gives it go to our own site as codes and counts (`ErrorReport`): no text of a crash, no work, no name and
+/// no key.
 ///
 /// `GET /ui/error-reports?db=<generation>` (owner feature `error_reports`) answers `{"send", "db"}`: whether the switch
 /// is on, for that generation (a missing or another generation is the hub's 409 `hub_changed`, as for every owner
@@ -361,9 +362,11 @@ extension ErrorReport {
     }
 
     /// What the file holds, each entry checked again; nothing for no file, a larger one or one that does not read.
+    /// Only a regular file is read, with no wait (`KeptFile`), and the size is the opened file's own: it was asked
+    /// of the file's name before, so a link passed with its own few bytes, and the file behind it was then read
+    /// whole, whatever its size.
     public static func kept(_ file: URL = keptFile) -> [Crash] {
-        guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? NSNumber,
-              size.intValue <= 2 * maxBytes, let data = try? Data(contentsOf: file),
+        guard let data = KeptFile.bytes(of: file, atMost: 2 * maxBytes),
               let crashes = try? JSONDecoder().decode([Crash].self, from: data) else { return [] }
         return merged(crashes.compactMap(\.checked))
     }

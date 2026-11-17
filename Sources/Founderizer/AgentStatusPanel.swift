@@ -57,14 +57,16 @@ struct AgentStatusPanel: View {
 
     var body: some View {
         let asked = askedCard(agent)
+        let work = store.state.map { WorkCard($0, agent: agent, asks: store.asks) }
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if let current = store.state?.agents.first(where: { $0.name == agent }) { content(current, asked: asked) }
+                if let current = store.state?.agents.first(where: { $0.name == agent }) { content(current, asked: asked, work: work) }
                 else { Text("This hub does not list \(agent.agentLabel).").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
             }.padding(.horizontal, 16).padding(.top, FleetSpace.underBand + FleetSpace.lights).padding(.bottom, 16)
                 // **A row of Asked that comes or goes fades, and the cards under it move with it**, not in one frame:
                 // the column stays, so the change of the card's rows is its to move. Nothing moves under Reduce Motion.
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: asked.rows.map(\.id) + (asked.waiting > 0 ? ["waiting"] : []))
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2),
+                           value: asked.rows.map(\.id) + (asked.waiting > 0 ? ["waiting"] : []) + (work.map(Self.workKeys) ?? []))
         }
         // Its cards a step lighter than a page's, so they stand out from the rail they stand on (fix round 2).
         .environment(\.cardFill, FleetStyle.chrome)
@@ -87,7 +89,7 @@ struct AgentStatusPanel: View {
         guard let state = store.state else { return AskedCard([], agent: agent, after: .infinity) }
         let seen = seenTimes
         // A fleet that this Mac has not drawn the card for yet shows nothing that ended.
-        return AskedCard(state.asks, agent: agent,
+        return AskedCard(store.asks, agent: agent,
                          after: max(seen["\(state.db)/"] ?? .infinity, seen["\(state.db)/\(agent)"] ?? -.infinity))
     }
 
@@ -100,14 +102,15 @@ struct AgentStatusPanel: View {
     /// The machines' readings, read before any chat opens (`PagePrefetch`).
     static let prefetch = PagePrefetch("machines", feature: "machines") { try await HubClient().machines(hub: $0, database: $1) }
 
-    @ViewBuilder private func content(_ agent: FleetAgent, asked: AskedCard) -> some View {
+    @ViewBuilder private func content(_ agent: FleetAgent, asked: AskedCard, work: WorkCard?) -> some View {
         let state = store.state
-        let presence = agent.presence(isFresh: store.isFresh, serverTime: time,
-                                      openTasks: state?.tasks.filter { $0.owner == agent.name && !$0.isTerminal } ?? [],
-                                      holds: state?.holds ?? [], thinking: store.thinks(agent.name))
+        let open = state?.tasks.filter { $0.owner == agent.name && !$0.isTerminal } ?? []
+        let presence = agent.presence(isFresh: store.isFresh, serverTime: time, openTasks: open, holds: state?.holds ?? [],
+                                      waits: state?.ownerWaits(of: open) ?? [:], thinking: store.thinks(agent.name))
         let bar = UsageBar.bars(for: state?.agents ?? [], time: time, isFresh: store.isFresh)[agent.name]
         FormSection { agentRow(agent, presence: presence) }
         if !asked.isEmpty { section(AskedCard.title) { askedRows(asked) }.transition(.opacity) }
+        if let work, !work.isEmpty { section(WorkCard.title) { workRows(work) }.transition(.opacity) }
         // A local model has no account limits: the account's own row says Local model, and a card that could only say
         // so again is not drawn.
         if bar?.isLocalModel != true { section(String(l10n: "Usage")) { usage(bar) } }
@@ -336,6 +339,86 @@ struct AgentStatusPanel: View {
         .accessibilityLabel([row.title, row.words].filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("panel-asked-\(row.id)")
+    }
+
+    /// **The rows of Work** (`WorkCard`; the owner's pick of the picture "A: counts", 16 November 2026): each task that
+    /// waits for him, the task that a turn works on now, then the number of the other open tasks and of the tasks done
+    /// today, which open the agent's Tasks; their titles are on hover.
+    @ViewBuilder private func workRows(_ card: WorkCard) -> some View {
+        ForEach(card.waits) { wait in
+            // The orange raised hand of a request that stops work, as Asked draws it, and it opens what Asked's opens.
+            workRow(title: wait.title, line: wait.line, id: "wait-\(wait.id)") {
+                if let request = wait.request { store.selectedNeed = request; store.destination = .needs }
+                else { store.destination = .task(wait.id) }
+            } mark: {
+                Image(systemName: "hand.raised.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(.orange)
+            }.transition(.opacity)
+        }
+        ForEach(card.working) { task in
+            workRow(title: task.title, line: task.doing ?? "", id: "now-\(task.id)") { store.destination = .task(task.id) } mark: {
+                // It turns only by a current reading: motion says that the work goes on now (UI-PATTERNS, "Statuses
+                // must be true").
+                if store.isFresh { WorkMark(size: Self.mark) }
+                else { Image(systemName: "circle.dotted").font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetStyle.muted) }
+            }.transition(.opacity)
+        }
+        if !card.waiting.isEmpty {
+            Button(action: openTasks) { row(AskedCard.waitingWords(card.waiting.count), symbol: "clock") }
+                .buttonStyle(FleetRowButtonStyle())
+                .help(Self.titles(card.waiting))
+                .accessibilityIdentifier("panel-work-waiting")
+                .transition(.opacity)
+        }
+        if !card.done.isEmpty {
+            Button(action: openTasks) { row(WorkCard.doneWords(card.done.count), symbol: "checkmark") }
+                .buttonStyle(FleetRowButtonStyle())
+                .help(Self.titles(card.done))
+                .accessibilityIdentifier("panel-work-done")
+                .transition(.opacity)
+        }
+    }
+
+    /// One task row of Work, as one row of Asked: its mark, its title on one line, and one muted line under it.
+    private func workRow<Mark: View>(title: String, line: String, id: String, open: @escaping () -> Void,
+                                     @ViewBuilder mark: () -> Mark) -> some View {
+        Button(action: open) {
+            HStack(spacing: 0) {
+                RowMark { mark() }.accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(FormMetrics.text).foregroundStyle(FleetStyle.text).lineLimit(1)
+                    if !line.isEmpty { Text(line).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1) }
+                }
+                Spacer(minLength: 8)
+            }
+            .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 9)
+            .frame(minHeight: 44).contentShape(Rectangle())
+        }
+        .buttonStyle(FleetRowButtonStyle())
+        .help([title, line].filter { !$0.isEmpty }.joined(separator: "\n"))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([title, line].filter { !$0.isEmpty }.joined(separator: ", "))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("panel-work-\(id)")
+    }
+
+    /// The agent's own Tasks, where its open and its finished tasks are; Tasks for all agents for an agent that has no
+    /// such part (`AgentTab.available`: the manager owns no task).
+    private func openTasks() {
+        let role = store.state?.agents.first { $0.name == agent }?.role
+        if AgentTab.available(features: features, role: role).contains(.tasks) { store.destination = .agentDetail(agent, .tasks) }
+        else { UserDefaults.standard.set("", forKey: "activityAgent"); store.destination = .activity }
+    }
+
+    /// The hover words of a count: the titles of its tasks, at most ten, and how many more.
+    private static func titles(_ tasks: [FleetTask]) -> String {
+        let shown = tasks.prefix(10).map(\.title)
+        return (shown + (tasks.count > 10 ? [String(l10n: "\(tasks.count - 10) more")] : [])).joined(separator: "\n")
+    }
+
+    /// What of the card Work comes or goes, for its fade.
+    private static func workKeys(_ card: WorkCard) -> [String] {
+        card.waits.map { "work-wait-\($0.id)" } + card.working.map { "work-now-\($0.id)" }
+            + (card.waiting.isEmpty ? [] : ["work-waiting"]) + (card.done.isEmpty ? [] : ["work-done"])
     }
 
     // MARK: parts

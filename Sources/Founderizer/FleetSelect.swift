@@ -25,7 +25,8 @@ enum FleetSelectMark {
     static func agent(_ name: String, state: HubState?, isFresh: Bool) -> FleetSelectMark {
         guard let state, let agent = state.agents.first(where: { $0.name == name }) else { return .agent(name, nil) }
         let open = state.tasks.filter { $0.owner == name && !$0.isTerminal }
-        return .agent(name, agent.presence(isFresh: isFresh, serverTime: state.time, openTasks: open, holds: state.holds ?? []))
+        return .agent(name, agent.presence(isFresh: isFresh, serverTime: state.time, openTasks: open, holds: state.holds ?? [],
+                                           waits: state.ownerWaits(of: open)))
     }
 
     var presence: AgentPresence? { if case .agent(_, let presence) = self { presence } else { nil } }

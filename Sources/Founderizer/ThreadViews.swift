@@ -160,8 +160,10 @@ struct ManagerView: View {
                     let askByID = Dictionary(asks.map { ($0.id, $0) }) { first, _ in first }
                     // A card counts for the marks of a day or an hour as a message does, by the time it was raised.
                     let times = ChatRequestPlaces.times(of: rows, raised: byID.mapValues(\.raised))
+                    let stamps = rows.indices.map { ChatStamp.time(times[$0], after: $0 > 0 ? times[$0 - 1] : nil) }
+                    let stamped = stamps.map { $0 != nil }
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        if let time = ChatStamp.time(times[index], after: index > 0 ? times[index - 1] : nil) {
+                        if let time = stamps[index] {
                             ChatStamp(time: time)
                         }
                         switch row {
@@ -181,11 +183,13 @@ struct ManagerView: View {
                         // **A reply that arrives while he looks fades in where it stands** (T-20): 0.2 s, opacity
                         // only. It took the waiting line's place in one frame. Not on the first paint, and not for
                         // the earlier messages he asks for.
-                        case .entry(.report(let report)): reportRow(report).id(row.id)
-                            .transition(shownUpTo.map { report.id > $0 } == true
-                                        ? ReplyArrival.transition(taking: lineShowing && places.atEnd.isEmpty ? lastWaiting : nil,
-                                                                  agent: agent)
-                                        : .identity)
+                        // Copy and its age only under the last reply of a run (`ChatPart.endsReplies`).
+                        case .entry(.report(let report)):
+                            reportRow(report, lastOfRun: ChatPart.endsReplies(at: index, in: rows, stamped: stamped)).id(row.id)
+                                .transition(shownUpTo.map { report.id > $0 } == true
+                                            ? ReplyArrival.transition(taking: lineShowing && places.atEnd.isEmpty ? lastWaiting : nil,
+                                                                      agent: agent)
+                                            : .identity)
                         }
                     }
                     // What the owner is waiting for, under his last message and above nothing: one muted line,
@@ -305,8 +309,8 @@ struct ManagerView: View {
     /// A reply, with its delivery icons when it went to a channel. **A message that the agent wrote first
     /// (`message_owner`) looks like any other** (D-2, the owner's yes of 28 October 2026): its "Sent first" line said
     /// what the conversation already shows, a message under no question of his.
-    private func reportRow(_ report: ManagerReport) -> some View {
-        AgentReply(text: report.text, time: report.created, detail: reportDetail(report))
+    private func reportRow(_ report: ManagerReport, lastOfRun: Bool) -> some View {
+        AgentReply(text: report.text, time: report.created, detail: reportDetail(report), lastOfRun: lastOfRun)
     }
 
     /// Under a reply: the files that the agent sent with it (CHAT-APPS.md 20; the owner's "Yes, build it" of 15

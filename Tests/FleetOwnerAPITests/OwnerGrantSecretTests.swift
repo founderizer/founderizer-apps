@@ -439,16 +439,16 @@ struct OwnerGrantSecretWordsTests {
         #expect(tool.firstSentence == "Gives one secret of the fleet to one agent with the owner's signature, or "
                 + "takes it back, as Give and Take back on the Founderizer app's Secrets page do.")
         #expect(OwnerLinkTools.names == ["save_bot_token", "prepare_problem_report", "save_secret", "grant_secret",
-                                         "share_secret"])
-        #expect(OwnerLinkTools.names.firstIndex(of: GrantSecret.name) == 3 && OwnerLinkTools.names.count == 5)
+                                         "share_secret", "answer_secret_request"])
+        #expect(OwnerLinkTools.names.firstIndex(of: GrantSecret.name) == 3 && OwnerLinkTools.names.count == 6)
         #expect(OwnerLinkTools.names.filter { $0 == GrantSecret.name }.count == 1)
         #expect(OwnerLinkTools.tools.map(\.name) == OwnerLinkTools.names)
         #expect(OwnerLinkTools.tools[3].description == tool.description)
-        // Not a tool of owner_mcp.py's table: a tool of the program only. The program lists it last but one, before
-        // `share_secret`.
+        // Not a tool of owner_mcp.py's table: a tool of the program only. The program lists it last but two, before
+        // `share_secret` and `answer_secret_request`.
         #expect(Fixture.table.tool(GrantSecret.name) == nil)
         let listed = OwnerTools.programTable(Fixture.table).tools.filter { $0.kind.listed }
-        #expect(listed.suffix(2).map(\.name) == [GrantSecret.name, ShareSecret.name])
+        #expect(listed.suffix(3).map(\.name) == [GrantSecret.name, ShareSecret.name, AnswerSecret.name])
         #expect(listed.filter { $0.name == GrantSecret.name }.count == 1)
         // It has its own words for a lost answer.
         #expect(OwnerLinkTools.notKnownHere(GrantSecret.name) == GrantSecret.notKnownHere)
@@ -557,8 +557,8 @@ struct OwnerGrantSecretWordsTests {
         #expect(GrantSecret.readsTwice == "That agent already reads another API key of the same variable name, and "
                 + "a session has one value for one name. Ask the owner which of the two keys that agent reads. "
                 + "Nothing was sent.")
-        #expect(GrantSecret.busy == "Another call of grant_secret is at its writes now. Call again when it has "
-                + "answered. Nothing was sent.")
+        #expect(GrantSecret.busy == "Another call of grant_secret or answer_secret_request is at its writes now. "
+                + "Call again when it has answered. Nothing was sent.")
         #expect(GrantSecret.ended == "The call ended before its first write. Nothing was sent.")
         // At the first write of a give, when this Mac held the key a moment ago and the app could not sign with it.
         #expect(GrantSecret.notSignedNow == "This Mac held an owner key for this fleet a moment ago, and the app "
@@ -643,9 +643,13 @@ struct OwnerGrantSecretWordsTests {
         }
         let hubSaid = GrantSecret.withHubWords(GrantSecret.signRefused, status: 400, "the statement is older")
         let others = OwnerLinkTools.names.filter { $0 != GrantSecret.name }
-        #expect(others.count == 4)
+        #expect(others.count == 5)
         for words in before + after + notes + [hubSaid, notSigned] {
-            for other in others { #expect(!words.contains(other), "\(words)") }
+            // The one sentence that names another tool: `busy`, which is also `answer_secret_request`'s, because the
+            // two tools share one line of writes.
+            for other in others where !(words == GrantSecret.busy && other == AnswerSecret.name) {
+                #expect(!words.contains(other), "\(words)")
+            }
             for never in ["read a login", "reads a login", "read the login", "reads the login", "read the secret",
                           "reads the secret"] {
                 #expect(!words.contains(never), "\(words)")
@@ -1486,18 +1490,18 @@ final class OwnerGrantSecretProgramTests {
         return (status, out.all, errors)
     }
 
-    /// **The tool is a write of the program alone, and the last one of its list but one** (`share_secret` came after
-    /// it): taken by `write` and by the MCP form, refused by `call`, and no tool of `owner_mcp.py`'s table.
+    /// **The tool is a write of the program alone, and the last one of its list but two** (`share_secret` and
+    /// `answer_secret_request` came after it): taken by `write` and by the MCP form, refused by `call`, and no tool of `owner_mcp.py`'s table.
     @Test func theToolIsAWriteOfTheProgramAloneAndTheLastButOne() throws {
         let tools = OwnerTools(table: Fixture.table, context: context(ValueLink()))
         let tool = try #require(tools.listed.first { $0.name == GrantSecret.name })
         #expect(tool.annotations == .object(["readOnlyHint": .bool(false)]))
         #expect(OwnerTools.verb(of: tool) == .write)
-        #expect(tools.listed.suffix(2).map(\.name) == [GrantSecret.name, ShareSecret.name])
+        #expect(tools.listed.suffix(3).map(\.name) == [GrantSecret.name, ShareSecret.name, AnswerSecret.name])
         #expect(Fixture.table.tool(GrantSecret.name) == nil)
         let (status, out, _) = try run(["tools"], ValueLink())
         #expect(status == 0)
-        #expect(out.dropLast().last == "write grant_secret: " + GrantSecret.tool.firstSentence)
+        #expect(out.dropLast(2).last == "write grant_secret: " + GrantSecret.tool.firstSentence)
         #expect(out.filter { $0.hasPrefix("write grant_secret") }.count == 1)
         let (one, full, _) = try run(["tools", "grant_secret"], ValueLink())
         #expect(one == 0 && full.contains(GrantSecret.tool.description))
@@ -1581,9 +1585,10 @@ final class OwnerGrantSecretProgramTests {
         mcp.finish()
         let said = lines.wait(for: 3)
         let listed = try #require(said.first { $0["id"] == .int(1) }?["result"]?["tools"]?.array)
-        // The last tool but one: `share_secret` came after it.
-        #expect(listed.suffix(2).map { $0["name"] } == [.string("grant_secret"), .string("share_secret")])
-        let tool = try #require(listed.dropLast().last)
+        // The last tool but two: `share_secret` and `answer_secret_request` came after it.
+        #expect(listed.suffix(3).map { $0["name"] } == [.string("grant_secret"), .string("share_secret"),
+                                                        .string("answer_secret_request")])
+        let tool = try #require(listed.dropLast(2).last)
         #expect(tool["name"] == .string("grant_secret"))
         #expect(tool["annotations"]?["readOnlyHint"] == .bool(false))
         #expect(tool["inputSchema"]?["required"] == .array([.string("login"), .string("agent"), .string("level")]))

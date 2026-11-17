@@ -217,5 +217,21 @@ extension KeptRecords where Record == BuildRecord {
         record.joined(at: time)
         write(record)
     }
+
+    /// **An install from this Mac ended on a server that the owner took from its provider's list** ("Use this
+    /// server"), by the provider's own id of that server: an exact proof, where `noteJoined(name:hub:)` has only a name
+    /// and a hub. A first run's server that stopped before this Mac saw it on the private network has no hub in its
+    /// record, so the install that took it later found no record by name and hub: the record stayed "never joined",
+    /// and "Start again" never saw the server (found by the lane "Unfinished setup" on 15 November 2026). The newest
+    /// record of that server says that it joined, with the hub that the install proved: the id proves the server, and
+    /// the install proves the fleet that it is in now. A build that still runs is left to its own end.
+    public func noteJoined(serverID: String, provider: CloudProvider, hub: String, at time: Date = Date()) {
+        guard !serverID.isEmpty, !hub.isEmpty,
+              var record = all().first(where: { $0.provider == provider && $0.serverID == serverID }),
+              record.outcome != .running, record.outcome != .joined || record.hub != hub else { return }
+        record.hub = hub
+        record.joined(at: time)
+        write(record)
+    }
 }
 #endif

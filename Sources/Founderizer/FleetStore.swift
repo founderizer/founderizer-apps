@@ -343,13 +343,19 @@ final class FleetStore {
     static var asked: Destination? {
         // Only a word of this start's arguments, never a kept setting: a kept one (`defaults write`) opened each
         // start of the app on a chosen page, also on one that acts when it opens, and so went around the rules of
-        // `setup_show`. The other lane did the same for `firstRunStep` on 15 November 2026.
-        switch UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["openPage"] as? String {
+        // `setup_show`. The other lane did the same for `firstRunStep` on 15 November 2026. (The page he left, which
+        // this Mac keeps, opens only as one of `setup_show`'s places: `keptPage`.)
+        (UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["openPage"] as? String).flatMap(page(named:))
+    }
+
+    /// A page by its name of `-openPage`, or nil for a name that names none.
+    static func page(named name: String) -> Destination? {
+        switch name {
         case "settings": return .settings(.general)
         // `app.<github|drive|gmail|mcp>`: one app's page of Settings › Apps; its MCP servers were once a section, `mcps`.
         case "settings.mcps", "mcps": return .app(.mcp)
-        case let page? where page.hasPrefix("app."): return AppsGroup(rawValue: String(page.dropFirst("app.".count))).map { .app($0) }
-        case let page? where page.hasPrefix("settings."):
+        case let page where page.hasPrefix("app."): return AppsGroup(rawValue: String(page.dropFirst("app.".count))).map { .app($0) }
+        case let page where page.hasPrefix("settings."):
             // `settings.<tab>`, by the tab's own name: servers, updates, secrets, knowledge, apps, people, team, status.
             return SettingsTab.named(String(page.dropFirst("settings.".count))).map { .settings($0) }
         case "needs": return .needs
@@ -357,13 +363,13 @@ final class FleetStore {
         case "agents", "usage": return .agents
         case "servers", "devices": return .settings(.servers)
         // `server.<name>`: one server's page, which no sidebar row opens on its own.
-        case let page? where page.hasPrefix("server."): return .server(String(page.dropFirst("server.".count)))
+        case let page where page.hasPrefix("server."): return .server(String(page.dropFirst("server.".count)))
         // Settings › Updates is gone (15 November 2026): its versions and its switch are in General.
         case "updates", "updates.subscription": return .settings(.general)
         // `task.<id>`: the thread of one task. It is no sidebar row, so nothing else opens it on its own — and it
         // was the one screen of the app nobody could look at without a task to click to.
-        case let page? where page.hasPrefix("task."): return Int(page.dropFirst("task.".count)).map { .task($0) }
-        case let page? where page.hasPrefix("agent."):
+        case let page where page.hasPrefix("task."): return Int(page.dropFirst("task.".count)).map { .task($0) }
+        case let page where page.hasPrefix("agent."):
             // `agent.<name>` is the agent's chat, as its row in the sidebar is; `agent.<name>.<section>` is one
             // section of its details, so any one of them can be looked at on its own.
             let parts = page.dropFirst("agent.".count).split(separator: ".", maxSplits: 1)
@@ -478,6 +484,9 @@ final class FleetStore {
                WelcomeRules.leaves(chosen: homeChosen, fromManager: oldValue == managerPage,
                                    changed: destination != oldValue) { welcomePassed = true }
             homeChosen = true
+            // The page he left opens at the next start (`keptPage`); every other page leaves none.
+            let kept = Self.keptName(destination)
+            if keptPages[hub.absoluteString] != kept { keptPages[hub.absoluteString] = kept }
             if destination != oldValue { childThreadRequest = nil; keptUnread = nil }
             // A chat that `setup_show` just opened keeps its mark; every other change of page ends it (`ShownPage`).
             if shown.chat != nil { shown.went(to: destination.agentTab == .chat ? destination.agentName : nil) }
@@ -616,10 +625,48 @@ final class FleetStore {
     }
 
     /// Opens the first page once there is a reading to choose it from: the one this Mac kept, in the first frame, or the
-    /// launch's first answer. A page he opened before it stays.
+    /// launch's first answer. A page he opened before it stays. The page he left at his last quit comes first, when
+    /// this start may open it (`keptPage`).
     private func chooseHome() {
         guard !homeChosen, state != nil else { return }
-        destination = Self.home(state)
+        destination = keptPage() ?? Self.home(state)
+    }
+
+    /// **The page he left, by hub address** (the owner's "Build ideas 1–5" of 16 November 2026, of "The app opens on
+    /// the page you left when you quit"; it opened on `home` each time): its name of `-openPage` (`keptName`), kept on
+    /// this Mac for the next start.
+    private var keptPages = UserDefaults.standard.dictionary(forKey: "lastPages") as? [String: String] ?? [:] {
+        didSet { UserDefaults.standard.set(keptPages, forKey: "lastPages") }
+    }
+
+    /// The name of a page that the next start may open (`page(named:)` reads it back), or nil: only the places that
+    /// `setup_show` opens (`SetupShow.targetForms`), whose pages do nothing by themselves when they show.
+    static func keptName(_ page: Destination) -> String? {
+        switch page {
+        case .needs: "needs"
+        case .activity: "tasks"
+        case .agents: "agents"
+        case .task(let number): "task.\(number)"
+        case .agent(let name): "agent.\(name)"
+        case .agentDetail(let name, let tab) where [.behaviour, .tasks, .people, .canUse].contains(tab):
+            "agent.\(name).\(tab.rawValue)"
+        case .settings(let tab) where ![.servers, .backup].contains(tab): "settings.\(tab.rawValue)"
+        default: nil
+        }
+    }
+
+    /// **The page he left, when this start may open it**: a page that a kept setting names opens only as a place of
+    /// `setup_show` would, as it shows now and with its checks (`SetupChannel.opensAtStart`), so never a setup, a wizard
+    /// or a page that acts by itself when it shows (`asked` says why). Not the chat of an agent whose chat place shows
+    /// its Runs on (`chatShowsDetail`), not while the manager's setup fills the window, which its welcome page may
+    /// cover (`welcomeCovers`), and not Needs you with nothing in it: then `home` decides.
+    private func keptPage() -> Destination? {
+        guard let name = keptPages[hub.absoluteString], let page = Self.page(named: name),
+              managerPage.map({ !fillsWindow($0) }) ?? true, canOpen(page), !fillsWindow(page),
+              SetupChannel.opensAtStart(page, in: self) else { return nil }
+        if case .agent(let agent) = page, chatShowsDetail(agent) { return nil }
+        if page == .needs, state?.needs.contains(where: \.isOpen) != true { return nil }
+        return page
     }
     /// The newest chat reply that the owner has seen from each agent, for one hub generation (`seenContext`).
     private var seenReplies: [String: Int] = [:]
@@ -744,7 +791,14 @@ final class FleetStore {
     /// Sends one staged file up, with its own number. A file that is already on the hub never goes again.
     func upload(_ file: StagedFile, for composer: String) async {
         guard let state, !file.isOnHub, !uploading.contains(file.requestID) else { return }
-        guard let data = try? Data(contentsOf: stagedURL(file)) else {
+        // Only a regular file of a staged file's size is read, with no wait (`KeptFile`). A larger file there is not
+        // one that this app staged: it gets the words that the upload gave it before, with no read of it.
+        let found = KeptFile.read(stagedURL(file), atMost: MessageAttachment.sizeLimit)
+        if found == .refused(.tooLarge) {
+            change(file, in: composer) { $0.failure = AttachmentError.tooLarge.errorDescription }
+            return
+        }
+        guard case .bytes(let data) = found else {
             change(file, in: composer) { $0.failure = String(l10n: "The bytes of this file are gone. Pick it again.") }
             return
         }
@@ -861,6 +915,18 @@ final class FleetStore {
         } catch {
             fileProblems[file.id] = HubError.said(error) ?? String(l10n: "This file could not be kept. Try again.")
         }
+    }
+
+    /// His newest message of one agent's chat: the one that "Correcting your last message" and ↑ in an empty box take.
+    /// nil while the one that the hub just took is not in the reading yet (until the next read): the newest is then
+    /// not known, and the one before it is not his last.
+    func newestMessage(to agent: String) -> OwnerMessage? {
+        guard let state else { return nil }
+        if let taken = lastReceipt, taken.replaces_request_id == nil, (taken.recipient ?? "manager") == agent,
+           !state.messages.contains(where: { $0.request_id.caseInsensitiveCompare(taken.request_id) == .orderedSame }) {
+            return nil
+        }
+        return state.messages.filter { $0.kind == "message" && $0.chatRecipient == agent }.max { $0.created < $1.created }
     }
 
     func canEdit(_ message: OwnerMessage) -> Bool {
@@ -998,8 +1064,29 @@ final class FleetStore {
         guard let database = state?.db else { return }
         providerFor[placingKey(agent, database: database)] = provider
     }
+    /// **The server that the first run made for an agent with no server yet** (slice 2 of the one wizard: one press
+    /// makes every server of the fleet), by the same key: its name and its address on the private network. The agent's
+    /// setup installs it by itself and takes the note away as that install starts (`AddServerView`). This Mac keeps
+    /// it, so an app that starts again before that install still has it.
+    struct MadeServer: Equatable {
+        let name: String
+        let address: String
+    }
+    /// Its own key: `MadeServers` keeps a list of another form under "serversMadeFor".
+    private var madeFor = UserDefaults.standard.dictionary(forKey: "firstRunServerFor") as? [String: [String]] ?? [:] {
+        didSet { UserDefaults.standard.set(madeFor, forKey: "firstRunServerFor") }
+    }
+    func madeServer(_ agent: String) -> MadeServer? {
+        guard let kept = state.flatMap({ madeFor[placingKey(agent, database: $0.db)] }), kept.count == 2 else { return nil }
+        return MadeServer(name: kept[0], address: kept[1])
+    }
+    /// nil takes the note away: the install that it was for starts.
+    func noteMadeServer(_ server: MadeServer?, for agent: String) {
+        guard let database = state?.db else { return }
+        madeFor[placingKey(agent, database: database)] = server.map { [$0.name, $0.address] }
+    }
     /// An agent with no server goes on the list, and one that runs leaves it. One that has its server needs no joined
-    /// server and no chosen provider any more.
+    /// server, no chosen provider and no made server any more.
     private func notePlacing(_ fresh: HubState) {
         // The reading that has a manager under its new name, and no more under its old one (`noteRenamed`).
         if let renamed = renamedManager, renamed.hub == hub, renamed.database == fresh.db,
@@ -1016,6 +1103,7 @@ final class FleetStore {
             if AgentSetupFlow.runs(agent), unplaced.contains(key) { unplaced.remove(key) }
             if agent.placed, joinedFor[key] != nil { joinedFor[key] = nil }
             if agent.placed, providerFor[key] != nil { providerFor[key] = nil }
+            if agent.placed, madeFor[key] != nil { madeFor[key] = nil }
         }
     }
     /// **A write that its own row says it waits for** (fix round 3c, the lead's call): the request, and the agent's part
@@ -1271,13 +1359,18 @@ final class FleetStore {
         // **The window as he left it, in its first frame** (T-07): the last reading of this hub that this Mac kept.
         // The launch's first read replaces it; until that read answers, fails or has taken eight seconds it is not old
         // (`isFresh`), so nothing on the page marks it for the moment it stands.
-        if let data = try? Data(contentsOf: lastReadingFile), let kept = try? HubState.decode(data) {
+        // Each kept file is read only when it is a regular file of a reading's size, with no wait (`KeptFile`):
+        // these reads hold the window's first frame. What is not read is no kept reading: the window waits for the
+        // hub's first answer, as on a Mac that kept none.
+        if let data = KeptFile.bytes(of: lastReadingFile, atMost: KeptFile.largestReading), let kept = try? HubState.decode(data) {
             state = kept
             var timeline = ChatTimeline()
             if timeline.update(messages: kept.messages, reports: kept.reports) { chatTimeline = timeline }
-            keptHealth = KeptReading((try? Data(contentsOf: keptFile("health"))).flatMap { FleetHealth.kept($0, database: kept.db) })
-            keptReleases = KeptReading((try? Data(contentsOf: keptFile("releases"))).flatMap { ReleaseState.kept($0, database: kept.db) })
-            updates.start(kept: (try? Data(contentsOf: keptFile("app-update"))).flatMap(WaitingBuild.kept))
+            keptHealth = KeptReading(KeptFile.bytes(of: keptFile("health"), atMost: KeptFile.largestReading)
+                .flatMap { FleetHealth.kept($0, database: kept.db) })
+            keptReleases = KeptReading(KeptFile.bytes(of: keptFile("releases"), atMost: KeptFile.largestReading)
+                .flatMap { ReleaseState.kept($0, database: kept.db) })
+            updates.start(kept: KeptFile.bytes(of: keptFile("app-update"), atMost: KeptFile.largestReading).flatMap(WaitingBuild.kept))
         }
         chooseHome()
         quitting = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
@@ -1489,7 +1582,9 @@ final class FleetStore {
         unplaced = unplaced.filter { !$0.hasPrefix(bar) }
         adding = adding.filter { !$0.hasPrefix(bar) }
         joinedFor = joinedFor.filter { !$0.key.hasPrefix(bar) }
+        madeFor = madeFor.filter { !$0.key.hasPrefix(bar) }
         pins[address] = nil
+        keptPages[address] = nil
         if seenContext.hasPrefix("\(address)\n") { seenContext = ""; seenReplies = [:] }
         // This hub's install model, also under the address of no hub: a first run's install is kept under both
         // (`keepInstall`), and the address of no hub is this store's address again after this step. None runs now.
@@ -1552,7 +1647,7 @@ final class FleetStore {
         do {
             let (fresh, data) = try await client.stateReading(at: requestedHub, present: OwnerPresenceProbe.now())
             guard requestedHub == hub else { return }
-            if let state, state.db != fresh.db { childThreadRequest = nil; cancelEdit(); endProviderSetups() }
+            if let state, state.db != fresh.db { childThreadRequest = nil; cancelEdit(); endProviderSetups(); lastReceipt = nil }
             var timeline = chatTimeline
             if timeline.update(messages: fresh.messages, reports: fresh.reports) { chatTimeline = timeline }
             notePlacing(fresh)

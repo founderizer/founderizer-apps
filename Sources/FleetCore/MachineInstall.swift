@@ -300,6 +300,10 @@ public struct InstallPlan: Equatable, Sendable {
     /// `managerServer`: the installer refuses the two together.
     static let oneServer = "FLEET_HUB_SERVER=shared"
 
+    /// The AI programs that `hub.sh --runtime` takes for a manager on the hub's own server (its own check refuses any
+    /// other word).
+    static let hubRuntimes: Set<String> = ["claude", "codex"]
+
     /// **This app's own last step is `verify`**, and it says so to the hub's installer, which then ends with no verify
     /// of its own: the self-test in it takes about a minute, and the install ran it one time for the installer and
     /// one time for this app. An installer from before ignores the word and ends with verify, as before.
@@ -340,12 +344,20 @@ public struct InstallPlan: Equatable, Sendable {
     /// feature `fleet_shape`): "2 servers" and "1 per agent" go into the line as `FLEET_SHAPE_STEP`, before the word
     /// of the layout. "1 server" needs no such word, because `oneServer`'s word writes the step, and the installer
     /// refuses that word with another step. An installer from before the feature does not read the word.
+    ///
+    /// `runtime`: the AI program of the manager, which the owner chose on the first run's page of its AI provider. With
+    /// `oneServer` the installer puts it on the hub's own server, so it gets it as `--runtime`, in its plan and in its
+    /// run (`hub.sh` takes `claude` and `codex`; any other value, and none, leave the installer's own Claude Code). With
+    /// the other steps the manager gets its program with its own server (`HubClient.moveAgent`), as `install_hub` of
+    /// the owner's own agent has it, so the line has none.
     public static func hub(target: InstallTarget, source: String, authKey: String?, managerName: String? = nil,
-                           oneServer: Bool = false, shape: ServersStep? = nil) -> InstallPlan {
+                           oneServer: Bool = false, shape: ServersStep? = nil, runtime: String? = nil) -> InstallPlan {
         let kit = hubKit, log = hubLog
         let kept = oneServer ? nil : shape.flatMap(FleetShapeHub.installWord)
         let layout = (kept.map { "\($0) " } ?? "") + (oneServer ? Self.oneServer : managerServer)
+        let program = oneServer ? runtime.flatMap { hubRuntimes.contains($0) ? " --runtime \($0)" : nil } ?? "" : ""
         let named = managerName.flatMap { ManagerName.agentName($0) == $0 ? " --manager-name \($0)" : nil } ?? ""
+        let options = named + program
         let steps: [InstallStep] = [
             .init(id: "read", title: ServerCheck.title, says: String(l10n: "Which system it is, and whether we are root there."),
                   action: readAction),
@@ -360,9 +372,9 @@ public struct InstallPlan: Equatable, Sendable {
                                + "--ff-only; else git clone -q -- \(quote(source)) \(kit) || { \(cloneStop); }; fi; "
                                + "git -C \(kit) rev-parse --short HEAD; ls \(kit)/hub.sh")),
             .init(id: "plan", title: String(l10n: "The plan"), says: String(l10n: "Every step the install would take. It changes nothing."),
-                  action: .run("\(layout) \(callerVerifies) sh \(kit)/hub.sh --check\(named)")),
+                  action: .run("\(layout) \(callerVerifies) sh \(kit)/hub.sh --check\(options)")),
             .init(id: "start", title: String(l10n: "Install the hub"), says: String(l10n: "The installer runs on the server and writes what it does to a log."),
-                  action: .detach("setsid sh -c '\(layout) \(callerVerifies) sh \(kit)/hub.sh\(named) < /dev/null > \(log) 2>&1' "
+                  action: .detach("setsid sh -c '\(layout) \(callerVerifies) sh \(kit)/hub.sh\(options) < /dev/null > \(log) 2>&1' "
                                   + "> /dev/null 2>&1 < /dev/null &")),
             .init(id: "wait_claim", title: String(l10n: "Wait for the link code"), says: String(l10n: "The installer makes a one-time code for this Mac."),
                   action: .waitForClaim("tail -n 60 \(log)", every: 10, within: 1200)),

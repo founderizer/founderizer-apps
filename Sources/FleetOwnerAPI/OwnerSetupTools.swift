@@ -19,11 +19,11 @@ public enum OwnerSetupTools {
             Where the setup of the fleet stands in the Founderizer app on this Mac, as typed facts and fixed names, and \
             never a value of a field (no token, key, password, code, address or free text): the app's version and \
             build; the hub (none, set, or set and answering); the first run: whether it shows, its page by a fixed name \
-            (welcome, paste, name, servers, vps, tailscale, tailscale_key, token, building, other_vps, machine, installing, \
-            address, \
-            done, restore), the page's title in English as the owner reads it (a title with a placeholder gives its \
+            (welcome, paste, name, ai_provider, servers, vps, tailscale, tailscale_key, token, building, other_vps, machine, \
+            installing, address, done, restore), the page's title in English as the owner reads it (a title with a placeholder gives its \
             key, such as "Your %@ token"), whether work of the first run runs now, whether an install of it began, \
-            whether it holds the window, the VPS provider on a provider's page, and layout (one, two or each: the \
+            whether it holds the window, the VPS provider on a provider's page, ai_provider (claude or codex: the \
+            owner's choice on the page ai_provider, or null before it), and layout (one, two or each: the \
             owner's choice on the page servers, or null before it); the programs of the owner's own \
             agent that the app found on this Mac (claude_code, codex); place, the page that the app's window shows now, \
             or where it would open when it is closed, by a fixed name; places, the names with no agent, server or \
@@ -220,7 +220,10 @@ public enum OwnerSetupTools {
 /// **A page of the first run, by its fixed name**: what `setup_state` gives and `setup_show` takes, so that an agent
 /// never reads a page's words to know where the owner stands.
 public enum FirstRunPage: String, CaseIterable, Sendable {
-    case welcome, paste, name, servers, vps, tailscale
+    case welcome, paste, name
+    /// The manager's AI provider, after its name (the lane "One wizard and the build page", 16 November 2026).
+    case aiProvider = "ai_provider"
+    case servers, vps, tailscale
     case tailscaleKey = "tailscale_key"
     case token, building
     case otherVPS = "other_vps"
@@ -230,7 +233,7 @@ public enum FirstRunPage: String, CaseIterable, Sendable {
     /// provider's token is `building` while its server is made (the app decides). A test holds each case of
     /// `FirstRunModel.Step` to this table.
     public static let ofStep: [String: FirstRunPage] = [
-        "welcome": .welcome, "paste": .paste, "name": .name, "servers": .servers, "network": .tailscale, "machine": .machine, "installing": .installing,
+        "welcome": .welcome, "paste": .paste, "name": .name, "aiProvider": .aiProvider, "servers": .servers, "network": .tailscale, "machine": .machine, "installing": .installing,
         "done": .done, "restore": .restore, "address": .address, "key": .tailscaleKey, "cloud": .vps, "token": .token,
         "vps": .otherVPS,
     ]
@@ -238,8 +241,8 @@ public enum FirstRunPage: String, CaseIterable, Sendable {
     /// **The titles that `setup_state` may give**, each a key of the app's string table in English. A title that the app
     /// shows and that is not here (a server's address as a title) is given as none.
     public static let titles: Set<String> = [
-        "Your own team of AI agents", "Paste this in %@", "Name your manager", "Your fleet's servers", "A VPS for your fleet", "Connect Tailscale",
-        "Waiting for Tailscale", "Connecting your network", "Your Tailscale key", "Building your fleet",
+        "Your own team of AI agents", "Paste this in %@", "Name your manager", "%@'s AI provider", "Your fleet's servers", "A VPS for your fleet", "Connect Tailscale",
+        "Waiting for Tailscale", "Connecting your network", "Your Tailscale key", "Building your fleet", "Your fleet",
         "Your hub's server at %@", "Your %@ token", "Your VPS", "Checking %@", "Waiting for %@", "Password for %@@%@",
         "Your hub did not install", "Connecting to your hub", "Your fleet is up", "Your hub is installed", "Your server",
         "Checking your fleet", "Your hub's address", "Restore a copy",
@@ -250,6 +253,12 @@ public enum FirstRunPage: String, CaseIterable, Sendable {
 /// slider of "Your fleet's servers" (`ServersStep` in the app, by its raw value; a test of the app's lane holds the two).
 public enum FirstRunLayout: String, CaseIterable, Sendable {
     case one, two, each
+}
+
+/// **The manager's AI provider that the owner chose in the first run**, by its fixed name: the card of the page
+/// `ai_provider`, by the name of its program on a server (`hub.sh --runtime`, and `runtime` of `install_hub`).
+public enum FirstRunAI: String, CaseIterable, Sendable {
+    case claude, codex
 }
 
 /// **What the first run shows**, as the app's window copy of it keeps it (`FleetStore.setupSnapshot`): typed values,
@@ -271,10 +280,13 @@ public struct SetupFirstRun: Equatable, Sendable {
     public var atStart: Bool
     /// The owner's choice on the page `servers`, or nil until the owner went on from that page in this first run.
     public var layout: FirstRunLayout?
+    /// The owner's choice on the page `ai_provider`, or nil until the owner went on from that page in this first run.
+    public var aiProvider: FirstRunAI?
 
     public init(shows: Bool, page: FirstRunPage?, title: String?, works: Bool, began: Bool, holdsWindow: Bool,
-                provider: String?, atStart: Bool, layout: FirstRunLayout? = nil) {
+                provider: String?, atStart: Bool, layout: FirstRunLayout? = nil, aiProvider: FirstRunAI? = nil) {
         self.layout = layout
+        self.aiProvider = aiProvider
         self.shows = shows
         self.page = page
         self.title = title
@@ -363,6 +375,7 @@ public struct SetupFacts: Equatable, Sendable {
         first["provider"] = firstRun.shows ? firstRun.provider.flatMap { Self.providers.contains($0) ? .string($0) : nil }
             ?? .null : .null
         first["layout"] = firstRun.shows ? firstRun.layout.map { .string($0.rawValue) } ?? .null : .null
+        first["ai_provider"] = firstRun.shows ? firstRun.aiProvider.map { .string($0.rawValue) } ?? .null : .null
         let known = Set(Self.programNames.values)
         var answer: [String: JSONValue] = [
             "change": .int(change),
