@@ -16,40 +16,27 @@
 
 </div>
 
-Founderizer runs always-on AI agents on servers that you own. A hub on one of your servers keeps the agents, their
-tasks and their records. These two apps are how you work with them:
+<p align="center">The team works day and night, with the Claude or ChatGPT plan that you already pay for.</p>
 
-- **Founderizer for Mac** sets up a fleet and operates it.
-- **Founderizer for iPhone** reads the fleet and answers it when you are not at your Mac.
+<p align="center">
+  <a href="https://founderizer.com/features"><img src=".github/features/feature-team.webp" alt="The team does the work: the manager splits one sentence into three tasks, for Nora, Theo and Ada" width="270"></a>
+  <a href="https://founderizer.com/features"><img src=".github/features/feature-decide.webp" alt="The decisions stay yours: the manager asks before a refund of 240 euros, and you press Refund" width="270"></a>
+  <a href="https://founderizer.com/features"><img src=".github/features/feature-iphone.webp" alt="Answer from your iPhone: a notification from the manager on the lock screen" width="270"></a>
+  <a href="https://founderizer.com/features"><img src=".github/features/feature-chats.webp" alt="WhatsApp and Discord: you ask Nora on WhatsApp whether a customer got her refund" width="270"></a>
+  <a href="https://founderizer.com/features"><img src=".github/features/feature-logins.webp" alt="Logins without passwords: Ada signs in to the shop's admin and never sees the password or the code" width="270"></a>
+  <a href="https://founderizer.com/features"><img src=".github/features/feature-servers.webp" alt="On servers you own: Hetzner, DigitalOcean, Vultr or Akamai, and a new server in your fleet" width="270"></a>
+</p>
 
-The apps run no AI. They talk to your own hub on your private network (Tailscale), and the agents use your own
-accounts with the AI providers.
-
-## What the Mac app does
-
-- **Set up a fleet.** It makes a server at Hetzner Cloud, DigitalOcean, Vultr or Akamai, or takes a server that you
-  already have, puts it on your private network and installs the hub. It adds more servers and always-on Macs later.
-- **Chats.** One conversation with each agent, with files, and the requests that the agent asks you.
-- **Needs you.** Each request that waits for your answer, and each task that only you can move.
-- **Tasks.** A board of the fleet's work, and the thread of each task.
-- **Agents.** Each agent with its role, its server, its AI account and its usage.
-- **Settings.** General, Servers (with your own devices), Updates, Backup, System status, Secrets, Knowledge, Apps
-  (GitHub, Google Drive, Gmail and MCP servers), People and Reporting lines.
-- **Help › Report a problem.** It lists what the app can see is wrong, with the fix for each item.
-
-The package also builds three helpers: the setup service (an XPC service inside the app), **Founderizer Installer**
-(for a Mac that stays on and runs agents) and **Fleet Vault** (the helper that keeps secrets on a Mac).
-
-## What the iPhone app does
-
-- **Chats**, **Needs you** and **Tasks**, as on the Mac, in the system's light and dark appearance.
-- You add the phone with a one-time code from the Mac app (Settings › Servers › Add device). The phone keeps its own
-  key in the keychain, behind Face ID.
-- A new request can ring the phone, with the request's options as buttons. The hub sends each notification, sealed
-  with the phone's own key, through the relay at founderizer.com. That relay sends only to the builds that Amura
-  Ventures SL publishes, so a build that you sign yourself gets no notification from it.
+<p align="center"><a href="https://founderizer.com/features"><b>See all 31 features</b></a></p>
 
 ## What you need
+
+The Mac app runs on macOS 15 or later, and the iPhone app on iOS 18 or later. [Download them](https://founderizer.com/download), or build them from this source:
+
+<details>
+<summary><b>Build the apps yourself</b></summary>
+
+### What you need to build them
 
 - A Mac with macOS 15 or later, and an Xcode that has the macOS 26 and iOS 26 SDKs or later ones: the source uses
   their APIs behind availability checks. The tests pass with Xcode 27.2. The apps run on macOS 15 and iOS 18 or
@@ -57,7 +44,7 @@ The package also builds three helpers: the setup service (an XPC service inside 
 - A checkout of the hub repository. The Mac app's setup service carries the hub's `onboard.py`.
 - For Fleet Vault only: an Apple Developer ID.
 
-## Build and run the Mac app
+### The Mac app
 
 ```sh
 swift test
@@ -83,19 +70,10 @@ builds `build/Founderizer Installer.app`, signed ad hoc.
 `run.sh` and `installer.sh` are for a run on your own Mac. An app that other people download must have your own
 Developer ID signature and Apple's notarization.
 
-### Fleet Vault and the signing team
+The package also builds three helpers: the setup service (an XPC service inside the app), **Founderizer Installer**
+(for a Mac that stays on and runs agents) and **Fleet Vault** (the helper that keeps secrets on a Mac).
 
-Fleet Vault keeps its items in a keychain group, and the app accepts only a vault that the publisher's Apple team
-signed. The team identifier `6EBZ756H9Q` (Amura Ventures SL's team) is therefore part of the source: in
-`Sources/FleetVaultCore`, `Sources/FleetVaultIPC`, `Vault/` and `ios/Sources/SealedPing.swift`. To ship builds of your
-own, replace it with your team identifier in each of those places, and build the vault with your identity:
-
-```sh
-FLEET_SIGN_IDENTITY="Developer ID Application: Your Name (YOURTEAMID)" \
-FLEET_VAULT_PROFILE=/path/to/your.provisionprofile python3 Vault/build.py
-```
-
-## Build and run the iPhone app
+### The iPhone app
 
 Open `ios/FleetMobile.xcodeproj` in Xcode, choose an iPhone simulator and run. Or from a terminal:
 
@@ -110,21 +88,22 @@ xcodebuild test -project FleetMobile.xcodeproj -scheme FleetMobile \
 Name a simulator that your Xcode has. The project uses the package in the repository's root as a local dependency.
 For a build on your own iPhone, set your own team and bundle identifiers in the project's signing settings.
 
-## What is where
+### Builds that you sign yourself
 
-| Path | What it is |
-| --- | --- |
-| `Package.swift` | The Swift package: the Mac app, its helpers and the code that both apps share. |
-| `Sources/FleetCore` | The hub's API and each rule with no view. Both apps use it, and most tests are for it. |
-| `Sources/FleetMark` | The marks of the agents, the brand and the providers. |
-| `Sources/Founderizer` | The Mac app. |
-| `Sources/FleetSetupService`, `Sources/FleetSetupIPC` | The setup service and its interface. |
-| `Sources/FleetVault`, `Sources/FleetVaultCore`, `Sources/FleetVaultIPC`, `Vault/` | Fleet Vault, its interface, and its build, install and update scripts. |
-| `Sources/FounderizerInstaller`, `Installer/` | The installer for an always-on Mac. |
-| `ios/` | The iPhone app, its two notification extensions and its tests. |
-| `Tests/` | The tests of the package. |
-| `test-support/` | Local stand-ins for a hub and small probes, for checks of the app with no fleet. Each one says what it does at its head. |
-| `UI-PATTERNS.md` | How each view of the Mac app is drawn. Read it before you change a view. |
+Fleet Vault keeps its items in a keychain group, and the app accepts only a vault that the publisher's Apple team
+signed. The team identifier `6EBZ756H9Q` (Amura Ventures SL's team) is therefore part of the source: in
+`Sources/FleetVaultCore`, `Sources/FleetVaultIPC`, `Vault/` and `ios/Sources/SealedPing.swift`. To ship builds of your
+own, replace it with your team identifier in each of those places, and build the vault with your identity:
+
+```sh
+FLEET_SIGN_IDENTITY="Developer ID Application: Your Name (YOURTEAMID)" \
+FLEET_VAULT_PROFILE=/path/to/your.provisionprofile python3 Vault/build.py
+```
+
+The relay at founderizer.com sends a notification only to the builds that Amura Ventures SL publishes, so a build
+that you sign yourself gets no notification from it.
+
+</details>
 
 ## Licence
 

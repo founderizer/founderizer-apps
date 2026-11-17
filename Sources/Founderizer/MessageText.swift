@@ -137,10 +137,11 @@ extension EnvironmentValues {
     @Entry var messageWordsSelectable = true
 }
 
-private extension View {
-    /// **Each text of a message takes the selection itself**, where `messageWordsSelectable` says so: a change gives or
-    /// takes the selection of each text and makes nothing else of the message again, so a code block keeps the place
-    /// that he scrolled it to sideways, and its copy icon its state.
+extension View {
+    /// **Each text takes the selection itself**, where `messageWordsSelectable` says so: a change gives or takes the
+    /// selection of each text and makes nothing else of the row again, so a code block keeps the place that he
+    /// scrolled it to sideways, and its copy icon its state. A text that he can select in a long scroll view (a
+    /// message, a thread's step, a conversation he reads) takes it so, in place of `.textSelection(.enabled)`.
     func selectableWords() -> some View { modifier(SelectableWords()) }
 }
 
@@ -387,8 +388,8 @@ struct MessageAction: View {
 }
 
 /// An agent's reply with its hover footer below it on the left: Copy, then how long ago it came (`messageAge`), in a
-/// chat under the last reply of a run only (`lastOfRun`). The footer has its own space in the reply, hidden until
-/// hover, so hover never resizes a message or moves the scroll.
+/// chat under the last reply of a run only (`lastOfRun`), and there on the hover of any reply of the run (`run`). The
+/// footer has its own space in the reply, hidden until hover, so hover never resizes a message or moves the scroll.
 /// The text keeps its own selection and menu.
 struct AgentReply: View {
     /// The height of a reply's footer: the air above the icons and the row itself, regular in a chat, compact in a task
@@ -403,6 +404,9 @@ struct AgentReply: View {
     /// False for a reply with another reply of its run right under it (`ChatPart.endsReplies`): it keeps the room of
     /// the footer, so the chat's gaps stay, and shows nothing there on hover.
     var lastOfRun = true
+    /// In an agent's chat, this reply's place in its run: the pointer on any reply of the run shows the footer under its
+    /// last one (`ReplyRunHover`). Nil in a task thread, where each reply has a hover of its own.
+    var run: ReplyRunHover.Place?
     @State private var hovered = false
     @State private var copied = false
 
@@ -411,6 +415,8 @@ struct AgentReply: View {
         // A detail line stays with the text. The icons take the rest of the footer as air above them: the reference
         // keeps its row clear of the last line, and a row under the text reads as a part of it.
         let gap: CGFloat = compact ? 5 : 4
+        // Only the reply that shows the footer reads its run's hover, so a change draws that reply again and no other.
+        let shown = lastOfRun && (run?.shown ?? hovered)
         VStack(alignment: .leading, spacing: gap) {
             MessageText(text: text, chat: true).equatable()
             if let detail { detail }
@@ -422,10 +428,56 @@ struct AgentReply: View {
                     if let time { Text(messageAge(time)).help(fleetDate(time)) }
                 }.font(ChatStyle.detail).foregroundStyle(FleetStyle.muted).frame(height: row)
                     .padding(.top, Self.footer(compact: compact) - row - gap)
-                    .opacity(hovered ? 1 : 0).allowsHitTesting(hovered)
+                    .opacity(shown ? 1 : 0).allowsHitTesting(shown)
             } else {
                 Color.clear.frame(height: Self.footer(compact: compact) - gap)
             }
-        }.contentShape(Rectangle()).onHover { hovered = $0; if !$0 { copied = false } }
+        }.contentShape(Rectangle()).onHover { inside in
+            if let run { run.hover(inside: inside) } else { hovered = inside }
+        }
+        .onChange(of: shown) { _, now in if !now { copied = false } }
+        // A reply that goes while the pointer is on it leaves no run that shows its footer to nobody.
+        .onDisappear { run?.hover(inside: false) }
+    }
+}
+
+/// **The replies of a run in an agent's chat share one hover** (`ChatRunHover` in FleetCore says why): the pointer on
+/// any of them shows Copy and the age under the last one. Each run has a flag of its own, which only its last reply
+/// reads, so a change draws that reply again and not the chat.
+@MainActor final class ReplyRunHover {
+    @MainActor @Observable final class Flag {
+        fileprivate(set) var on = false
+    }
+
+    /// A reply's place in its run (`ChatPart.replyRuns`): it tells the run its hover, and its footer reads the run's.
+    @MainActor struct Place {
+        fileprivate let runs: ReplyRunHover
+        fileprivate let row: String
+        fileprivate let run: String
+        /// The pointer is on a reply of this run.
+        var shown: Bool { runs.flag(run).on }
+        func hover(inside: Bool) { runs.hover(row, run: run, inside: inside) }
+    }
+
+    private var rule = ChatRunHover()
+    private var flags: [String: Flag] = [:]
+
+    /// The place of the reply `row` in the run `run`.
+    func place(row: String, run: String) -> Place { Place(runs: self, row: row, run: run) }
+
+    private func flag(_ run: String) -> Flag {
+        if let flag = flags[run] { return flag }
+        let flag = Flag()
+        flag.on = rule.run == run
+        flags[run] = flag
+        return flag
+    }
+
+    private func hover(_ row: String, run: String, inside: Bool) {
+        let before = rule.run
+        rule.hover(row, run: run, inside: inside)
+        guard rule.run != before else { return }
+        if let before { flags[before]?.on = false }
+        if let now = rule.run { flags[now]?.on = true }
     }
 }

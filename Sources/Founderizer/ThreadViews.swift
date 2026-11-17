@@ -50,6 +50,8 @@ struct ManagerView: View {
     @State private var answerSent: PendingRequest?
     /// The rows whose words can be selected: the row under the pointer and the row whose words he pressed last.
     @State private var selection = ChatSelection()
+    /// The replies of a run share one hover: the pointer on any of them shows Copy and the age under the last one.
+    @State private var replyHover = ReplyRunHover()
     /// The gap between chat entries. A reply's footer takes its height from it, and every other entry gets the same
     /// height below it, so each gap stays 28 points.
     private static let entrySpacing: CGFloat = 28, footer = AgentReply.footer(compact: false)
@@ -164,6 +166,7 @@ struct ManagerView: View {
                     let times = ChatRequestPlaces.times(of: rows, raised: byID.mapValues(\.raised))
                     let stamps = rows.indices.map { ChatStamp.time(times[$0], after: $0 > 0 ? times[$0 - 1] : nil) }
                     let stamped = stamps.map { $0 != nil }
+                    let runs = ChatPart.replyRuns(in: rows, stamped: stamped)
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         if let time = stamps[index] {
                             ChatStamp(time: time)
@@ -185,9 +188,11 @@ struct ManagerView: View {
                         // **A reply that arrives while he looks fades in where it stands** (T-20): 0.2 s, opacity
                         // only. It took the waiting line's place in one frame. Not on the first paint, and not for
                         // the earlier messages he asks for.
-                        // Copy and its age only under the last reply of a run (`ChatPart.endsReplies`).
+                        // Copy and its age only under the last reply of a run (`ChatPart.endsReplies`), on the hover
+                        // of any reply of the run.
                         case .entry(.report(let report)):
-                            reportRow(report, lastOfRun: ChatPart.endsReplies(at: index, in: rows, stamped: stamped)).id(row.id)
+                            reportRow(report, lastOfRun: ChatPart.endsReplies(at: index, in: rows, stamped: stamped),
+                                      run: runs[index].map { replyHover.place(row: row.id, run: $0) }).id(row.id)
                                 .transition(shownUpTo.map { report.id > $0 } == true
                                             ? ReplyArrival.transition(taking: lineShowing && places.atEnd.isEmpty ? lastWaiting : nil,
                                                                       agent: agent)
@@ -203,9 +208,7 @@ struct ManagerView: View {
             }
             .keepsEnd($end, room: Self.endRoom)
             // No row gets or loses its selectable words while the chat moves (`ChatWordsSelection`).
-            .onScrollPhaseChange { _, phase in selection.scroll(moving: phase != .idle) }
-            .onAppear { selection.start() }
-            .onDisappear { selection.stop() }
+            .scrollsAsAChat(selection, store: store)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             // Text that scrolls up fades under the pill instead of running under it (T-20).
             .topFade(56)
@@ -317,8 +320,8 @@ struct ManagerView: View {
     /// A reply, with its delivery icons when it went to a channel. **A message that the agent wrote first
     /// (`message_owner`) looks like any other** (D-2, the owner's yes of 28 October 2026): its "Sent first" line said
     /// what the conversation already shows, a message under no question of his.
-    private func reportRow(_ report: ManagerReport, lastOfRun: Bool) -> some View {
-        AgentReply(text: report.text, time: report.created, detail: reportDetail(report), lastOfRun: lastOfRun)
+    private func reportRow(_ report: ManagerReport, lastOfRun: Bool, run: ReplyRunHover.Place?) -> some View {
+        AgentReply(text: report.text, time: report.created, detail: reportDetail(report), lastOfRun: lastOfRun, run: run)
             .wordsSelectable(in: selection, row: "report-\(report.id)")
     }
 
@@ -457,6 +460,8 @@ struct TaskView: View {
     @State private var latestActivity = 0
     /// Why the thread's last read failed, in the hub's words.
     @State private var readError: String?
+    /// The rows whose words can be selected: the row under the pointer and the row whose words he pressed last.
+    @State private var selection = ChatSelection()
     private var notes: [ProgressNote] { state.notes.filter { $0.task == task.id } }
     private var permissions: [FleetPermission] { state.permissions.filter { $0.task == task.id } }
     private var threadEvents: Bool { state.ui_features?.contains("thread_events") == true }
@@ -528,6 +533,12 @@ struct TaskView: View {
                     await store.settle(since: start)
                     guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
                 }
+                // A new page of a thread that he scrolls waits until it rests, as the fleet's reading does
+                // (`FleetStore.readingsRest`); the first one shows the thread, and waits for nothing.
+                if first == nil, !page.events.isEmpty {
+                    await store.readingsRest()
+                    guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
+                }
                 // A read that brought nothing new keeps nothing, so the thread and its panel do not draw again for it.
                 if first != nil || !page.events.isEmpty { store.keep(activity, as: name) }
                 first = nil
@@ -568,27 +579,29 @@ struct TaskView: View {
                             .help(limit.reset_known ? "\(who) is at its usage limit until \(fleetComingTime(limit.until, now: state.time))."
                                                     : "\(who) is at its usage limit.")
                     }
-                    OwnerBubble(text: task.details)
+                    OwnerBubble(text: task.details).wordsSelectable(in: selection, row: "request")
                     if threadEvents {
                         // Its "Activity is unavailable" not while the window's notice says the outage
                         // (`FleetStore.hubNoticeShows`; fix round 3, item 33).
                         RuntimeActivity(activity: activity ?? TaskActivity(), error: store.hubNoticeShows ? nil : readError, task: task.id, attempt: task.attempt, stoppedAttempt: state.stoppedAttempt(of: task.id), terminal: task.isTerminal, isFresh: isFresh, followsLatest: $end.followsLatest,
                                         steers: state.steers?.filter { $0.task == task.id } ?? [],
                                         notes: notes, permissions: permissions,
-                                        childRequest: $store.childThreadRequest)
+                                        childRequest: $store.childThreadRequest, selection: selection)
                             .id("\(hub.absoluteString)/\(state.db)/\(task.id)")
                     }
                     // A hub without `thread_events` has no thread to put them in, so there they stay rows of their own.
                     if !threadEvents {
-                        ForEach(notes) { note in AgentReply(text: note.text, time: note.ts, compact: true) }
+                        ForEach(notes) { note in
+                            AgentReply(text: note.text, time: note.ts, compact: true).wordsSelectable(in: selection, row: "note-\(note.id)")
+                        }
                         ForEach(permissions.filter(\.needsReading)) { permission in
                             FoldRow(title: permission.tool, symbol: "hand.raised",
                                     status: permission.decision ?? TaskWords.waitingFor(task.requester), statusColor: .orange, chat: true) {
                                 VStack(alignment: .leading, spacing: 9) {
-                                    Text(permission.input).font(ChatStyle.code).textSelection(.enabled)
-                                    if let reason = permission.reason { Text(reason).textSelection(.enabled) }
+                                    Text(permission.input).font(ChatStyle.code).selectableWords()
+                                    if let reason = permission.reason { Text(reason).selectableWords() }
                                 }
-                            }
+                            }.wordsSelectable(in: selection, row: "permission-\(permission.id)")
                         }
                     }
                     // **The thread says its state once** (review B6): the head's word ("Reconnecting", "Stalled") is the
@@ -610,7 +623,9 @@ struct TaskView: View {
                     }
                     if task.delivered != nil {
                         Rule()
-                        if let what = task.what { AgentReply(text: what, time: task.delivered, compact: true) }
+                        if let what = task.what {
+                            AgentReply(text: what, time: task.delivered, compact: true).wordsSelectable(in: selection, row: "result")
+                        }
                         else { MessageText(text: String(l10n: "No result reported")) }
                         FoldRow(title: task.checkStatus, symbol: "checkmark.circle", chat: true) {
                             VStack(alignment: .leading, spacing: 10) {
@@ -633,6 +648,8 @@ struct TaskView: View {
                 }.threadRows(top: FleetSpace.underBand)
             }
             .keepsEnd($end)
+            // No row gets or loses its selectable words while the thread moves (`ChatWordsSelection`).
+            .scrollsAsAChat(selection, store: store)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             // Its rows fade as they leave at the top, over the room the thread leaves above its first row (T-20): its first
             // row stands 14 pt under the band, level with the first thing of every pane (the margins of 30 October 2026,

@@ -73,7 +73,11 @@ struct ReadChat: View {
     let entries: [ReadChatEntry]
     /// What stands under the newest entry: the reading's own line.
     var footer: AnyView? = nil
+    /// The store whose new readings wait while the chat moves (`FleetStore.scroll(_:moving:)`).
+    var store: FleetStore? = nil
     @State private var end = ChatEnd()
+    /// The rows whose words can be selected: the row under the pointer and the row whose words he pressed last.
+    @State private var selection = ChatSelection()
 
     /// Between two runs of messages, and over a line in the middle.
     private static let runGap: CGFloat = 18
@@ -89,6 +93,7 @@ struct ReadChat: View {
                         let stamp = entry.created.flatMap { ChatStamp.time($0, after: previous?.created) }
                         if let stamp { ChatStamp(time: stamp).padding(.top, previous == nil ? 0 : Self.runGap) }
                         row(entry, after: stamp == nil ? previous : nil, first: previous == nil || stamp != nil)
+                            .wordsSelectable(in: selection, row: "\(entry.id)")
                             .accessibilityIdentifier("chat-item-\(entry.id)")
                     }
                     footer
@@ -102,6 +107,8 @@ struct ReadChat: View {
             // pill (`topFade`).
             .topFade(24)
             .keepsEnd($end)
+            // No row gets or loses its selectable words while the chat moves (`ChatWordsSelection`).
+            .scrollsAsAChat(selection, store: store)
             // A message that comes while he reads the newest stands under it, and the chat follows it there.
             .onChange(of: entries.last?.id) { _, _ in
                 if end.followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
@@ -156,7 +163,7 @@ struct ReadChat: View {
                 }
             }
             if !note.text.isEmpty {
-                Text(verbatim: note.text).lineLimit(3).multilineTextAlignment(.center).textSelection(.enabled)
+                Text(verbatim: note.text).lineLimit(3).multilineTextAlignment(.center).selectableWords()
             }
         }
         .font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
@@ -206,7 +213,7 @@ struct ReadBubble: View {
             MessageText(text: message.text, chat: true).equatable()
         } else {
             Text(verbatim: message.text).font(ChatStyle.font).lineSpacing(ChatStyle.lineSpacing)
-                .foregroundStyle(FleetStyle.text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(FleetStyle.text).selectableWords().fixedSize(horizontal: false, vertical: true)
         }
     }
 

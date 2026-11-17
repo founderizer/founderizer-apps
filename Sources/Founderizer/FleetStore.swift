@@ -1622,6 +1622,21 @@ final class FleetStore {
         history = PageHistory(); homeChosen = false
     }
 
+    // MARK: A reading waits while he scrolls
+
+    /// The scroll views of chats and threads that move now, and the readings that wait for them (`ScrollHold`).
+    @ObservationIgnored private let scrollHold = ScrollHold()
+
+    /// A chat's or a thread's scroll view began to move, or came to rest (`scrollsAsAChat`).
+    func scroll(_ view: ObjectIdentifier, moving: Bool) { scrollHold.scroll(view, moving: moving) }
+
+    /// **A new reading waits while a chat or a thread scrolls** (`ScrollHold`): a reading draws again every view that
+    /// reads it, and a scroll lost frames to it every three seconds. It comes in when the scroll rests, and at the
+    /// latest three seconds before the reading on the screen would count as old.
+    func readingsRest() async {
+        await scrollHold.rest(sinceAnswer: lastSuccess.map { max(clock, Date()).timeIntervalSince($0) })
+    }
+
     /// Reads the fleet's state. **A call while a read is on its way is never dropped**: that read runs once more when
     /// it ends, and this call comes back after that one, so what the caller just did is in the state it sees.
     func refresh() async {
@@ -1647,6 +1662,12 @@ final class FleetStore {
         do {
             let (fresh, data) = try await client.stateReading(at: requestedHub, present: OwnerPresenceProbe.now())
             guard requestedHub == hub else { return }
+            // The hub answered, so this read is not slow, whatever waits now (`readPatience`), and the reading's age
+            // counts from this answer (`lastSuccess`). A read that is slow already comes in at once.
+            let answered = ContinuousClock.now, answeredAt = Date()
+            held.cancel()
+            if !readHeld { await readingsRest() }
+            guard requestedHub == hub else { return }
             if let state, state.db != fresh.db { childThreadRequest = nil; cancelEdit(); endProviderSetups(); lastReceipt = nil }
             var timeline = chatTimeline
             if timeline.update(messages: fresh.messages, reports: fresh.reports) { chatTimeline = timeline }
@@ -1661,8 +1682,8 @@ final class FleetStore {
             chooseHome()
             follow(fresh)
             markRepliesSeen()
-            lastSuccess = Date()
-            lastReadTook = ContinuousClock.now - began
+            lastSuccess = answeredAt
+            lastReadTook = answered - began
             if readHeld { readHeld = false }
             connectionError = nil
             lastReadError = nil

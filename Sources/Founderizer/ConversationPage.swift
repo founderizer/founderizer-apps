@@ -51,7 +51,7 @@ struct ConversationPage: View {
             }
         } chat: {
             if readAt != nil, !items.isEmpty {
-                ReadChat(entries: entries, footer: AnyView(status.padding(.top, 12)))
+                ReadChat(entries: entries, footer: AnyView(status.padding(.top, 12)), store: store)
             } else {
                 // The first visit, a read that failed, or a conversation with nothing in it yet: a page's blocks under
                 // its name.
@@ -214,7 +214,7 @@ struct AgentConversationPage: View {
                 ReadChat(entries: messages.map { message in
                     .message(ReadChatMessage(id: message.label, ours: message.sender == agent, who: .agent(message.sender),
                                              text: message.text, markdown: true, created: message.created))
-                })
+                }, store: store)
             } else {
                 VStack(alignment: .leading, spacing: FleetSpace.block) {
                     if kept == nil, failure == nil, store.connectionError == nil {

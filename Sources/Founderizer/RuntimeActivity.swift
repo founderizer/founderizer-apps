@@ -68,6 +68,8 @@ struct RuntimeActivity: View {
     /// The permissions of this task. Only the ones that wait or were refused become rows.
     var permissions: [FleetPermission] = []
     @Binding var childRequest: RuntimeToolKey?
+    /// The rows whose words can be selected (`ChatSelection`): the task's view keeps it, with its scroll view.
+    let selection: ChatSelection
     @State private var visibleCount = 80
     @State private var childPath: [RuntimeToolKey] = []
 
@@ -134,7 +136,8 @@ struct RuntimeActivity: View {
                 Spacer()
                 Text("Attempt \(key.attempt)").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
             }
-            ChildActivity(rows: timeline.children(of: key), timeline: timeline, kept: keptScripts, ended: ended, open: openChild).id(key)
+            ChildActivity(rows: timeline.children(of: key), timeline: timeline, kept: keptScripts, ended: ended, open: openChild,
+                          selection: selection).id(key)
         }
     }
 
@@ -147,6 +150,7 @@ struct RuntimeActivity: View {
                     .buttonStyle(.plain).foregroundStyle(FleetStyle.muted).font(ChatStyle.detail).padding(.bottom, activityFooter)
             }
             ForEach(entries.suffix(visibleCount)) { entry in
+                Group {
                 switch entry {
                 case .said(let shown): RuntimeRow(row: shown.row, script: shown.script, children: childRows(shown.row), ended: ended(shown.row), open: openChild)
                 case .steps(let rows):
@@ -156,9 +160,9 @@ struct RuntimeActivity: View {
                     FoldRow(title: permission.tool, symbol: "hand.raised",
                             status: permission.decision ?? String(l10n: "Waiting"), statusColor: .orange, chat: true) {
                         VStack(alignment: .leading, spacing: 9) {
-                            Text(permission.input).font(ChatStyle.code).textSelection(.enabled)
+                            Text(permission.input).font(ChatStyle.code).selectableWords()
                                 .fixedSize(horizontal: false, vertical: true)
-                            if let reason = permission.reason { Text(reason).textSelection(.enabled) }
+                            if let reason = permission.reason { Text(reason).selectableWords() }
                         }
                     }.padding(.bottom, activityFooter)
                 case .steer(let steer):
@@ -168,6 +172,9 @@ struct RuntimeActivity: View {
                             .font(ChatStyle.detail).foregroundStyle(FleetStyle.muted).help(fleetDate(steer.read_at ?? steer.created))
                     }.padding(.bottom, activityFooter)
                 }
+                }
+                // A long thread had a hidden text field for each text of every row (`ChatWordsSelection`).
+                .wordsSelectable(in: selection, row: entry.id)
             }
             // The plan the agent wrote for itself is for watching work that runs, so it stands open under the latest
             // activity (the owner's yes of 4 November 2026 to its mockup). A finished task is read by its result, so
@@ -314,6 +321,7 @@ private struct ChildActivity: View {
     let kept: Set<Int>
     let ended: (ActivityRow) -> Bool
     let open: (RuntimeToolKey) -> Void
+    let selection: ChatSelection
     @State private var visibleCount = 80
     var body: some View {
         // A child's thread is already one level in: its steps stay a plain list, without Fleet's own calls.
@@ -325,6 +333,7 @@ private struct ChildActivity: View {
             ForEach(shown.suffix(visibleCount)) { item in
                 RuntimeRow(row: item.row, script: item.script, children: item.row.subagent == nil ? [] : item.row.event.toolKey.map { timeline.children(of: $0) } ?? [],
                            ended: ended(item.row), open: open)
+                    .wordsSelectable(in: selection, row: "child-\(item.id)")
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -349,28 +358,28 @@ private struct RuntimeRow: View {
     @ViewBuilder private var content: some View {
         switch row.event.type {
         case "agent_thought":
-            FoldRow(title: String(l10n: "Thinking"), symbol: "sparkle", chat: true) { Text(verbatim: row.event.text ?? "").textSelection(.enabled) }
+            FoldRow(title: String(l10n: "Thinking"), symbol: "sparkle", chat: true) { Text(verbatim: row.event.text ?? "").selectableWords() }
         case "tool_call":
             FoldRow(title: row.subagent?.name ?? toolTitle(row.event.title), symbol: row.subagent == nil ? toolSymbol(row.event.kind) : "person.crop.square", status: ended ? String(l10n: "Result unknown") : toolStatus(row.status), statusColor: row.status == "failed" ? .orange : FleetStyle.muted, chat: true) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let title = row.event.title, toolTitle(title) != title {
-                        Text(verbatim: title).font(ChatStyle.code).textSelection(.enabled)
+                        Text(verbatim: title).font(ChatStyle.code).selectableWords()
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     ForEach(Array(row.locations.enumerated()), id: \.offset) { _, location in
-                        Label { Text(verbatim: location.path).textSelection(.enabled) } icon: { Image(systemName: "doc.text") }
+                        Label { Text(verbatim: location.path).selectableWords() } icon: { Image(systemName: "doc.text") }
                             .font(ChatStyle.detail).foregroundStyle(FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
                     }
                     if row.output != nil || row.subagent == nil {
-                        Text(verbatim: row.output ?? "No output reported.").font(ChatStyle.code).textSelection(.enabled)
+                        Text(verbatim: row.output ?? "No output reported.").font(ChatStyle.code).selectableWords()
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let script {
                         // The script that made this call: its line, and its own result on demand.
                         Text(verbatim: script.event.title ?? "exec").font(ChatStyle.code).foregroundStyle(FleetStyle.muted)
-                            .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                            .selectableWords().fixedSize(horizontal: false, vertical: true)
                         FoldRow(title: String(l10n: "Script result"), symbol: "terminal") {
-                            Text(verbatim: script.output ?? "No output reported.").font(ChatStyle.code).textSelection(.enabled)
+                            Text(verbatim: script.output ?? "No output reported.").font(ChatStyle.code).selectableWords()
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }

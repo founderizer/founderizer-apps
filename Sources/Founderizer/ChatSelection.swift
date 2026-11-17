@@ -67,6 +67,22 @@ import SwiftUI
 }
 
 extension View {
+    /// **The scroll view of a chat or a thread**: the rows that take `wordsSelectable(in:row:)` hear of its scroll and
+    /// of the presses while it shows (`ChatSelection`), and a new reading of the fleet waits while it moves
+    /// (`FleetStore.scroll(_:moving:)`).
+    func scrollsAsAChat(_ selection: ChatSelection, store: FleetStore?) -> some View {
+        // Fingers that rest on the trackpad (`tracking`) move nothing: only a scroll that moves holds.
+        onScrollPhaseChange { _, phase in
+            selection.scroll(moving: phase.isScrolling)
+            store?.scroll(ObjectIdentifier(selection), moving: phase.isScrolling)
+        }
+        .onAppear { selection.start() }
+        .onDisappear {
+            selection.stop()
+            store?.scroll(ObjectIdentifier(selection), moving: false)
+        }
+    }
+
     /// The words of the chat's row `row` can be selected while `selection` says so (`ChatSelection`).
     func wordsSelectable(in selection: ChatSelection, row: String) -> some View {
         modifier(SelectableRow(selection: selection, row: row))

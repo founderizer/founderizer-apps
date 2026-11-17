@@ -42,6 +42,32 @@ struct ChatReplyRunsTests {
         #expect(ends(rows, stamped: [0, 1]) == [true, false, true])
     }
 
+    /// The owner, 17 November 2026, with the pointer on the first of two replies: "I should see the time and the copy
+    /// button at the bottom of the second paragraph!"
+    @Test("Each reply of a run hovers its run, and the run keeps its id when a reply comes under its last")
+    func eachReplyNamesItsRun() throws {
+        let rows = [try mine("a", at: 10), try reply(1, at: 20), try reply(2, at: 30), .request(7), try reply(3, at: 40),
+                    try reply(4, at: 40 + 7200)]
+        let marks = rows.indices.map { $0 == 5 }
+        #expect(ChatPart.replyRuns(in: rows, stamped: marks) == [nil, "report-1", "report-1", nil, "report-3", "report-4"])
+        let more = rows + [try reply(5, at: 40 + 7300)]
+        #expect(ChatPart.replyRuns(in: more, stamped: marks + [false]).last == "report-4")
+    }
+
+    @Test("A pointer that goes from one reply to the next shows the footer of the run it is on, whichever it tells first")
+    func thePointerMovesInsideARun() {
+        var hover = ChatRunHover()
+        hover.hover("report-1", run: "report-1", inside: true)
+        hover.hover("report-2", run: "report-1", inside: true)
+        hover.hover("report-1", run: "report-1", inside: false)
+        #expect(hover.run == "report-1")
+        hover.hover("report-4", run: "report-4", inside: true)
+        hover.hover("report-2", run: "report-1", inside: false)
+        #expect(hover.run == "report-4")
+        hover.hover("report-4", run: "report-4", inside: false)
+        #expect(hover.run == nil)
+    }
+
     @Test("A row out of range is no reply")
     func outOfRange() throws {
         #expect(!ChatPart.endsReplies(at: 3, in: [try reply(1, at: 10)], stamped: []))

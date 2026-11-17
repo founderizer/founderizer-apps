@@ -9,3 +9,5 @@ contributor. Under section 5 of the licence, what you send is under the Apache L
 
 **Before you send it.** Run `swift test` in the folder of this repository. The iPhone app's tests run in Xcode, as the
 README says.
+
+**A change to a view.** Read `UI-PATTERNS.md` first: it says how each view of the Mac app is drawn.

@@ -29,6 +29,24 @@ struct StateReadingTests {
         #expect(!StateReading.isCurrent(held: true, sinceAnswer: 0.5, firstReadEnded: true))
     }
 
+    /// The Mac holds a new reading while a chat scrolls (the owner, 17 November 2026: "scrolling up and down the fleet
+    /// manager conversation does not feel smooth"). Held too long, the page would say that its reading is old while the
+    /// hub answers.
+    @Test func aReadingThatWaitsForAScrollComesInBeforeThePageWouldCallItOld() {
+        for since in stride(from: 0.0, through: 15, by: 0.5) {
+            let wait = StateReading.waitWhileScrolling(sinceAnswer: since)
+            #expect(wait >= 0)
+            // It comes in at once, or three seconds before the reading on the screen would count as old.
+            #expect(since + wait <= max(since, StateReading.limit - 3), "\(since)")
+            #expect(StateReading.isCurrent(held: false, sinceAnswer: since + wait, firstReadEnded: true) || wait == 0, "\(since)")
+        }
+        #expect(StateReading.waitWhileScrolling(sinceAnswer: 3) == 6)
+        // Before the hub's first answer of a launch there is no reading to keep current: nothing waits.
+        #expect(StateReading.waitWhileScrolling(sinceAnswer: nil) == 0)
+        // A clock that went back an hour after the answer: still nine seconds at most.
+        #expect(StateReading.waitWhileScrolling(sinceAnswer: -3_600) == 9)
+    }
+
     @Test func thePatienceIsLongerThanASlowReadAndShorterThanAReadsTimeLimit() {
         // The slowest read of the owner's fleet in 300, under load, took 6.9 s; a read gives up after 10 s.
         #expect(StateReading.patience > 6.9)

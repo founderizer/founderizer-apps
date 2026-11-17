@@ -17,3 +17,42 @@ extension ChatPart {
         return true
     }
 }
+
+extension ChatPart {
+    /// **The run of each row**: the id of the first reply of its run, for each reply of `rows`, and nil for every other
+    /// row. A run keeps that id when a reply comes under its last one. `stamped` as in `endsReplies`.
+    public static func replyRuns(in rows: [ChatPart], stamped: [Bool]) -> [String?] {
+        var runs: [String?] = []
+        var run: String?
+        for (index, row) in rows.enumerated() {
+            guard case .entry(.report) = row else { run = nil; runs.append(nil); continue }
+            if run == nil || stamped.indices.contains(index) && stamped[index] { run = row.id }
+            runs.append(run)
+        }
+        return runs
+    }
+}
+
+/// **The replies of a run share one hover** (the owner, 17 November 2026, with the pointer on the first of two replies:
+/// "I should see the time and the copy button at the bottom of the second paragraph! not showing now"): the pointer on
+/// any reply of a run shows Copy and the age under its last one. One row is under the pointer at a time, and a pointer
+/// that goes from one reply to the next can tell that it came into the new one before it tells that it left the old.
+public struct ChatRunHover: Equatable, Sendable {
+    /// The reply under the pointer.
+    public private(set) var row: String?
+    /// Its run (`ChatPart.replyRuns`), whose last reply shows its footer.
+    public private(set) var run: String?
+
+    public init() {}
+
+    /// The pointer came into the reply `row` of the run `run`, or left it.
+    public mutating func hover(_ row: String, run: String, inside: Bool) {
+        if inside {
+            self.row = row
+            self.run = run
+        } else if self.row == row {
+            self.row = nil
+            self.run = nil
+        }
+    }
+}

@@ -58,6 +58,15 @@ public enum StateReading {
         guard let sinceAnswer else { return !firstReadEnded }
         return sinceAnswer < limit
     }
+
+    /// **How long a new reading may wait while a chat or a thread scrolls** (`ScrollHold`): it comes in when the scroll
+    /// rests, and at the latest three seconds before the reading on the screen would count as old, so the page never
+    /// says that its reading is old while the hub answers. No wait when the hub has not answered in this launch, or when
+    /// the reading on the screen is that old already; never more than nine seconds, also when the clock went back.
+    public static func waitWhileScrolling(sinceAnswer: TimeInterval?) -> TimeInterval {
+        guard let sinceAnswer else { return 0 }
+        return min(limit - 3, max(0, limit - 3 - sinceAnswer))
+    }
 }
 
 /// **The readings that a page judges against the hub's clock stay current while the app runs** (the owner, 10 November
