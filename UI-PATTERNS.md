@@ -105,6 +105,15 @@ not for him, muted, in the board's words ("Until 15:00", "Waiting for Shop Devel
 "Done" only after the requester's check; the red mark and word of a result that did not succeed; "Canceled" muted. Rows
 under one reply stand 8 points apart. The iPhone's chat draws the same rows by the same rules.
 
+**In an agent's chat, the words of two rows at a time can be selected: the row under the pointer and the row whose
+words he pressed last** (`ChatSelection`, `ChatWordsSelection`; the owner, 17 November 2026: "scrolling up and down the
+fleet manager conversation does not feel smooth"). The words look as before, and a press on the words under the
+pointer selects them as before; only while the chat scrolls is the pointer over words an arrow and not an I-beam. For
+each text that can be selected, SwiftUI keeps a hidden AppKit text field over its words, and every one of these fields
+draws again at each frame of a scroll: the Fleet Manager's chat had 273, and most frames of its scroll were late. A
+row that gets or loses its fields is slow too, so no row does while the chat scrolls. A long list of words in a scroll
+view does not put `.textSelection(.enabled)` on every row.
+
 **The flat shape is the owner's own decision of 20 October 2026, and no longer an inherited one.** His fleet had
 never run a task, so he had never seen a task thread until a check build put one on his screen. He took it for a
 fault ("this is super broken now!?"; "not loading the proper styles"), and the styles were loading: the two files

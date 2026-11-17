@@ -33,14 +33,6 @@ enum NetworkCredentialStore {
         return NetworkCredential(stored: data)
     }
 
-    /// Whether a credential is held, without reading the secret, so a screen can say so without touching it.
-    static var isHeld: Bool {
-        guard FleetKeychainItem.developerIDSigned else { return false }
-        var request = query
-        request[kSecMatchLimit as String] = kSecMatchLimitOne
-        return SecItemCopyMatching(request as CFDictionary, nil) == errSecSuccess
-    }
-
     /// Keeps the credential, replacing whatever was there.
     static func save(_ credential: NetworkCredential) throws {
         guard FleetKeychainItem.developerIDSigned else { throw NetworkStoreError.keychain(errSecInteractionNotAllowed) }

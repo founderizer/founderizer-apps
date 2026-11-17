@@ -339,7 +339,9 @@ extension ErrorReport {
     /// **The crashes whose send can still go** (`ErrorReportError.keeps`), for the next start: one small file in the
     /// app's own folder (`KeptRecordsPlace`), readable by its user only, with at most `maxCrashes` entries (`keep` merges
     /// and cuts what it writes, `kept` what it reads). Nothing else is ever written: a crash that comes while the switch
-    /// is off, or before the hub has said that it is on, is never on the disk.
+    /// is off, or before the hub has said that it is on, is never on the disk. **The name is the app's own:** a file or a
+    /// link at it that does not read as crashes goes at the sender's first look (`forget`), and a send that keeps writes
+    /// over it (`keep`); a folder at it stays, with what is in it.
     public static var keptFile: URL { KeptRecordsPlace.folder("error-reports.json") }
 
     /// **What a send leaves in the kept file, and so for the next start**; it gives what the file holds then.
@@ -384,8 +386,11 @@ extension ErrorReport {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
     }
 
+    /// Removes the file, or a link at its name and never the file behind it, with one `unlink`. **A folder at the name
+    /// stays, with what is in it** (`removeItem` took the folder whole until 17 November 2026): only another program of
+    /// this user puts one there, `kept` reads nothing from it and `keep` cannot write over it, so no crash waits then.
     public static func forget(_ file: URL = keptFile) {
-        try? FileManager.default.removeItem(at: file)
+        unlink(file.path)
     }
 
     /// The system that runs, as the report names it: "macOS 26.6.2".

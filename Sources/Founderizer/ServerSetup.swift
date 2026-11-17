@@ -12,7 +12,7 @@ final class ServerSetupSession {
     private(set) var busy = false
     private(set) var available = false
     private(set) var error: String?
-    /// The bundled executor, from `onboard.py version` (owner API 1.12 placement). The setup view does not read it.
+    /// The bundled executor, from `onboard.py version`: whether it prepares a runtime (`ProviderView`).
     private(set) var executor: SetupExecutor?
     var hubReady = false
     private var connection: NSXPCConnection?
@@ -105,32 +105,17 @@ final class ServerSetupSession {
         }
     }
 
-    func answer(_ value: Any, secret: Data? = nil) async {
+    func answer(_ value: Any) async {
         guard !busy, running, let id = timeline.prompt?.id,
               let data = try? JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed) else { return }
         busy = true
         let ok: Bool = await withCheckedContinuation { continuation in
             guard let service = service(onError: { _ in continuation.resume(returning: false) }) else { continuation.resume(returning: false); return }
-            service.answer(prompt: id, value: data, secret: secret) { continuation.resume(returning: $0) }
+            service.answer(prompt: id, value: data) { continuation.resume(returning: $0) }
         }
         busy = false
         if ok { timeline.answered(id); error = nil }
         else { error = String(l10n: "The answer was not accepted. Check the setup connection.") }
-    }
-
-    /// Whether this Mac can answer a Tailscale key prompt by itself, from the credential in its keychain.
-    var holdsNetworkCredential: Bool { NetworkCredentialStore.isHeld }
-
-    /// Answers the executor's one Tailscale question with a key this Mac mints: single-use, for this machine, and
-    /// worthless in fifteen minutes. The owner presses once and types nothing; nothing is minted until they do.
-    func answerNetworkKey() async {
-        guard !busy, running, let credential = NetworkCredentialStore.read() else { return }
-        do {
-            let key = try await NetworkClient().key(for: configuration.name, with: credential)
-            await answer("sent", secret: Data(key.utf8))
-        } catch let failure {
-            self.error = (failure as? LocalizedError)?.errorDescription ?? failure.localizedDescription
-        }
     }
 
     func cancel() async {
@@ -166,12 +151,11 @@ struct SetupMark: View {
     }
 }
 
-/// **The one thing a setup stops to ask**: a server identity to confirm, a key, the provider's own sign-in page, a
-/// command to paste or a choice: the session's own open prompt. It stands with nothing else around it on the provider
-/// and account card of one agent (`ProviderView`), where the steps of a setup are not his business and the question is.
+/// **The one thing a setup stops to ask**: the provider's own sign-in page, or a command to paste: the session's own
+/// open prompt. It stands with nothing else around it on the provider and account card of one agent (`ProviderView`),
+/// where the steps of a setup are not his business and the question is.
 struct SetupPromptView: View {
     @Bindable var session: ServerSetupSession
-    @Binding var secret: String
 
     var body: some View {
         if let shown = session.timeline.prompt ?? session.timeline.signIn { ask(shown) }
@@ -180,37 +164,6 @@ struct SetupPromptView: View {
     @ViewBuilder private func ask(_ prompt: SetupEvent) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             switch prompt.kind {
-            case "confirm_host_key":
-                Text("Confirm server identity").fontWeight(.medium)
-                Text("Compare this fingerprint with your provider's server details.").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                Text("\(prompt.data?.host ?? ""):\(prompt.data?.port ?? 22)").textSelection(.enabled)
-                ForEach(prompt.data?.fingerprints ?? [], id: \.sha256) { fingerprint in
-                    Text("\(fingerprint.algorithm)  \(fingerprint.sha256)").font(FormMetrics.code).textSelection(.enabled)
-                }
-                HStack {
-                    Button("Cancel") { Task { await session.answer(false) } }
-                    Button("Trust this server") { Task { await session.answer(true) } }
-                }.buttonStyle(FleetOutlineButtonStyle())
-            case "secret":
-                // A fleet whose private network is connected never types a key: this Mac makes one for this
-                // machine, on one press.
-                if prompt.data?.label == "tailscale_auth_key", session.holdsNetworkCredential {
-                    Text("Put this server on your private network").fontWeight(.medium)
-                    Text("A key for this server alone, used once and worthless in fifteen minutes.")
-                        .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                    Button("Put it on the network") { Task { await session.answerNetworkKey() } }
-                        .buttonStyle(FleetOutlineButtonStyle()).disabled(session.busy)
-                        .accessibilityIdentifier("setup-network-key")
-                } else {
-                    let hint = prompt.data?.label == "tailscale_auth_key" ? String(l10n: "Tailscale auth key") : String(l10n: "Provider password")
-                    SecureField(text: $secret, prompt: Text(verbatim: "")) { Text(hint) }
-                        .fieldPlaceholder(hint, shows: secret.isEmpty)
-                        .fleetField().accessibilityIdentifier("setup-secret")
-                    Button("Continue") {
-                        let value = Data(secret.utf8); secret = ""
-                        Task { await session.answer("sent", secret: value) }
-                    }.buttonStyle(FleetOutlineButtonStyle()).disabled(secret.isEmpty || secret.utf8.count > 2048)
-                }
             case "open_url":
                 if let code = prompt.data?.code { Text(code).font(FormMetrics.oneTimeCode).textSelection(.enabled) }
                 if let url = prompt.loginURL {
@@ -231,11 +184,6 @@ struct SetupPromptView: View {
                         Text(command).font(FormMetrics.code).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                     }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                 } else { Text("The installer returned an unsupported command.").foregroundStyle(.orange) }
-            case "choice":
-                Text(prompt.data?.question ?? String(l10n: "Choose an option"))
-                ForEach(prompt.data?.options ?? [], id: \.value) { option in
-                    Button(option.label) { Task { await session.answer(option.value) } }.buttonStyle(FleetOutlineButtonStyle())
-                }
             default: Text("This setup prompt is not supported.").foregroundStyle(.orange)
             }
         }.padding(15).frame(maxWidth: .infinity, alignment: .leading)

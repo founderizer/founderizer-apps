@@ -77,15 +77,16 @@ public struct VaultPlan: Equatable, Sendable {
         // Each server whose vault key is not pinned as it reports it now, unless this session's own pin of that very
         // key is still on its way into the hub's next reading (the hub reads the vault's status once a minute). A
         // server that the owner removed on this Mac gets no pin again, whatever the hub's reading says (`VaultRemovals`).
+        // While that record is not known, the plan gives no server a pin (`removedKnown`).
         let open = reading.machines.filter {
-            $0.canBeTrusted && !$0.isTrusted && !facts.removed.contains($0.machine)
+            facts.removedKnown && $0.canBeTrusted && !$0.isTrusted && !facts.removed.contains($0.machine)
                 && facts.confirmedPins[$0.machine] != $0.broker_recipient
         }
         // Each trusted server whose kept pin is missing or `pinRefresh` old, from a hub that says when its kept pin was
         // signed: its key is read and signed again, by the same step, at most once a day after a success. Never a server
         // that the owner removed on this Mac.
         let stale = reading.machines.filter { machine in
-            machine.isTrusted && machine.keptPinKnown && !facts.removed.contains(machine.machine)
+            facts.removedKnown && machine.isTrusted && machine.keptPinKnown && !facts.removed.contains(machine.machine)
                 && (machine.kept_pin_at.map { facts.now - Double($0) > Self.pinRefresh } ?? true)
                 && facts.now - (facts.signedAt[machine.machine] ?? 0) >= Self.resignWait
         }
@@ -116,12 +117,13 @@ public struct VaultPlan: Equatable, Sendable {
             else if facts.recovery?.isDue(at: facts.now) ?? true { return VaultPlan(step: .recover, servers: rows) }
         }
         // The vault runs another program than the hub's release: the install's root step again brings it up to date.
-        // After six tries in a row the row shows, and the step goes on each hour (C3).
-        if reading.programBehind, let tries = facts.update, tries.givenUp {
+        // After six tries in a row the row shows, and the step goes on each hour (C3). While the record of those tries is
+        // not known, the update waits (`updateKnown`).
+        if facts.updateKnown, reading.programBehind, let tries = facts.update, tries.givenUp {
             let row = VaultNeed.retry(.update, KeySwapWords.centralBehind(tries.reason))
             if facts.now - tries.last >= Self.retryEvery { return VaultPlan(step: .update, vault: vault ?? row, servers: rows) }
             vault = vault ?? row
-        } else if reading.programBehind, facts.update?.isDue(at: facts.now) ?? true {
+        } else if facts.updateKnown, reading.programBehind, facts.update?.isDue(at: facts.now) ?? true {
             return VaultPlan(step: .update, vault: vault, servers: rows)
         }
         return VaultPlan(step: due.isEmpty ? .nothing : .trust(due), vault: vault, servers: rows)
@@ -208,15 +210,22 @@ public struct VaultFacts: Equatable, Sendable {
     public var update: VaultTries?
     /// The machines of this fleet that the owner removed on this Mac (`VaultRemovals`): none of them gets a pin.
     public var removed: Set<String>
+    /// The record of the removed servers is known (`RecordKeeper.known`). While it is not, the file is there and gives
+    /// no record, so the machines that it names are not known: the plan gives no machine a pin. The owner's own Try
+    /// again on a server's row is his act on this Mac, and it trusts that server all the same.
+    public var removedKnown: Bool
+    /// The record that keeps the update's tries is known (`KeySwapState`, `RecordKeeper.known`). While it is not, those
+    /// tries are not known, so the update waits.
+    public var updateKnown: Bool
     public var now: Double
 
     public init(keyHeld: Bool, pin: String?, hubOnRecord: Bool, otherOwner: Bool = false, confirmedRecovery: String? = nil,
                 confirmedPins: [String: String] = [:], signedAt: [String: Double] = [:], install: VaultTries? = nil,
                 recovery: VaultTries? = nil, servers: [String: VaultTries] = [:], update: VaultTries? = nil,
-                removed: Set<String> = [], now: Double) {
+                removed: Set<String> = [], removedKnown: Bool = true, updateKnown: Bool = true, now: Double) {
         self.keyHeld = keyHeld; self.pin = pin; self.hubOnRecord = hubOnRecord; self.otherOwner = otherOwner
         self.confirmedRecovery = confirmedRecovery; self.confirmedPins = confirmedPins; self.signedAt = signedAt
         self.install = install; self.recovery = recovery; self.servers = servers; self.update = update
-        self.removed = removed; self.now = now
+        self.removed = removed; self.removedKnown = removedKnown; self.updateKnown = updateKnown; self.now = now
     }
 }

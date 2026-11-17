@@ -1,4 +1,20 @@
+<div align="center">
+
+<a href="https://founderizer.com"><img src="founderizer-mark.svg" alt="" width="64" height="64"></a>
+
 # Founderizer for Mac and iPhone
+
+**Your own team of AI agents, on servers you own.**
+
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![The latest release](https://img.shields.io/github/v/release/founderizer/founderizer-apps?label=release&color=blue)](https://github.com/founderizer/founderizer-apps/releases/latest)
+[![macOS 15 or later, iOS 18 or later](https://img.shields.io/badge/runs%20on-macOS%2015%2B%20%C2%B7%20iOS%2018%2B-blue)](#what-you-need)
+
+[Website](https://founderizer.com) · [Download&nbsp;for&nbsp;Mac&nbsp;and&nbsp;iPhone](https://founderizer.com/download) · [Source&nbsp;of&nbsp;the&nbsp;hub](https://github.com/founderizer/founderizer)
+
+<a href="https://founderizer.com"><img src=".github/founderizer-mac-iphone.webp" alt="Founderizer on a Mac and an iPhone, with an example team of four agents: the Tasks board on the Mac, the chats on the iPhone" width="860"></a>
+
+</div>
 
 Founderizer runs always-on AI agents on servers that you own. A hub on one of your servers keeps the agents, their
 tasks and their records. These two apps are how you work with them:
@@ -8,8 +24,6 @@ tasks and their records. These two apps are how you work with them:
 
 The apps run no AI. They talk to your own hub on your private network (Tailscale), and the agents use your own
 accounts with the AI providers.
-
-The hub is a separate repository: <https://github.com/founderizer/founderizer>.
 
 ## What the Mac app does
 
@@ -127,11 +141,8 @@ mark's path is from Octicons, under the MIT License; its notice stands beside it
 
 ## Changes from outside
 
-Issues and pull requests are welcome. This repository is a copy that we publish from our own repository, so we do not
-merge a pull request here. We apply its change to our repository, run the tests, and publish the next copy with it.
-Then we close the pull request with a link to that copy. The commit of that copy names you as co-author, so GitHub
-lists you as a contributor. Under section 5 of the licence, what you send is under the Apache License 2.0. Before you
-send a change, run `swift test`.
+Issues and pull requests are welcome. [CONTRIBUTING.md](.github/CONTRIBUTING.md) says how a change gets in, and how to
+test it before you send it.
 
 ## Credit
 

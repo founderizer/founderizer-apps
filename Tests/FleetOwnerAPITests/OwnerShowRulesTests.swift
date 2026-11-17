@@ -1061,9 +1061,10 @@ struct OwnerShowRulesTests {
                 found.append("\(file.lastPathComponent): \(events)")
             }
         }
-        // **The nine watches of the app's own events**, by file and by the events that each takes.
+        // **The ten watches of the app's own events**, by file and by the events that each takes.
         #expect(found == [
             "AttachmentViews.swift: .keyDown",                      // Command and V with a file: asks `holdsKeys`
+            "ChatSelection.swift: [.leftMouseDown, .rightMouseDown, .otherMouseDown]",   // a chat's pressed row: asks `reaches`
             "FleetMenu.swift: kinds",                               // the app's menu while it is open (four, below)
             "FleetMenu.swift: [.rightMouseDown, .leftMouseDown]",   // a right click opens the app's menu: asks `reaches`
             "FleetView.swift: .keyDown",                            // ⌘1 to 9, the steps, ⌥⇧↓, typing: asks `holdsKeys`
@@ -1095,6 +1096,15 @@ struct OwnerShowRulesTests {
             let block = try #require(text.range(of: "MainActor.assumeIsolated { () -> Bool in", range: watch.upperBound..<text.endIndex))
             #expect(text[block.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(guardLine), "\(path)")
         }
+
+        // ---- **A press in an agent's chat keeps the words of the row that he pressed selectable** (`ChatSelection`):
+        // the watch asks the hold first, and a click that the hold drops moves no row.
+        let chat = try Self.source("Sources/Founderizer/ChatSelection.swift")
+        let watches = try Self.body(of: "func start() {", in: chat)
+        let asksHold = try #require(watches.range(of: "guard AppFront.reaches(event) else { return }"))
+        let presses = try #require(watches.range(of: "self?.change { $0.press(onWords: Self.onWords(event)) }"))
+        #expect(asksHold.upperBound < presses.lowerBound)
+        #expect(watches.contains("return event"))
 
         // ---- the app's menu. While it is open it has four watches, through one helper: a click elsewhere, the
         // held button's drags and release, the scroll wheel, and its keys.

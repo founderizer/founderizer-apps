@@ -85,22 +85,23 @@ struct MessageText: View, Equatable {
                 Group {
                 switch block.kind {
                 case .paragraph:
-                    Text(block.formatted).lineSpacing(lines)
+                    Text(block.formatted).lineSpacing(lines).selectableWords()
                 case .heading:
                     Text(block.formatted)
                         .font(step ? Font.system(size: SetupMetrics.text, weight: .semibold) : chat ? ChatStyle.heading : FormMetrics.title)
+                        .selectableWords()
                         .padding(.top, chat ? 0 : 3)
                 case .item:
                     // An item under another starts its mark where that item's words start: the mark's 12 and the 9
                     // after it, for each level.
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
-                        Text(block.marker).frame(minWidth: 12, alignment: .trailing)
-                        Text(block.formatted).lineSpacing(lines)
+                        Text(block.marker).selectableWords().frame(minWidth: 12, alignment: .trailing)
+                        Text(block.formatted).lineSpacing(lines).selectableWords()
                     }.padding(.leading, 3 + CGFloat(block.level) * 21)
                 case .quote:
                     HStack(spacing: 10) {
                         Rectangle().fill(FleetStyle.muted.opacity(0.4)).frame(width: 2)
-                        Text(block.formatted).foregroundStyle(FleetStyle.muted).lineSpacing(lines)
+                        Text(block.formatted).foregroundStyle(FleetStyle.muted).lineSpacing(lines).selectableWords()
                     }
                 case .code: CodeBlock(text: block.text, font: chat ? ChatStyle.code : step && !script ? Self.stepCode : FormMetrics.code,
                                       spacing: chat ? 5 : 4, fill: card ? FleetStyle.canvas : FleetStyle.surface,
@@ -111,7 +112,7 @@ struct MessageText: View, Equatable {
                         ForEach(Array(block.cells.enumerated()), id: \.offset) { index, row in
                             GridRow {
                                 ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                                    Text(cell).fontWeight(index == 0 ? .medium : .regular).lineSpacing(3)
+                                    Text(cell).fontWeight(index == 0 ? .medium : .regular).lineSpacing(3).selectableWords()
                                 }
                             }
                             if index == 0 { Rule().gridCellUnsizedAxes(.horizontal) }
@@ -123,10 +124,33 @@ struct MessageText: View, Equatable {
                 .padding(.top, !chat || index == 0 ? 0 :
                             block.kind == .item && blocks[index - 1].kind == .item ? ChatStyle.itemSpacing : ChatStyle.blockSpacing)
             }
-        }.font(step ? SetupMetrics.textFont : chat ? ChatStyle.font : FleetStyle.body).textSelection(.enabled)
+        }.font(step ? SetupMetrics.textFont : chat ? ChatStyle.font : FleetStyle.body)
             // A link's words in the link colour, which reads 4.5:1 and more (fix round 2): the accent drew them 3.4:1.
             .tint(FleetStyle.link)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+extension EnvironmentValues {
+    /// Whether the words of a message (`MessageText`) can be selected here: everywhere, and in an agent's chat only in
+    /// the row under the pointer and the row whose words he pressed last (`ChatSelection`).
+    @Entry var messageWordsSelectable = true
+}
+
+private extension View {
+    /// **Each text of a message takes the selection itself**, where `messageWordsSelectable` says so: a change gives or
+    /// takes the selection of each text and makes nothing else of the message again, so a code block keeps the place
+    /// that he scrolled it to sideways, and its copy icon its state.
+    func selectableWords() -> some View { modifier(SelectableWords()) }
+}
+
+/// A text's selection where `messageWordsSelectable` says so. The modifier reads the value itself, so a message whose
+/// words did not change (`MessageText` is equatable) still follows it.
+private struct SelectableWords: ViewModifier {
+    @Environment(\.messageWordsSelectable) private var selectable
+
+    func body(content: Content) -> some View {
+        if selectable { content.textSelection(.enabled) } else { content }
     }
 }
 
@@ -187,7 +211,7 @@ private struct CodeBlock: View {
         Group {
             if runs, let run {
                 HStack(alignment: .center, spacing: 6) {
-                    Text(verbatim: text).font(font).lineSpacing(spacing)
+                    Text(verbatim: text).font(font).lineSpacing(spacing).selectableWords()
                         .fixedSize(horizontal: false, vertical: true).padding(.vertical, 12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if copies { copyIcon }
@@ -195,11 +219,11 @@ private struct CodeBlock: View {
                 }
                 .padding(.leading, 12).padding(.trailing, 6)
             } else if wraps {
-                Text(verbatim: text).font(font).lineSpacing(spacing)
+                Text(verbatim: text).font(font).lineSpacing(spacing).selectableWords()
                     .fixedSize(horizontal: false, vertical: true).padding(12)
             } else {
                 ScrollView(.horizontal) {
-                    Text(verbatim: text).font(font).lineSpacing(spacing)
+                    Text(verbatim: text).font(font).lineSpacing(spacing).selectableWords()
                         .fixedSize(horizontal: true, vertical: false).padding(12)
                 }
                 .sidewaysFade()

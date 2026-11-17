@@ -8,7 +8,6 @@ final class SetupService: NSObject, FleetSetupServiceProtocol, @unchecked Sendab
     private let queue = DispatchQueue(label: "fleet.setup.executor")
     private var process: pid_t = 0
     private var input: FileHandle?
-    private var secrets: FileHandle?
     private var events: [SetupEvent] = []
     private var timeline = SetupTimeline()
     private var failure = ""
@@ -78,9 +77,6 @@ final class SetupService: NSObject, FleetSetupServiceProtocol, @unchecked Sendab
                 guard let python, FileManager.default.fileExists(atPath: kit.appendingPathComponent("onboard.py").path) else {
                     reply(false, "The setup executor is not included in this build."); return
                 }
-                if config.auth == "identity", let key = config.identityFile, !FileManager.default.isReadableFile(atPath: key) {
-                    reply(false, "The selected SSH key is not readable."); return
-                }
                 events = []; timeline = SetupTimeline(); failure = ""; retainedBytes = 0; lineBuffer = Data()
                 try launch(python: python, arguments: config.arguments)
                 reply(true, "")
@@ -95,13 +91,12 @@ final class SetupService: NSObject, FleetSetupServiceProtocol, @unchecked Sendab
         }
     }
 
-    func answer(prompt: String, value: Data, secret: Data?, reply: @escaping (Bool) -> Void) {
+    func answer(prompt: String, value: Data, reply: @escaping (Bool) -> Void) {
         queue.sync {
             guard running, let pending = timeline.prompt, pending.id == prompt, value.count < 4096,
                   let answer = try? JSONSerialization.jsonObject(with: value, options: .fragmentsAllowed) else { reply(false); return }
-            guard pending.accepts(answer, secret: secret) else { reply(false); return }
+            guard pending.accepts(answer) else { reply(false); return }
             do {
-                if pending.kind == "secret", let secret { try secrets?.write(contentsOf: secret + Data([10])) }
                 var line = try JSONSerialization.data(withJSONObject: ["prompt": prompt, "answer": answer])
                 line.append(10)
                 try input?.write(contentsOf: line)
@@ -131,7 +126,7 @@ final class SetupService: NSObject, FleetSetupServiceProtocol, @unchecked Sendab
     }
 
     private func launch(python: String, arguments: [String]) throws {
-        // Move pipe descriptors above stdio/FD 3 before spawn actions; this avoids dup2 collisions.
+        // Move pipe descriptors above stdio before spawn actions; this avoids dup2 collisions.
         func channel() throws -> [Int32] {
             var raw: [Int32] = [0, 0]
             guard pipe(&raw) == 0 else { throw SetupError.invalidConfiguration }
@@ -146,7 +141,6 @@ final class SetupService: NSObject, FleetSetupServiceProtocol, @unchecked Sendab
         defer { opened.forEach { close($0) } }
         let stdin = try channel(); opened += stdin
         let stdout = try channel(); opened += stdout
-        let secret = try channel(); opened += secret
         let null = open("/dev/null", O_WRONLY | O_CLOEXEC)
         guard null >= 0 else { throw SetupError.invalidConfiguration }
         opened.append(null)
@@ -157,8 +151,7 @@ final class SetupService: NSObject, FleetSetupServiceProtocol, @unchecked Sendab
         posix_spawn_file_actions_adddup2(&actions, stdin[0], STDIN_FILENO)
         posix_spawn_file_actions_adddup2(&actions, stdout[1], STDOUT_FILENO)
         posix_spawn_file_actions_adddup2(&actions, null, STDERR_FILENO)
-        posix_spawn_file_actions_adddup2(&actions, secret[0], 3)
-        for fd in opened where fd > 3 { posix_spawn_file_actions_addclose(&actions, fd) }
+        for fd in opened where fd > STDERR_FILENO { posix_spawn_file_actions_addclose(&actions, fd) }
         guard posix_spawn_file_actions_addchdir_np(&actions, kit.path) == 0 else { throw SetupError.invalidConfiguration }
         // A child keeps every signal that its parent ignores, and the XPC runtime ignores SIGTERM in this service. The
         // executor gets the default action for every signal and an empty mask, so that Stop's SIGTERM ends it at once.
@@ -179,9 +172,8 @@ final class SetupService: NSObject, FleetSetupServiceProtocol, @unchecked Sendab
         var pid: pid_t = 0
         guard posix_spawn(&pid, python, &actions, &attributes, &argv, &envp) == 0 else { throw SetupError.invalidConfiguration }
         input = FileHandle(fileDescriptor: stdin[1], closeOnDealloc: true)
-        secrets = FileHandle(fileDescriptor: secret[1], closeOnDealloc: true)
         let output = FileHandle(fileDescriptor: stdout[0], closeOnDealloc: true)
-        opened.removeAll { [stdin[1], secret[1], stdout[0]].contains($0) }
+        opened.removeAll { [stdin[1], stdout[0]].contains($0) }
         process = pid; running = true
         let childPID = pid
         DispatchQueue.global(qos: .utility).async {
@@ -194,8 +186,8 @@ final class SetupService: NSObject, FleetSetupServiceProtocol, @unchecked Sendab
             while waitpid(childPID, &status, 0) < 0 && errno == EINTR {}
             self.queue.sync {
                 self.running = false; self.process = 0
-                try? self.input?.close(); try? self.secrets?.close()
-                self.input = nil; self.secrets = nil
+                try? self.input?.close()
+                self.input = nil
                 if self.timeline.result == nil && self.failure.isEmpty {
                     self.failure = "Setup ended before verification (status \(status >> 8), signal \(status & 127)). Resume to check the server before continuing."
                 }

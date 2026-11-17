@@ -22,11 +22,14 @@ public enum KeySwapPlan {
     public static let lockedFor: Double = 60
 
     /// **What the table wants on one server** (the design, section 3), or nil for a row that gets no step: a Mac, a row
-    /// that has not joined, the hub's own machine, a server that the owner removed on this Mac, and a row whose key
-    /// swap fields this app cannot read (a hub before them). `central` is false when this Mac has no list of the owner
-    /// keys: then only the reading runs, and no switch (change 4).
+    /// that has not joined, the hub's own machine, a server that the owner removed on this Mac, a row whose key swap
+    /// fields this app cannot read (a hub before them), and a row whose name is not a server's name
+    /// (`Servers.machinePattern`, as the reading's own request needs): a step's record is kept under that name, so a
+    /// hub that is broken into cannot make this Mac's record grow with names of its own. `central` is false when this
+    /// Mac has no list of the owner keys: then only the reading runs, and no switch (change 4).
     public static func wanted(_ row: KeySwapServer, central: Bool, removed: Set<String> = []) -> KeySwapWanted? {
-        guard row.kind == "linux", row.joined, !row.hub, !removed.contains(row.name), let word = row.word else { return nil }
+        guard row.kind == "linux", row.joined, !row.hub, !removed.contains(row.name), let word = row.word,
+              row.name.range(of: Servers.machinePattern, options: .regularExpression) != nil else { return nil }
         let swaps = word
         switch row.wish {
         case .off?:
@@ -57,8 +60,10 @@ public enum KeySwapPlan {
     /// fleet are not all in this Mac's last good keys step there, when the hub's release has another `vault.py` than
     /// the one of its last step (at most once in `wait`), or when its pin's weekly re-sign is due. It runs when its
     /// tries let it. While a put-back's hold stands on any server, no step switches to on (change 2): the keys steps
-    /// and the readings go on, and a switch to off, which the owner wished, goes on too.
+    /// and the readings go on, and a switch to off, which the owner wished, goes on too. While this Mac's records or
+    /// the record of the removed servers are not known (`RecordKeeper.known`), no step runs.
     public static func next(_ rows: [KeySwapServer], facts: KeySwapFacts) -> KeySwapStep? {
+        guard facts.recordsKnown, facts.removedKnown else { return nil }
         let central = facts.central
         let held = rows.contains { holds($0, facts.records[$0.name]) }
         var later: KeySwapStep?
@@ -140,7 +145,8 @@ public enum KeySwapPlan {
         var record = earlier ?? KeySwapRecord()
         record.lockedAt = nil
         record.atOnce = nil
-        record.tries = KeySwapTries.failed(after: record.tries, at: now, reason: KeySwapWords.notSwitchedOn(words))
+        // at most 2000 characters, as a stop's own reason from the server (`KeySwapAnswer.read`)
+        record.tries = KeySwapTries.failed(after: record.tries, at: now, reason: KeySwapWords.notSwitchedOn(String(words.prefix(2000))))
         return record
     }
 
@@ -227,12 +233,20 @@ public struct KeySwapFacts: Equatable, Sendable {
     public var removed: Set<String>
     /// The servers whose pin's weekly re-sign is due in this round (`VaultPlan.pinRefresh`).
     public var resignDue: Set<String>
+    /// This Mac's records are known (`RecordKeeper.known`). While they are not, no step runs: a put-back's hold or the
+    /// tries can stand in them, so the plan cannot decide.
+    public var recordsKnown: Bool
+    /// The record of the removed servers is known (`RecordKeeper.known`). While it is not, the servers that it names
+    /// are not known, so no step runs.
+    public var removedKnown: Bool
     public var now: Double
 
     public init(central: KeySwapCentral?, hubProgram: String? = nil, records: [String: KeySwapRecord] = [:],
-                removed: Set<String> = [], resignDue: Set<String> = [], now: Double) {
+                removed: Set<String> = [], resignDue: Set<String> = [], recordsKnown: Bool = true,
+                removedKnown: Bool = true, now: Double) {
         self.central = central; self.hubProgram = hubProgram; self.records = records
-        self.removed = removed; self.resignDue = resignDue; self.now = now
+        self.removed = removed; self.resignDue = resignDue; self.recordsKnown = recordsKnown
+        self.removedKnown = removedKnown; self.now = now
     }
 }
 

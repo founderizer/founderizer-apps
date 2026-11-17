@@ -14,7 +14,6 @@
       }
     },
     "%@\n%@" : {},
-    "%@  %@" : {},
     "%@ %@ stay." : {
       "localizations" : {
         "es" : {
@@ -2012,7 +2011,6 @@
         }
       }
     },
-    "%@:%lld" : {},
     "%lld" : {},
     "%lld accounts" : {
       "localizations" : {
@@ -2996,16 +2994,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Un hub solo sirve a la dirección de su propietario. Reclámalo desde este Mac, o añade este Mac a la misma red privada."
-          }
-        }
-      }
-    },
-    "A key for this server alone, used once and worthless in fifteen minutes." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Una clave solo para este servidor, de un solo uso, que deja de valer a los quince minutos."
           }
         }
       }
@@ -5730,16 +5718,6 @@
         }
       }
     },
-    "Choose an option" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Elige una opción"
-          }
-        }
-      }
-    },
     "Choose another" : {
       "localizations" : {
         "es" : {
@@ -6010,16 +5988,6 @@
         }
       }
     },
-    "Compare this fingerprint with your provider's server details." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compara esta huella con los datos del servidor de tu proveedor."
-          }
-        }
-      }
-    },
     "Completed" : {
       "localizations" : {
         "es" : {
@@ -6046,16 +6014,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Configurar %@"
-          }
-        }
-      }
-    },
-    "Confirm server identity" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Confirma la identidad del servidor"
           }
         }
       }
@@ -15180,16 +15138,6 @@
         }
       }
     },
-    "Provider password" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contraseña del proveedor"
-          }
-        }
-      }
-    },
     "Put a copy back" : {
       "localizations" : {
         "es" : {
@@ -15210,32 +15158,12 @@
         }
       }
     },
-    "Put it on the network" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Añadirlo a la red"
-          }
-        }
-      }
-    },
     "Put the tag back" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Volver a poner la etiqueta"
-          }
-        }
-      }
-    },
-    "Put this server on your private network" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Añade este servidor a tu red privada"
           }
         }
       }
@@ -19026,16 +18954,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tailscale pide a este Mac que espere. Vuelve a intentarlo en un minuto."
-          }
-        }
-      }
-    },
-    "Tailscale auth key" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clave de autenticación de Tailscale"
           }
         }
       }
@@ -24696,16 +24614,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Herramientas"
-          }
-        }
-      }
-    },
-    "Trust this server" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Confiar en este servidor"
           }
         }
       }

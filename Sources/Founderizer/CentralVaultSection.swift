@@ -1,5 +1,6 @@
 import FleetCore
 import Observation
+import os
 import SwiftUI
 
 /// **The fleet's central vault, kept by this Mac by itself** (owner feature `central_vault`).
@@ -24,6 +25,7 @@ import SwiftUI
 /// It lives in the store, one for each hub address, so that a step that takes minutes goes on whatever page shows.
 @MainActor @Observable
 final class CentralVaultModel {
+    private static let log = Logger(subsystem: "com.founderizer.app", category: "vault")
     private let hub: URL
     /// The last reading of `GET /ui/vault` for this hub generation.
     private(set) var reading: VaultReading?
@@ -57,18 +59,25 @@ final class CentralVaultModel {
     private var confirmedPins: [String: String] = [:]
     /// When this session last signed each machine's pin (`VaultFacts.signedAt`).
     private var signedAt: [String: Double] = [:]
-    /// The servers that the owner removed on this Mac, kept in a file of this Mac (`VaultRemovals`) and read again at
-    /// each reading, because the model of another hub address can change that file; and the removals and Add servers of
-    /// this session whose fleet the vault model has not read yet.
-    private var removals = VaultRemovals.load()
+    /// The servers that the owner removed on this Mac, kept in a file of this Mac (`VaultRemovals`) by the app's one
+    /// keeper of it (`VaultRecordFiles`), which the model of each hub address uses and each round reads again; and the
+    /// removals and Add servers of this session whose fleet the vault model has not read yet.
+    private var removals: RecordKeeper<VaultRemovals> {
+        get { VaultRecordFiles.removals }
+        set { VaultRecordFiles.removals = newValue }
+    }
     private var removedHere: [String: Double] = [:]
     private var addedHere: Set<String> = []
     /// The tries of each unpin that has not reached the central vault: one that fails waits `VaultTries.wait`, for ever.
     private var unpins: [String: VaultTries] = [:]
     /// **The key swap's own step** (Part B, app patch 2): this Mac's records on the disk (`KeySwapState`, also the
     /// tries of the update above, so that they outlive a start), the servers whose pin this session signed since their
-    /// last key swap step (the weekly re-sign is one of its events), and the server rows that its stops give.
-    private var keySwap = KeySwapState.load()
+    /// last key swap step (the weekly re-sign is one of its events), and the server rows that its stops give. The
+    /// records are kept as the removals are (`VaultRecordFiles`).
+    private var keySwap: RecordKeeper<KeySwapState> {
+        get { VaultRecordFiles.keySwap }
+        set { VaultRecordFiles.keySwap = newValue }
+    }
     private var resigned: Set<String> = []
     private(set) var keySwapNeeds: [VaultServerNeed] = []
     /// The central vault's owner keys and fleet as this session last read them on the hub's machine, and when: read
@@ -107,8 +116,12 @@ final class CentralVaultModel {
     }
 
     /// Read, decide, act, and again: an install goes on to its recovery key and its servers in one go. Each step leaves
-    /// the facts changed, by its success or by its try, so the rounds end; five is more than one install needs.
+    /// the facts changed, by its success or by its try, so the rounds end; five is more than one install needs. The two
+    /// record files are read once at the start (`RecordKeeper.reread`): a change of this app goes through their one
+    /// keeper, and it reads the file itself.
     private func rounds(_ store: FleetStore) async {
+        note(removals.reread())
+        note(keySwap.reread())
         for _ in 0..<5 {
             guard await read(store) else { return }
             await unpinRemoved(store)
@@ -141,16 +154,16 @@ final class CentralVaultModel {
             // for each wait, not one each minute, and after a real restore a server whose try failed waits its due time.
         }
         if fresh?.program != updateFor { update = nil }       // the tries were for another release's program
-        if update == nil, let fleet = fresh?.fleetID, let program = fresh?.program,
-           let kept = keySwap.update(fleet: fleet), kept.program == program {
-            // a start of the app keeps the tries of the update to this program (the design, change 3)
+        if let fleet = fresh?.fleetID, let program = fresh?.program,
+           let kept = keySwap.record.update(fleet: fleet), kept.program == program, kept.tries.failures > (update?.failures ?? 0) {
+            // a start of the app keeps the tries of the update to this program (the design, change 3); so does a read
+            // that gives a larger count than this session's, after its record was not known
             update = VaultTries(failures: kept.tries.failures, last: kept.tries.last, reason: kept.tries.reason)
             updateFor = program
         }
         self.database = database
         served = fresh != nil
         reading = fresh
-        removals = VaultRemovals.load()
         if let fleet = fresh?.fleetID, !removedHere.isEmpty || !addedHere.isEmpty {
             let (marked, joined) = (removedHere, addedHere)
             changeRemovals { record in
@@ -176,13 +189,13 @@ final class CentralVaultModel {
     private var facts: VaultFacts {
         let fleet = reading?.fleetID
         var removed = Set(removedHere.keys)
-        if let fleet { removed.formUnion(removals.marks(fleet: fleet).keys) }
+        if let fleet { removed.formUnion(removals.record.marks(fleet: fleet).keys) }
         removed.subtract(addedHere)
         return VaultFacts(keyHeld: fleet.map(OwnerKeychain.isHeld) ?? false,
                           pin: fleet.flatMap { CentralVaultPins.recipient(hub: hub, fleet: $0) }, hubOnRecord: hubOnRecord,
                           otherOwner: otherOwner, confirmedRecovery: confirmedRecovery, confirmedPins: confirmedPins, signedAt: signedAt,
                           install: install, recovery: recovery, servers: servers, update: update, removed: removed,
-                          now: Date().timeIntervalSince1970)
+                          removedKnown: removals.known, updateKnown: keySwap.known, now: Date().timeIntervalSince1970)
     }
 
     // MARK: the servers that the owner removed on this Mac (package 4 of the vault's gates)
@@ -206,30 +219,29 @@ final class CentralVaultModel {
     private func isRemoved(_ machine: String) -> Bool {
         if addedHere.contains(machine) { return false }
         if removedHere[machine] != nil { return true }
-        return reading?.fleetID.map { removals.marks(fleet: $0)[machine] != nil } ?? false
+        return reading?.fleetID.map { removals.record.marks(fleet: $0)[machine] != nil } ?? false
     }
 
     /// Add server for `machine` on this Mac: a server that joined with a join code of this Mac. Its mark goes, so it
-    /// gets the trust step of a new server again.
+    /// gets the trust step of a new server again. The change always goes to the keeper: when the file gives no record
+    /// now, it waits, and it takes away a mark that only the file holds; when there is no mark, it writes nothing.
     func added(_ machine: String) {
         removedHere[machine] = nil
         if let fleet = reading?.fleetID {
-            guard VaultRemovals.load().marks(fleet: fleet)[machine] != nil || removals.marks(fleet: fleet)[machine] != nil else { return }
+            let marked = removals.record.marks(fleet: fleet)[machine] != nil
             changeRemovals { $0.added(machine, fleet: fleet) }
+            guard marked else { return }
         } else {
             addedHere.insert(machine)
         }
         unpins[machine] = nil; servers[machine] = nil       // its first trust starts with no try of the machine before
     }
 
-    /// One change of the record, made to the record as its file holds it now and written back at once: the model of
-    /// another hub address may have changed the file since this model read it, and its marks stay. A write that fails
-    /// leaves this session's copy changed, so this session still signs no pin of a machine that it marked.
-    private func changeRemovals(_ change: (inout VaultRemovals) -> Void) {
-        var record = VaultRemovals.load()
-        change(&record)
-        removals = record
-        try? record.save()
+    /// One change of the record, made to the record as its file holds it now and written back at once. A read that gives
+    /// no record, or a write that fails, leaves the change in this Mac's copy, where it waits for a good read
+    /// (`RecordKeeper`), so this Mac still signs no pin of a machine that it marked.
+    private func changeRemovals(_ change: @escaping (inout VaultRemovals) -> Void) {
+        removals.change(change)
     }
 
     /// The unpin of each machine that the owner removed on this Mac, until the central vault took it: signed with this
@@ -239,7 +251,7 @@ final class CentralVaultModel {
     private func unpinRemoved(_ store: FleetStore) async {
         guard let fleet = reading?.fleetID, reading?.central?.ok == true else { return }
         let now = Date().timeIntervalSince1970
-        for machine in removals.unpinsDue(fleet: fleet, tries: unpins, now: now) {
+        for machine in removals.record.unpinsDue(fleet: fleet, tries: unpins, now: now) {
             do {
                 guard store.hub == hub, store.isFresh, let database = store.state?.db, let key = OwnerKeychain.key(fleet: fleet) else {
                     throw Stop(String(l10n: "Founderizer has no current status of the hub, or no owner key for it."))
@@ -359,9 +371,16 @@ final class CentralVaultModel {
         }
         updateFor = program
         if let fleet = reading?.fleetID {
-            let kept = update.map { KeySwapUpdate(program: program, tries: KeySwapTries(failures: $0.failures, last: $0.last,
-                                                                                         reason: $0.reason)) }
-            changeKeySwap { $0.setUpdate(kept, fleet: fleet) }
+            // Made inside the change, from the tries that the record holds for this program: a change that waits for a
+            // good read never puts a smaller count over the file's (`RecordKeeper.change`).
+            let tries = update
+            changeKeySwap { state in
+                guard let tries else { return state.setUpdate(nil, fleet: fleet) }
+                let kept = state.update(fleet: fleet).flatMap { $0.program == program ? $0.tries.failures : nil } ?? 0
+                state.setUpdate(KeySwapUpdate(program: program, tries: KeySwapTries(failures: max(tries.failures, kept + 1),
+                                                                                    last: tries.last, reason: tries.reason)),
+                                fleet: fleet)
+            }
         }
     }
 
@@ -423,11 +442,11 @@ final class CentralVaultModel {
         guard store.hub == hub, store.isFresh, let database = store.state?.db, database == self.database,
               store.state?.ui_features?.contains(KeySwapPlan.feature) == true, let fleet = reading?.fleetID,
               let rows = try? await KeySwapClient().rows(hub: hub, database: database) else { return }
-        keySwap = KeySwapState.load()                   // the model of another hub address can have written it
         let removed = facts.removed
-        defer { keySwapNeeds = KeySwapPlan.needs(rows, records: keySwap.records(fleet: fleet), removed: removed) }
+        defer { keySwapNeeds = KeySwapPlan.needs(rows, records: keySwap.record.records(fleet: fleet), removed: removed) }
         var keyFacts = KeySwapFacts(central: keySwapKeys?.central, hubProgram: reading?.program,
-                                    records: keySwap.records(fleet: fleet), removed: removed, resignDue: resigned,
+                                    records: keySwap.record.records(fleet: fleet), removed: removed, resignDue: resigned,
+                                    recordsKnown: keySwap.known, removedKnown: removals.known,
                                     now: Date().timeIntervalSince1970)
         let mine = only.map { name in rows.filter { $0.name == name } } ?? rows
         var next = KeySwapPlan.next(mine, facts: keyFacts)
@@ -452,10 +471,11 @@ final class CentralVaultModel {
     }
 
     /// One root step on one server, its record and its reading to the hub; its answer, or nil when it did not reach
-    /// the server.
+    /// the server. The record is made inside the change, from the server's record that the change is made to, so a
+    /// change that waits for a good read keeps that record's hold and tries (`RecordKeeper.change`).
     private func keySwapStep(_ row: KeySwapServer, _ program: String?, keys: [String], fleet: String?, store: FleetStore,
                              database: String, fleetID: String) async -> KeySwapAnswer? {
-        let earlier = keySwap.records(fleet: fleetID)[row.name], now = Date().timeIntervalSince1970
+        let now = Date().timeIntervalSince1970, server = row.name, wish = row.wish
         do {
             guard let program else { throw Stop(String(l10n: "Founderizer cannot write the install for this owner key.")) }
             let target = try await self.target(row.name, database: database)
@@ -468,13 +488,19 @@ final class CentralVaultModel {
                 throw Stop(Self.unread(output, machine: row.name, what: ""))
             }
             let answer = KeySwapAnswer.read(output.output, status: output.status)
-            let record = KeySwapPlan.record(answer, after: earlier, wish: row.wish, keys: keys, fleet: fleet, at: now)
-            changeKeySwap { $0.set(record, server: row.name, fleet: fleetID) }
+            changeKeySwap { state in
+                let earlier = state.records(fleet: fleetID)[server]
+                state.set(KeySwapPlan.record(answer, after: earlier, wish: wish, keys: keys, fleet: fleet, at: now),
+                          server: server, fleet: fleetID)
+            }
             await keySwapTell(row, answer: answer, store: store, database: database)
             return answer
         } catch {
-            let record = KeySwapPlan.record(stop: Self.words(error), after: earlier, at: now)
-            changeKeySwap { $0.set(record, server: row.name, fleet: fleetID) }
+            let words = Self.words(error)
+            changeKeySwap { state in
+                let earlier = state.records(fleet: fleetID)[server]
+                state.set(KeySwapPlan.record(stop: words, after: earlier, at: now), server: server, fleet: fleetID)
+            }
             return nil
         }
     }
@@ -521,13 +547,24 @@ final class CentralVaultModel {
         }
     }
 
-    /// One change of the key swap's records, made to the file as it is now and written back at once: the model of
-    /// another hub address may have changed it since this model read it.
-    private func changeKeySwap(_ change: (inout KeySwapState) -> Void) {
-        var state = KeySwapState.load()
-        change(&state)
-        keySwap = state
-        try? state.save()
+    /// One change of the key swap's records, made to the records as the file holds them now and written back at once. A
+    /// read that gives no record, or a write that fails, leaves the change in this Mac's copy, where it waits for a good
+    /// read (`RecordKeeper`).
+    private func changeKeySwap(_ change: @escaping (inout KeySwapState) -> Void) {
+        keySwap.change(change)
+    }
+
+    /// A move of a record file in the app's log: the file gave no record at `RecordKeeper.mostUnread` round reads in a
+    /// row. The names are the files' own, never a path.
+    private func note(_ event: RecordFileEvent?) {
+        switch event {
+        case .movedAside(let file, let aside)?:
+            Self.log.error("\(file, privacy: .public) gave no record at \(RecordKeeper<VaultRemovals>.mostUnread) round reads in a row: it is now \(aside, privacy: .public), and this Mac's copy took its place.")
+        case .notMoved(let file, let cause)?:
+            Self.log.error("\(file, privacy: .public) gave no record at \(RecordKeeper<VaultRemovals>.mostUnread) round reads in a row, and it could not go to a new name (\(cause, privacy: .public)): this Mac goes on with its copy.")
+        case nil:
+            break
+        }
     }
 
     /// The install on the hub's machine, from root's own clone there, the pin of the key it printed, and the hub's
@@ -685,6 +722,15 @@ final class CentralVaultModel {
         HubError.said(error) ?? (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 
+}
+
+/// **The vault's two record files on this Mac, with one keeper each for the whole app** (`RecordKeeper`): the model of
+/// each hub address reads and changes the same files, so they share one copy, one list of changes that wait and one
+/// count of reads that gave no record. Each keeper makes its first read when a model first uses it.
+@MainActor
+enum VaultRecordFiles {
+    static var removals = RecordKeeper(file: VaultRemovals.file, empty: VaultRemovals())
+    static var keySwap = RecordKeeper(file: KeySwapState.file, empty: KeySwapState())
 }
 
 /// **The top of the Secrets page, only while the central vault needs the owner**: the Founderizer Vault row when an

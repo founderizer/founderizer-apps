@@ -393,7 +393,7 @@ public struct InstallPlan: Equatable, Sendable {
 
     /// **How long each apt-get of an install waits for apt's lock**: a new server runs its first security updates for
     /// about nine minutes after its first start, and they hold the lock (the proof run of 5 November 2026). `hub.sh`,
-    /// `join.sh`, `hubsetup.py` and `onboard.py` wait as long.
+    /// `join.sh` and `hubsetup.py` wait as long.
     static let aptLockWait = 1200
 
     /// One `apt-get update`. It tries the lock of the package lists once: apt reads DPkg::Lock::Timeout only for the

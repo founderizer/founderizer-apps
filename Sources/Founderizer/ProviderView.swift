@@ -84,7 +84,6 @@ struct ProviderView: View {
     /// while another tab or page shows; Stop setup stops it.
     private let held: ProviderSetup
     private var setup: ServerSetupSession { held.session }
-    @State private var secret = ""
     /// The agent's machine in team.json, which binds its setup.
     @State private var placement: String?
     private let hub: URL
@@ -141,11 +140,10 @@ struct ProviderView: View {
                 FormRow("The other provider", detail: String(l10n: "\(providerName(runtime)) cannot switch."))
             }
         }
-        .onChange(of: setup.timeline.prompt?.id) { _, _ in secret = "" }
         .onChange(of: setup.timeline.result?.status) { _, status in if status == "ok" { Task { await afterSetup() } } }
         // A running setup stays with its agent while another tab or page shows: the agent's row in the sidebar has
         // a progress mark, and Stop is its stop control. A refused switch leaves the outbox with this view.
-        .onDisappear { secret = ""; discardRefused() }
+        .onDisappear { discardRefused() }
         .task {
             // **The agent's server first, and this Mac's installer only for a machine that this Mac set up.** A server
             // that joined with a join line prepares a provider itself, so this form asks nothing of the installer for
@@ -216,7 +214,7 @@ struct ProviderView: View {
     /// One control, the one that applies now.
     @ViewBuilder private func control(_ readiness: RuntimeSwitch, to: String) -> some View {
         if setup.running && !held.joined {
-            Button("Stop") { secret = ""; Task { await setup.cancel() } }
+            Button("Stop") { Task { await setup.cancel() } }
                 .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("stop-provider-setup")
                 .help("Stops the setup. Set up again continues from its saved steps.")
         } else if held.job?.isOpen == true {
@@ -258,7 +256,7 @@ struct ProviderView: View {
                 }
             }
         } else if !held.joined, setup.running, (setup.timeline.prompt ?? setup.timeline.signIn) != nil {
-            FormBlock("The setup needs you") { SetupPromptView(session: setup, secret: $secret) }
+            FormBlock("The setup needs you") { SetupPromptView(session: setup) }
         }
     }
 

@@ -11,7 +11,7 @@ public enum SetupServiceID {
     func executorVersion(reply: @escaping (Data) -> Void)
     func start(configuration: Data, reply: @escaping (Bool, String) -> Void)
     func readEvents(after: Int, reply: @escaping (Data, Bool, String) -> Void)
-    func answer(prompt: String, value: Data, secret: Data?, reply: @escaping (Bool) -> Void)
+    func answer(prompt: String, value: Data, reply: @escaping (Bool) -> Void)
     func cancel(reply: @escaping () -> Void)
     func openScreenSharing(configuration: Data, reply: @escaping (Int, String) -> Void)
     func closeScreenSharing(configuration: Data, reply: @escaping () -> Void)

@@ -155,6 +155,12 @@ struct CentralVaultPlanTests {
         #expect(VaultPlan.of(behind, facts: Self.mine(update: used, now: Self.now + 3539))
                 == VaultPlan(step: .trust(["worker4", "newbox"]), vault: row))
         #expect(VaultPlan.of(behind, facts: Self.mine(update: used, now: Self.now + 3540)) == VaultPlan(step: .update, vault: row))
+        // While the record that keeps the update's tries is not known (`RecordKeeper.known`), the update waits.
+        var unknown = Self.mine()
+        unknown.updateKnown = false
+        #expect(VaultPlan.of(behind, facts: unknown) == VaultPlan(step: .trust(["worker4", "newbox"])))
+        unknown.update = used
+        #expect(VaultPlan.of(behind, facts: unknown) == VaultPlan(step: .trust(["worker4", "newbox"])))
         // The same program, or a side that says nothing, is no update.
         #expect(VaultPlan.of(try Self.reading(central: Self.vaultKey, recovery: true, source: release, program: release),
                              facts: Self.mine()) == VaultPlan(step: .trust(["worker4", "newbox"])))
@@ -270,6 +276,27 @@ struct CentralVaultPlanTests {
         var elsewhere = Self.mine()
         elsewhere.removed = ["mac-studio", "gone"]
         #expect(VaultPlan.of(old, facts: elsewhere) == VaultPlan.of(old, facts: Self.mine()))
+    }
+
+    /// A record of the removed servers that this session has not read (`RecordKeeper.known`): the machines that it names
+    /// are not known, so no machine gets a pin, by a first trust or by a re-sign, until a read gives the record.
+    @Test func aRecordOfRemovedServersThatThisSessionHasNotReadSignsNoPin() throws {
+        let json = """
+            {"db": "gen-1", "fleet": "0f1e2d3c4b5a6978", "central": {"ok": true, "recipient": "\(Self.vaultKey)",
+             "fleet": "0f1e2d3c4b5a6978", "owner_keys": 1, "pins": {}, "recovery": "\(Self.vaultKey)", "items": 0,
+             "source": null}, "program": null, "read_at": null, "error": null, "held": {}, "machines": [
+              {"machine": "vps", "carrier": "vps", "broker_recipient": "\(Self.serverKey)", "pinned": "\(Self.serverKey)",
+               "matches": true, "missing": [], "kept_pin_at": \(Int(Self.now - 8 * 86400))}]}
+            """
+        let old = try JSONDecoder().decode(VaultReading.self, from: Data(json.utf8))
+        let open = try Self.reading(central: Self.vaultKey, recovery: true)
+        #expect(VaultPlan.of(old, facts: Self.mine()).step == .trust(["vps"]))
+        #expect(VaultPlan.of(open, facts: Self.mine()).step == .trust(["worker4", "newbox"]))
+        var unknown = Self.mine()
+        unknown.removedKnown = false
+        for reading in [old, open] {
+            #expect(VaultPlan.of(reading, facts: unknown) == VaultPlan(step: .nothing))
+        }
     }
 
     /// The clock guard (package 4): no pin is signed while this Mac's clock and the hub's clock of its last state read

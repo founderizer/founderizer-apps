@@ -58,8 +58,10 @@ struct KeySwapPlanTests {
     }
 
     @Test func aRowThatGetsNoStep() {
+        // the names that are not a server's name too: a hub that is broken into cannot make this Mac's record grow
         let rows = [Self.row("mac-1", kind: "mac"), Self.row("new-1", joined: false), Self.row("hub-1", kind: nil, joined: false, hub: true),
-                    Self.row("old-1", word: nil), Self.row("gone-1")]
+                    Self.row("old-1", word: nil), Self.row("gone-1"), Self.row("two words"), Self.row("-dash"),
+                    Self.row(String(repeating: "a", count: 65)), Self.row("")]
         for row in rows {
             #expect(KeySwapPlan.wanted(row, central: true, removed: ["gone-1"]) == nil)
         }
@@ -155,6 +157,35 @@ struct KeySwapPlanTests {
         state.tryAgain(server: "spare-1", fleet: Self.fleet)
         #expect(state.records(fleet: Self.fleet)["spare-1"]?.hold == nil)
         #expect(state.records(fleet: Self.fleet)["spare-1"]?.tries == nil)
+    }
+
+    /// This Mac's records, or the record of the removed servers, that are not known (`RecordKeeper.known`): a put-back's
+    /// hold, the tries or a mark can stand in them, so no step runs, not even a reading or a switch to off.
+    @Test func recordsThatAreNotKnownHoldEveryStep() {
+        let rows = [Self.row("spare-1"), Self.row("app-2", agents: ["a", "b"], word: true, wish: .off, readAt: Self.now)]
+        let facts = KeySwapFacts(central: Self.central, records: ["app-2": Self.done()], now: Self.now)
+        #expect(KeySwapPlan.next(rows, facts: facts) == KeySwapStep(server: "spare-1", keys: [Self.keyA], fleet: Self.fleet, then: .on))
+        // spare-1 swaps already and has its reading: the next step is app-2's switch to off, which the owner wished
+        let swapped = [Self.row("spare-1", word: true, readAt: Self.now), rows[1]]
+        var read = facts
+        read.records["spare-1"] = Self.done()
+        #expect(KeySwapPlan.next(swapped, facts: read)?.then == .off)
+        for known in [(records: false, removed: true), (records: true, removed: false), (records: false, removed: false)] {
+            var unknown = facts
+            unknown.recordsKnown = known.records
+            unknown.removedKnown = known.removed
+            #expect(KeySwapPlan.next(rows, facts: unknown) == nil)
+            unknown.records["spare-1"] = Self.done()
+            #expect(KeySwapPlan.next(swapped, facts: unknown) == nil)
+        }
+    }
+
+    /// A stop's words in the record are at most 2000 characters, as a server's own reason is (`KeySwapAnswer.read`).
+    @Test func aStopsWordsAreCutTo2000Characters() throws {
+        let record = KeySwapPlan.record(stop: String(repeating: "x", count: 5000), after: nil, at: Self.now)
+        let reason = try #require(record.tries?.reason)
+        #expect(reason.contains(String(repeating: "x", count: 2000)) && !reason.contains(String(repeating: "x", count: 2001)))
+        #expect(KeySwapPlan.wanted(Self.row(String(repeating: "a", count: 64)), central: true) != nil)   // the longest name
     }
 
     @Test func aLateFaultOnAServerThatSwappedShowsAtOnceAndHoldsNobody() {

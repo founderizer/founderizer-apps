@@ -376,6 +376,29 @@ struct ErrorReportsTests {
         #expect(!FileManager.default.fileExists(atPath: file.path))
     }
 
+    @Test func aFolderAtTheKeptFilesNameStaysWithWhatIsInItAndALinkGoesAlone() throws {
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("error-reports-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("error-reports.json")
+        let inside = file.appendingPathComponent("another-program.txt")
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+        try Data("kept by another program".utf8).write(to: inside)
+        #expect(ErrorReport.kept(file).isEmpty)
+        ErrorReport.forget(file)
+        #expect(throws: (any Error).self) { try ErrorReport.keep([crash()], in: file) }
+        #expect(ErrorReport.settle([crash()], carriedKept: true, after: nil, in: file).isEmpty)
+        #expect(FileManager.default.contents(atPath: inside.path) == Data("kept by another program".utf8))
+        // A link at the name goes, and the file behind it stays as it was.
+        let behind = folder.appendingPathComponent("behind.json")
+        try ErrorReport.keep([crash()], in: behind)
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createSymbolicLink(at: file, withDestinationURL: behind)
+        ErrorReport.forget(file)
+        #expect((try? FileManager.default.attributesOfItem(atPath: file.path)) == nil)
+        #expect(ErrorReport.kept(behind) == [crash()])
+    }
+
     // ------------------------------------------------------------ where it goes
 
     @Test func theReportGoesToTheFleetsOwnChannelAndOursWhenItHasNone() throws {

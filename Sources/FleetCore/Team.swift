@@ -97,7 +97,8 @@ public struct TeamSnapshot: Decodable, Sendable {
     /// The account labels, and the same lines with their identity fields.
     public let accounts: [String: TeamAccount]?
     public let members: [TeamMember]
-    /// Owner API 1.12 (`agent_auth`): each machine, for Add agent. An entry that cannot be read never hides the team.
+    /// Owner API 1.12 (`agent_auth`): each machine, for the OS user of its agents. An entry that cannot be read never
+    /// hides the team.
     public let machines: [String: TeamMachine]?
     /// Owner feature `secrets`: the owner's titles of login references, by `bws://<uuid>` in lower case. nil on a hub
     /// without the feature. A catalog that cannot be read never hides the team.

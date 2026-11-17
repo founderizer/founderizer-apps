@@ -48,6 +48,8 @@ struct ManagerView: View {
     @State private var sent: PendingRequest?
     /// His answer in words to a request of this agent, kept in the same way: it is his message in this chat.
     @State private var answerSent: PendingRequest?
+    /// The rows whose words can be selected: the row under the pointer and the row whose words he pressed last.
+    @State private var selection = ChatSelection()
     /// The gap between chat entries. A reply's footer takes its height from it, and every other entry gets the same
     /// height below it, so each gap stays 28 points.
     private static let entrySpacing: CGFloat = 28, footer = AgentReply.footer(compact: false)
@@ -200,6 +202,10 @@ struct ManagerView: View {
                 }.threadRows(top: Self.topInset)
             }
             .keepsEnd($end, room: Self.endRoom)
+            // No row gets or loses its selectable words while the chat moves (`ChatWordsSelection`).
+            .onScrollPhaseChange { _, phase in selection.scroll(moving: phase != .idle) }
+            .onAppear { selection.start() }
+            .onDisappear { selection.stop() }
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             // Text that scrolls up fades under the pill instead of running under it (T-20).
             .topFade(56)
@@ -297,13 +303,15 @@ struct ManagerView: View {
     }
 
     private func messageRow(_ message: OwnerMessage) -> some View {
-        SentMessageView(store: store, message: message).id("message-\(message.id)")
+        SentMessageView(store: store, message: message).wordsSelectable(in: selection, row: "message-\(message.id)")
+            .id("message-\(message.id)")
     }
 
     /// A request's card in the chat, at the column's width, waiting or folded. `spoken`: his answer stands in the chat
     /// as his own message, so the folded card does not say it again.
     private func requestCard(_ need: OwnerNeed, spoken: Bool) -> some View {
-        NeedRequestCard(store: store, need: need, spoken: spoken).padding(.bottom, Self.footer).id("need-\(need.id)")
+        NeedRequestCard(store: store, need: need, spoken: spoken).padding(.bottom, Self.footer)
+            .wordsSelectable(in: selection, row: "need-\(need.id)").id("need-\(need.id)")
     }
 
     /// A reply, with its delivery icons when it went to a channel. **A message that the agent wrote first
@@ -311,6 +319,7 @@ struct ManagerView: View {
     /// what the conversation already shows, a message under no question of his.
     private func reportRow(_ report: ManagerReport, lastOfRun: Bool) -> some View {
         AgentReply(text: report.text, time: report.created, detail: reportDetail(report), lastOfRun: lastOfRun)
+            .wordsSelectable(in: selection, row: "report-\(report.id)")
     }
 
     /// Under a reply: the files that the agent sent with it (CHAT-APPS.md 20; the owner's "Yes, build it" of 15
