@@ -53,11 +53,12 @@ public enum DoorHosts {
     /// The install on one server, as root, with the bundle on its standard input: a folder that only root reaches,
     /// `install.sh` at Fix, and the folder goes. Its last line is the second sshd's host key. nil for a mode or a key
     /// that is not one.
-    public static func installProgram(mode: String, doorKey: String) -> String? {
-        guard ["fix", "rule-only"].contains(mode), isDoorKey(doorKey) else { return nil }
+    /// `fleet`: a machine of the fleet, which gets its mark (`install.sh --fleet`) and only ever rule-only.
+    public static func installProgram(mode: String, doorKey: String, fleet: Bool = false) -> String? {
+        guard ["fix", "rule-only"].contains(mode), isDoorKey(doorKey), !fleet || mode == "rule-only" else { return nil }
         return "set -eu; d=$(mktemp -d /root/.door-parts.XXXXXX); trap 'rm -rf \"$d\"' EXIT; "
             + "base64 -d | tar -xf - -C \"$d\" --no-same-owner; "
-            + "bash \"$d/install.sh\" --level fix --mode \(mode) --door-key '\(doorKey)'"
+            + "bash \"$d/install.sh\" --level fix --mode \(mode)\(fleet ? " --fleet" : "") --door-key '\(doorKey)'"
     }
 
     /// The door's own check of one server's second sshd (`door.py probe`, test 1 as code), as the door's user, whose
@@ -89,18 +90,19 @@ public enum DoorHosts {
         }.first
     }
 
-    /// The servers that get the door's parts, in their order: by business, a business's CI runners first, then by name.
-    /// The door, a server on the `never` list (`DoorAccess.servers`), a machine of the fleet and a server that the
-    /// manager's `door_hold` holds at `parts` are not in it.
+    /// The servers that get the door's parts, in their order: by business, a business's CI runners first, then by name;
+    /// after every business's server, the fleet's own servers (`DoorAccess.fleetServers`, the hub's server last).
+    /// The door, a server on the `never` list (`DoorAccess.servers`), a machine of the fleet that carries a business
+    /// tag and a server that the manager's `door_hold` holds at `parts` are not in it.
     public static func order(access: [String: Any], devices: [DoorAccess.Device], fleet: Set<String>,
-                             heldOut: Set<String> = []) -> [String] {
+                             heldOut: Set<String> = [], fleetServers: [String] = []) -> [String] {
         let tags = Dictionary(devices.map { ($0.name, $0.tags) }, uniquingKeysWith: { first, _ in first })
         let found = DoorAccess.servers(access: access, devices: devices)
             .filter { !fleet.contains($0.key) && !heldOut.contains($0.key) }
         func rank(_ name: String) -> (String, Int, String) {
             ((found[name] ?? []).sorted().first ?? "", (tags[name] ?? []).contains(ciTag) ? 0 : 1, name)
         }
-        return found.keys.sorted { rank($0) < rank($1) }
+        return found.keys.sorted { rank($0) < rank($1) } + fleetServers.filter { found[$0] == nil && !heldOut.contains($0) }
     }
 
     /// What this Mac did with each server, for one hub and database: `installed` (it waits for the door's file and its

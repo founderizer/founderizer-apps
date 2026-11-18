@@ -151,7 +151,7 @@ struct DeliveryLine: View {
                 if delivery.canSendAgain && offered && sentAgain != delivery.outbound {
                     MessageAction(symbol: "arrow.clockwise", label: String(l10n: "Send again"), help: String(l10n: "Send again. The first one can still arrive."), height: 16) {
                         Task { await sendAgain() }
-                    }.foregroundStyle(FleetStyle.muted).disabled(sending || !store.isFresh)
+                    }.foregroundStyle(FleetStyle.muted).disabled(sending || !store.writesNow)
                 }
                 if sending { ProgressView().controlSize(.mini) }
             }

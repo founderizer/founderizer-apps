@@ -254,13 +254,15 @@ extension CloudOffer {
     }
 
     /// "€5.49 a month", in this Mac's own way of writing an amount.
-    public var monthly: String {
+    public var monthly: String { String(l10n: "\(amount) a month") }
+
+    /// "€5.49": a month's price alone, for a row of a provider's types, whose capsule says "a month".
+    public var amount: String {
         let format = NumberFormatter()
         format.numberStyle = .currency
         format.currencyCode = currency
         format.maximumFractionDigits = 2
-        let amount = format.string(from: monthlyPrice as NSDecimalNumber) ?? "\(monthlyPrice) \(currency)"
-        return String(l10n: "\(amount) a month")
+        return format.string(from: monthlyPrice as NSDecimalNumber) ?? "\(monthlyPrice) \(currency)"
     }
 
     /// The new server's row in the list: "CX23 · 4 GB · Nuremberg · €5.49 a month".
@@ -285,6 +287,31 @@ extension CloudOffer {
         }
         parts.append(monthly)
         return parts.joined(separator: " · ")
+    }
+
+    /// **The capsule under a server on "Your fleet"** (slice 2b; the owner's "Yes, build them" of 18 November 2026):
+    /// its provider and its line, "Hetzner · CX23 · €5.49 a month".
+    public var pick: String { "\(provider.name) · \(brief)" }
+
+    /// **One row of that capsule's list of the provider's types**: "CX23 · 2 cores · 4 GB · Nuremberg", and the price
+    /// beside it (`amount`). Another provider's row has no type, as `row` has none.
+    public var choice: String {
+        var parts: [String] = []
+        if provider == .hetzner { parts.append(type.uppercased()) }
+        if let cores { parts.append(Self.cores(cores, dedicated: dedicated)) }
+        if let memoryGB { parts.append(CloudExisting.size(Int((memoryGB * 1024).rounded()))) }
+        parts.append(String(place.split(separator: ",").first ?? Substring(place)))
+        return parts.joined(separator: " · ")
+    }
+
+    /// "2 cores", or "2 own cores" for a type whose cores no other server shares.
+    static func cores(_ count: Int, dedicated: Bool) -> String {
+        switch (count, dedicated) {
+        case (1, false): String(l10n: "1 core")
+        case (1, true): String(l10n: "1 own core")
+        case (_, false): String(l10n: "\(count) cores")
+        case (_, true): String(l10n: "\(count) own cores")
+        }
     }
 }
 #endif

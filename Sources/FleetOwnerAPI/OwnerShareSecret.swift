@@ -160,6 +160,12 @@ public enum ShareSecret {
     /// Stricter than the app's page, on purpose, as `grant_secret`: a login is used and never seen.
     static let readNeedsKey = "max read is only for an API key: a login is used and never seen. For a login the only "
         + "max is use: call again with max use only when the owner wants that. Nothing was sent."
+    /// As `GrantSecret.clockApart`, for a standing: its pool statement is signed first. A take-back does not wait for
+    /// the clocks: its hub step comes first, and an end only narrows.
+    static let clockApart = "This Mac's clock and the hub's clock differ by more than an hour, so the app signs no "
+        + "pool statement now. Ask the owner to check this Mac's date and time (System Settings, General, Date & "
+        + "Time), and then call share_secret again. If this Mac's clock is right, the hub's clock is probably wrong: "
+        + "tell the owner. A take-back (max null) does not wait for the clocks. Nothing was sent."
     static let busy = "Another call of share_secret is at its writes now. Call again when it has answered. Nothing "
         + "was sent."
     /// The call's connection ended before its first write. Nobody reads this. In `grant_secret`'s own words.
@@ -440,6 +446,9 @@ public enum ShareSecret {
         /// Whether this Mac holds an owner key for the fleet of this id, without reading it
         /// (`OwnerKeychain.isHeld(fleet:)`).
         public var holdsKey: (String) -> Bool
+        /// As `GrantSecret.Desk.clockApart`: whether this Mac's clock and the hub's differ by more than an hour, and
+        /// nil ("not ready") with no answer of the hub in this launch for this place. Asked only for a standing.
+        public var clockApart: (Place) -> Bool?
         /// **Makes one statement, signs it with the owner key of this Mac and sends it** (`GrantSigning` in the app,
         /// `POST /ui/vault/grant`). It throws `NotSigned` when the key could not be read or made no signature:
         /// nothing was sent then. An error of the send itself is a `HubFailure`.
@@ -455,7 +464,7 @@ public enum ShareSecret {
                     team: @escaping (Place) async throws -> Team,
                     resources: @escaping (Place) async throws -> Resources,
                     vault: @escaping (Place) async throws -> Vault, holdsKey: @escaping (String) -> Bool,
-                    sign: @escaping (Place, Statement) async throws -> Void,
+                    clockApart: @escaping (Place) -> Bool?, sign: @escaping (Place, Statement) async throws -> Void,
                     standing: @escaping (Place, String, String, Level?) async throws -> Bool,
                     refresh: @escaping () async -> Void) {
             self.ready = ready
@@ -464,6 +473,7 @@ public enum ShareSecret {
             self.resources = resources
             self.vault = vault
             self.holdsKey = holdsKey
+            self.clockApart = clockApart
             self.sign = sign
             self.standing = standing
             self.refresh = refresh
@@ -483,7 +493,9 @@ public enum ShareSecret {
     /// 4. Three reads: the fleet's list, the fleet's resources and the vault's page. Then, each with its own
     ///    sentence: the page names the fleet; the hub has a reading of a central vault; the hub's newest read of that
     ///    vault did not fail (`Vault.Central.of`); this Mac holds the fleet's owner key. Then, **for a standing
-    ///    only**: the list and the resources have the secret; `read` only for an API key. **A take-back makes no
+    ///    only**: the list and the resources have the secret; `read` only for an API key; and the hub answered the
+    ///    app in this launch, and its clock and this Mac's do not differ by more than an hour (`Desk.clockApart`:
+    ///    with no such answer, "not ready"). **A take-back makes no
     ///    check of the secret**: an end goes for whatever the hub has, and the hub answers in its own words.
     /// 5. No other call of the tool is at its writes (`Line`).
     /// 6. The call still has its caller: a call whose connection ended sends nothing.
@@ -539,6 +551,8 @@ public enum ShareSecret {
                 return .refused(noSecret)
             }
             if max == .read && !secret.apiKey { return .refused(readNeedsKey) }
+            guard let apart = desk.clockApart(place) else { return .refused(notReady) }
+            guard !apart else { return .refused(clockApart) }
         }
         // The base of the writes, and this secret's standing in the same read: a 409 is judged against both.
         let first = Before(base: resources.sha256, standing: resources.standing(of: read.login))

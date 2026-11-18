@@ -720,7 +720,7 @@ struct StartAgainTests {
         for key in ["serversJoinedFor", "hubTCPDone", "centralVaultPins"] {
             defaults.set(["\(mine)|db1|manager": "worker-2", "\(theirs)|db9|manager": "worker-9"], forKey: key)
         }
-        for key in ["ownerAccessInPlace", "serverHardening"] {
+        for key in ["ownerAccessInPlace", "serverHardening", "serverMemoryLimit", ServerLibraries.keptKey] {
             defaults.set(["\(mine) worker-2 100.64.0.9": "aa", "\(theirs) worker-9 100.64.0.99": "bb"], forKey: key)
         }
         for key in ["pinnedAgents", "fleetIdsByHub", "lastPages"] { defaults.set([mine: "one", theirs: "two"], forKey: key) }
@@ -768,7 +768,7 @@ struct StartAgainTests {
         for key in ["serversJoinedFor", "hubTCPDone", "centralVaultPins"] {
             #expect(defaults.dictionary(forKey: key) as? [String: String] == ["\(theirs)|db9|manager": "worker-9"], "\(key)")
         }
-        for key in ["ownerAccessInPlace", "serverHardening"] {
+        for key in ["ownerAccessInPlace", "serverHardening", "serverMemoryLimit", ServerLibraries.keptKey] {
             #expect(defaults.dictionary(forKey: key) as? [String: String] == ["\(theirs) worker-9 100.64.0.99": "bb"], "\(key)")
         }
         for key in ["pinnedAgents", "fleetIdsByHub", "lastPages"] { #expect(defaults.dictionary(forKey: key) as? [String: String] == [theirs: "two"], "\(key)") }

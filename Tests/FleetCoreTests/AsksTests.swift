@@ -147,6 +147,20 @@ struct AsksTests {
         // No task of an ask is a card of its own.
         let cards = board.values.flatMap { $0 }.compactMap { item -> Int? in if case .task(let task) = item { task.id } else { nil } }
         #expect(Set(cards) == [3, 5, 7])
+        // The board of one agent (View all of the card Asked): what he asked that agent is one card, whoever does its
+        // tasks; the agent's other tasks are cards of their own, its work on what he asked another agent too. An agent
+        // that owns no task of its own, as the Fleet Manager, shows what he asked it. As on every board, what waits for
+        // him shows whatever the period and stands first in Waiting, and so does an open thing that he asked for.
+        let one = try hub([task(1, "working", ask: "mine", owner: "lead", last: Self.now - 300, works: true),
+                           task(2, "working", ask: "mine", owner: "dev", last: Self.now - 200, works: true, parent: 1),
+                           task(3, "input-required", ask: "theirs", owner: "lead", last: Self.now - 86_400 * 9, waitingOn: "N-7"),
+                           task(4, "working", owner: "lead", last: Self.now - 400, works: true),
+                           task(5, "submitted", owner: "lead", last: Self.now - 50)],
+                          messages: [message("mine", asked: "Mine"), message("theirs", asked: "Theirs", to: "ops")], needs: [need(7)])
+        let lead = one.board(period: .today, agent: "lead", calendar: Self.utc)
+        #expect(ids(lead, .inProgress) == ["ask mine", "task 4"] && ids(lead, .waiting) == ["task 3", "task 5"])
+        #expect(ids(one.board(period: .today, agent: "dev", calendar: Self.utc), .inProgress) == ["task 2"])
+        #expect(one.board(period: .today, agent: "ops", calendar: Self.utc).mapValues { $0.map(\.id) } == [.waiting: ["ask theirs"]])
     }
 
     @Test func endedHasOneRowForAnAskAndTheRowsOfTasksAsBefore() throws {
@@ -251,11 +265,12 @@ struct AsksTests {
         #expect(row.mark == .waitsForOwner && row.task == 1 && row.request == nil)
     }
 
-    @Test func theCardAskedShowsARowOnlyWhileItHasNews() throws {
+    @Test func theCardAskedShowsItsNewsThenWhatOnlyWaitsInTheBoardsWords() throws {
         let state = try hub([
             task(1, "input-required", ask: "his", owner: "dev", waitingOn: "N-7"),
             task(2, "working", ask: "works", owner: "dev", works: true, doing: "Runs the tests"),
             task(3, "working", ask: "parked", parked: Self.now + 3600, works: false),
+            task(12, "submitted", ask: "parked", last: Self.now - 5),          // a later task of it, queued: its lead
             task(4, "submitted", ask: "queued"),
             task(5, "completed", ask: "done", last: Self.now - 100, accepted: 1),
             task(6, "failed", ask: "failed", last: Self.now - 200),
@@ -272,12 +287,23 @@ struct AsksTests {
                       message("other", asked: "Another agent's", to: "ops")],
            needs: [need(7)])
         // He has seen what ended up to 250 seconds ago.
-        let card = AskedCard(state.asks, agent: "lead", after: Self.now - 250)
+        let card = AskedCard(state.asks, agent: "lead", after: Self.now - 250, state: state)
         // The order is the order in which he asked, the newest first.
         #expect(card.rows.map(\.id) == ["his", "works", "done", "failed"])
         #expect(card.rows.map(\.mark) == [.waitsForOwner, .working, .done, .failed])
-        // Parked, and queued. The one whose check is not made and the one that somebody canceled say nothing.
-        #expect(card.waiting == 2 && !card.isEmpty)
+        // Parked, and queued: each a row of its own, muted, in the board's words (until its time, "Queued"), that opens
+        // the task whose wait it says, and not the ask's newest task. The one whose check is not made and the one that
+        // somebody canceled say nothing.
+        #expect(card.waits.map(\.id) == ["parked", "queued"] && card.waiting == 2 && card.waitsInRows && !card.isEmpty)
+        #expect(card.waits.map(\.mark) == [.quiet(symbol: "circle.dotted", word: TaskWords.working),
+                                            .quiet(symbol: "clock", word: "Queued")])
+        #expect(card.waits.map(\.until) == [Self.now + 3600, nil] && card.waits.map(\.task) == [3, 4])
+        #expect(card.waits.allSatisfy { !$0.moves } && card.waits.last?.line == "Queued")
+        // Its words read the fleet's reading: a task that waits for its subtask's agent says so, as on the board.
+        let sub = try hub([task(20, "working", ask: "sub", owner: "lead", works: false),
+                           task(21, "working", owner: "ops", works: true, parent: 20)],
+                          messages: [message("sub", asked: "Waits for a subtask")])
+        #expect(AskedCard(sub.asks, agent: "lead", after: 0, state: sub).waits.map(\.line) == [HubState.subtaskWords(["ops"])])
         #expect(card.rows[0].request == 7 && card.rows[0].words == "Need 7" && card.rows[0].task == 1)
         #expect(card.rows[1].worker == "dev" && card.rows[1].doing == "Runs the tests" && card.rows[1].task == 2)
         #expect(card.rows[1].line.hasSuffix(" · Runs the tests") && card.rows[1].moves)
@@ -308,6 +334,12 @@ struct AsksTests {
         // Another agent's chat has that agent's asks only, and an agent with none has no card.
         #expect(AskedCard(state.asks, agent: "ops", after: 0).rows.map(\.id) == ["other"])
         #expect(AskedCard(state.asks, agent: "manager", after: 0).isEmpty)
+        // Three that only wait are rows of their own (his "if it's only 3 elements you could have shown them there
+        // directly!"); a fourth folds them into one row with their number (his "Yes, fold them").
+        let four = try hub((1...4).map { task($0, "submitted", ask: "q\($0)") },
+                           messages: (1...4).map { message("q\($0)", asked: "Q \($0)") })
+        #expect(AskedCard(four.asks.filter { $0.id != "q4" }, agent: "lead", after: 0).waitsInRows)
+        #expect(!AskedCard(four.asks, agent: "lead", after: 0).waitsInRows)
         // A Mac that has drawn no card for this fleet yet shows nothing that ended.
         #expect(AskedCard(state.asks, agent: "lead", after: .infinity).rows.map(\.id) == ["his", "works"])
         // An ask whose result is not checked yet is over on the board, and no failure.

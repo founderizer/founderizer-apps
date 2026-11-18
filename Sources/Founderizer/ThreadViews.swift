@@ -36,6 +36,9 @@ struct ManagerView: View {
     @Bindable var store: FleetStore
     let agent: String
     @State private var end = ChatEnd()
+    /// The chat's end is more than three of its room's heights away: "Latest" goes there in one frame (`knowsFarEnd`).
+    @State private var farFromEnd = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var visibleCount = 60
     /// The newest reply when the chat drew first: a reply after it arrives while he looks, and fades in.
     @State private var shownUpTo: Int?
@@ -48,6 +51,10 @@ struct ManagerView: View {
     @State private var sent: PendingRequest?
     /// His answer in words to a request of this agent, kept in the same way: it is his message in this chat.
     @State private var answerSent: PendingRequest?
+    /// **His answers to this agent's requests, by request, kept as each card keeps its own** (`sent` of
+    /// `NeedRequestCard`) from the frame they go until the reading says the request is answered: a card that folded at
+    /// his answer draws no head, so its ask keeps its row for the round trip after the hub's receipt too.
+    @State private var answersKept: [Int: PendingRequest] = [:]
     /// The rows whose words can be selected: the row under the pointer and the row whose words he pressed last.
     @State private var selection = ChatSelection()
     /// The replies of a run share one hover: the pointer on any of them shows Copy and the age under the last one.
@@ -159,8 +166,14 @@ struct ManagerView: View {
                     let byID = Dictionary(needs.map { ($0.id, $0) }) { first, _ in first }
                     // **One list of rows, the entries and the cards, each under its own id** (`ChatPart`): a card keeps
                     // its view, with the cursor in its answer, when an entry that comes moves it to another place.
-                    // The row of each thing that he asked for in this chat stands under its turn's reply.
-                    let rows = ChatAskPlaces.rows(places.rows(of: held), asks: asks, waitsOn: waitsOn(held))
+                    // The row of each thing that he asked for in this chat stands under its turn's reply. **A thing that
+                    // waits for a card of this chat is that card's head instead** (`ChatAskPlaces.onCards`), until he
+                    // answers it: from the frame his answer goes, the card folds and the row stands again.
+                    let placedAsks = ChatAskPlaces.rows(
+                        places.rows(of: held), asks: asks,
+                        open: needs.filter { $0.isOpen && store.answerOnItsWay(to: $0, kept: answersKept[$0.id]) == nil },
+                        waitsOn: waitsOn(held))
+                    let rows = placedAsks.rows, onCards = placedAsks.heads
                     let askByID = Dictionary(asks.map { ($0.id, $0) }) { first, _ in first }
                     // A card counts for the marks of a day or an hour as a message does, by the time it was raised.
                     let times = ChatRequestPlaces.times(of: rows, raised: byID.mapValues(\.raised))
@@ -173,7 +186,7 @@ struct ManagerView: View {
                         }
                         switch row {
                         case .request(let id):
-                            if let need = byID[id] { requestCard(need, spoken: places.spoken.contains(id)) }
+                            if let need = byID[id] { requestCard(need, spoken: places.spoken.contains(id), ask: onCards[id]) }
                         case .ask(let id):
                             if let ask = askByID[id] {
                                 // Rows under one reply stand 8 points apart, as the cards of a lane of Tasks.
@@ -185,6 +198,9 @@ struct ManagerView: View {
                             // The room under his message is counted to the row under it: a reply, or a card.
                             messageRow(message).padding(.bottom, Self.gap(under: message, before: Self.entry(after: index, in: rows),
                                                                           keepsFiles: store.supportsKeptFiles))
+                                // **His message comes up from the composer** (`AnyTransition.sentMessage`): only the
+                                // one that he sends now, in the frame it goes, never a message of the reading.
+                                .transition(!reduceMotion && comesFromComposer(message) ? .sentMessage : .identity)
                         // **A reply that arrives while he looks fades in where it stands** (T-20): 0.2 s, opacity
                         // only. It took the waiting line's place in one frame. Not on the first paint, and not for
                         // the earlier messages he asks for.
@@ -201,12 +217,13 @@ struct ManagerView: View {
                     }
                     // What the owner is waiting for, under his last message and above nothing: one muted line,
                     // in the place the answer will take.
-                    if let waiting { ChatWaitingLine(waiting: waiting, agent: agent).padding(.bottom, Self.footer) }
+                    if let waiting { ChatWaitingLine(waiting: waiting, agent: agent, moves: store.marksMove).padding(.bottom, Self.footer) }
                     Color.clear.frame(height: Self.endRoom)
                     Color.clear.frame(height: 1).id("latest")
                 }.threadRows(top: Self.topInset)
             }
             .keepsEnd($end, room: Self.endRoom)
+            .knowsFarEnd($farFromEnd, room: Self.endRoom)
             // No row gets or loses its selectable words while the chat moves (`ChatWordsSelection`).
             .scrollsAsAChat(selection, store: store)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
@@ -223,6 +240,9 @@ struct ManagerView: View {
             }
             .onChange(of: store.pending?.requestID, initial: true) { _, _ in
                 if let request = store.messageOnItsWay(to: agent) { sent = request }
+                for need in mine where need.isOpen {
+                    if let request = store.answerOnItsWay(to: need) { answersKept[need.id] = request }
+                }
                 // **The chat follows the answer that he writes to a request** (the owner, 14 November 2026: "When I
                 // reply to a card, the conversation should follow!"): his words stand at the chat's end, also when
                 // he wrote them in a card further up, and the agent's reply comes under them.
@@ -270,7 +290,12 @@ struct ManagerView: View {
             .overlay(alignment: .top) { ChatAgentPill(agent: agent) }
             .overlay(alignment: .bottomTrailing) {
                 if end.showsLatest {
-                    Button("Latest", systemImage: "arrow.down") { proxy.scrollTo("latest", anchor: .bottom); end.followsLatest = true }
+                    // **"Latest" scrolls to the chat's end over 0.25 s** (`FleetMotion.latest`; the owner's yes of 17
+                    // November 2026), as the iPhone's chat does: the view jumped there. An end that is far stays a jump.
+                    Button("Latest", systemImage: "arrow.down") {
+                        withAnimation(reduceMotion || farFromEnd ? nil : FleetMotion.latest) { proxy.scrollTo("latest", anchor: .bottom) }
+                        end.followsLatest = true
+                    }
                         .buttonStyle(.plain).font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
                         .padding(9).background(FleetStyle.surface, in: Capsule()).padding(12)
                 }
@@ -305,15 +330,22 @@ struct ManagerView: View {
         }
     }
 
+    /// His message or his answer in words that is on its way now: the row that he sent in this frame (`drawn`).
+    private func comesFromComposer(_ message: OwnerMessage) -> Bool {
+        [requestOnItsWay, answerOnItsWay].contains { $0?.requestID.uuidString.lowercased() == message.request_id }
+    }
+
     private func messageRow(_ message: OwnerMessage) -> some View {
         SentMessageView(store: store, message: message).wordsSelectable(in: selection, row: "message-\(message.id)")
             .id("message-\(message.id)")
     }
 
     /// A request's card in the chat, at the column's width, waiting or folded. `spoken`: his answer stands in the chat
-    /// as his own message, so the folded card does not say it again.
-    private func requestCard(_ need: OwnerNeed, spoken: Bool) -> some View {
-        NeedRequestCard(store: store, need: need, spoken: spoken).padding(.bottom, Self.footer)
+    /// as his own message, so the folded card does not say it again. `ask`: the thing that he asked for in this chat and
+    /// that waits for it, which the card's head names (`ChatAskPlaces.onCards`).
+    private func requestCard(_ need: OwnerNeed, spoken: Bool, ask: Ask?) -> some View {
+        NeedRequestCard(store: store, need: need, spoken: spoken,
+                        ask: ask.map { ChatAskRow($0, agent: agent, state: store.state) }).padding(.bottom, Self.footer)
             .wordsSelectable(in: selection, row: "need-\(need.id)").id("need-\(need.id)")
     }
 
@@ -457,9 +489,15 @@ struct TaskView: View {
     let hub: URL
     let isFresh: Bool
     @State private var end = ChatEnd()
+    /// The thread's end is more than three of its room's heights away: "Latest" goes there in one frame.
+    @State private var farFromEnd = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var latestActivity = 0
     /// Why the thread's last read failed, in the hub's words.
     @State private var readError: String?
+    /// When the first of the reads that failed in a row failed: one break of them says nothing
+    /// (`FleetStore.pageReadingIsOld`; 17 November 2026).
+    @State private var readFailedSince: ContinuousClock.Instant?
     /// The rows whose words can be selected: the row under the pointer and the row whose words he pressed last.
     @State private var selection = ChatSelection()
     private var notes: [ProgressNote] { state.notes.filter { $0.task == task.id } }
@@ -515,6 +553,8 @@ struct TaskView: View {
     /// The first read of a task keeps nothing until it has every page; one that took more than a second keeps its
     /// loading line half a second (`settle`).
     private func readActivity() async {
+        // Each run of the reads counts its own break (`readFailedSince`).
+        readError = nil; readFailedSince = nil
         guard isFresh, threadEvents else { return }
         let name = TaskActivity.name(task.id), database = state.db, client = HubClient(), start = ContinuousClock.now
         var first: TaskActivity? = store.reading(name) as TaskActivity? == nil ? TaskActivity() : nil
@@ -527,7 +567,7 @@ struct TaskView: View {
                 try Task.checkCancellation()
                 guard store.hub == hub, store.state?.db == database else { return }
                 activity.append(page)
-                if readError != nil { readError = nil }
+                if readError != nil { readError = nil; readFailedSince = nil }
                 if first != nil, page.more { first = activity; continue }
                 if first != nil {
                     await store.settle(since: start)
@@ -548,6 +588,7 @@ struct TaskView: View {
             } catch {
                 if Task.isCancelled { return }
                 readError = HubError.said(error) ?? String(l10n: "Activity is unavailable. Retrying…")
+                if readFailedSince == nil { readFailedSince = .now }
                 if let partial = first {
                     await store.settle(since: start)
                     guard !Task.isCancelled else { return }
@@ -582,8 +623,9 @@ struct TaskView: View {
                     OwnerBubble(text: task.details).wordsSelectable(in: selection, row: "request")
                     if threadEvents {
                         // Its "Activity is unavailable" not while the window's notice says the outage
-                        // (`FleetStore.hubNoticeShows`; fix round 3, item 33).
-                        RuntimeActivity(activity: activity ?? TaskActivity(), error: store.hubNoticeShows ? nil : readError, task: task.id, attempt: task.attempt, stoppedAttempt: state.stoppedAttempt(of: task.id), terminal: task.isTerminal, isFresh: isFresh, followsLatest: $end.followsLatest,
+                        // (`FleetStore.hubNoticeShows`; fix round 3, item 33), and only once its reads have failed one
+                        // whole break.
+                        RuntimeActivity(activity: activity ?? TaskActivity(), error: store.hubNoticeShows || !store.pageReadingIsOld(failedSince: readFailedSince) ? nil : readError, task: task.id, attempt: task.attempt, stoppedAttempt: state.stoppedAttempt(of: task.id), terminal: task.isTerminal, isFresh: isFresh, followsLatest: $end.followsLatest,
                                         steers: state.steers?.filter { $0.task == task.id } ?? [],
                                         notes: notes, permissions: permissions,
                                         childRequest: $store.childThreadRequest, selection: selection)
@@ -648,6 +690,7 @@ struct TaskView: View {
                 }.threadRows(top: FleetSpace.underBand)
             }
             .keepsEnd($end)
+            .knowsFarEnd($farFromEnd)
             // No row gets or loses its selectable words while the thread moves (`ChatWordsSelection`).
             .scrollsAsAChat(selection, store: store)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
@@ -667,7 +710,9 @@ struct TaskView: View {
             .overlay(alignment: .bottomTrailing) {
                 if end.showsLatest {
                     Button("Latest", systemImage: "arrow.down") {
-                        proxy.scrollTo("latest-task", anchor: .bottom); end.followsLatest = true
+                        // Over 0.25 s, as a chat's (`FleetMotion.latest`); an end that is far stays a jump.
+                        withAnimation(reduceMotion || farFromEnd ? nil : FleetMotion.latest) { proxy.scrollTo("latest-task", anchor: .bottom) }
+                        end.followsLatest = true
                     }.buttonStyle(.plain).font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
                         .padding(9).background(FleetStyle.surface, in: Capsule()).padding(12)
                         .accessibilityIdentifier("task-latest")
@@ -792,6 +837,17 @@ extension View {
             EndMeasure(under: ChatEnd.isEnd(under($0)) ? 0 : ChatEnd.near, chat: $0.contentSize.height, room: $0.containerSize.height)
         } action: { old, now in
             keep { $0.stands(under: now.under, moved: old.chat == now.chat && old.room == now.room) }
+        }
+    }
+
+    /// **Whether the end of a chat or a task thread is far**: more than three heights of its room stand under the view.
+    /// "Latest" then goes to the end in one frame, and scrolls there otherwise (`FleetMotion.latest`). As `keepsEnd`,
+    /// it tells its answer only when that changes, not at each point of a scroll.
+    func knowsFarEnd(_ far: Binding<Bool>, room: CGFloat = 0) -> some View {
+        onScrollGeometryChange(for: Bool.self) {
+            $0.contentSize.height - room - $0.visibleRect.maxY > 3 * $0.containerSize.height
+        } action: { _, now in
+            if far.wrappedValue != now { far.wrappedValue = now }
         }
     }
 

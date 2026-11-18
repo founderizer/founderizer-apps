@@ -36,10 +36,12 @@ struct ChatAsksTests {
          "pushed": pushed, "turn": turn ?? NSNull()]
     }
 
-    private func need(_ id: Int, by agent: String = "dev", raised: Double, answered: Double? = nil) -> [String: Any] {
+    /// `ask`: the message of his that the request names (`OwnerNeed.ask`).
+    private func need(_ id: Int, by agent: String = "dev", raised: Double, answered: Double? = nil,
+                      ask: String? = nil) -> [String: Any] {
         ["id": id, "title": "Need \(id)", "why": "", "todo": "", "raised": raised, "by": agent,
          "answer": answered == nil ? NSNull() : "Yes", "answered": answered ?? NSNull(), "options": ["Yes", "No"],
-         "chosen": answered == nil ? NSNull() : 0]
+         "chosen": answered == nil ? NSNull() : 0, "ask": ask ?? NSNull()]
     }
 
     private func hub(_ tasks: [[String: Any]], messages: [[String: Any]] = [], reports: [[String: Any]] = [],
@@ -52,15 +54,21 @@ struct ChatAsksTests {
             "outcomes": [], "notes": [], "needs": needs, "permissions": [], "messages": messages, "reports": reports]))
     }
 
-    /// The chat of `agent` as the Mac draws it: its entries, the cards in their places, and the rows of its asks.
-    private func chat(_ state: HubState, agent: String = "dev", waitsOn: String? = nil) -> [String] {
+    /// The chat of `agent` as the Mac draws it (`ManagerView`): its entries, the cards in their places, the rows of its
+    /// asks, and, by each card's request, the ask that is the card's head and has no row (`ChatAskPlaces.onCards`).
+    private func drawn(_ state: HubState, agent: String, waitsOn: String?) -> (rows: [String], heads: [Int: String]) {
         var timeline = ChatTimeline()
         _ = timeline.update(messages: state.messages, reports: state.reports)
         let entries = timeline.entries(for: agent, limit: .max)
         let needs = state.needs.filter { $0.by == agent }
         let places = ChatRequestPlaces.inTime(needs: needs, in: entries, whole: true)
-        return ChatAskPlaces.rows(places.rows(of: entries), asks: state.asks.filter { $0.agent == agent },
-                                  waitsOn: waitsOn).map(\.id)
+        let drawn = ChatAskPlaces.rows(places.rows(of: entries), asks: state.asks.filter { $0.agent == agent },
+                                       open: needs.filter(\.isOpen), waitsOn: waitsOn)
+        return (drawn.rows.map(\.id), drawn.heads.mapValues(\.id))
+    }
+
+    private func chat(_ state: HubState, agent: String = "dev", waitsOn: String? = nil) -> [String] {
+        drawn(state, agent: agent, waitsOn: waitsOn).rows
     }
 
     private func row(_ state: HubState, _ id: String, agent: String = "dev") throws -> ChatAskRow {
@@ -259,6 +267,33 @@ struct ChatAsksTests {
         let waits = try row(state, "a")
         #expect(waits.symbol == "hand.raised.fill" && waits.tint == .attention && waits.line == "Waits for you")
         #expect(waits.words == "Need 7" && waits.task == 1)
+    }
+
+    /// **What waits for a card of its chat is that card's head, and has no row** (the owner, 18 November 2026, of the
+    /// row "Waits for you" over the card that it waited for: "Or just combine them"), only while the card waits: a row
+    /// that went with a card that he answered, or with a card of another chat, would be gone from his chat for good.
+    @Test func anAskThatWaitsForACardOfItsChatIsThatCardsHeadUntilHeAnswers() throws {
+        let manager = (messages: [message("a", at: Self.now - 3000, to: "manager")],
+                       reports: [report(1, at: Self.now - 2990, by: "manager", replyingTo: "a")])
+        let open = try hub([task(1, "submitted", ask: "a")], messages: manager.messages,
+                           reports: manager.reports, needs: [need(7, by: "manager", raised: Self.now - 2980, ask: "a")])
+        let waits = drawn(open, agent: "manager", waitsOn: nil)
+        #expect(waits.rows == ["message-a", "report-1", "need-7"])
+        #expect(waits.heads == [7: "a"])
+        // A card that the chat does not draw yet (older than its drawn entries) takes no ask: the ask keeps its row.
+        #expect(ChatAskPlaces.onCards(open.asks, open: open.needs, in: [.entry(.report(open.reports[0]))]).isEmpty)
+        let answered = try hub([task(1, "submitted", ask: "a")], messages: manager.messages,
+                               reports: manager.reports,
+                               needs: [need(7, by: "manager", raised: Self.now - 2980, answered: Self.now - 100, ask: "a")])
+        let after = drawn(answered, agent: "manager", waitsOn: nil)
+        #expect(after.rows == ["message-a", "report-1", "ask-a", "need-7"])
+        #expect(after.heads.isEmpty)
+        // His task waits for a card that the Fleet Manager raised: it stands in the Fleet Manager's chat, not in this one.
+        let elsewhere = try hub([task(1, "input-required", ask: "a", waitingOn: "N-7")],
+                                messages: [message("a", at: Self.now - 3000)],
+                                reports: [report(1, at: Self.now - 2990, replyingTo: "a")],
+                                needs: [need(7, by: "manager", raised: Self.now - 2000)])
+        #expect(chat(elsewhere) == ["message-a", "report-1", "ask-a"])
     }
 
     @Test func doneOnlyAfterTheCheck() throws {

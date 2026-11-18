@@ -30,6 +30,11 @@ struct FleetView: View {
     /// The agents whose rows the sidebar drew last: a row that comes into a list that had rows fades in (`sidebar`).
     @State private var listedAgents: Set<String> = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The main sidebar's rows, for the fill of the selected one, which moves between them (`SidebarFill`).
+    @Namespace private var selectedRowSpace
+    /// A page came in this update: the column and the panel beside it are clear for its first frame, and whole again
+    /// over 0.15 s (`marksPageChange`).
+    @State private var pageClear = false
     /// The zoom the window is drawn at (View › Bigger), for the band its buttons stand in.
     @Environment(\.viewZoom) private var zoom
 
@@ -106,6 +111,14 @@ struct FleetView: View {
                         else { composer() }
                     }
                 }.frame(minWidth: FleetStyle.pageMinWidth, maxWidth: .infinity)
+                // **A page that comes fades in**, and the panel beside it with it (`marksPageChange`, `pageClear`): this
+                // column stays while its page changes, so it marks the change, and the column and each panel draw by
+                // it. The window's notice over it does not fade; the notice of a page with its own sidebar is that
+                // page's own, and comes with it. A page that takes the whole window (Add server, Add agent and the
+                // other setups that take it) is no part of this column: it comes at once, and so does the page that
+                // he comes back to from it.
+                .opacity(pageClear ? 0 : 1)
+                .marksPageChange(store.destination.page, clear: $pageClear)
                 // **The notice stands in the band over the main view and moves nothing** (`FleetNotices`): never over a
                 // sidebar or the chat's panel (the owner, 21 October 2026: "warning should be aligned, so only do the
                 // bar on the main view, not on the sidebars"; fix round 3c, where round 3 ran it over both). A page that
@@ -113,14 +126,18 @@ struct FleetView: View {
                 .overlay(alignment: .top) { if !store.destination.ownsSidebar { FleetNotices(store: store) } }
                 // The panel of an agent's chat, and the facts of a task in a task thread. Neither is hidden and
                 // neither waits to be asked for: the two pages that have a panel show it, every other page has none.
+                // Each panel draws by the page's own mark (`pageClear`), so a panel that comes with its page fades in
+                // with it: a fade on the panel itself saw no change when the panel was new, and the panel stood whole
+                // beside a page that was still clear.
                 if let name = chatAgent, setupAgent == nil, startingAgent == nil, accountAgent == nil, store.state != nil {
-                    Rule(vertical: true)
+                    Rule(vertical: true).opacity(pageClear ? 0 : 1)
                     AgentStatusPanel(store: store, agent: name) { openAgent(name, .settings) }
                         .id("\(store.hub)/\(name)")
+                        .opacity(pageClear ? 0 : 1)
                         .sideMenu(.trailing, width: $panelWidth, range: FleetStyle.panelWidths)
                 } else if store.currentTask != nil {
-                    Rule(vertical: true)
-                    inspector.sideMenu(.trailing, width: $panelWidth, range: FleetStyle.panelWidths)
+                    Rule(vertical: true).opacity(pageClear ? 0 : 1)
+                    inspector.opacity(pageClear ? 0 : 1).sideMenu(.trailing, width: $panelWidth, range: FleetStyle.panelWidths)
                 }
             }
             }
@@ -319,7 +336,9 @@ struct FleetView: View {
         var presences: [String: AgentPresence] = [:]
         for agent in state.agents {
             let open = state.tasks.filter { $0.owner == agent.name && !$0.isTerminal }
-            presences[agent.name] = agent.presence(isFresh: store.isFresh, serverTime: state.time, openTasks: open,
+            // For the glyphs that move and have no store (the pill over a chat): work moves only by an answer of
+            // this wake (`marksMove`). `.working` and `.workingAtLastRead` differ only in motion.
+            presences[agent.name] = agent.presence(isFresh: store.marksMove, serverTime: state.time, openTasks: open,
                                                    holds: state.holds ?? [], waits: state.ownerWaits(of: open),
                                                    thinking: store.thinks(agent.name))
         }
@@ -395,6 +414,8 @@ struct FleetView: View {
             // The chats take the room that the window has, and scroll when it has too little.
             ScrollView {
                 VStack(spacing: 2) { ForEach(agents) { agentRow($0) } }
+                    // The selected chat's fill, behind the chats, where it scrolls with them (`selectionFill`).
+                    .selectionFill(FleetStyle.bubble)
                     // **A new agent's row fades in over 0.2 s, ease-out, and the rows under it move with it** (the polish
                     // of 30 October 2026, B-BRAND-22): it came in one frame. Only into a list that had rows: the rows of
                     // a launch's first reading, or of another hub, come at once; a pin moves no name in or out.
@@ -427,6 +448,8 @@ struct FleetView: View {
                 }
             }.accessibilityIdentifier("hub-connection").accessibilityValue(store.connectionLabel)
         }
+        // The fill of a selected row that is no chat: Needs you, Tasks, Agents, Settings (`selectionFill`).
+        .selectionFill(FleetStyle.bubble)
         // **Needs you comes and goes over 0.2 s, ease-out, and the rows under it move with it** (the second review of 30
         // October 2026: it came and went in one frame, and every row under it moved 34 pt), as a new agent's row does,
         // **under the same rule** (review B, round 3): the rows of a launch's first reading, or of another hub, come at
@@ -434,10 +457,25 @@ struct FleetView: View {
         // Needs you faded in.
         .animation(listedAgents.isEmpty || reduceMotion ? nil : .easeOut(duration: 0.2),
                    value: (store.state?.needsYouCount ?? 0) > 0)
+        // **The selected row's fill moves to the row that he opens, over 0.18 s** (the owner's yes of 17 November 2026):
+        // it stood on the new row in one frame. One fill for each group of rows, behind them (`selectionFill`).
+        .animation(reduceMotion ? nil : FleetMotion.selection, value: selectedRow)
+        .environment(\.selectionSpace, selectedRowSpace)
         .padding(.horizontal, 10).padding(.top, FleetSpace.underBand + FleetSpace.lights).padding(.bottom, FleetSpace.under)
             .overlay(alignment: .topLeading) { historyButtons }
             .overlay(alignment: .topTrailing) { sidebarButtons }
             .background(FleetStyle.rail)
+    }
+
+    /// The row of the sidebar that is selected now, or none: what the move of the selected row's fill follows.
+    private var selectedRow: String {
+        if isSettings { return "settings" }
+        switch store.destination {
+        case .needs: return "needs"
+        case .activity, .task: return "tasks"
+        case .agents: return "agents"
+        default: return store.destination.agentName.map { "agent/\($0)" } ?? ""
+        }
     }
 
     /// **The Settings dot says what System status has to say** (fix round 3, item 18): the warnings of its last reading of
@@ -603,14 +641,16 @@ struct FleetView: View {
         let time = (request.map { ChatList.requestTime($0, last: last) } ?? ChatList.lastTime(last))
             .map { ChatList.time($0, now: store.state?.time ?? Date().timeIntervalSince1970) }
         return ChatRow(agent.name.agentLabel, preview: action ?? preview, selected: selected, emphasized: reply,
-                       working: presence == .working, needsYou: action == nil && request != nil, time: time) {
+                       // Its line and its glyph move only by an answer of this wake (`marksMove`).
+                       working: presence == .working && store.marksMove, needsYou: action == nil && request != nil,
+                       time: time) {
             openAgent(agent.name, .chat)
         } mark: {
             // **Its status dot stands on its glyph's lower right corner, as everywhere else** (the owner's yes of 28
             // October 2026, D-8): none while it works or is simply online. The ring under the dot is the row's own
             // colour, so it parts the dot from the glyph on the selected row too.
             AgentAvatar(name: agent.name, presence: presence, size: ChatRow<EmptyView, EmptyView>.glyph,
-                        surface: selected ? FleetStyle.bubble : FleetStyle.rail, moves: true)
+                        surface: selected ? FleetStyle.bubble : FleetStyle.rail, moves: store.marksMove)
                 // **The words of its dot show over the whole glyph** (the owner, 16 November 2026: "on hover on the
                 // side"): the dot alone is 6 points.
                 .help(StatusDot.shows(presence, reduceMotion: reduceMotion) ? presence.label : "")
@@ -682,7 +722,7 @@ struct FleetView: View {
             // it is typed into (`SettingsPage`).
             case .agent(let name):
                 // The setup, "Setting up" and the chat cross-fade in 200 ms as one takes the other's place; a switch
-                // to another agent still happens in one frame.
+                // to another agent is a page that comes, and fades in as each page does (`arrives`).
                 Group {
                     if setupAgent == name {
                         AgentSetupWizard(store: store, agent: name).id("\(store.hub)/\(name)/setup")
@@ -703,6 +743,9 @@ struct FleetView: View {
             // One case for every section and a rule's editor, so that the sidebar of the details stays.
             case .agentDetail(let name, _), .agentRule(let name, _):
                 AgentPage(store: store, team: team, agent: name, destination: store.destination) { store.destination = $0 }
+            // One thing of an agent's work, from a row of its chat panel's card Work.
+            case .work(let name, let key):
+                WorkItemPage(store: store, agent: name, key: key).id("\(store.hub)/\(name)/work/\(key)")
             }
         }
     }

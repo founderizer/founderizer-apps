@@ -248,7 +248,7 @@ struct RepositoryPickerCard: View {
                     .accessibilityIdentifier("agent-github-cancel")
                 Button(giving == 0 ? "Add" : "Add \(giving)") { Task { await model.add(store: store, agent: agent) } }
                     .buttonStyle(FleetPrimaryButtonStyle())
-                    .disabled(giving == 0 || !store.isFresh || model.givingFor != nil)
+                    .disabled(giving == 0 || !store.writesNow || model.givingFor != nil)
                     .accessibilityIdentifier("agent-github-add-picked")
             }.padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 10)
         }

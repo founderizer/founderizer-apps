@@ -46,7 +46,7 @@ struct AddPersonView: View {
     @State private var filled = false
     private let client = PeopleClient()
 
-    private var canWrite: Bool { store.isFresh && store.state?.db != nil && !busy }
+    private var canWrite: Bool { store.writesNow && store.state?.db != nil && !busy }
     /// The agents a person may reach: every configured agent but the fleet's manager, which the hub refuses.
     private var agents: [FleetAgent] { (store.state?.agents ?? []).filter { $0.role != "manager" } }
     /// Who they are, in the titles after the first page.

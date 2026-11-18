@@ -27,6 +27,9 @@ struct ChatWaitingLine: View {
     let waiting: ChatWaiting
     /// The agent whose answer the chat waits for, or nil for the words alone.
     var agent: String?
+    /// False: the agent's work rests, as with Reduce Motion, before the hub's first answer after a wake
+    /// (`FleetStore.marksMove`).
+    var moves = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The room between the glyph and the words, as where a glyph stands before a name (`AgentNamed`).
@@ -35,9 +38,9 @@ struct ChatWaitingLine: View {
     var body: some View {
         HStack(spacing: Self.glyphGap) {
             // The agent's glyph before the words of its own work; it rests with Reduce Motion (`AgentGlyph`).
-            if waiting.moving, let agent { Self.glyph(agent, moves: true) }
+            if waiting.moving, let agent { Self.glyph(agent, moves: moves) }
             HStack(spacing: 8) {
-                if waiting.moving && !reduceMotion {
+                if waiting.moving && moves && !reduceMotion {
                     // The words themselves carry the motion, as they do in his own project.
                     ShimmeringWords(text: waiting.says)
                 } else {

@@ -181,17 +181,21 @@ public struct HubHardening: Decodable, Sendable, Equatable {
     public let ssh_keys_only: Bool?
     /// npm holds back a package version newer than seven days; nil where the server has no npm.
     public let npm_rule: Bool?
+    /// All users' processes of the server together have a memory limit (owner API 1.211); nil where the kernel's file
+    /// cannot say, and from a hub before that version. `ServerMemory` reads it.
+    public let memory_guard: Bool?
     /// When the hub read them, by its own clock.
     public let at: Double?
     /// When the owner's Mac that the hub's team names claimed the hub (its install's claim, or a second one), or when
     /// the hub's records were restored, if that is later; nil while the hub has not kept it.
     public let claimed_at: Double?
 
-    public init(ssh_keys_only: Bool?, npm_rule: Bool?, at: Double?, claimed_at: Double?) {
+    public init(ssh_keys_only: Bool?, npm_rule: Bool?, at: Double?, claimed_at: Double?, memory_guard: Bool? = nil) {
         self.ssh_keys_only = ssh_keys_only; self.npm_rule = npm_rule; self.at = at; self.claimed_at = claimed_at
+        self.memory_guard = memory_guard
     }
 
-    private enum Keys: String, CodingKey { case ssh_keys_only, npm_rule, at, claimed_at }
+    private enum Keys: String, CodingKey { case ssh_keys_only, npm_rule, memory_guard, at, claimed_at }
     public init(from decoder: Decoder) throws {
         let keys = try? decoder.container(keyedBy: Keys.self)
         func fact(_ key: Keys) -> Bool? { (try? keys?.decodeIfPresent(Bool.self, forKey: key)).flatMap { $0 } }
@@ -199,7 +203,7 @@ public struct HubHardening: Decodable, Sendable, Equatable {
             (try? keys?.decodeIfPresent(Double.self, forKey: key)).flatMap { $0 }.flatMap { $0.isFinite ? $0 : nil }
         }
         self.init(ssh_keys_only: fact(.ssh_keys_only), npm_rule: fact(.npm_rule), at: time(.at),
-                  claimed_at: time(.claimed_at))
+                  claimed_at: time(.claimed_at), memory_guard: fact(.memory_guard))
     }
 
     /// Read in the last ten minutes, as a server's reading counts (`ServerReading.isCurrent`).
@@ -311,6 +315,10 @@ public struct ServerReading: Decodable, Sendable {
         /// before 3 November 2026. `ServerHardening` reads them.
         public let ssh_keys_only: Bool?
         public let npm_rule: Bool?
+        /// All users' processes of the server together have a memory limit (owner API 1.211), which the join's
+        /// hardening sets since that version: false when the kernel says none, nil when its file cannot say and from
+        /// a helper before that version. `ServerMemory` reads it.
+        public let memory_guard: Bool?
     }
 
     public func isCurrent(at time: Double) -> Bool {

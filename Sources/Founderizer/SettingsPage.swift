@@ -168,6 +168,8 @@ struct SettingsPage: View {
             // keyboard, and the responder chain reached the view that had just gone (`swift_abortRetainUnowned`,
             // 22 October 2026). The reading below follows the generation; the view does not.
             .id("\(store.hub)/\(shown.rawValue)")
+            // The page of a section that he opens fades in beside the sidebar, which stays (`arrives`).
+            .arrives(with: store.destination.part)
             .pageNotices(store)
             // The title and the header's button stand where every page has them (`columnPull`).
             .environment(\.columnPull, (FleetStyle.pageSidebarWidth + 1) / 2)
@@ -381,7 +383,7 @@ private struct DefaultModelsSection: View {
                         let effort = value.effort.flatMap { DefaultModels.efforts(options, for: next).contains($0) ? $0 : nil }
                         choose(runtime, ModelDefault(model: next, effort: effort))
                     }), options: Self.models(options, current: value.model))
-                        .disabled(!store.isFresh).accessibilityIdentifier("default-model-\(runtime)")
+                        .disabled(!store.writesNow).accessibilityIdentifier("default-model-\(runtime)")
                 }
                 FormRow("Reasoning") {
                     FleetSelect("Reasoning", selection: Binding(get: { value.effort ?? "" }, set: { level in
@@ -389,7 +391,7 @@ private struct DefaultModelsSection: View {
                         guard next != value.effort else { return }
                         choose(runtime, ModelDefault(model: value.model, effort: next))
                     }), options: Self.efforts(page.efforts(runtime, for: value.model), current: value.effort))
-                        .disabled(!store.isFresh).accessibilityIdentifier("default-effort-\(runtime)")
+                        .disabled(!store.writesNow).accessibilityIdentifier("default-effort-\(runtime)")
                 }
             }
             if let failure = states[runtime]?.failure {
@@ -421,7 +423,7 @@ private struct DefaultModelsSection: View {
     }
 
     private func choose(_ runtime: String, _ value: ModelDefault) {
-        guard store.isFresh else { return }
+        guard store.writesNow else { return }
         wanted[runtime] = value
         unanswered[runtime] = nil
         states[runtime] = .saving
@@ -429,7 +431,7 @@ private struct DefaultModelsSection: View {
     }
 
     private func retry(_ runtime: String) {
-        guard store.isFresh, wanted[runtime] != nil, !sending.contains(runtime) else { return }
+        guard store.writesNow, wanted[runtime] != nil, !sending.contains(runtime) else { return }
         states[runtime] = .saving
         Task { await drain(runtime) }
     }
@@ -526,7 +528,7 @@ private struct ChannelsSettings: View {
                     Toggle("Receive messages", isOn: Binding(get: { !paused },
                                                              set: { on in Task { await setPaused(!on) } }))
                         .toggleStyle(.switch).controlSize(.small).labelsHidden()
-                        .disabled(sending || !store.isFresh)
+                        .disabled(sending || !store.writesNow)
                         .accessibilityIdentifier("settings-receive-messages")
                 }
             }
@@ -534,7 +536,7 @@ private struct ChannelsSettings: View {
     }
 
     private func setPaused(_ value: Bool) async {
-        guard store.isFresh, !sending, let db = store.state?.db else { return }
+        guard store.writesNow, !sending, let db = store.state?.db else { return }
         sending = true; problem = nil
         defer { sending = false }
         do {
@@ -625,7 +627,7 @@ struct BackupSettings: View {
             // taken its place says so in moving words.
             if copy.busy {
                 ShimmeringWords(text: String(l10n: "Saving\u{2026}")).accessibilityIdentifier("backup-saving-copy")
-            } else if store.isFresh {
+            } else if store.writesNow {
                 Button(FleetHealth.Warning.Act.saveCopy.label) { Task { await copy.save(store: store) } }
                     .buttonStyle(FleetPrimaryButtonStyle())
                     .accessibilityIdentifier("backup-save-copy")

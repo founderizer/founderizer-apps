@@ -30,7 +30,9 @@ public enum GrantSecret {
     /// **The door's name as a holder of the central vault** (`DoorAccess.holder` in FleetCore, which this library
     /// does not link; a test holds the two equal). The hub reads a grant for this name as the door's own
     /// (`hub.py` `save_grant`), and the door is no agent of the team: this tool never signs for it and never
-    /// writes for it, for a give and for a take-back.
+    /// writes for it, for a give and for a take-back. It is also the machine of the door's signed grant. Only
+    /// `answer_secret_request` gives the door a secret, with the answer of a request for the door, as the app's form
+    /// of that request does (`AnswerSecret`).
     static let door = "door"
 
     /// The roles of an agent that can hold a secret of the central vault: the hub delivers only what workers and
@@ -154,6 +156,15 @@ public enum GrantSecret {
     /// It names no take-back: which of the two keys the agent reads is the owner's to say.
     static let readsTwice = "That agent already reads another API key of the same variable name, and a session has "
         + "one value for one name. Ask the owner which of the two keys that agent reads. Nothing was sent."
+    /// **A give while this Mac's clock and the hub's differ by more than an hour** (`Desk.clockApart`, the rule of the
+    /// app's own controls that sign: `VaultPlan.clockProblem`). The owner's signed statement takes its time from this
+    /// Mac's clock (`GrantClock.next`), and the vault keeps only a statement that is newer than the one that it holds
+    /// for that grant (`central_signed` in vault.py): with a wrong clock, a statement can be refused, or be dated in
+    /// the future. A take-back does not wait for the clocks: its hub step comes first, and an end only narrows.
+    static let clockApart = "This Mac's clock and the hub's clock differ by more than an hour, so the app signs no "
+        + "grant now. Ask the owner to check this Mac's date and time (System Settings, General, Date & Time), and "
+        + "then call grant_secret again. If this Mac's clock is right, the hub's clock is probably wrong: tell the "
+        + "owner. A take-back (level null) does not wait for the clocks. Nothing was sent."
     /// **One sentence for the two tools that write grants** (`AnswerSecret.busy` is this text): they share one
     /// line of writes, so the call that holds it can be a call of either tool.
     static let busy = "Another call of grant_secret or answer_secret_request is at its writes now. Call again when "
@@ -353,6 +364,10 @@ public enum GrantSecret {
             self.agents = agents
         }
 
+        /// Whether the list has a grant of this secret for this agent, at any level. The door's hold is never in this
+        /// list: the team's page shows the grants of the agents only.
+        func holds(_ login: String, agent: String) -> Bool { secrets[login]?.grants[agent] != nil }
+
         /// **The hub's rule `read_twice`**: this agent reads another API key of the variable name of this one. A
         /// session has one value for one name, so the hub refuses such a grant.
         func readsTwice(_ login: String, agent: String) -> Bool {
@@ -480,6 +495,13 @@ public enum GrantSecret {
         public var holdsKey: (String) -> Bool
         /// The form of a server's name that a signed grant can carry (`CentralVault.isMachine`).
         public var isMachine: (String) -> Bool
+        /// Whether this Mac's clock and the hub's differ by more than an hour, by the hub's answer to the app's last
+        /// read in this launch, for the hub and the database of the place (`VaultPlan.clockProblem` with the hub's
+        /// time of that answer and this Mac's time of it: the rule of the app's own controls that sign). nil when the
+        /// app has no such answer: none in this launch yet (a kept reading gives no clock), or a reading that moved
+        /// to another hub or database; the tool then answers "not ready". A give asks it last, and waits while it is
+        /// true or nil; a take-back does not ask it.
+        public var clockApart: (Place) -> Bool?
         /// **Makes one statement, signs it with the owner key of this Mac and sends it** (`GrantSigning` in the
         /// app, `POST /ui/vault/grant`). It throws `NotSigned` when the key could not be read or made no
         /// signature: nothing was sent then. An error of the send itself is a `HubFailure`.
@@ -493,7 +515,7 @@ public enum GrantSecret {
         public init(ready: @escaping () -> Place?, signs: @escaping (Place) -> Bool?,
                     team: @escaping (Place) async throws -> Team, vault: @escaping (Place) async throws -> Vault,
                     holdsKey: @escaping (String) -> Bool, isMachine: @escaping (String) -> Bool,
-                    sign: @escaping (Place, Statement) async throws -> Void,
+                    clockApart: @escaping (Place) -> Bool?, sign: @escaping (Place, Statement) async throws -> Void,
                     grant: @escaping (Place, String, String, Level?) async throws -> Receipt,
                     refresh: @escaping () async -> Void) {
             self.ready = ready
@@ -502,6 +524,7 @@ public enum GrantSecret {
             self.vault = vault
             self.holdsKey = holdsKey
             self.isMachine = isMachine
+            self.clockApart = clockApart
             self.sign = sign
             self.grant = grant
             self.refresh = refresh
@@ -555,7 +578,9 @@ public enum GrantSecret {
     ///    page names the fleet; the hub has a reading of a central vault; the hub's newest read of that vault
     ///    did not fail (`Vault.Central.of`); this Mac holds the fleet's owner key. Then, **for a give only**: the
     ///    list has the secret; the fleet has the agent; the agent is a worker or a lead; the hub names a server
-    ///    for it; `read` only for an API key; and no second key of one variable name read by one agent. **A
+    ///    for it; `read` only for an API key; no second key of one variable name read by one agent; and the hub
+    ///    answered the app in this launch, and its clock and this Mac's do not differ by more than an hour
+    ///    (`Desk.clockApart`: with no such answer, "not ready"). **A
     ///    take-back makes none of the checks of a give but one**: an end goes for whatever the list has, and the
     ///    hub answers in its own words for an agent or a secret that it does not know. The one check is the
     ///    door's name, which is refused in a give and in a take-back with the words for an agent that the fleet
@@ -616,6 +641,8 @@ public enum GrantSecret {
                 guard secret.apiKey else { return .refused(readNeedsKey) }
                 guard !team.readsTwice(read.login, agent: read.agent) else { return .refused(readsTwice) }
             }
+            guard let apart = desk.clockApart(place) else { return .refused(notReady) }
+            guard !apart else { return .refused(clockApart) }
             server = machine
         } else {
             guard read.agent != door else { return .refused(noAgent) }
@@ -685,12 +712,13 @@ public enum GrantSecret {
 
     /// **The writes of one give**, for both tools: the signed `grant`, then the hub's grant, and after a certain
     /// refusal of that grant one more read of the list and, only when it shows no grant, the signed `ungrant`.
-    /// `sign` makes, signs and sends one statement; `grant` is the hub's grant at the give's level; `team` is one
-    /// read of the list. Each is a closure of the calling tool's own desk.
+    /// `sign` makes, signs and sends one statement; `grant` is the hub's grant at the give's level; `holds` reads the
+    /// list one time and says whether it has a grant of this secret for this holder now, at any level. Each is a
+    /// closure of the calling tool's own desk.
     @MainActor
     static func give(login: String, agent: String, fleet: String, server: String,
                      sign: (Statement) async throws -> Void, grant: () async throws -> Receipt,
-                     team: () async throws -> Team) async -> GiveEnd {
+                     holds: () async throws -> Bool) async -> GiveEnd {
         let statement = Statement(fleet: fleet, login: login, agent: agent, machine: server)
         switch await sent({ try await sign(statement) }) {
         case .took: break
@@ -706,15 +734,15 @@ public enum GrantSecret {
             return .grantNotKnown
         case .refused(let status, let said):
             // The list as it is now, and never as the call's first read had it.
-            guard let now = try? await team() else { return .refusedListUnread(status, said) }
-            guard now.secrets[login]?.grants[agent] == nil else { return .refusedListHasOne(status, said) }
+            guard let held = try? await holds() else { return .refusedListUnread(status, said) }
+            guard !held else { return .refusedListHasOne(status, said) }
             let end = Statement(fleet: fleet, login: login, agent: agent, machine: nil)
             guard case .took = await sent({ try await sign(end) }) else { return .refusedSignatureLeft(status, said) }
             return .refusedTakenBack(status, said)
         }
     }
 
-    /// **The writes of a give of this tool** (`give(login:agent:fleet:server:sign:grant:team:)`), and this tool's
+    /// **The writes of a give of this tool** (`give(login:agent:fleet:server:sign:grant:holds:)`), and this tool's
     /// words for each end.
     @MainActor
     private static func give<Place>(_ read: Read, _ level: Level, fleet: String, server: String, place: Place,
@@ -722,7 +750,7 @@ public enum GrantSecret {
         let end = await give(login: read.login, agent: read.agent, fleet: fleet, server: server,
                              sign: { try await desk.sign(place, $0) },
                              grant: { try await desk.grant(place, read.login, read.agent, level) },
-                             team: { try await desk.team(place) })
+                             holds: { try await desk.team(place).holds(read.login, agent: read.agent) })
         switch end {
         case .given(let receipt):
             await desk.refresh()

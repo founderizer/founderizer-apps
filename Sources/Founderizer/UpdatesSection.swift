@@ -21,6 +21,9 @@ import SwiftUI
 final class UpdatesModel {
     private(set) var state: ReleaseState?
     private(set) var failed = false
+    /// When the first of the reads that failed in a row failed: one break of them says nothing
+    /// (`FleetStore.pageReadingIsOld`).
+    private(set) var failedSince: ContinuousClock.Instant?
     private(set) var busy = false
     private(set) var error: String?
 
@@ -35,6 +38,9 @@ final class UpdatesModel {
 
     /// What one visit of General said goes with it: a refusal's words. The reading stays.
     func left() { if !pressed && !queued { error = nil } }
+    /// **A new visit counts its own break** (`failedSince`): reads that failed in an earlier visit say nothing to it at
+    /// its first failed read.
+    func visited() { if failedSince != nil { failedSince = .now } }
 
     func read(store: FleetStore) async {
         guard let database = store.state?.db else { return }
@@ -42,7 +48,8 @@ final class UpdatesModel {
         let read = try? await HubClient().releases(hub: hub, database: database)
         guard store.hub == hub, store.state?.db == database else { return }
         // The store's reading too, which the sidebar's Update draws: an update taken here takes it away.
-        if let read { state = read; failed = false; store.keep(read, as: "releases") } else { failed = true }
+        if let read { state = read; failed = false; failedSince = nil; store.keep(read, as: "releases") }
+        else { failed = true; failedSince = failedSince ?? .now }
         if read?.running == false { pressed = false }       // the run he started has ended, however it ended
     }
 
@@ -128,9 +135,12 @@ struct UpdatesSection: View {
         FormSection("Updates", footer: model.error ?? store.updates.cannotReplace ?? store.updates.failure) {
             if let state {
                 fleetRow(state)
-            } else if fleet, model.failed || store.connectionError != nil, !store.hubNoticeShows {
+            } else if fleet, model.failed && store.pageReadingIsOld(failedSince: model.failedSince) || store.connectionError != nil,
+                      !store.hubNoticeShows {
                 // While the hub does not answer nothing is read: the failed row, never a loading line. **Not while the
                 // window's notice says the outage** (`FleetStore.hubNoticeShows`): it is said once, over the page.
+                // **One break of the hub says nothing** (17 November 2026): only once the reads have failed one whole
+                // break.
                 FormRow("Founderizer cannot read the updates now.", detail: String(l10n: "It reads again when the hub answers."))
             }
             FormRow("Founderizer for Mac", symbol: "app.badge", warning: failing) {
@@ -145,10 +155,12 @@ struct UpdatesSection: View {
 
     /// Reads the updates every 15 seconds while General shows, every 3 while a run goes on.
     private func poll() async {
+        model.visited()
         while !Task.isCancelled {
             if store.isFresh { await model.read(store: store) }
             guard !Task.isCancelled else { return }
-            do { try await store.nap(model.state?.running == true ? 3 : 15) } catch { return }
+            // Also 3 s after a read that failed, as the lists do: its row goes as soon as the hub is back.
+            do { try await store.nap(model.state?.running == true || model.failed ? 3 : 15) } catch { return }
         }
     }
 

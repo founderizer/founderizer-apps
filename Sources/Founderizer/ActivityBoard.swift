@@ -15,15 +15,19 @@ import SwiftUI
 /// It was Activity, under the Dashboard; the owner's map of 28 October 2026 (D-4) names it Tasks, as the iPhone does.
 ///
 /// **The same board is an agent's own Tasks part** (`scope`, `AgentTab.tasks`; the owner's yes of 6 November 2026 to its
-/// mockup, in place of the Activity card of the chat's panel): that agent's tasks only, so it has the Period filter and
-/// no Agent filter, and no agent's name on its cards.
+/// mockup, in place of the Activity card of the chat's panel): that agent's tasks and the things that he asked it, so it
+/// has the Period filter and no Agent filter, and no agent's name on its cards.
 ///
 /// **For all agents, one card is one thing that he asked for** (`HubState.board`; his "Both places" of 15 November 2026
 /// to its picture, after "I am not interested in the specific individual tasks to be done but in the thing I asked for
 /// to be done"): the name of what he asked for, and under it the agent that he asked. The tasks of it are behind the
 /// card, which opens the one that matters now: the task that waits for him, else the task in work, else the open one
-/// that moved last, else the one that moved last (`Ask.lead`). A task that no message of his began is a card of its own, as before, and so is every task
-/// on the board of one agent.
+/// that moved last, else the one that moved last (`Ask.lead`). A task that no message of his began is a card of its own, as before.
+///
+/// **The board of one agent shows the things that he asked that agent for in the same way** (his "Yes, build it" of 17
+/// November 2026 to its picture: View all of the card Asked in an agent's chat panel opens Tasks with that agent
+/// chosen): one card for each, whoever does their tasks, and the agent's other tasks a card each, its work on what he
+/// asked another agent too. The Fleet Manager owns no task of its own, so its board showed nothing.
 struct ActivityBoard: View {
     @Bindable var store: FleetStore
     /// The agent whose own Tasks part this board is, or nil for the board of the main sidebar.
@@ -34,6 +38,7 @@ struct ActivityBoard: View {
     private var period: ActivityPeriod { ActivityPeriod(rawValue: periodName) ?? .week }
     /// Ended shows the tasks behind its "more" row.
     @State private var showsRest = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The rows of several tasks that show their tasks, by the row's newest task.
     @State private var openRows: Set<Int> = []
     /// The narrowest lane: a card keeps its agent's name on one line. A window too narrow for three shows as many whole
@@ -43,6 +48,8 @@ struct ActivityBoard: View {
     private static let spacing: CGFloat = 24
     /// The agent whose tasks show: the part's own, else the one of the filter; empty for all agents.
     private var agent: String { scope ?? chosen }
+    /// Which list the lanes show: the hub, the period and the agent. When it changes, no card moves (`lane`).
+    private var listed: String { "\(store.hub)/\(periodName)/\(agent)" }
 
     var body: some View {
         let state = store.state
@@ -51,18 +58,18 @@ struct ActivityBoard: View {
             filters(state?.activityAgents(saved: chosen) ?? [])
             if let state, !board.isEmpty { lanes(board, state: state) }
             else {
-                empty(hasTasks: state?.tasks.contains { agent.isEmpty || $0.owner == agent } == true)
+                empty(hasTasks: state?.tasks.contains { agent.isEmpty || $0.owner == agent } == true
+                                || store.asks.contains { $0.agent == agent })
                 Spacer(minLength: 0)
             }
         } actions: { EmptyView() }
     }
 
-    /// The board's cards: for all agents, one for each thing that he asked for and one for every other task; for one
-    /// agent, that agent's tasks.
+    /// The board's cards: one for each thing that he asked for and one for every other task, of all agents or of one
+    /// (`HubState.board`).
     private func items(_ state: HubState?) -> [ActivityColumn: [BoardItem]] {
         guard let state else { return [:] }
-        if agent.isEmpty { return state.board(period: period) }
-        return state.activity(agent: agent, period: period).mapValues { $0.map(BoardItem.task) }
+        return state.board(period: period, agent: agent.isEmpty ? nil : agent)
     }
 
     /// The period and the agent: two dropdowns on one line. An agent's own board has the period alone.
@@ -92,22 +99,29 @@ struct ActivityBoard: View {
             let shown = max(1, min(count, ((proxy.size.width + Self.spacing) / (Self.laneWidth + Self.spacing)).rounded(.down)))
             let width = (proxy.size.width - Self.spacing * (shown - 1)) / shown
             let row = HStack(alignment: .top, spacing: Self.spacing) {
-                lane(.inProgress, count: board[.inProgress]?.count ?? 0) {
+                lane(.inProgress, count: board[.inProgress]?.count ?? 0, ids: (board[.inProgress] ?? []).map(\.id)) {
                     ForEach(board[.inProgress] ?? []) { item in
-                        switch item {
-                        case .task(let task):
-                            // A task in work says nothing more; one that stalled or lost its session says so.
-                            let word = task.stateWord(holds: holds, limited: limited.contains(task.owner))
-                            card(task, wait: nil, state: state, why: word == TaskWords.working ? nil : word)
-                        case .ask(let ask):
-                            // As a task in work: nothing more, unless its task in work stalled or lost its session.
-                            let word = ask.working?.stateWord(holds: holds, limited: limited.contains(ask.working?.owner ?? ""))
-                            askCard(ask, state: state, why: word == TaskWords.working ? nil : word)
-                        }
+                        // **The glyph of a card in this lane moves while its agent works** (`works`; the owner's yes of 17
+                        // November 2026), as that agent's glyph does in the sidebar: the lane looked as Waiting does.
+                        // Only a card whose own task is in work: one that says that it stalled or lost its session
+                        // rests, also while its agent works on another task.
+                        Group {
+                            switch item {
+                            case .task(let task):
+                                // A task in work says nothing more; one that stalled or lost its session says so.
+                                let word = task.stateWord(holds: holds, limited: limited.contains(task.owner))
+                                card(task, wait: nil, state: state, why: word == TaskWords.working ? nil : word, works: word == TaskWords.working)
+                            case .ask(let ask):
+                                // As a task in work: nothing more, unless its task in work stalled or lost its session.
+                                let word = ask.working?.stateWord(holds: holds, limited: limited.contains(ask.working?.owner ?? ""))
+                                askCard(ask, state: state, why: word == TaskWords.working ? nil : word, works: word == TaskWords.working)
+                            }
+                        }.transition(.laneCard)
                     }
                 }.frame(width: width)
-                lane(.waiting, count: board[.waiting]?.count ?? 0) {
+                lane(.waiting, count: board[.waiting]?.count ?? 0, ids: (board[.waiting] ?? []).map(\.id)) {
                     ForEach(board[.waiting] ?? []) { item in
+                        Group {
                         switch item {
                         case .task(let task):
                             let reason = waits[task.id] == nil
@@ -122,9 +136,12 @@ struct ActivityBoard: View {
                                 why($0, holds: holds, limited: limited.contains($0.owner), subtasks: subtasks[$0.id], now: state.time)
                             })
                         }
+                        }.transition(.laneCard)
                     }
                 }.frame(width: width)
-                lane(.done, count: board[.done]?.count ?? 0) { endedRows(ended, state: state, narrow: width < EndedRow.narrow) }.frame(width: width)
+                lane(.done, count: board[.done]?.count ?? 0, ids: ended.failedRows.map { "\($0.id)" }) {
+                    endedRows(ended, state: state, narrow: width < EndedRow.narrow)
+                }.frame(width: width)
             }.scrollTargetLayout().frame(height: proxy.size.height)
             if shown == count { row } else { ScrollView(.horizontal) { row }.scrollTargetBehavior(.viewAligned) }
         }
@@ -132,24 +149,34 @@ struct ActivityBoard: View {
 
     /// One lane: its heading with its count, and its cards on the page itself. **No box around a lane** (the owner's yes
     /// of 11 November 2026): cards stood in a box of their own colour, and an empty lane was a tall empty box.
-    private func lane<Cards: View>(_ column: ActivityColumn, count: Int, @ViewBuilder cards: () -> Cards) -> some View {
+    ///
+    /// **A card that leaves a lane goes at once, and the cards under it close its room over 0.2 s; a card that comes
+    /// fades in over the same time** (`ids`, the lane's cards in their order; `AnyTransition.laneCard`; the owner's yes
+    /// of 17 November 2026): a task that started stood in its new lane in one frame, and the cards under its old place
+    /// jumped. The fleet is read every three seconds, so this happens while he looks. Its count rolls (`rolls`).
+    /// **Only a card that changes its lane moves**: with another period, another agent or another hub the lane is
+    /// another list, and stands at once (`listed`), as the sidebar's rows of another hub do.
+    private func lane<Cards: View>(_ column: ActivityColumn, count: Int, ids: [String] = [], @ViewBuilder cards: () -> Cards) -> some View {
         // **A lane's heading as every heading over a card** (margins row 23): 2 points in, in the 28-point heading row, 10
         // over its first card (`FormSection`).
         VStack(alignment: .leading, spacing: FleetSpace.inside) {
             HStack(spacing: 6) {
                 Text(column.title).font(FormMetrics.heading).foregroundStyle(FleetStyle.text)
-                Text("\(count)").font(FormMetrics.detail).monospacedDigit().foregroundStyle(FleetStyle.muted)
+                Text("\(count)").font(FormMetrics.detail).monospacedDigit().foregroundStyle(FleetStyle.muted).rolls(count)
             }.frame(minHeight: FormMetrics.headingRow).padding(.leading, 2)
                 .accessibilityElement(children: .combine).accessibilityAddTraits(.isHeader)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) { cards() }.padding(.bottom, FleetSpace.bottom)
+                    .transaction(value: listed) { $0.animation = nil }
+                    .animation(reduceMotion ? nil : FleetMotion.lane, value: ids)
             }
         }.accessibilityElement(children: .contain).accessibilityIdentifier("activity-column-\(column.rawValue)")
     }
 
     /// One open task's card. `wait`: what it waits for from the owner; `why`: why any other task waits; `words`: its
     /// state in words for its hover and VoiceOver where they are not its state word (a task that waits for subtasks).
-    private func card(_ task: FleetTask, wait: OwnerWait?, state: HubState, why: String? = nil, words: String? = nil) -> some View {
+    private func card(_ task: FleetTask, wait: OwnerWait?, state: HubState, why: String? = nil, words: String? = nil,
+                      works: Bool = false) -> some View {
         var request: (() -> Void)?
         if case .request(let id, _) = wait {
             // The request itself, on Needs you, where he answers it.
@@ -157,7 +184,7 @@ struct ActivityBoard: View {
         }
         return ActivityCard(title: task.title, identifier: "activity-task-\(task.id)", requestIdentifier: "activity-request-\(task.id)",
                             owner: scope == nil ? task.owner : nil, ownerLine: wait?.words, why: why,
-                            words: wait?.words ?? words ?? task.stateWord(in: state), openRequest: request) {
+                            words: wait?.words ?? words ?? task.stateWord(in: state), works: works, openRequest: request) {
             store.destination = .task(task.id)
         }.opensTask(task.id, store: store)
     }
@@ -165,11 +192,11 @@ struct ActivityBoard: View {
     /// **One thing that he asked for, on one card**, with the look of a task's card: its name, under it the agent that
     /// he asked, what it waits for from him in orange, or `why` it waits at the end of the agent's line. The card opens
     /// the task of it that matters now (`Ask.lead`); the other tasks of it are in that task's thread and in Ended.
-    @ViewBuilder private func askCard(_ ask: Ask, state: HubState, why: String?) -> some View {
+    @ViewBuilder private func askCard(_ ask: Ask, state: HubState, why: String?, works: Bool = false) -> some View {
         if let lead = ask.lead {
             ActivityCard(title: ask.title, identifier: "activity-ask-\(ask.id)", requestIdentifier: "activity-ask-request-\(ask.id)",
-                         owner: ask.agent, ownerLine: ask.wait?.words, why: why,
-                         words: ask.wait?.words ?? why ?? lead.stateWord(in: state), openRequest: request(ask)) {
+                         owner: scope == nil ? ask.agent : nil, ownerLine: ask.wait?.words, why: why,
+                         words: ask.wait?.words ?? why ?? lead.stateWord(in: state), works: works, openRequest: request(ask)) {
                 store.destination = .task(lead.id)
             }.opensTask(lead.id, store: store)
         }
@@ -202,6 +229,8 @@ struct ActivityBoard: View {
             EndedRow(title: row.title, owner: scope == nil ? row.owner : nil, badge: row.task.failedResult, stacked: narrow) {
                 store.destination = .task(row.task.id)
             }.opensTask(row.task.id, store: store).accessibilityIdentifier("activity-task-\(row.task.id)")
+                // A result that did not succeed comes into Ended as a card comes into its lane (`laneCard`).
+                .transition(.laneCard)
         }
         if ended.rest > 0 {
             Button { showsRest.toggle() } label: {
@@ -291,10 +320,15 @@ struct ActivityCard: View {
     let why: String?
     /// Its state in words, for its hover and for VoiceOver.
     let words: String
+    /// The card stands in In progress: its agent's glyph moves while that agent works, as it does in the sidebar
+    /// (`AgentGlyph.moves`). It is no new mark: the glyph was there, and stood still.
+    var works = false
     /// Opens the request it waits on, where `ownerLine` is a request's title.
     let openRequest: (() -> Void)?
     let open: () -> Void
     @State private var hovered = false
+    /// The pointer is down on the card: it ends with the press, however that ends.
+    @GestureState private var pressed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -315,7 +349,8 @@ struct ActivityCard: View {
                 HStack(spacing: 6) {
                     if let owner {
                         // The glyph with its dot, as everywhere it stands for the agent (D-8 item 2).
-                        AgentGlyph(name: owner, size: GlyphSize.inline, ground: FleetStyle.surface)
+                        AgentGlyph(name: owner, size: GlyphSize.inline, moves: works,
+                                   ground: hovered ? FleetStyle.lifted : FleetStyle.surface)
                         Text(owner.agentLabel).lineLimit(1)
                     }
                     Spacer(minLength: 4)
@@ -325,8 +360,12 @@ struct ActivityCard: View {
         }
         .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
         .modifier(BoardCardLook(hovered: hovered))
+        .pressScale(pressed)
         // The whole card opens the task; the request's line in it is a button of its own, which takes its own click.
         .onTapGesture(perform: open)
+        // The press, for the card's smaller size while the pointer is down (`pressScale`): beside the tap, never in
+        // its place.
+        .simultaneousGesture(DragGesture(minimumDistance: 0).updating($pressed) { _, down, _ in down = true })
         .onHover { hovered = $0 }
         // **The keyboard reaches a card as it reaches a button** (review of 11 November 2026): it is no `Button`, because
         // a button inside a button takes no click of its own, so it takes the focus of keyboard navigation itself, and
@@ -345,21 +384,27 @@ struct ActivityCard: View {
 }
 
 /// **The look of a card of a board's lane**, on Tasks and on Needs you: the surface of a form card with its edge, 14 and
-/// 12 points of room, and a brighter edge under the pointer. `selected`: the card of the request at hand on Needs you,
-/// on the fill of a selected row (`FleetStyle.bubble`) with a stronger edge.
+/// 12 points of room, and under the pointer a brighter edge and a fill one step over the surface. `selected`: the card
+/// of the request at hand on Needs you, on the fill of a selected row (`FleetStyle.bubble`) with a stronger edge.
+///
+/// **The pointer's fill comes at once and goes over 0.15 s** (the owner's yes of 17 November 2026): the edge alone went
+/// from 8% to 16% white, which a large screen hardly shows.
 struct BoardCardLook: ViewModifier {
     var selected = false
     let hovered: Bool
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, 14).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? FleetStyle.bubble : FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.radius))
+            .background(selected ? FleetStyle.bubble : hovered ? FleetStyle.lifted : FleetStyle.surface,
+                        in: RoundedRectangle(cornerRadius: FormMetrics.radius))
             // The form cards' edge, which Increase Contrast raises to 4:1 (fix round 3c, HIG; T-41).
             .overlay(RoundedRectangle(cornerRadius: FormMetrics.radius)
                 .strokeBorder(FleetStyle.hairline(selected ? 0.26 : hovered ? 0.16 : 0.08), lineWidth: FleetStyle.edgeWidth(contrast)))
             .contentShape(RoundedRectangle(cornerRadius: FormMetrics.radius))
+            .animation(hovered || reduceMotion ? nil : FleetMotion.pointerOut, value: hovered)
     }
 }
 

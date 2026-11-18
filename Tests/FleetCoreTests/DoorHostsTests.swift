@@ -33,6 +33,25 @@ struct DoorHostsTests {
                 == ["ci-1", "ci-2", "app-b", "two-a", "two-z"])
     }
 
+    /// The fleet's own servers (API 1.210) get the door's parts after every business's server, in the order that
+    /// `DoorAccess.fleetServers` gives, the hub's server last, and never one that a plan step holds.
+    @Test func theFleetsOwnServersComeAfterEveryBusinesssServer() {
+        let access: [String: Any] = ["never": ["hosts": ["gone"]]]
+        #expect(DoorHosts.order(access: access, devices: Self.devices, fleet: ["worker-1"],
+                                fleetServers: ["agents-1", "agents-2", "hub-1"])
+                == ["ci-1", "ci-2", "app-a", "app-b", "two-a", "two-z", "agents-1", "agents-2", "hub-1"])
+        #expect(DoorHosts.order(access: access, devices: Self.devices, fleet: ["worker-1"], heldOut: ["agents-2"],
+                                fleetServers: ["agents-1", "agents-2", "app-a"])
+                == ["ci-1", "ci-2", "app-a", "app-b", "two-a", "two-z", "agents-1"])        // no server two times
+    }
+
+    @Test func aMachineOfTheFleetGetsItsMarkAndOnlyEverRuleOnly() throws {
+        let program = try #require(DoorHosts.installProgram(mode: "rule-only", doorKey: Self.key, fleet: true))
+        #expect(program.hasSuffix("bash \"$d/install.sh\" --level fix --mode rule-only --fleet --door-key '\(Self.key)'"))
+        #expect(DoorHosts.installProgram(mode: "fix", doorKey: Self.key, fleet: true) == nil)
+        #expect(DoorHosts.installProgram(mode: "rule-only", doorKey: Self.key)?.contains("--fleet") == false)
+    }
+
     @Test func theCanaryComesFirstAndTheOthersWaitForTheManager() {
         let order = ["ci-1", "ci-2", "app-a"]
         var state = DoorHosts.State()

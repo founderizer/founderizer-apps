@@ -233,4 +233,37 @@ public enum ChatAskPlaces {
         }
         return out
     }
+
+    /// **The rows of the Mac's chat, with each ask that stands on its card as that card's head** (`onCards`): `rows`
+    /// without the row of such an ask, and the heads by the card's request. `open`: the requests of this chat that wait
+    /// for his answer, without one whose answer is on its way.
+    public static func rows(_ rows: [ChatPart], asks: [Ask], open: [OwnerNeed],
+                            waitsOn: String? = nil) -> (rows: [ChatPart], heads: [Int: Ask]) {
+        let heads = onCards(asks, open: open, in: rows)
+        let carded = Set(heads.values.map(\.id))
+        return (self.rows(rows, asks: asks.filter { !carded.contains($0.id) }, waitsOn: waitsOn), heads)
+    }
+
+    /// **The asks that stand on the card that they wait for, by the card's request** (the owner, 18 November 2026, of
+    /// the row "Waits for you" over the card that it waited for: "Or just combine them, so instead of just going to the
+    /// other screen, it shows expanded here. Then if more detail is required add a button to go to the task?", and "Yes,
+    /// build it" to its picture, for the Mac): an ask that waits for a request (`OwnerWait.request`) that is open and
+    /// whose card this chat draws is that card's head, and has no row of its own until he answers it. Then the card
+    /// folds and the row stands under its reply again. One ask for each card: the one that he asked first. `open`: the
+    /// requests of this chat that wait for his answer, without one whose answer is on its way. `rows`: the chat's rows
+    /// (`ChatRequestPlaces.rows`): a card that they do not draw (older than the drawn entries) takes no ask, so the
+    /// ask keeps its row.
+    public static func onCards(_ asks: [Ask], open: [OwnerNeed], in rows: [ChatPart]) -> [Int: Ask] {
+        var drawn = Set<Int>()
+        for row in rows {
+            if case .request(let id) = row { drawn.insert(id) }
+        }
+        let waiting = Set(open.filter(\.isOpen).map(\.id)).intersection(drawn)
+        var cards: [Int: Ask] = [:]
+        for ask in asks.sorted(by: { ($0.created, $0.id) < ($1.created, $1.id) }) {
+            guard case .request(let id, _) = ask.wait, waiting.contains(id), cards[id] == nil else { continue }
+            cards[id] = ask
+        }
+        return cards
+    }
 }

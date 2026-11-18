@@ -512,15 +512,21 @@ public final class OwnerHub: @unchecked Sendable {
     /// database answers 409 to the old one, and this reads it again once, as the app does on that refusal.
     @discardableResult
     public func generation(fresh: Bool = false) throws -> String {
-        if fresh || generationValue == nil {
-            let answer = try call("GET", "/ui/state")
-            guard answer.status == 200, let db = answer.data?["db"], db.truthy else {
-                throw refusal(answer, "a read of the fleet")
-            }
-            generationValue = db.pythonText
-            noteFeatures(answer.data)
-        }
+        if fresh || generationValue == nil { _ = try state() }
         return generationValue!
+    }
+
+    /// **One read of the hub's state, whole**: the read that `generation` makes, which keeps the generation and the
+    /// features of its answer, and gives that answer too. `answer_needs_you` reads an item of it before a choice of 0
+    /// or 1 (`AnswerDoor.press`), so that the command after it, if one goes, makes no second read.
+    func state() throws -> JSONValue {
+        let answer = try call("GET", "/ui/state")
+        guard answer.status == 200, let db = answer.data?["db"], db.truthy else {
+            throw refusal(answer, "a read of the fleet")
+        }
+        generationValue = db.pythonText
+        noteFeatures(answer.data)
+        return answer.data ?? .null
     }
 
     /// The hub's `ui_features`, from a read of `/ui/state`.

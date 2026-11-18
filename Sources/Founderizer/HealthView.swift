@@ -41,6 +41,9 @@ struct HealthView: View {
     /// The hub's health, read before the page first opens (`PagePrefetch`): System status and every server's page draw it.
     static let prefetch = PagePrefetch("servers.health") { try await HubClient().health(hub: $0, database: $1) }
     @State private var error: String?
+    /// When the first of the reads that failed in a row failed: one break of them says nothing
+    /// (`FleetStore.pageReadingIsOld`).
+    @State private var failedSince: ContinuousClock.Instant?
     /// The page's reads: a press of Refresh while one is on its way runs one more when it ends (`RunAgain`), so the
     /// button that looks ready always acts.
     @State private var reads = RunAgain()
@@ -83,9 +86,12 @@ struct HealthView: View {
         // frustrating! are you sure I need to do something?!". A page whose whole job is to be current was the
         // one page that was not. Fifteen seconds, the same as the other secondary reads.
         .task(id: "\(store.hub)/\(store.state?.db ?? "")") {
+            // Another hub or generation: the failure of the last one says nothing to it.
+            error = nil; failedSince = nil
             while !Task.isCancelled {
                 await refresh()
-                do { try await store.nap(15) } catch { return }
+                // Again in 3 s after a read that failed, as the lists do: its row goes as soon as the hub is back.
+                do { try await store.nap(failedSince == nil ? 15 : 3) } catch { return }
             }
         }
     }
@@ -116,7 +122,9 @@ struct HealthView: View {
                 // A hub that answers this app and not its own status is one more thing that is not connected, so
                 // it is one more row of this card, with the one thing he can do about it.
                 // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3, item 33).
-                if let error, !store.hubNoticeShows {
+                // **One break of the hub says nothing** (17 November 2026): only once its reads have failed one whole
+                // break.
+                if let error, !store.hubNoticeShows, store.pageReadingIsOld(failedSince: failedSince) {
                     FormMarkRow(title: String(l10n: "The hub's own status"), state: .bad, words: String(l10n: "Cannot be read"), detail: error,
                                 act: (String(l10n: "Report a problem"), { openWindow(id: FounderizerApp.reportWindow) }),
                                 identifier: "health-error")
@@ -372,7 +380,7 @@ struct HealthView: View {
                         ? (String(l10n: "Report a problem"), { openWindow(id: FounderizerApp.reportWindow) }) : nil,
                     identifier: "health-database")
         FormRow("Started") { value(fleetDate(reading.hub.started_at)) }
-        FormRow("Disk") { value(disk(reading.hub)) }
+        FormRow("Disk") { value(disk(reading.hub)).rolls(words: disk(reading.hub)) }
     }
 
     /// **How much of the hub's disk is used, and on which server** (the owner, 4 November 2026: "it is also not clear what
@@ -446,7 +454,7 @@ struct HealthView: View {
             result = nil; failure = HubError.said(error) ?? String(l10n: "Cannot read system status. Try Refresh.")
         }
         guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
-        if let result { reading = result; error = nil } else { self.error = failure }
+        if let result { reading = result; error = nil; failedSince = nil } else { self.error = failure; failedSince = failedSince ?? .now }
         answered = true
         // The servers of the agents to update, for their rows, where nothing has read them yet.
         if result?.warnings.contains(where: { FleetHealth.isUpdate($0.kind) }) == true,

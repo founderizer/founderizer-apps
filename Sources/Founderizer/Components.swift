@@ -5,9 +5,10 @@ import FleetCore
 enum FleetStyle {
     static let canvas = Color(red: 0.098, green: 0.098, blue: 0.098)
     static let rail = Color(white: 0.125)
-    /// **A card on the rail** — the cards of an agent's chat panel (fix round 2): five levels over the panel's #202020,
-    /// where a page's card (`surface`, #222222) stood two off it and the bar asks four.
-    static let chrome = Color(white: 0.145)
+    /// **A card on the rail** — the cards of an agent's chat panel (fix round 2): three levels over a page's card
+    /// (`surface`), as before, and so eleven over the panel's #202020. It took the step of the page's card of 17
+    /// November 2026 with it (#252525 until then), so a card has one look on a page and on the panel.
+    static let chrome = Color(white: 0x2B / 255)
     static let bubble = Color(white: 0.19)
     /// **The selected row of a page's own sidebar**: 16 levels over its ground, the canvas #191919, as the main
     /// sidebar's selected row (`bubble`, #303030) is over the rail #202020 (fix round 2: the page sidebars drew #303030
@@ -40,7 +41,19 @@ enum FleetStyle {
     /// **A page sidebar's symbol column, and the room between it and the word** (the margins of 30 October 2026, row 5):
     /// its words begin 26 pt after the column's edge, and the head's name after its glyph begins there too (`AgentPage`).
     static let pageSidebarMark: CGFloat = 20, pageSidebarGap: CGFloat = 6
-    static let surface = Color(red: 0.135, green: 0.135, blue: 0.135)
+    /// **A card: #282828, fifteen levels over the canvas #191919** (the owner, 17 November 2026: "Card lighter", of a
+    /// lighter card or a darker page, with both in a window of the demo): it stood at #222222, nine levels over the
+    /// canvas and two over the sidebar's #202020, and only its thin edge showed where a card was. Its words keep their
+    /// contrast: the muted words read 5.2:1 on it and a link's 5.0:1 (4.5:1 is what words ask).
+    static let surface = Color(white: 0x28 / 255)
+    /// Six levels over `surface`, two under a selected row's `bubble`: an outline button and a card of a lane under
+    /// the pointer. #2E2E2E (it was #2A2A2A, eight over the card's #222222 and six under `bubble`). The selected card
+    /// of a lane, which is `bubble`, has its stronger edge to part it from a card under the pointer.
+    static let lifted = Color(white: 0x2E / 255)
+    /// Six levels over `lifted`: an outline button while it is pressed. It took `bubble`, which is now only two levels
+    /// over `lifted`, so a press showed nothing. Only a button's own words stand on it (`FleetStyle.text`): muted
+    /// words would read 4.4:1 there.
+    static let pressed = Color(white: 0x34 / 255)
     static let line = hairline(0.065)
     /// Details, values and quiet words; lighter with Increase Contrast (`contrasted`), where they read 9.6:1 on the
     /// canvas instead of 6.2:1.
@@ -51,7 +64,7 @@ enum FleetStyle {
     /// existed; the app follows the mark rather than keeping a second palette.
     static let accent = Color(red: 0x63 / 255, green: 0x5B / 255, blue: 0xFF / 255)
     /// **The words of a link: the violet, lighter, so they read** (fix round 2; violet keeps its one job, D-8): #8F88FF
-    /// stands 5.4:1 on a card and more on the canvas, where the accent's own 3.4:1 was too faint for words (text asks
+    /// stands 5.0:1 on a card and more on the canvas, where the accent's own 3.4:1 was too faint for words (text asks
     /// 4.5:1). The accent stays for the focus ring, a checked box, the mark and every filled control.
     static let link = Color(red: 0x8F / 255, green: 0x88 / 255, blue: 0xFF / 255)
     /// The brand's soft accent (`#ecebff`) and its ink (`#111213`), for the places that carry the mark itself.
@@ -197,10 +210,16 @@ private struct SidebarFill: View {
     let selected: Bool
     let hovered: Bool
     @Environment(\.pageSidebar) private var pageSidebar
+    @Environment(\.selectionSpace) private var space
 
     var body: some View {
+        // **In a sidebar whose selected fill moves, the row draws none**: it says where it stands (`selectedRow`), and
+        // its group of rows draws the one fill behind all of them (`selectionFill`), so the fill passes under the
+        // words of the rows between. A row outside such a sidebar draws its own fill in place, as before.
+        let own = selected && space == nil
         RoundedRectangle(cornerRadius: FormMetrics.inner)
-            .fill(selected ? (pageSidebar ? FleetStyle.pageSelection : FleetStyle.bubble) : hovered ? Color.white.opacity(0.04) : .clear)
+            .fill(own ? (pageSidebar ? FleetStyle.pageSelection : FleetStyle.bubble) : hovered && !selected ? Color.white.opacity(0.04) : .clear)
+            .selectedRow(selected && space != nil)
     }
 }
 

@@ -27,6 +27,9 @@ struct ServersPage: View {
     }
     private var helpers: [FleetHealth.Helper] { health?.currentHelpers(at: time) ?? [] }
     @State private var failed = false
+    /// When the first of the reads that failed in a row began to fail: one break of them says nothing
+    /// (`FleetStore.pageReadingIsOld`).
+    @State private var failedSince: ContinuousClock.Instant?
     /// The hub's own line about the read it refused, when it wrote one. The row that says the servers cannot be
     /// read says it, instead of leaving the owner with nothing about why.
     @State private var reason: String?
@@ -45,7 +48,7 @@ struct ServersPage: View {
         FleetPage("Servers", board: true) {
             Group {
                 if offered, let list {
-                    if (failed || !store.isFresh) && !store.hubNoticeShows { lastReading }
+                    if store.pageReadingIsOld(failedSince: failedSince) && !store.hubNoticeShows { lastReading }
                     // No line under the list about what a click does: every card says it with its own pointer,
                     // and the other lists of the app (Apps, Devices) carry none. **No heading over the cards**: the
                     // page's title says "Servers" and carries Add server (the owner's yes of 13 November 2026 to the
@@ -58,7 +61,7 @@ struct ServersPage: View {
                         ServerCards(store: store, list: list, helpers: helpers)
                     }
                 } else if older, let machines {
-                    if (failed || !store.isFresh) && !store.hubNoticeShows { lastReading }
+                    if store.pageReadingIsOld(failedSince: failedSince) && !store.hubNoticeShows { lastReading }
                     FormSection(footer: String(l10n: "Update the Founderizer hub to add servers here.")) {
                         ForEach(Self.groups(machines), id: \.name) { olderRow($0.name, $0.rows) }
                     }
@@ -66,7 +69,7 @@ struct ServersPage: View {
                     if !devices {
                         FormSection { FormEmpty("This hub does not report its servers yet.", symbol: "server.rack") }
                     }
-                } else if failed || store.connectionError != nil {
+                } else if saysFailed || store.connectionError != nil {
                     // **While the hub does not answer, nothing is being read**, so the page says it cannot read the
                     // servers instead of a "Reading the servers…" that would stand for as long as the hub is down.
                     // **Not while the window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item
@@ -179,9 +182,11 @@ struct ServersPage: View {
         return connect.readAt
     }
     /// The page's own line "Last reading. Founderizer reads the servers again when the hub answers." is drawn: only
-    /// over a list of servers or of machines that was read.
+    /// over a list of servers or of machines that was read. **One break of the hub says nothing** (17 November 2026):
+    /// it stood from the first read that a restart of the hub refused, and up to 15 s after the hub answered again.
     private var topLineShows: Bool {
-        (failed || !store.isFresh) && !store.hubNoticeShows && ((offered && list != nil) || (older && machines != nil))
+        store.pageReadingIsOld(failedSince: failedSince) && !store.hubNoticeShows
+            && ((offered && list != nil) || (older && machines != nil))
     }
     private var connectNow: Double { store.state?.time ?? Date().timeIntervalSince1970 }
 
@@ -192,7 +197,10 @@ struct ServersPage: View {
     /// first read answers, its one line stands in the first slot and the devices' group waits under it, read but drawn
     /// as nothing; then both come in one frame, or the devices' group keeps its own place under the list. It stood
     /// under the line, with a line of its own, and went 536 pt down when the list came on a slow hub.
-    private var holdsDevices: Bool { offered && list == nil && !failed && store.connectionError == nil }
+    private var holdsDevices: Bool { offered && list == nil && !saysFailed && store.connectionError == nil }
+    /// The page says that it cannot read the servers: its reads have failed one whole break, or the fleet's state is
+    /// old. **One break of the hub says nothing** (17 November 2026): the line under the title stays until then.
+    private var saysFailed: Bool { failed && store.pageReadingIsOld(failedSince: failedSince) }
 
     /// **Add server, on the page's title** (the owner's yes of 13 November 2026 to the clean page), in the look of Add
     /// device on the heading of his devices: one kind of button, one look.
@@ -263,7 +271,9 @@ struct ServersPage: View {
         }.buttonStyle(FleetRowButtonStyle()).accessibilityIdentifier("server-\(name)")
     }
 
-    /// Reads the servers and the health every 15 seconds while the page shows. A failed read keeps the last reading.
+    /// Reads the servers and the health every 15 seconds while the page shows, and 3 seconds after a read that got no
+    /// answer.
+    /// A failed read keeps the last reading.
     private func poll() async {
         let start = ContinuousClock.now
         while !Task.isCancelled {
@@ -275,11 +285,11 @@ struct ServersPage: View {
                         let read = try await HubClient().servers(hub: hub, database: database)
                         guard !Task.isCancelled else { return }
                         if first { await store.settle(since: start) }
-                        if store.hub == hub, store.state?.db == database { list = read; failed = false; reason = nil }
+                        if store.hub == hub, store.state?.db == database { list = read; failed = false; failedSince = nil; reason = nil }
                     } catch {
                         guard !Task.isCancelled else { return }
                         if first { await store.settle(since: start) }
-                        if store.hub == hub, store.state?.db == database { failed = true; reason = HubError.said(error) }
+                        if store.hub == hub, store.state?.db == database { failed = true; failedSince = failedSince ?? .now; reason = HubError.said(error) }
                     }
                     if let read = try? await HubClient().health(hub: hub, database: database),
                        store.hub == hub, store.state?.db == database { health = read }
@@ -289,15 +299,17 @@ struct ServersPage: View {
                         let read = try await HubClient().machines(hub: hub, database: database)
                         guard !Task.isCancelled else { return }
                         if first { await store.settle(since: start) }
-                        if store.hub == hub, store.state?.db == database { machines = read; failed = false; reason = nil }
+                        if store.hub == hub, store.state?.db == database { machines = read; failed = false; failedSince = nil; reason = nil }
                     } catch {
                         guard !Task.isCancelled else { return }
                         if first { await store.settle(since: start) }
-                        if store.hub == hub, store.state?.db == database { failed = true; reason = HubError.said(error) }
+                        if store.hub == hub, store.state?.db == database { failed = true; failedSince = failedSince ?? .now; reason = HubError.said(error) }
                     }
                 }
             }
-            do { try await store.nap(15) } catch { return }
+            // Again in 3 s after a read that got no answer, as the other lists do: the line goes as soon as the hub is
+            // back. A refusal in the hub's own words (`reason`) waits the 15 s: it says the same again.
+            do { try await store.nap(failed && reason == nil ? 3 : 15) } catch { return }
         }
     }
 }
@@ -343,6 +355,11 @@ struct ServerPage: View {
         get { store.reading("servers.health") } nonmutating set { store.keep(newValue, as: "servers.health") }
     }
     @State private var failed = false
+    /// When the first of the reads that failed in a row failed: one break of them says nothing (`saysFailed`).
+    @State private var failedSince: ContinuousClock.Instant?
+    /// The page says that it cannot read the server: its reads have failed one whole break, or the fleet's state is
+    /// old (`FleetStore.pageReadingIsOld`; 17 November 2026). "Reading the server…" stays until then.
+    private var saysFailed: Bool { failed && store.pageReadingIsOld(failedSince: failedSince) }
     @State private var removing = false
     @State private var error: String?
     /// The hub's words when it refused Try again on a deleted agent's removal.
@@ -402,7 +419,7 @@ struct ServerPage: View {
                     FormSection { FormEmpty("Founderizer has no server named \(name).", symbol: "server.rack") }
                 } else if !offered {
                     TechnicalDetails(store: store, agent: name)
-                } else if failed || store.connectionError != nil {
+                } else if saysFailed || store.connectionError != nil {
                     // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3, item 33).
                     if !store.hubNoticeShows {
                         FormSection { FormRow("Founderizer cannot read this server now.", detail: String(l10n: "It reads again when the hub answers.")) }
@@ -420,7 +437,7 @@ struct ServerPage: View {
     /// The hub's own answer about one server: are its helpers reporting? A reading of the hub that is not current
     /// gives no answer at all, which the page says rather than calling an old reading "Connected".
     private func connection(_ server: ServerEntry) -> MachineConnection {
-        guard let health else { return failed ? .unknown : .waiting }
+        guard let health else { return saysFailed ? .unknown : .waiting }
         return MachineConnection.of(server, helpers: health.helpers, warnings: health.warnings,
                                     time: time, fresh: store.isFresh)
     }
@@ -535,6 +552,8 @@ struct ServerPage: View {
 
     private func loadValue(_ words: String?, share: Double?, old: Bool, help: String?) -> some View {
         Text(words ?? String(l10n: "Not reported")).multilineTextAlignment(.trailing).textSelection(.enabled)
+            // A new reading rolls to its digits, as on the Agents page and a server's card (`rolls`).
+            .rolls(words: words ?? "")
             .foregroundStyle(!old && ServerLoad.isHigh(share ?? 0) ? Color.orange : FleetStyle.muted)
             .help(help ?? "")
     }
@@ -711,7 +730,9 @@ struct ServerPage: View {
                 if offered {
                     let read = try? await HubClient().servers(hub: hub, database: database)
                     guard !Task.isCancelled else { return }
-                    if store.hub == hub, store.state?.db == database { if let read { list = read; failed = false } else { failed = true } }
+                    if store.hub == hub, store.state?.db == database {
+                        if let read { list = read; failed = false; failedSince = nil } else { failed = true; failedSince = failedSince ?? .now }
+                    }
                     await readMachines()
                     // The one word of each server's page comes from this reading. A read that fails keeps the
                     // last one, so the word does not come and go with one unanswered request.
@@ -809,7 +830,7 @@ struct AgentAccountLine: View {
         }.help(account.help)
         // **The shares are never cut** (T-17: "5 h · 34…" at every width): their column is as wide as two windows at
         // their widest and never narrower than its own words, and the account gives way to "…" in their place.
-        let usage = Text(account.usage).monospacedDigit().lineLimit(1).fixedSize()
+        let usage = Text(account.usage).monospacedDigit().lineLimit(1).fixedSize().rolls(words: account.usage)
             .foregroundStyle(account.old ? FleetStyle.muted : FleetStyle.text).help(account.usageHelp)
         if table {
             HStack(spacing: 12) {

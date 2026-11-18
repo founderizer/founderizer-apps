@@ -100,15 +100,52 @@ struct ReadingTests {
 
     @Test func anOldProfileReadingKeepsTheProfileAndStillSaysItIsTheLastReading() throws {
         let current = ProfileReading.loading.after(try profiles())
-        #expect(current.list != nil && current.reason == nil)
-        let old = current.after(nil, reason: HubError.said(refused))
+        #expect(current.list != nil && current.reason == nil && current.failedSince == nil)
+        let start = ContinuousClock.now
+        let old = current.after(nil, reason: HubError.said(refused), at: start)
         #expect(old.list != nil)
         if case .stale = old {} else { Issue.record("A failed read over a list is an old reading, not a failure.") }
         #expect(old.lastReadingLine ==
                 "this Mac is not the owner's machine. Last reading. Founderizer reads the profile again every 15 seconds.")
+        // One break counts from the first of the reads that failed in a row (`StateReading.pageReadingIsOld`): a read
+        // that fails after it does not start it again, or a profile whose reads all fail would never say so.
+        let again = old.after(nil, at: start + .seconds(25))
+        #expect(again.failedSince == start && again.list != nil)
+        #expect(ProfileReading.loading.after(nil, at: start).after(nil, at: start + .seconds(25)).failedSince == start)
+        // A new visit counts its own break: reads that failed in an earlier one, unread since, say nothing to it.
+        let visit = start + .seconds(3_600)
+        #expect(old.visited(at: visit).failedSince == visit && old.visited(at: visit).list != nil)
+        #expect(ProfileReading.loading.after(nil, at: start).visited(at: visit).failedSince == visit)
         // The old reading is cleared by a read that works.
         let read = try profiles()
         if case .current = old.after(read) {} else { Issue.record("A read that works is current again.") }
+        #expect(old.after(read).after(nil, at: start + .seconds(40)).failedSince == start + .seconds(40))
+    }
+
+    // MARK: a page's own reading (People, Conversations, Devices)
+
+    /// **One break of the hub says nothing on a page's own reading** (17 November 2026: "either fix the underlaying issue
+    /// OR not show the wanring at all"): reads that fail in a row keep the moment of the first; until they have failed one
+    /// whole break the page draws its last reading as it was read and no reading as its loading line; a new visit counts
+    /// its own break.
+    @Test func aPagesReadingSaysNothingForOneBreakFromItsFirstFailedRead() {
+        let start = ContinuousClock.now, current = PageReading.current([1, 2], at: 100)
+        let stale = current.failed("no answer", at: start).failed("no answer", at: start + .seconds(25))
+        #expect(stale.failedSince == start && stale.value == [1, 2] && stale.isOld && stale.at == 100)
+        let failed = PageReading<[Int]>.loading.failed("refused", at: start).failed("no answer", at: start + .seconds(9))
+        #expect(failed.failedSince == start && failed.failure == "no answer")
+        // Inside the break: the last reading as it was read, and no reading as loading.
+        if case .current(let value, let at) = stale.shown(old: { _ in false }) { #expect(value == [1, 2] && at == 100) }
+        else { Issue.record("Inside one break the last reading draws as it was read.") }
+        if case .loading = failed.shown(old: { _ in false }) {} else { Issue.record("Inside one break a failed first read is loading.") }
+        // After it, or with an old state: the last reading, and the failure in its words.
+        #expect(stale.shown(old: { $0 == start }).isOld)
+        #expect(failed.shown(old: { $0 == start }).failure == "no answer")
+        // An answer ends the row; a new visit counts its own break.
+        #expect(current.failedSince == nil && current.visited(at: start).failedSince == nil)
+        let visit = start + .seconds(3_600)
+        #expect(stale.visited(at: visit).failedSince == visit && stale.visited(at: visit).value == [1, 2])
+        #expect(failed.visited(at: visit).failedSince == visit)
     }
 
     // MARK: the one line itself

@@ -19,6 +19,17 @@ struct MessageText: View, Equatable {
     /// The block of a hand step's command that has Run (owner feature `need_run`): the code block whose text is its
     /// command, and no other, shows Run (`NeedRunTarget`).
     var run: NeedRunTarget? = nil
+    /// **Each block of the text, and each cell of a table, is a row of this selection** (a long file in the knowledge
+    /// reader): only the row under the pointer and the row whose words he pressed last can be selected, as only two
+    /// rows of a chat can (`ChatSelection`), and a block or a cell longer than `keepsFields` can always be selected.
+    /// Nil: each block takes the selection of the view around it.
+    var selection: ChatSelection? = nil
+    /// **A block or a cell of more than this many bytes (UTF-8) keeps its fields** in a text with a selection (a
+    /// block's Markdown, a cell's words): making or dropping the field of a block took about 4 ms for each 1,000
+    /// characters (266 to 295 ms for a block of 70,089, as a Word, RTF or PDF file comes in: its paragraphs end with
+    /// one line break, so the whole file can be one block), and a pointer that comes and goes would pay that each time.
+    /// Without a selection, every block keeps its fields, and the file paid it once.
+    private static let keepsFields = 2_000
     /// Code in a line of a step's words: a little under the words' 15 points, as the chat's code is under its 14.
     private static let stepCode = Font.system(size: 13.5, design: .monospaced)
 
@@ -109,13 +120,18 @@ struct MessageText: View, Equatable {
                 case .rule: Rule().padding(.vertical, 4)
                 case .table:
                     Grid(alignment: .topLeading, horizontalSpacing: 18, verticalSpacing: 7) {
-                        ForEach(Array(block.cells.enumerated()), id: \.offset) { index, row in
+                        ForEach(Array(block.cells.enumerated()), id: \.offset) { line, row in
                             GridRow {
-                                ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                                    Text(cell).fontWeight(index == 0 ? .medium : .regular).lineSpacing(3).selectableWords()
+                                ForEach(Array(row.enumerated()), id: \.offset) { column, cell in
+                                    Text(cell).fontWeight(line == 0 ? .medium : .regular).lineSpacing(3)
+                                        .selectableWords()
+                                        // A table can be long: each of its cells is a row of the selection.
+                                        .modifier(BlockWords(selection: selection.flatMap {
+                                            String(cell.characters).utf8.count > Self.keepsFields ? nil : $0
+                                        }, row: "block-\(index)-\(line)-\(column)"))
                                 }
                             }
-                            if index == 0 { Rule().gridCellUnsizedAxes(.horizontal) }
+                            if line == 0 { Rule().gridCellUnsizedAxes(.horizontal) }
                         }
                     }.padding(.vertical, 2)
                 }
@@ -123,8 +139,11 @@ struct MessageText: View, Equatable {
                 // In a chat, the reference's space between blocks, and less between two items of one list.
                 .padding(.top, !chat || index == 0 ? 0 :
                             block.kind == .item && blocks[index - 1].kind == .item ? ChatStyle.itemSpacing : ChatStyle.blockSpacing)
+                .modifier(BlockWords(selection: block.kind == .table || block.text.utf8.count > Self.keepsFields ? nil
+                                        : selection, row: "block-\(index)"))
             }
-        }.font(step ? SetupMetrics.textFont : chat ? ChatStyle.font : FleetStyle.body)
+        }.modifier(TextPointer(selection: selection))
+        .font(step ? SetupMetrics.textFont : chat ? ChatStyle.font : FleetStyle.body)
             // A link's words in the link colour, which reads 4.5:1 and more (fix round 2): the accent drew them 3.4:1.
             .tint(FleetStyle.link)
             .fixedSize(horizontal: false, vertical: true)
@@ -132,8 +151,9 @@ struct MessageText: View, Equatable {
 }
 
 extension EnvironmentValues {
-    /// Whether the words of a message (`MessageText`) can be selected here: everywhere, and in an agent's chat only in
-    /// the row under the pointer and the row whose words he pressed last (`ChatSelection`).
+    /// Whether the words of a message (`MessageText`) can be selected here: everywhere, and in a chat, a thread, a
+    /// conversation he reads and a knowledge file only in the row under the pointer and the row whose words he pressed
+    /// last (`ChatSelection`).
     @Entry var messageWordsSelectable = true
 }
 
@@ -141,7 +161,8 @@ extension View {
     /// **Each text takes the selection itself**, where `messageWordsSelectable` says so: a change gives or takes the
     /// selection of each text and makes nothing else of the row again, so a code block keeps the place that he
     /// scrolled it to sideways, and its copy icon its state. A text that he can select in a long scroll view (a
-    /// message, a thread's step, a conversation he reads) takes it so, in place of `.textSelection(.enabled)`.
+    /// message, a thread's step, a conversation he reads, a knowledge file) takes it so, in place of
+    /// `.textSelection(.enabled)`.
     func selectableWords() -> some View { modifier(SelectableWords()) }
 }
 
@@ -152,6 +173,55 @@ private struct SelectableWords: ViewModifier {
 
     func body(content: Content) -> some View {
         if selectable { content.textSelection(.enabled) } else { content }
+    }
+}
+
+/// A block of a text, or a cell of its table, as a row of the text's selection (`MessageText.selection`): its words can
+/// be selected while the selection says so, and it tells the selection where it stands in the text, for the text's one
+/// hover (`TextPointer`). Without a selection, as it was.
+private struct BlockWords: ViewModifier {
+    let selection: ChatSelection?
+    let row: String
+
+    func body(content: Content) -> some View {
+        if let selection {
+            content
+                .environment(\.messageWordsSelectable, selection.flag(row).on)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(TextPointer.space)) } action: {
+                    selection.place(row, at: $0)
+                }
+                .onDisappear { selection.place(row, at: nil) }
+        } else {
+            content
+        }
+    }
+}
+
+/// The one hover of a text whose blocks are rows of a selection (`ChatSelection.pointer(at:)`): the row under the
+/// pointer is the one whose place holds it.
+private struct TextPointer: ViewModifier {
+    static let space = "MessageText.rows"
+    let selection: ChatSelection?
+
+    func body(content: Content) -> some View {
+        if let selection {
+            content
+                .coordinateSpace(.named(Self.space))
+                // The whole text, also the room in a row where nothing is drawn (an item's indent, the space after its
+                // mark, beside a quote's bar): a hover that ended there would take the row's fields and give them back.
+                .contentShape(Rectangle())
+                .onContinuousHover(coordinateSpace: .local) { phase in
+                    switch phase {
+                    case .active(let point): selection.pointer(at: point)
+                    case .ended: selection.pointer(at: nil)
+                    }
+                }
+                // A hover does not end when its view goes (the editor takes the text's place): no row of it is under
+                // the pointer then.
+                .onDisappear { selection.pointer(at: nil) }
+        } else {
+            content
+        }
     }
 }
 
@@ -235,7 +305,19 @@ private struct CodeBlock: View {
         .overlay(alignment: .topTrailing) {
             if copies && !wraps && !runs { copyIcon.padding(6) }
         }
-        .onHover { hovered = $0; if !$0 { copied = false } }
+        .modifier(CopyIconHover(copies: copies, hovered: $hovered, copied: $copied))
+    }
+}
+
+/// The pointer's hover on a block of code that shows its copy icon under the pointer. A block with no icon (the
+/// knowledge reader's) has no hover: each hover costs time at each frame of a scroll under the pointer.
+private struct CopyIconHover: ViewModifier {
+    let copies: Bool
+    @Binding var hovered: Bool
+    @Binding var copied: Bool
+
+    func body(content: Content) -> some View {
+        if copies { content.onHover { hovered = $0; if !$0 { copied = false } } } else { content }
     }
 }
 

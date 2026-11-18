@@ -245,6 +245,13 @@ final class MachineInstallModel {
     /// which a first run's record with no hub needs (the lane "Unfinished setup", 15 November 2026). The page that
     /// starts the install sets it after `use`, and `again` takes it away.
     var provenServer: (provider: CloudProvider, id: String)?
+    /// **The agent that this install's server is for** (the review of 17 November 2026): the agent whose setup's page
+    /// started it, or the new agent that Add agent's New server named; nil for a server for no agent yet. One install
+    /// model serves every page of a hub, so its end can show on another agent's page, and Add server gives the server
+    /// to this agent only (`AddServerView.handsOver`, `goesOn`). The page sets it once its start is taken (`running`):
+    /// a start that the model refuses keeps the earlier install's end, and its agent with it. Try again keeps it, an
+    /// agent's rename in its setup moves it (`AgentSetupView.rename`), and `again` takes it away.
+    var forAgent: String?
 
     /// Installs the hub itself: the first machine of a fleet, which has no hub to ask for a line. The claim at its
     /// end proves this Mac's own address to that hub, and the app then connects to it.
@@ -660,7 +667,7 @@ final class MachineInstallModel {
         runCount += 1
         steps = []; planned = []; checklist = nil; failure = nil; failureDetail = nil; hubAddress = nil; needsNetworkKey = false; networkFailure = nil
         job = nil
-        server = nil; made = nil; provenServer = nil
+        server = nil; made = nil; provenServer = nil; forAgent = nil
         // The record of the install that ended stays in its file; this model writes it no more.
         stop = nil; cause = nil; log = nil
     }

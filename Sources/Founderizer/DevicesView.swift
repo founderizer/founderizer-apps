@@ -19,9 +19,11 @@ struct DevicesSection: View {
 
     /// The readings are the store's (`FleetStore.reading`): the devices he saw last show in the first frame when he
     /// comes back, and the read that starts then changes only what changed.
-    private var reading: DeviceReading {
+    private var kept: DeviceReading {
         get { store.reading("devices.reading") ?? .loading } nonmutating set { store.keep(newValue, as: "devices.reading") }
     }
+    /// The reading as the page draws it: one break of failed reads says nothing (`DeviceReading.shown`).
+    private var reading: DeviceReading { kept.shown(store) }
     /// `team.json` with its version: every save of a device goes against the version that this page read.
     private var team: TeamSnapshot? {
         get { store.reading("team.snapshot") } nonmutating set { store.keep(newValue, as: "team.snapshot") }
@@ -315,9 +317,14 @@ struct DevicesSection: View {
     /// store's has read it either** (`FleetStore.keepLive`): one that is two rounds old. A reading of the last round
     /// is no last reading, however long this visit's own read takes (10 November 2026: under load that read took more
     /// than its second, and the orange line came and went under a list that was 12 seconds old).
+    ///
+    /// **One break of the hub says nothing** (17 November 2026): the rounds that did not read it again failed from one
+    /// round after it, so it is the last reading only once they have failed one whole break, counted from the Mac's last
+    /// wake when it is older, or while the fleet's state is old (`FleetStore.pageReadingIsOld`).
     private var waitsOld: Bool {
-        store.readingWaits("devices.reading", since: opened)
-            && (store.readingAge("devices.reading") ?? .zero) > .seconds(LiveReadings.every * 2)
+        guard store.readingWaits("devices.reading", since: opened), let kept = store.readingKept("devices.reading"),
+              ContinuousClock.now - kept > .seconds(LiveReadings.every * 2) else { return false }
+        return store.pageReadingIsOld(failedSince: kept + .seconds(LiveReadings.every))
     }
 
     /// One line at a time: the hub's own words about this page's last write first, then an old reading.
@@ -340,7 +347,8 @@ struct DevicesSection: View {
 
     private func loop() async {
         // A failure was the last visit's: this visit reads again before it says so.
-        if case .failed = reading { reading = .loading }
+        // An old reading counts its break from this visit (`PageReading.visited`).
+        if case .failed = kept { kept = .loading } else if kept.failedSince != nil { kept = kept.visited() }
         while !Task.isCancelled {
             await read()
             // Every three seconds while a new phone's code shows, so its row takes the code's place at once.
@@ -351,13 +359,13 @@ struct DevicesSection: View {
     private func read() async {
         guard sameHub, let database else { return }
         let client = HubClient()
-        let first = reading.list == nil
+        let first = kept.list == nil
         do {
             let fresh = try await client.ownerDevices(hub: hub, database: database)
             let snapshot = try await client.team(hub: hub, database: database)
             if first { await store.settle(since: opened) }
             guard sameHub else { return }
-            reading = .current(fresh, at: now)
+            kept = .current(fresh, at: now)
             if let newCode, fresh.devices.contains(where: { !newCode.known.contains($0.device) }) { made = nil }
             team = snapshot
             await DoorCallSigning.certify(fresh.devices, store: store, hub: hub, database: database)
@@ -367,7 +375,7 @@ struct DevicesSection: View {
             // The row says that the devices are unavailable; the hub's own words are its line, and the system's
             // own words for a request that got no answer are behind it.
             cause = error.localizedDescription
-            reading = reading.aged ?? .failed(HubError.said(error) ?? "")
+            kept = kept.failed(HubError.said(error) ?? "")
         }
     }
 
@@ -448,40 +456,11 @@ struct DevicesSection: View {
     }
 }
 
-/// The four states of a page that reads the hub again and again (UI-PATTERNS, "Statuses must be true"): loading, a
-/// current reading, an old one, and a failed read. An old reading is never shown as current.
-private enum DeviceReading: Sendable {
-    case loading
-    case current(OwnerDeviceList, at: Double)
-    case stale(OwnerDeviceList, at: Double)
-    case failed(String)
+/// The devices' reading (`PageReading` in FleetCore): loading, current, an old one, and a failed read.
+private typealias DeviceReading = PageReading<OwnerDeviceList>
 
-    var list: OwnerDeviceList? {
-        switch self {
-        case .current(let list, _), .stale(let list, _): list
-        case .loading, .failed: nil
-        }
-    }
-
-    var at: Double {
-        switch self {
-        case .current(_, let at), .stale(_, let at): at
-        case .loading, .failed: 0
-        }
-    }
-
-    var isOld: Bool { if case .stale = self { true } else { false } }
-
-    /// What a failed read said.
-    var failure: String? { if case .failed(let why) = self { why } else { nil } }
-
-    /// The same reading, marked old. nil when there is none to keep.
-    var aged: DeviceReading? {
-        switch self {
-        case .current(let list, let at), .stale(let list, let at): .stale(list, at: at)
-        case .loading, .failed: nil
-        }
-    }
+private extension PageReading where Value == OwnerDeviceList {
+    var list: OwnerDeviceList? { value }
 }
 
 /// **A device's code and its picture**: side by side where the row holds both, as before, and the picture under the

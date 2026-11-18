@@ -126,9 +126,11 @@ extension SetupShow {
     /// **Left out, each for what its code does by itself:**
     /// - `agent.<name>.runs_on` (`AgentSetupView`): it carries out a Rename… or a Deactivate that waits in the store
     ///   (`FleetStore.agentAction`, taken with `.onChange(initial: true)`; Deactivate is a write to the hub). Its part
-    ///   for the AI provider opens by itself while a provider's setup goes on, stopped or ended
-    ///   (`ProviderSetup.reopens`), and that part asks this Mac's installer and starts the machine check of a setup
-    ///   that ended while it did not show (`ProviderView`'s `.task`: `askInstaller`, `afterSetup`).
+    ///   for the AI provider opens by itself while a provider's setup goes on or waits for the owner
+    ///   (`ProviderSetup.running`, `.waits`), and that part asks this Mac's installer and starts the machine check of a
+    ///   setup that ended while it did not show (`ProviderView`'s `.task`: `askInstaller`, `afterSetup`).
+    /// - `agent.<name>.capabilities` (`AgentCapabilitiesPart`, 17 November 2026): not decided. Its page came after
+    ///   the read of 15 November 2026, and its switches save at once.
     /// - `settings.servers` (`ServersPage`): with the connected apps on, it makes a code on the hub when it shows
     ///   (`ConnectedAppsModel.run`, then `keepCode`: a write); its devices make a device's code when a Needs-you
     ///   answer asked for one (`DevicesView`, `FleetStore.addDeviceAsked`: a write); and its going ends a stop of

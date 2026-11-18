@@ -53,7 +53,18 @@ import SwiftUI
     }
 }
 
-/// Change an agent's provider (`runtime_switch`): Codex or Claude Code, the only providers that Fleet switches. The hub
+/// **The AI provider as the owner picks it in Add agent** (`ServerAI`): "Claude" and "ChatGPT", not their programs
+/// (the owner, 17 November 2026: "AI Provider is just that: the provider"). Another runtime keeps its program's name.
+func aiName(_ runtime: String) -> String {
+    switch runtime {
+    case "claude": ServerAI.claude.title
+    case "codex": ServerAI.chatGPT.title
+    default: providerName(runtime)
+    }
+}
+
+/// Change an agent's provider (`runtime_switch`): ChatGPT (Codex) or Claude (Claude Code), the only providers that
+/// Fleet switches. The hub
 /// decides whether the agent can switch now and says why not. This view sends the one command and shows the new
 /// provider as ready only after the agent's helper has loaded it. When the target provider is not installed or not
 /// signed in on the agent's machine, its setup runs here first; the switch stays a separate step. On a server that
@@ -70,6 +81,14 @@ struct ProviderView: View {
     @State private var machine: MachineStatus?
     /// The last reading failed. A later good reading clears it.
     @State private var readError: String?
+    /// When the first of the reads that failed in a row failed: one break of them says nothing
+    /// (`FleetStore.pageReadingIsOld`).
+    @State private var readFailedSince: ContinuousClock.Instant?
+    /// The words of the reads that failed, once they have failed one whole break; the row stands with its name until
+    /// then (17 November 2026).
+    private var saidReadError: String? {
+        readError.flatMap { store.pageReadingIsOld(failedSince: readFailedSince) ? $0 : nil }
+    }
     /// The switch failed. It stays until the next switch.
     @State private var writeError: String?
     /// The hub refused the server's preparation, or did not answer. It stays until the next request.
@@ -127,9 +146,9 @@ struct ProviderView: View {
         let blocker = RuntimeSwitch.unavailable(offered: store.state?.ui_features?.contains(RuntimeSwitch.feature) == true,
                                                 readiness: readiness)
         Group {
-            if line == nil && readError == nil {
+            if line == nil && saidReadError == nil {
                 // The row stands with its name while it is read, and what it says comes in its place: no spinner,
-                // which is the pages' one loading look (the Change form's own line says that it reads).
+                // which is the pages' one loading look (the page's own line says that it reads).
                 FormRow("The other provider")
             } else if let blocker {
                 FormRow("The other provider", detail: blocker)
@@ -137,7 +156,7 @@ struct ProviderView: View {
                 targetRow(readiness, to: to)
                 askView(to)
             } else {
-                FormRow("The other provider", detail: String(l10n: "\(providerName(runtime)) cannot switch."))
+                FormRow("The other provider", detail: String(l10n: "\(aiName(runtime)) cannot switch."))
             }
         }
         .onChange(of: setup.timeline.result?.status) { _, status in if status == "ok" { Task { await afterSetup() } } }
@@ -149,6 +168,7 @@ struct ProviderView: View {
             // that joined with a join line prepares a provider itself, so this form asks nothing of the installer for
             // it. It asked each time it showed, and on a Mac with no developer tools that call opened macOS's dialog
             // about them (the onboarding test of 13 November 2026).
+            readError = nil; readFailedSince = nil
             await refresh()
             await askInstaller()
             // A setup that finished while this view did not show still gets its machine check.
@@ -161,7 +181,7 @@ struct ProviderView: View {
     /// wrong, and one control.
     @ViewBuilder private func targetRow(_ readiness: RuntimeSwitch, to: String) -> some View {
         let place = machineName
-        FormRow(providerName(to), mark: ProviderIcon(runtime: to, size: 18),
+        FormRow(aiName(to), mark: ProviderIcon(runtime: to, size: 18),
                 detail: detailWords(readiness, to: to, machine: place), warning: warningWords(to: to, machine: place)) {
             control(readiness, to: to)
         }.help(helpWords(readiness, to: to))
@@ -186,12 +206,12 @@ struct ProviderView: View {
     /// he cannot act on belongs.
     private func warningWords(to: String, machine: String) -> String? {
         if let message = writeError ?? prepareError ?? sendBlock { return message }
-        if held.job?.state == "failed" { return String(l10n: "Founderizer could not set up \(providerName(to)) on \(machine).") }
+        if held.job?.state == "failed" { return String(l10n: "Founderizer could not set up \(aiName(to)) on \(machine).") }
         if !held.joined, setupStarted, !setup.running, setup.timeline.result?.status != "ok",
            setup.timeline.result != nil || setup.error != nil {
-            return String(l10n: "Founderizer could not set up \(providerName(to)) on \(machine).")
+            return String(l10n: "Founderizer could not set up \(aiName(to)) on \(machine).")
         }
-        return readError
+        return saidReadError
     }
 
     /// Behind the row: what a switch would change, and the words of whatever stopped a setup — the installer's own
@@ -206,7 +226,7 @@ struct ProviderView: View {
         if let error = setup.error, !held.joined { lines.append(error) }
         if let detail = held.job?.detail, held.job?.state == "failed" { lines.append(detail) }
         if readiness.ready {
-            lines.append(String(l10n: "Switching sets the model and the reasoning back to the defaults of \(providerName(to))."))
+            lines.append(String(l10n: "Switching sets the model and the reasoning back to the defaults of \(aiName(to))."))
         }
         return lines.joined(separator: "\n")
     }
@@ -228,14 +248,14 @@ struct ProviderView: View {
             if !busy && sendBlock == nil && (held.joined || placement != nil) {
                 Button(setupTried ? "Try again" : "Set up") { Task { await startTarget(to) } }
                     .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("setup-provider")
-                    .accessibilityLabel("Set up \(providerName(to)) on \(machineName)")
-                    .help("Founderizer installs \(providerName(to)) on this agent's server. You sign in yourself.")
+                    .accessibilityLabel("Set up \(aiName(to)) on \(machineName)")
+                    .help("Founderizer installs \(aiName(to)) on this agent's server. You sign in yourself.")
             }
         } else if readiness.to != nil {
             if readiness.ready && !busy && sendBlock == nil && provider.switchingFrom == nil && !setupRunning {
                 Button("Switch") { Task { await switchTo(to) } }
                     .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("switch-provider")
-                    .accessibilityLabel("Switch to \(providerName(to))")
+                    .accessibilityLabel("Switch to \(aiName(to))")
             }
         }
     }
@@ -247,7 +267,7 @@ struct ProviderView: View {
            let url = prompt.signInURL, let code = prompt.deviceCode {
             // **The steps over the code, as on every sign-in** (`SetupSteps`, the owner's rule of 10 November 2026): the
             // first one's link opens the provider's page with the code copied for it.
-            FormBlock("Sign in to \(providerName(to))") {
+            FormBlock("Sign in to \(aiName(to))") {
                 VStack(alignment: .leading, spacing: 12) {
                     SetupSteps.deviceCode(at: url, width: nil)
                         .environment(\.openURL, OpenURLAction { _ in copyMessage(code); NSWorkspace.shared.open(url); return .handled })
@@ -360,7 +380,8 @@ struct ProviderView: View {
                 (held.job?.state == "done" && held.job?.runtime == line?.runtime_switch?.to)
             let waiting = state.switchingFrom != nil || (asked != nil && !state.isConfirmed) || held.job?.isOpen == true ||
                 (prepared && line?.runtime_switch?.needsSetup == true)
-            do { try await store.nap(waiting ? 3 : 15) } catch { return }
+            // Also 3 s after a read that failed: its warning goes as soon as the hub is back.
+            do { try await store.nap(waiting || readError != nil ? 3 : 15) } catch { return }
         }
     }
 
@@ -385,8 +406,10 @@ struct ProviderView: View {
                 guard !Task.isCancelled, matches else { return }
                 machine = list?.machines.first { $0.agent == agent }
             }
-            readError = nil
-        } catch { if !Task.isCancelled { readError = String(l10n: "No current provider reading.") } }
+            readError = nil; readFailedSince = nil
+        } catch {
+            if !Task.isCancelled { readError = String(l10n: "No current provider reading."); readFailedSince = readFailedSince ?? .now }
+        }
     }
 
     /// One command. A receipt that changed the runtime tells the agent's Settings, which then show the new provider's

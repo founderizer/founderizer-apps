@@ -43,6 +43,11 @@ enum ShapeMetrics {
     /// with its one line of words over what runs on it; and each thing that runs there, a 36-pt mark over its name in a
     /// 64-pt column.
     static let serversWidth: CGFloat = SetupMetrics.cardsWidth
+    /// **The page "Your fleet" with a capsule under each server** (slice 2b): the four boxes of "1 per agent" stand in
+    /// one row, as the slider's page has them: two boxes of about 290 pt that hold their capsules, two agents' boxes of
+    /// 84 and three gaps make about 785 (measured, 18 November 2026). The column is a most (`SetupStep`), so a narrower
+    /// window puts the boxes in two rows.
+    static let fleetWidth: CGFloat = 800
     static let serverMark: CGFloat = 36, serverTile: CGFloat = 64, serverGap: CGFloat = 10
     /// The manager's mark on the page "Name your manager": larger than a step's mark, because the page is about it.
     static let managerMark: CGFloat = 72
@@ -189,6 +194,30 @@ struct FleetServersPage: View {
     }
 }
 
+/// **One server's capsule on "Your fleet"** (slice 2b of the one wizard; the owner's "Yes, build them" of 18 November
+/// 2026 to its picture, after "hetzner has alternatives even if more expensive, we need to show more options!"): the
+/// server's provider, type and price ("Hetzner · CX23 · €5.99 a month"), and its list in the app's own dropdown
+/// (`FleetSelect`): the provider's types that fit, one row each with its price, the cheapest first, and under "Another
+/// provider" each other provider, with "asks for its token" where this Mac holds none.
+struct ServerBoxChoice {
+    enum Pick: Hashable { case offer(String), provider(CloudProvider) }
+    /// Whose server it is, for assistive apps.
+    let title: String
+    let label: String
+    let options: [FleetOption<Pick>]
+    let selected: Pick?
+    let pick: (Pick) -> Void
+
+    /// **The provider's five cheapest types**, as the picture has them: with the three other providers, eight rows, so
+    /// the list never needs its filter (`FleetSelect` filters a list of more than eight).
+    static let types = 5
+
+    /// The capsule alone, for the room that it takes.
+    static func capsule(_ label: String) -> some View {
+        Button {} label: { FleetSelectLabel(title: label) }.buttonStyle(FleetOutlineButtonStyle())
+    }
+}
+
 /// **The servers of a step, each a box with what runs on it**: one line of words over the box's content says what the
 /// box is ("Server", or "Mac"), and each thing that runs there is its mark over its name: the hub, the manager by its
 /// name, each agent by its role, and, before a team exists, each agent to come as a dotted ring over "Agent".
@@ -211,8 +240,13 @@ struct ServerBoxes: View {
     var waits: [String: AgentPresence] = [:]
     /// The line under each box, by the box's place; nil, or no entry, for none.
     var under: [String?] = []
+    /// **A capsule under each box in place of its line** (slice 2b of the one wizard; the owner's "Yes, build them" of 18
+    /// November 2026): the server's provider, type and price, whose list offers the provider's other types and the
+    /// other providers (`ServerBoxChoice`). nil, or no entry, for none.
+    var choices: [ServerBoxChoice?] = []
 
     private func line(_ index: Int) -> String? { under.indices.contains(index) ? under[index] : nil }
+    private func choice(_ index: Int) -> ServerBoxChoice? { choices.indices.contains(index) ? choices[index] : nil }
 
     /// `named`: an agent of a fleet that runs, by its own name (a later change).
     private enum Tile: Hashable { case hub, manager, agent(Int), next, named(String) }
@@ -251,6 +285,10 @@ struct ServerBoxes: View {
                             // A box with a line under it is at least as wide as that line: the line of each box then
                             // stands under its own box, and two lines of narrow boxes never read as one.
                             if let line = line(index) { Text(line).font(ShapeMetrics.underFont).hidden() }
+                            // Its width only: a box of a row is as high as the others.
+                            if let choice = choice(index) {
+                                ServerBoxChoice.capsule(choice.label).hidden().frame(height: 0).accessibilityHidden(true)
+                            }
                             HStack(spacing: 5) {
                                 Image(systemName: box.mac ? "desktopcomputer" : "server.rack").font(IconMetrics.symbol(ShapeMetrics.kindMark))
                                 Text(box.title ?? (box.mac ? String(l10n: "Mac") : String(l10n: "Server"))).font(ShapeMetrics.underFont)
@@ -277,7 +315,7 @@ struct ServerBoxes: View {
                     .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 12)
                     .background(ShapeMetrics.islandFill, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
                     .overlay {
-                        if box.new || line(index) != nil {
+                        if box.new || line(index) != nil || choice(index) != nil {
                             RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(ShapeMetrics.line,
                                 style: StrokeStyle(lineWidth: ShapeMetrics.lineWidth, lineCap: .round, dash: ShapeMetrics.dots))
                         } else {
@@ -291,6 +329,14 @@ struct ServerBoxes: View {
                         Text(line(index) ?? " ").font(ShapeMetrics.underFont).foregroundStyle(FleetStyle.muted)
                             .lineLimit(1).minimumScaleFactor(0.8)
                             .accessibilityHidden(line(index) == nil)
+                    }
+                    if !choices.isEmpty {
+                        if let choice = choice(index) {
+                            FleetSelect(choice.title, options: choice.options, selection: choice.selected,
+                                        onSelect: choice.pick) { FleetSelectLabel(title: choice.label) }
+                        } else {
+                            ServerBoxChoice.capsule(" ").hidden().accessibilityHidden(true)
+                        }
                     }
                 }
             }

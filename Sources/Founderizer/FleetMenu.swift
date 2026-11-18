@@ -38,8 +38,10 @@ enum FleetMenuMetrics {
     static let maxHeight: CGFloat = 420
     /// Between a control and the list under it.
     static let gap: CGFloat = 4
-    /// Its fill, a step over the rail (#202020) and the cards it opens on, and the highlight over that fill.
-    static let fill = Color(white: 0.15)
+    /// Its fill, a step over the rail (#202020) and the cards it opens on, and the highlight over that fill. #2C2C2C:
+    /// four levels over a page's card (`FleetStyle.surface`, #282828) and one over a card of the chat's panel
+    /// (`FleetStyle.chrome`), as it stood over them at #262626 before the card became lighter (17 November 2026).
+    static let fill = Color(white: 0x2C / 255)
     static let highlight = Color.white.opacity(0.07)
     /// The words of an item that deletes: the danger button's red (`FleetDangerButtonStyle`).
     static let danger = Color(red: 0.93, green: 0.42, blue: 0.38)
@@ -394,6 +396,8 @@ private final class FleetMenuSurface: NSView {
 /// The menu's window. It takes the keyboard only for VoiceOver, so that its rows can be read and pressed there.
 private final class FleetMenuPanel: NSPanel {
     var keyable = false
+    /// Its fade in and out (`WindowFade`).
+    let fade = WindowFade()
     override var canBecomeKey: Bool { keyable }
     override var canBecomeMain: Bool { false }
 }
@@ -462,7 +466,8 @@ private final class FleetMenuPanel: NSPanel {
         // Drawn at the zoom of the window it opens from (View › Bigger), as the window's own content is.
         let hosting = NSHostingView(rootView: FleetMenuList(model: model).fixedSize()
             .zoomedAsItsWindow().environment(\.viewZoom, zoom)
-            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in resize(to: size) })
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in resize(to: size) }
+            .menuArrives())
         hosting.sizingOptions = [.intrinsicContentSize]
         let surface = FleetMenuSurface(model: model, content: hosting)
         surface.zoom = zoom
@@ -487,9 +492,19 @@ private final class FleetMenuPanel: NSPanel {
         shown = open
         hosting.layoutSubtreeIfNeeded()
         panel.setFrame(frame(for: hosting.fittingSize, open), display: true)
+        // **A menu fades in over 0.1 s, and its list comes 4 points down into its place** (`FleetMotion.menuIn`,
+        // `menuArrives`; the owner's yes of 17 November 2026): it stood there in one frame. Clear before it is on the
+        // screen, so no frame shows it whole first.
+        let fades = !FleetMotion.reduced
+        if fades { panel.alphaValue = 0 }
         panel.orderFrontRegardless()
-        // The shadow follows the panel's round shape once the list is drawn, which is after this turn.
+        if fades { panel.fade.run(panel, to: 1, over: FleetMotion.menuIn) }
+        // The shadow follows the panel's round shape once the list is drawn, which is after this turn, and once more
+        // when the list stands in its place.
         DispatchQueue.main.async { [weak panel] in panel?.invalidateShadow() }
+        if fades {
+            DispatchQueue.main.asyncAfter(deadline: .now() + FleetMotion.menuIn + 0.05) { [weak panel] in panel?.invalidateShadow() }
+        }
         if panel.keyable { panel.makeKey() }
         watch(open)
     }
@@ -500,7 +515,17 @@ private final class FleetMenuPanel: NSPanel {
         shown = nil
         for watch in open.watches { NSEvent.removeMonitor(watch) }
         for observer in open.observers { NotificationCenter.default.removeObserver(observer) }
-        open.panel.orderOut(nil)
+        // **It fades out over 0.08 s** (`FleetMotion.menuOut`), and takes no click while it goes: it is closed from
+        // this call on, and what he chose runs now. VoiceOver's menu, which holds the keyboard, leaves at once.
+        let panel = open.panel
+        if FleetMotion.reduced || panel.keyable || !panel.isVisible {
+            // No fade: a fade-in that still runs ends here, with the window.
+            panel.fade.stop()
+            panel.orderOut(nil)
+        } else {
+            panel.ignoresMouseEvents = true
+            panel.fade.run(panel, to: 0, over: FleetMotion.menuOut) { panel.orderOut(nil) }
+        }
         if open.panel.keyable, let host = open.host, host.isVisible { host.makeKey() }
         open.closed()
         // A click or a VoiceOver press on a row closes the menu from inside the panel's own event: its window and views

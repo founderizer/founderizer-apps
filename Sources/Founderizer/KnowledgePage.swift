@@ -46,6 +46,9 @@ struct KnowledgePage: View {
     /// The file whose Delete waits for the owner's confirmation.
     @State private var deleting: String?
     @State private var dropping = false
+    /// The rows of the opened file whose words can be selected (a block, or a cell of a table): the row under the
+    /// pointer and the row whose words he pressed last (`MessageText.selection`).
+    @State private var selection = ChatSelection()
     /// The opened file's text, or the reason that it is not there. The text is the store's: the last file he read on
     /// this page shows in the first frame when he opens it again.
     private var file: KnowledgeFile? {
@@ -80,7 +83,7 @@ struct KnowledgePage: View {
 
     private var scope: String { agent ?? "fleet" }
     private var offered: Bool { store.state?.ui_features?.contains(KnowledgeClient.feature) == true }
-    private var canChange: Bool { offered && store.isFresh && busy == nil }
+    private var canChange: Bool { offered && store.writesNow && busy == nil }
     /// The agent's profile, on one agent's page; nil until it is read.
     private var profile: AgentProfile? { agent.flatMap { name in profiles?.first { $0.agent == name } } }
     /// The files the agent of this page reads, by path.
@@ -266,7 +269,7 @@ struct KnowledgePage: View {
     /// one to give and the hub answers; it waits while a change goes on.
     @ViewBuilder private func giveMenu(_ entries: [KnowledgeEntry]) -> some View {
         let open = entries.filter { !mine.contains($0.path) }
-        if let agent, profile != nil, store.isFresh, !open.isEmpty {
+        if let agent, profile != nil, store.writesNow, !open.isEmpty {
             let words = String(l10n: "Give \(agent.agentLabel) a file")
             FleetSelect(words, options: open.map { FleetOption($0.path, $0.title, mark: .symbol(Self.symbol($0))) }) { path in
                 guard let entry = open.first(where: { $0.path == path }) else { return }
@@ -419,7 +422,13 @@ struct KnowledgePage: View {
                     // **A form page's card** (margins row 17): the form's 680 points from the page's left edge and the
                     // rows' 16 inside, as every card of Settings. It took the column's whole 1,100, a line too long to
                     // read, with 18 inside.
-                    MessageText(text: cut ? String(file.text.prefix(Self.readerLimit)) : file.text)
+                    // **Only two rows of the file can be selected at a time** (a block, or a cell of a table;
+                    // `MessageText.selection`), and a block or a cell of more than 2,000 bytes always: a long file had
+                    // a hidden text field over each of them, and each field drew again at every frame of the page's
+                    // scroll. Equatable: a new reading of the fleet makes the page again, and not the file's blocks.
+                    MessageText(text: cut ? String(file.text.prefix(Self.readerLimit)) : file.text,
+                                selection: selection)
+                        .equatable()
                         .padding(FormMetrics.rowInset).frame(maxWidth: FormMetrics.formWidth, alignment: .leading)
                         .background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.radius))
                         // The form cards' edge, which Increase Contrast raises to 4:1 (fix round 3c, HIG; T-41).
@@ -445,6 +454,7 @@ struct KnowledgePage: View {
                 }
             }
         } actions: { readerActions(entry) }
+        .scrollsAsAChat(selection, store: store)
         .task(id: entry.path) { await read(entry) }
         // Back, Esc or another page: what was typed and not saved yet goes with it.
         .onDisappear { leave() }
@@ -533,7 +543,7 @@ struct KnowledgePage: View {
             return
         }
         guard edit.isChanged else { return }
-        guard store.isFresh, let db = store.state?.db else {
+        guard store.writesNow, let db = store.state?.db else {
             saveState = .failed(Self.unanswered); problem = Self.unanswered
             if draft?.path != edit.path { message = (Self.unanswered, true) }
             return

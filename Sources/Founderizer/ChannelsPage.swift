@@ -37,6 +37,11 @@ struct ChannelsPage: View {
         get { store.reading("channels.read_at.\(agent)") } nonmutating set { store.keep(newValue, as: "channels.read_at.\(agent)") }
     }
     @State private var readError: String?
+    /// When the first of the reads that failed in a row failed: one break of them says nothing
+    /// (`FleetStore.pageReadingIsOld`).
+    @State private var failedSince: ContinuousClock.Instant?
+    /// The words of the reads that failed, once they have failed one whole break.
+    private var saidError: String? { readError.flatMap { store.pageReadingIsOld(failedSince: failedSince) ? $0 : nil } }
     /// The change that is on its way, by its app: that card's status says it.
     @State private var busy: (app: String, words: String)?
     /// What the hub refused, by its app: one line in that app's card.
@@ -57,7 +62,7 @@ struct ChannelsPage: View {
     }
 
     private var name: String { ChatAppWords.agent(agent) }
-    private var canChange: Bool { store.isFresh && busy == nil && snapshot?.sha256 != nil }
+    private var canChange: Bool { store.writesNow && busy == nil && snapshot?.sha256 != nil }
     private var serverTime: Double? { store.state?.time }
     private var peopleOffered: Bool { store.state?.ui_features?.contains(ChatApps.peopleFeature) == true }
     private var paused: Bool { store.state?.chat_apps?.paused ?? snapshot?.paused ?? false }
@@ -88,7 +93,7 @@ struct ChannelsPage: View {
             }
         }
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(agent)") {
-            readError = nil; refused = [:]; busy = nil
+            readError = nil; failedSince = nil; refused = [:]; busy = nil
             // The steps that the part keeps stay open: this view is made again as they open and close.
             if setup == nil { ownSetup = nil }
             let start = ContinuousClock.now
@@ -109,11 +114,12 @@ struct ChannelsPage: View {
         status
         if snapshot != nil {
             ForEach(ChatApps.apps, id: \.self) { card($0) }
-        } else if readError != nil || store.connectionError != nil {
+        } else if saidError != nil || store.connectionError != nil {
             // While the hub does not answer nothing is read: the failed row, never "Reading…". **Not while the
             // window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item 33: it is said once).
+            // **One break of the hub says nothing** (17 November 2026): "Reading…" stays until then.
             if !store.hubNoticeShows {
-                FormSection { FormRow("Not read", symbol: "exclamationmark.circle", warning: readError) }
+                FormSection { FormRow("Not read", symbol: "exclamationmark.circle", warning: saidError) }
             }
         } else {
             LoadingLine(String(l10n: "Reading the channels…"))
@@ -122,12 +128,14 @@ struct ChannelsPage: View {
 
     // MARK: status
 
-    /// One line at a time, and only about the reading itself: an old reading, or Pause all.
+    /// One line at a time, and only about the reading itself: an old reading, or Pause all. **One break of the hub says
+    /// nothing** (17 November 2026), and an old reading is not said while the window's notice says the outage (fix round
+    /// 3, item 33: it is said once).
     @ViewBuilder private var status: some View {
-        if let readError, snapshot != nil {
+        if let saidError, snapshot != nil, !store.hubNoticeShows {
             Label("Last reading \(readAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "")", systemImage: "exclamationmark.circle")
-                .font(FormMetrics.detail).foregroundStyle(.orange).help(readError)
-        } else if snapshot != nil, !store.isFresh, let readAt {
+                .font(FormMetrics.detail).foregroundStyle(.orange).help(saidError)
+        } else if snapshot != nil, !store.isFresh, !store.hubNoticeShows, let readAt {
             Label("Last reading \(readAt.formatted(date: .omitted, time: .shortened))", systemImage: "exclamationmark.circle")
                 .font(FormMetrics.detail).foregroundStyle(.orange)
         } else if paused {
@@ -275,7 +283,7 @@ struct ChannelsPage: View {
     /// device); then Founderizer asks for the code, after at most 20 readings in any case. It gives the account's ID.
     /// `goesOn` is false once he left the step: the wait ends, and no code is asked for.
     private func startNumber(_ goesOn: @MainActor () -> Bool) async throws -> String {
-        guard store.isFresh, snapshot != nil, let db = store.state?.db else { throw HubError.invalidResponse }
+        guard store.writesNow, snapshot != nil, let db = store.state?.db else { throw HubError.invalidResponse }
         var id = snapshot?.channel("whatsapp", of: agent)?.id
         if id == nil {
             let made = try await write { current in
@@ -365,7 +373,7 @@ struct ChannelsPage: View {
     /// account (nil removes it) from the current accounts, or nil when nothing is left to do; on 409 the page reads
     /// again and asks once more. It gives the ID that the hub saved.
     private func write(_ choose: (ChatAppsSnapshot) -> (id: String, account: ChatAccountInput?)?) async throws -> String? {
-        guard store.isFresh, var current = snapshot, let db = store.state?.db else { return nil }
+        guard store.writesNow, var current = snapshot, let db = store.state?.db else { return nil }
         let hub = store.hub, installation = store.installation
         for attempt in 1...2 {
             guard let choice = choose(current), let sha = current.sha256 else { return nil }
@@ -391,9 +399,9 @@ struct ChannelsPage: View {
         if first, let start { await store.settle(since: start) }
         guard store.hub == hub, store.state?.db == db else { return }
         if let accounts {
-            snapshot = accounts; readAt = Date(); readError = nil
+            snapshot = accounts; readAt = Date(); readError = nil; failedSince = nil
             onRead(accounts)
-        } else { readError = reason }
+        } else { readError = reason; failedSince = failedSince ?? .now }
         if peopleOffered, let readPeople { people = readPeople }
     }
 }

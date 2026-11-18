@@ -23,6 +23,11 @@ import Foundation
 /// **A server's mode from its own row** (owner feature `door_mode_set`, API 1.125; the owner's "Yes, as shown" of 11
 /// November 2026 to the row "Managed by <agent>" with Auto and Full access): `setMode` signs the mode with the same
 /// key and sends it to `POST /ui/door/mode`. No view calls it yet.
+///
+/// **The owner's own agent presses the same two answers** (the owner, 17 November 2026, of a door card of one of his
+/// servers: "why can't you press Full access on <server> for me?"): `answer_needs_you` of the app's program sends a
+/// press of the yes or of Full access to the app, which signs it by the same rule (`maker`) and sends it
+/// (`LinkTools.doorDesk`, `AnswerDoor` in FleetOwnerAPI). No card shows anything for it.
 @MainActor
 enum DoorCallSigning {
     static let feature = "door_calls"
@@ -42,8 +47,35 @@ enum DoorCallSigning {
 
     static func approval(for need: OwnerNeed, choice: Int, store: FleetStore, hub: URL,
                          database: String) async -> Approval {
-        let features = store.state?.ui_features ?? []
-        var make: ((String) -> String)?
+        let make: (String) -> String
+        switch maker(for: need, choice: choice, features: store.state?.ui_features ?? []) {
+        case nil: return .none
+        case .success(let found)?: make = found
+        case .failure(.olderHub)?: return .refused(DoorCall.olderHub)
+        case .failure(.card(let why))?: return .refused(why.line(by: need.by.agentLabel))
+        }
+        guard let fleet = try? await VaultClient().reading(hub: hub, database: database)?.fleetID,
+              let key = OwnerKeychain.key(fleet: fleet) else { return .none }
+        let statement = make(fleet)
+        guard let signature = try? key.sign(statement) else { return .none }
+        return .signed(statement: statement, signature: signature)
+    }
+
+    /// Why this Mac signs nothing for a press that carries a signed statement.
+    enum Stop: Error, Equatable {
+        /// The door's card of a run with no script, from a hub that sends none yet (`DoorCall.olderHub`).
+        case olderHub
+        /// The card is not one that this Mac signs that press on.
+        case card(DoorCall.Refusal)
+    }
+
+    /// **What this Mac signs for the press of option `choice` of `need`**, before any key is read: a maker of the
+    /// statement for the fleet's id, or why it signs nothing; nil when that press carries no signed statement on this
+    /// hub (an item with no door call, another option, a hub without the feature). **The one rule** of the owner's
+    /// own press (`approval`) and of `answer_needs_you` of the app's program (`LinkTools.doorDesk`), so that the two
+    /// sign the same things.
+    static func maker(for need: OwnerNeed, choice: Int,
+                      features: [String]) -> Result<(String) -> String, Stop>? {
         if choice == 0, let call = need.door_call, features.contains(feature) {
             var signs = call
             if let host = need.door_host {      // the door's card of a run: the hash of what the card shows
@@ -51,24 +83,21 @@ enum DoorCallSigning {
                                         script: need.door_script, details: need.details,
                                         words: [need.why, need.todo] + (need.door_task.map { [$0] } ?? [])) {
                 case .success(let computed): signs = computed
-                case .failure(.noScript) where !features.contains(modeSet): return .refused(DoorCall.olderHub)
-                case .failure(let why): return .refused(why.line(by: need.by.agentLabel))
+                case .failure(.noScript) where !features.contains(modeSet): return .failure(.olderHub)
+                case .failure(let why): return .failure(.card(why))
                 }
             }
-            make = { OwnerStatement.doorCall(fleet: $0, need: need.id, call: signs) }
-        } else if choice == 1, need.door_call != nil, let host = need.door_host, features.contains(modes) {
+            return .success { OwnerStatement.doorCall(fleet: $0, need: need.id, call: signs) }
+        }
+        if choice == 1, need.door_call != nil, let host = need.door_host, features.contains(modes) {
             // Full access is signed only on the door's own card of that server: its title and its three answers
             // name it, so the option that he pressed says "Full access on <server>" for the server that is signed.
             guard DoorCall.names(host: host, title: need.title, answers: need.options ?? []) else {
-                return .refused(DoorCall.Refusal.otherServer.line(by: need.by.agentLabel))
+                return .failure(.card(.otherServer))
             }
-            make = { OwnerStatement.doorMode(fleet: $0, host: host, mode: DoorMode.full.rawValue) }
+            return .success { OwnerStatement.doorMode(fleet: $0, host: host, mode: DoorMode.full.rawValue) }
         }
-        guard let make, let fleet = try? await VaultClient().reading(hub: hub, database: database)?.fleetID,
-              let key = OwnerKeychain.key(fleet: fleet) else { return .none }
-        let statement = make(fleet)
-        guard let signature = try? key.sign(statement) else { return .none }
-        return .signed(statement: statement, signature: signature)
+        return nil
     }
 
     /// Why a server's mode was not set, in one plain line for the row.

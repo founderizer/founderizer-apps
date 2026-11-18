@@ -220,7 +220,7 @@ struct SecretEntryView: View {
 
     /// The hub and the generation of this view, while the store still shows them and its reading is current.
     private var context: (hub: URL, db: String)? {
-        guard let database, store.hub == hub, store.state?.db == database, store.isFresh, Self.isOffered(by: store) else { return nil }
+        guard let database, store.hub == hub, store.state?.db == database, store.writesNow, Self.isOffered(by: store) else { return nil }
         return (hub, database)
     }
 
@@ -712,7 +712,7 @@ struct SecretEntryView: View {
         let reference = replacing?.reference ?? centralLogin ?? "bws://\(UUID().uuidString.lowercased())"
         var signed: (statement: String, signature: String)?
         if replacing != nil {
-            do { signed = try await GrantSigning.replace(login: reference, sealed: sealed, hub: context.hub, database: context.db) }
+            do { signed = try await GrantSigning.replace(login: reference, sealed: sealed, store: store, hub: context.hub, database: context.db) }
             catch { message = String(l10n: "\(text(error)) Nothing was sent."); return }
         } else {
             centralLogin = reference

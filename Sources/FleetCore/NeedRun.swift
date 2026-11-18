@@ -13,15 +13,16 @@ public enum NeedRun {
     public static let feature = "need_run"
     /// `run_on` of the owner's own Mac: the Mac where he presses Run.
     public static let ownMac = "mac"
-    /// The most characters of a command (`hub.NEED_RUN_CHARS`): one line, which the card shows whole.
+    /// The most characters of a command, as the hub held each item with Run (raised before owner API 1.208): one
+    /// line, which the card shows whole.
     public static let commandCharacters = 1000
     /// The most characters of the output that the answer carries (`hub.NEED_RUN_OUTPUT_CHARS`): its end, which says
     /// how the command ended. Characters as the hub counts them: Unicode scalars.
     public static let outputCharacters = 8000
     /// How the hub's answer of a press of Run begins (`hub.need_run_answer`): "Ran it on <where>".
     public static let answerPrefix = "Ran it on "
-    /// The widest run of spaces in a command (`hub.NEED_RUN_GAP`): more can move a part of the command away from the part
-    /// that he reads.
+    /// The widest run of spaces in a command, as the hub held each item with Run (raised before owner API 1.208):
+    /// more can move a part of the command away from the part that he reads.
     public static let gapSpaces = 8
 
     /// **The command that Run runs for this item, or nil for an item that shows no Run**: an open item, whose task

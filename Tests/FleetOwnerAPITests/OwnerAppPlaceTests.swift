@@ -168,7 +168,7 @@ struct OwnerAppPlaceTests {
                 == AppPlace.SignInPage.allCases.map(\.rawValue))
         // `AgentTab`: its `chat` is the agent's chat, and its `settings` is Runs on.
         #expect(try Self.cases("Sources/Founderizer/AgentPage.swift", after: "enum AgentTab")
-                == ["settings", "chat", "behaviour", "tasks", "people", "canUse"])
+                == ["settings", "capabilities", "chat", "behaviour", "tasks", "people", "canUse"])
         // `AgentSetupPage` in FleetCore, one case on each line.
         let flow = try Self.source("Sources/FleetCore/AgentSetupFlow.swift")
         let begin = try #require(flow.range(of: "public enum AgentSetupPage"))

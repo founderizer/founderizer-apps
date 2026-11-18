@@ -22,6 +22,8 @@ public struct ReportingLine: Codable, Equatable, Identifiable, Sendable {
     public var vault_create_grant: VaultGrant?
     /// `runtime_switch`: whether the hub can switch this agent to its other provider now. Read only.
     public var runtime_switch: RuntimeSwitch?
+    /// Owner API 1.216: the boxes that the agent's Capabilities page shows, and those that stay on. Read only.
+    public var boxes: AgentBoxes?
     public var id: String { agent }
     public init(agent: String, role: String, reports_to: String?) {
         self.agent = agent; self.role = role; self.reports_to = reports_to
@@ -30,6 +32,38 @@ public struct ReportingLine: Codable, Equatable, Identifiable, Sendable {
         var fields = encoder.container(keyedBy: CodingKeys.self)
         try fields.encode(agent, forKey: .agent); try fields.encode(role, forKey: .role)
         try fields.encode(reports_to, forKey: .reports_to)
+    }
+}
+
+/// **The Tools boxes of one agent that the owner can see and set** (`boxes` of a `GET /ui/team` line, owner API 1.216):
+/// the boxes that the agent has in effect (`on`: its Tools list, or for an entry with no list, whose `can` reads `[]`,
+/// the shell and the web of its runtime; nil from a hub that does not say); each box that does something for the
+/// agent, and each one it has (`offered`); those of them that do nothing for
+/// it now (`idle`); and those that a write cannot turn off (`stays_on`: Shell for an agent whose sessions cannot be held
+/// to a fixed list of tools). A value that cannot be read leaves the page as a hub without the field draws it: the
+/// four boxes.
+public struct AgentBoxes: Decodable, Equatable, Sendable {
+    public let on: [String]?
+    public let offered: [String]
+    public let idle: [String]
+    public let stays_on: [String]
+    enum CodingKeys: String, CodingKey { case on, offered, idle, stays_on }
+    public init(on: [String]? = nil, offered: [String], idle: [String] = [], stays_on: [String]) {
+        self.on = on; self.offered = offered; self.idle = idle; self.stays_on = stays_on
+    }
+    public init(from decoder: Decoder) throws {
+        let values = try? decoder.container(keyedBy: CodingKeys.self)
+        let known = Set(AgentSettingsInput.capabilities)
+        on = ((try? values?.decodeIfPresent([String].self, forKey: .on)) ?? nil)?.filter(known.contains)
+        offered = ((try? values?.decodeIfPresent([String].self, forKey: .offered)) ?? AgentSettingsInput.capabilities)
+            .filter(known.contains)
+        idle = ((try? values?.decodeIfPresent([String].self, forKey: .idle)) ?? []).filter(known.contains)
+        stays_on = ((try? values?.decodeIfPresent([String].self, forKey: .stays_on)) ?? []).filter(known.contains)
+    }
+
+    /// The boxes of a line, or the four of a hub that does not say.
+    public static func of(_ line: ReportingLine?) -> AgentBoxes {
+        line?.boxes ?? AgentBoxes(offered: AgentSettingsInput.capabilities, stays_on: [])
     }
 }
 

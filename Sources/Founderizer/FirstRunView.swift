@@ -211,6 +211,11 @@ final class FirstRunModel {
     /// The hub's address that the newest try of the hub's server gives (`StartAgain.hubAddress`), for which the
     /// manager's own server is kept.
     var managersHub: URL?
+    /// **The provider of the manager's own server** (slice 2b of the one wizard, its capsule on "Your fleet"), when the
+    /// owner chose another one than the hub's; nil: the hub's, also after the hub's changes.
+    var managersProvider: CloudProvider?
+    /// That provider's token page shows for the manager's own server, because this Mac holds no token of it yet.
+    var managersToken: CloudProvider?
 
     /// Continue of "Your fleet's servers": on to the VPS page, with this Mac's network and the fleet's key first when
     /// they are missing, as after a press on a card. Then the VPS page's own press needs neither, and the steps on
@@ -394,8 +399,54 @@ final class FirstRunModel {
         if step == .welcome { foundPrograms = AgentPrograms.found() }
         // The first run starts over on its welcome page: no way is taken, so no name, no AI provider and no layout
         // are chosen. The three pages keep what he typed, pressed and set.
-        if step == .welcome { named = false; choseAI = false; shaped = false }
+        if step == .welcome { named = false; choseAI = false; shaped = false; managersProvider = nil; managersToken = nil }
     }
+}
+
+/// **What the window's first run keeps while another page has the window** (the review of 17 November 2026): Settings,
+/// which ⌘, opens in the middle of the first run, takes the window from the wizard, and a view's own state ends with the
+/// view, while the provider's build, the install that its end starts and the manager's own server go on. The wizard
+/// that came back then opened on its welcome page with none of that work, and its press made a second server. The
+/// window's wizard takes its models from here, so the one that comes back is the same: on the same step, with the same
+/// builds. The first run that is over drops them (`FirstRunView`'s `onDisappear`), and the next one opens on its
+/// welcome page.
+@MainActor @Observable
+final class FirstRunWork {
+    let model = FirstRunModel()
+    /// This Mac's own private network.
+    let networkModel = PrivateNetworkModel()
+    /// Putting a copy back, on the hub this wizard has just claimed.
+    let putBack = RestoreModel()
+    /// This Mac on the private network, and the fleet's own Tailscale key.
+    let net = FleetNetworkModel()
+    /// The fleet's VPS, made at a provider, or any VPS by its address.
+    let cloud = FleetCloudModel()
+    let vps = FleetVPSModel()
+    /// **The manager's own server, on 2 servers and 1 per agent** (`makeManagersServer`): its offer opens with the
+    /// hub's, and the same press makes it.
+    let managerCloud = FleetCloudModel()
+    /// The manager's sign-in that the first run asks for at its end is on its way (`finish`).
+    var signsIn = false
+    /// **The server of the account that "Use this server" chose for the hub**, by its provider, its id and its public
+    /// address: the hub's install there proves its build record by the id (`MachineInstallModel.provenServer`).
+    var chosenServer: (provider: CloudProvider, id: String, address: String)?
+
+    /// The window's own: its first wizard makes it, and each one after takes it, until `drop`.
+    private static var window: FirstRunWork?
+    static var kept: FirstRunWork {
+        if let window { return window }
+        let made = FirstRunWork()
+        window = made
+        return made
+    }
+
+    /// The first run is over: the next wizard of the window opens on its welcome page. Each way out of the first run
+    /// drops it (`leave`, the restore page's way into the app, `FleetStore.forgetFleet`), and so does a wizard that the
+    /// window leaves for a fleet that answers (`onDisappear`).
+    static func drop() { window = nil }
+
+    /// This work is the window's still: a build's end of a first run that is over holds no window (`startInstall`).
+    static func isKept(_ work: FirstRunWork) -> Bool { window === work }
 }
 
 /// The wizard. One screen, one decision, and a Back that goes one step.
@@ -407,30 +458,37 @@ final class FirstRunModel {
 /// title's moving words and no spinner ("remove that circle, I liked the Thinking text animation").
 struct FirstRunView: View {
     @Bindable var store: FleetStore
-    @State private var model = FirstRunModel()
-    /// This Mac's own private network.
-    @State private var networkModel = PrivateNetworkModel()
-    /// Putting a copy back, on the hub this wizard has just claimed.
-    @State private var putBack = RestoreModel()
-    /// The manager's sign-in that the first run asks for at its end is on its way (`finish`).
-    @State private var signsIn = false
-    /// This Mac on the private network, and the fleet's own Tailscale key.
-    @State private var net = FleetNetworkModel()
-    /// The fleet's VPS, made at a provider, or any VPS by its address.
-    @State private var cloud = FleetCloudModel()
-    @State private var vps = FleetVPSModel()
-    /// **The manager's own server, on 2 servers and 1 per agent** (`makeManagersServer`): its offer opens with the
-    /// hub's, and the same press makes it.
-    @State private var managerCloud = FleetCloudModel()
-    /// **The server of the account that "Use this server" chose for the hub**, by its provider, its id and its public
-    /// address: the hub's install there proves its build record by the id (`MachineInstallModel.provenServer`).
-    @State private var chosenServer: (provider: CloudProvider, id: String, address: String)?
+    /// **The wizard's models and its two values** (`FirstRunWork`): the window's wizard keeps them while another page has
+    /// the window, and every other copy has its own. Each model has its own `State` too, for the fields' bindings.
+    @State private var work: FirstRunWork
+    @State private var model: FirstRunModel
+    @State private var networkModel: PrivateNetworkModel
+    @State private var putBack: RestoreModel
+    @State private var net: FleetNetworkModel
+    @State private var cloud: FleetCloudModel
+    @State private var vps: FleetVPSModel
+    @State private var managerCloud: FleetCloudModel
     /// True in the window itself, false for the copy that Settings shows before there is a hub: only the window
     /// is held open for the wizard's last screens.
-    var window = false
+    var window: Bool
     /// **The fleet has its hub already, and its setup never finished** (`FleetStore.welcomeCovers`): the wizard shows
     /// only the welcome page and the page after its press, in front of the manager's setup, and both ways lead there.
-    var resumes = false
+    var resumes: Bool
+
+    init(store: FleetStore, window: Bool = false, resumes: Bool = false) {
+        self.store = store
+        self.window = window
+        self.resumes = resumes
+        let work = window && !resumes ? FirstRunWork.kept : FirstRunWork()
+        _work = State(initialValue: work)
+        _model = State(initialValue: work.model)
+        _networkModel = State(initialValue: work.networkModel)
+        _putBack = State(initialValue: work.putBack)
+        _net = State(initialValue: work.net)
+        _cloud = State(initialValue: work.cloud)
+        _vps = State(initialValue: work.vps)
+        _managerCloud = State(initialValue: work.managerCloud)
+    }
     /// `setup_show`'s answer to an ask for the VPS page while a fleet exists (the words of the lane of the link).
     static let noNamePage = "The fleet has its hub and its manager already, so the page name does not show here: "
         + "the app shows the manager's setup."
@@ -476,13 +534,25 @@ struct FirstRunView: View {
         .onChange(of: setupFirstRun, initial: true) { _, now in if window { store.setupSnapshot = now } }
         .onAppear { if window, cloud.onState == nil { cloud.onState = SetupChannel.reports(to: store, \.firstRunBuild) } }
         .onChange(of: store.setupAsk?.id, initial: true) { _, _ in take(store.setupAsk) }
-        // The manager's own server's offer opens with the hub's (`opensManagersChoice`).
-        .onChange(of: cloud.stage) { _, _ in opensManagersChoice() }
+        // The manager's own server's offer opens with the hub's (`opensManagersChoice`), also when the hub's opened
+        // while another page had the window (`FirstRunWork`).
+        .onChange(of: cloud.stage, initial: true) { _, _ in opensManagersChoice() }
         .onChange(of: cloud.tokenTaken) { _, _ in opensManagersChoice() }
+        // The manager's own provider took its token (slice 2b): "Your fleet" again, with that provider's offer.
+        .onChange(of: managerCloud.tokenTaken, initial: true) { _, taken in if taken { model.managersToken = nil } }
+        // Its own provider refused the token that this Mac holds for it: that provider's token page again, for a new one.
+        .onChange(of: managerCloud.stopped, initial: true) { _, stop in
+            if stop == .token, let own = model.managersProvider, managerCloud.provider == own, !managerCloud.tokenTaken {
+                model.managersToken = own
+            }
+        }
         .onDisappear {
             guard window else { return }
             store.setupSnapshot = .none
             if store.setupAsk?.outcome == nil { store.setupAsk?.outcome = .refused(SetupChannel.windowWent) }
+            // **The first run is over** when the window went to a fleet that answers, with no hold of the wizard's: its
+            // work goes, and the next first run opens on its welcome page. Settings, and a window that closes, keep it.
+            if !resumes, store.state != nil, !store.firstRunHolds { FirstRunWork.drop() }
         }
     }
 
@@ -514,6 +584,10 @@ struct FirstRunView: View {
     private var showsFleet: Bool { model.shaped && cloud.existing.isEmpty }
 
     private func tokenHead(_ provider: CloudProvider) -> Head {
+        if let other = model.managersToken {
+            return Head(title: String(l10n: "Your \(other.name) token"), key: "Your %@ token",
+                        waits: managerCloud.stage == .choosing)
+        }
         let choosing = cloud.stage == .choosing
         // The page "Your fleet" waits for the offer of the manager's own server too.
         let managers = showsFleet && model.makesManagersServer && managerCloud.offer == nil
@@ -591,7 +665,7 @@ struct FirstRunView: View {
         case .cloud: (name, title, works) = ("cloud", "A VPS for your fleet", model.busy)
         case .token(let chosen):
             (name, head) = (cloudBuilds ? "building" : "token", tokenHead(chosen))
-            provider = chosen.rawValue
+            provider = (model.managersToken ?? chosen).rawValue
         case .vps: (name, head) = ("vps", vpsHead)
         case .machine: (name, head) = ("machine", machineHead)
         case .installing: (name, head) = ("installing", machineHead)
@@ -699,11 +773,11 @@ struct FirstRunView: View {
         if line?.placed == false { noteManagersServer() }
         switch FirstRunHandover.of(chosen: model.chosenAI, placed: line?.placed, runtime: line?.runtime,
                                    installedOneServer: model.began && model.oneServer, writes: store.canWrite,
-                                   asked: signsIn) {
+                                   asked: work.signsIn) {
         case .keep(let provider):
             store.noteProvider(provider, for: manager)
         case .signIn(let provider):
-            signsIn = true
+            work.signsIn = true
             Task {
                 // Only while the hub takes a write: the store then sends at once, and its request has its answer, or
                 // the hub's client gives up, within that client's own limit. So the window always goes on.
@@ -722,6 +796,8 @@ struct FirstRunView: View {
     private func leave(to manager: String) {
         store.firstRunHolds = false
         store.destination = .agent(manager)
+        // Also when Settings has the window during the sign-in's save, so that no wizard runs `onDisappear` now.
+        FirstRunWork.drop()
     }
 
     /// The last press of an install. **No page of ours on the way** (D-3).
@@ -808,10 +884,17 @@ struct FirstRunView: View {
         case .servers: model.start(.aiProvider)
         case .network, .key: model.start(model.backFromNetwork)
         case .machine, .address: model.start(.cloud)
+        // The token page of the manager's own provider goes back to "Your fleet", with the hub's provider for it.
+        case .token where model.managersToken != nil:
+            model.managersToken = nil
+            model.managersProvider = nil
+            managerCloud.cancel()
+            opensManagersChoice()
         // The manager's offer goes with the hub's; a build of the manager's server that runs is never ended here.
         case .token:
             cloud.cancel()
             if managerCloud.stage == .choosing { managerCloud.cancel() }
+            model.managersProvider = nil
             model.start(.cloud)
         case .vps: vps.reset(); model.start(.cloud)
         // From a stopped install, to its form with what he typed (fix round 3, item 51): Back left the stop in place.
@@ -908,7 +991,7 @@ struct FirstRunView: View {
     /// VPS, at its public address.
     private func useExisting(_ server: CloudExisting) {
         guard let address = server.ipv4 else { return }
-        chosenServer = cloud.provider.map { ($0, server.id, address) }
+        work.chosenServer = cloud.provider.map { ($0, server.id, address) }
         cloud.cancel(); vps.reset()
         vps.addressText = address; vps.tailnet = model.mac?.tailnet
         model.start(.vps)
@@ -923,9 +1006,13 @@ struct FirstRunView: View {
         install.shape = model.shaped ? model.serversStep : nil
         install.runtime = model.chosenAI
         // The account's server that "Use this server" chose, when the install goes to its address.
-        install.provenServer = chosenServer.flatMap { $0.address == target.host ? ($0.provider, $0.id) : nil }
+        install.provenServer = work.chosenServer.flatMap { $0.address == target.host ? ($0.provider, $0.id) : nil }
         install.installHub(store: store)
         model.start(.installing)
+        // The window holds for the wizard also when the build's end starts the install while another page has the
+        // window (`FirstRunWork`): no `onChange` of the wizard runs then, and the hub's claim would take it to the app.
+        // Not for a first run that is over, nor over a fleet that answers this Mac (connected from Settings meanwhile).
+        if store.state == nil, FirstRunWork.isKept(work) { hold(model.holdsWindow) }
     }
 
     /// **One press makes every server of the fleet** (slice 2 of the one wizard): the hub's server, whose install
@@ -987,19 +1074,53 @@ struct FirstRunView: View {
         store.noteMadeServer(server, for: manager)
     }
 
-    /// **The manager's own server's offer opens with the hub's**, on 2 servers and 1 per agent: the same provider, once
-    /// the provider took the token. A build of that server that runs is never touched.
+    /// **The manager's own server's offer opens with the hub's**, on 2 servers and 1 per agent: at the hub's provider,
+    /// or at the one that the owner chose for it (`managersProvider`, slice 2b), once this Mac holds that provider's
+    /// token. A build of that server that runs is never touched.
     private func opensManagersChoice() {
-        guard model.makesManagersServer, case .token(let provider) = model.step, cloud.stage == .choosing,
+        guard model.makesManagersServer, case .token(let hubs) = model.step, cloud.stage == .choosing,
               cloud.tokenTaken else { return }
+        let provider = model.managersProvider ?? hubs
         switch managerCloud.stage {
         case .token:
-            managerCloud.open(provider, use: .agent)
+            if managerCloud.holds(provider) { managerCloud.open(provider, use: .agent, lists: false) }
         case .choosing where managerCloud.provider != provider:
             managerCloud.cancel()
-            managerCloud.open(provider, use: .agent)
+            if managerCloud.holds(provider) { managerCloud.open(provider, use: .agent, lists: false) }
         case .choosing, .making, .joining:
             break
+        }
+    }
+
+    /// **The hub's server at another provider** (its capsule's "Another provider", slice 2b): that provider's step,
+    /// which opens its choice when this Mac holds its token and asks for the token first when not. The manager's own
+    /// server that goes with the hub's provider goes there too (`opensManagersChoice`).
+    private func hubAt(_ provider: CloudProvider) {
+        // The manager's own provider that is the hub's new one goes with the hub's, as one choice of it does.
+        if model.managersProvider == provider { model.managersProvider = nil }
+        cloud.cancel()
+        // The manager's server that goes with the hub's goes there; one at that provider already keeps its type.
+        if model.managersProvider == nil, managerCloud.stage == .choosing, managerCloud.provider != provider {
+            managerCloud.cancel()
+        }
+        model.choose(.token(provider))
+        opensChoice()
+        // A provider whose token this Mac holds opens in this same call, so no `onChange` of the hub's model sees it.
+        opensManagersChoice()
+    }
+
+    /// **The manager's own server at another provider** (its capsule's "Another provider", slice 2b): its choice opens
+    /// there when this Mac holds that provider's token, and that provider's token page shows first when not. The hub's
+    /// own provider again is the hub's provider again.
+    private func managersAt(_ provider: CloudProvider) {
+        guard case .token(let hubs) = model.step, managerCloud.stage == .token || managerCloud.stage == .choosing
+        else { return }
+        model.managersProvider = provider == hubs ? nil : provider
+        managerCloud.cancel()
+        if managerCloud.holds(provider) {
+            managerCloud.open(provider, use: .agent, lists: false)
+        } else {
+            model.managersToken = provider
         }
     }
 
@@ -1007,18 +1128,27 @@ struct FirstRunView: View {
         let building = cloudBuilds
         let choosing = cloud.stage == .choosing
         let head = tokenHead(provider)
-        // The page "Your fleet" draws the slider page's boxes, at that page's width.
-        let width = choosing && showsFleet ? ShapeMetrics.serversWidth : SetupMetrics.width
+        // The page "Your fleet" draws the slider page's boxes, with a capsule under each server (`fleetWidth`).
+        let width = choosing && showsFleet && model.managersToken == nil ? ShapeMetrics.fleetWidth : SetupMetrics.width
         return SetupStep(title: head.title, waits: head.waits, width: width) {
             // The provider's own logo over its pages, as Add server has it (the owner, 10 November 2026).
-            CloudMark(provider: provider, size: SetupMetrics.mark)
+            CloudMark(provider: model.managersToken ?? provider, size: SetupMetrics.mark)
         } content: {
             if building {
                 CloudBuilding(stage: cloud.stage, provider: cloud.provider, showsStatus: true)
+            } else if let other = model.managersToken {
+                // **The token of the manager's own provider** (slice 2b): its page, as the hub's provider's, for the
+                // manager's model; once the provider took it, "Your fleet" again.
+                SetupSteps.token(other)
+                PasteField(placeholder: String(l10n: "Paste it here"), text: $managerCloud.tokenText,
+                           accepts: { $0.count >= 20 && !$0.contains(" ") }) {
+                    managerCloud.sendToken(other, use: .agent, lists: false)
+                }
+                .accessibilityIdentifier("first-run-managers-token")
             } else if choosing, showsFleet {
                 FirstFleetChoice(cloud: cloud, managers: model.makesManagersServer ? managerCloud : nil,
                                  plan: FleetPlan(manager: model.managerName, agents: []), step: model.serversStep,
-                                 make: makeFleet)
+                                 hubAt: hubAt, managersAt: managersAt, make: makeFleet)
             } else if choosing {
                 CloudChoice(cloud: cloud, job: .hub, fleet: [], makeNew: { cloud.makeNew { startInstall($0) } },
                             use: useExisting)
@@ -1031,12 +1161,16 @@ struct FirstRunView: View {
                 }
                 .accessibilityIdentifier("first-run-cloud-token")
             }
-            // While the list shows, its own press carries the line (`CloudChoice`).
-            if let failure = cloud.failure, !choosing || cloud.offer == nil { SetupWarning(failure) }
-            // The offer of the manager's own server that could not be read: it is read again by itself.
-            if choosing, showsFleet, model.makesManagersServer, managerCloud.offer == nil,
-               let failure = managerCloud.failure, failure != cloud.failure {
-                SetupWarning(failure)
+            if model.managersToken != nil {
+                if let failure = managerCloud.failure { SetupWarning(failure) }
+            } else {
+                // While the list shows, its own press carries the line (`CloudChoice`).
+                if let failure = cloud.failure, !choosing || cloud.offer == nil { SetupWarning(failure) }
+                // The offer of the manager's own server that could not be read: it is read again by itself.
+                if choosing, showsFleet, model.makesManagersServer, managerCloud.offer == nil,
+                   let failure = managerCloud.failure, failure != cloud.failure {
+                    SetupWarning(failure)
+                }
             }
         }
     }
@@ -1227,7 +1361,7 @@ struct FirstRunView: View {
                 // One sentence about the hub keeping its address, the restore's own (D-2): this one said it twice.
                 FormSection {
                     RestoreRows(store: store, model: putBack,
-                                go: { store.firstRunHolds = false; store.destination = $0 },
+                                go: { store.firstRunHolds = false; store.destination = $0; FirstRunWork.drop() },
                                 whenDone: { openApp() })
                 }
             }

@@ -147,7 +147,7 @@ final class GoogleConnecting {
 
     /// The notice's Continue can start the Connect.
     func canContinue(_ store: FleetStore) -> Bool {
-        store.state?.ui_features?.contains(Google.feature) == true && store.isFresh && busy == nil
+        store.state?.ui_features?.contains(Google.feature) == true && store.writesNow && busy == nil
     }
 
     /// Connect account: the notice, and nothing else yet.

@@ -52,7 +52,7 @@ public enum OwnerSetupTools {
             own windows, and it is nothing also when the app shows no window. \
             The forms of a place: needs, tasks, agents; task.<number>, or task for a task that the hub no longer \
             has; agent.<name> (the agent's chat); \
-            agent.<name>.<part> with part runs_on, behaviour, tasks, people, can_use; agent.<name>.rule (one rule's \
+            agent.<name>.<part> with part runs_on, capabilities, behaviour, tasks, people, can_use; agent.<name>.rule (one rule's \
             editor); agent.<name>.setup.<page> with page name, servers, server, provider, installing, switching, \
             sign_in, activate, \
             or agent.<name>.setup when the page is not known; agent.<name>.setup.server.<page> with a page of \
@@ -770,7 +770,7 @@ public struct AppLink: Sendable {
         // shown, a save of a secret begun): it gets the caller's words for this call (`notKnown`), or its tool's own
         // "not known" words (`OwnerLinkTools.notKnownHere`), never "call the tool again" alone. The setup tools keep
         // their words, whatever the caller gave.
-        if OwnerLinkTools.names.contains(tool), case .failed(let words) = reach,
+        if OwnerLinkTools.writes.contains(tool), case .failed(let words) = reach,
            [ChannelClient.noAnswer, ChannelClient.closedNoAnswer, ChannelClient.unreadable].contains(words) {
             return (notKnown ?? OwnerLinkTools.notKnownHere(tool), true)
         }

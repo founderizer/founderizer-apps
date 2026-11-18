@@ -100,8 +100,29 @@ extension FleetStore {
         readings.kept(name, in: readingContext).map { $0 < opened } ?? false
     }
 
-    /// How long ago the page reading `name` was kept on this hub generation, or nil without one.
-    func readingAge(_ name: String) -> Duration? { readings.age(name, in: readingContext) }
+    /// When the page reading `name` was kept on this hub generation, or nil without one.
+    func readingKept(_ name: String) -> ContinuousClock.Instant? { readings.kept(name, in: readingContext) }
+
+    /// **A page's own reading shows as its last one** (`StateReading.pageReadingIsOld`): while the fleet's state is
+    /// old, or once the page's own reads have failed for one whole break since `failedSince`, the first of them in a
+    /// row. The clock of the held lines draws the page again at the moment that break ends (`QuietClock`). Reads that
+    /// failed before the Mac last slept count from its wake (`wokeAt`): a Mac that wakes starts no break.
+    func pageReadingIsOld(failedSince: ContinuousClock.Instant?) -> Bool {
+        if let start = StateReading.failingStart(since: failedSince, wokeAt: wokeAt) {
+            // Asked, so that the page draws again when the break ends.
+            _ = QuietClock.shared.passed(start + .seconds(StateReading.limit))
+        }
+        let failingFor = StateReading.failingFor(since: failedSince, wokeAt: wokeAt, now: .now)
+        return StateReading.pageReadingIsOld(stateIsCurrent: isFresh, failingFor: failingFor)
+    }
+
+    /// **A page's own reads have failed one whole break** since `failedSince`, whatever the fleet's state: a page that
+    /// reads again only for one break stops then, and says that it could not read (an agent's Memory, the reporting
+    /// lines). On the fleet's state too it would stop at the third failed state read of a release restart, and say
+    /// the failure for good after the hub came back.
+    func pageReadsFailedABreak(failedSince: ContinuousClock.Instant?) -> Bool {
+        (StateReading.failingFor(since: failedSince, wokeAt: wokeAt, now: .now) ?? 0) >= StateReading.limit
+    }
 
     /// **One read of a page reading at a time** (the fix round of 29 October 2026): every list that draws the reading
     /// `name` reads it through here, and a read that is asked for while one is on its way gets that one's answer.

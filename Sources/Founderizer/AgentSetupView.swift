@@ -28,9 +28,15 @@ final class AgentSettingsModel {
         get { store?.reading("servers.list") } set { keep(newValue, as: "servers.list") }
     }
     private(set) var readError: String?
+    /// When the first of the reads of team.json that failed in a row failed: one break of them says nothing
+    /// (`FleetStore.pageReadingIsOld`).
+    private(set) var readFailedSince: ContinuousClock.Instant?
     /// The value of each field that waits or is sent now, or that the hub refused. The control shows it.
     private(set) var values: [Field: AgentSettingEdit] = [:]
     private(set) var states: [Field: SaveState] = [:]
+    /// The box of Capabilities that he switched last: its row has the save's mark and a refusal, also when he comes back
+    /// to the page while the save waits (a view's own state would have forgotten it).
+    var switchedBox: String?
     private var order: [Field] = []
     private var versions: [Field: Int] = [:]
     private var draining = false
@@ -44,6 +50,10 @@ final class AgentSettingsModel {
     /// A field waits for its save.
     var isSaving: Bool { !order.isEmpty }
 
+    /// **A new visit counts its own break** (`readFailedSince`): reads that failed in an earlier visit say nothing to
+    /// it at its first failed read.
+    func visited() { if readFailedSince != nil { readFailedSince = .now } }
+
     /// Reads team.json. A first reading of a page that opened at `start` waits until a loading line that showed has
     /// stood half a second (`FleetStore.settle`).
     @discardableResult func readTeam(since start: ContinuousClock.Instant? = nil) async -> Bool {
@@ -52,11 +62,14 @@ final class AgentSettingsModel {
             let read = try await HubClient().team(hub: hub, database: database)
             if first, let start { await store?.settle(since: start) }
             team = read
-            readError = nil
+            readError = nil; readFailedSince = nil
             return true
         } catch {
             if first, let start { await store?.settle(since: start) }
-            if !Task.isCancelled { readError = String(l10n: "The settings could not be read. Check the connection.") }
+            if !Task.isCancelled {
+                readError = String(l10n: "The settings could not be read. Check the connection.")
+                readFailedSince = readFailedSince ?? .now
+            }
             return false
         }
     }
@@ -157,7 +170,8 @@ final class AgentSettingsModel {
             if case .unconfirmed(let id) = result {
                 unanswered = (edit.field, id)
                 // Its row says it, so the window's request line leaves it out on this part (`pendingInItsRow`).
-                store.pendingInItsRow = (id, agent, .settings)
+                // The boxes and the desktop model are rows of Capabilities, the rest of Runs on.
+                store.pendingInItsRow = (id, agent, [.capabilities, .screen].contains(edit.field) ? .capabilities : .settings)
                 set(.failed(String(l10n: "The hub has not answered. Try again sends the same request.")), for: edit.field)
                 result = await store.answer(to: id)
                 unanswered = nil
@@ -178,16 +192,23 @@ final class AgentSettingsModel {
     }
 }
 
-/// **An agent's Settings: its server, its AI provider, its account and its usage, and nothing else.** The owner,
-/// 25 October 2026: "The Settings page for an agent needs to be simpler! ... Make it simple: Show Server, AI Provider,
-/// Account and Usage, that's it!! Everything else is not needed or is already somewhere else", and the same day, from a
-/// mockup, yes to one Settings page in place of Overview and Settings. So it is one card of four rows:
+/// **An agent's Runs on: its server, its AI provider with its model and its reasoning, its account and its usage, and
+/// nothing else.** The owner, 25 October 2026: "The Settings page for an agent needs to be simpler! ... Make it simple:
+/// Show Server, AI Provider, Account and Usage, that's it!! Everything else is not needed or is already somewhere
+/// else", and the same day, from a mockup, yes to one Settings page in place of Overview and Settings. Then, 17 November
+/// 2026, of its Change, which opened Codex's rows and the Tools boxes under a Claude agent's provider: "AI Provider is
+/// just that: the provider", "If I have Claude, dont show anything about codex", and his "Yes, as shown" the same day to
+/// its picture. So it is one card:
 ///
 ///   - **Server**: its name, which opens the server's page; a fault of that machine is the row's orange line.
-///   - **AI provider**: the provider, its model and its reasoning, and Change. Change opens under the row what is
-///     about the AI: the switch to the other provider, the model, the reasoning and what the agent may use. Each
-///     control saves itself, and the mark beside it says Saving…, Saved or Retry.
+///   - **AI provider**: the provider's logo and its name as Add agent names it ("Claude", "ChatGPT"; `aiName`), and a
+///     menu of the two only where the hub can switch the agent to the other one. A press on the other one opens its
+///     setup and its switch under the row (`ProviderView`); the agent's own one closes them again.
+///   - **Model** and **Reasoning**, under the provider's title: each saves itself, and the mark beside it says Saving…,
+///     Saved or Retry. A full model name is the Model menu's last choice, Other….
 ///   - **Account** and **Usage** (`ProviderAccountSection`).
+///
+/// What the agent may use on its server is its Capabilities (`AgentCapabilitiesPart`), with the desktop model.
 ///
 /// Its role and the agent it reports to are in Settings › Reporting lines; its name and Deactivate are behind the
 /// page's one "…"; an agent in setup is activated by its setup, which stands in place of its chat. A select and a
@@ -201,8 +222,11 @@ struct AgentSetupView: View {
     @State private var modelName = ""
     /// The full model name he typed last and saved: after a refusal its field keeps it.
     @State private var typedName: String?
-    /// What is about the AI, under its row. A provider setup that is going on opens it by itself.
-    @State private var changing: Bool?
+    /// The provider that he picked in the AI provider menu, while it is not the agent's own: its setup and its switch
+    /// stand under the row. nil: nothing picked, and a provider setup that is going on opens them by itself.
+    @State private var chosen: String?
+    /// He picked Other… in the Model menu: the Full model name row stands under it until its field lets go.
+    @State private var typingName = false
     @FocusState private var naming: Bool
     /// The new name while its field is open (Rename… of the "…").
     @State private var newName: String?
@@ -234,8 +258,6 @@ struct AgentSetupView: View {
     private var features: [String] { store.state?.ui_features ?? [] }
     /// The agent's provider in team.json, or nil when it is unknown.
     private var configuredRuntime: String? { store.state?.agents.first { $0.name == agent }?.runtime }
-    /// The capabilities of a team line that has none: an older hub.
-    private var fallbackCan: [String] { store.state?.agents.first { $0.name == agent }?.can ?? [] }
     /// **The plain hold** (D-1, the owner's yes of 28 October 2026: "a reading that Founderizer is reading again is not
     /// old until that read fails or takes more than one second"): the machine reading shown is the one kept from before
     /// this visit, which the page reads again, and that read has had less than a second (`FleetStore.readingWaits`), so
@@ -251,7 +273,8 @@ struct AgentSetupView: View {
                     if newName != nil && !renaming && renameJob?.isOpen != true { roleRow() }
                     serverRow(state)
                     providerRow(state)
-                    if changeOpen(state) { changeRows(state) }
+                    if providerOpen(state) { providerForm(state) }
+                    aiRows(state)
                     ProviderAccountSection(store: store, agent: agent, machine: model.machine, card: false)
                 }
                 // **"Switching to …" under the AI provider comes and goes with the motion of a save's line**
@@ -269,6 +292,7 @@ struct AgentSetupView: View {
             more
         }
         .task(id: "\(model.hub)/\(model.database)/\(agent)") {
+            model.visited()
             let start = ContinuousClock.now
             while !Task.isCancelled {
                 async let team = model.readTeam(since: start)
@@ -278,7 +302,9 @@ struct AgentSetupView: View {
                 // A sign-in, a machine check or a rename that he waits for is answered in seconds.
                 let quick = model.machine?.check?.isPending == true || model.machine?.login?.isOpen == true ||
                     AgentRename.job(of: agent, in: model.servers)?.isOpen == true
-                do { try await store.nap(quick ? 2 : 15) } catch { return }
+                // Again in 3 s after a read of team.json that failed, as the lists do: its row goes as soon as the hub
+                // is back.
+                do { try await store.nap(quick ? 2 : model.readFailedSince == nil ? 15 : 3) } catch { return }
             }
         }
         .task {
@@ -334,24 +360,27 @@ struct AgentSetupView: View {
 
     // MARK: AI provider
 
-    /// **The AI that runs it, its model and its reasoning, and Change.** Which provider an agent runs on is a different
-    /// question from which account it runs on, so it is a row of its own over the account's.
+    /// **The AI that runs it, as he picked it, and a menu only where it can switch.** Which provider an agent runs on is
+    /// a different question from which account it runs on, so it is a row of its own over the account's.
     private func providerRow(_ state: FleetAgent) -> some View {
         let setup = store.providerSetup(hub: store.hub, database: store.state?.db, agent: agent)
-        let open = changeOpen(state)
+        let open = providerOpen(state)
         let switching = providerSwitching(state)
         return FormRow("AI provider", mark: ProviderIcon(runtime: state.runtime, provider: state.modelProvider, size: 18),
-                       warning: switching ? String(l10n: "Switching to \(providerName(state.runtime))…") : nil) {
+                       warning: switching ? String(l10n: "Switching to \(aiName(state.runtime))…") : nil) {
             HStack(spacing: FleetSpace.actions) {
-                Text(providerWords(state)).foregroundStyle(FleetStyle.muted).lineLimit(1)
-                // **No Change for an agent on a key or a model server** (picture 6, his "Yes, as shown"): it cannot
-                // switch to Claude or ChatGPT in this version.
-                if features.contains("agent_setup"), state.modelProvider == nil {
-                    if !open {
-                        SetupMark(setup: setup, subject: String(l10n: "The provider setup"), place: String(l10n: "Select Change on the AI provider row to see it."))
-                    }
-                    Button(open ? "Hide" : "Change") { changing = !open }
-                        .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("change-provider")
+                if !open, features.contains("agent_setup"), state.modelProvider == nil {
+                    SetupMark(setup: setup, subject: String(l10n: "The provider setup"),
+                              place: String(l10n: "Select the other provider in the AI provider menu to see it."))
+                }
+                if let other = switchable(state) {
+                    let own = state.runtime
+                    FleetSelect("AI provider", selection: Binding(get: { open ? other : own }, set: { picked in
+                        chosen = picked
+                    }), options: [own, other].map { FleetOption($0, aiName($0), mark: .provider($0)) })
+                    .accessibilityIdentifier("change-provider")
+                } else {
+                    Text(providerWords(state)).foregroundStyle(FleetStyle.muted).lineLimit(1)
                 }
             }
         }
@@ -362,20 +391,21 @@ struct AgentSetupView: View {
         state.modelProvider == nil && ProviderState(configured: state.runtime, machine: model.machine, at: time).switchingFrom != nil
     }
 
-    /// The provider, then the model and the reasoning that the agent runs, its own or the owner's default where its
-    /// server takes it (owner feature `default_models`): "Codex · GPT-6.1-Sol · High".
+    /// The provider as Add agent names it. An agent on a key or a model server: the AI that he picked and its model
+    /// (picture 6 of the AI providers build: "Gemini · gemini-4-carbon · High", "Model server · qwen3-coder-30b"; never
+    /// its program, his answer 12), as it has no Model and Reasoning rows. A hub with no agent settings: the model and the
+    /// reasoning too, the only place that says them there.
     private func providerWords(_ state: FleetAgent) -> String {
+        if features.contains("agent_setup"), state.modelProvider == nil { return aiName(state.runtime) }
         let line = model.line
         let (own, level) = if case .model(let value, let level)? = model.shown(.model) { (value, level) } else { (line?.model, line?.effort) }
         let runs = followed(own, level)
         let shown = runs.model.map { chosen in model.machine?.models?.options.first { $0.model == chosen }?.display_name ?? chosen }
-        // **An agent on a key or a model server: the AI that he picked and its model** (picture 6): "Gemini ·
-        // gemini-4-carbon · High", "Model server · qwen3-coder-30b"; never its program (his answer 12).
         if let provider = state.modelProvider {
             let named = runs.model.flatMap { ModelAccount.shownModel($0, provider: provider) }
             return ([provider.label] + [named, runs.effort.map(reasoningName)].compactMap { $0 }).joined(separator: " · ")
         }
-        return ([providerName(state.runtime)] + [shown, runs.effort.map(reasoningName)].compactMap { $0 }).joined(separator: " · ")
+        return ([aiName(state.runtime)] + [shown, runs.effort.map(reasoningName)].compactMap { $0 }).joined(separator: " · ")
     }
 
     /// The model and the reasoning that this agent's next session gets with these of its own, on its server, the
@@ -387,83 +417,72 @@ struct AgentSetupView: View {
                                      takes: model.machine?.features?.contains(DefaultModels.feature) == true)
     }
 
-    /// The same for the desktop runtime (Codex), whose default is the Codex row's.
-    private func followedOnDesktop(_ screen: ScreenSettingsInput) -> ModelDefault {
-        DefaultModels.session(model.team?.default_models["codex"], model: screen.model, effort: screen.effort,
-                              machine: model.machine?.screen_models, runtime: "codex",
-                              takes: model.machine?.features?.contains(DefaultModels.feature) == true)
+    /// **What keeps an agent on its provider for good**, until he changes the agent itself: its capabilities (a Shell
+    /// box that is off, a browser), its access, or a role or a runtime that never switches. The hub refuses the switch
+    /// then, so the row offers no menu and says nothing of the other provider (the Runs on of a support agent with its
+    /// Shell box off offered Codex's setup for a switch that the hub refused; the owner, 17 November 2026: "If I have
+    /// Claude, dont show anything about codex").
+    static let lasting: Set<String> = ["capability_not_supported", "access_not_equivalent", "manager_not_supported",
+                                       "runtime_not_supported"]
+
+    /// The provider that the menu offers beside the agent's own, or nil for no menu.
+    private func switchable(_ state: FleetAgent) -> String? {
+        guard features.contains("agent_setup"), features.contains("profiles"), features.contains(RuntimeSwitch.feature),
+              state.modelProvider == nil, state.active != false,
+              let readiness = model.line?.runtime_switch, let other = readiness.to,
+              !readiness.missing.contains(where: Self.lasting.contains) else { return nil }
+        return other
     }
 
-    private func changeOpen(_ state: FleetAgent) -> Bool {
-        guard features.contains("agent_setup"), state.modelProvider == nil else { return false }
+    /// The other provider's setup and switch stand under the row: he picked it, or a setup of it goes on or waits for
+    /// his sign-in, until he picks the agent's own one again. **Not by themselves for a setup that stopped or ended
+    /// without a switch** (`ProviderSetup.reopens` opened them for that): a Claude agent's Runs on then read "ChatGPT"
+    /// on every visit, and one that had lost its switch (its Shell box went off) had nothing to close them (reviews of
+    /// 17 November 2026). The menu opens them again with their Try again or Switch.
+    private func providerOpen(_ state: FleetAgent) -> Bool {
+        guard features.contains("agent_setup"), features.contains("profiles"), state.modelProvider == nil,
+              state.active != false else { return false }
         let setup = store.providerSetup(hub: store.hub, database: store.state?.db, agent: agent)
-        return changing ?? setup.reopens(current: state.runtime)
+        // A setup that runs or waits for his sign-in keeps its rows: its Stop and its code are there.
+        let busy = setup.running || setup.waits
+        guard switchable(state) != nil || busy else { return false }
+        if let chosen, switchable(state) != nil { return chosen != state.runtime }
+        return busy
     }
 
-    /// **What Change opens under the AI provider row**: the other provider (an agent in setup gets its provider in its
-    /// setup), the model and the reasoning, what the agent may use, and the desktop model of an agent that has one.
-    private func changeRows(_ state: FleetAgent) -> some View {
-        // Each of them stands under the row's title, not under its mark: they are the AI provider's, opened.
-        Group { changeContent(state) }.padding(.leading, FormMetrics.markColumn + FormMetrics.markGap)
-    }
-
-    @ViewBuilder private func changeContent(_ state: FleetAgent) -> some View {
-        if features.contains("profiles"), state.active != false {
-            // After a switch the hub gives the model its defaults: a model of the old provider that waits to be saved
-            // is forgotten, and the page reads the new values.
-            ProviderView(store: store, agent: agent) { _, _ in
-                model.drop(.model)
-                Task { await model.readTeam() }
-            }
+    /// **The other provider's setup and switch, under the row's title**: they are the AI provider's, opened. After a
+    /// switch the hub gives the model its defaults: a model of the old provider that waits to be saved is forgotten,
+    /// and the page reads the new values.
+    private func providerForm(_ state: FleetAgent) -> some View {
+        ProviderView(store: store, agent: agent) { _, _ in
+            model.drop(.model)
+            chosen = nil
+            Task { await model.readTeam() }
         }
-        if let line = model.line {
-            modelRows(line, model.machine)
-            capabilitiesRow(line)
-            if features.contains("screen_model"), line.screen != nil, let machine = model.machine { screenRows(line, machine) }
-            if model.machine?.settings_pending == true {
-                FormRow("Waiting for \(agent.agentLabel) to load the new settings.", symbol: "clock")
-            }
-        } else if model.readError != nil || store.connectionError != nil {
-            // While the hub does not answer nothing is read: the failed row, never "Reading the settings…". **Not while the
-            // window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item 33): it is said once.
-            if !store.hubNoticeShows { FormRow("Settings not read", warning: model.readError) }
-        } else {
-            LoadingLine(String(l10n: "Reading the settings…"))
-        }
+        .padding(.leading, FormMetrics.markColumn + FormMetrics.markGap)
     }
 
-    /// What the agent may use. Each box saves at once.
-    private func capabilitiesRow(_ line: ReportingLine) -> some View {
-        let can = if case .capabilities(let value)? = model.shown(.capabilities) { value } else { line.can ?? fallbackCan }
-        // "Tools" (fix round 2): "Can use" is the name of one of the agent's four parts, which lists other things.
-        return FormRow("Tools", warning: model.states[.capabilities]?.failure) {
-            // **A label never breaks inside a word** (fix round 2, item 98): "She ll" and "Brow ser" when Try again took
-            // their room. Where the line cannot hold the mark and the four boxes, the mark goes under them, so the boxes
-            // stay where they were; where it cannot hold the four, they go two by two.
-            let boxes = AgentSettingsInput.capabilities
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) { mark(.capabilities); toolBoxes(boxes, can: can) }
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 10) { toolBoxes(boxes, can: can) }
-                    mark(.capabilities)
+    /// **Model and Reasoning, rows of their own** under the provider's title (his picture of 17 November 2026), and the
+    /// line that the agent is loading new settings. An agent on a key or a model server has none: its model is its
+    /// account's.
+    @ViewBuilder private func aiRows(_ state: FleetAgent) -> some View {
+        if features.contains("agent_setup"), state.modelProvider == nil {
+            Group {
+                if let line = model.line {
+                    modelRows(line, model.machine)
+                    if model.machine?.settings_pending == true {
+                        FormRow("Waiting for \(agent.agentLabel) to load the new settings.", symbol: "clock")
+                    }
+                } else if model.readError != nil && store.pageReadingIsOld(failedSince: model.readFailedSince)
+                            || store.connectionError != nil {
+                    // While the hub does not answer nothing is read: the failed row, never "Reading the settings…". **Not
+                    // while the window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item 33).
+                    // **One break of the hub says nothing** (17 November 2026): "Reading the settings…" stays until then.
+                    if !store.hubNoticeShows { FormRow("Settings not read", warning: model.readError) }
+                } else {
+                    LoadingLine(String(l10n: "Reading the settings…"))
                 }
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 10) { toolBoxes(Array(boxes.prefix(2)), can: can) }
-                    HStack(spacing: 10) { toolBoxes(Array(boxes.dropFirst(2)), can: can) }
-                    mark(.capabilities)
-                }
-            }
-        }
-    }
-
-    /// One box for each of `capabilities`, each as wide as its name.
-    private func toolBoxes(_ capabilities: [String], can: [String]) -> some View {
-        ForEach(capabilities, id: \.self) { capability in
-            Toggle(capability.capitalized, isOn: Binding(get: { can.contains(capability) }, set: { on in
-                var next = can.filter { $0 != capability }
-                if on { next.append(capability) }
-                model.save(.capabilities(next), store: store)
-            })).toggleStyle(FleetCheckboxStyle()).fixedSize().accessibilityIdentifier("settings-can-\(capability)")
+            }.padding(.leading, FormMetrics.markColumn + FormMetrics.markGap)
         }
     }
 
@@ -634,6 +653,8 @@ struct AgentSetupView: View {
                     let receipt = try await HubClient().renameAgent(hub: store.hub, database: database, client: store.installation,
                                                                     agent: agent, sha256: team.sha256, name: typed)
                     newName = nil
+                    // An install of this agent's server that runs now still gives it the server (`forAgent`).
+                    if store.installModel().forAgent == agent { store.installModel().forAgent = receipt.agent }
                     await store.refresh()
                     store.destination = .agentDetail(receipt.agent, .settings)
                     return
@@ -693,7 +714,9 @@ struct AgentSetupView: View {
     // MARK: Model
 
     /// The model, the full model name where the provider takes other names, and the reasoning. A new model takes the
-    /// current reasoning when it offers it, else its default; the two are saved together.
+    /// current reasoning when it offers it, else its default; the two are saved together. **A full model name is the
+    /// Model menu's last choice, Other…** (his picture of 17 November 2026): its row stands under Model from that choice
+    /// until its field lets go, and while the hub refuses what he typed. "Last used" is on the menu's hover.
     @ViewBuilder private func modelRows(_ line: ReportingLine, _ machine: MachineStatus?) -> some View {
         let (current, effort) = if case .model(let name, let level)? = model.shown(.model) { (name, level) } else { (line.model, line.effort) }
         // The full model name he typed stays in its field after a refusal; the selects show the hub's value.
@@ -704,28 +727,33 @@ struct AgentSetupView: View {
             let supported = current == nil && effort == nil ||
                 models.supports(AgentSettingsInput(model: current ?? followed(nil, nil).model, effort: effort, can: []), at: time)
             let reported = line.reported_model.map { String(l10n: "Last used: \($0.model ?? String(l10n: "not reported")) · \($0.effort.map(reasoningName) ?? String(l10n: "default reasoning")), \(fleetDate($0.at))") }
-            FormRow("Model", detail: reported, warning: failure) {
+            FormRow("Model", warning: failure) {
                 HStack(spacing: 10) {
                     mark(.model)
                     FleetSelect("Model", selection: Binding(get: { current ?? "" }, set: { name in
+                        if name == Self.otherChoice { typingName = true; return }
                         let next = name.isEmpty ? nil : name
                         if next != current { model.save(.model(next, effort: models.effort(effort, with: next)), store: store) }
-                    }), options: Self.modelOptions(models, current: current, default: followed(nil, effort).model))
+                    }), options: Self.modelOptions(models, current: current, default: followed(nil, effort).model)
+                        + (models.other_names ? [FleetOption(Self.otherChoice, String(l10n: "Other…"))] : []))
                         .accessibilityIdentifier("setup-model")
-                        .help(String(l10n: "New sessions use this. A desktop task uses the desktop model.") + "\n"
-                              + String(l10n: "Options read \(fleetDate(models.read_at))."))
+                        .help(([String(l10n: "New sessions use this. A desktop task uses the desktop model."), reported,
+                                String(l10n: "Options read \(fleetDate(models.read_at)).")] as [String?]).compactMap { $0 }
+                            .joined(separator: "\n"))
                 }
             }
-            if models.other_names {
+            if models.other_names, typingName || typed != nil {
                 FormRow("Full model name") {
                     TextField(text: Binding(get: { naming ? modelName : typed ?? current ?? "" }, set: { modelName = $0 }),
                               prompt: Text(verbatim: "")) { Text("Leave empty for the default") }
                         .fieldPlaceholder(String(l10n: "Leave empty for the default"), shows: (naming ? modelName : typed ?? current ?? "").isEmpty)
                         .fleetField(focus: $naming).frame(width: 240).accessibilityIdentifier("setup-model-name")
                         .onChange(of: naming) { _, focused in
-                            if focused { modelName = current ?? "" } else { saveName(models, current: current, effort: effort) }
+                            if focused { modelName = current ?? "" } else { saveName(models, current: current, effort: effort); typingName = false }
                         }
                         .onSubmit { saveName(models, current: current, effort: effort) }
+                        // The field takes the keyboard when Other… opens it.
+                        .task { if typingName { naming = true } }
                 }
             }
             FormRow("Reasoning", warning: supported ? nil : String(l10n: "Check this server, or select an available model and reasoning.")) {
@@ -738,7 +766,7 @@ struct AgentSetupView: View {
         } else {
             // Without a machine reading yet, the saved values only.
             FormRow("Model", warning: machine.map { $0.models?.ok == true ?
-                        configuredRuntime.map { String(l10n: "No model list for \(providerName($0)) yet.") } ?? String(l10n: "No model list for its provider yet.") :
+                        configuredRuntime.map { String(l10n: "No model list for \(aiName($0)) yet.") } ?? String(l10n: "No model list for its provider yet.") :
                         $0.models?.error ?? String(l10n: "Model options are not reported. Check this server.") }) {
                 value(current ?? automaticChoice)
             }
@@ -748,7 +776,7 @@ struct AgentSetupView: View {
 
     /// The rows of a model select: the owner's default where his Settings give one that this server takes ("Default
     /// (Opus)"), else the runtime's own; the offered models; and a saved model that is not offered.
-    private static func modelOptions(_ models: RuntimeModels, current: String?, default chosen: String? = nil) -> [FleetOption<String>] {
+    static func modelOptions(_ models: RuntimeModels, current: String?, default chosen: String? = nil) -> [FleetOption<String>] {
         [first(chosen.map { name in models.options.first { $0.model == name }?.display_name ?? name })] +
             models.options.map { FleetOption($0.model, $0.display_name, subtitle: $0.default ? String(l10n: "The provider's default") : nil) } +
             (current.map { name in models.options.contains { $0.model == name } ? [] : [FleetOption(name, name, subtitle: String(l10n: "Not offered now"))] } ?? [])
@@ -756,7 +784,7 @@ struct AgentSetupView: View {
 
     /// The rows of a reasoning select: the owner's default ("Default (High)") or the runtime's own, the levels that
     /// the model offers, and a saved level that it does not offer.
-    private static func effortOptions(_ models: RuntimeModels, model: String?, current: String?, default chosen: String? = nil) -> [FleetOption<String>] {
+    static func effortOptions(_ models: RuntimeModels, model: String?, current: String?, default chosen: String? = nil) -> [FleetOption<String>] {
         let levels = models.efforts(for: model)
         return [first(chosen.map(reasoningName))] + levels.map { FleetOption($0, reasoningName($0)) } +
             (current.map { levels.contains($0) ? [] : [FleetOption($0, reasoningName($0), subtitle: String(l10n: "Not offered for this model"))] } ?? [])
@@ -765,9 +793,12 @@ struct AgentSetupView: View {
     /// The first row of a model or reasoning select, which follows the owner's Settings: "Default (Opus)" with his
     /// default's value, with no mark (his yes of 9 November 2026 was to these words), else "Automatic", as Settings ›
     /// General says it (his yes of 10 November 2026; it said "Provider's own", with the mark of none).
-    private static func first(_ chosen: String?) -> FleetOption<String> {
+    static func first(_ chosen: String?) -> FleetOption<String> {
         chosen.map { FleetOption("", "Default (\($0))") } ?? FleetOption("", automaticChoice)
     }
+
+    /// The Model menu's choice that opens the Full model name row: no model name has this character (`MODEL_NAME`).
+    static let otherChoice = "\u{1}other"
 
     /// The full model name, when its field loses focus or on Return.
     private func saveName(_ models: RuntimeModels, current: String?, effort: String?) {
@@ -776,48 +807,6 @@ struct AgentSetupView: View {
         guard next != current else { return }
         typedName = next
         model.save(.model(next, effort: models.effort(effort, with: next)), store: store)
-    }
-
-    /// The model and reasoning of desktop tasks, which Codex runs with its own settings: two rows under the agent's
-    /// own model, under the AI provider row.
-    @ViewBuilder private func screenRows(_ line: ReportingLine, _ machine: MachineStatus) -> some View {
-        let screen = if case .screen(let value)? = model.shown(.screen) { value } else { line.screen ?? ScreenSettingsInput() }
-        let models = machine.screen_models
-        let gets = ScreenSettingsInput(model: screen.model ?? followedOnDesktop(ScreenSettingsInput()).model, effort: screen.effort)
-        let supported = models?.isCurrent(at: time) == true && models?.supportsScreen(gets, at: time) == true
-        Group {
-            if let models, models.ok {
-                FormRow("Desktop model", detail: line.reported_screen_model.map { String(l10n: "Last used: \($0.model ?? String(l10n: "not reported")), \(fleetDate($0.at))") },
-                        warning: model.states[.screen]?.failure) {
-                    HStack(spacing: 10) {
-                        mark(.screen)
-                        FleetSelect("Desktop model", selection: Binding(get: { screen.model ?? "" }, set: { name in
-                            let next = name.isEmpty ? nil : name
-                            if next != screen.model {
-                                model.save(.screen(ScreenSettingsInput(model: next, effort: models.effort(screen.effort, with: next))), store: store)
-                            }
-                        }), options: Self.modelOptions(models, current: screen.model,
-                                                         default: followedOnDesktop(ScreenSettingsInput(model: nil, effort: screen.effort)).model))
-                            .accessibilityIdentifier("setup-screen-model")
-                    }
-                }
-                FormRow("Desktop reasoning", warning: supported || screen == ScreenSettingsInput() ? nil :
-                            String(l10n: "Check this server, or select an available desktop model and reasoning.")) {
-                    FleetSelect("Desktop reasoning", selection: Binding(get: { screen.effort ?? "" }, set: { level in
-                        let next = level.isEmpty ? nil : level
-                        if next != screen.effort { model.save(.screen(ScreenSettingsInput(model: screen.model, effort: next)), store: store) }
-                    }), options: Self.effortOptions(models, model: screen.model ?? followedOnDesktop(ScreenSettingsInput()).model,
-                                                    current: screen.effort,
-                                                    default: followedOnDesktop(ScreenSettingsInput(model: screen.model, effort: nil)).effort))
-                        .accessibilityIdentifier("setup-screen-effort")
-                }
-            } else {
-                FormRow("Desktop model", warning: models?.error ?? String(l10n: "Check this server to read its desktop model options.")) {
-                    value(screen.model ?? automaticChoice)
-                }
-                FormRow("Desktop reasoning") { value(screen.effort.map(reasoningName) ?? automaticChoice) }
-            }
-        }
     }
 
     // MARK: Deactivate

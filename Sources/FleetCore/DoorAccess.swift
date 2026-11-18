@@ -34,12 +34,28 @@ public enum DoorAccess {
     /// The root command that takes the whole file on its standard input and checks it before it writes it.
     public static let writeProgram = "/usr/local/sbin/door-access"
     /// What a managed host says about its own parts: the second sshd's host key, ops-root's mode file, and whether the
-    /// host is a machine of the fleet (`install.sh --fleet-kit`). A host without the parts prints no key, and so does a
-    /// host whose second sshd does not run: an install that stopped after it made the key (7 November 2026, the canary's
-    /// first install) has no parts.
+    /// host has the mark of a machine of the fleet (`install.sh --fleet`, or the older `--fleet-kit`). A host without the
+    /// parts prints no key, and so does a host whose second sshd does not run: an install that stopped after it made the
+    /// key (7 November 2026, the canary's first install) has no parts.
     public static let hostProgram = "systemctl is-active --quiet ops-sshd.service && "
         + "cat /etc/ops-root/ssh_host_ed25519_key.pub 2>/dev/null; "
-        + "echo \"mode=$(cat /etc/ops-root/mode 2>/dev/null)\"; test -e /etc/ops-root/fleet-kit && echo fleet=yes; true"
+        + "echo \"mode=$(cat /etc/ops-root/mode 2>/dev/null)\"; "
+        + "if test -e /etc/ops-root/fleet || test -e /etc/ops-root/fleet-kit; then echo fleet=yes; fi; true"
+    /// **The fleet's own servers through the door** (the owner, 17 November 2026, after three of them ran out of memory
+    /// and each time a card asked him for a root command: "someone should probably have root, I dont want to be doing
+    /// devops work on the fleet!"). Each Linux server of the fleet, a server that runs agents or the hub's server, is a
+    /// host of the door at rule-only: one agent holds all of them, reads why one failed and runs the fixed root forms
+    /// there, with no command, file or script of its own, because root there opens every agent's keys. In the door's
+    /// file they are the hosts of this business, which no tag gives: a tag `tag:business-fleet` names no business.
+    public static let fleetBusiness = "fleet"
+    /// What a server says, before it gets the door's parts, about being a machine of the fleet: Fleet's own root
+    /// helper is there, which both installers write as root. The hub proposes the fleet's servers, and this is the
+    /// server's own word, so a fault of the hub makes no other device of the network a host of the door.
+    public static let fleetProgram = "test -x /usr/local/sbin/fleet-agent-user && echo fleet-machine=yes; true"
+    /// What tells, on the door, whether the release that it runs installs a machine of the fleet (`install.sh
+    /// --fleet`): its own install script's line for that option. Before that release, no fleet server gets parts, and
+    /// none fails for an option that the script does not know.
+    public static let fleetProbe = "grep -qs -- '--fleet) FLEET=1' /opt/fleet-door/current/host/install.sh && echo fleet=yes; true"
     /// The OS users of the agents on an operator box: the members of the group that every agent's user is in.
     public static let boxProgram = "getent group fleet-agents | cut -d: -f4"
     /// The door's service port on the private network, the default of its entry in the fleet's configuration.
@@ -221,6 +237,21 @@ public enum DoorAccess {
         }
         /// {owner/name: GitOps}. nil from a hub before API 1.111, which leaves the file's GitOps targets as they are.
         public var gitops: [String: GitOps]? = nil
+        /// The fleet's own servers (API 1.210): each Linux server of the fleet with its address, the agent that the
+        /// manager named for them (`door_fleet`), and the manager, which holds them in a fleet with no DevOps agent.
+        /// The hub proposes: this Mac takes a server only by its own Tailscale and the server's own word, and an agent
+        /// only when its server says that it runs alone there.
+        public struct Fleet: Decodable, Equatable, Sendable {
+            public let servers: [String: String]
+            public let holder: String?
+            public let manager: String?
+
+            public init(servers: [String: String], holder: String? = nil, manager: String? = nil) {
+                self.servers = servers; self.holder = holder; self.manager = manager
+            }
+        }
+        /// nil from a hub before API 1.210: no machine of the fleet is a host of the door then, as before.
+        public var fleet: Fleet? = nil
 
         /// The names of a hold that keeps a server's parts and makes it rule-only.
         public static let ruleOnlyHolds: Set<String> = ["rule-only", "judged"]
@@ -244,18 +275,31 @@ public enum DoorAccess {
 
         /// What decides, with the devices, whether a round must write the file again.
         public var digest: String {
-            (credentials.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value.secret) \($0.value.agents.sorted().joined(separator: ","))" }
-                + agents.sorted { $0.key < $1.key }.map { name, agent in
-                    "\(name) \(agent.address) \(agent.user ?? "-") "
-                        + (agent.repos ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
+            var lines: [String] = credentials.sorted { $0.key < $1.key }.map { name, credential in
+                "\(name) \(credential.secret) \(credential.agents.sorted().joined(separator: ","))"
+            }
+            for (name, agent) in agents.sorted(by: { $0.key < $1.key }) {
+                let repos = (agent.repos ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+                lines.append("\(name) \(agent.address) \(agent.user ?? "-") " + repos.joined(separator: ","))
+            }
+            lines.append("app \(github_app?.app_id ?? "-") linked \(linked == true)")
+            let rolled: String = rollout.map { String($0) } ?? "-"
+            lines.append("pin \(vault_pin ?? "-") read \(vault_read == true) rollout \(rolled)")
+            let held = (holds ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+            lines.append("holds " + held.joined(separator: ","))
+            let targets: [String]? = gitops.map { given in
+                given.sorted { $0.key < $1.key }.map { repo, target in
+                    "\(repo)=\(target.sync):\(target.agents.sorted().joined(separator: "+"))"
                 }
-                + ["app \(github_app?.app_id ?? "-") linked \(linked == true)",
-                   "pin \(vault_pin ?? "-") read \(vault_read == true) rollout \(rollout.map(String.init) ?? "-")",
-                   "holds " + (holds ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ","),
-                   "gitops " + (gitops.map { $0.sorted { $0.key < $1.key }
-                       .map { "\($0.key)=\($0.value.sync):\($0.value.agents.sorted().joined(separator: "+"))" }
-                       .joined(separator: ",") } ?? "-")])
-                .joined(separator: "\n")
+            }
+            lines.append("gitops " + (targets?.joined(separator: ",") ?? "-"))
+            // the fleet's own servers, and who the hub proposes for them (API 1.210)
+            let own: String? = fleet.map { given in
+                let servers = given.servers.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+                return "\(given.holder ?? "-") \(given.manager ?? "-") " + servers.joined(separator: ",")
+            }
+            lines.append("fleet " + (own ?? "-"))
+            return lines.joined(separator: "\n")
         }
     }
 
@@ -290,6 +334,9 @@ public enum DoorAccess {
         /// The door's code takes an entry for an agent that only gets its GitHub tokens (no business, address, server
         /// or provider): the release of plan 13, item 4. Before it, only agents with an entry get their grants.
         public var tokensOnly: Bool
+        /// Who holds the fleet's own servers, as this round found it (`fleetCandidate`, and the agent's own server for
+        /// one that is no Operator). `.keep`: the round could not say, so the agent that the file shows stays.
+        public var fleetHolder: FleetHolder = .keep
 
         public init(devices: [Device], hosts: [String: HostReading] = [:], operators: [String: Operator?] = [:],
                     owner: OwnerPin? = nil, hub: HubDoor? = nil, tokensOnly: Bool = false) {
@@ -298,13 +345,78 @@ public enum DoorAccess {
         }
     }
 
+    /// The holder of the fleet's own servers for one round.
+    public enum FleetHolder: Equatable, Sendable {
+        /// Not known this round (a box did not answer, or the hub gives no view): the file's holder stays.
+        case keep
+        case nobody
+        case agent(Operator)
+    }
+
+    /// Whom the hub's view and this round's Operators give as the holder, before the agent's own server is asked.
+    public enum FleetCandidate: Equatable, Sendable {
+        case keep
+        case nobody
+        /// An Operator of this round: its box already said that it runs alone there.
+        case agent(Operator)
+        /// An agent that is no Operator (the one that the manager named, or the manager itself): its server at this
+        /// address must say that this agent runs alone there (`boxProgram`), before it holds anything.
+        case box(agent: String, address: String)
+    }
+
+    /// **Who holds the fleet's own servers**, by the owner's two decisions (the DevOps agent that he names; with no
+    /// DevOps agent, the manager): the agent that the manager named with `door_fleet`; else the one DevOps agent,
+    /// when exactly one business has an Operator; else, with no Operator, the manager; else, with several Operators
+    /// and nobody named, nobody. An operator box of this Mac's Tailscale that was not read this round can hold the
+    /// named agent, and without a name the round does not know how many Operators there are: the answer is then
+    /// `.keep`. A named agent that this round's read boxes show, or whose server is no such box, is not held up by
+    /// a box that does not answer.
+    public static func fleetCandidate(hub: HubDoor?, devices: [Device], operators: [String: Operator?]) -> FleetCandidate {
+        guard let hub, let fleet = hub.fleet else { return .keep }
+        var unread: Set<String> = []                // the addresses of the operator boxes that this round did not read
+        for (business, box) in operatorBoxes(devices: devices) where operators[business] == nil {
+            if let address = box?.address { unread.insert(address) }
+        }
+        var found: [Operator] = []
+        for checked in operators.sorted(by: { $0.key < $1.key }).compactMap(\.value) {
+            let named = Operator(agent: hub.name(of: checked) ?? checked.agent, address: checked.address)
+            if !found.contains(named) { found.append(named) }
+        }
+        func other(_ agent: String?) -> FleetCandidate {
+            guard let agent, isName(agent), let address = hub.agents[agent]?.address else { return .nobody }
+            return unread.contains(address) ? .keep : .box(agent: agent, address: address)
+        }
+        if let named = fleet.holder { return found.first { $0.agent == named }.map { .agent($0) } ?? other(named) }
+        guard unread.isEmpty else { return .keep }
+        if found.count == 1 { return .agent(found[0]) }
+        return found.isEmpty ? other(fleet.manager) : .nobody
+    }
+
+    /// **The fleet's own servers that can be hosts of the door**, by name, the hub's own server last: each server of
+    /// the hub's view that this Mac's own Tailscale shows under the same name at the same address, with no business
+    /// tag (a server with one goes with its business), that is not the door, not on the never list, and that no plan
+    /// step holds at `parts`. The hub's server is the one at the hub's address of the door's file.
+    public static func fleetServers(access: [String: Any], devices: [Device], hub: HubDoor?) -> [String] {
+        guard let hub, let fleet = hub.fleet else { return [] }
+        let never = Set(((access["never"] as? [String: Any])?["hosts"] as? [String]) ?? [])
+        let hubAddress = (access["hub"] as? [String: Any])?["address"] as? String
+        let byName = Dictionary(devices.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+        let names = fleet.servers.filter { name, address in
+            guard isName(name), let device = byName[name], device.address == address else { return false }
+            return device.businesses.isEmpty && !device.tags.contains(doorTag) && !never.contains(name)
+                && !hub.heldOut.contains(name)
+        }
+        return names.keys.sorted { (names[$0] == hubAddress ? 1 : 0, $0) < (names[$1] == hubAddress ? 1 : 0, $1) }
+    }
+
     /// One round's decision: the file to write, and the Operators' servers, which the hub records too.
     public struct Plan: Sendable {
         /// The whole new file, as canonical JSON (sorted keys), which `door-access` takes on its standard input.
         public let file: Data
         /// The file differs from the one on the door.
         public let changed: Bool
-        /// {agent: {server: "fix"}}: the holdings, which `POST /ui/servers/grant` records.
+        /// {agent: {server: level}}: the holdings, which `POST /ui/servers/grant` records. `fix` for a business's
+        /// server, and `patch` for a machine of the fleet, which the door's file holds as `fix` on a rule-only host.
         public let holdings: [String: [String: String]]
         /// The servers of a business whose parts did not answer: not in the file until their second sshd does.
         public let waiting: [String]
@@ -372,6 +484,25 @@ public enum DoorAccess {
             }
             hosts[name] = entry
         }
+        // The fleet's own servers: a host only with the mark of a machine of the fleet, which its install put there
+        // after the server's own word (`fleetProgram`), always rule-only. One that did not answer keeps its place.
+        var fleetHosts: [String] = []
+        for name in fleetServers(access: current, devices: facts.devices, hub: facts.hub) where owners[name] == nil {
+            if let reading = facts.hosts[name], let address = byName[name]?.address {
+                guard reading.fleet else { waiting.append(name); continue }
+                let old = oldHosts[name] as? [String: Any] ?? [:]
+                hosts[name] = ["address": address, "port": (old["port"] as? Int) ?? sshdPort, "host_key": reading.hostKey,
+                               "business": fleetBusiness, "mode": "rule-only", "kind": "fleet"] as [String: Any]
+            } else if var old = oldHosts[name] as? [String: Any], old["kind"] as? String == "fleet", !facts.bare.contains(name) {
+                old["business"] = fleetBusiness
+                old["mode"] = "rule-only"
+                hosts[name] = old
+            } else {
+                waiting.append(name)
+                continue
+            }
+            fleetHosts.append(name)
+        }
         file["hosts"] = hosts
 
         var oldAgents = current["agents"] as? [String: Any] ?? [:]
@@ -397,6 +528,51 @@ public enum DoorAccess {
         for (name, names) in owners where hosts[name] != nil {
             for business in names { if let agent = holder[business] { held[agent, default: [:]][name] = "fix" } }
         }
+        // The one holder of the fleet's own servers, its own server among them. The door knows a caller by its
+        // address and refuses a file with an agent at the hub's address, so an agent on the hub's server holds none.
+        let nowOperators = operators.values.compactMap { $0 }       // this round's, by the names of the file
+        // the hosts that the file had as the fleet's own
+        let were = Set(oldHosts.filter { ($0.value as? [String: Any])?["kind"] as? String == "fleet"
+            && ($0.value as? [String: Any])?["business"] as? String == fleetBusiness }.keys)
+        var fleetHolder: Operator? = nil
+        var fleetKept = false
+        switch facts.fleetHolder {
+        case .agent(let found): fleetHolder = found
+        case .nobody: break
+        case .keep:
+            // The round could not say: the agent that the file shows stays, at the address that this round gives it
+            // when it is an Operator of this round, else at the file's own.
+            fleetKept = true
+            for agent in oldAgents.keys.sorted() {
+                guard let entry = oldAgents[agent] as? [String: Any], let address = entry["address"] as? String,
+                      !were.isDisjoint(with: ((entry["servers"] as? [String: Any]) ?? [:]).keys) else { continue }
+                fleetHolder = nowOperators.first { $0.agent == agent } ?? Operator(agent: agent, address: address)
+                break
+            }
+        }
+        let own = [(current["hub"] as? [String: Any])?["address"] as? String, door(in: facts.devices)?.address]
+        if let found = fleetHolder, own.contains(found.address) || !isName(found.agent) { fleetHolder = nil }
+        // The hub proposes the holder with a name and an address, and an entry of the file under that name can hold
+        // more than the fleet's servers: a business's servers at Fix, a database, a commit target, an account that
+        // a Mac session wrote. Only the operator box of its business gives such an entry its address. Were the
+        // proposed address taken for it, a fault of the hub would give the agent at that address all of that. So
+        // where the holder's entry would get another address than the lines above give it, the entry may hold only
+        // what this part and the hub give: the fleet's own hosts, its GitHub grants and the keys of key cards. Such
+        // an entry gives the agent at the new address the fixed forms on the fleet's servers and no more, so a
+        // holder that moved to another server still holds them. A holder that only stays (`.keep`) gets no address.
+        if let found = fleetHolder, !fleetKept, let was = oldAgents[found.agent] as? [String: Any] {
+            let operated = holder.first { $0.value == found.agent }.flatMap { operators[$0.key] ?? nil }?.address
+            if (operated ?? was["address"] as? String) != found.address {
+                let fleetOnly = Set(was.keys).isSubset(of: ["address", "business", "servers", "github", "providers"])
+                    && (was["business"] == nil || was["business"] as? String == fleetBusiness)
+                    && ((was["servers"] as? [String: Any]) ?? [:]).keys.allSatisfy { were.contains($0) }
+                    && ((was["providers"] as? [String]) ?? []).allSatisfy(cardCredential)
+                if !fleetOnly { fleetHolder = nil }
+            }
+        }
+        if let found = fleetHolder {
+            for name in fleetHosts { held[found.agent, default: [:]][name] = "fix" }
+        }
         var agents = oldAgents
         for (agent, value) in oldAgents {
             guard var entry = value as? [String: Any], entry["servers"] != nil else { continue }
@@ -416,6 +592,22 @@ public enum DoorAccess {
                 }
             }
             agents[agent] = entry
+        }
+        if let found = fleetHolder, !fleetHosts.isEmpty {
+            var entry = agents[found.agent] as? [String: Any] ?? [:]
+            if entry["business"] == nil { entry["business"] = fleetBusiness }
+            entry["servers"] = held[found.agent] ?? [:]
+            // A holder that this round's own reads gave has that address alone, as an Operator has its box's. One
+            // that only stays from the file (`.keep`) keeps what the lines above gave it, and takes no address away.
+            if !fleetKept {
+                entry["address"] = found.address
+                for (other, value) in agents where other != found.agent {
+                    guard var taken = value as? [String: Any], taken["address"] as? String == found.address else { continue }
+                    taken["address"] = nil
+                    agents[other] = taken
+                }
+            }
+            agents[found.agent] = entry
         }
         if let hub = facts.hub {
             var credentials = file["credentials"] as? [String: Any] ?? [:]
@@ -455,7 +647,11 @@ public enum DoorAccess {
             file["fleet"] = owner.fleet
         }
         let data = canonical(file)
-        return Plan(file: data, changed: data != canonical(current), holdings: held, waiting: waiting.sorted())
+        var recorded = held                     // the hub's record: patch for a machine of the fleet
+        if let found = fleetHolder {
+            for name in fleetHosts { recorded[found.agent]?[name] = "patch" }
+        }
+        return Plan(file: data, changed: data != canonical(current), holdings: recorded, waiting: waiting.sorted())
     }
 
     /// **Each Operator's GitHub entries, from the hub's grants** (new-projects plan, N8, in DevOps plan 5.12; the
@@ -577,7 +773,8 @@ public enum DoorAccess {
 
     static func names(_ tags: [String], after prefix: String) -> [String] {
         tags.filter { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }
-            .filter { $0.range(of: "^[a-z][a-z0-9-]{1,30}$", options: .regularExpression) != nil }.sorted()
+            .filter { $0.range(of: "^[a-z][a-z0-9-]{1,30}$", options: .regularExpression) != nil && $0 != fleetBusiness }
+            .sorted()
     }
 
     static func isName(_ text: String) -> Bool { text.range(of: "^[a-z0-9][a-z0-9-]{0,62}$", options: .regularExpression) != nil }
@@ -736,12 +933,12 @@ public enum DoorAccess {
 }
 
 /// `POST /ui/servers/grant` (owner feature `server_access`): one agent's holding of one server, which the app records as
-/// the door's access file gives it. Level nil takes it back.
+/// the door's access file gives it: `read`, `fix`, or `patch` for a machine of the fleet. Level nil takes it back.
 public enum ServerGrantCommand {
     public static let feature = "server_access"
 
     public static func body(requestID: UUID, database: String, agent: String, server: String, level: String?) throws -> Data {
-        guard DoorAccess.isName(agent), DoorAccess.isName(server), level == nil || level == "read" || level == "fix" else {
+        guard DoorAccess.isName(agent), DoorAccess.isName(server), [nil, "read", "patch", "fix"].contains(level) else {
             throw HubError.invalidResponse
         }
         return try JSONSerialization.data(withJSONObject: [

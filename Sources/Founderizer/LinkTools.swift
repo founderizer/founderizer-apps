@@ -5,8 +5,8 @@ import Foundation
 
 /// **The app's side of the link's write tools** (`OwnerLinkTools` in FleetOwnerAPI; the secrets plan, steps B and
 /// E): a thin adapter from each tool's logic (`SaveBotToken.answer`, `PrepareReport.answer`, `SaveSecret.answer`,
-/// `GrantSecret.answer`, `ShareSecret.answer`, `AnswerSecret.answer`, tested there with stand-ins) to the app's own
-/// engine, on the board of `SetupChannel`.
+/// `GrantSecret.answer`, `ShareSecret.answer`, `AnswerSecret.answer`, `AnswerDoor.answer`, tested there with
+/// stand-ins) to the app's own engine, on the board of `SetupChannel`.
 /// Nothing of it shows on the screen, and nothing of a request (its line, its fields, its value part) is written
 /// to the app's log.
 ///
@@ -41,9 +41,16 @@ import Foundation
 /// **`answer_secret_request`** answers one request of an agent for a secret with a secret of the list, as "Answer with
 /// it" of the request's form does (`SecretEntryView.answerWith` and `proceed`): each give of the call as
 /// `grant_secret`'s, through the same two functions, and then the answer through `SecretsClient.answer`
-/// (`POST /ui/needs/<need>/secret`), in the form's own order. It asks the owner nothing, it answers no request that is
-/// for the door, and it takes no give back. Both tools write grants, so they share one line of writes: the one
-/// instance of `GrantSecret.Line` that `add` makes. The desk is `answerDesk`, closure by closure.
+/// (`POST /ui/needs/<need>/secret`), in the form's own order. A request for the door gets the form's give to the
+/// door, signed for the door's own name (`GrantSigning.send` with the machine `door`). It asks the owner nothing, and
+/// it takes no give back. Both tools write grants, so they share one line of writes: the one instance of
+/// `GrantSecret.Line` that `add` makes. The desk is `answerDesk`, closure by closure.
+///
+/// **`answer_needs_you`, for a door card's signed press alone** (Run it once, and Full access on the card's server):
+/// the program sends that one press of the tool to the app, which signs it by the rule of the owner's own press
+/// (`DoorCallSigning.maker`) and sends it as that press does (`HubClient.send`, `POST /ui/needs/<need>`), with no
+/// question to the owner. Every other answer of the tool goes from the program to the hub. The desk is `doorDesk`,
+/// closure by closure.
 ///
 /// **A text for the report form**: one that the owner's own agent wrote (`prepare_problem_report`), or the app's own
 /// words of the problem that a button reports (the manager band's Report a problem). The form takes it, and says
@@ -77,7 +84,7 @@ enum LinkTools {
             token: { BotToken(pasted: $0) },
             isAccountID: { ChatApps.isAccountID($0) },
             ready: {
-                guard let store = store(), store.isFresh, let database = store.state?.db else { return nil }
+                guard let store = store(), store.writesNow, let database = store.state?.db else { return nil }
                 return Place(hub: store.hub, database: database, client: store.installation)
             },
             accounts: { place in
@@ -136,6 +143,12 @@ enum LinkTools {
         let shareLine = ShareSecret.Line()
         board.add(set: OwnerSetupTools.set, tool: ShareSecret.name, value: .none) { fields, value in
             await ShareSecret.answer(fields: fields, value: value, desk: shares, line: shareLine)
+        }
+        // `answer_needs_you`, for a door card's signed press alone: Run it once or Full access, signed by the rule of
+        // the owner's own press, and sent. One write, so no line of writes.
+        let doors = doorDesk(store: store)
+        board.add(set: OwnerSetupTools.set, tool: AnswerDoor.name, value: .none) { fields, value in
+            await AnswerDoor.answer(fields: fields, value: value, desk: doors)
         }
     }
 
@@ -206,7 +219,7 @@ enum LinkTools {
             },
             // As `save_bot_token`'s, and only while the hub serves Add secret's form (`SecretEntryView.isOffered`).
             ready: {
-                guard let store = store(), store.isFresh, let database = store.state?.db,
+                guard let store = store(), store.writesNow, let database = store.state?.db,
                       SecretEntryView.isOffered(by: store) else { return nil }
                 return Place(hub: store.hub, database: database, client: store.installation)
             },
@@ -292,6 +305,18 @@ enum LinkTools {
         return GrantSecret.Team(secrets: secrets, agents: Dictionary(agents) { first, _ in first })
     }
 
+    /// **Whether this Mac's clock and the hub's differ by more than an hour**, for the desks of the three tools that
+    /// sign a give or a pool statement: the rule of the app's own controls that sign (`VaultPlan.clockProblem`, with
+    /// the hub's time of the store's last answered read and this Mac's time of that answer). **It fails closed**: nil,
+    /// which the tools answer as "not ready", when the store has no answer of the hub in this launch, and when it no
+    /// longer shows the call's hub and database. A kept reading counts as current until the launch's first read ends
+    /// (`isFresh`), and it gives no clock: the program's first call after it started the app comes in that moment.
+    static func clockApart(_ store: FleetStore?, at place: Place) -> Bool? {
+        guard let store, store.hub == place.hub, let state = store.state, state.db == place.database,
+              let answered = store.lastSuccess else { return nil }
+        return VaultPlan.clockProblem(hubTime: state.time, readAt: answered.timeIntervalSince1970) != nil
+    }
+
     /// The vault's page as the tool reads it: the fleet's id as `GrantSigning` reads it (`fleetID`), and what the
     /// page says of the central vault, by the tool's own rule (`GrantSecret.Vault.Central.of`) over the page's
     /// central part, that part's `ok` and the page's `error`. A hub with no such page (nil) names no fleet and
@@ -313,7 +338,7 @@ enum LinkTools {
             // without its own `working`): a current reading with a database, and a hub that serves the page with
             // its grants (`SecretEntryView.isOffered`).
             ready: {
-                guard let store = store(), store.isFresh, let database = store.state?.db,
+                guard let store = store(), store.writesNow, let database = store.state?.db,
                       SecretEntryView.isOffered(by: store) else { return nil }
                 return Place(hub: store.hub, database: database, client: store.installation)
             },
@@ -333,6 +358,8 @@ enum LinkTools {
             // Whether the key is there, with no read of it.
             holdsKey: { fleet in OwnerKeychain.isHeld(fleet: fleet) },
             isMachine: { CentralVault.isMachine($0) },
+            // The rule of the app's own controls that sign, which fails closed (`clockApart(_:at:)`).
+            clockApart: { place in clockApart(store(), at: place) },
             // One statement, made, signed and sent, for the fleet and the server that the tool read. A key that
             // could not be read, and a key that made no signature, are that function's `NotSigned`: nothing was
             // sent then, and the tool gets its own error for it, never a failure of the hub.
@@ -380,7 +407,7 @@ enum LinkTools {
         return AnswerSecret.Desk<Place>(
             // As `grantDesk`'s: a current reading with a database, and a hub that serves the Secrets page.
             ready: {
-                guard let store = store(), store.isFresh, let database = store.state?.db,
+                guard let store = store(), store.writesNow, let database = store.state?.db,
                       SecretEntryView.isOffered(by: store) else { return nil }
                 return Place(hub: store.hub, database: database, client: store.installation)
             },
@@ -408,6 +435,8 @@ enum LinkTools {
             vault: { place in vaultFacts(try await vault.reading(hub: place.hub, database: place.database)) },
             holdsKey: { fleet in OwnerKeychain.isHeld(fleet: fleet) },
             isMachine: { CentralVault.isMachine($0) },
+            // The rule of the app's own controls that sign, which fails closed (`clockApart(_:at:)`).
+            clockApart: { place in clockApart(store(), at: place) },
             // One statement, made, signed and sent, as `grantDesk`'s.
             sign: { place, statement in
                 do {
@@ -474,7 +503,7 @@ enum LinkTools {
         return ShareSecret.Desk<Place>(
             // As `grantDesk`'s: a current reading with a database, and a hub that serves the Secrets page.
             ready: {
-                guard let store = store(), store.isFresh, let database = store.state?.db,
+                guard let store = store(), store.writesNow, let database = store.state?.db,
                       SecretEntryView.isOffered(by: store) else { return nil }
                 return Place(hub: store.hub, database: database, client: store.installation)
             },
@@ -499,6 +528,8 @@ enum LinkTools {
             // The vault's reading, as `grantDesk`'s.
             vault: { place in vaultFacts(try await vault.reading(hub: place.hub, database: place.database)) },
             holdsKey: { fleet in OwnerKeychain.isHeld(fleet: fleet) },
+            // As `grantDesk`'s.
+            clockApart: { place in clockApart(store(), at: place) },
             // One pool statement, made, signed and sent, for the fleet that the tool read. A key that could not be
             // read, and a key that made no signature, are that function's `NotSigned`: nothing was sent then.
             sign: { place, statement in
@@ -520,6 +551,100 @@ enum LinkTools {
                     return try await owned.saveStanding(hub: place.hub, database: place.database, client: place.client,
                                                         sha256: base, resource: ShareSecret.resourceID(login),
                                                         standing: standing).changed
+                } catch {
+                    throw failure(error)
+                }
+            },
+            // Started, and not waited for, as `secretDesk`'s.
+            refresh: {
+                guard let store = store() else { return }
+                Task { @MainActor in await store.refresh() }
+            })
+    }
+
+    // ------------------------------------------------------------ a door card's signed press (`answer_needs_you`)
+
+    /// The tool's reason for the app's own, when the app signs nothing on a door card. No default: a new case of
+    /// `DoorCall.Refusal` is a build error here.
+    nonisolated static func cardStop(_ stop: DoorCallSigning.Stop) -> AnswerDoor.CardStop {
+        switch stop {
+        case .olderHub: return .olderHub
+        case .card(.noScript): return .noScript
+        case .card(.otherServer): return .otherServer
+        case .card(.hidden(let code)): return .hidden(code)
+        case .card(.padded): return .padded
+        case .card(.decoy): return .decoy
+        case .card(.notShown): return .notShown
+        case .card(.otherHash): return .otherHash
+        }
+    }
+
+    /// The facts of an item that the tool decides by: its answer, the option that answered it, its door call and its
+    /// server, from the item that the app reads as its cards read it.
+    nonisolated static func card(_ need: OwnerNeed) -> AnswerDoor.Card {
+        AnswerDoor.Card(open: need.answer == nil, chosen: need.chosen, doorCall: !(need.door_call ?? "").isEmpty,
+                        host: need.door_host)
+    }
+
+    /// **The owner's signature of one press**, by the rule of the owner's own press (`DoorCallSigning.maker`), with
+    /// the reason when it signs nothing: the features of the hub that the store still shows, the card, the fleet's id
+    /// from the vault's reading, this Mac's owner key, and the signature. Nothing is sent here.
+    static func signDoor(_ need: OwnerNeed, _ press: AnswerDoor.Press, place: Place,
+                         store: FleetStore?) async -> AnswerDoor.Signed {
+        guard let shown = features(of: store, at: place) else { return .moved }
+        let make: (String) -> String
+        switch DoorCallSigning.maker(for: need, choice: Int(press.rawValue), features: shown) {
+        case nil: return .notOffered
+        case .success(let found)?: make = found
+        case .failure(let stop)?: return .card(cardStop(stop))
+        }
+        let reading: VaultReading?
+        do { reading = try await VaultClient().reading(hub: place.hub, database: place.database) }
+        catch { return .vaultUnread }
+        guard let fleet = reading?.fleetID else { return .noFleet }
+        guard OwnerKeychain.isHeld(fleet: fleet) else { return .noOwnerKey }
+        let statement = make(fleet)
+        guard let key = OwnerKeychain.key(fleet: fleet), let signature = try? key.sign(statement) else {
+            return .notSignedNow
+        }
+        return .signed(statement: statement, signature: signature)
+    }
+
+    /// **The app's engine for a door card's signed press of `answer_needs_you`**, closure by closure
+    /// (`AnswerDoor.Desk`). Each request ends by the time limit of its own client (the state's read and the answer 10
+    /// seconds for a request and 15 in all, `HubClient`; the vault's read 20 and 30). No closure writes anything of a
+    /// request to the log, and none shows anything on the screen: the card goes from Needs you at the store's next
+    /// reading, as after the owner's own press on another of his devices.
+    static func doorDesk(store: @escaping @MainActor () -> FleetStore?) -> AnswerDoor.Desk<Place, OwnerNeed> {
+        let lists = HubClient()
+        return AnswerDoor.Desk<Place, OwnerNeed>(
+            // A current reading with a database, as for `save_bot_token`: a door card is no page of Secrets.
+            ready: {
+                guard let store = store(), store.isFresh, let database = store.state?.db else { return nil }
+                return Place(hub: store.hub, database: database, client: store.installation)
+            },
+            database: { $0.database },
+            // One read of the hub's state, whole, as the store reads it, and the item of this id, as its cards read
+            // it. A read that failed, and bytes that are no state, are thrown as they are.
+            item: { place, need in
+                let state = try await lists.stateReading(at: place.hub).state
+                guard state.db == place.database else { return .otherGeneration }
+                guard let found = state.needs.first(where: { $0.id == need }) else { return .none }
+                return .found(found, card(found))
+            },
+            sign: { place, need, press in await signDoor(need, press, place: place, store: store()) },
+            // The answer as the owner's own press sends it (`FleetStore.answer(_:choice:)`): the item's id, the
+            // option, and the signed statement beside it, under a new request id of the app. It is no request of the
+            // outbox: nothing of it is kept on disk, and the store's own sends are not touched. The hub's refusal of
+            // an item that has its answer (its code `request_answered`, as the form reads it) is the tool's own error.
+            send: { place, need, press, statement, signature in
+                let request = PendingRequest(hub: place.hub, database: place.database, client: place.client,
+                                             needID: need, choice: Int(press.rawValue),
+                                             approval: (statement, signature), text: "")
+                do {
+                    _ = try await lists.send(request)
+                } catch HubError.refusal(let refused) where refused.status == 409 && refused.means(.requestAnswered) {
+                    throw AnswerSecret.Answered()
                 } catch {
                     throw failure(error)
                 }

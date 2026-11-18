@@ -49,11 +49,13 @@ struct AccessSettings: View {
     private var reading: ResourceList? {
         get { store.reading(Self.name(agent)) } nonmutating set { store.keep(newValue, as: Self.name(agent)) }
     }
-    /// The last read failed. `reading` is then the last good one, or nil. It is the reading's, kept beside it, so the
-    /// lists that draw one reading (an agent's Apps has three) agree on it whichever of them read last.
-    private var failed: Bool {
-        get { store.reading(Self.name(agent) + ".failed") ?? false }
-        nonmutating set { store.keep(newValue, as: Self.name(agent) + ".failed") }
+    /// When the first of the reads that failed in a row failed, or nil while the last read answered: `reading` is then
+    /// the last good one, or nil. One break of them says nothing (`FleetStore.pageReadingIsOld`). It is the reading's,
+    /// kept beside it, so the lists that draw one reading (an agent's Apps has three) agree on it whichever of them read
+    /// last.
+    private var failedSince: ContinuousClock.Instant? {
+        get { store.reading(Self.name(agent) + ".failedSince") }
+        nonmutating set { store.keep(newValue, as: Self.name(agent) + ".failedSince") }
     }
     @State private var shown: ShownResource?
     /// The resource whose standing the hub works on now, or "<resource> <agent>" while a hold ends.
@@ -67,7 +69,7 @@ struct AccessSettings: View {
     @State private var disconnecting: String?
 
     private var offered: Bool { store.state?.ui_features?.contains(ResourceList.feature) == true }
-    private var canChange: Bool { offered && store.isFresh && working == nil }
+    private var canChange: Bool { offered && store.writesNow && working == nil }
 
     /// The name of the fleet's resources, or of one agent's: the MCPs and Apps lists and the Secrets page draw it.
     nonisolated static func name(_ agent: String?) -> String { "resources.\(agent ?? "fleet")" }
@@ -83,15 +85,26 @@ struct AccessSettings: View {
     /// **"Last reading", in the heading row of the page's first group** (review B17, fix round 2; as Secrets): one line
     /// for the one reading that Apps draws in its lists, and only once this visit's read has had its second (`Held`).
     /// It stood as a row over the first list — 51 ms after the page opened, and at its second once `Held` worked — and
-    /// every group under it moved down 37 pt and back.
+    /// every group under it moved down 37 pt and back. **One break of the hub says nothing** (17 November 2026): it
+    /// stood from the first read that a restart of the hub refused. Not while the window's notice says the outage (fix
+    /// round 3, item 33: an outage is said once).
     @ViewBuilder static func lastReading(_ store: FleetStore, agent: String?, since opened: ContinuousClock.Instant) -> some View {
-        let failed: Bool = store.reading(name(agent) + ".failed") ?? false
-        if (store.reading(name(agent)) as ResourceList?) != nil && (failed || !store.isFresh) {
+        let failedSince: ContinuousClock.Instant? = store.reading(name(agent) + ".failedSince")
+        if (store.reading(name(agent)) as ResourceList?) != nil && store.pageReadingIsOld(failedSince: failedSince)
+            && !store.hubNoticeShows {
             Held(since: opened) {
                 Label("Last reading", systemImage: "clock.arrow.circlepath")
                     .font(FormMetrics.detail).foregroundStyle(.orange).lineLimit(1)
                     .help("Founderizer reads the resources again when the hub answers.")
             }
+        }
+    }
+
+    /// **A new visit of a page that draws the resources counts its own break** (`failedSince`): reads that failed in an
+    /// earlier visit, which nothing read again since, say nothing to it at its first failed read.
+    static func visited(_ store: FleetStore, agent: String?) {
+        if (store.reading(name(agent) + ".failedSince") as ContinuousClock.Instant?) != nil {
+            store.keep(nil, as: name(agent) + ".failedSince")
         }
     }
 
@@ -112,9 +125,11 @@ struct AccessSettings: View {
         if !offered {
             FormSection { FormEmpty("Update the hub to give access from here.", symbol: "square.stack.3d.up") }
         } else if let reading { list(reading) }
-        else if failed || !store.isFresh {
+        else if store.pageReadingIsOld(failedSince: failedSince) {
             // **Not while the window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item 33: an
-            // outage is said once): the line stands only where no notice over the page says why.
+            // outage is said once): the line stands only where no notice over the page says why. **One break of the hub
+            // says nothing** (17 November 2026): "Reading the resources…" stays until the reads have failed one whole
+            // break, or the fleet's state is old.
             if !store.hubNoticeShows {
                 FormSection { FormRow("Founderizer cannot read the resources now.", detail: String(l10n: "It reads again when the hub answers.")) }
             }
@@ -127,7 +142,7 @@ struct AccessSettings: View {
     /// (`items`). An agent's list of one kind always draws its card, empty or not (`agentList`).
     private var drawsNothing: Bool {
         guard offered else { return false }
-        guard let reading else { return (failed || !store.isFresh) && store.hubNoticeShows }
+        guard let reading else { return store.pageReadingIsOld(failedSince: failedSince) && store.hubNoticeShows }
         return !(agent != nil && kinds.count == 1) && groups(reading).isEmpty
     }
 
@@ -350,7 +365,7 @@ struct AccessSettings: View {
                     await read()
                 }
             }
-            .disabled(!canChange || !store.isFresh)
+            .disabled(!canChange || !store.writesNow)
             .accessibilityIdentifier("access-take-\(resource.id)")
         }
     }
@@ -733,7 +748,7 @@ struct AccessSettings: View {
 
     /// Reads the resources every 15 seconds while the page shows, and again after 3 seconds when a read failed.
     private func poll() async {
-        failed = false; note = nil
+        failedSince = nil; note = nil
         // `-openResource <id>` opens one item's detail, so that card can be looked at without clicking to it.
         shown = UserDefaults.standard.string(forKey: "openResource").map(ShownResource.init)
         let start = ContinuousClock.now
@@ -758,14 +773,18 @@ struct AccessSettings: View {
         let hub = store.hub, first = (store.reading(name(agent)) as ResourceList?) == nil
         guard let list = try? await readResources(store, agent: agent, hub: hub, database: database) else {
             if first, let start { await store.settle(since: start) }
-            if !Task.isCancelled, store.hub == hub, store.state?.db == database { store.keep(true, as: name(agent) + ".failed") }
+            if !Task.isCancelled, store.hub == hub, store.state?.db == database {
+                if (store.reading(name(agent) + ".failedSince") as ContinuousClock.Instant?) == nil {
+                    store.keep(ContinuousClock.now, as: name(agent) + ".failedSince")
+                }
+            }
             return false
         }
         guard !Task.isCancelled else { return false }
         if first, let start { await store.settle(since: start) }
         guard store.hub == hub, store.state?.db == database else { return false }
         store.keep(list, as: name(agent))
-        store.keep(false, as: name(agent) + ".failed")
+        store.keep(nil, as: name(agent) + ".failedSince")
         return true
     }
 }
@@ -787,7 +806,7 @@ struct AccessGive: View {
         let open = (reading?.resources ?? []).filter { $0.kind == kind && !$0.holders.contains { $0.agent == agent } }
         if giving {
             ProgressView().controlSize(.small).frame(width: IconMetrics.side, height: IconMetrics.side)
-        } else if let reading, store.state?.ui_features?.contains(ResourceList.feature) == true, store.isFresh, !open.isEmpty {
+        } else if let reading, store.state?.ui_features?.contains(ResourceList.feature) == true, store.writesNow, !open.isEmpty {
             FleetSelect(words, options: open.map { FleetOption($0.id, $0.title, mark: .symbol(AccessSettings.symbol(kind))) }) { id in
                 guard let resource = open.first(where: { $0.id == id }) else { return }
                 Task { await give(resource, reading: reading) }

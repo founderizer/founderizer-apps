@@ -140,6 +140,8 @@ struct AddServerView: View {
     /// The new server for which he pressed Add agent on this wizard: Add agent opens for it, with the servers read first
     /// (`goOnToAddAgent`), from the page's own task, which ends with the page.
     @State private var addAgentFor: String?
+    /// The install that this page hands over ended before the page opened (`opened`): its server joined long ago.
+    @State private var handsOverAgain = false
     /// Add server fills the window (`FleetStore.fillsWindow`): its × closes it, so its first page has no Back.
     @Environment(\.fillsWindow) private var fillsWindow
     private var time: Double { store.state?.time ?? Date().timeIntervalSince1970 }
@@ -316,8 +318,13 @@ struct AddServerView: View {
         }
     }
 
-    /// The server is in, and goes to the agent's setup once the hub offers it (`handOver`).
-    private var handsOver: Bool { placing != nil && model.checklist != nil }
+    /// The server is in, and goes to the agent's setup once the hub offers it (`handOver`): only the server of an
+    /// install that this agent's setup started (`MachineInstallModel.forAgent`; the review of 17 November 2026).
+    private var handsOver: Bool { placing != nil && model.checklist != nil && model.forAgent == placing?.agent }
+
+    /// **The agent that an install of these pages is for** (`MachineInstallModel.forAgent`): the agent whose setup shows
+    /// them, or the new agent of Add agent's New server; nil for Add server alone.
+    private var installFor: String? { placing?.agent ?? (fromAddAgent ? newAgent?.name : nil) }
 
     /// The pasted line waits for its server: it is open and has not expired.
     private var lineWaits: Bool {
@@ -736,8 +743,11 @@ struct AddServerView: View {
         model.use(target, sudo: sudo)
         // The server of the list that "Use this server" took, when the install goes to its address.
         model.provenServer = reusedServer.flatMap { $0.address == target.host ? ($0.provider, $0.id) : nil }
+        let ran = model.running
         model.installMachine(store: store)
-        // The install page is the install: a start that the model refused (no hub to ask for a line) stays here.
+        // The install page is the install: a start that the model refused (no hub to ask for a line) stays here. Only
+        // a start that this press began names its agent (`forAgent`).
+        if model.running, !ran { model.forAgent = installFor }
         if model.running { page = .install }
     }
 
@@ -840,7 +850,9 @@ struct AddServerView: View {
             onwards(String(l10n: "Link this Mac"), identifier: "link-start", warning: model.failure,
                     disabled: model.running || nameProblem != nil
                     || MacInstallerClient.address(model.macHost) == nil || ClaimCode.read(model.linkCode) == nil) {
+                let ran = model.running
                 model.linkMac(store: store, withAgent: placing == nil, named: macAgent?.name)
+                if model.running, !ran { model.forAgent = installFor }
                 if model.running { page = .install }
             }
         }
@@ -868,7 +880,7 @@ struct AddServerView: View {
                 }
             }
             onwards(String(l10n: "Make the line"), identifier: "add-server-make", warning: error,
-                    disabled: busy || list == nil || !store.isFresh || nameProblem != nil) {
+                    disabled: busy || list == nil || !store.writesNow || nameProblem != nil) {
                 Task { await make() }
             }
         }
@@ -898,7 +910,7 @@ struct AddServerView: View {
     /// buttons.
     private var goesOn: Bool {
         model.way == .linux && placing == nil && fromAddAgent && !addAgentWaits && !model.running
-            && model.checklist.map { $0.isReady || $0.onlyNeedsSignIn } == true
+            && model.checklist.map { $0.isReady || $0.onlyNeedsSignIn } == true && model.forAgent == installFor
     }
 
     /// Add agent for the new server, as soon as the hub offers that server: its first reading comes some seconds after
@@ -932,25 +944,50 @@ struct AddServerView: View {
     /// reading comes some seconds after its join. A count ends the wait, and the provider page then says in the hub's
     /// words why the server cannot take the agent. With no name for the server, the first page shows again.
     private func handOver(_ placing: Placing) async {
+        // Read once for this hand-over: a later install of this page's has its own end (`opened`).
+        let reopened = handsOverAgain
+        handsOverAgain = false
         guard let server = installed, let database = store.state?.db else {
             model.again(); page = .ways
             return
         }
+        var free = false
         for _ in 0..<40 where !Task.isCancelled {
-            if let read = try? await HubClient().servers(hub: store.hub, database: database),
-               read.servers.contains(where: { $0.name == server && AgentSetupFlow.isFree($0) }) { break }
+            if let read = try? await HubClient().servers(hub: store.hub, database: database) {
+                let row = read.servers.first { $0.name == server }
+                if let row, AgentSetupFlow.isFree(row) { free = true; break }
+                // **An install that ended before this page opened** (`opened`): a server that another agent has now, or
+                // that is the hub, gives no hand-over, and the page offers its ways at once. One that is not available
+                // yet (its first reading comes seconds after its join) or not listed is waited for, as at its own end.
+                if reopened, let row, !row.agents.isEmpty || row.hub { return leaveHandOver() }
+            }
             try? await Task.sleep(for: .seconds(3))
         }
-        if !Task.isCancelled { placing.place(server) }
+        guard !Task.isCancelled else { return }
+        // That install's server that never came free leaves the ways page, with Back, and no moving title for good.
+        if reopened, !free { return leaveHandOver() }
+        placing.place(server)
+        // Given, or the hub says why not: this install hands over no more, here or on a later opening (`opened`).
+        model.forAgent = nil
+    }
+
+    /// An install that ended before this page opened, and that this agent can no longer take: cleared, and the page's
+    /// ways show.
+    private func leaveHandOver() {
+        model.again()
+        page = .ways
     }
 
     /// What is left after a machine reached its checklist: its agent, which only the owner adds.
     @ViewBuilder private var joined: some View {
-        if placing != nil {
+        if handsOver {
             // It goes on to the agent's setup by itself (`handOver`, from the page's own task).
             Color.clear.frame(height: 0)
-        // A Mac that the hub sets up has its first agent already, and the installer on it leads the rest.
-        } else if model.way == .mac, model.firstAgent != nil {
+        // A Mac that the hub sets up has its first agent already, and the installer on it leads the rest. **An install
+        // that is not this page's** (`MachineInstallModel.forAgent`; the review of 17 November 2026) is in the fleet and
+        // is another agent's, or no agent's: its end here offers no Add agent, which put a new agent on the manager's
+        // own server.
+        } else if model.forAgent != installFor || (model.way == .mac && model.firstAgent != nil) {
             FormSection {
                 FormRow("\(installed ?? String(l10n: "The server")) is in your fleet", symbol: "checkmark.circle") { openServer }
             }
@@ -1062,6 +1099,9 @@ struct AddServerView: View {
         if cloud.stage != .token, let provider = cloud.provider { page = .token(provider); return }
         cloud.cancel()
         guard model.checklist != nil || model.failure != nil else { return }
+        // **This agent's own install that ended while another page showed it** goes on to its hand-over here
+        // (`handOver`): cleared, it left the manager with no server, and its setup's press made a second one.
+        if handsOver { handsOverAgain = true; page = .install; return }
         model.again()
         model.name = ""; model.host = ""; model.macHost = ""; model.linkCode = ""
         model.user = "root"; model.port = "22"; model.identityFile = nil

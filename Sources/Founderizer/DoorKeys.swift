@@ -25,6 +25,9 @@ enum DoorKeys {
     /// key registered (`DoorKeyReference`), so that a try that failed after the hub step leaves no second catalog entry.
     static func put(_ value: String, variable: String, store: FleetStore, reference: String? = nil) async throws -> String {
         guard let database = store.state?.db else { throw Stop(String(l10n: "No current status of this hub. Nothing was sent.")) }
+        // The give to the door at the end waits for the clock (GrantSigning.checkClock) on a hub that takes signed
+        // grants: checked first, so a stop sends no value and makes no catalog entry that no grant names.
+        if GrantSigning.offered(store) { try GrantSigning.checkClock(store) }
         let hub = store.hub, client = store.installation
         guard let reading = try await VaultClient().reading(hub: hub, database: database), let fleet = reading.fleetID,
               let recipient = reading.trusted(pin: CentralVaultPins.recipient(hub: hub, fleet: fleet)) else {

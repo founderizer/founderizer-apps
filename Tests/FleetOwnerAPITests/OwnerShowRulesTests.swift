@@ -105,7 +105,8 @@ struct OwnerShowRulesTests {
     /// manager's `name` and `servers` too) and the later change of the fleet's shape. Each is refused with the same
     /// fixed words, also with every other fact in order.
     @Test func thesePlacesAreNeverOpened() {
-        var never: [AppPlace] = [.agentPart("nova", .runsOn), .settings(.servers), .settings(.backup),
+        var never: [AppPlace] = [.agentPart("nova", .runsOn), .agentPart("nova", .capabilities), .settings(.servers),
+                                 .settings(.backup),
                                  .addServer(nil), .addAgent(nil), .shapeChange, .connectKey, .server("fleet-1"),
                                  .agentRule("nova"), .agentSetup("nova", nil), .agentSetup("nova", .name),
                                  .agentSetup("nova", .servers), .agentSettingUp("nova"), .agentSignIn("nova", nil)]

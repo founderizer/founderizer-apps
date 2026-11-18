@@ -283,7 +283,9 @@ struct CloudChoiceTests {
     }
 
     /// **The line under a server on the first run's page "Your fleet"**, as the build page's picture has it: Hetzner's
-    /// type and the price; another provider's memory in place of the type. No place and no disk.
+    /// type and the price; another provider's memory in place of the type. No place and no disk. **Its capsule and the
+    /// rows of its list** (slice 2b, the owner's picture of 17 November 2026): the provider before that line, and a row
+    /// with the cores ("own" for a dedicated type), the memory and the city, the price apart.
     @Test func theLineUnderAServerOfTheFleetIsItsTypeAndItsPrice() {
         let offer = CloudOffer(provider: .hetzner, type: "cx23", location: "nbg1", cores: 2, memoryGB: 4, diskGB: 40,
                                monthlyPrice: Decimal(string: "5.49")!, currency: "EUR")
@@ -294,6 +296,17 @@ struct CloudChoiceTests {
         let bare = CloudOffer(provider: .vultr, type: "vc2-1c-1gb", location: "fra", cores: nil, memoryGB: nil,
                               diskGB: nil, monthlyPrice: 5, currency: "USD")
         #expect(bare.brief == bare.monthly)
+        #expect(offer.pick == "Hetzner · \(offer.brief)" && offer.choice == "CX23 · 2 cores · 4 GB · Nuremberg")
+        #expect(offer.monthly == "\(offer.amount) a month")
+        #expect(ocean.pick == "DigitalOcean · \(ocean.brief)" && ocean.choice == "1 core · 2 GB · Frankfurt")
+        let own = CloudOffer(provider: .hetzner, type: "ccx13", location: "hel1", cores: 2, memoryGB: 8, diskGB: 80,
+                             monthlyPrice: Decimal(string: "36.99")!, currency: "EUR", dedicated: true)
+        #expect(own.choice == "CCX13 · 2 own cores · 8 GB · Helsinki")
+        // One row of the list is Hetzner's type, and another provider's size, whatever its kind (`kind`, which keeps the
+        // owner's choice through a read after "taken").
+        let amd = CloudOffer(provider: .digitalOcean, type: "s-1vcpu-2gb-amd", location: "ams3", cores: 1, memoryGB: 2,
+                             diskGB: 50, monthlyPrice: 14, currency: "USD")
+        #expect(offer.kind == "cx23" && own.kind == "ccx13" && amd.kind == ocean.kind && amd.kind != own.kind)
     }
 }
 #endif

@@ -18,8 +18,9 @@ import Foundation
 ///
 /// **No question to the owner** (the owner, 15 November 2026: "No touch"). So a program that runs as the owner's
 /// user on this Mac can make the app answer any open request of the fleet with any fitting secret of the list, and
-/// give it with the owner's signature to any worker or lead (`OWNER-MCP-BOUNDARY.md`, section 7b). The guide, and
-/// not the tool, says that the owner's agent answers only with the secret and the agents that the owner named.
+/// give it with the owner's signature to any worker or lead, and to the door for a request for the door
+/// (`OWNER-MCP-BOUNDARY.md`, section 7b). The guide, and not the tool, says that the owner's agent answers only with
+/// the secret and the agents that the owner named.
 ///
 /// **It writes grants, as `grant_secret` does, so the two tools share one line of writes** (`GrantSecret.Line`):
 /// two calls whose grant writes cross can end with a grant in the list whose signature the other call ended.
@@ -27,6 +28,16 @@ import Foundation
 /// **It never takes a give back because of the answer.** When the request was closed first (by the owner, an agent
 /// or the hub), the gives of the call stand, and the words send the caller to the owner: only the owner says whether
 /// those agents keep the secret.
+///
+/// **A request for the door is answered as the form answers it** (the owner, 17 November 2026: his agent should do
+/// every step that needs nothing from him). The form gives such a request's secret to the door with a signed grant of
+/// the door's own (`SecretEntryView.doorGrant`, `GrantSigning.grant`), and then answers; for a request that names a
+/// door's key the hub then keeps the secret as that key of the door (`hub.py` `save_door_credential`). So `give` of
+/// such a request must name the door, at `use`, and the app signs the door's grant like each agent's, for the door's
+/// own name in the central vault. A request that names a key of the door gives it to the door alone, as the form does
+/// (its proposal is the door alone, so the form shows no row of an agent): the hub's answer says that the door holds
+/// the key and no agent does. No other request takes the door in `give`: the door gets a secret only with the answer
+/// of a request for it, and `grant_secret` gives it none.
 ///
 /// This file has the whole tool: its fields and their forms, its fixed sentences, the read of a request, the app's
 /// desk and the answer to one call. The app's side is `LinkTools.answerDesk`, closure by closure.
@@ -60,13 +71,17 @@ public enum AnswerSecret {
             lead. The request's own give is a proposal and no decision: answer only with the secret and the agents \
             that the owner named. The gives go one after the other in the order of the agents' names, and the first \
             one that fails stops the call: the gives before it stand, and the call does not answer the request. \
-            A request that is for the door (its secret has door, or its give has the key door) is the owner's \
-            to answer in the app. A request that has its answer takes no other one. A no is \
-            decline_secret_request. Only the Mac that set up Founderizer Vault holds the owner's key and can sign a \
-            give; with give {} the app signs nothing. It answers need, login, answered true, given (for each \
-            agent: agent, level, server, changed, vault when the hub says it, and note) and note. One call of this \
-            tool or of grant_secret writes at a time: a call that comes while another one is at its writes is \
-            refused. No answer has a secret's value.
+            A request for the door (its secret has door, or its give has the key door) is answered in the same \
+            way, and its give must name door with use: the app gives the secret to the door with the owner's \
+            signature, as the app's own form of that request does. A request whose secret has door asks for a key \
+            that the door alone holds: its give is {"door": "use"} and no agent, and the hub then keeps the secret as \
+            that key of the door. give names door only for a request for the door. A request \
+            that has its answer takes no other one. A no is decline_secret_request. Only the Mac that set up \
+            Founderizer Vault holds the owner's key and can sign a give; with give {} the app signs nothing. It \
+            answers need, login, answered true, given (for each agent: agent, level, server, changed, vault when \
+            the hub says it, and note; the door has no server) and note. One call of this tool or of grant_secret \
+            writes at a time: a call that comes while another one is at its writes is refused. No answer has a \
+            secret's value.
             """,
         inputSchema: .object([
             "type": .string("object"),
@@ -137,12 +152,32 @@ public enum AnswerSecret {
     /// deletes it): that is `noRequest`.
     static let answeredAlready = "That request is closed already: the owner declined it or answered it with another "
         + "secret, or an agent or the hub closed it. A request takes one answer. Nothing was sent."
-    /// The request names a door's credential, or its proposal names the door as a holder (`Request.door`). The hub
-    /// writes the door's own credential with the answer of the first kind (`hub.py` `save_door_credential`), and
-    /// the app's form gives the secret to the door with a signed grant of its own for both. This tool signs for no
-    /// door, so it leaves the whole answer to the owner.
-    static let doorRequest = "That request is for the door, and this tool does not answer such a request: the owner "
-        + "answers it in the Founderizer app, on Needs you. Nothing was sent."
+    /// **A request for the door, with no door in `give`**. The request names a door's credential, or its proposal
+    /// names the door as a holder (`Request.door`). The hub writes the door's own credential with the answer of the
+    /// first kind (`hub.py` `save_door_credential`), and the app's form gives the secret to the door with a signed
+    /// grant of its own for both, always. An answer with no give to the door would leave the door's rules naming a
+    /// secret that the door does not hold, so this tool, as the form, gives it to the door or answers nothing.
+    static let doorNeedsDoor = "That request is for the door, so give must name door with use, as the request "
+        + "proposes: the app gives the secret to the door with the owner's signature, as its own form of the request "
+        + "does. Nothing was sent."
+    /// The door holds a secret to use it (`hub.py` `save_door_grant`: "the door uses a secret; nobody reads it there").
+    static let doorUsesOnly = "give has read for the door, and the door uses a secret and never reads it: give it "
+        + "with use. Nothing was sent."
+    /// The door gets a secret only with the answer of a request for the door, as in the app's form, where the door has
+    /// no row of its own.
+    static let doorNotAsked = "give names door, and that request is not for the door: the door gets a secret only "
+        + "with the answer of a request for it. Nothing was sent."
+    /// **A request for a key of the door** (`Request.doorKey`), with an agent in `give` beside the door. The hub's
+    /// answer of such a request says that the door holds the key and no agent holds it, and the form gives it to the door
+    /// alone: its proposal is the door alone (`hub.py` `t_request_secret`), so the form shows no row of an agent.
+    static let doorKeyAlone = "That request asks for a key that the door alone holds, so give must be {\"door\": "
+        + "\"use\"} and name no agent. Nothing was sent."
+    /// The request for a key of the door (`Request.doorKey`) has its answer already, with this `login`. The hub takes
+    /// such an answer only while the door holds the secret (`hub.py` `save_door_credential`), so the words say that. A
+    /// request whose proposal only names the door gets `answeredWithThis`: the app's form answers it also after a give
+    /// to the door that failed.
+    static let answeredWithThisForDoor = "That request asks for a key of the door, and it has its answer already, with "
+        + "this secret: the hub took that answer only while the door held the secret. Nothing was sent."
     static let noSecret = "The fleet's list has no secret of that reference: fleet_read(page=\"team\") gives the "
         + "references under logins. Nothing was sent."
     static let notFitting = "That secret does not fit the request: the request asks for the other kind of secret (an "
@@ -160,14 +195,20 @@ public enum AnswerSecret {
         + "Call answer_secret_request again in a minute. Nothing was sent."
     static let noOwnerKey = "This Mac holds no owner key for this fleet, so the app on it cannot sign a give: only "
         + "the Mac that set up Founderizer Vault signs. Nothing was sent."
+    /// As `GrantSecret.clockApart`, for a call with a give. An answer with give {} signs nothing and does not wait
+    /// for the clocks, and it is no way around this stop: it gives nobody the secret.
+    static let clockApart = "This Mac's clock and the hub's clock differ by more than an hour, so the app signs no "
+        + "give now. Ask the owner to check this Mac's date and time (System Settings, General, Date & Time), and "
+        + "then call answer_secret_request again with the same give. If this Mac's clock is right, the hub's clock "
+        + "is probably wrong: tell the owner. Nothing was sent."
     /// The two tools that write grants share one line, and one sentence says so for both (`GrantSecret.busy`).
     static let busy = GrantSecret.busy
     /// The call's connection ended before its first write. Nobody reads this.
     static let ended = "The call ended before its first write. Nothing was sent."
 
-    // The checks of one agent of `give`. Each names the agent.
+    // The checks of one agent of `give`. Each names the agent. The door is no agent of the team: its name in `give` is
+    // checked with the request (`doorNeedsDoor`, `doorUsesOnly`, `doorNotAsked`), and none of these is asked of it.
 
-    /// Also the answer for the door's name: the door is no agent of the team.
     static func noAgent(_ agent: String) -> String {
         "The fleet has no agent named \(agent): fleet_read(page=\"team\") gives the agents. Nothing was sent."
     }
@@ -208,9 +249,11 @@ public enum AnswerSecret {
 
     /// **The words for the give that stopped a call**: the agent, what its give left, the agents that got the secret
     /// before it, and that this call did not answer the request. The meanings are those of `grant_secret`'s
-    /// sentences for the same ends. The hub's own words, when the end has them, stand last.
+    /// sentences for the same ends. The hub's own words, when the end has them, stand last. The door's give has
+    /// words of its own (`doorStopped`).
     static func stopped(_ end: GrantSecret.GiveEnd, agent: String, before: [String]) -> String {
         let rest = "\(gaveBefore(before)) \(noAnswerYet)"
+        if agent == GrantSecret.door { return doorStopped(end, rest: rest) }
         switch end {
         case .given:
             // No call asks for this: a give that went stops nothing.
@@ -259,13 +302,71 @@ public enum AnswerSecret {
         }
     }
 
+    /// **The words for the door's give that stopped a call.** The door is no agent: `grant_secret` takes no grant of
+    /// it, so no sentence sends the caller there, and the team's page shows no hold of the door. The hub's own check
+    /// refuses the door's grant only when the door does not hold the secret after it (`hub.py` `save_door_grant`: a
+    /// fleet with no door, a secret that the list does not have, or a list that the hub's check refuses; a hold that the
+    /// door has already is no change), so after a certain refusal the app signs the end of the door's grant with no
+    /// read (`AnswerSecret.writes`), and the last two ends are lines that the door's give does not reach. A refusal of
+    /// the whole command before that check (the hub's generation moved) refuses the end in the same way, so the
+    /// signature then stays. The door gets a copy only of a secret that its own list names and that the owner signed
+    /// for it (`hub.py` `door_reconcile`). The words claim nothing of the list, which the app did not read.
+    static func doorStopped(_ end: GrantSecret.GiveEnd, rest: String) -> String {
+        switch end {
+        case .given:
+            return rest
+        case .notSignedNow:
+            return "This Mac held an owner key for this fleet a moment ago, and the app could not sign the grant for "
+                + "the door with it now: the Mac can be locked, the key can be gone, or macOS did not let the app read "
+                + "it. The app sent nothing for the door. \(rest) Call answer_secret_request again later."
+        case .signRefused(let status, let said):
+            return GrantSecret.withHubWords(
+                "The hub refused the owner's signed grant for the door, so that give changed nothing. " + rest,
+                status: status, said)
+        case .signNotKnown:
+            return "Whether the vault took the owner's signed grant for the door is not known, and the fleet's list "
+                + "was not changed for the door. \(rest) Call answer_secret_request again in the same way: a give "
+                + "that went is given again with no change, and a second signature of the same grant is no error, "
+                + "because the vault keeps the newer one."
+        case .grantNotKnown:
+            return "The app signed the grant for the door with the owner's key, and whether the fleet's list gives the "
+                + "door this secret is not known. \(rest) Call answer_secret_request again in the same way: a give "
+                + "that went is given again with no change."
+        case .refusedTakenBack(let status, let said):
+            return GrantSecret.withHubWords(
+                "The hub refused the grant for the door, and the app took the owner's signature of it back: the "
+                    + "vault has no signed grant of this secret for the door. " + rest, status: status, said)
+        case .refusedSignatureLeft(let status, let said):
+            return GrantSecret.withHubWords(
+                "The hub refused the grant for the door, and the app could not take the owner's signature of it "
+                    + "back: a signed grant of this secret for the door stays in the vault. The door gets a copy only "
+                    + "of a secret that its own list names. Tell the owner. " + rest, status: status, said)
+        case .refusedListHasOne(let status, let said):
+            return GrantSecret.withHubWords(
+                "The hub refused the grant for the door. The fleet's list gives the door this secret, which stays as "
+                    + "it is, and the owner's signature stands for it. " + rest, status: status, said)
+        case .refusedListUnread(let status, let said):
+            return GrantSecret.withHubWords(
+                "The hub refused the grant for the door, and a signed grant of this secret for the door stays in the "
+                    + "vault. Tell the owner. " + rest, status: status, said)
+        }
+    }
+
     /// What the caller does about gives that stand when this call did not answer the request, because the request
     /// was closed first (by the owner, an agent or the hub) or the hub refused the answer: the tool takes nothing
     /// back, because only the owner says whether those agents keep the secret.
+    /// The door is no agent: `grant_secret` takes nothing back from it, so a list with the door says that no tool here
+    /// does, and sends the caller to the owner.
     static func askTheOwner(_ agents: [String]) -> String {
-        agents.isEmpty ? ""
-            : " Ask the owner whether those agents keep the secret: grant_secret with level null takes it back from "
-                + "one agent."
+        var words = ""
+        if agents.contains(where: { $0 != GrantSecret.door }) {
+            words += " Ask the owner whether those agents keep the secret: grant_secret with level null takes it back "
+                + "from one agent."
+        }
+        if agents.contains(GrantSecret.door) {
+            words += " No tool here takes the secret back from the door: tell the owner that the door keeps it."
+        }
+        return words
     }
 
     /// The hub said that the request had its answer, and the read after it shows this call's `login` as its answer.
@@ -314,6 +415,16 @@ public enum AnswerSecret {
     static let noteAnswered = "The agent that asked got the hub's own words: the secret's name, its reference and "
         + "who holds it now, and never its value."
     static let noteNoGive = "This call gave the secret to no agent."
+    /// The door's hold, as the hub keeps it (`hub.py` `save_door_grant`): in the fleet's list, and a copy sealed for the
+    /// door's own key that the door fetches (`door_reconcile`, `GET /door/sealed`).
+    static let noteDoor = "The fleet's list gives the door this secret now. When the central vault holds the value, the "
+        + "hub has it sealed for the door's own key, and the door fetches that copy at its next read."
+    /// A give to the door that the list had already: the hub changed nothing, and the signature is in the vault now.
+    static let noteDoorSame = "The fleet's list gave the door this secret already, so the hub changed nothing in it, and "
+        + "the owner's signature of it is in the vault now."
+
+    /// The note of the door's give.
+    static func doorNote(_ receipt: GrantSecret.Receipt) -> String { receipt.changed ? noteDoor : noteDoorSame }
 
     // ------------------------------------------------------------ the fields, on both sides
 
@@ -393,19 +504,24 @@ public enum AnswerSecret {
         /// **The request is for the door**: its secret has `door`, present and not null, or its proposal (`give`)
         /// is an object with the door's name as a key. The manager's proposal can name the door with no `door`
         /// (`hub.py` `t_request_secret`); the app's form then always gives the door the secret
-        /// (`SecretEntryView.doorGrant`), and after an answer nothing else can. So this tool leaves both to the owner.
+        /// (`SecretEntryView.doorGrant`), and after an answer nothing else can. So this tool answers such a request
+        /// only with a give to the door, and never gives the door anything for another request.
         public let door: Bool
+        /// **The request names a key of the door**: its secret has `door`, present and not null (`Request.door` is
+        /// then true too). The door alone holds such a key: `give` is the door alone.
+        public let doorKey: Bool
         /// The reference of the secret that answered the request, when it has the form of a reference.
         public let saved: String?
 
         public init(isSecret: Bool = true, open: Bool = true, apiKey: Bool = true, env: String? = nil,
-                    site: String? = nil, door: Bool = false, saved: String? = nil) {
+                    site: String? = nil, door: Bool = false, doorKey: Bool = false, saved: String? = nil) {
             self.isSecret = isSecret
             self.open = open
             self.apiKey = apiKey
             self.env = env
             self.site = site
-            self.door = door
+            self.door = door || doorKey
+            self.doorKey = doorKey
             self.saved = saved
         }
 
@@ -461,8 +577,9 @@ public enum AnswerSecret {
     /// (12.0 is 12), and never a boolean. A secret's `kind` that is not the text `login` (also one that is no text)
     /// is the hub's default, an API key. `env` and `site` are the hub's own forms, which the tool trusts
     /// (`Request.fits`). **`door` is strict on purpose**: each `door` that is present and not null makes a door
-    /// request, also an empty text and a `false`, because a request that this tool wrongly leaves to the owner
-    /// costs one answer in the app, and one that it wrongly answers leaves the door without its secret.
+    /// request, also an empty text and a `false`, because a request that this tool wrongly reads as one for the door
+    /// costs one call with the door in `give`, and one that it wrongly answers with no give to the door leaves the door
+    /// without its secret.
     public static func request(in data: Data, need: Int, database: String) -> RequestRead {
         guard let state = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let generation = state["db"] as? String, let items = state["needs"] as? [Any] else {
@@ -479,11 +596,12 @@ public enum AnswerSecret {
         }
         // For the door: the request names a door's credential, or its proposal names the door as a holder.
         let proposal = secret["give"] as? [String: Any] ?? [:]
-        let door = secret["door"].map { !($0 is NSNull) } ?? false || proposal[GrantSecret.door] != nil
+        let doorKey = secret["door"].map { !($0 is NSNull) } ?? false
         return .found(Request(
             isSecret: item["kind"] as? String == "secret", open: answer == nil || answer is NSNull,
             // The hub's default, and FleetCore's reading of it: a request that names no login asks for an API key.
-            apiKey: secret["kind"] as? String != "login", env: secret["env"] as? String, site: site, door: door,
+            apiKey: secret["kind"] as? String != "login", env: secret["env"] as? String, site: site,
+            door: proposal[GrantSecret.door] != nil, doorKey: doorKey,
             saved: (secret["saved"] as? String).flatMap { GrantSecret.isReference($0) ? $0 : nil }))
     }
 
@@ -526,6 +644,10 @@ public enum AnswerSecret {
         public var holdsKey: (String) -> Bool
         /// The form of a server's name that a signed grant can carry (`CentralVault.isMachine`).
         public var isMachine: (String) -> Bool
+        /// As `GrantSecret.Desk.clockApart`: whether this Mac's clock and the hub's differ by more than an hour, and
+        /// nil ("not ready") with no answer of the hub in this launch for this place. Asked only for a call with a
+        /// give.
+        public var clockApart: (Place) -> Bool?
         /// As `GrantSecret.Desk.sign`: makes one statement, signs it and sends it.
         public var sign: (Place, GrantSecret.Statement) async throws -> Void
         /// The hub's grant of the secret to the agent at a level (`SecretsClient.grant`). This tool never ends a
@@ -543,6 +665,7 @@ public enum AnswerSecret {
                     team: @escaping (Place) async throws -> GrantSecret.Team,
                     vault: @escaping (Place) async throws -> GrantSecret.Vault,
                     holdsKey: @escaping (String) -> Bool, isMachine: @escaping (String) -> Bool,
+                    clockApart: @escaping (Place) -> Bool?,
                     sign: @escaping (Place, GrantSecret.Statement) async throws -> Void,
                     grant: @escaping (Place, String, String, GrantSecret.Level) async throws -> GrantSecret.Receipt,
                     answer: @escaping (Place, Int, String) async throws -> Void,
@@ -554,6 +677,7 @@ public enum AnswerSecret {
             self.vault = vault
             self.holdsKey = holdsKey
             self.isMachine = isMachine
+            self.clockApart = clockApart
             self.sign = sign
             self.grant = grant
             self.answer = answer
@@ -580,18 +704,22 @@ public enum AnswerSecret {
     /// 4. The reads, each with its own sentence when it fails: the request, the fleet's list, and **only for a call
     ///    with a give** the vault's page. Then, in this order:
     ///    - the request: the state is of the place's database; the item is there; it asks for a secret; it has no
-    ///      answer (an answer with this `login` has its own sentence); it is not for the door (`Request.door`:
-    ///      its secret has `door`, or its proposal names the door);
+    ///      answer (an answer with this `login` has its own sentence); and the door: a request for the door
+    ///      (`Request.door`: its secret has `door`, or its proposal names the door) has the door in `give` at `use`,
+    ///      as the app's own form always gives it, and every other request has no door in `give`;
     ///    - the secret: the list has it, and it fits the request (`Request.fits`);
     ///    - **only for a call with a give**, as step 4 of `grant_secret`: the page names the fleet; the hub has a
     ///      reading of a central vault whose newest read did not fail; this Mac holds the fleet's owner key; then
-    ///      for each agent of `give`, in the byte order of the names: it is not the door's name and the fleet has
-    ///      it, it is a worker or a lead, the hub names a server for it, `read` only for an API key, and no second
-    ///      key of one variable name read by that agent.
+    ///      for each agent of `give`, in the byte order of the names: the fleet has it, it is a worker or a lead,
+    ///      the hub names a server for it, `read` only for an API key, and no second key of one variable name read
+    ///      by that agent. The door's give, which the request's check already took, is signed for the door's own
+    ///      name in the central vault (`GrantSecret.door`), as the form signs it (`GrantSigning.grant`). Last, the
+    ///      hub answered the app in this launch, and its clock and this Mac's do not differ by more than an hour
+    ///      (`Desk.clockApart`: with no such answer, "not ready").
     /// 5. No other call of this tool or of `grant_secret` is at its writes (`GrantSecret.Line`).
     /// 6. The call still has its caller: a call whose connection ended sends nothing.
     /// 7. The writes, in a task of the line's own: each give in the byte order of the names
-    ///    (`GrantSecret.give(login:agent:fleet:server:sign:grant:team:)`), where the first give that does not end
+    ///    (`GrantSecret.give(login:agent:fleet:server:sign:grant:holds:)`), where the first give that does not end
     ///    in a grant stops the call, with no later give and no answer; and then the answer of the request.
     /// 8. From the first write on, the call goes to its end also when its caller went away.
     ///
@@ -605,7 +733,7 @@ public enum AnswerSecret {
     ///
     /// **The answer** of a call whose writes all went: `need`, `login`, `answered` true, `given` (in the order of
     /// the names; for each agent `agent`, `level`, `server`, `changed`, `vault` when the receipt has it, and
-    /// `note`) and `note`. Then the app reads the fleet again, started and not waited for.
+    /// `note`; the door has no `server`) and `note`. Then the app reads the fleet again, started and not waited for.
     @MainActor
     public static func answer<Place>(fields: [String: JSONValue], value: OwnerChannel.Value?, desk: Desk<Place>,
                                      line: GrantSecret.Line) async -> OwnerChannel.Answer {
@@ -640,8 +768,18 @@ public enum AnswerSecret {
         case .found(let item): request = item
         }
         guard request.isSecret else { return .refused(notSecretRequest) }
-        guard request.open else { return .refused(request.saved == read.login ? answeredWithThis : answeredAlready) }
-        guard !request.door else { return .refused(doorRequest) }
+        guard request.open else {
+            guard request.saved == read.login else { return .refused(answeredAlready) }
+            return .refused(request.doorKey ? answeredWithThisForDoor : answeredWithThis)
+        }
+        let toDoor = read.give.first { $0.agent == GrantSecret.door }?.level
+        if request.door {
+            guard let level = toDoor else { return .refused(doorNeedsDoor) }
+            guard level == .use else { return .refused(doorUsesOnly) }
+            guard !request.doorKey || read.give.count == 1 else { return .refused(doorKeyAlone) }
+        } else if toDoor != nil {
+            return .refused(doorNotAsked)
+        }
         guard let secret = team.secrets[read.login] else { return .refused(noSecret) }
         guard request.fits(secret) else { return .refused(notFitting) }
         var fleet = ""
@@ -657,7 +795,12 @@ public enum AnswerSecret {
             fleet = id
             for give in read.give {
                 let name = give.agent
-                guard name != GrantSecret.door, let agent = team.agents[name] else { return .refused(noAgent(name)) }
+                // The door: its give was checked with the request, above, and its grant names its own name.
+                if name == GrantSecret.door {
+                    servers[name] = GrantSecret.door
+                    continue
+                }
+                guard let agent = team.agents[name] else { return .refused(noAgent(name)) }
                 guard GrantSecret.holderRoles.contains(agent.role) else { return .refused(notWorker(name)) }
                 guard let machine = agent.machine, desk.isMachine(machine) else { return .refused(noServer(name)) }
                 if give.level == .read {
@@ -666,6 +809,8 @@ public enum AnswerSecret {
                 }
                 servers[name] = machine
             }
+            guard let apart = desk.clockApart(place) else { return .refused(notReady) }
+            guard !apart else { return .refused(clockApart) }
         }
         // 5 and 6, and then the start of the writes, with no `await` between the three.
         guard !line.busy else { return .refused(busy) }
@@ -695,11 +840,16 @@ public enum AnswerSecret {
             guard let server = servers[give.agent] else {
                 return .refused(stopped(.notSignedNow, agent: give.agent, before: names))
             }
+            // After a certain refusal of the hub's grant: whether the list gives the secret to that holder now. The
+            // team's page never shows the door's hold, and the hub refuses the door's grant only when the door does
+            // not hold the secret after it (`doorStopped`), so for the door the app signs the end with no read.
+            let holds: () async throws -> Bool = give.agent == GrantSecret.door ? { false }
+                : { try await desk.team(place).holds(read.login, agent: give.agent) }
             let end = await GrantSecret.give(
                 login: read.login, agent: give.agent, fleet: fleet, server: server,
                 sign: { try await desk.sign(place, $0) },
                 grant: { try await desk.grant(place, read.login, give.agent, give.level) },
-                team: { try await desk.team(place) })
+                holds: holds)
             guard case .given(let receipt) = end else {
                 if !given.isEmpty { await desk.refresh() }
                 return .refused(stopped(end, agent: give.agent, before: names))
@@ -731,6 +881,11 @@ public enum AnswerSecret {
     /// access pass only as codes (`GrantSecret.code`), and the hub's words to the agent that asked are not in it.
     static func result(_ read: Read, _ given: [Given]) -> JSONValue {
         let entries: [JSONValue] = given.map { one in
+            // The door has no server: its grant names the door's own name in the central vault, and its note is its own.
+            if one.give.agent == GrantSecret.door {
+                return .object(["agent": .string(one.give.agent), "level": .string(one.give.level.rawValue),
+                                "changed": .bool(one.receipt.changed), "note": .string(doorNote(one.receipt))])
+            }
             var entry: [String: JSONValue] = [
                 "agent": .string(one.give.agent), "level": .string(one.give.level.rawValue),
                 "server": .string(one.server), "changed": .bool(one.receipt.changed),

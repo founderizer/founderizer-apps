@@ -2112,22 +2112,22 @@
         }
       }
     },
+    "%lld cores" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld núcleos"
+          }
+        }
+      }
+    },
     "%lld days ago" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "hace %lld días"
-          }
-        }
-      }
-    },
-    "%lld done today" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld hechas hoy"
           }
         }
       }
@@ -2298,6 +2298,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld tareas abiertas · rol bloqueado"
+          }
+        }
+      }
+    },
+    "%lld own cores" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld núcleos propios"
           }
         }
       }
@@ -2574,6 +2584,16 @@
         }
       }
     },
+    "1 core" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 núcleo"
+          }
+        }
+      }
+    },
     "1 day ago" : {
       "localizations" : {
         "es" : {
@@ -2640,6 +2660,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1 tarea abierta · rol bloqueado"
+          }
+        }
+      }
+    },
+    "1 own core" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 núcleo propio"
           }
         }
       }
@@ -4288,6 +4318,16 @@
         }
       }
     },
+    "Another provider" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otro proveedor"
+          }
+        }
+      }
+    },
     "Another save changed this value meanwhile. The value shown is the saved one." : {
       "localizations" : {
         "es" : {
@@ -4768,6 +4808,16 @@
         }
       }
     },
+    "Browser" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Navegador"
+          }
+        }
+      }
+    },
     "Browser tasks in Chrome." : {
       "localizations" : {
         "es" : {
@@ -5054,6 +5104,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No se puede quitar la clave de este teléfono."
+          }
+        }
+      }
+    },
+    "Capabilities" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capacidades"
           }
         }
       }
@@ -7124,6 +7184,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No lo leen · %lld"
+          }
+        }
+      }
+    },
+    "Does nothing for this agent now." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ahora no hace nada para este agente."
           }
         }
       }
@@ -9398,6 +9468,16 @@
         }
       }
     },
+    "Handled" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gestionado"
+          }
+        }
+      }
+    },
     "Has it at %@" : {
       "localizations" : {
         "es" : {
@@ -9514,16 +9594,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Número oculto"
-          }
-        }
-      }
-    },
-    "Hide" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ocultar"
           }
         }
       }
@@ -10664,6 +10734,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Su servicio se reinicia, así que termina la tarea «%@», en la que %@ trabaja ahora. La actualización del propio hub espera a que %@ esté inactivo; esta no puede. Después, Founderizer vuelve a revisar el servidor."
+          }
+        }
+      }
+    },
+    "Its shell reaches the web too." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Su shell también accede a la web."
           }
         }
       }
@@ -12204,6 +12284,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aún no hay cuentas"
+          }
+        }
+      }
+    },
+    "No action" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin acción"
           }
         }
       }
@@ -14178,6 +14268,16 @@
         }
       }
     },
+    "Open task" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir la tarea"
+          }
+        }
+      }
+    },
     "Open the [Developer Portal](%@)" : {
       "localizations" : {
         "es" : {
@@ -14368,6 +14468,16 @@
         }
       }
     },
+    "Opens the task" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre la tarea"
+          }
+        }
+      }
+    },
     "Optional." : {
       "localizations" : {
         "es" : {
@@ -14424,6 +14534,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Otros modelos"
+          }
+        }
+      }
+    },
+    "Other…" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otro…"
           }
         }
       }
@@ -16768,6 +16888,26 @@
         }
       }
     },
+    "Runs commands and changes files on %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ejecuta comandos y cambia archivos en %@."
+          }
+        }
+      }
+    },
+    "Runs commands and changes files on %@. Keep it off for an agent that reads messages from strangers." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ejecuta comandos y cambia archivos en %@. Mantenla desactivada en un agente que lee mensajes de desconocidos."
+          }
+        }
+      }
+    },
     "Runs on" : {
       "localizations" : {
         "es" : {
@@ -17068,6 +17208,16 @@
         }
       }
     },
+    "Screen" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pantalla"
+          }
+        }
+      }
+    },
     "Screen Sharing" : {
       "localizations" : {
         "es" : {
@@ -17218,22 +17368,22 @@
         }
       }
     },
-    "Select Change on the AI provider row to see it." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Selecciona Cambiar en la fila del proveedor de IA para verla."
-          }
-        }
-      }
-    },
     "Select a server." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Elige un servidor."
+          }
+        }
+      }
+    },
+    "Select the other provider in the AI provider menu to see it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selecciona el otro proveedor en el menú del proveedor de IA para verla."
           }
         }
       }
@@ -18024,6 +18174,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La configuración devolvió un estado no válido. Vuelve a conectar antes de continuar."
+          }
+        }
+      }
+    },
+    "Shell" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell"
           }
         }
       }
@@ -19164,6 +19324,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Retirarlo"
+          }
+        }
+      }
+    },
+    "Take over" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomar el control"
           }
         }
       }
@@ -22988,6 +23158,16 @@
         }
       }
     },
+    "This AI cannot work with its Shell box off." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta IA no puede trabajar con su shell desactivada."
+          }
+        }
+      }
+    },
     "This Akamai token cannot make servers. Make one with Read/Write for Linodes and Firewalls, and paste it." : {
       "localizations" : {
         "es" : {
@@ -24608,16 +24788,6 @@
         }
       }
     },
-    "Tools" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Herramientas"
-          }
-        }
-      }
-    },
     "Try again" : {
       "localizations" : {
         "es" : {
@@ -25438,6 +25608,16 @@
         }
       }
     },
+    "Uses Chrome on %@. It can act on each site where it is signed in." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa Chrome en %@. Puede actuar en cada sitio donde tiene la sesión iniciada."
+          }
+        }
+      }
+    },
     "Uses it" : {
       "localizations" : {
         "es" : {
@@ -25454,6 +25634,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lo usa: su bóveda envía la clave por él, y nunca la ve. Lo lee: la clave está en sus sesiones como $%@."
+          }
+        }
+      }
+    },
+    "Uses the mouse and keyboard of %@. It can do all that a person at that Mac can do." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa el ratón y el teclado de %@. Puede hacer todo lo que haría una persona en ese Mac."
+          }
+        }
+      }
+    },
+    "Uses the web. A web page can contain instructions from strangers." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa la web. Una página web puede contener instrucciones de desconocidos."
           }
         }
       }
@@ -25554,6 +25754,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ver %@"
+          }
+        }
+      }
+    },
+    "View all" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ver todo"
           }
         }
       }
@@ -25914,6 +26124,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Te respondemos aquí y no guardamos nada más."
+          }
+        }
+      }
+    },
+    "Web" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Web"
           }
         }
       }
@@ -27784,6 +28004,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "y"
+          }
+        }
+      }
+    },
+    "asks for its token" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pide su token"
           }
         }
       }

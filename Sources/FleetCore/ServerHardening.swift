@@ -201,8 +201,15 @@ public enum ServerHardening {
     /// the most for one launch, so that a run that reads as not started cannot come more often than that. A run that
     /// started and did not settle the server is counted in `memory`, also when it did not end: the program ran in
     /// part, and six such runs are the most for good.
+    ///
+    /// `started`, `outcome` and `settledLine` are this sweep's own unless another sweep with a program of its own
+    /// gives its own (`ServerMemory`): the program's first line, how its output reads, and the log's words for a
+    /// server that a run settled.
     public static func turn(_ reading: Reading, memory: inout Memory, unreached: inout VaultTries?, seenBefore: Bool,
-                            now: Double, connection: @Sendable () async throws -> InstallTarget,
+                            now: Double, started first: String? = nil,
+                            outcome: @Sendable (String) -> Outcome = { ServerHardening.outcome($0) },
+                            settledLine: String = "its hardening is in order",
+                            connection: @Sendable () async throws -> InstallTarget,
                             run: @Sendable (InstallTarget) async throws -> String) async -> Turn {
         switch step(reading, memory: memory, seenBefore: seenBefore, now: now, unreached: unreached) {
         case .nothing: return Turn()
@@ -217,7 +224,7 @@ public enum ServerHardening {
             do {
                 let output = try await run(try await connection())
                 turn.lines = Array(output.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
-                    .filter { !$0.isEmpty && $0 != started }.suffix(6))
+                    .filter { !$0.isEmpty && $0 != (first ?? started) }.suffix(6))
                 switch outcome(output) {
                 case .holds, .leftAsItIs: memory.settled = true
                 case .failed(let said): memory.failed(at: now, reason: said)
@@ -236,7 +243,7 @@ public enum ServerHardening {
                 return turn
             }
             if memory.settled {
-                turn.lines.append("its hardening is in order")
+                turn.lines.append(settledLine)
             } else if memory.tries?.givenUp == true {
                 turn.lines.append("left after \(memory.failures) tries (\(memory.reason))")
             }

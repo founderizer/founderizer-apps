@@ -63,7 +63,7 @@ struct PersonAccessPage: View {
     private var person: PeopleSnapshot.Person? { snapshot?.person(id) }
     private var scope: PersonScope? { person?.agents.first { $0.agent == agent }?.scope }
     private var offered: Bool { store.state?.ui_features?.contains(PersonScope.feature) == true }
-    private var canWrite: Bool { store.isFresh && store.state?.db != nil }
+    private var canWrite: Bool { store.writesNow && store.state?.db != nil }
     /// Nothing to set here any more: the person, their row of this agent, or its access is gone. The page goes back to
     /// the person's, which shows what is there now.
     private var gone: Bool { !offered || scope == nil }
@@ -71,7 +71,8 @@ struct PersonAccessPage: View {
     private var reading: ResourceList? {
         store.reading(AccessSettings.name(agent)) ?? store.reading(AccessSettings.name(nil))
     }
-    private var failed: Bool { store.reading(AccessSettings.name(agent) + ".failed") ?? false }
+    /// When the first of the agent's reads of them that failed in a row failed (`AccessSettings.readOnce`).
+    private var failedSince: ContinuousClock.Instant? { store.reading(AccessSettings.name(agent) + ".failedSince") }
     /// The hub's list: what of it the agent holds now; nothing for All.
     private var hubList: [String: String] { scope?.list ?? [:] }
     /// The list that the ticks show.
@@ -84,8 +85,9 @@ struct PersonAccessPage: View {
                 let holdings = reading.scopeHoldings(of: agent)
                 github(holdings)
                 secrets(reading, holdings: holdings)
-            } else if failed || !store.isFresh {
-                // Not while the window's notice says the outage, as Can use says it.
+            } else if store.pageReadingIsOld(failedSince: failedSince) {
+                // Not while the window's notice says the outage, as Can use says it. **One break of the hub says
+                // nothing** (17 November 2026): "Reading the resources…" stays until then.
                 if !store.hubNoticeShows {
                     FormSection {
                         FormRow("Founderizer cannot read the resources now.", detail: String(l10n: "It reads again when the hub answers."))
@@ -365,6 +367,7 @@ struct PersonAccessPage: View {
     /// GitHub writes them, once for this hub generation.
     private func poll() async {
         opened = .now
+        AccessSettings.visited(store, agent: agent)
         let start = ContinuousClock.now
         var named = false
         while !Task.isCancelled {

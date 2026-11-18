@@ -30,12 +30,17 @@ struct ConversationPage: View {
         get { store.reading("conversation.read_at.\(id)") } nonmutating set { store.keep(newValue, as: "conversation.read_at.\(id)") }
     }
     @State private var readError: String?
+    /// When the first of the reads that failed in a row failed: one break of them says nothing
+    /// (`FleetStore.pageReadingIsOld`).
+    @State private var failedSince: ContinuousClock.Instant?
+    /// The words of the reads that failed, once they have failed one whole break.
+    private var saidError: String? { readError.flatMap { store.pageReadingIsOld(failedSince: failedSince) ? $0 : nil } }
     @State private var busy = false
     @State private var problem: String?
     private let client = PeopleClient()
 
     private var now: Double { store.state?.time ?? Date().timeIntervalSince1970 }
-    private var canWrite: Bool { store.isFresh && store.state?.db != nil && !busy }
+    private var canWrite: Bool { store.writesNow && store.state?.db != nil && !busy }
     /// The head of one conversation, which the Conversations list keeps too when a row opens it.
     static func headName(_ id: Int) -> String { "conversation.head.\(id)" }
 
@@ -56,7 +61,7 @@ struct ConversationPage: View {
                 // The first visit, a read that failed, or a conversation with nothing in it yet: a page's blocks under
                 // its name.
                 VStack(alignment: .leading, spacing: FleetSpace.block) {
-                    if readAt == nil, readError == nil, store.connectionError == nil {
+                    if readAt == nil, saidError == nil, store.connectionError == nil {
                         // The first visit: nothing of the record until it is read, then all of it in one frame. While
                         // the hub does not answer nothing is read, and the failed row stands in its place.
                         LoadingLine(String(l10n: "Reading the conversation…"))
@@ -65,7 +70,7 @@ struct ConversationPage: View {
                         // item 33).
                         if !store.hubNoticeShows {
                             FormSection {
-                                FormRow("The conversation is unavailable", symbol: "exclamationmark.circle", warning: readError)
+                                FormRow("The conversation is unavailable", symbol: "exclamationmark.circle", warning: saidError)
                                     .accessibilityIdentifier("conversation-failed")
                             }
                         }
@@ -81,7 +86,7 @@ struct ConversationPage: View {
         }
         .font(FleetStyle.body).foregroundStyle(FleetStyle.text)
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(id)") {
-            readError = nil; problem = nil
+            readError = nil; failedSince = nil; problem = nil
             let start = ContinuousClock.now
             while !Task.isCancelled {
                 await read(since: start)
@@ -138,9 +143,10 @@ struct ConversationPage: View {
         if let problem {
             Text(problem).font(FormMetrics.detail).foregroundStyle(.orange).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("conversation-problem")
-        } else if let readError, readAt != nil, !store.hubNoticeShows {
-            // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`).
-            Text("Last reading \(readAt!.formatted(date: .omitted, time: .shortened)). \(readError) Founderizer reads again.")
+        } else if let saidError, readAt != nil, !store.hubNoticeShows {
+            // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`). **One break of the hub says
+            // nothing** (17 November 2026): it stood from the first read that a restart of the hub refused.
+            Text("Last reading \(readAt!.formatted(date: .omitted, time: .shortened)). \(saidError) Founderizer reads again.")
                 .font(FormMetrics.detail).foregroundStyle(.orange).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("conversation-stale")
         }
@@ -167,12 +173,12 @@ struct ConversationPage: View {
             if first, let start { await store.settle(since: start) }
             guard store.hub == hub, store.state?.db == db else { return }
             if let record { head = record }
-            items = fresh; readAt = Date(); readError = nil
+            items = fresh; readAt = Date(); readError = nil; failedSince = nil
         } catch {
             if first, let start { await store.settle(since: start) }
             guard store.hub == hub, store.state?.db == db else { return }
             if let record { head = record }
-            readError = People.reason(error)
+            readError = People.reason(error); failedSince = failedSince ?? .now
         }
     }
 
@@ -200,6 +206,10 @@ struct AgentConversationPage: View {
     let other: String
     let back: () -> Void
     @State private var failure: String?
+    /// When the first of the reads that failed in a row failed: "Reading the conversation…" stays until they have
+    /// failed one whole break (`FleetStore.pageReadingIsOld`; 17 November 2026).
+    @State private var failedSince: ContinuousClock.Instant?
+    private var saidFailure: String? { failure.flatMap { store.pageReadingIsOld(failedSince: failedSince) ? $0 : nil } }
 
     private var kept: [AgentMessage]? { store.reading(AgentMessagesReading.name(agent)) }
     private var messages: [AgentMessage] {
@@ -217,12 +227,12 @@ struct AgentConversationPage: View {
                 }, store: store)
             } else {
                 VStack(alignment: .leading, spacing: FleetSpace.block) {
-                    if kept == nil, failure == nil, store.connectionError == nil {
+                    if kept == nil, saidFailure == nil, store.connectionError == nil {
                         LoadingLine(String(l10n: "Reading the conversation…"))
                     } else if kept == nil {
                         if !store.hubNoticeShows {
                             FormSection {
-                                FormRow("The conversation is unavailable", symbol: "exclamationmark.circle", warning: failure)
+                                FormRow("The conversation is unavailable", symbol: "exclamationmark.circle", warning: saidFailure)
                                     .accessibilityIdentifier("conversation-failed")
                             }
                         }
@@ -237,10 +247,11 @@ struct AgentConversationPage: View {
         }
         .font(FleetStyle.body).foregroundStyle(FleetStyle.text)
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(agent)") {
+            failure = nil; failedSince = nil
             while !Task.isCancelled {
                 switch await AgentMessagesReading.read(store, agent: agent) {
-                case .read: failure = nil
-                case .failed(let reason): failure = reason
+                case .read: failure = nil; failedSince = nil
+                case .failed(let reason): failure = reason; failedSince = failedSince ?? .now
                 case .notAsked: break
                 }
                 do { try await store.nap(3) } catch { return }

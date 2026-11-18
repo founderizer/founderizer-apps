@@ -4,24 +4,29 @@ import SwiftUI
 /// The parts of one agent. Chat is the agent's own page (`.agent(name)`, with its status panel); the other parts are
 /// its details, with a sidebar of their own.
 ///
-/// **Five parts** (the owner's yes of 28 October 2026 to D-5 ("All") for four of them, and of 6 November 2026 to Tasks):
-/// Runs on, Behaviour, Tasks, People and Can use — the manager has Runs on, Behaviour and People. They were twelve
-/// sections that took the chat's place, six of which held nothing for most agents. **Runs on** is the page that was
-/// Settings (its server, its AI provider, its account and its usage, and the one "…"), which is no longer a second
-/// "Settings" beside the app's own. **Behaviour** is its rules, with its duties under "Responsible for", its schedules and
-/// its memory. **Tasks** is the task board of the main sidebar with this agent's tasks only (`ActivityBoard.scope`); the
-/// manager owns no task — it gives them — so it has none. **People** is its channels, the people who can talk to it and
+/// **Six parts** (the owner's yes of 28 October 2026 to D-5 ("All") for four of them, of 6 November 2026 to Tasks, and
+/// of 17 November 2026 to Capabilities): Runs on, Capabilities, Behaviour, Tasks, People and Can use — the manager has
+/// Runs on, Behaviour and People. They were twelve sections that took the chat's place, six of which held nothing for
+/// most agents. **Runs on** is the page that was Settings (its server, its AI provider with its model and its reasoning,
+/// its account and its usage, and the one "…"), which is no longer a second "Settings" beside the app's own.
+/// **Capabilities** is what the agent may use on its server: a switch for each box that its AI and its server can have,
+/// with one line of what it allows (`AgentCapabilitiesPart`). **Behaviour** is its rules, with its duties under
+/// "Responsible for", its schedules and its memory. **Tasks** is the task board of the main sidebar with this agent
+/// alone: its tasks and the things that he asked it (`ActivityBoard.scope`); the manager owns no task — it gives them —
+/// so it has none, and what he asked it is on Tasks with the manager chosen, which View all of its card Asked opens.
+/// **People** is its channels, the people who can talk to it and
 /// its conversations: with people, and with the other agents it wrote to or heard from (`AgentConversationPage`). **Can
 /// use** is the secrets, the knowledge and the apps it has, as rows of the fleet's own that open the same card as
 /// Settings, where each kind is given and taken back.
 enum AgentTab: String, CaseIterable, Hashable {
-    case settings, chat, behaviour, tasks, people, canUse = "canuse"
+    case settings, capabilities, chat, behaviour, tasks, people, canUse = "canuse"
 
     /// A part by its name, also by the names of the sections that are in one of the parts now: `-openPage
     /// agent.<name>.memory` opens Behaviour, `.secrets` Can use, `.channels` People.
     static func named(_ name: String) -> AgentTab? {
         switch name {
         case "overview", "runson": .settings
+        case "tools": .capabilities
         case "memory", "notes", "duties": .behaviour
         case "channels", "conversations": .people
         case "secrets", "knowledge", "mcps", "apps": .canUse
@@ -32,6 +37,7 @@ enum AgentTab: String, CaseIterable, Hashable {
     var title: String {
         switch self {
         case .settings: String(l10n: "Runs on")
+        case .capabilities: String(l10n: "Capabilities")
         case .chat: String(l10n: "Chat")
         case .behaviour: String(l10n: "Behaviour")
         case .tasks: String(l10n: "Tasks")
@@ -52,6 +58,8 @@ enum AgentTab: String, CaseIterable, Hashable {
         switch self {
         case .chat: "bubble.left.and.bubble.right"
         case .settings: "desktopcomputer"
+        // Two switches: the page is one switch for each box.
+        case .capabilities: "switch.2"
         case .behaviour: "text.book.closed"
         // The symbol of Tasks in the main sidebar: one board, one mark.
         case .tasks: "rectangle.split.3x1"
@@ -70,6 +78,9 @@ enum AgentTab: String, CaseIterable, Hashable {
             case .chat: false
             // Always: its server, its provider, its account and its usage are read on every hub.
             case .settings: true
+            // Where its boxes were the Tools row of Runs on's Change (`agent_setup`), for a worker or a lead: the
+            // manager's sessions have the shell and the web whatever its boxes say, and it has no task of its own.
+            case .capabilities: worker && features.contains("agent_setup")
             case .behaviour: features.contains("profiles") || features.contains(AgentNotes.feature)
                 || features.contains(AgentMemory.feature) || features.contains(Duties.feature) || features.contains("triggers")
             // Every hub sends its tasks in its state.
@@ -125,7 +136,10 @@ struct AgentPage: View {
                     part(tab).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                         .id("\(store.hub)/\(agent)/\(tab.rawValue)")
                 }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).pageNotices(store)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // The part that he opens fades in beside the sidebar, which stays (`arrives`).
+            .arrives(with: destination.part)
+            .pageNotices(store)
             // The title and the header's button stand where every page has them (`columnPull`).
             .environment(\.columnPull, (FleetStyle.pageSidebarWidth + 1) / 2)
         }
@@ -158,6 +172,7 @@ struct AgentPage: View {
         case .tasks: ActivityBoard(store: store, scope: agent)
         case .people: AgentPeoplePart(store: store, agent: agent) { channels = $0 }
         case .canUse: AgentCanUsePart(store: store, agent: agent)
+        case .capabilities: AgentCapabilitiesPart(store: store, agent: agent)
         }
     }
 

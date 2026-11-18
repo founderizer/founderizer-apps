@@ -193,11 +193,29 @@ final class FleetCloudModel {
     /// While the owner chooses: the server this app would make, and the servers the account holds already. nil while
     /// they are read.
     private(set) var offer: CloudOffer?
+    /// **Every type of the provider that fits, each once, the cheapest first** (`CloudServers.offers`; slice 2b of the
+    /// one wizard, the list under a server of "Your fleet"): `offer` is the first until the owner chooses another one
+    /// (`choose`), and a stop that reads them again gives the first again.
+    private(set) var choices: [CloudOffer] = []
+    /// The row that the owner chose in that list (`CloudOffer.kind`: Hetzner's type, another provider's size): a read
+    /// after a stop ("taken") gives its next free place, when it has one, in place of the cheapest.
+    private var wanted: String?
     private(set) var existing: [CloudExisting] = []
     /// The chosen server of the account, by its id; nil for the new one.
     var chosen: String?
+
+    /// **The owner's type in the list under a server** (slice 2b): the press then makes it or nothing (`createServer`
+    /// takes the offer that the owner said yes to, and only that one). Only one of `choices`, and only while the choice shows.
+    func choose(_ chosen: CloudOffer) {
+        guard stage == .choosing, choices.contains(chosen) else { return }
+        offer = chosen
+        wanted = chosen.kind
+    }
     /// What the server is for, from the press that opened the choice.
     private(set) var use: CloudServerUse = .hub { didSet { tell() } }
+    /// The page shows the account's servers, so each read of this choice reads them too (`open`); false for the
+    /// manager's own server on "Your fleet", also in the read after a build's stop.
+    private(set) var lists = true
     /// **Who hears of each change of `stage`, `stopped`, `use` and `provider`**: the page that owns this model sets it
     /// once, and the store keeps the facts for `setup_diagnosis` (`SetupChannel.reports`), also while the page is
     /// closed. One change of the page calls it more than once; the last call is the settled one.
@@ -237,13 +255,14 @@ final class FleetCloudModel {
 
     /// A token goes once, and once the provider took it the choice opens (`open`). The title moves from the press on:
     /// the field emptied and the page stood still while the token was checked.
-    func sendToken(_ provider: CloudProvider, use: CloudServerUse) {
+    func sendToken(_ provider: CloudProvider, use: CloudServerUse, lists: Bool = true) {
         let token = tokenText.trimmingCharacters(in: .whitespacesAndNewlines)
         tokenText = ""
         guard work == nil, !token.isEmpty else { return }
         listing += 1
-        failure = nil; stopped = nil; self.provider = provider; self.use = use; anotherProject = false
-        offer = nil; existing = []; chosen = nil; taken = []; stage = .choosing
+        failure = nil; stopped = nil; self.provider = provider; self.use = use; anotherProject = false; self.lists = lists
+        wanted = nil
+        offer = nil; choices = []; existing = []; chosen = nil; taken = []; stage = .choosing
         work = Task { [weak self] in
             guard let self else { return }
             defer { if !Task.isCancelled { work = nil } }
@@ -256,26 +275,29 @@ final class FleetCloudModel {
             }
             guard !Task.isCancelled else { return }
             tokenTaken = true
-            await read(provider, use: use)
+            await read(provider, use: use, lists: lists)
         }
     }
 
     /// **Before anything is made: the servers of the account and the new one, with its price** (the owner's yes of 5
-    /// November 2026). Nothing is made until the owner presses Make the server.
-    func open(_ provider: CloudProvider, use: CloudServerUse) {
+    /// November 2026). Nothing is made until the owner presses Make the server. A model whose page shows no list (the
+    /// manager's own server on "Your fleet") reads none (`lists`), so no list's failure holds its press.
+    func open(_ provider: CloudProvider, use: CloudServerUse, lists: Bool = true) {
         guard work == nil else { return }
         listing += 1
-        failure = nil; stopped = nil; self.provider = provider; self.use = use; tokenTaken = true
-        offer = nil; existing = []; chosen = nil; taken = []; stage = .choosing
+        failure = nil; stopped = nil; self.provider = provider; self.use = use; tokenTaken = true; self.lists = lists
+        wanted = nil
+        offer = nil; choices = []; existing = []; chosen = nil; taken = []; stage = .choosing
         work = Task { [weak self] in
             guard let self else { return }
             defer { if !Task.isCancelled { work = nil } }
-            await read(provider, use: use)
+            await read(provider, use: use, lists: lists)
         }
     }
 
-    /// The new server's offer and the account's servers, read together. A list that cannot be read leaves the new
-    /// server alone, which is the step as it was before the list.
+    /// The new server's offer and the account's servers, read together. **A list that cannot be read fails the read**,
+    /// as the offer does (the review of 17 November 2026): it left the new server alone, whose press made a second
+    /// server beside the account's own.
     ///
     /// **A list that cannot be read keeps the page the server's**, with the line of why: the token's own refusal asks
     /// for a token again, and anything else (no server free now, no network, a provider that asks to wait) is read
@@ -285,23 +307,29 @@ final class FleetCloudModel {
     /// **A read that `cancel` ended writes nothing more** (Back while the token or the list is read): its page is
     /// gone, and the model is the next try's. It wrote the failure of a request that Back itself had ended, which
     /// the next page showed as its own line, and which `stopped` gave the app's own program as a stop.
-    private func read(_ provider: CloudProvider, use: CloudServerUse) async {
+    private func read(_ provider: CloudProvider, use: CloudServerUse, lists: Bool = true) async {
         let servers = CloudServers(provider: provider)
         for round in 0...Self.readsAgain {
             if round > 0 { try? await Task.sleep(for: Self.readAgainAfter) }
             guard !Task.isCancelled else { return }
-            async let listed = try? servers.servers()
+            async let listed = Self.list(servers, lists: lists)
             do {
-                let offer = try await servers.offer(use: use, except: taken)
+                let offers = try await servers.offers(use: use, except: taken)
+                guard !Task.isCancelled else { return }
+                // **The offer and the account's servers come together**: an offer alone showed the new server's page
+                // (the first run's "Your fleet", or `CloudChoice`'s new server alone) with its press for an account
+                // whose list was still on its way. **A list that could not be read is no empty account** (the review of
+                // 17 November 2026): those pages made a second server beside the account's own with one press. Its
+                // failure is the read's, with its words and the next round, as the offer's is.
+                let existing = try await listed.get()
                 guard !Task.isCancelled else { return }
                 // A line of this read's own earlier round says nothing true any more.
                 if round > 0 { failure = nil; stopped = nil }
-                // **The offer and the account's servers come together**: an offer alone showed the new server's page
-                // (the first run's "Your fleet", or `CloudChoice`'s new server alone) with its press for an account
-                // whose list was still on its way.
-                let existing = await listed ?? []
-                guard !Task.isCancelled else { return }
-                self.offer = offer
+                let kept = offers.first { $0.kind == wanted }
+                // A type that is gone is no longer the owner's choice: a later read never brings it back by itself.
+                if kept == nil { wanted = nil }
+                self.offer = kept ?? offers[0]
+                self.choices = offers
                 self.existing = existing
                 return
             } catch {
@@ -321,6 +349,12 @@ final class FleetCloudModel {
         // Read again as often as it may: the page stops looking, with its line and no moving title, until the next
         // press on the provider's card opens the list again.
         stage = .token
+    }
+
+    /// The account's servers, or why they could not be read (`read`); none for a page that shows no list.
+    nonisolated private static func list(_ servers: CloudServers, lists: Bool) async -> Result<[CloudExisting], any Error> {
+        guard lists else { return .success([]) }
+        do { return .success(try await servers.servers()) } catch { return .failure(error) }
     }
 
     /// The account's server chosen in the list, or nil for the new one.
@@ -362,7 +396,7 @@ final class FleetCloudModel {
         guard work == nil else { return }
         listing += 1
         anotherProject = true; tokenTaken = false; taken = []
-        failure = nil; stopped = nil; offer = nil; existing = []; chosen = nil; stage = .token
+        failure = nil; stopped = nil; offer = nil; choices = []; existing = []; chosen = nil; stage = .token
     }
 
     /// **The server, made with nothing typed**: a name no device of the network has, this Mac's own SSH key, a join key
@@ -452,9 +486,9 @@ final class FleetCloudModel {
         if !Task.isCancelled, reached == .making, let error = stoppedBy, CloudStop.readsListAgain(after: error, called: kept != nil) {
             if case CloudError.taken = error { taken.insert(offer.key) }
             listing += 1
-            self.offer = nil; existing = []; chosen = nil
+            self.offer = nil; choices = []; existing = []; chosen = nil
             stage = .choosing
-            await read(provider, use: use)
+            await read(provider, use: use, lists: lists)
             return
         }
         if let error = stoppedBy, CloudStop.refusesToken(error) { tokenTaken = false }
@@ -465,7 +499,7 @@ final class FleetCloudModel {
     func cancel() {
         listing += 1
         work?.cancel(); work = nil; failure = nil; stopped = nil; stage = .token; provider = nil; tokenText = ""
-        offer = nil; existing = []; chosen = nil; anotherProject = false; tokenTaken = false; taken = []
+        offer = nil; choices = []; existing = []; chosen = nil; anotherProject = false; tokenTaken = false; taken = []
     }
 }
 
@@ -768,13 +802,22 @@ struct FirstFleetChoice: View {
     var managers: FleetCloudModel?
     let plan: FleetPlan
     let step: ServersStep
+    /// **Another provider for the hub's server, and for the manager's own** (slice 2b; each capsule's "Another
+    /// provider"): the first run takes each one there (`FirstRunView.hubAt`, `managersAt`).
+    var hubAt: (CloudProvider) -> Void = { _ in }
+    var managersAt: (CloudProvider) -> Void = { _ in }
     let make: () -> Void
+    /// The providers whose token this Mac holds, read as the page shows: each other one "asks for its token".
+    @State private var held: Set<CloudProvider> = []
 
     var body: some View {
-        if let hub = cloud.offer, managers == nil || managers?.offer != nil {
+        if cloud.offer != nil, managers == nil || managers?.offer != nil {
             VStack(spacing: SetupMetrics.gap) {
-                ServerBoxes(plan: plan, step: step, under: [hub.brief, managers?.offer?.brief])
-                    .accessibilityIdentifier("first-run-fleet")
+                ServerBoxes(plan: plan, step: step, choices: [
+                    choice(cloud, title: String(l10n: "Your hub"), elsewhere: hubAt),
+                    managers.flatMap { choice($0, title: String(l10n: "\(plan.names[0])'s server"), elsewhere: managersAt) },
+                ])
+                .accessibilityIdentifier("first-run-fleet")
                 SetupAction {
                     // Why the press made nothing (`FleetCloudModel.stop`), over the press, as in `CloudChoice`.
                     if cloud.stage == .choosing, let failure = cloud.failure { SetupWarning(failure) }
@@ -786,6 +829,33 @@ struct FirstFleetChoice: View {
                             .accessibilityIdentifier("cloud-choice-project")
                     }
                 }
+            }
+            .onAppear { held = Set(CloudProvider.allCases.filter { CloudServers(provider: $0).isHeld }) }
+        }
+    }
+
+    /// One server's capsule (`ServerBoxChoice`): its provider's five cheapest types that fit, the cheapest first, with the
+    /// one that the press makes checked, then each other provider. nil while its offer is read.
+    private func choice(_ model: FleetCloudModel, title: String,
+                        elsewhere: @escaping (CloudProvider) -> Void) -> ServerBoxChoice? {
+        guard let offer = model.offer, let provider = model.provider else { return nil }
+        // The type that the press makes is always a row: one dearer than the fifth takes the fifth's place.
+        var shown = Array(model.choices.prefix(ServerBoxChoice.types))
+        if !shown.contains(offer), !shown.isEmpty { shown[shown.count - 1] = offer }
+        let types = shown.map {
+            FleetOption(ServerBoxChoice.Pick.offer($0.key), $0.choice, detail: $0.amount, section: provider.name)
+        }
+        let others = CloudProvider.allCases.filter { $0 != provider }.map { other in
+            FleetOption(ServerBoxChoice.Pick.provider(other), other.name,
+                        detail: held.contains(other) ? nil : String(l10n: "asks for its token"),
+                        section: String(l10n: "Another provider"))
+        }
+        let choices = model.choices
+        return ServerBoxChoice(title: title, label: offer.pick, options: types + others,
+                               selected: .offer(offer.key)) { pick in
+            switch pick {
+            case .offer(let key): if let chosen = choices.first(where: { $0.key == key }) { model.choose(chosen) }
+            case .provider(let other): elsewhere(other)
             }
         }
     }

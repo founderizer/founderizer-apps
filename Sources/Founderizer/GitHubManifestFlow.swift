@@ -29,6 +29,12 @@ enum GitHubManifestFlow {
             log.notice("No GitHub App flow: this fleet has no door, or its hub does not take one.")
             return
         }
+        // GitHub gives the App's key once, and the give to the door waits for the clock (DoorKeys.put): a clock that
+        // the hub does not agree with stops the flow before GitHub makes a key that could not reach the door.
+        if GrantSigning.offered(store), (try? GrantSigning.checkClock(store)) == nil {
+            log.error("No GitHub App flow: this Mac's clock and the hub's clock differ by more than an hour.")
+            return
+        }
         let key = owner.lowercased()
         if let view = try? await DoorSetupClient().view(hub: store.hub, database: database), view.github_apps?[key] != nil {
             log.notice("The door holds the GitHub App of \(owner, privacy: .public) already.")

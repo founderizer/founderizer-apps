@@ -32,6 +32,24 @@ struct TeamTests {
         #expect(throws: (any Error).self) { try snapshot(lines, db: "another").validate(database: "db") }
         #expect(throws: (any Error).self) { try snapshot(lines, open: ["unknown": 1]).validate(database: "db") }
     }
+    /// **The boxes of a line never stop the read of the team** (owner API 1.216): a hub without the field, or one that
+    /// sends it in another shape, still gives every line, and the Capabilities page then draws the four boxes as before.
+    @Test func aLinesBoxesNeverStopTheReadAndFallBackToTheFour() throws {
+        func boxes(_ value: Any?) throws -> AgentBoxes {
+            var line: [String: Any] = ["agent": "desk", "role": "worker", "reports_to": "manager"]
+            if let value { line["boxes"] = value }
+            let read = try JSONDecoder().decode(ReportingLine.self, from: JSONSerialization.data(withJSONObject: line))
+            return AgentBoxes.of(read)
+        }
+        #expect(try boxes(["on": ["shell", "web"], "offered": ["shell", "web", "browser", "warp"], "idle": ["browser"],
+                           "stays_on": ["shell"]])
+                == AgentBoxes(on: ["shell", "web"], offered: ["shell", "web", "browser"], idle: ["browser"],
+                              stays_on: ["shell"]))
+        for value: Any? in [nil, NSNull(), "shell", ["offered": 3]] {
+            #expect(try boxes(value) == AgentBoxes(offered: ["shell", "web", "browser", "screen"], stays_on: []))
+        }
+    }
+
     @Test func openTasksBlockRoleChangesButKeepReportingMovesAvailable() throws {
         let original = try snapshot(lines, open: ["worker": 1])
         var move = TeamLinesInput(lines: lines); move.lines[0].reports_to = "manager"

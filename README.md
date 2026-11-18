@@ -4,7 +4,7 @@
 
 # Founderizer for Mac and iPhone
 
-**Your own team of AI agents, on servers you own.**
+**The Mac and iPhone apps of [Founderizer](https://github.com/founderizer/founderizer): your own team of AI agents, on servers you own.**
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![The latest release](https://img.shields.io/github/v/release/founderizer/founderizer-apps?label=release&color=blue)](https://github.com/founderizer/founderizer-apps/releases/latest)
@@ -12,22 +12,7 @@
 
 [Website](https://founderizer.com) · [Download&nbsp;for&nbsp;Mac&nbsp;and&nbsp;iPhone](https://founderizer.com/download) · [Source&nbsp;of&nbsp;the&nbsp;hub](https://github.com/founderizer/founderizer)
 
-<a href="https://founderizer.com"><img src=".github/founderizer-mac-iphone.webp" alt="Founderizer on a Mac and an iPhone, with an example team of four agents: the Tasks board on the Mac, the chats on the iPhone" width="860"></a>
-
 </div>
-
-<p align="center">The team works day and night, with the Claude or ChatGPT plan that you already pay for.</p>
-
-<p align="center">
-  <a href="https://founderizer.com/features"><img src=".github/features/feature-team.webp" alt="The team does the work: the manager splits one sentence into three tasks, for Nora, Theo and Ada" width="270"></a>
-  <a href="https://founderizer.com/features"><img src=".github/features/feature-decide.webp" alt="The decisions stay yours: the manager asks before a refund of 240 euros, and you press Refund" width="270"></a>
-  <a href="https://founderizer.com/features"><img src=".github/features/feature-iphone.webp" alt="Answer from your iPhone: a notification from the manager on the lock screen" width="270"></a>
-  <a href="https://founderizer.com/features"><img src=".github/features/feature-chats.webp" alt="WhatsApp and Discord: you ask Nora on WhatsApp whether a customer got her refund" width="270"></a>
-  <a href="https://founderizer.com/features"><img src=".github/features/feature-logins.webp" alt="Logins without passwords: Ada signs in to the shop's admin and never sees the password or the code" width="270"></a>
-  <a href="https://founderizer.com/features"><img src=".github/features/feature-servers.webp" alt="On servers you own: Hetzner, DigitalOcean, Vultr or Akamai, and a new server in your fleet" width="270"></a>
-</p>
-
-<p align="center"><a href="https://founderizer.com/features"><b>See all 31 features</b></a></p>
 
 ## What you need
 
@@ -92,7 +77,8 @@ For a build on your own iPhone, set your own team and bundle identifiers in the 
 
 Fleet Vault keeps its items in a keychain group, and the app accepts only a vault that the publisher's Apple team
 signed. The team identifier `6EBZ756H9Q` (Amura Ventures SL's team) is therefore part of the source: in
-`Sources/FleetVaultCore`, `Sources/FleetVaultIPC`, `Vault/` and `ios/Sources/SealedPing.swift`. To ship builds of your
+`Sources/FleetVaultCore`, `Vault/`, `ios/Sources/SealedPing.swift`, `test-support/VaultKeychainProbe.swift` and the
+signing settings of `ios/FleetMobile.xcodeproj` (`SECURITY.md` names it too). To ship builds of your
 own, replace it with your team identifier in each of those places, and build the vault with your identity:
 
 ```sh

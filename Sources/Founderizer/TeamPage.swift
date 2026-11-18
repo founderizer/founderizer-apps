@@ -32,6 +32,23 @@ final class TeamModel {
 
     func profile(_ agent: String) -> AgentProfile? { reading.list?.profiles.first { $0.agent == agent } }
 
+    /// **The profiles are the last reading**: their reads have failed one whole break, or the fleet's state is old. One
+    /// break of the hub says nothing (`FleetStore.pageReadingIsOld`; 17 November 2026).
+    func saysOld(_ store: FleetStore) -> Bool {
+        if case .stale = reading { store.pageReadingIsOld(failedSince: reading.failedSince) } else { false }
+    }
+    /// **A new visit of a page that draws the profiles counts its own break** (`ProfileReading.visited`): reads that
+    /// failed in an earlier visit, which nothing read again since, say nothing to it at its first failed read.
+    func visited() { if reading.failedSince != nil { reading = reading.visited() } }
+    /// No profile is read, and its reads have not failed one whole break: the line where the rules come stays.
+    func waits(_ store: FleetStore) -> Bool {
+        switch reading {
+        case .loading: true
+        case .failed(_, let since): !store.pageReadingIsOld(failedSince: since)
+        case .current, .stale: false
+        }
+    }
+
     /// Reads every profile of the hub. The reading takes the answer of the newest read that answered: an older read
     /// that answers after a newer one changes nothing. Returns the list that this read got, also when a later read
     /// replaces it, or nil when the read failed. A first reading of a page that opened at `start` waits until a loading
@@ -225,10 +242,12 @@ struct BehaviourView: View {
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(agent)/schedules") { await TriggersView.poll(store: store) }
         .task(id: "\(store.hub.absoluteString)/\(store.state?.db ?? "")") {
             guard features.contains("profiles") else { return }
+            team.visited()
             let start = ContinuousClock.now
             while !Task.isCancelled {
                 await team.read(store, since: start)
-                do { try await store.nap(15) } catch { return }
+                // Again in 3 s after a read that failed, as the other lists do: its line goes as soon as the hub is back.
+                do { try await store.nap(team.reading.failedSince == nil ? 15 : 3) } catch { return }
             }
         }
     }
@@ -236,19 +255,22 @@ struct BehaviourView: View {
     @ViewBuilder private var profileBlocks: some View {
         if let profile = team.profile(agent) {
             rules(profile)
-            if case .stale = team.reading {
+            // **One break of the hub says nothing** (17 November 2026), and not while the window's notice says the
+            // outage (`FleetStore.hubNoticeShows`; fix round 3, item 33: it is said once).
+            if team.saysOld(store), !store.hubNoticeShows {
                 // Not before this visit's read has had its second (D-1 rule 2).
                 Held(since: opened) {
                     Text(team.reading.lastReadingLine).font(FormMetrics.detail).foregroundStyle(.orange)
                 }
             }
+        } else if team.waits(store), store.connectionError == nil {
+            // Before the first reading: the heading and its Add rule, and under them the line where the rules come.
+            // While the hub does not answer nothing is read, and the profile is not read. Reads that failed keep the
+            // line until they have failed one whole break (`TeamModel.waits`).
+            rules(nil)
+            LoadingLine(String(l10n: "Reading the rules…"))
         } else {
             switch team.reading {
-            // Before the first reading: the heading and its Add rule, and under them the line where the rules come.
-            // While the hub does not answer nothing is read, and the profile is not read.
-            case .loading where store.connectionError == nil:
-                rules(nil)
-                LoadingLine(String(l10n: "Reading the rules…"))
             // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3, item 33): the
             // heading stands alone, with no Add rule, because the editor has nothing to edit without the profile.
             case .loading, .failed:
@@ -357,15 +379,19 @@ struct RuleEditor: View {
             VStack(alignment: .leading, spacing: 14) {
                 if let key, let edit { editor(edit, key: key) }
                 else {
-                    switch team.reading {
-                    case .loading where store.connectionError == nil: LoadingLine(String(l10n: "Reading the rule…"))
-                    // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`).
-                    case .loading, .failed:
-                        if !store.hubNoticeShows {
-                            EmptyState(symbol: "exclamationmark.circle", title: String(l10n: "Profile not read"), detail: team.reading.notReadDetail)
+                    // Reads that failed keep the line until they have failed one whole break (`TeamModel.waits`).
+                    if team.waits(store), store.connectionError == nil {
+                        LoadingLine(String(l10n: "Reading the rule…"))
+                    } else {
+                        switch team.reading {
+                        // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`).
+                        case .loading, .failed:
+                            if !store.hubNoticeShows {
+                                EmptyState(symbol: "exclamationmark.circle", title: String(l10n: "Profile not read"), detail: team.reading.notReadDetail)
+                            }
+                        case .current, .stale:
+                            EmptyState(symbol: "doc.questionmark", title: String(l10n: "Rule not found"), detail: state?.failure ?? String(l10n: "This profile has no such rule now."))
                         }
-                    case .current, .stale:
-                        EmptyState(symbol: "doc.questionmark", title: String(l10n: "Rule not found"), detail: state?.failure ?? String(l10n: "This profile has no such rule now."))
                     }
                     Spacer(minLength: 0)
                 }
@@ -379,10 +405,12 @@ struct RuleEditor: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         } actions: { actions }
         .task(id: "\(store.hub.absoluteString)/\(store.state?.db ?? "")") {
+            team.visited()
             let start = ContinuousClock.now
             while !Task.isCancelled {
                 await team.read(store, since: start)
-                do { try await store.nap(15) } catch { return }
+                // Again in 3 s after a read that failed, as the other lists do: its line goes as soon as the hub is back.
+                do { try await store.nap(team.reading.failedSince == nil ? 15 : 3) } catch { return }
             }
         }
         // The edit comes from the profile when it is read, and again from each newer reading while it has no change, and
@@ -414,7 +442,7 @@ struct RuleEditor: View {
         if isNew {
             // Once the rule can be added: no grey button (the owner: "dont show the send button if it's not
             // clickable"). While it saves, the save mark says so.
-            if edit.map({ $0.problem() == nil }) == true && state != .saving && store.isFresh {
+            if edit.map({ $0.problem() == nil }) == true && state != .saving && store.writesNow {
                 Button("Add rule") { if let key { team.save(key, store: store) } }.buttonStyle(FleetPrimaryButtonStyle())
                     .accessibilityIdentifier("rule-add")
             }
@@ -477,7 +505,7 @@ struct RuleEditor: View {
         if let failure = state?.failure { return (String(l10n: "Not saved. \(failure)"), true) }
         if state == .behind { return nil }          // only Retry says it, with its reason on hover
         if state == .changedElsewhere { return (String(l10n: "Another change also changed this rule. This is its saved text now."), true) }
-        if case .stale = team.reading { return (team.reading.lastReadingLine, true) }
+        if team.saysOld(store) { return (team.reading.lastReadingLine, true) }
         // Nothing while all is well (D-2): the save mark says Saved, and Add rule says what it does.
         return nil
     }

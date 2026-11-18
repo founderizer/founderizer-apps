@@ -160,6 +160,7 @@ struct AllowanceMeter: View {
     var stale = false
     /// Its length; nil takes the width it is given, as in the panel of an agent's chat, whose width the owner sets.
     var width: CGFloat? = 44
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The fill of a share that is neither near nor at its limit: a soft white, lighter than an old reading's gray
     /// (6.6:1 on the track, the old gray 4.1:1).
@@ -176,11 +177,12 @@ struct AllowanceMeter: View {
         let share = min(100, max(0, used)) / 100
         Capsule().fill(Color.white.opacity(0.10)).frame(width: width, height: 4)
             .overlay(alignment: .leading) {
-                // No fill for no use; a small use stays visible.
-                if share > 0 {
-                    GeometryReader { track in
-                        Capsule().fill(color).frame(width: max(2, track.size.width * share), height: 4)
-                    }
+                // No fill for no use; a small use stays visible. **The fill moves to the length of a new reading over
+                // 0.3 s** (`FleetMotion.bar`; the owner's yes of 17 November 2026): it jumped there. Only a new
+                // reading moves it: a bar that draws first, or whose room changes, stands at its length at once.
+                GeometryReader { track in
+                    Capsule().fill(color).frame(width: share > 0 ? max(2, track.size.width * share) : 0, height: 4)
+                        .animation(reduceMotion ? nil : FleetMotion.bar, value: share)
                 }
             }
             .accessibilityLabel("\(used.formatted(.number.precision(.fractionLength(0...1)))) percent used")
@@ -253,12 +255,14 @@ struct ResetLine: View {
 /// text baseline. It does not move with Reduce Motion.
 struct WorkMark: View {
     var size: CGFloat = 12
+    /// False: it rests, green, as with Reduce Motion (before the hub's first answer after a wake, `marksMove`).
+    var moves = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let work = AgentPresence.working.color
         let still = Image(systemName: "circle.dotted").font(IconMetrics.symbol(size)).foregroundStyle(work)
-        if reduceMotion { still }
+        if reduceMotion || !moves { still }
         else { still.hidden().overlay { TurningSymbol(name: "circle.dotted", size: size, color: NSColor(work)) } }
     }
 }

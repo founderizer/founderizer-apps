@@ -3,13 +3,24 @@ import Foundation
 
 /// **The owner's signature of each grant** (owner feature `signed_grants`, DevOps plan V4). The central vault seals a
 /// secret for a server only when the owner signed a grant of it to an agent there, or signed it into the grantable
-/// pool, so a hub that is broken into cannot send a secret to a server the owner did not give it to. This Mac holds the
-/// owner key, so each control that gives a secret or takes it back also signs that change and sends it through the
-/// hub, which passes it on as it is (`POST /ui/vault/grant`).
+/// pool, and only to a server whose key the owner pinned. The server of a grant is the one that the hub names for the
+/// agent at the moment of the Give: a hub that is broken into can name another machine there, and the vault then seals
+/// the secret to it only while the owner pinned its key, also with a pin that he signs later (the vault manager's
+/// choice C50). This Mac holds the owner key, so each control that gives a secret or takes it back also signs that
+/// change and sends it through the hub, which passes it on as it is (`POST /ui/vault/grant`).
+///
+/// **The clock.** A give, a `pool` and a replace sign nothing while this Mac's clock and the hub's are more than an
+/// hour apart (`VaultPlan.clockProblem`, as for a pin): their time comes from `GrantClock`, which follows the last
+/// time that this Mac signed, and the central vault keeps a statement only when it is newer than its record and not
+/// from more than a day ahead. A take-back and an `unpool` do not wait for it: their hub step came first, and an end
+/// only narrows. The check passes while the store has no clock of the hub. The link tools sign through `send`, whose
+/// desks are the lane "Agent install"'s, and they do not check the clock yet.
 ///
 /// The order keeps the vault the narrower of the two: a grant is signed before the hub's grant, and its end after
-/// it, so at no moment does the vault seal a secret that `team.json` does not give. A hub that does not offer
-/// `signed_grants` takes nothing here, and its controls work as before.
+/// it, so the vault seals no secret that `team.json` does not give while each end reaches the vault. An end that the
+/// vault refuses (from a clock 23 hours or more behind, from owner API 1.217 more than a day ahead, or older than a
+/// record that the vault holds from ahead), or that is not sent, leaves the vault's grant until a later end reaches
+/// it. A hub that does not offer `signed_grants` takes nothing here, and its controls work as before.
 @MainActor
 enum GrantSigning {
     static let feature = "signed_grants"
@@ -22,10 +33,23 @@ enum GrantSigning {
 
     static func offered(_ store: FleetStore) -> Bool { store.state?.ui_features?.contains(feature) == true }
 
+    /// **A stop while this Mac's clock and the hub's are more than an hour apart**, in the pin's own words
+    /// (`VaultPlan.clockProblem`, against the hub's clock of the store's last state read): a statement's time follows
+    /// this Mac's clock, so with a clock that is wrong it would be refused by the vault, or end a record too early.
+    static func checkClock(_ store: FleetStore) throws {
+        if let problem = VaultPlan.clockProblem(hubTime: store.state?.time, readAt: store.lastSuccess?.timeIntervalSince1970) {
+            throw Stop(problem)
+        }
+    }
+
     /// The signed statement of one agent's grant of one secret: `grant` with the agent's machine for a use or a read,
-    /// `ungrant` for nil. The machine is the one the hub's team names for the agent now.
+    /// `ungrant` for nil. The machine is the one the hub's team names for the agent now, so a hub that is broken into
+    /// can name another machine, which gets the secret only while the owner pinned its key (`OwnerStatement.grant`).
+    /// A give waits for the clock (`checkClock`); a take-back does not: its hub step came first, and an end only
+    /// narrows, so a stop here would leave the vault's grant that the list no longer has.
     static func grant(_ level: SecretGrant?, login: String, agent: String, store: FleetStore, hub: URL, database: String) async throws {
         guard offered(store) else { return }
+        if level != nil { try checkClock(store) }
         let (fleet, key) = try await owner(hub: hub, database: database)
         var machine: String?
         if level != nil {
@@ -108,9 +132,10 @@ enum GrantSigning {
     }
 
     /// The signed statement of one secret's place in the grantable pool: `pool` while the fleet manager may give it,
-    /// `unpool` when only the owner gives it.
+    /// `unpool` when only the owner gives it. A `pool` waits for the clock; an `unpool` does not, as a take-back.
     static func pool(_ inPool: Bool, login: String, store: FleetStore, hub: URL, database: String) async throws {
         guard offered(store) else { return }
+        if inPool { try checkClock(store) }
         let (fleet, key) = try await owner(hub: hub, database: database)
         let made = try signed(pool: inPool, login: login, fleet: fleet, key: key)
         _ = try await VaultClient().grant(hub: hub, database: database, client: store.installation,
@@ -132,7 +157,9 @@ enum GrantSigning {
     /// The owner's signed replace of one secret's value (owner feature `secret_replace`): the statement about this
     /// very sealed copy and its signature, for the intake that carries the copy. The central vault puts a new value
     /// under a reference that it holds only with them, so a Mac that cannot sign sends no replace.
-    static func replace(login: String, sealed: String, hub: URL, database: String) async throws -> (statement: String, signature: String) {
+    static func replace(login: String, sealed: String, store: FleetStore, hub: URL,
+                        database: String) async throws -> (statement: String, signature: String) {
+        try checkClock(store)
         let (fleet, key) = try await owner(hub: hub, database: database)
         let statement = OwnerStatement.replace(fleet: fleet, login: login, sha256: OwnerStatement.checksum(sealed),
                                                at: GrantClock.next(fleet: fleet))

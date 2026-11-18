@@ -33,6 +33,8 @@ final class DoorSyncModel {
     private var followReady = false
     /// The door's code takes an entry for an agent that only gets its GitHub tokens (plan 13, item 4).
     private var tokensOnly = false
+    /// The door's release installs a machine of the fleet (`install.sh --fleet`, API 1.210).
+    private var fleetInstall = false
     /// The servers that did not answer this Mac's SSH or run a release that the door's install does not cover, with
     /// when: each is passed over for an hour (N8 (b)).
     private var skipped: [String: Date] = [:]
@@ -109,7 +111,9 @@ final class DoorSyncModel {
         }
         var facts = DoorAccess.Facts(devices: devices, hub: hubDoor)
         let byName = Dictionary(devices.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
-        for name in DoorAccess.servers(access: current, devices: devices).keys.sorted() {
+        // the fleet's own servers (API 1.210) are read as a business's servers are: each one's own parts
+        let fleetServers = DoorAccess.fleetServers(access: current, devices: devices, hub: hubDoor)
+        for name in DoorAccess.servers(access: current, devices: devices).keys.sorted() + fleetServers {
             guard let device = byName[name], let address = device.address else { continue }
             let answer = await ssh(device, address: address, DoorAccess.hostProgram)
             if let answer, let reading = DoorAccess.HostReading(output: answer.output) {
@@ -133,6 +137,7 @@ final class DoorSyncModel {
             if agent == nil { said.append("\(box.name) holds no one agent's OS user alone: it operates nothing.") }
         }
 
+        facts.fleetHolder = await fleetHolder(hubDoor, devices: devices, operators: facts.operators, said: &said)
         // owner feature door_calls: the door checks the owner's signed yes against this Mac's owner key and the fleet
         if store.state?.ui_features?.contains(DoorCallSigning.feature) == true,
            let fleet = try? await VaultClient().reading(hub: hub, database: database)?.fleetID,
@@ -165,6 +170,13 @@ final class DoorSyncModel {
                                        doorAddress: doorAddress, database: database, said: &said)
         }
         let plan = DoorAccess.plan(current: base, facts: facts)
+        // an agent that this round found for the fleet's own servers, and that the plan gave none of them: its entry
+        // in the door's file holds more than the fleet's servers at another address (the log only, no page)
+        if case .agent(let found) = facts.fleetHolder, !fleetServers.isEmpty,
+           !fleetServers.contains(where: { plan.holdings[found.agent]?[$0] != nil }),
+           fleetServers.contains(where: { facts.hosts[$0]?.fleet == true }) {
+            Self.log.notice("\(found.agent, privacy: .public) holds none of the fleet's own servers: the door's file has it at another address with more than those servers, or at the hub's or the door's address.")
+        }
         if plan.file != DoorAccess.canonical(current) {
             guard let written = await ssh(door, address: doorAddress, DoorAccess.writeProgram, stdin: plan.file), written.ok else {
                 said.append("The door refused the new access file, or SSH did not answer. Nothing was recorded.")
@@ -184,6 +196,35 @@ final class DoorSyncModel {
         }
         Self.keep(recorded, hub: hub, database: database)
         if said.isEmpty && !placing { lastRound = (key, now) }
+    }
+
+    /// **The agent that holds the fleet's own servers** (API 1.210; the owner, 17 November 2026): the hub's view and
+    /// this round's Operators give a candidate (`DoorAccess.fleetCandidate`). One that is no Operator, the agent that
+    /// the manager named or the manager itself, holds them only when the server at its address, a device of this Mac's
+    /// own Tailscale, says that this one agent runs alone there, as an operator box says it. A server that did not
+    /// answer leaves the holder as the door's file has it. Nothing of it shows on a page.
+    private func fleetHolder(_ view: DoorAccess.HubDoor?, devices: [DoorAccess.Device],
+                             operators: [String: DoorAccess.Operator?], said: inout [String]) async -> DoorAccess.FleetHolder {
+        switch DoorAccess.fleetCandidate(hub: view, devices: devices, operators: operators) {
+        case .keep: return .keep
+        case .nobody: return .nobody
+        case .agent(let found): return .agent(found)
+        case .box(let agent, let address):
+            guard let box = devices.first(where: { $0.address == address && !$0.tags.contains(DoorAccess.doorTag) }) else {
+                return .nobody          // the hub names a server that this Mac's Tailscale does not show
+            }
+            guard let answer = await ssh(box, address: address, DoorAccess.boxProgram) else {
+                said.append("\(box.name), the server of the agent for the fleet's own servers, did not answer over SSH.")
+                return .keep
+            }
+            let found = DoorAccess.operatorAgent(users: DoorAccess.boxUsers(output: answer.output))
+                .map { DoorAccess.Operator(agent: $0, address: address) }
+            guard let found, view?.name(of: found) == agent else {
+                Self.log.notice("\(box.name, privacy: .public) does not hold the one agent \(agent, privacy: .public) alone: it holds none of the fleet's own servers.")
+                return .nobody
+            }
+            return .agent(DoorAccess.Operator(agent: agent, address: address))
+        }
     }
 
     /// The door's parts on a business's servers, one step a round (`DoorHosts.next`): the door's check of a server
@@ -224,11 +265,24 @@ final class DoorSyncModel {
         }
         let now = Date()
         skipped = skipped.filter { now.timeIntervalSince($0.value) < 3600 }
-        let order = DoorHosts.order(access: current, devices: devices, fleet: Set(fleet), heldOut: view.heldOut)
+        // the fleet's own servers come after every business's server (API 1.210), with the mark of a machine of the
+        // fleet; one whose parts lack that mark has not answered, so it gets its install again
+        var fleetServers = DoorAccess.fleetServers(access: current, devices: devices, hub: view)
+        // only when the door's own release knows the mark: an older install script would stop at the option
+        if !fleetServers.isEmpty, !fleetInstall {
+            fleetInstall = await ssh(door, address: doorAddress, DoorAccess.fleetProbe)?.output.contains("fleet=yes") == true
+        }
+        if !fleetInstall { fleetServers = [] }
+        let order = DoorHosts.order(access: current, devices: devices, fleet: Set(fleet), heldOut: view.heldOut,
+                                    fleetServers: fleetServers)
+        let unmarked = Set(fleetServers.filter { facts.hosts[$0]?.fleet == false })
+        // such a server can have a state from an earlier install without the mark: it starts again
+        for name in unmarked where state.hosts[name] != nil { state.hosts[name] = nil }
         // a host with no second sshd running leaves the door's file this round, so a canary whose install stopped
         // stays the canary (7 November 2026: the next host became one, because the stopped install had made its key)
-        let inFile = Set((current["hosts"] as? [String: Any] ?? [:]).keys).subtracting(facts.bare)
-        switch DoorHosts.next(order: order, state: state, inFile: inFile, answered: Set(facts.hosts.keys), rollout: rollout,
+        let inFile = Set((current["hosts"] as? [String: Any] ?? [:]).keys).subtracting(facts.bare).subtracting(unmarked)
+        switch DoorHosts.next(order: order, state: state, inFile: inFile,
+                              answered: Set(facts.hosts.keys).subtracting(unmarked), rollout: rollout,
                               skipped: Set(skipped.keys)) {
         case .wait:
             return state.hosts.values.contains("installed")
@@ -267,8 +321,21 @@ final class DoorSyncModel {
                 said.append("The door gave no bundle of its parts for \(host).")
                 return false
             }
-            let mode = (DoorAccess.servers(access: current, devices: devices)[host]?.count ?? 0) > 1 ? "rule-only" : "fix"
-            guard let program = DoorHosts.installProgram(mode: mode, doorKey: bundle.doorKey) else { return false }
+            // a machine of the fleet says so itself before it becomes a host: the hub only proposed it
+            let ofFleet = fleetServers.contains(host)
+            if ofFleet {
+                guard let word = await ssh(device, address: address, DoorAccess.fleetProgram),
+                      word.output.contains("fleet-machine=yes") else {
+                    skipped[host] = now
+                    said.append("\(host) does not say that it is a server of this fleet: it gets no door parts.")
+                    return false
+                }
+            }
+            let mode = ofFleet || (DoorAccess.servers(access: current, devices: devices)[host]?.count ?? 0) > 1
+                ? "rule-only" : "fix"
+            guard let program = DoorHosts.installProgram(mode: mode, doorKey: bundle.doorKey, fleet: ofFleet) else {
+                return false
+            }
             let answer = await ssh(device, address: address, program, stdin: Data(bundle.tar.utf8))
             if let answer, answer.ok, answer.output.contains("host-key: ssh-ed25519 ") {
                 state.hosts[host] = "installed"

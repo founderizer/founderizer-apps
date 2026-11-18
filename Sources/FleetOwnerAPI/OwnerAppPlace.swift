@@ -6,12 +6,12 @@ import Foundation
 /// number. It never carries a title, a typed value, a failure's words, a path or an address.
 ///
 /// The names follow the app's own launch argument (`-openPage`, `FleetStore.asked`) where that one has a name; an
-/// agent's parts differ (`runs_on` and `can_use` here, `runson` and `canuse` there). A name part that is not in the
+/// agent's parts differ (`runs_on` and `can_use` here, `runson` and `canuse` there; `capabilities` in both). A name part that is not in the
 /// narrow alphabet is left out, and the name says only the kind of the place: `agent`, `server` or `task`.
 public enum AppPlace: Hashable, Sendable {
     /// A part of an agent's details (`AgentTab` in the app; its tab `chat` is the agent's chat, `agent.<name>`).
     public enum AgentPart: String, CaseIterable, Sendable {
-        case runsOn = "runs_on", behaviour, tasks, people
+        case runsOn = "runs_on", capabilities, behaviour, tasks, people
         case canUse = "can_use"
     }
 

@@ -77,13 +77,26 @@ public final class OwnerTools: @unchecked Sendable {
     public static func programTable(_ table: OwnerTable) -> OwnerTable {
         let written = table.writtenIn(Self.written)
         let link = Set(OwnerSetupTools.names + OwnerLinkTools.names)
-        return OwnerTable(tools: written.tools.filter { !link.contains($0.name) } + OwnerSetupTools.tools
-                            + OwnerLinkTools.tools,
+        return OwnerTable(tools: written.tools.filter { !link.contains($0.name) }.map(withDoorWords)
+                            + OwnerSetupTools.tools + OwnerLinkTools.tools,
                           instructions: written.instructions, protocolVersion: written.protocolVersion,
                           supported: written.supported, pages: written.pages, pageQuery: written.pageQuery,
                           pageWords: written.pageWords, pageInPath: written.pageInPath,
                           historyWords: written.historyWords, costsWords: written.costsWords,
                           mediaTypes: written.mediaTypes, version: written.version)
+    }
+
+    /// **`answer_needs_you` with the program's own sentences about the door's card** (`AnswerDoor.description`), after
+    /// the table's words: this program sends a door card's signed press to the app, and `owner_mcp.py`, whose table
+    /// this is, cannot sign one. Every other tool, and a table of a later version whose words have them already, as
+    /// they come.
+    static func withDoorWords(_ tool: OwnerTable.Tool) -> OwnerTable.Tool {
+        guard tool.name == AnswerDoor.name, tool.kind == .swift, !tool.description.contains(AnswerDoor.description)
+        else { return tool }
+        return OwnerTable.Tool(name: tool.name, description: tool.description + " " + AnswerDoor.description,
+                               inputSchema: tool.inputSchema, annotations: tool.annotations, kind: tool.kind,
+                               route: tool.route, fields: tool.fields, what: tool.what, revisionPage: tool.revisionPage,
+                               requestIDFromArguments: tool.requestIDFromArguments, feature: tool.feature)
     }
 
     /// The tools that `tools/list` gives: each one that the table builds, the thirteen written here, the two setup
@@ -203,6 +216,11 @@ public final class OwnerTools: @unchecked Sendable {
                             + "older than the Founderizer app on this Mac. The hub takes releases by itself; read "
                             + "fleet_read(page=\"releases\") for its state.", true)
                 }
+            }
+            // **A door card's signed press goes to the running app** (`AnswerDoor`): Run it once and Full access need
+            // the owner key's signature, which only the app makes. Every other answer goes on to the hub below.
+            if tool.name == AnswerDoor.name, let press = try AnswerDoor.press(args, on: hub) {
+                return context.appLink.call(tool: AnswerDoor.name, fields: press)
             }
             let result = try run(tool, args, on: hub)
             return (Self.dataMark + "\n" + (result ?? .null).dumps(indent: 1), false)

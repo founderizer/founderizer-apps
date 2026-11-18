@@ -40,32 +40,90 @@ public enum FleetReading {
 /// 150 s, and at a launch whose first read took 1.4 s from 1.2 to 1.6 s after the window opened, with the agents' dots
 /// gone from the sidebar for that time (10 November 2026: "loading certain screens like Servers flicker before they
 /// are fully loaded"). The rule is here, so that a test can hold it.
+///
+/// **While the app runs, one break of the hub says nothing** (the owner, 27 October 2026: "never for one short break";
+/// 17 November 2026: "We need to either fix the underlaying issue OR not show the wanring at all"). A reading was old
+/// eight seconds into a read, or 12 seconds after the hub's last answer, and his hub leaves the app with no answer for
+/// longer than that many times a day: in six hours of his Mac's own record (17 November 2026), 10 breaks of more than
+/// 12 seconds, the longest 22.3 s, five of the seven reads that got no answer right after a release restarted the hub,
+/// and one just after he connected Gmail. Each one put "This reading of your fleet is old" over the page and an orange
+/// "Last reading" on his lists for a few seconds. A reading is old now when the hub has left the app with no answer
+/// for a whole `limit`, and the hub's own notice waits for the same limit (`HubReach.tells`). A write that the owner
+/// starts keeps its own rule, 12 seconds after the last answer (`FleetStore.writesNow`); the writes that run under the
+/// hood follow the reading.
 public enum StateReading {
-    /// How long a read of the fleet's state goes before its reading is old.
+    /// How long the launch's first read goes before the reading that this Mac kept is old. While the app runs, a slow
+    /// read is part of one break (`limit`).
     public static let patience: TimeInterval = 8
-    /// A reading is old this long after the hub's last answer, whatever the reads did since.
-    public static let limit: TimeInterval = 12
+    /// **One break of the hub**: a reading is old once the hub has left the app this long with no answer, whatever the
+    /// reads did meanwhile. Longer than the longest break that his fleet's release restarts and loads gave (22.3 s).
+    public static let limit: TimeInterval = 30
+    /// The longest time that a new reading waits while a chat or a thread scrolls (`waitWhileScrolling`).
+    public static let scrollWaitMost: TimeInterval = 9
 
     /// The state is current.
     /// - Parameters:
-    ///   - held: a read has taken more than its patience, and none has answered since.
-    ///   - sinceAnswer: the seconds since the hub's last answer of this launch; nil before the first one, when the
-    ///     state is the reading that this Mac kept from its last launch.
+    ///   - held: the launch's first read has taken more than its patience, and none has answered since.
+    ///   - sinceAnswer: the seconds since the hub's last answer of this launch, on a clock that stops while the Mac
+    ///     sleeps; nil before the first one, when the state is the reading that this Mac kept from its last launch.
     ///   - firstReadEnded: the launch's first read has ended, with an answer or without one.
     public static func isCurrent(held: Bool, sinceAnswer: TimeInterval?, firstReadEnded: Bool) -> Bool {
-        if held { return false }
-        // The kept reading is current while the launch's first read is on its way, and old once that read failed.
-        guard let sinceAnswer else { return !firstReadEnded }
+        // The kept reading is current while the launch's first read is on its way, and old once that read failed or
+        // took more than its patience.
+        guard let sinceAnswer else { return !firstReadEnded && !held }
+        // While the app runs, a read that failed or that is slow is part of one break: only the break's length counts.
         return sinceAnswer < limit
     }
 
+    /// **A page's own reading is its last one** (its orange "Last reading"): when the fleet's state is old, or when the
+    /// page's own reads have failed for one whole break. One read of the page that fails while the hub restarts says
+    /// nothing (17 November 2026: an agent's Secrets said "Last reading" from the first read that the restart of
+    /// release 2026.11.565 refused). `failingFor`: the seconds since the first of the page's reads that failed in a
+    /// row, or nil while its last read answered.
+    public static func pageReadingIsOld(stateIsCurrent: Bool, failingFor: TimeInterval?) -> Bool {
+        !stateIsCurrent || (failingFor.map { $0 >= limit } ?? false)
+    }
+
+    /// **An agent's work moves on the screen only by an answer of this wake** (`FleetStore.marksMove`), because a moving
+    /// glyph says that the work goes on now. A Mac that wakes starts no break (`isCurrent` counts on a clock that stops
+    /// while it sleeps), so the reading from before the sleep stays current, with no notice, until the hub answers or
+    /// leaves the app one whole break. By that reading an agent worked when the Mac went to sleep, maybe hours ago: its
+    /// work keeps its colour and rests until the hub's first answer after the wake (a review of 17 November 2026).
+    /// With no wake in this launch nothing changes: the reading kept from the last launch moves while the launch's
+    /// first read is on its way, as before.
+    /// - Parameters:
+    ///   - stateIsCurrent: the state is current (`isCurrent`).
+    ///   - readBegan: when the read that brought the hub's last answer of this launch began, or nil before the first
+    ///     answer.
+    ///   - wokeAt: the Mac's last wake in this launch, or nil.
+    public static func workMoves(stateIsCurrent: Bool, readBegan: ContinuousClock.Instant?,
+                                 wokeAt: ContinuousClock.Instant?) -> Bool {
+        guard stateIsCurrent else { return false }
+        guard let wokeAt else { return true }
+        // After a wake, the reading that this Mac kept from its last launch is from before it too.
+        return readBegan.map { $0 > wokeAt } ?? false
+    }
+
+    /// **Where the break of a page's reads that failed in a row starts**: at `since`, the first of them (a later one
+    /// that fails too does not start it again), or at the Mac's last wake when they began before it, because a Mac that
+    /// wakes starts no break, as the state's own break does not. Nil while the page's last read answered.
+    public static func failingStart(since: ContinuousClock.Instant?, wokeAt: ContinuousClock.Instant?) -> ContinuousClock.Instant? {
+        since.map { max($0, wokeAt ?? $0) }
+    }
+
+    /// **How long a page's reads have failed in a row** by `now`, for `pageReadingIsOld`: from `failingStart`.
+    public static func failingFor(since: ContinuousClock.Instant?, wokeAt: ContinuousClock.Instant?,
+                                  now: ContinuousClock.Instant) -> TimeInterval? {
+        failingStart(since: since, wokeAt: wokeAt).map { max(0, (now - $0) / .seconds(1)) }
+    }
+
     /// **How long a new reading may wait while a chat or a thread scrolls** (`ScrollHold`): it comes in when the scroll
-    /// rests, and at the latest three seconds before the reading on the screen would count as old, so the page never
-    /// says that its reading is old while the hub answers. No wait when the hub has not answered in this launch, or when
-    /// the reading on the screen is that old already; never more than nine seconds, also when the clock went back.
+    /// rests, and at the latest nine seconds after the hub's last answer, well inside one break, so the page never says
+    /// that its reading is old while the hub answers. No wait when the hub has not answered in this launch, or when the
+    /// reading on the screen is that old already; never more than nine seconds, also when the clock went back.
     public static func waitWhileScrolling(sinceAnswer: TimeInterval?) -> TimeInterval {
         guard let sinceAnswer else { return 0 }
-        return min(limit - 3, max(0, limit - 3 - sinceAnswer))
+        return min(scrollWaitMost, max(0, scrollWaitMost - sinceAnswer))
     }
 }
 
@@ -88,6 +146,78 @@ public enum LiveReadings {
         return sinceAsked.map { $0 >= every } ?? true
     }
 }
+
+/// **A reading that a page reads from the hub again and again** (UI-PATTERNS, "Statuses must be true"): loading, a
+/// current reading, an old one, and a failed read. An old reading is never shown as current. An old reading and a
+/// failed read keep when the first of the reads that failed in a row failed (`since`): one break of them says nothing
+/// (`StateReading.pageReadingIsOld`). People, Conversations and Devices draw theirs.
+public enum PageReading<Value> {
+    case loading
+    case current(Value, at: Double)
+    case stale(Value, at: Double, since: ContinuousClock.Instant)
+    case failed(String, since: ContinuousClock.Instant)
+
+    public var value: Value? {
+        switch self {
+        case .current(let value, _), .stale(let value, _, _): value
+        case .loading, .failed: nil
+        }
+    }
+
+    public var at: Double {
+        switch self {
+        case .current(_, let at), .stale(_, let at, _): at
+        case .loading, .failed: 0
+        }
+    }
+
+    public var isOld: Bool { if case .stale = self { true } else { false } }
+    /// What a failed read said.
+    public var failure: String? { if case .failed(let why, _) = self { why } else { nil } }
+    /// When the first of the reads that failed in a row failed; nil while the last read answered.
+    public var failedSince: ContinuousClock.Instant? {
+        switch self {
+        case .stale(_, _, let since), .failed(_, let since): since
+        case .loading, .current: nil
+        }
+    }
+
+    /// The reading after one more read that failed with `why`: the last one, marked old, or the failure. A read that
+    /// fails after another one keeps the moment of the first.
+    public func failed(_ why: String, at now: ContinuousClock.Instant = .now) -> PageReading<Value> {
+        switch self {
+        case .current(let value, let at): .stale(value, at: at, since: now)
+        case .stale: self
+        case .loading: .failed(why, since: now)
+        case .failed(_, let since): .failed(why, since: since)
+        }
+    }
+
+    /// **The same reading for a new visit of its page**: the break of its reads counts from `now`, so reads that failed
+    /// in an earlier visit, which nothing read again since, say nothing to this one at its first failed read.
+    public func visited(at now: ContinuousClock.Instant = .now) -> PageReading<Value> {
+        switch self {
+        case .stale(let value, let at, _): .stale(value, at: at, since: now)
+        case .failed(let why, _): .failed(why, since: now)
+        case .loading, .current: self
+        }
+    }
+
+    /// **The reading as the page draws it: one break of the hub says nothing** (the owner, 17 November 2026: "either
+    /// fix the underlaying issue OR not show the wanring at all"). `old` says whether the reads that have failed since a
+    /// moment make the page's reading old (`FleetStore.pageReadingIsOld`). Until then the last reading draws as it was
+    /// read, with no "Last reading", and a page with none keeps its loading line, with no failed row.
+    public func shown(old: (ContinuousClock.Instant) -> Bool) -> PageReading<Value> {
+        switch self {
+        case .stale(let value, let at, let since) where !old(since): .current(value, at: at)
+        case .failed(_, let since) where !old(since): .loading
+        default: self
+        }
+    }
+}
+
+/// A reading that the store reads before its page opens (`PagePrefetch`) crosses from the read to the store.
+extension PageReading: Sendable where Value: Sendable {}
 
 /// The schedule rules that a page reads from the hub again and again. A read that fails never looks like an empty
 /// list or like a current one, and says why where the hub wrote a reason.
@@ -149,21 +279,30 @@ public enum RuleReading: Equatable, Sendable {
 public enum ProfileReading: Sendable {
     case loading
     case current(ProfileList)
-    /// The last good list, after a read that failed, with the hub's own words for that failure.
-    case stale(ProfileList, String?)
-    /// No list: the first read failed, with the hub's own words for it.
-    case failed(String?)
+    /// The last good list, after a read that failed, with the hub's own words for that failure, and when the first of
+    /// the reads that failed in a row failed (`failedSince`).
+    case stale(ProfileList, String?, since: ContinuousClock.Instant)
+    /// No list: the first read failed, with the hub's own words for it, and when the first read of that row failed.
+    case failed(String?, since: ContinuousClock.Instant)
 
     public var list: ProfileList? {
         switch self {
-        case .current(let list), .stale(let list, _): list
+        case .current(let list), .stale(let list, _, _): list
         case .loading, .failed: nil
         }
     }
     /// The hub's own sentence for the read that failed, or nil when it wrote none.
     public var reason: String? {
         switch self {
-        case .stale(_, let reason), .failed(let reason): reason
+        case .stale(_, let reason, _), .failed(let reason, _): reason
+        case .loading, .current: nil
+        }
+    }
+    /// **When the first of the reads that failed in a row failed**, or nil while the last read answered: the page says
+    /// its line only once they have failed one whole break (`StateReading.pageReadingIsOld`).
+    public var failedSince: ContinuousClock.Instant? {
+        switch self {
+        case .stale(_, _, let since), .failed(_, let since): since
         case .loading, .current: nil
         }
     }
@@ -177,10 +316,21 @@ public enum ProfileReading: Sendable {
         FleetReading.line(reason, then: String(l10n: "Founderizer reads the profile again every 15 seconds."))
     }
 
-    /// The state after one more read; nil is a read that failed, and `reason` is the hub's words for it.
-    public func after(_ list: ProfileList?, reason: String? = nil) -> ProfileReading {
+    /// The state after one more read; nil is a read that failed, and `reason` is the hub's words for it. A read that
+    /// fails after another one keeps the moment of the first (`failedSince`).
+    public func after(_ list: ProfileList?, reason: String? = nil, at now: ContinuousClock.Instant = .now) -> ProfileReading {
         if let list { return .current(list) }
-        return self.list.map { .stale($0, reason) } ?? .failed(reason)
+        let since = failedSince ?? now
+        return self.list.map { .stale($0, reason, since: since) } ?? .failed(reason, since: since)
+    }
+
+    /// **The same reading for a new visit of a page that draws it** (`PageReading.visited`): its break counts from `now`.
+    public func visited(at now: ContinuousClock.Instant = .now) -> ProfileReading {
+        switch self {
+        case .stale(let list, let reason, _): .stale(list, reason, since: now)
+        case .failed(let reason, _): .failed(reason, since: now)
+        case .loading, .current: self
+        }
     }
 }
 

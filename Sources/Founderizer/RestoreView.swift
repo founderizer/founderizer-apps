@@ -270,7 +270,7 @@ struct RestoreRows: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     HStack(spacing: 10) {
-                        if store.isFresh {
+                        if store.writesNow {
                             Button("Restore this copy") { Task { await model.send(store: store) } }
                                 .buttonStyle(FleetPrimaryButtonStyle())
                                 .accessibilityIdentifier("restore-send")
@@ -307,7 +307,7 @@ struct RestoreRows: View {
                     HStack(spacing: 10) {
                         Button("Keep this fleet") { model.forget() }.buttonStyle(FleetOutlineButtonStyle())
                             .accessibilityIdentifier("restore-keep")
-                        if store.isFresh {
+                        if store.writesNow {
                             Button("Replace it with the copy") { Task { await model.send(store: store, replace: true) } }
                                 .buttonStyle(FleetDangerButtonStyle())
                                 .accessibilityIdentifier("restore-replace")

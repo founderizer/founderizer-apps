@@ -32,7 +32,7 @@ struct RolePage: View {
     private let client = PeopleClient()
 
     private var role: RoleList.Role? { roles?.role(name) }
-    private var canWrite: Bool { store.isFresh && store.state?.db != nil }
+    private var canWrite: Bool { store.writesNow && store.state?.db != nil }
 
     var body: some View {
         FleetPage(People.roleWord(name), back: FleetBack("People", action: back)) {

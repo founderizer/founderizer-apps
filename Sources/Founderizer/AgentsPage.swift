@@ -22,6 +22,11 @@ struct AgentsPage: View {
     }
     /// The read of this visit failed and none was kept: Not reported in the server's place.
     @State private var readFailed = false
+    /// When the first of the reads that failed in a row failed: one break of them says nothing (`saysFailed`).
+    @State private var readFailedSince: ContinuousClock.Instant?
+    /// The machines' reads have failed one whole break, or the fleet's state is old (`FleetStore.pageReadingIsOld`;
+    /// 17 November 2026): only then is the last reading gray, and "Not reported" said.
+    private var saysFailed: Bool { readFailed && store.pageReadingIsOld(failedSince: readFailedSince) }
     private var time: Double { store.state?.time ?? 0 }
     private var features: [String] { store.state?.ui_features ?? [] }
 
@@ -176,15 +181,16 @@ struct AgentsPage: View {
     /// with its time on hover; a dash where its helper read nothing yet.
     private func use(_ agent: String) -> some View {
         let machine = machines?.machines.first { $0.agent == agent }
-        let old = readFailed || !store.isFresh || machine?.isCurrent(at: time) != true
+        let old = saysFailed || !store.isFresh || machine?.isCurrent(at: time) != true
         let when = old ? machine?.reported_at.map { String(l10n: "Last reading \(fleetDate($0))") } : nil
         let cpu = machine?.use?.cpu, memory = machine?.use?.memory
         return HStack(spacing: Self.gap) {
-            Text(cpu.map(LoadWords.percent) ?? "–").monospacedDigit()
+            // A new reading rolls to its digits (`rolls`), as each number of a reading on this page does.
+            Text(cpu.map(LoadWords.percent) ?? "–").monospacedDigit().rolls(words: cpu.map(LoadWords.percent) ?? "–")
                 .foregroundStyle(cpu == nil || old ? FleetStyle.muted : FleetStyle.text)
                 .frame(width: Self.cpuWidth, alignment: .leading)
                 .help(when ?? "")
-            Text(memory.map(LoadWords.memory) ?? "–").monospacedDigit()
+            Text(memory.map(LoadWords.memory) ?? "–").monospacedDigit().rolls(words: memory.map(LoadWords.memory) ?? "–")
                 .foregroundStyle(memory == nil || old ? FleetStyle.muted : FleetStyle.text)
                 .frame(width: Self.memoryWidth, alignment: .leading)
                 .help(when ?? "")
@@ -207,7 +213,7 @@ struct AgentsPage: View {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 8) {
                                 AllowanceMeter(used: window.used_percent, stale: stale)
-                                Text("\(Int(window.used_percent.rounded()))%").monospacedDigit()
+                                Text("\(Int(window.used_percent.rounded()))%").monospacedDigit().rolls(Int(window.used_percent.rounded()))
                                     .foregroundStyle(stale ? FleetStyle.muted : FleetStyle.text)
                                     .frame(width: Self.percentWidth, alignment: .trailing)
                             }
@@ -239,9 +245,9 @@ struct AgentsPage: View {
     /// first read goes on, which takes less than a second once the app has read its fleet.
     private func server(_ agent: String) -> (name: String, help: String)? {
         guard features.contains("machines") else { return nil }
-        guard let machines else { return readFailed ? (String(l10n: "Not reported"), "") : nil }
+        guard let machines else { return saysFailed ? (String(l10n: "Not reported"), "") : nil }
         guard let machine = machines.machines.first(where: { $0.agent == agent }) else { return (String(l10n: "Not reported"), "") }
-        let old = readFailed || !store.isFresh || !machine.isCurrent(at: time)
+        let old = saysFailed || !store.isFresh || !machine.isCurrent(at: time)
         return (machine.machine, old ? String(l10n: "Last reading \(fleetDate(machine.reported_at))") : "")
     }
 
@@ -282,11 +288,13 @@ struct AgentsPage: View {
                 let list = try? await HubClient().machines(hub: hub, database: database)
                 guard !Task.isCancelled else { return }
                 if store.hub == hub, store.state?.db == database {
-                    if let list { machines = list; readFailed = false } else { readFailed = true }
+                    if let list { machines = list; readFailed = false; readFailedSince = nil }
+                    else { readFailed = true; readFailedSince = readFailedSince ?? .now }
                 }
             }
             guard !Task.isCancelled else { return }
-            do { try await store.nap(machines != nil || readFailed ? 30 : 5) } catch { return }
+            // 3 s after a read that failed, as the lists do: the gray goes as soon as the hub is back.
+            do { try await store.nap(readFailed ? 3 : machines != nil ? 30 : 5) } catch { return }
         }
     }
 }

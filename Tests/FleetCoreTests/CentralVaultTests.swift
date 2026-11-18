@@ -66,12 +66,39 @@ struct CentralVaultTests {
     /// The vault keeps a grant statement only when it is newer than the one it holds, so two changes in one second
     /// are two seconds apart here, for each fleet on its own.
     @Test func eachGrantStatementOfAFleetIsLaterThanTheLast() throws {
-        let defaults = try #require(UserDefaults(suiteName: "founderizer-test-\(UUID().uuidString)"))
+        let suite = "founderizer-test-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
         #expect(GrantClock.next(fleet: Self.fleet, now: 1_761_300_000, in: defaults) == 1_761_300_000)
         #expect(GrantClock.next(fleet: Self.fleet, now: 1_761_300_000, in: defaults) == 1_761_300_001)
         #expect(GrantClock.next(fleet: Self.fleet, now: 1_761_299_000, in: defaults) == 1_761_300_002)    // a clock set back
         #expect(GrantClock.next(fleet: Self.fleet, now: 1_761_400_000, in: defaults) == 1_761_400_000)
         #expect(GrantClock.next(fleet: "0123456789abcdef", now: 1_761_300_000, in: defaults) == 1_761_300_000)
+    }
+
+    /// The central vault refuses a statement dated more than a day after its own clock (`PIN_AHEAD`; for every kind
+    /// since owner API 1.217), so this Mac never dates one more than `GrantClock.ahead` after its own clock: a last time
+    /// from a clock that ran ahead once is not followed, and the next statement is dated now (the vault manager's
+    /// choice C50).
+    @Test func aGrantStatementIsNeverDatedMoreThanAheadOfThisMac() throws {
+        let suite = "founderizer-test-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let ahead = GrantClock.ahead, ran = 1_761_400_000
+        #expect(ahead == 86400 - 3600)
+        #expect(GrantClock.next(fleet: Self.fleet, now: ran, in: defaults) == ran)                   // the clock ran ahead
+        // put right, and the last time is more than `ahead` after it: now
+        #expect(GrantClock.next(fleet: Self.fleet, now: ran - ahead - 2, in: defaults) == ran - ahead - 2)
+        // a clock set back by less than that: one second after the last, as before
+        #expect(GrantClock.next(fleet: Self.fleet, now: ran - ahead - 100, in: defaults) == ran - ahead - 1)
+        // exactly `ahead` after the clock is the most
+        #expect(GrantClock.next(fleet: Self.fleet, now: ran - 2 * ahead, in: defaults) == ran - ahead)
+        #expect(GrantClock.next(fleet: Self.fleet, now: ran - 2 * ahead, in: defaults) == ran - 2 * ahead)
+        // a damaged stored value, at either end of the numbers: now, and no overflow
+        for damaged in [Int.min, Int.max] {
+            defaults.set([Self.fleet: damaged], forKey: "signedGrantClock")
+            #expect(GrantClock.next(fleet: Self.fleet, now: ran, in: defaults) == ran)
+        }
     }
 
     // MARK: the hub's machine

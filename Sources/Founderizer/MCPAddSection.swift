@@ -112,7 +112,7 @@ final class MCPAdding {
 
     /// The form opens before the team is read (the loading contract, C4.2): only its own Add waits for that reading,
     /// which is the version a new server is written against (`canChange`).
-    func canOpen(_ store: FleetStore) -> Bool { offered(store) && store.isFresh && busy == nil }
+    func canOpen(_ store: FleetStore) -> Bool { offered(store) && store.writesNow && busy == nil }
 
     func canChange(_ store: FleetStore) -> Bool { canOpen(store) && snapshot != nil }
 

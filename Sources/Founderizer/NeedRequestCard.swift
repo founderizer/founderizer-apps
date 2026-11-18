@@ -457,7 +457,13 @@ struct NeedRequestCard: View {
     /// His answer stands in the chat as his own message (`ChatRequestPlaces.spoken`): the folded card does not say it
     /// a second time.
     var spoken = false
+    /// **The thing that he asked for in this chat and that waits for this request** (`ChatAskPlaces.onCards`), or nil:
+    /// while the card waits, its head (`ChatAskHead`) names it and opens its task, and it has no row of its own. A card
+    /// that folds has no head: the row stands under its reply again.
+    var ask: ChatAskRow? = nil
     @State private var expanded = false
+    /// owner feature need_takeover: he pressed Take over on this card, so its error line may show
+    @State private var pressedTakeOver = false
     /// His answer as the outbox saved it, kept from the frame it went until the reading says the request is answered
     /// (`WordsOnTheirWay`): the store lets the request go with its receipt, a round trip before that reading.
     @State private var sent: PendingRequest?
@@ -518,7 +524,10 @@ struct NeedRequestCard: View {
             } else {
                 // **A card's content 16 points in, folded and whole** (margins row 19), as the rows of every form card:
                 // the request's title stood 2 points left of the form rows' titles on the same page.
-                whole.padding(FormMetrics.rowInset)
+                VStack(alignment: .leading, spacing: 0) {
+                    if let ask { ChatAskHead(store: store, row: ask) }
+                    whole.padding(FormMetrics.rowInset)
+                }
             }
         }
         .background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.radius))
@@ -542,7 +551,15 @@ struct NeedRequestCard: View {
         .task(id: need.isOpen ? need.run_on : nil) {
             if need.isOpen, let on = need.run_on, on != NeedRun.ownMac { await store.readRunMachines() }
         }
+        // owner feature need_takeover: Take over stands once the machines' readings name the asking agent's way in
+        .task(id: need.isOpen && need.asksForTakeover ? need.by : nil) {
+            if need.isOpen, need.asksForTakeover { await store.readTakeOverMachines() }
+        }
     }
+
+    /// owner feature need_takeover: the Screen Sharing way to the asking agent's machine, on an open take-over whose
+    /// answer is not on its way (an opened folded card shows no Take over).
+    private var takeOverWay: ScreenSharingConnection? { onItsWay == nil ? need.takeOverWay(in: store) : nil }
 
     /// What a press of Run answered (owner feature `need_run`), or nil.
     private var ranAnswer: NeedRunAnswer? { NeedRunAnswer.of(need, onItsWay: onItsWay) }
@@ -570,29 +587,45 @@ struct NeedRequestCard: View {
 
     private var whole: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Button { withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() } } label: {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(heading).font(titleFont).multilineTextAlignment(.leading)
-                    Spacer(minLength: 8)
-                    // No orange "Needs you" on a request that waits (D-2): every open request needs him. "Answered" stays,
-                    // on one opened again.
-                    if !need.isOpen { Text("Answered").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
-                }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
-            }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach)
-
-            // The reason and the task are two parts of one message: a message's room between them.
-            VStack(alignment: .leading, spacing: ChatStyle.blockSpacing) {
-                if expanded || short {
-                    MessageText(text: need.why, chat: true, card: true)
-                } else {
-                    // **An older long card folds to three lines** (the owner, 9 November 2026: "MUCH better so they
-                    // are shorter"): the start of its reason, until Show all opens the rest.
-                    Text(MessageBlock.inline(need.why.components(separatedBy: .newlines).joined(separator: " ")))
-                        .font(ChatStyle.font).lineSpacing(ChatStyle.lineSpacing).tint(FleetStyle.link)
-                        .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Button { withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() } } label: {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(heading).font(titleFont).multilineTextAlignment(.leading)
+                        Spacer(minLength: 8)
+                        // No orange "Needs you" on a request that waits (D-2): every open request needs him. "Answered"
+                        // stays, on one opened again.
+                        if !need.isOpen { Text("Answered").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
+                    }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
+                }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach)
+                // owner feature need_takeover (the owner's "Yes, as drawn"): Take over at the right of the title, beside
+                // the title's own button and not in it, so that each press does one thing
+                if let way = takeOverWay {
+                    NeedTakeOverButton(need: need.id, connection: way) {
+                        // its error line shows once this press tried to open the screen, not an older error before it
+                        Task { await store.takeOver(need); pressedTakeOver = true }
+                    }
                 }
-                // owner feature need_run: the block of its command has Run (the owner's "Yes, as drawn")
-                if !task.isEmpty { MessageText(text: task, chat: true, card: true, run: NeedRunTarget.of(need, store: store)) }
+            }
+            if let way = takeOverWay { NeedTakeOverLine(connection: way, pressed: pressedTakeOver) }
+
+            // The reason and the task are two parts of one message: a message's room between them. A take-over has
+            // neither: its title is its step.
+            if !need.why.isEmpty || !task.isEmpty {
+                VStack(alignment: .leading, spacing: ChatStyle.blockSpacing) {
+                    if expanded || short {
+                        MessageText(text: need.why, chat: true, card: true)
+                    } else {
+                        // **An older long card folds to three lines** (the owner, 9 November 2026: "MUCH better so they
+                        // are shorter"): the start of its reason, until Show all opens the rest.
+                        Text(MessageBlock.inline(need.why.components(separatedBy: .newlines).joined(separator: " ")))
+                            .font(ChatStyle.font).lineSpacing(ChatStyle.lineSpacing).tint(FleetStyle.link)
+                            .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                    }
+                    // owner feature need_run: the block of its command has Run (the owner's "Yes, as drawn")
+                    if !task.isEmpty {
+                        MessageText(text: task, chat: true, card: true, run: NeedRunTarget.of(need, store: store))
+                    }
+                }
             }
             if expanded, let details = need.details {
                 // **The door's card shows its script line for line** (API 1.125, review point 5.6): one code block, as

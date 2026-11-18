@@ -13,11 +13,22 @@ struct MachineDetails: View {
     /// The machine, from the machines' reading the store keeps (`FleetStore.reading`), which the agent's panel and its
     /// Settings read too: it shows in the first frame, and the read that starts then changes only what changed.
     private var reading: MachineStatus? { (store.reading("machines") as MachineList?)?.machines.first { $0.agent == agent } }
+    /// The words of the reads that failed in a row, and when the first of them failed, or nil while the last one
+    /// answered: one break of them says nothing (`FleetStore.pageReadingIsOld`).
     @State private var error: String?
+    @State private var failedSince: ContinuousClock.Instant?
+    /// The hub's answer that this server is not in its list. It stays while later reads fail.
+    @State private var notRegistered = false
     @State private var checking = false
     /// What stopped the read. While the hub does not answer nothing is read, so a machine not read yet says it is
-    /// unavailable then, and never "Reading the server…" for as long as the hub is down.
-    private var failure: String? { error ?? (reading == nil && store.connectionError != nil ? Self.unavailable : nil) }
+    /// unavailable then, and never "Reading the server…" for as long as the hub is down. **One break of the hub says
+    /// nothing** (17 November 2026): reads that failed say it once they have failed one whole break, and "Reading the
+    /// server…", the last reading or the hub's last answer stands until then.
+    private var failure: String? {
+        if let error, store.pageReadingIsOld(failedSince: failedSince) { return error }
+        if notRegistered { return String(l10n: "This server is not registered.") }
+        return reading == nil && store.connectionError != nil ? Self.unavailable : nil
+    }
     private static let unavailable = String(l10n: "Server status is unavailable.")
     private var fresh: Bool { store.isFresh && reading?.isCurrent(at: store.state?.time ?? 0) == true }
 
@@ -141,11 +152,12 @@ struct MachineDetails: View {
             if let failure, !store.hubNoticeShows { Text(failure).foregroundStyle(.orange) }
         }.font(FormMetrics.detail)
         .task(id: "\(store.hub)/\(store.state?.db ?? "")") {
-            error = nil
+            error = nil; failedSince = nil; notRegistered = false
             while !Task.isCancelled {
                 await refresh()
                 let busy = reading?.check?.isPending == true || reading?.login?.isOpen == true
-                do { try await store.nap(busy ? 2 : 15) } catch { return }
+                // Again in 3 s after a read that failed, as the lists do: its line goes as soon as the hub is back.
+                do { try await store.nap(busy ? 2 : failedSince == nil ? 15 : 3) } catch { return }
             }
         }
     }
@@ -194,9 +206,11 @@ struct MachineDetails: View {
         do {
             let list = try await client.machines(hub: hub, database: database)
             guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
-            store.keep(list, as: "machines"); error = nil
-            if reading == nil { error = String(l10n: "This server is not registered.") }
-        } catch { if !Task.isCancelled { self.error = HubError.said(error) ?? Self.unavailable } }
+            store.keep(list, as: "machines"); error = nil; failedSince = nil
+            notRegistered = reading == nil
+        } catch {
+            if !Task.isCancelled { self.error = HubError.said(error) ?? Self.unavailable; failedSince = failedSince ?? .now }
+        }
     }
 }
 
@@ -269,11 +283,25 @@ struct TaskMachineAccess: View {
         }.task(id: store.isFresh) {
             guard store.isFresh, let database = store.state?.db else { return }
             let hub = store.hub
-            do {
-                let result = try await HubClient().machines(hub: hub, database: database)
-                guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
-                store.keep(result, as: "machines"); error = nil
-            } catch { if !Task.isCancelled { self.error = HubError.said(error) ?? String(l10n: "Server access is unavailable.") } }
+            // **One break of the hub says nothing** (17 November 2026): a read that fails is made again every 3 seconds,
+            // and its line comes only once its own reads have failed one whole break (`FleetStore.pageReadsFailedABreak`).
+            var failedSince: ContinuousClock.Instant?
+            while !Task.isCancelled {
+                do {
+                    let result = try await HubClient().machines(hub: hub, database: database)
+                    guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
+                    store.keep(result, as: "machines"); error = nil
+                    return
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    failedSince = failedSince ?? .now
+                    if store.pageReadsFailedABreak(failedSince: failedSince) {
+                        self.error = HubError.said(error) ?? String(l10n: "Server access is unavailable.")
+                        return
+                    }
+                }
+                do { try await store.nap(3) } catch { return }
+            }
         }
     }
 }

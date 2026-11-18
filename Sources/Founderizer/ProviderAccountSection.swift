@@ -181,7 +181,7 @@ struct ProviderAccountSection: View {
                                     .frame(minWidth: 32, idealWidth: 90, maxWidth: 90).frame(height: Self.line)
                                 ResetLine(window: window, now: time)
                             }
-                            Text("\(Int(window.used_percent.rounded()))%").monospacedDigit()
+                            Text("\(Int(window.used_percent.rounded()))%").monospacedDigit().rolls(Int(window.used_percent.rounded()))
                                 .foregroundStyle(FleetStyle.text)
                                 .frame(width: 38, height: Self.line, alignment: .trailing).layoutPriority(1)
                         }

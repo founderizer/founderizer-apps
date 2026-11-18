@@ -208,7 +208,8 @@ enum AppFront {
 /// socket in the app's own folder of the user's Library, on which the program inside this bundle (`founderizer-cli`)
 /// asks the running app its reads (`setup_state`, `setup_show`, `setup_diagnosis`) and its six writes
 /// (`save_bot_token`, `prepare_problem_report`, `save_secret`, `grant_secret`, `share_secret`,
-/// `answer_secret_request`; `LinkTools`). The
+/// `answer_secret_request`; `LinkTools`), and one write more of a tool of the table: a door card's signed press of
+/// `answer_needs_you`. The
 /// listener runs on a queue of its own; the answers come on the
 /// main actor, from the store (`SetupBoard`). Nothing of it shows on the screen.
 ///
@@ -224,14 +225,17 @@ enum AppFront {
 /// and sets no site itself. Proved with the released, Developer ID signed build (14 November 2026), before
 /// `save_secret` was on the link; `save_secret` ran in the released build 0.1.275 on a test fleet (16 November 2026).
 ///
-/// **Three tools sign, and that is a new power.** `grant_secret` makes this app sign the owner's grant of a secret of
+/// **Four tools sign, and that is a new power.** `grant_secret` makes this app sign the owner's grant of a secret of
 /// the list to a worker or a lead, or its end, with the owner key of this Mac and with no question to the owner (the
 /// owner, 15 November 2026: "No touch"). So each process of the owner's user can bring a secret's value to an
 /// agent's server, and with `read` an API key into that agent's sessions. `share_secret` makes this app sign a secret
 /// of the list into the grantable pool, or out of it, in the same way, and the hub then lets the fleet manager give
 /// it to any worker or lead, at most at the level that the call names. `answer_secret_request` makes this app sign
-/// the gives of one call as `grant_secret` does, and then answer an agent's open request for a secret with a secret
-/// of the list that fits it. `OWNER-MCP-BOUNDARY.md`, section 7b, has the
+/// the gives of one call as `grant_secret` does, and to the door for a request for the door, and then answer an
+/// agent's open request for a secret with a secret of the list that fits it. A door card's press of
+/// `answer_needs_you` (17 November 2026) makes this app sign the owner's yes to the card's door call, or Full access on
+/// the server of the door's card of a run, by the rule of the owner's own press, and send it. `OWNER-MCP-BOUNDARY.md`,
+/// section 7b, has the
 /// powers, their traces and their limits. `grant_secret` ran in the released build 0.1.275 on a test fleet (16
 /// November 2026): the signed give, the value on a worker's server, and the signed end. `share_secret` ran in the released
 /// build 0.1.293 on a test fleet (16 November 2026): the signed pool statement, the delivery through the pool, and
@@ -266,7 +270,8 @@ final class SetupChannel {
                                // The bundle's Info.plist on the disk now: an update swaps the bundle at its path.
                                diskBuild: { ProgramPlace.build(of: Bundle.main.bundleURL) })
         // The link's write tools (`save_bot_token`, `prepare_problem_report`, `save_secret`, `grant_secret`,
-        // `share_secret`, `answer_secret_request`), on the same board and the same store.
+        // `share_secret`, `answer_secret_request`) and a door card's press of `answer_needs_you`, on the same board and
+        // the same store.
         LinkTools.add(to: board, store: { [weak self] in self?.store })
         return board
     }()
@@ -645,6 +650,7 @@ final class SetupChannel {
             case .tasks: return .agentPart(name, .tasks)
             case .people: return .agentPart(name, .people)
             case .canUse: return .agentPart(name, .canUse)
+            case .capabilities: return .agentPart(name, .capabilities)
             }
         case .signIn(let name): return .agentSignIn(name, pages.signIn(of: name))
         case .agentRule(let name, _): return .agentRule(name)
@@ -653,6 +659,9 @@ final class SetupChannel {
         case .connectKey: return .connectKey
         // The slider's step is the owner's choice and no page: the wizard's own pages have no name yet.
         case .shapeChange: return .shapeChange
+        // One thing of an agent's work, from its chat panel (`WorkItemPage`), is a page of the agent's work: the name of
+        // its Tasks, which lists the same work task by task. A name of its own waits for a lane of the owner's places.
+        case .work(let name, _): return .agentPart(name, .tasks)
         }
     }
 
@@ -749,6 +758,7 @@ final class SetupChannel {
         case .tasks: .tasks
         case .people: .people
         case .canUse: .canUse
+        case .capabilities: .capabilities
         }
     }
 

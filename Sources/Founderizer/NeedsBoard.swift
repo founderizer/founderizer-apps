@@ -522,7 +522,8 @@ private struct NeedCard: View {
                 }
                 HStack(spacing: 6) {
                     // The glyph with its dot, as everywhere it stands for the agent (D-8 item 2).
-                    AgentGlyph(name: need.by, size: GlyphSize.inline, ground: selected ? FleetStyle.bubble : FleetStyle.surface)
+                    AgentGlyph(name: need.by, size: GlyphSize.inline,
+                               ground: selected ? FleetStyle.bubble : hovered ? FleetStyle.lifted : FleetStyle.surface)
                     Text(need.by.agentLabel).lineLimit(1)
                     Spacer(minLength: 4)
                     if !waits.isEmpty && !took {
@@ -535,7 +536,8 @@ private struct NeedCard: View {
             .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
             .modifier(BoardCardLook(selected: selected, hovered: hovered))
         }
-        .buttonStyle(.plain)
+        // Plain, and 98% of its size while it is pressed, as a card of Tasks (`BoardCardButtonStyle`).
+        .buttonStyle(BoardCardButtonStyle())
         .onHover { hovered = $0 }
         .help(waits.isEmpty ? need.shownTitle : "\(need.shownTitle)\n\(waiting)")
         .accessibilityElement(children: .ignore)
@@ -583,6 +585,8 @@ private struct NeedStep: View {
     /// Where the answer that he gave stood under the top of the answers: his answer moves from there to the top, as
     /// the other answers go.
     @State private var answerTop: CGFloat = 0
+    /// owner feature need_takeover: he pressed Take over on this step, so its error line may show
+    @State private var pressedTakeOver = false
 
     private var expanded: Bool { memory.expanded }
 
@@ -620,7 +624,16 @@ private struct NeedStep: View {
             Text(need.shownTitle).font(SetupMetrics.titleFont).foregroundStyle(FleetStyle.text)
                 .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                 .accessibilityAddTraits(.isHeader).padding(.top, 14)
-            why.padding(.top, 12)
+            // owner feature need_takeover: Take over under the title, where a take-over has no reason (its title is its
+            // step), and its error line after a press here
+            if let way = takeOverWay {
+                NeedTakeOverButton(need: need.id, connection: way) {
+                    // its error line shows once this press tried to open the screen, not an older error before it
+                    Task { await store.takeOver(need); pressedTakeOver = true }
+                }.padding(.top, 14)
+                if pressedTakeOver { NeedTakeOverLine(connection: way, pressed: true).padding(.top, 6) }
+            }
+            if !need.why.isEmpty { why.padding(.top, 12) }
             if !task.isEmpty { taskWords.padding(.top, 12) }
             if hasMore { moreLink.padding(.top, 10) }
             if expanded, need.details != nil || (!todo.isEmpty && task.isEmpty) { more.padding(.top, 14) }
@@ -637,7 +650,15 @@ private struct NeedStep: View {
         .task(id: need.isOpen ? need.run_on : nil) {
             if need.isOpen, let on = need.run_on, on != NeedRun.ownMac { await store.readRunMachines() }
         }
+        // owner feature need_takeover: Take over stands once the machines' readings name the asking agent's way in
+        .task(id: need.isOpen && need.asksForTakeover ? need.by : nil) {
+            if need.isOpen, need.asksForTakeover { await store.readTakeOverMachines() }
+        }
     }
+
+    /// owner feature need_takeover: the Screen Sharing way to the asking agent's machine, on an open take-over that
+    /// has not ended here (no answer of his on its way).
+    private var takeOverWay: ScreenSharingConnection? { ended ? nil : need.takeOverWay(in: store) }
 
     /// Who asks, by the name the sidebar gives it, and when; and the raised hand of a request that stops work
     /// (`stopsWork`).
@@ -821,7 +842,7 @@ private struct Rolls: ViewModifier {
 
     func body(content: Content) -> some View {
         content.contentTransition(.numericText(value: Double(count)))
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: count)
+            .animation(reduceMotion ? nil : FleetMotion.number, value: count)
     }
 }
 

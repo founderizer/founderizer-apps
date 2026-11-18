@@ -55,7 +55,7 @@ enum ShareSecretSample {
                          ShareSecret.teamUnread, ShareSecret.resourcesUnread, ShareSecret.vaultUnread,
                          ShareSecret.noFleet, ShareSecret.noVaultReading, ShareSecret.vaultSilent,
                          ShareSecret.noOwnerKey, ShareSecret.noOwnerKeyTakeBack, ShareSecret.noSecret,
-                         ShareSecret.readNeedsKey, ShareSecret.busy, ShareSecret.ended]
+                         ShareSecret.readNeedsKey, ShareSecret.clockApart, ShareSecret.busy, ShareSecret.ended]
     /// Each sentence for a refusal after a write went out, and the program's words for a lost answer.
     static let after = [ShareSecret.poolRefused, ShareSecret.poolNotKnown, ShareSecret.standingNotKnown,
                         ShareSecret.standingUnwritten, ShareSecret.standingChanged,
@@ -98,6 +98,10 @@ final class StandInShareDesk {
     /// The vault's page, or nil for a read that fails.
     var vault: ShareSecret.Vault? = .init(fleet: ShareSecretSample.fleet, central: .answers)
     var holdsKey = true
+    /// Whether this Mac's clock and the hub's differ by more than an hour, or nil for no answer of the hub in this
+    /// launch. It is not recorded in `asked`: `clockAsked` says whether a call asked it.
+    var clockApart: Bool? = false
+    var clockAsked = false
     /// What each signed statement and each standing of the hub gets, in the order of the sends: nil when it was
     /// taken. The last one serves each later send too.
     var signAnswers: [(any Error)?] = [nil]
@@ -184,6 +188,10 @@ final class StandInShareDesk {
             holdsKey: { [self] fleet in
                 asked.append("key")
                 return fleet == ShareSecretSample.fleet && holdsKey
+            },
+            clockApart: { [self] _ in
+                clockAsked = true
+                return clockApart
             },
             sign: { [self] place, statement in
                 asked.append(statement.inPool ? "sign pool" : "sign unpool")
@@ -521,6 +529,11 @@ struct OwnerShareSecretWordsTests {
         #expect(ShareSecret.readNeedsKey == "max read is only for an API key: a login is used and never seen. For a "
                 + "login the only max is use: call again with max use only when the owner wants that. Nothing was "
                 + "sent.")
+        #expect(ShareSecret.clockApart == "This Mac's clock and the hub's clock differ by more than an hour, so the "
+                + "app signs no pool statement now. Ask the owner to check this Mac's date and time (System Settings, "
+                + "General, Date & Time), and then call share_secret again. If this Mac's clock is right, the hub's "
+                + "clock is probably wrong: tell the owner. A take-back (max null) does not wait for the clocks. "
+                + "Nothing was sent.")
         #expect(ShareSecret.busy == "Another call of share_secret is at its writes now. Call again when it has "
                 + "answered. Nothing was sent.")
         #expect(ShareSecret.ended == "The call ended before its first write. Nothing was sent.")
@@ -807,6 +820,8 @@ struct OwnerShareSecretAppTests {
         let app = StandInShareDesk()
         app.resourcePages = [ShareSecretSample.resources(standing: [key])]
         let answer = try await app.went(takeBack)
+        // A take-back never asks for the clocks, so it goes at a launch and while they are apart.
+        #expect(!app.clockAsked)
         #expect(app.asked == checks + ["standing null \(base)", "sign unpool", "refresh"])
         #expect(app.standings == ["\(base) \(key) null"])
         #expect(app.statements == [ShareSecret.Statement(fleet: fleet, login: key, inPool: false)])
@@ -924,6 +939,10 @@ struct OwnerShareSecretAppTests {
         }
         await refused(ShareSecretSample.with(["login": .string(ShareSecretSample.password), "max": .string("read")]),
                       ShareSecret.readNeedsKey, asked: checks)
+        // Last of a standing's: this Mac's clock and the hub's differ by more than an hour; and with no answer of the
+        // hub in this launch, a standing is not ready (it fails closed).
+        await refused(share, ShareSecret.clockApart, asked: checks) { $0.clockApart = true }
+        await refused(share, ShareSecret.notReady, asked: checks) { $0.clockApart = nil }
     }
 
     /// **The order of the checks**: of two faults in one call, the earlier check's sentence is the answer.
@@ -967,6 +986,8 @@ struct OwnerShareSecretAppTests {
             $0.resourcePages = [ShareSecretSample.resources(without: [ShareSecretSample.password])]
         }
         await refused(all, ShareSecret.readNeedsKey, asked: checks)
+        // The clocks after every other check of a standing.
+        await refused(all, ShareSecret.readNeedsKey, asked: checks) { $0.clockApart = true }
     }
 
     // ------------------------------------------------------------ one call at a time, and a caller that goes

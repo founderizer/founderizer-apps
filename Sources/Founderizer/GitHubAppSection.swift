@@ -24,7 +24,7 @@ struct GitHubAppSection: View {
     @State private var note: (text: String, warning: Bool)?
 
     private var offered: Bool { store.state?.ui_features?.contains(GitHubAppForm.feature) == true }
-    private var canChange: Bool { offered && store.isFresh && !busy }
+    private var canChange: Bool { offered && store.writesNow && !busy }
     private var has: Bool { app?.app == true }
     /// Whether to ask for an App at all. With one in place this card is its head row, and while Founderizer has
     /// not read the hub yet it asks for nothing, so no credential form flashes up and is taken away again.

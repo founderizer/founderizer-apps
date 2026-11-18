@@ -29,7 +29,7 @@ struct OwnerProfileSection: View {
 
     /// The fleet's name now, as the hub keeps it.
     private var kept: String { page.name?.value ?? "" }
-    private var canWrite: Bool { store.isFresh && store.state?.db != nil }
+    private var canWrite: Bool { store.writesNow && store.state?.db != nil }
 
     var body: some View {
         FormSection("Your profile") {

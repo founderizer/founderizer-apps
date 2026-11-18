@@ -70,7 +70,10 @@ public enum OwnerStatement {
 
     /// The central vault may seal `login` to the vault of `machine` for `agent`: the owner gave the agent this secret
     /// (owner feature `signed_grants`). Without such a statement, or the secret in the pool, the vault seals it for no
-    /// machine, so a hub that is broken into cannot send a secret to a machine the owner did not give it to.
+    /// machine. **The machine is the one that the hub names for the agent at the moment of the Give**
+    /// (`GrantSigning.grant`): a hub that is broken into can name another machine there, and the vault then seals the
+    /// secret to that machine only while the owner pinned its key, also with a pin that he signs later (the vault
+    /// manager's choice C50).
     public static func grant(fleet: String, login: String, agent: String, machine: String, at: Int) -> String {
         canonical(["v": .number(1), "kind": .text("grant"), "fleet": .text(fleet), "login": .text(login.lowercased()),
                    "agent": .text(agent), "machine": .text(machine), "at": .number(at)])
@@ -137,15 +140,29 @@ public enum OwnerStatement {
     public static func now() -> Int { Int(Date().timeIntervalSince1970) }
 }
 
-/// **The time of the owner's next grant statement** for a fleet: whole Unix seconds, and always later than the last one
-/// this Mac signed for it. The central vault keeps a grant statement only when it is newer than the one it holds for
-/// the same secret and agent, and two changes of one grant can come in one second.
+/// **The time of the owner's next grant statement** for a fleet: whole Unix seconds, and one second after the last one
+/// this Mac signed for it, or now when that is later. The central vault keeps a grant statement only when it is newer
+/// than the one it holds for the same secret and agent, and two changes of one grant can come in one second.
+///
+/// **It is never more than `ahead` after this Mac's clock** (the vault manager's choice C50). The central vault
+/// refuses a statement of any kind dated more than a day after its own clock (owner API 1.217; before it, only a pin
+/// and an unpin), so a last time that is `ahead` or more after this Mac's clock, from a clock that ran ahead once, is
+/// not followed, and the next statement is dated now. The app's own controls sign a give, a `pool` or a replace only
+/// while this Mac's clock and the hub's are no more than an hour apart (`GrantSigning`, `VaultPlan.clockProblem`), so
+/// for those a restart comes from a last time of a clock that ran ahead, not from a clock that is behind now; a
+/// take-back, an `unpool` and the link tools do not check the clock. A statement that the vault already holds from
+/// ahead stays there until its time, and this Mac's next change of that record is refused until then.
 public enum GrantClock {
     static let key = "signedGrantClock"
+    /// The most that a statement's time is after this Mac's clock: one hour less than the central vault's `PIN_AHEAD`
+    /// (one day), so that a statement is not refused for its time while the two clocks are no more than an hour apart.
+    /// So a last time from 23 to 24 hours ahead also starts again from now, where the vault would still take it.
+    public static let ahead = 86400 - 3600
 
     public static func next(fleet: String, now: Int = OwnerStatement.now(), in defaults: UserDefaults = .standard) -> Int {
         var all = defaults.dictionary(forKey: key) as? [String: Int] ?? [:]
-        let at = max(now, (all[fleet] ?? 0) + 1)
+        let last = all[fleet] ?? 0
+        let at = last >= now && last - now < ahead ? last + 1 : now     // no overflow, also for a damaged value
         all[fleet] = at
         defaults.set(all, forKey: key)
         return at

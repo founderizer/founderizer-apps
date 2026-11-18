@@ -54,12 +54,15 @@ struct AppsPage: View {
     private var groups: [AppsGroup] { AppsGroup.available(features: features) }
     private var offered: Bool { features.contains(ResourceList.feature) }
     private var reading: ResourceList? { store.reading(AccessSettings.name(nil)) }
-    private var failed: Bool { store.reading(AccessSettings.name(nil) + ".failed") ?? false }
+    /// When the first of the lists' reads that failed in a row failed (`AccessSettings.readOnce`): one break of them
+    /// says nothing (`FleetStore.pageReadingIsOld`).
+    private var failedSince: ContinuousClock.Instant? { store.reading(AccessSettings.name(nil) + ".failedSince") }
 
     var body: some View {
         FleetPage("Apps") { rows } actions: { AccessSettings.lastReading(store, agent: nil, since: opened) }
             // The counts are the resources' reading, read as the lists read it (`AccessSettings.readOnce`).
             .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(offered)") {
+                AccessSettings.visited(store, agent: nil)
                 let start = ContinuousClock.now
                 while !Task.isCancelled {
                     let current = await AccessSettings.readOnce(store, agent: nil, since: start)
@@ -74,7 +77,9 @@ struct AppsPage: View {
         if groups.isEmpty {
             FormSection { FormEmpty("This hub offers no app yet.", symbol: "puzzlepiece.extension") }
         } else if offered && reading == nil {
-            if failed || !store.isFresh {
+            // **One break of the hub says nothing** (17 November 2026): "Reading the resources…" stays until the reads
+            // have failed one whole break, or the fleet's state is old.
+            if store.pageReadingIsOld(failedSince: failedSince) {
                 if !store.hubNoticeShows {
                     FormSection { FormRow("Founderizer cannot read the resources now.", detail: String(l10n: "It reads again when the hub answers.")) }
                 }
@@ -178,6 +183,9 @@ struct AppsSettings: View {
     @State private var appRead = false
     /// This visit's first read of the resources failed: the lists' own line says so once, in the place of the three.
     @State private var unread = false
+    /// When that first read failed: the line waits until the reads have failed one whole break
+    /// (`FleetStore.pageReadingIsOld`).
+    @State private var unreadSince: ContinuousClock.Instant?
     /// The GitHub App, read before the page first opens (`PagePrefetch`); the resources are `AccessSettings.prefetch`.
     static let prefetch = PagePrefetch("apps.integrations.fleet", feature: Integrations.feature) {
         try await IntegrationsClient().read(hub: $0, database: $1)
@@ -264,9 +272,10 @@ struct AppsSettings: View {
 
     /// While the hub does not answer nothing is read: the lists' failed line, never "Reading…". **Not while the
     /// window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item 33): it is said once, over the
-    /// page.
+    /// page. **One break of the hub says nothing** (17 November 2026): "Reading…" stays until the first read's retries
+    /// have failed one whole break.
     @ViewBuilder private var waiting: some View {
-        if unread || store.connectionError != nil {
+        if unread && store.pageReadingIsOld(failedSince: unreadSince) || store.connectionError != nil {
             if !store.hubNoticeShows {
                 FormSection { FormRow("Founderizer cannot read the resources now.", detail: String(l10n: "It reads again when the hub answers.")) }
             }
@@ -456,7 +465,7 @@ struct AppsSettings: View {
         guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
         if let app { integrations = app }
         if let list { resources = list }
-        appRead = true; unread = listsWait
+        appRead = true; unread = listsWait; unreadSince = unread ? .now : nil
         while unread {
             do { try await store.nap(3) } catch { return }
             let list = listsWait ? try? await AccessSettings.readResources(store, agent: agent, hub: hub, database: database) : nil

@@ -14,19 +14,49 @@ struct StateReadingTests {
         #expect(!StateReading.isCurrent(held: true, sinceAnswer: nil, firstReadEnded: false))
     }
 
-    @Test func aReadingIsCurrentForTwelveSecondsAfterTheHubsLastAnswer() {
+    /// **One break of the hub says nothing** (the owner, 27 October 2026: "never for one short break"; 17 November
+    /// 2026: "either fix the underlaying issue OR not show the wanring at all"). His Mac's own record of six hours:
+    /// breaks of 19.4 s just after he connected Gmail and 22.3 s at a release restart, each with reads that hung or
+    /// failed, and each said "This reading of your fleet is old" for a few seconds.
+    @Test func oneBreakOfTheHubSaysNothingAndALongerOneIsOld() {
         #expect(StateReading.isCurrent(held: false, sinceAnswer: 0, firstReadEnded: true))
-        // One read that failed, and a second one: "never for one short break".
-        #expect(StateReading.isCurrent(held: false, sinceAnswer: 3.8, firstReadEnded: true))
-        #expect(StateReading.isCurrent(held: false, sinceAnswer: 11.9, firstReadEnded: true))
-        #expect(!StateReading.isCurrent(held: false, sinceAnswer: 12, firstReadEnded: true))
-        #expect(!StateReading.isCurrent(held: false, sinceAnswer: 3_600, firstReadEnded: true))
+        // A read that hung eight seconds and more inside the break, as at 17:46 UTC: still current.
+        #expect(StateReading.isCurrent(held: true, sinceAnswer: 19.4, firstReadEnded: true))
+        #expect(StateReading.isCurrent(held: false, sinceAnswer: 22.3, firstReadEnded: true))
+        #expect(StateReading.limit > 22.3)
+        // A hub that stays away: old once the break has lasted its whole limit, whatever the reads did.
+        #expect(!StateReading.isCurrent(held: false, sinceAnswer: StateReading.limit, firstReadEnded: true))
+        #expect(!StateReading.isCurrent(held: true, sinceAnswer: 3_600, firstReadEnded: true))
+        // A page's own reading: one break of failed reads says nothing; a longer one, or an old state, is its last.
+        #expect(!StateReading.pageReadingIsOld(stateIsCurrent: true, failingFor: nil))
+        #expect(!StateReading.pageReadingIsOld(stateIsCurrent: true, failingFor: 20))
+        #expect(StateReading.pageReadingIsOld(stateIsCurrent: true, failingFor: StateReading.limit))
+        #expect(StateReading.pageReadingIsOld(stateIsCurrent: false, failingFor: nil))
+        // How long a page's reads have failed: from the first of them, and from the Mac's last wake when they began
+        // before it, so a Mac that wakes after a night starts no break (Conversations, People, Devices and the other
+        // pages' own lines, 17 November 2026).
+        let first = ContinuousClock.now, woke = first + .seconds(8 * 3_600)
+        #expect(StateReading.failingFor(since: nil, wokeAt: woke, now: woke) == nil)
+        #expect(StateReading.failingFor(since: first, wokeAt: nil, now: first + .seconds(30)) == 30)
+        #expect(StateReading.failingFor(since: first, wokeAt: woke, now: woke + .seconds(5)) == 5)
+        #expect(StateReading.failingFor(since: woke, wokeAt: first, now: woke + .seconds(5)) == 5)
     }
 
-    @Test func aReadThatTakesLongerThanItsPatienceMakesTheReadingOld() {
-        // Eight seconds into a read, with the last answer 11 seconds ago: old, until a read answers.
-        #expect(!StateReading.isCurrent(held: true, sinceAnswer: 11, firstReadEnded: true))
-        #expect(!StateReading.isCurrent(held: true, sinceAnswer: 0.5, firstReadEnded: true))
+    /// **A wake starts no break, and no work moves by the reading from before it** (a review of 17 November 2026): with
+    /// the hub away after a night's sleep, that reading stays current for up to one break, and an agent that worked as
+    /// the Mac went to sleep moved on the screen as if it worked now.
+    @Test func noWorkMovesByAReadingFromBeforeAWake() {
+        let began = ContinuousClock.now, woke = began.advanced(by: .seconds(8 * 3_600))
+        #expect(StateReading.workMoves(stateIsCurrent: true, readBegan: began, wokeAt: nil))
+        #expect(StateReading.workMoves(stateIsCurrent: true, readBegan: began, wokeAt: began.advanced(by: .seconds(-1))))
+        #expect(!StateReading.workMoves(stateIsCurrent: true, readBegan: began, wokeAt: woke))
+        // The hub's answer to the first read after the wake.
+        #expect(StateReading.workMoves(stateIsCurrent: true, readBegan: woke.advanced(by: .seconds(2)), wokeAt: woke))
+        // The reading that this Mac kept from its last launch is from before the wake too; an old one never moves.
+        #expect(!StateReading.workMoves(stateIsCurrent: true, readBegan: nil, wokeAt: woke))
+        #expect(!StateReading.workMoves(stateIsCurrent: false, readBegan: began, wokeAt: nil))
+        // With no wake, a launch's kept reading moves while its first read is on its way, as before this rule.
+        #expect(StateReading.workMoves(stateIsCurrent: true, readBegan: nil, wokeAt: nil))
     }
 
     /// The Mac holds a new reading while a chat scrolls (the owner, 17 November 2026: "scrolling up and down the fleet
@@ -36,8 +66,8 @@ struct StateReadingTests {
         for since in stride(from: 0.0, through: 15, by: 0.5) {
             let wait = StateReading.waitWhileScrolling(sinceAnswer: since)
             #expect(wait >= 0)
-            // It comes in at once, or three seconds before the reading on the screen would count as old.
-            #expect(since + wait <= max(since, StateReading.limit - 3), "\(since)")
+            // It comes in at once, or at most nine seconds after the hub's last answer, well inside one break.
+            #expect(since + wait <= max(since, StateReading.scrollWaitMost), "\(since)")
             #expect(StateReading.isCurrent(held: false, sinceAnswer: since + wait, firstReadEnded: true) || wait == 0, "\(since)")
         }
         #expect(StateReading.waitWhileScrolling(sinceAnswer: 3) == 6)
@@ -51,7 +81,7 @@ struct StateReadingTests {
         // The slowest read of the owner's fleet in 300, under load, took 6.9 s; a read gives up after 10 s.
         #expect(StateReading.patience > 6.9)
         #expect(StateReading.patience < 10)
-        // A read on the clock starts 3 s after the last answer: its patience ends inside the reading's 12 seconds.
-        #expect(3 + StateReading.patience <= StateReading.limit)
+        // The launch's first read: its patience ends before a read gives up.
+        #expect(StateReading.patience < StateReading.limit)
     }
 }

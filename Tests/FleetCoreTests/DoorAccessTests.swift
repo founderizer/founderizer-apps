@@ -457,6 +457,341 @@ struct DoorAccessTests {
         #expect(file["v"] as? Int == 1)
     }
 
+    // MARK: the fleet's own servers (API 1.210)
+
+    /// The fixture's network with the fleet's own servers on it: two servers that run agents, the hub's server at the
+    /// hub's address of the door's file, a Mac, and the manager's server.
+    static var fleetDevices: [DoorAccess.Device] {
+        DoorAccess.devices(status: status([
+            peer("agents-1", "100.64.0.3", ["tag:fleet"]), peer("agents-2", "100.64.0.7", ["tag:old-worker"]),
+            peer("hub-1", "100.64.0.2", ["tag:fleet"]), peer("mac-1", "100.64.0.9", ["tag:mac"]),
+            peer("manager-box", "100.64.0.10", ["tag:fleet"]), peer("moved-1", "100.64.0.40", [])]))
+    }
+
+    static func fleetHub(holder: String? = nil, manager: String? = "manager") -> DoorAccess.HubDoor {
+        var hub = hubDoor(agents: ["otto": .init(address: "100.64.0.11", user: "fleet-ops-one"),
+                                   "ops-two": .init(address: "100.64.0.12", user: "fleet-ops-two"),
+                                   "manager": .init(address: "100.64.0.10", user: "fleet-manager"),
+                                   "builder": .init(address: "100.64.0.13", user: "fleet-builder")])
+        hub.fleet = .init(servers: ["agents-1": "100.64.0.3", "agents-2": "100.64.0.7", "hub-1": "100.64.0.2",
+                                    "fleet-1": "100.64.1.4",          // it carries a business tag: it goes with its business
+                                    "ghost-1": "100.64.0.99",         // this Mac's Tailscale shows no such device
+                                    "moved-1": "100.64.0.41",         // another address than this Mac's Tailscale gives
+                                    "box-one": "100.64.0.11", "manager-box": "100.64.0.10"],
+                          holder: holder, manager: manager)
+        return hub
+    }
+
+    static func fleetFacts(_ holder: DoorAccess.FleetHolder, hub: DoorAccess.HubDoor = fleetHub(),
+                           marked: [String] = ["agents-1", "hub-1", "box-one", "manager-box"]) -> DoorAccess.Facts {
+        var hosts = readings(["web-1", "web-2", "shared-1", "fleet-1"])
+        for name in ["agents-1", "agents-2", "hub-1", "box-one", "manager-box"] {
+            hosts[name] = DoorAccess.HostReading(hostKey: other, mode: "rule-only", fleet: marked.contains(name))
+        }
+        var facts = DoorAccess.Facts(devices: fleetDevices, hosts: hosts, operators: both, hub: hub)
+        facts.fleetHolder = holder
+        return facts
+    }
+
+    /// The owner, 17 November 2026, after three of the fleet's own servers ran out of memory and each time a card asked
+    /// him for a root command: "someone should probably have root, I dont want to be doing devops work on the fleet!"
+    /// The hub proposes the fleet's servers, and this Mac takes one only when its own Tailscale shows it under that
+    /// name at that address, with no business tag, and when it is not the door, not on the never list and not held.
+    @Test func theFleetsOwnServersAreTheHubsListAsThisMacsTailscaleShowsIt() {
+        var hub = Self.fleetHub()
+        #expect(DoorAccess.fleetServers(access: Self.access, devices: Self.fleetDevices, hub: hub)
+                == ["agents-1", "agents-2", "box-one", "manager-box", "hub-1"])       // by name, the hub's server last
+        #expect(DoorAccess.fleetServers(access: Self.access, devices: Self.fleetDevices, hub: nil).isEmpty)
+        #expect(DoorAccess.fleetServers(access: Self.access, devices: Self.fleetDevices, hub: Self.hubDoor()).isEmpty)
+        hub.holds = ["agents-2": "parts", "agents-1": "rule-only"]
+        var access = Self.access
+        access["never"] = ["hosts": ["site-1", "manager-box"]]
+        #expect(DoorAccess.fleetServers(access: access, devices: Self.fleetDevices, hub: hub)
+                == ["agents-1", "box-one", "hub-1"])
+        hub.fleet = .init(servers: ["door": "100.64.0.5", "Bad Name": "100.64.0.3"])
+        #expect(DoorAccess.fleetServers(access: Self.access, devices: Self.fleetDevices, hub: hub).isEmpty)
+        // a tag business-fleet names no business: the name is the fleet's own in the door's file
+        let tagged = DoorAccess.Device(name: "x", address: "100.64.0.6", tags: ["tag:business-fleet", "tag:operator-fleet"])
+        #expect(tagged.businesses.isEmpty && tagged.operates.isEmpty)
+        #expect(DoorAccess.fleetBusiness == "fleet")
+    }
+
+    /// Who holds them, by the owner's two decisions: the DevOps agent that he names, and with no DevOps agent the
+    /// manager. The hub's view only proposes: an agent that is no Operator needs its own server's word (`.box`).
+    @Test func theHolderIsTheNamedAgentTheOneDevOpsAgentOrTheManager() {
+        let devices = Self.fleetDevices
+        let otto = DoorAccess.Operator(agent: "otto", address: "100.64.0.11")
+        let two = DoorAccess.Operator(agent: "ops-two", address: "100.64.0.12")
+        func candidate(_ hub: DoorAccess.HubDoor?, _ operators: [String: DoorAccess.Operator?] = Self.both) -> DoorAccess.FleetCandidate {
+            DoorAccess.fleetCandidate(hub: hub, devices: devices, operators: operators)
+        }
+        #expect(candidate(Self.fleetHub(holder: "otto")) == .agent(otto))           // the Operator, by the hub's name of it
+        #expect(candidate(Self.fleetHub(holder: "ops-two")) == .agent(two))
+        #expect(candidate(Self.fleetHub(holder: "builder")) == .box(agent: "builder", address: "100.64.0.13"))
+        #expect(candidate(Self.fleetHub(holder: "ghost")) == .nobody)               // the hub shows no server for it
+        #expect(candidate(Self.fleetHub()) == .nobody)                              // two DevOps agents, and none named
+        #expect(candidate(Self.fleetHub(), ["one": Self.both["one"]!, "two": nil]) == .agent(otto))
+        #expect(candidate(Self.fleetHub(), ["one": nil, "two": nil])
+                == .box(agent: "manager", address: "100.64.0.10"))                  // no DevOps agent: the manager
+        #expect(candidate(Self.fleetHub(manager: nil), ["one": nil, "two": nil]) == .nobody)
+        // An operator box that was not read this round (here box-two): without a name the round does not know how
+        // many DevOps agents there are, and the named agent can be the one on that box. A named agent that a read
+        // box shows, or whose server is no such box, is not held up by it.
+        let onlyOne: [String: DoorAccess.Operator?] = ["one": Self.both["one"]!]
+        #expect(candidate(Self.fleetHub(), onlyOne) == .keep)
+        #expect(candidate(Self.fleetHub(holder: "ops-two"), onlyOne) == .keep)
+        #expect(candidate(Self.fleetHub(holder: "otto"), onlyOne) == .agent(otto))
+        #expect(candidate(Self.fleetHub(holder: "builder"), onlyOne) == .box(agent: "builder", address: "100.64.0.13"))
+        #expect(candidate(nil) == .keep && candidate(Self.hubDoor()) == .keep)      // a hub before API 1.210
+    }
+
+    @Test func aMachineOfTheFleetIsAHostAtRuleOnlyForTheOneAgentThatHoldsThem() {
+        let otto = DoorAccess.Operator(agent: "otto", address: "100.64.0.11")
+        let plan = DoorAccess.plan(current: Self.access, facts: Self.fleetFacts(.agent(otto)))
+        let file = Self.object(plan.file)
+        let hosts = file["hosts"] as? [String: Any] ?? [:]
+        for name in ["agents-1", "hub-1", "box-one", "manager-box"] {
+            let host = hosts[name] as? [String: Any] ?? [:]
+            #expect(host["business"] as? String == "fleet" && host["mode"] as? String == "rule-only"
+                    && host["kind"] as? String == "fleet" && host["host_key"] as? String == Self.other, "\(name)")
+        }
+        #expect((hosts["agents-1"] as? [String: Any])?["address"] as? String == "100.64.0.3")
+        #expect(hosts["agents-2"] == nil && plan.waiting.contains("agents-2"))      // its parts have no mark of the fleet
+        #expect(hosts["ghost-1"] == nil && hosts["moved-1"] == nil && hosts["mac-1"] == nil)
+        // a server with a business tag goes with its business, as before
+        #expect((hosts["fleet-1"] as? [String: Any])?["business"] as? String == "one")
+        // the holder: its business's servers at Fix, and the fleet's own, its own server among them
+        let held = Self.agent(file, "otto")["servers"] as? [String: String] ?? [:]
+        #expect(held == ["web-1": "fix", "shared-1": "fix", "fleet-1": "fix", "agents-1": "fix", "hub-1": "fix",
+                         "box-one": "fix", "manager-box": "fix"])
+        #expect(Self.agent(file, "otto")["business"] as? String == "one")
+        #expect((Self.agent(file, "ops-two")["servers"] as? [String: String])?.keys.sorted() == ["shared-1", "web-2"])
+        // the hub's record: patch for a machine of the fleet, which is no Fix there
+        #expect(plan.holdings["otto"] == ["web-1": "fix", "shared-1": "fix", "fleet-1": "fix", "agents-1": "patch",
+                                          "hub-1": "patch", "box-one": "patch", "manager-box": "patch"])
+        // the same facts again write nothing
+        #expect(!DoorAccess.plan(current: file, facts: Self.fleetFacts(.agent(otto))).changed)
+    }
+
+    @Test func anAgentThatIsNoOperatorHoldsThemUnderTheFleetsOwnBusiness() {
+        let manager = DoorAccess.Operator(agent: "manager", address: "100.64.0.10")
+        var access = Self.access
+        var agents = access["agents"] as? [String: Any] ?? [:]
+        agents["stale"] = ["address": "100.64.0.10", "business": "one"]      // an old entry at the manager's address
+        access["agents"] = agents
+        let plan = DoorAccess.plan(current: access, facts: Self.fleetFacts(.agent(manager)))
+        let file = Self.object(plan.file)
+        let entry = Self.agent(file, "manager")
+        #expect(entry["business"] as? String == "fleet" && entry["address"] as? String == "100.64.0.10")
+        #expect((entry["servers"] as? [String: String])?.keys.sorted() == ["agents-1", "box-one", "hub-1", "manager-box"])
+        #expect(Self.agent(file, "stale")["address"] == nil)                 // the address is the holder's alone
+        #expect(plan.holdings["manager"] == ["box-one": "patch", "hub-1": "patch", "manager-box": "patch", "agents-1": "patch"])
+        #expect((Self.agent(file, "otto")["servers"] as? [String: String])?["agents-1"] == nil)
+        // nobody: the hosts stay, and no agent holds them
+        let none = DoorAccess.plan(current: file, facts: Self.fleetFacts(.nobody))
+        let after = Self.object(none.file)
+        #expect((after["hosts"] as? [String: Any])?["agents-1"] != nil)
+        #expect(Self.agent(after, "manager")["servers"] == nil && none.holdings["manager"] == nil)
+        // keep: a round that could not say leaves the holder that the file shows, at its address
+        let kept = DoorAccess.plan(current: file, facts: Self.fleetFacts(.keep))
+        #expect(!kept.changed && kept.holdings["manager"]?["agents-1"] == "patch")
+    }
+
+    /// What a fault of the hub must not reach (found by a reviewer of this change): the hub proposes the holder with a
+    /// name and an address. An entry of the file under that name can hold a business's servers at Fix, a provider's
+    /// account or a database, and only an operator box gives such an entry its address. Were the hub's address
+    /// taken, the agent at that address would have all of that.
+    @Test func theHubsAddressNeverMovesAnEntryThatHoldsMoreThanTheFleetsServers() {
+        var access = Self.access
+        var agents = access["agents"] as? [String: Any] ?? [:]
+        agents["ops-one"] = ["address": "100.64.0.11", "business": "one", "servers": ["web-1": "fix"]]
+        agents["builder"] = ["address": "100.64.0.13", "business": "one", "databases": ["shop-db": "data"]]
+        agents["reader"] = ["github": ["one-org/ops": "read"]]                // its GitHub grants alone, from the hub
+        access["agents"] = agents
+        var hosts = access["hosts"] as? [String: Any] ?? [:]
+        hosts["web-1"] = ["address": "100.64.1.1", "port": 2244, "host_key": Self.key, "business": "one", "mode": "fix", "kind": "app"]
+        access["hosts"] = hosts
+        // this round: no device carries the operator tag of one, so the file's holder of one stays (ops-one)
+        func planned(_ agent: String, _ address: String) -> [String: Any] {
+            var facts = Self.fleetFacts(.agent(.init(agent: agent, address: address)), hub: Self.hubDoor(agents: [:]))
+            facts.hub?.fleet = Self.fleetHub().fleet
+            facts.devices = Self.fleetDevices.filter { $0.name != "box-one" }
+            facts.operators = ["two": Self.both["two"]!]
+            return Self.object(DoorAccess.plan(current: access, facts: facts).file)
+        }
+        // the holder of a business's servers, at the address that the hub gives for it
+        var entry = Self.agent(planned("ops-one", "100.64.0.10"), "ops-one")
+        #expect(entry["address"] as? String == "100.64.0.11")                       // its own, as the file had it
+        #expect((entry["servers"] as? [String: String])?["web-1"] == "fix")
+        #expect((entry["servers"] as? [String: String])?["agents-1"] == nil)        // and none of the fleet's servers
+        // an entry with a database's login
+        entry = Self.agent(planned("builder", "100.64.0.10"), "builder")
+        #expect(entry["address"] as? String == "100.64.0.13" && entry["servers"] == nil)
+        #expect(entry["databases"] as? [String: String] == ["shop-db": "data"])
+        // at the address that the file already has, each of them holds the fleet's servers
+        entry = Self.agent(planned("ops-one", "100.64.0.11"), "ops-one")
+        #expect(entry["address"] as? String == "100.64.0.11" && (entry["servers"] as? [String: String])?["agents-1"] == "fix")
+        #expect((entry["servers"] as? [String: String])?["web-1"] == "fix")
+        // an entry with GitHub grants alone, and an agent with no entry, take the address that their own server proved
+        entry = Self.agent(planned("reader", "100.64.0.10"), "reader")
+        #expect(entry["address"] as? String == "100.64.0.10" && entry["business"] as? String == "fleet")
+        #expect((entry["servers"] as? [String: String])?["agents-1"] == "fix")
+        #expect((Self.agent(planned("manager", "100.64.0.10"), "manager")["servers"] as? [String: String])?["agents-1"] == "fix")
+    }
+
+    /// The other side of that guard (found in the confirm round of the reviews): a holder whose entry holds only the
+    /// fleet's own servers moves with its server. Without this, a manager that the owner moved to another server
+    /// lost the fleet's servers for good, and nothing said so.
+    @Test func aHolderWhoseEntryHoldsOnlyTheFleetsServersMovesWithItsServer() {
+        let manager = DoorAccess.Operator(agent: "manager", address: "100.64.0.10")
+        var file = Self.object(DoorAccess.plan(current: Self.access, facts: Self.fleetFacts(.agent(manager))).file)
+        #expect(Self.agent(file, "manager")["address"] as? String == "100.64.0.10")
+        // the owner moved the manager to another server: the hub and that server say so
+        let moved = DoorAccess.Operator(agent: "manager", address: "100.64.0.40")
+        var after = Self.object(DoorAccess.plan(current: file, facts: Self.fleetFacts(.agent(moved))).file)
+        #expect(Self.agent(after, "manager")["address"] as? String == "100.64.0.40")
+        #expect((Self.agent(after, "manager")["servers"] as? [String: String])?["agents-1"] == "fix")
+        // an entry that lost its address (an Operator took it in a round that could not say who holds) gets one again
+        var agents = file["agents"] as? [String: Any] ?? [:]
+        var entry = agents["manager"] as? [String: Any] ?? [:]
+        entry["address"] = nil
+        agents["manager"] = entry
+        file["agents"] = agents
+        after = Self.object(DoorAccess.plan(current: file, facts: Self.fleetFacts(.agent(moved))).file)
+        #expect(Self.agent(after, "manager")["address"] as? String == "100.64.0.40")
+        #expect((Self.agent(after, "manager")["servers"] as? [String: String])?["agents-1"] == "fix")
+        // with a key of a key card in its entry too, which the hub gives as it gives the GitHub grants
+        entry["address"] = "100.64.0.10"
+        entry["providers"] = ["hetzner:fleet"]
+        agents["manager"] = entry
+        file["agents"] = agents
+        after = Self.object(DoorAccess.plan(current: file, facts: Self.fleetFacts(.agent(moved))).file)
+        #expect(Self.agent(after, "manager")["address"] as? String == "100.64.0.40")
+        // but not with an account that a Mac session wrote, a database, or a server that is none of the fleet's own
+        for (key, value) in [("providers", ["aws:one"] as Any), ("databases", ["shop-db": "data"] as Any),
+                             ("servers", ["agents-1": "fix", "web-1": "fix"] as Any), ("business", "one" as Any)] {
+            var more = entry
+            more[key] = value
+            agents["manager"] = more
+            file["agents"] = agents
+            let kept = Self.agent(Self.object(DoorAccess.plan(current: file, facts: Self.fleetFacts(.agent(moved))).file), "manager")
+            #expect(kept["address"] as? String == "100.64.0.10", "\(key)")
+            #expect((kept["servers"] as? [String: String])?["agents-1"] == nil, "\(key)")
+        }
+    }
+
+    /// And the corner of an Operator of this round (the same review): the hub names the agent on the operator box of one
+    /// business as the file's holder of another business. The rule of two businesses gives it neither business, so
+    /// no line gives its entry that box's address, and the fleet's part does not either: the entry keeps its
+    /// address, with its database.
+    @Test func anOperatorOfThisRoundThatTheHubNamesAsAnotherEntryGetsNoAddressFromTheFleetsPart() {
+        var access = Self.access
+        var agents = access["agents"] as? [String: Any] ?? [:]
+        agents["otto"] = ["address": "100.64.0.99", "business": "three", "servers": ["old-1": "fix"],
+                          "databases": ["shop-db": "data"]]
+        agents["ops-one"] = nil
+        agents["builder"] = nil
+        access["agents"] = agents
+        var hosts = access["hosts"] as? [String: Any] ?? [:]
+        hosts["old-1"] = ["address": "100.64.1.99", "port": 2244, "host_key": Self.key, "business": "three", "mode": "fix", "kind": "app"]
+        access["hosts"] = hosts
+        var facts = Self.fleetFacts(.agent(.init(agent: "otto", address: "100.64.0.11")))        // the box of one
+        facts.devices = Self.fleetDevices + [DoorAccess.Device(name: "old-1", address: "100.64.1.99", tags: ["tag:business-three"])]
+        facts.hosts["old-1"] = DoorAccess.HostReading(hostKey: Self.key, mode: "fix", fleet: false)
+        let file = Self.object(DoorAccess.plan(current: access, facts: facts).file)
+        let entry = Self.agent(file, "otto")
+        #expect(entry["address"] as? String == "100.64.0.99")
+        #expect(entry["databases"] as? [String: String] == ["shop-db": "data"])
+        #expect((entry["servers"] as? [String: String])?["agents-1"] == nil)
+    }
+
+    /// `.keep` (a box that did not answer): the holder that the file shows stays. When it is an Operator of this round,
+    /// its address is this round's, and an agent that only stays takes no address from another agent.
+    @Test func aKeptHolderHasThisRoundsAddressAndTakesNoAddressAway() {
+        let otto = DoorAccess.Operator(agent: "otto", address: "100.64.0.11")
+        let first = Self.object(DoorAccess.plan(current: Self.access, facts: Self.fleetFacts(.agent(otto))).file)
+        // the box of one moved to another address, and this round could not say who holds the fleet's servers
+        var facts = Self.fleetFacts(.keep)
+        facts.operators = ["one": DoorAccess.Operator(agent: "ops-one", address: "100.64.0.31"), "two": Self.both["two"]!]
+        var hub = Self.hubDoor(agents: ["otto": .init(address: "100.64.0.31", user: "fleet-ops-one"),
+                                        "ops-two": .init(address: "100.64.0.12", user: "fleet-ops-two")])
+        hub.fleet = Self.fleetHub().fleet
+        facts.hub = hub
+        let moved = Self.object(DoorAccess.plan(current: first, facts: facts).file)
+        #expect(Self.agent(moved, "otto")["address"] as? String == "100.64.0.31")
+        #expect((Self.agent(moved, "otto")["servers"] as? [String: String])?["agents-1"] == "fix")
+        // A kept holder that is no Operator keeps the file's address. When this round gives that address to an
+        // Operator (its server got an operator tag), the Operator has it alone, as the door asks: the kept holder
+        // has no address then, so it calls nothing until a round can say who holds the fleet's servers.
+        let manager = DoorAccess.Operator(agent: "manager", address: "100.64.0.10")
+        let file = Self.object(DoorAccess.plan(current: Self.access, facts: Self.fleetFacts(.agent(manager))).file)
+        let kept = Self.object(DoorAccess.plan(current: file, facts: Self.fleetFacts(.keep)).file)
+        #expect(Self.agent(kept, "manager")["address"] as? String == "100.64.0.10")
+        #expect((Self.agent(kept, "manager")["servers"] as? [String: String])?["agents-1"] == "fix")
+        var taken = Self.fleetFacts(.keep)
+        taken.operators = ["one": Self.both["one"]!, "two": DoorAccess.Operator(agent: "ops-two", address: "100.64.0.10")]
+        let after = Self.object(DoorAccess.plan(current: file, facts: taken).file)
+        #expect(Self.agent(after, "ops-two")["address"] as? String == "100.64.0.10")
+        #expect(Self.agent(after, "manager")["address"] == nil)
+        let addresses = (after["agents"] as? [String: Any] ?? [:]).values.compactMap { ($0 as? [String: Any])?["address"] as? String }
+        #expect(Set(addresses).count == addresses.count)                 // no address two times: the door takes the file
+    }
+
+    /// The door refuses a whole file that has an agent at the hub's address, and it knows a caller by its address: an
+    /// agent on the hub's server, or at the door's own address, holds nothing, and the file stays one that the door takes.
+    @Test func anAgentAtTheHubsOrTheDoorsAddressHoldsNoneOfThem() {
+        for address in ["100.64.0.2", "100.64.0.5"] {
+            let plan = DoorAccess.plan(current: Self.access,
+                                       facts: Self.fleetFacts(.agent(.init(agent: "manager", address: address))))
+            let file = Self.object(plan.file)
+            #expect(Self.agent(file, "manager").isEmpty && plan.holdings["manager"] == nil, "\(address)")
+            #expect((file["hosts"] as? [String: Any])?["agents-1"] != nil)
+        }
+        let bad = DoorAccess.plan(current: Self.access,
+                                  facts: Self.fleetFacts(.agent(.init(agent: "Not A Name", address: "100.64.0.10"))))
+        #expect(bad.holdings["Not A Name"] == nil)
+    }
+
+    @Test func aFleetServerThatDidNotAnswerKeepsItsPlaceAndOneWithNoSshdLeaves() {
+        let otto = DoorAccess.Operator(agent: "otto", address: "100.64.0.11")
+        let first = Self.object(DoorAccess.plan(current: Self.access, facts: Self.fleetFacts(.agent(otto))).file)
+        var facts = Self.fleetFacts(.agent(otto))
+        facts.hosts["agents-1"] = nil                                        // SSH did not answer this round
+        let kept = Self.object(DoorAccess.plan(current: first, facts: facts).file)
+        #expect(((kept["hosts"] as? [String: Any])?["agents-1"] as? [String: Any])?["mode"] as? String == "rule-only")
+        #expect((Self.agent(kept, "otto")["servers"] as? [String: String])?["agents-1"] == "fix")
+        facts.bare = ["agents-1"]                                            // it answered, and its second sshd is gone
+        let gone = DoorAccess.plan(current: first, facts: facts)
+        #expect((Self.object(gone.file)["hosts"] as? [String: Any])?["agents-1"] == nil && gone.holdings["otto"]?["agents-1"] == nil)
+        // an old entry of another kind under a fleet server's name is no entry of the fleet: it is not kept as one
+        var old = first
+        var hosts = old["hosts"] as? [String: Any] ?? [:]
+        hosts["agents-1"] = ["address": "100.64.0.3", "port": 2244, "host_key": Self.key, "business": "one", "mode": "fix", "kind": "app"]
+        old["hosts"] = hosts
+        facts.bare = []
+        #expect((Self.object(DoorAccess.plan(current: old, facts: facts).file)["hosts"] as? [String: Any])?["agents-1"] == nil)
+    }
+
+    @Test func theHubsViewGivesTheFleetAndTheRoundReadsAChangeOfIt() throws {
+        let json = #"{"door": null, "credentials": {}, "agents": {}, "db": "g", "fleet": {"servers": {"agents-1": "100.64.0.3"}, "holder": "otto", "manager": "manager"}}"#
+        let view = try JSONDecoder().decode(DoorAccess.HubDoor.self, from: Data(json.utf8))
+        #expect(view.fleet == .init(servers: ["agents-1": "100.64.0.3"], holder: "otto", manager: "manager"))
+        var other = view
+        other.fleet = .init(servers: ["agents-1": "100.64.0.3"], holder: nil, manager: "manager")
+        #expect(view.digest != other.digest)
+        other.fleet = nil
+        #expect(view.digest != other.digest)
+        let none = try JSONDecoder().decode(DoorAccess.HubDoor.self, from: Data(#"{"door": null, "credentials": {}, "agents": {}, "db": "g"}"#.utf8))
+        #expect(none.fleet == nil)
+        #expect(DoorAccess.fleetProgram == "test -x /usr/local/sbin/fleet-agent-user && echo fleet-machine=yes; true")
+        // the probe reads the install script's own line for the option (the hub's test_host_parts holds that line)
+        #expect(DoorAccess.fleetProbe == "grep -qs -- '--fleet) FLEET=1' /opt/fleet-door/current/host/install.sh && echo fleet=yes; true")
+        #expect(DoorAccess.hostProgram.contains("if test -e /etc/ops-root/fleet || test -e /etc/ops-root/fleet-kit; then echo fleet=yes; fi"))
+        let body = Self.object(try ServerGrantCommand.body(requestID: UUID(), database: "g", agent: "otto", server: "agents-1", level: "patch"))
+        #expect(body["level"] as? String == "patch")
+        #expect((try? ServerGrantCommand.body(requestID: UUID(), database: "g", agent: "otto", server: "agents-1", level: "root")) == nil)
+    }
+
     @Test func aHostSaysItsKeyItsModeAndWhetherItIsTheFleets() {
         #expect(DoorAccess.HostReading(output: "\(Self.key) root@web-1\nmode=fix\n")
                     == DoorAccess.HostReading(hostKey: Self.key, mode: "fix", fleet: false))

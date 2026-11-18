@@ -124,6 +124,9 @@ final class ServerHardeningModel {
     /// not start the program there. They are not in what this Mac keeps of the server (`ServerHardening.Memory`), and
     /// a new launch tries again.
     private var unreached: [String: VaultTries] = [:]
+    /// This launch's records of the system packages' turn (`ServerLibraries`), by the name in `seen`: its failed runs,
+    /// which a new launch does not have, so that each launch tries a server again.
+    private var librariesRuns: [String: ServerHardening.Memory] = [:]
 
     /// How long this Mac waits between two rounds: two rounds in a row are five minutes apart at least.
     static let every: TimeInterval = 300
@@ -170,9 +173,62 @@ final class ServerHardeningModel {
                 Self.log.notice("\(server.name, privacy: .public): \(line, privacy: .public)")
             }
             if memory != kept { Self.keep(memory, for: name) }
+            // The system packages of the fleet's pinned tools (`ServerLibraries`), with a record of their own: a run
+            // that failed counts for this launch only (`librariesRuns`), and this Mac keeps a server once settled.
+            guard store.hub == hub else { return }
+            let librariesName = Self.librariesMark + name, librariesRecord = ServerLibraries.record(name)
+            let keptLibraries = Self.memory(librariesRecord, key: ServerLibraries.keptKey)
+            var libraries = librariesRuns[librariesName] ?? keptLibraries, librariesTries = unreached[librariesName]
+            let librariesTurn = await ServerHardening.turn(
+                ServerLibraries.reading(of: server, join: list.join, at: list.time), memory: &libraries,
+                unreached: &librariesTries, seenBefore: seen.contains(librariesName), now: Date().timeIntervalSince1970,
+                started: ServerLibraries.started, outcome: { ServerLibraries.outcome($0) },
+                settledLine: "its system libraries need nothing more",
+                connection: { try await OwnerAccessModel.connection(to: server, hub: hub, records: records) },
+                run: { target in
+                    try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(
+                        target: target, program: ServerLibraries.program()), timeout: ServerLibraries.runTime).output
+                })
+            unreached[librariesName] = librariesTries
+            librariesRuns[librariesName] = libraries
+            if librariesTurn.seen { seenNow.insert(librariesName) }
+            for line in librariesTurn.lines {
+                Self.log.notice("\(server.name, privacy: .public): libraries: \(line, privacy: .public)")
+            }
+            if libraries.settled, !keptLibraries.settled {
+                Self.keep(libraries, for: librariesRecord, key: ServerLibraries.keptKey)
+            }
+            // The server's memory reserve and limit (`ServerMemory`), with a record and a count of its own: a server
+            // whose SSH and npm were settled long ago still gets this.
+            guard store.hub == hub else { return }
+            let limitName = Self.memoryLimitMark + name, keptLimit = Self.memory(name, key: Self.keptLimitKey)
+            var limit = keptLimit, limitTries = unreached[limitName]
+            let limitTurn = await ServerHardening.turn(
+                ServerMemory.reading(of: server, join: list.join, at: list.time), memory: &limit,
+                unreached: &limitTries, seenBefore: seen.contains(limitName), now: Date().timeIntervalSince1970,
+                started: ServerMemory.started, outcome: { ServerMemory.outcome($0) },
+                settledLine: "its memory limit is in order",
+                connection: { try await OwnerAccessModel.connection(to: server, hub: hub, records: records) },
+                run: { target in
+                    try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(
+                        target: target, program: ServerMemory.program()), timeout: 120).output
+                })
+            unreached[limitName] = limitTries
+            if limitTurn.seen { seenNow.insert(limitName) }
+            for line in limitTurn.lines {
+                Self.log.notice("\(server.name, privacy: .public): memory: \(line, privacy: .public)")
+            }
+            if limit != keptLimit { Self.keep(limit, for: name, key: Self.keptLimitKey) }
         }
         seen = seenNow
     }
+
+    /// What this model keeps of a server's memory limit, beside what it keeps of its SSH and npm: the same shape under
+    /// a key of its own, and in `seen` and `unreached` the server's name after this mark.
+    private static let keptLimitKey = "serverMemoryLimit"
+    private static let memoryLimitMark = "memory-limit "
+    /// The mark of the system packages' turn (`ServerLibraries`) in `seen`, `unreached` and `librariesRuns`.
+    private static let librariesMark = "libraries "
 
     /// What this Mac kept of one server, by the hub's address, the server's name and its private address: a new server
     /// with the name of an earlier one has another address, and starts with nothing kept.
@@ -181,14 +237,16 @@ final class ServerHardeningModel {
     }
 
     /// The count in it is of the runs alone (`ServerHardening.Memory.kept`).
-    static func memory(_ name: String, defaults: UserDefaults = .standard) -> ServerHardening.Memory {
-        ServerHardening.Memory.kept((defaults.dictionary(forKey: keptKey) as? [String: Data])?[name])
+    static func memory(_ name: String, defaults: UserDefaults = .standard,
+                       key: String = keptKey) -> ServerHardening.Memory {
+        ServerHardening.Memory.kept((defaults.dictionary(forKey: key) as? [String: Data])?[name])
     }
 
-    static func keep(_ memory: ServerHardening.Memory, for name: String, defaults: UserDefaults = .standard) {
-        var all = (defaults.dictionary(forKey: keptKey) as? [String: Data]) ?? [:]
+    static func keep(_ memory: ServerHardening.Memory, for name: String, defaults: UserDefaults = .standard,
+                     key: String = keptKey) {
+        var all = (defaults.dictionary(forKey: key) as? [String: Data]) ?? [:]
         guard all[name].flatMap({ try? JSONDecoder().decode(ServerHardening.Memory.self, from: $0) }) != memory else { return }
         all[name] = try? JSONEncoder().encode(memory)
-        defaults.set(all, forKey: keptKey)
+        defaults.set(all, forKey: key)
     }
 }

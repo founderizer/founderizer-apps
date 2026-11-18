@@ -77,7 +77,7 @@ struct SecretImportView: View {
 
     /// The hub and the generation of this view, while the store still shows them and its reading is current.
     private var context: (hub: URL, db: String)? {
-        guard let database, store.hub == hub, store.state?.db == database, store.isFresh, SecretEntryView.isOffered(by: store) else { return nil }
+        guard let database, store.hub == hub, store.state?.db == database, store.writesNow, SecretEntryView.isOffered(by: store) else { return nil }
         return (hub, database)
     }
 

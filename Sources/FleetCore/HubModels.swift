@@ -26,6 +26,10 @@ public struct HubState: Decodable, Sendable {
     /// Owner feature `live_changes`: the hub's change count at the moment of this snapshot, `<boot>.<state>.<activity>`,
     /// read under the same lock as the snapshot. The app's watcher of `/ui/wait` starts from it.
     public let token: String?
+    /// **The cases of the duties** (UI-API.md, newest finished work): the open ones and the ones that closed in the
+    /// last 72 hours, by which the card Work names an agent's work (`WorkItem`). nil on a hub that sends no duties; a
+    /// var, so the phone's reading (`init(phoneTime:)`) has none by itself.
+    public private(set) var responsibilities: DutyCaseLists?
 
     /// The token as one the watcher can wait from, or nil.
     public var liveToken: LiveToken? { LiveToken(token) }
@@ -273,6 +277,9 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     /// follow-up and a subtask have the ask of their task, so every task of one thing that he asked for carries one
     /// value (`HubState.asks`).
     public let ask: String?
+    /// **The case of a duty that this task works**, by the case's id, or nil: work of no case, a subtask or a follow-up
+    /// of a case's task (which belongs to that case all the same: `HubState.workKey`), or an older reading.
+    public let duty_case: Int?
 
     public var isTerminal: Bool { ["completed", "failed", "rejected", "canceled"].contains(state) }
     /// Who checks the result, by the name the app gives everywhere: an agent's capitalised ("Accepted by Manager"),
@@ -581,6 +588,11 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// An item that asks for a key or a login. It takes no answer in words: the hub refuses one, because a key typed
     /// into an answer is in the agent's conversation before anything can mask it. Its secure form answers it.
     public var asksForSecret: Bool { kind == "secret" }
+
+    /// Owner feature `need_takeover` (API 1.217): an item whose agent asks for one step on its own screen that only a
+    /// person can do. Its title is that step, and its card has Take over, which opens the agent's screen in Screen
+    /// Sharing. He answers it in words or with a quick reply, as any item.
+    public var asksForTakeover: Bool { kind == "takeover" }
 
     /// **The task of the item stands on the front of its card, under the reason** (the owner, 15 November 2026:
     /// "manager tasks need to be super specific ... the task itself need to be very clear"): the words that an agent

@@ -152,7 +152,8 @@ struct CloudServersTests {
     /// One of Hetzner's server types as `GET /server_types` lists it: free in some locations and taken in others, at one
     /// monthly price in Falkenstein, Nuremberg and Helsinki.
     private static func hetznerType(_ name: String, free: [String], taken: [String] = [], memory: Double = 4, disk: Int = 40,
-                                    architecture: String = "x86", monthly: String = "4.1531", deprecated: Bool = false) -> String {
+                                    architecture: String = "x86", monthly: String = "4.1531", deprecated: Bool = false,
+                                    cpuType: String = "shared") -> String {
         let locations = (free.map { "{\"id\":1,\"name\":\"\($0)\",\"deprecation\":null,\"available\":true,\"recommended\":true}" }
             + taken.map { "{\"id\":2,\"name\":\"\($0)\",\"deprecation\":null,\"available\":false,\"recommended\":false}" })
             .joined(separator: ",")
@@ -163,7 +164,7 @@ struct CloudServersTests {
         }.joined(separator: ",")
         let deprecation = deprecated
             ? "{\"announced\":\"2026-01-01T00:00:00+00:00\",\"unavailable_after\":\"2026-04-01T00:00:00+00:00\"}" : "null"
-        return "{\"id\":114,\"name\":\"\(name)\",\"cores\":2,\"memory\":\(memory),\"disk\":\(disk),"
+        return "{\"id\":114,\"name\":\"\(name)\",\"cores\":2,\"memory\":\(memory),\"disk\":\(disk),\"cpu_type\":\"\(cpuType)\","
             + "\"architecture\":\"\(architecture)\",\"deprecation\":\(deprecation),\"prices\":[\(prices)],\"locations\":[\(locations)]}"
     }
 
@@ -177,8 +178,8 @@ struct CloudServersTests {
         + "\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_hourly\":{\"net\":\"0.0008\","
         + "\"gross\":\"0.0010\"},\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\","
         + "\"price_hourly\":{\"net\":\"0.0008\",\"gross\":\"0.0010\"},\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}}]},"
-        + "{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_hourly\":{\"net\":\"0.0000\",\"gross\":\"0.0000\"},"
-        + "\"price_monthly\":{\"net\":\"0.0000\",\"gross\":\"0.0000\"}}]}],\"server_types\":[]}}"
+        + "{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_hourly\":{\"net\":\"0.0006\",\"gross\":\"0.0007\"},"
+        + "\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}],\"server_types\":[]}}"
 
     private static let hetznerServer = "{\"server\":{\"id\":1001,\"name\":\"hub-1\",\"status\":\"initializing\",\"public_net\":"
         + "{\"ipv4\":{\"id\":5,\"ip\":\"203.0.113.10\",\"blocked\":false,\"dns_ptr\":\"static.example\"},\"ipv6\":null,"
@@ -219,7 +220,7 @@ struct CloudServersTests {
         hetzner.answer("GET", "/v1/actions/501", 429, "{\"error\":{\"code\":\"rate_limit_exceeded\",\"message\":\"limit\"}}")
         hetzner.answer("GET", "/v1/actions/501", 200, "{\"action\":{\"id\":501,\"status\":\"success\",\"error\":null}}")
         let server = try await Self.make(.hetzner, hetzner)
-        // The provider's id, the address, and what it costs a month: the type and its public addresses, with tax.
+        // The provider's id, the address, and what it costs a month: the type and its one public IPv4 address, with tax.
         #expect(server == CloudServer(provider: .hetzner, id: "1001", name: "hub-1", ipv4: "203.0.113.10", type: "cx23",
                                       location: "fsn1", monthlyPrice: Decimal(string: "4.7481")!, currency: "EUR",
                                       firewallID: "77"))
@@ -238,6 +239,8 @@ struct CloudServersTests {
         #expect(made["image"] as? String == "ubuntu-24.04")
         #expect(made["ssh_keys"] as? [Int] == [42])
         #expect((made["firewalls"] as? [[String: Int]]) == [["firewall": 77]])
+        // One public address, IPv4: the account's primary IPs are limited, and an IPv6 one is priced too.
+        #expect((made["public_net"] as? [String: Bool]) == ["enable_ipv4": true, "enable_ipv6": false])
         #expect(made["user_data"] as? String == CloudServers.userData(authKey: Self.authKey, hostname: "hub-1"))
         // Its creation is read until it ends, and nothing is taken back.
         #expect(hetzner.calls("GET", "/v1/actions/501").count == 4)
@@ -296,7 +299,8 @@ struct CloudServersTests {
             Self.hetznerType("cpx02", free: ["hel1", "nbg1"], memory: 1, disk: 20, monthly: "5.9900"),
             Self.hetznerType("small", free: ["fsn1"], memory: 0.5, monthly: "1.0000"),
             Self.hetznerType("old", free: ["fsn1"], monthly: "2.0000", deprecated: true),
-            Self.hetznerType("other", free: ["fsn1"], architecture: "riscv", monthly: "3.0000")))
+            Self.hetznerType("other", free: ["fsn1"], architecture: "riscv", monthly: "3.0000"),
+            Self.hetznerType("ccx13", free: ["nbg1"], memory: 8, monthly: "36.4900", cpuType: "dedicated")))
         let servers = Self.servers(.hetzner, hetzner)
         // A hub takes 1 GB: the cheapest type with that much, and at one price the nearest place (Nuremberg for Berlin).
         let hub = try await servers.offer(use: .hub)
@@ -304,6 +308,14 @@ struct CloudServersTests {
         // A server for agents takes 2 GB.
         let agent = try await servers.offer(use: .agent)
         #expect(agent.type == "cpx12" && agent.location == "nbg1" && agent.monthlyPrice == Decimal(string: "12.0850")!)
+        // **The list under a server on "Your fleet"** (slice 2b): each type that fits once, at its cheapest and then
+        // nearest place, the cheapest type first, its first the offer above; a dedicated type says so.
+        let list = try await servers.offers(use: .hub)
+        #expect(list.map(\.key) == ["cpx02@nbg1", "cpx12@nbg1", "cpx22@fsn1", "ccx13@nbg1"] && list.first == hub)
+        #expect(list.map(\.dedicated) == [false, false, false, true])
+        // A place that was taken gives its type's next place, and every other type stays.
+        let again = try await servers.offers(use: .hub, except: ["cpx02@nbg1"])
+        #expect(again.map(\.key) == ["cpx02@hel1", "cpx12@nbg1", "cpx22@fsn1", "ccx13@nbg1"])
     }
 
     @Test func aHetznerServerThatFailsIsTakenBackAndTheKeyStays() async throws {
@@ -465,6 +477,17 @@ struct CloudServersTests {
         #expect(next.type == "s-1vcpu-2gb" && next.location == "nyc3")
         let up = try await servers.offer(use: .hub, except: [hub.key, next.key])
         #expect(up.type == "s-2vcpu-2gb" && up.location == "fra1" && up.monthlyPrice == 18)
+        // **The list under a server on "Your fleet"** (slice 2b): another provider's rows name no type, so one size is
+        // one row, its cheapest kind; an AMD droplet of the same size is no second row that reads the same.
+        let kinds = ProviderStandIn()
+        kinds.answer("GET", "/v2/sizes", 200, "{\"sizes\":["
+                     + "{\"slug\":\"s-1vcpu-2gb-amd\",\"memory\":2048,\"vcpus\":1,\"disk\":50,\"price_monthly\":14,"
+                     + "\"regions\":[\"ams3\"],\"available\":true},"
+                     + "{\"slug\":\"s-1vcpu-2gb\",\"memory\":2048,\"vcpus\":1,\"disk\":50,\"price_monthly\":12,"
+                     + "\"regions\":[\"ams3\"],\"available\":true},"
+                     + "{\"slug\":\"s-2vcpu-4gb\",\"memory\":4096,\"vcpus\":2,\"disk\":80,\"price_monthly\":24,"
+                     + "\"regions\":[\"ams3\"],\"available\":true}]}")
+        #expect(try await Self.servers(.digitalOcean, kinds).offers(use: .hub).map(\.type) == ["s-1vcpu-2gb", "s-2vcpu-4gb"])
         await #expect(throws: CloudError.noRoom(.digitalOcean)) {
             try await servers.offer(use: .hub, except: [hub.key, next.key, up.key, "s-2vcpu-2gb@ams3"])
         }

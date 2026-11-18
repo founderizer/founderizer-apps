@@ -96,15 +96,22 @@ struct FirstRunTests {
 
     /// The owner, 27 October 2026: "show the connection notice only after several failed reads in a row, and never
     /// for one short break".
+    /// And 17 November 2026: a release restart of his hub refused two reads and left a third with no answer, 15 s in
+    /// all, and "Your hub took too long to answer" stood over a hub that answered again seven seconds later.
     @Test func oneShortBreakSaysNothing() {
-        #expect(!HubReach.tells(failedReads: 0, answeredBefore: true))
-        #expect(!HubReach.tells(failedReads: 1, answeredBefore: true))
-        #expect(!HubReach.tells(failedReads: 2, answeredBefore: true))
-        #expect(HubReach.tells(failedReads: 3, answeredBefore: true))
-        #expect(HubReach.tells(failedReads: 9, answeredBefore: true))
+        // Before this launch's first answer, over the reading that this Mac kept: three failed reads in a row.
+        #expect(!HubReach.tells(failedReads: 0, answeredBefore: true, sinceAnswer: nil))
+        #expect(!HubReach.tells(failedReads: 2, answeredBefore: true, sinceAnswer: nil))
+        #expect(HubReach.tells(failedReads: 3, answeredBefore: true, sinceAnswer: nil))
+        // After an answer of this launch: not inside one break, however many reads failed in it.
+        #expect(!HubReach.tells(failedReads: 3, answeredBefore: true, sinceAnswer: 21.4))
+        #expect(!HubReach.tells(failedReads: 9, answeredBefore: true, sinceAnswer: StateReading.limit - 0.1))
+        // A hub that stays away is said once the break has lasted its limit, from its first failed read.
+        #expect(HubReach.tells(failedReads: 1, answeredBefore: true, sinceAnswer: StateReading.limit))
+        #expect(!HubReach.tells(failedReads: 0, answeredBefore: true, sinceAnswer: 3_600))
         // A hub that never answered, the first run's and a new address's, is said at once.
-        #expect(HubReach.tells(failedReads: 1, answeredBefore: false))
-        #expect(!HubReach.tells(failedReads: 0, answeredBefore: false))
+        #expect(HubReach.tells(failedReads: 1, answeredBefore: false, sinceAnswer: nil))
+        #expect(!HubReach.tells(failedReads: 0, answeredBefore: false, sinceAnswer: nil))
     }
 
     /// **The first run tries again only what failed at once** (review A4, fix round 2): four claims that each timed

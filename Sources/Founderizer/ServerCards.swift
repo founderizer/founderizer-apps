@@ -162,7 +162,7 @@ struct ServerCards: View {
     }
 
     private func figure(_ share: Double?, help: String?, old: Bool) -> some View {
-        Text(share.map(LoadWords.percent) ?? "").monospacedDigit().lineLimit(1)
+        Text(share.map(LoadWords.percent) ?? "").monospacedDigit().lineLimit(1).rolls(words: share.map(LoadWords.percent) ?? "")
             .foregroundStyle(old ? FleetStyle.muted : ServerLoad.isHigh(share ?? 0) ? Color.orange : FleetStyle.text)
             .frame(width: Self.figureWidth, alignment: .leading)
             .help(help ?? "")
@@ -302,7 +302,7 @@ struct AgentUsageLine: View {
                     AllowanceMeter(used: window.used_percent, stale: stale, width: CGFloat(parts.meter))
                         .padding(.trailing, CGFloat(parts.meterGap))
                 }
-                Text("\(Int(window.used_percent.rounded()))%").monospacedDigit()
+                Text("\(Int(window.used_percent.rounded()))%").monospacedDigit().rolls(Int(window.used_percent.rounded()))
                     .foregroundStyle(stale ? FleetStyle.muted : FleetStyle.text)
                     .frame(width: CGFloat(parts.percent), alignment: .trailing)
             }

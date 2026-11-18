@@ -75,10 +75,12 @@ enum AnswerSecretSample {
                          AnswerSecret.giveAgentWord, AnswerSecret.giveLevelWord, AnswerSecret.notReady,
                          AnswerSecret.noSignedGrants, AnswerSecret.requestUnread, AnswerSecret.teamUnread,
                          AnswerSecret.vaultUnread, AnswerSecret.noRequest, AnswerSecret.notSecretRequest,
-                         AnswerSecret.answeredWithThis, AnswerSecret.answeredAlready, AnswerSecret.doorRequest,
+                         AnswerSecret.answeredWithThis, AnswerSecret.answeredAlready, AnswerSecret.doorNeedsDoor,
+                         AnswerSecret.doorUsesOnly, AnswerSecret.doorNotAsked, AnswerSecret.doorKeyAlone,
+                         AnswerSecret.answeredWithThisForDoor,
                          AnswerSecret.noSecret, AnswerSecret.notFitting, AnswerSecret.noFleet,
                          AnswerSecret.noVaultReading, AnswerSecret.vaultSilent, AnswerSecret.noOwnerKey,
-                         AnswerSecret.busy, AnswerSecret.ended]
+                         AnswerSecret.clockApart, AnswerSecret.busy, AnswerSecret.ended]
 
     /// Each sentence for one agent before a write, with an example agent.
     static func ofAgent(_ agent: String) -> [String] {
@@ -134,6 +136,10 @@ final class StandInAnswerDesk {
     var teams: [GrantSecret.Team?] = [AnswerSecretSample.list()]
     var vault: GrantSecret.Vault? = GrantSecret.Vault(fleet: AnswerSecretSample.fleet, central: .answers)
     var holdsKey = true
+    /// Whether this Mac's clock and the hub's differ by more than an hour, or nil for no answer of the hub in this
+    /// launch. It is not recorded in `asked`: `clockAsked` says whether a call asked it.
+    var clockApart: Bool? = false
+    var clockAsked = false
     /// What each signed statement, each grant of the hub and each answer gets, in the order of the sends: nil when
     /// it was taken. The last one serves each later send too.
     var signAnswers: [(any Error)?] = [nil]
@@ -218,6 +224,10 @@ final class StandInAnswerDesk {
                 return fleet == AnswerSecretSample.fleet && holdsKey
             },
             isMachine: { CentralVault.isMachine($0) },
+            clockApart: { [self] _ in
+                clockAsked = true
+                return clockApart
+            },
             sign: { [self] _, statement in
                 asked.append(statement.machine.map { "sign grant \(statement.agent) \($0)" }
                              ?? "sign ungrant \(statement.agent)")
@@ -467,8 +477,11 @@ struct OwnerAnswerSecretWordsTests {
                      + "agents that the owner named.",
                      "the first one that fails stops the call: the gives before it stand, and the call does not "
                      + "answer the request.",
-                     "A request that is for the door (its secret has door, or its give has the key door) is the "
-                     + "owner's to answer in the app.",
+                     "A request for the door (its secret has door, or its give has the key door) is answered in "
+                     + "the same way, and its give must name door with use: the app gives the secret to the door "
+                     + "with the owner's signature, as the app's own form of that request does",
+                     "give names door only for a request for the door.",
+                     "the door has no server",
                      "A no is decline_secret_request.", "with give {} the app signs nothing.",
                      "One call of this tool or of grant_secret writes at a time",
                      "No answer has a secret's value."] {
@@ -487,8 +500,11 @@ struct OwnerAnswerSecretWordsTests {
                 + "Call again when it has answered. Nothing was sent.")
         #expect(AnswerSecret.answeredWithThis == "That request has its answer already, with this secret. This call "
                 + "gave the secret to no agent: grant_secret gives it to an agent. Nothing was sent.")
-        #expect(AnswerSecret.doorRequest == "That request is for the door, and this tool does not answer such a "
-                + "request: the owner answers it in the Founderizer app, on Needs you. Nothing was sent.")
+        #expect(AnswerSecret.doorNeedsDoor == "That request is for the door, so give must name door with use, as "
+                + "the request proposes: the app gives the secret to the door with the owner's signature, as its own "
+                + "form of the request does. Nothing was sent.")
+        #expect(AnswerSecret.doorNotAsked == "give names door, and that request is not for the door: the door gets a "
+                + "secret only with the answer of a request for it. Nothing was sent.")
         #expect(AnswerSecret.notSecretRequest == "That Needs-you item asks for no secret, so this tool does not "
                 + "answer it: answer_needs_you answers it, in the owner's words. Nothing was sent.")
         #expect(AnswerSecret.noSignedGrants == "This hub takes no signed grant, so the app signs nothing for it. On "
@@ -499,6 +515,10 @@ struct OwnerAnswerSecretWordsTests {
                                                      + "with grant_access, and then call answer_secret_request with "
                                                      + "give {}."))
         #expect(!AnswerSecret.vaultSilent.contains("grant_access"))
+        #expect(AnswerSecret.clockApart == "This Mac's clock and the hub's clock differ by more than an hour, so the "
+                + "app signs no give now. Ask the owner to check this Mac's date and time (System Settings, General, "
+                + "Date & Time), and then call answer_secret_request again with the same give. If this Mac's clock is "
+                + "right, the hub's clock is probably wrong: tell the owner. Nothing was sent.")
         #expect(AnswerSecret.noAnswerYet == "This call did not answer the request.")
         #expect(AnswerSecret.answeredAlready == "That request is closed already: the owner declined it or answered "
                 + "it with another secret, or an agent or the hub closed it. A request takes one answer. Nothing "
@@ -574,10 +594,15 @@ struct OwnerAnswerSecretWordsTests {
         #expect(AnswerSecret.stopped(.refusedListUnread(409, "no"), agent: "nova", before: [])
             .contains("If it has one, change nothing"))
         // The request was closed first, or the hub refused the answer: the tool takes nothing back, and the words
-        // send the caller to the owner when a give stands.
+        // send the caller to the owner when a give stands. The door is no agent: grant_secret takes nothing back
+        // from it.
         for words in [AnswerSecret.closedFirst, AnswerSecret.answeredUnread, AnswerSecret.answerRefused] {
             #expect(words(["nova"]).contains("Ask the owner whether those agents keep the secret"))
             #expect(!words([]).contains("Ask the owner"))
+            #expect(!words(["door"]).contains("grant_secret") && words(["door"]).contains("tell the owner that the door "
+                                                                                         + "keeps it."))
+            #expect(words(["door", "nova"]).contains("grant_secret with level null takes it back from one agent. No "
+                                                     + "tool here takes the secret back from the door"))
         }
         // No sentence says that only the owner can have closed a request.
         for words in AnswerSecretSample.before + AnswerSecretSample.after(["nova"]) {
@@ -665,13 +690,14 @@ struct OwnerAnswerSecretRequestTests {
     @Test func aRequestIsForTheDoorByItsDoorOrByItsProposal() {
         let withDoor = found(AnswerSecretSample.item(secret: ["kind": "api_key", "env": "EXAMPLE_API_KEY",
                                                               "door": "app:web-1:shop", "give": ["door": "use"]]))
-        #expect(withDoor?.door == true)
+        #expect(withDoor?.door == true && withDoor?.doorKey == true)
         let doorAlone = found(AnswerSecretSample.item(secret: ["kind": "login", "site": AnswerSecretSample.site,
                                                                "door": "web-1"]))
-        #expect(doorAlone?.door == true)
+        #expect(doorAlone?.door == true && doorAlone?.doorKey == true)
+        // A proposal that names the door beside an agent asks for no key of the door: the agent can get it too.
         let proposed = found(AnswerSecretSample.item(secret: ["kind": "api_key", "env": "EXAMPLE_API_KEY",
                                                               "give": ["door": "use", "nova": "use"]]))
-        #expect(proposed?.door == true)
+        #expect(proposed?.door == true && proposed?.doorKey == false)
         let agents = found(AnswerSecretSample.item(secret: ["kind": "api_key", "env": "EXAMPLE_API_KEY",
                                                             "door": NSNull(), "give": ["nova": "use"]]))
         #expect(agents?.door == false)
@@ -883,13 +909,15 @@ struct OwnerAnswerSecretAppTests {
     }
 
     /// **A call with `give` `{}` reads no vault, asks for no key and signs nothing**: its one write is the answer.
-    /// It goes also on a hub that takes no signed grant, on a Mac with no owner key, and with no vault's page.
+    /// It goes also on a hub that takes no signed grant, on a Mac with no owner key and with no vault's page, and it
+    /// never asks for the clocks.
     @Test func aCallWithNoGiveOnlyAnswers() async throws {
         let app = StandInAnswerDesk()
         app.signs = false
         app.vault = nil
         app.holdsKey = false
         let answer = try await app.went(none)
+        #expect(!app.clockAsked)
         #expect(app.asked == AnswerSecretSample.checksOfNoGive + ["answer", "refresh"])
         #expect(app.statements.isEmpty && app.grants.isEmpty && app.answers == ["12 \(key)"])
         #expect(answer == ["need": .int(12), "login": .string(key), "answered": .bool(true), "given": .array([]),
@@ -974,9 +1002,25 @@ struct OwnerAnswerSecretAppTests {
             await refused(fields, AnswerSecret.answeredAlready, asked: asked) {
                 $0.requests = [.found(.init(open: false, env: AnswerSecretSample.variable))]
             }
-            await refused(fields, AnswerSecret.doorRequest, asked: asked) {
+            await refused(fields, AnswerSecret.doorNeedsDoor, asked: asked) {
                 $0.requests = [.found(.init(env: AnswerSecretSample.variable, door: true))]
             }
+        }
+        // A request for the door: the door at read; an agent beside the door for a key of the door, which the door
+        // alone holds; and a request that the door got with an answer of this secret already.
+        await refused(AnswerSecretSample.call(give: ["door": "read"]), AnswerSecret.doorUsesOnly, asked: reads) {
+            $0.requests = [.found(.init(env: AnswerSecretSample.variable, door: true))]
+        }
+        await refused(AnswerSecretSample.call(give: ["door": "use", "nova": "use"]), AnswerSecret.doorKeyAlone,
+                      asked: reads) { $0.requests = [.found(.init(env: AnswerSecretSample.variable, doorKey: true))] }
+        await refused(AnswerSecretSample.call(give: ["door": "use"]), AnswerSecret.answeredWithThisForDoor,
+                      asked: reads) {
+            $0.requests = [.found(.init(open: false, env: AnswerSecretSample.variable, doorKey: true, saved: key))]
+        }
+        // A request whose proposal only names the door claims no hold of the door: the app's form answers it also
+        // after a give to the door that failed.
+        await refused(AnswerSecretSample.call(give: ["door": "use"]), AnswerSecret.answeredWithThis, asked: reads) {
+            $0.requests = [.found(.init(open: false, env: AnswerSecretSample.variable, door: true, saved: key))]
         }
         // The secret: the list has it, and it fits.
         await refused(AnswerSecretSample.call(AnswerSecretSample.unknown), AnswerSecret.noSecret, asked: reads)
@@ -1000,6 +1044,10 @@ struct OwnerAnswerSecretAppTests {
             $0.vault = .init(fleet: AnswerSecretSample.fleet, central: .silent)
         }
         await refused(one, AnswerSecret.noOwnerKey, asked: checks) { $0.holdsKey = false }
+        // Last, only for a call with a give: this Mac's clock and the hub's differ by more than an hour; and with no
+        // answer of the hub in this launch, the call is not ready (it fails closed).
+        await refused(one, AnswerSecret.clockApart, asked: checks) { $0.clockApart = true }
+        await refused(one, AnswerSecret.notReady, asked: checks) { $0.clockApart = nil }
     }
 
     /// **The checks of each agent of `give`, in the byte order of the names**: the first agent that fails names
@@ -1009,9 +1057,11 @@ struct OwnerAnswerSecretAppTests {
             AnswerSecretSample.call(login, give: give)
         }
         await refused(give(["nova": "use", "ghost": "use"]), AnswerSecret.noAgent("ghost"), asked: checks)
-        // The door's name has an agent's form, and is never a holder of this tool.
-        await refused(give(["door": "use"]), AnswerSecret.noAgent("door"), asked: checks)
-        await refused(give(["door": "use"]), AnswerSecret.noAgent("door"), asked: checks) { app in
+        // The door's name has an agent's form, and it is a holder only for a request for the door: in any other
+        // request it is refused with the request's checks, before the key, also when an agent has that name.
+        let reads = ["ready", "signs", "request", "team", "vault"]
+        await refused(give(["door": "use"]), AnswerSecret.doorNotAsked, asked: reads)
+        await refused(give(["door": "use", "nova": "use"]), AnswerSecret.doorNotAsked, asked: reads) { app in
             var agents = AnswerSecretSample.list().agents
             agents["door"] = .init(role: "worker", machine: "w5")
             app.teams = [.init(secrets: AnswerSecretSample.list().secrets, agents: agents)]
@@ -1033,10 +1083,76 @@ struct OwnerAnswerSecretAppTests {
         await refused(give(["zed": "use", "ghost": "use", "manager": "use"]), AnswerSecret.noAgent("ghost"),
                       asked: checks)
         await refused(give(["manager": "use", "zed": "use"]), AnswerSecret.notWorker("manager"), asked: checks)
+        // The clocks come after the checks of every agent, also of the last one in the byte order.
+        await refused(give(["atlas": "use", "nova": "read"]), AnswerSecret.readsTwice("nova"), asked: checks) {
+            $0.teams = [AnswerSecretSample.list(twin: ["nova": "read"])]; $0.clockApart = true
+        }
         // An agent that uses the twin key, and one that reads this key already, are no "reads twice".
         let app = StandInAnswerDesk()
         app.teams = [AnswerSecretSample.list(grants: ["nova": "read"], twin: ["nova": "use"])]
         #expect(await app.refusal(give(["nova": "read"])) == nil)
+    }
+
+    // ------------------------------------------------------------ a request for the door
+
+    /// **A request for the door is answered as the app's form answers it** (the owner's agent does each step that
+    /// needs nothing from the owner): the door gets the secret with a grant signed for the door's own name, in the
+    /// byte order of the names beside the agents that the owner named, and then the request gets its answer. The
+    /// door is no agent of the team, so no check of an agent is asked of it, and its entry in `given` has no server.
+    @Test func aRequestForTheDoorGivesItToTheDoorAndThenAnswers() async throws {
+        let forDoor = AnswerSecret.RequestRead.found(.init(env: AnswerSecretSample.variable, door: true))
+        let app = StandInAnswerDesk()
+        app.requests = [forDoor]
+        let answer = try await app.went(AnswerSecretSample.call(give: ["nova": "use", "door": "use"]))
+        #expect(app.asked == checks + ["sign grant door door", "grant door use", "sign grant nova w5",
+                                       "grant nova use", "answer", "refresh"])
+        #expect(app.statements.first == .init(fleet: AnswerSecretSample.fleet, login: key, agent: "door",
+                                              machine: "door"))
+        let given = try #require(answer["given"]?.array)
+        #expect(given.first == .object(["agent": .string("door"), "level": .string("use"), "changed": .bool(true),
+                                        "note": .string(AnswerSecret.noteDoor)]))
+        #expect(given.last?["agent"] == .string("nova") && given.last?["server"] == .string("w5"))
+        // A key of the door goes to the door alone. The door held it already: no change in the list, and its own
+        // note.
+        let held = StandInAnswerDesk()
+        held.requests = [.found(.init(env: AnswerSecretSample.variable, doorKey: true))]
+        held.receipt = .init(changed: false)
+        let alone = try await held.went(AnswerSecretSample.call(give: ["door": "use"]))
+        #expect(alone["given"] == .array([.object(["agent": .string("door"), "level": .string("use"),
+                                                   "changed": .bool(false),
+                                                   "note": .string(AnswerSecret.noteDoorSame)])]))
+        #expect(held.answers == ["12 \(key)"])
+    }
+
+    /// **A grant of the door that the hub refuses is taken back with no read of the list**: the hub refuses the
+    /// door's grant only when the door does not hold the secret after it, and the team's page never shows the
+    /// door's hold, so the app signs the end at once. The words name the door, not "the agent door", and never send
+    /// the caller to `grant_secret`, which takes no grant of the door.
+    @Test func aRefusedGrantOfTheDoorIsTakenBackWithNoRead() async {
+        let app = StandInAnswerDesk()
+        app.requests = [.found(.init(env: AnswerSecretSample.variable, door: true))]
+        app.grantAnswers = [SaveBotToken.HubFailure.refused(409, "this fleet has no door")]
+        let words = await app.refusal(AnswerSecretSample.call(give: ["door": "use"]))
+        #expect(app.asked == checks + ["sign grant door door", "grant door use", "sign ungrant door"])
+        #expect(words == AnswerSecret.stopped(.refusedTakenBack(409, "this fleet has no door"), agent: "door",
+                                              before: []))
+        #expect(app.answers.isEmpty && app.ungrants == 1)
+        // The end that did not go: a signed grant stays, and the owner is told.
+        let left = StandInAnswerDesk()
+        left.requests = app.requests
+        left.grantAnswers = app.grantAnswers
+        left.signAnswers = [nil, SaveBotToken.HubFailure.refused(400, "no")]
+        #expect(await left.refusal(AnswerSecretSample.call(give: ["door": "use"]))
+                == AnswerSecret.stopped(.refusedSignatureLeft(409, "this fleet has no door"), agent: "door",
+                                        before: []))
+        for end in AnswerSecretSample.stops {
+            let said = AnswerSecret.stopped(end, agent: "door", before: ["atlas"])
+            #expect(said.contains("the door") && !said.contains("the agent door") && !said.contains("grant_secret"),
+                    "\(said)")
+            #expect(said.contains("gave the secret to: atlas.") && said.contains(AnswerSecret.noAnswerYet), "\(said)")
+        }
+        #expect(AnswerSecret.stopped(.refusedSignatureLeft(409, "no"), agent: "door", before: [])
+            .contains("The door gets a copy only of a secret that its own list names. Tell the owner."))
     }
 
     // ------------------------------------------------------------ one line of writes for two tools
@@ -1586,7 +1702,7 @@ final class OwnerAnswerSecretLinkTests {
         // A refusal of the app, in its words.
         await MainActor.run { app.requests = [.found(.init(env: AnswerSecretSample.variable, door: true))] }
         let (door, doorFailed) = await off { tools.call("answer_secret_request", .object(AnswerSecretSample.none)) }
-        #expect(doorFailed && door == AnswerSecret.doorRequest)
+        #expect(doorFailed && door == AnswerSecret.doorNeedsDoor)
         // A wrong field never reaches the app.
         let before = await MainActor.run { app.asked.count }
         let (wrong, wrongFailed) = await off {

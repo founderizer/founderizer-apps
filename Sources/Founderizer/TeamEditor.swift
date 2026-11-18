@@ -104,24 +104,38 @@ struct TeamEditor: View {
     private static let unavailable = String(l10n: "Team settings are unavailable. Check the connection, then refresh.")
 
     /// Reads team.json. The first reading of a page that opened at `start` waits until a loading line that showed has
-    /// stood half a second (`FleetStore.settle`).
+    /// stood half a second (`FleetStore.settle`). **One break of the hub says nothing** (17 November 2026): a read that
+    /// fails is made again every 3 seconds, and the page says that it could not read only once its own reads have
+    /// failed one whole break (`FleetStore.pageReadsFailedABreak`).
     private func read(since start: ContinuousClock.Instant? = nil) async {
         guard contextMatches, let database else { return }
         loading = true; defer { loading = false }
+        var failedSince: ContinuousClock.Instant?
+        while !Task.isCancelled, contextMatches {
+            guard let words = await readOnce(database: database, since: start) else { return }
+            failedSince = failedSince ?? .now
+            if store.pageReadsFailedABreak(failedSince: failedSince) { error = words; return }
+            do { try await store.nap(3) } catch { return }
+        }
+    }
+
+    /// One read of team.json; the words of its failure, or nil.
+    private func readOnce(database: String, since start: ContinuousClock.Instant?) async -> String? {
         let first = original == nil
         do {
             let result = try await HubClient().team(hub: hub, database: database)
             if first, let start { await store.settle(since: start) }
-            guard !Task.isCancelled, contextMatches else { return }
+            guard !Task.isCancelled, contextMatches else { return nil }
             latest = result
             // A form with no change takes the newest reading as its base: the one kept from an earlier visit, that it
             // opened on, is no conflict.
             if original == nil || input.lines == original?.lines { original = result; input = TeamLinesInput(lines: result.lines) }
             else if original?.sha256 == result.sha256 { original = result }
             error = nil
+            return nil
         } catch {
             if first, let start { await store.settle(since: start) }
-            self.error = HubError.said(error) ?? Self.unavailable
+            return HubError.said(error) ?? Self.unavailable
         }
     }
     private func save() async {

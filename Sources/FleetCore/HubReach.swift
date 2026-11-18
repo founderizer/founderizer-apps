@@ -99,13 +99,22 @@ public struct HubReach: Equatable, Sendable {
     }
 
     /// **One short break says nothing** (the owner, 27 October 2026: "show the connection notice only after several
-    /// failed reads in a row, and never for one short break"). A Mac that wakes up and a hub that restarts for its
-    /// update are back before the third read in a row fails; the app reads every three seconds, so a hub that stays
-    /// away is said within about six, before the reading counts as old. A hub that never answered is said at once.
+    /// failed reads in a row, and never for one short break"). A hub that never answered is said at once.
     public static let failedReadsBeforeNotice = 3
 
-    /// The failed reads in a row so far say it to the owner now.
-    public static func tells(failedReads: Int, answeredBefore: Bool) -> Bool {
-        failedReads > 0 && (!answeredBefore || failedReads >= failedReadsBeforeNotice)
+    /// The failed reads in a row so far say it to the owner now. **After an answer of this launch, only once the hub
+    /// has left the app one whole break with no answer** (`StateReading.limit`; the owner, 17 November 2026: "either
+    /// fix the underlaying issue OR not show the wanring at all"): a restart of his hub for a release refused two reads
+    /// and left a third with no answer in 15 s, so three in a row put "Your hub took too long to answer" over a hub that
+    /// was back seven seconds later, at each release. Before this launch's first answer, three failed reads in a row.
+    /// - Parameters:
+    ///   - answeredBefore: the screen has a reading of this hub, this launch's or the one this Mac kept.
+    ///   - sinceAnswer: the seconds since the hub's last answer of this launch (`StateReading.isCurrent`), or nil
+    ///     before the first one.
+    public static func tells(failedReads: Int, answeredBefore: Bool, sinceAnswer: TimeInterval?) -> Bool {
+        guard failedReads > 0 else { return false }
+        guard answeredBefore else { return true }
+        guard let sinceAnswer else { return failedReads >= failedReadsBeforeNotice }
+        return sinceAnswer >= StateReading.limit
     }
 }

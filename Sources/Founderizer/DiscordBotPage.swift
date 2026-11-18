@@ -138,7 +138,7 @@ struct DiscordBotPage: View {
             if let line = problem ?? refusal {
                 SetupWarning(line).help(bot?.error ?? "").accessibilityIdentifier("discord-problem")
             }
-            if !token.isEmpty, store.isFresh {
+            if !token.isEmpty, store.writesNow {
                 Button("Save") { Task { await save() } }
                     .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("discord-save")
@@ -211,7 +211,7 @@ struct DiscordBotPage: View {
     /// The token, once: the field is empty before a request goes. Without a bot, Save adds it first. A send that
     /// failed, or whose answer did not come, asks for the token again.
     private func save() async {
-        guard store.isFresh, !sending, let db = store.state?.db else { return }
+        guard store.writesNow, !sending, let db = store.state?.db else { return }
         let pasted = BotToken(pasted: token)
         token = ""
         guard let pasted else { problem = String(l10n: "Not a bot token · Copy it again"); return }

@@ -20,20 +20,29 @@ import Foundation
 /// end, with no value; the app signs for it. `answer_secret_request` (`OwnerAnswerSecret.swift`): the answer to an
 /// agent's request for a secret with a secret of the list, after the signed gives of the call, with no value; the
 /// app signs for it, in the line of writes that it shares with `grant_secret`.
+///
+/// **One more request writes on the link, and it is no tool of this list**: `answer_needs_you`, a tool of the table,
+/// sends a door card's Run it once or Full access to the app, which signs that press with the owner key and sends it
+/// (`OwnerAnswerDoor.swift`); every other answer of it goes to the hub. `writes` names it with the six.
 public enum OwnerLinkTools {
     public static let names = [SaveBotToken.name, PrepareReport.name, SaveSecret.name, GrantSecret.name,
                                ShareSecret.name, AnswerSecret.name]
     public static let tools: [OwnerTable.Tool] = [SaveBotToken.tool, PrepareReport.tool, SaveSecret.tool,
                                                   GrantSecret.tool, ShareSecret.tool, AnswerSecret.tool]
+    /// **Every request of the link that writes**: the six tools of `names`, and `answer_needs_you` (`AnswerDoor`), a
+    /// tool of the table whose one press, a door card's signed Run it once or Full access, the program sends on the
+    /// link (`OwnerTools.call`). A request of these that went out and got no answer has its tool's own words
+    /// (`AppLink.call`, `notKnownHere(_:)`).
+    public static let writes = names + [AnswerDoor.name]
 
     /// **The program's words for a link write whose request went out and got no answer**: each tool's own, because
     /// what may have happened is its own (a token saved, a report shown, a save of a secret begun, a grant signed
     /// or written, a pool statement signed or a standing written, grants signed and written and a request
-    /// answered).
+    /// answered, a door card's press signed and answered).
     ///
     /// **A case for each tool, by its name, and no tool's words for another one.** A name with no case gets
     /// `notKnownOther`, which says only that the outcome is not known: it names no tool and no effect. Only a tool
-    /// that `names` gains with no case here can get it, and a test holds that each name has words of its own.
+    /// that `writes` gains with no case here can get it, and a test holds that each name has words of its own.
     /// `save_secret`'s words here are those of a save whose caller gave the id. The program gives two other forms
     /// itself (`AppLink.call`, `notKnown`): the one with the id, for a save whose id it made, and the words of a
     /// read of a save's state (`SaveSecret.notKnownState`).
@@ -45,6 +54,7 @@ public enum OwnerLinkTools {
         case GrantSecret.name: return GrantSecret.notKnownHere
         case ShareSecret.name: return ShareSecret.notKnownHere
         case AnswerSecret.name: return AnswerSecret.notKnownHere
+        case AnswerDoor.name: return AnswerDoor.notKnownHere
         default: return notKnownOther
         }
     }

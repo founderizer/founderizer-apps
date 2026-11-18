@@ -785,6 +785,9 @@ struct PageSidebar<Value: Hashable, Head: View>: View {
     private let identifier: String
     private let select: (Value) -> Void
     private let head: Head
+    /// Its rows, for the fill of the selected one, which moves between them as the main sidebar's does (`SidebarFill`).
+    @Namespace private var selectedRowSpace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(items: [Item], selection: Value, identifier: String, select: @escaping (Value) -> Void, @ViewBuilder head: () -> Head) {
         self.items = items; self.selection = selection; self.identifier = identifier; self.select = select; self.head = head()
@@ -806,6 +809,8 @@ struct PageSidebar<Value: Hashable, Head: View>: View {
             }
             Spacer(minLength: 0)
         }
+        // The selected row's fill, behind the rows, which moves to the row that he opens (`selectionFill`).
+        .selectionFill(FleetStyle.pageSelection)
         // **It runs to the window's top edge, and its head begins where a page's back link begins** (margins rows 2 and
         // 4), 40 pt from the window's top: an agent's "Back to chat" stands on the line of the page's own "‹ Behaviour".
         .padding(.horizontal, 10).padding(.top, FleetSpace.lights + FleetSpace.back).padding(.bottom, 12)
@@ -814,6 +819,8 @@ struct PageSidebar<Value: Hashable, Head: View>: View {
         .frame(maxHeight: .infinity, alignment: .top)
         // Its selected row stands 16 levels over its own ground, as the main sidebar's does (fix round 2, item 23).
         .environment(\.pageSidebar, true)
+        .animation(reduceMotion ? nil : FleetMotion.selection, value: selection)
+        .environment(\.selectionSpace, selectedRowSpace)
     }
 }
 
@@ -837,6 +844,10 @@ private struct FleetModalCard<Card: View>: View {
     let dismiss: () -> Void
     @ViewBuilder let card: () -> Card
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// **The card comes from 97% of its size over 0.18 s, while its window fades in** (`ModalHolder`; the owner's yes of
+    /// 17 November 2026): it stood there in one frame. Each showing makes this view again, so each showing grows.
+    @State private var arrived = false
 
     var body: some View {
         ZStack {
@@ -856,9 +867,11 @@ private struct FleetModalCard<Card: View>: View {
             .shadow(color: .black.opacity(0.45), radius: 24, y: 8)
             .accessibilityAddTraits(.isModal)
             .padding(32)
+            .scaleEffect(arrived || reduceMotion ? 1 : 0.97)
         }.ignoresSafeArea()
         // The card is a window of its own over the app's window, so it takes the zoom he chose itself (View › Bigger).
         .viewZoomed()
+        .onAppear { withAnimation(reduceMotion ? nil : FleetMotion.cardGrows) { arrived = true } }
     }
 }
 
@@ -903,10 +916,15 @@ private struct FleetModalAnchor: NSViewRepresentable {
             // (22 October 2026). Nothing of his is lost: a field commits its value as it resigns.
             if panel.parent == nil {
                 host.makeFirstResponder(nil)
+                // **The card's window fades in over 0.15 s** (`FleetMotion.cardIn`): the dark page and the card came in
+                // one frame. Clear before it is on the screen, so no frame shows it whole first.
+                let fades = !FleetMotion.reduced
+                if fades { panel.alphaValue = 0 }
                 host.addChildWindow(panel, ordered: .above)
                 // Take focus only when first shown in the active app. Polling can update an open card while
                 // another app is in front; that update must leave its keyboard focus alone.
                 if NSApp.isActive { panel.makeKeyAndOrderFront(nil) }
+                if fades { panel.fade.run(panel, to: 1, over: FleetMotion.cardIn) }
             }
         }
 
@@ -945,13 +963,29 @@ private struct FleetModalAnchor: NSViewRepresentable {
             panel.setFrame(host.frame, display: true)
         }
 
+        /// **The card's window fades out over 0.12 s, and then leaves** (`FleetMotion.cardOut`): it went in one frame.
+        /// From this call on it is no longer this holder's panel and takes no click, so a card that opens meanwhile gets
+        /// a window of its own. **The keyboard goes back to the window under it at this call, not when the card has
+        /// gone**: a key that he presses while the card fades (the first letters of a message after a search, a page's
+        /// key after Esc) is the page's, as it was when the card left in one frame.
         private func close() {
-            if let panel {
-                panel.parent?.removeChildWindow(panel)
-                panel.orderOut(nil)
-            }
+            let leaving = panel
             panel = nil
             stopWatching()
+            guard let leaving else { return }
+            guard !FleetMotion.reduced, leaving.isVisible else {
+                // No fade: a fade-in that still runs ends here, with the window.
+                leaving.fade.stop()
+                leaving.parent?.removeChildWindow(leaving)
+                leaving.orderOut(nil)
+                return
+            }
+            leaving.ignoresMouseEvents = true
+            if leaving.isKeyWindow, let host = leaving.parent { host.makeKey() }
+            leaving.fade.run(leaving, to: 0, over: FleetMotion.cardOut) {
+                leaving.parent?.removeChildWindow(leaving)
+                leaving.orderOut(nil)
+            }
         }
 
         /// **Only a view that left its window for good closes the card** (fix round 3, item 19): SwiftUI takes this view
@@ -981,6 +1015,8 @@ private struct FleetModalAnchor: NSViewRepresentable {
     /// the card closes.
     private final class ModalPanel: NSPanel {
         let content = NSHostingView(rootView: AnyView(EmptyView()))
+        /// Its fade in and out (`WindowFade`).
+        let fade = WindowFade()
         var onCancel: () -> Void = {}
         override var canBecomeKey: Bool { true }
         override func cancelOperation(_ sender: Any?) { onCancel() }
@@ -1098,7 +1134,7 @@ private struct FleetButton: View {
     private func fill(hot: Bool, pressed: Bool) -> Color {
         switch kind {
         case .primary: Color.white.opacity(pressed ? 0.78 : !isEnabled ? 0.5 : hot ? 1 : 0.94)
-        case .secondary: pressed ? FleetStyle.bubble : hot ? Color(white: 0.165) : FleetStyle.surface
+        case .secondary: pressed ? FleetStyle.pressed : hot ? FleetStyle.lifted : FleetStyle.surface
         case .danger: Color(red: 0.86, green: 0.25, blue: 0.22).opacity(pressed ? 0.3 : hot ? 0.24 : 0.18)
         }
     }

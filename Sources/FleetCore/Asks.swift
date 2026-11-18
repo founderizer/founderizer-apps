@@ -143,22 +143,31 @@ extension HubState {
         }.sorted { ($0.created, $0.id) > ($1.created, $1.id) }
     }
 
-    /// **The Tasks board for all agents, with one card for each thing that he asked for** (his "Both places" of 15
-    /// November 2026 to its picture). A task of an ask is on no card of its own: it is behind the card of its ask,
-    /// which stands in the column of the ask. Every other task is a card as before. The order is the board's: the one
-    /// that moved last first, and in Waiting what waits for him before the rest. **An ask that is open shows whatever
-    /// the period**: it is work that he asked for and that is not done, and the last row of the card Asked ("4
-    /// waiting") leads here. An ask that ended shows when one task of it is in the period.
-    public func board(period: ActivityPeriod, calendar: Calendar = .current) -> [ActivityColumn: [BoardItem]] {
+    /// **The Tasks board, with one card for each thing that he asked for** (his "Both places" of 15 November 2026 to its
+    /// picture). A task of an ask is on no card of its own: it is behind the card of its ask, which stands in the column
+    /// of the ask. Every other task is a card as before. The order is the board's: the one that moved last first, and in
+    /// Waiting what waits for him before the rest. **An ask that is open shows whatever the period**: it is work that he
+    /// asked for and that is not done. An ask that ended shows when one task of it is in the period.
+    ///
+    /// **`agent`: the board of one agent** (his "Yes, build it" of 17 November 2026 to the picture of Tasks with the
+    /// Fleet Manager chosen, which View all of the card Asked opens): the things that he asked that agent for, whoever
+    /// does their tasks, and that agent's other tasks, its work on what he asked another agent too. The Fleet Manager
+    /// owns no task of its own, so its board showed nothing. nil: every agent's.
+    public func board(period: ActivityPeriod, agent: String? = nil, calendar: Calendar = .current) -> [ActivityColumn: [BoardItem]] {
         let start = period.start(now: Date(timeIntervalSince1970: time), calendar: calendar)?.timeIntervalSince1970 ?? -.infinity
         let waits = ownerWaits, column = taskColumns
         var columns: [ActivityColumn: [BoardItem]] = [:]
         var waiting: Set<String> = []
-        for ask in asks where !ask.isOver || ask.tasks.contains(where: { $0.activityTime >= start }) {
+        // The asks of this board: their tasks are behind their cards, also when their period leaves the card out.
+        var carded: Set<String> = []
+        for ask in asks where agent == nil || ask.agent == agent {
+            carded.insert(ask.id)
+            guard !ask.isOver || ask.tasks.contains(where: { $0.activityTime >= start }) else { continue }
             columns[ask.column, default: []].append(.ask(ask))
             if ask.wait != nil { waiting.insert(BoardItem.ask(ask).id) }
         }
-        for task in tasks where (task.ask ?? "").isEmpty && (task.activityTime >= start || waits[task.id] != nil) {
+        for task in tasks where (agent == nil || task.owner == agent) && !carded.contains(task.ask ?? "")
+            && (task.activityTime >= start || waits[task.id] != nil) {
             columns[column[task.id] ?? .waiting, default: []].append(.task(task))
             if waits[task.id] != nil { waiting.insert(BoardItem.task(task).id) }
         }
@@ -171,16 +180,20 @@ extension HubState {
 }
 
 /// **The card Asked of an agent's chat panel, as it shows** (his "Both places" of 15 November 2026 to its picture):
-/// the things that he asked that agent for, the newest first, one row each **only while the row has news** — it waits
-/// for him, an agent works on it now, or it ended and he has not seen that yet — and every other open one behind one
-/// row with their number. An ask that ended and that he has seen is on the Tasks page, with everything that ended.
+/// the things that he asked that agent for, the newest first, one row each **while the row has news** — it waits for
+/// him, an agent works on it now, or it ended and he has not seen that yet — then **every other open one, which only
+/// waits, as a row of its own too** (`waits`; the owner, 17 November 2026, of the row "2 waiting", which opened the
+/// whole Tasks board: "if it's only 3 elements you could have shown them there directly!"), **while they are three or
+/// fewer**; more are one row with their number, which opens them in place (`ownRows`). An ask that ended and that he
+/// has seen is on the Tasks page, with everything that ended.
 /// **A result shows when its requester has checked it**, and until then the card says nothing of the ask: a "Done"
 /// that a refused result takes back is worse than none. An ask that somebody canceled has no row. **A result shows
 /// again when a later task of the ask ends**: what he has seen of an agent's asks is a time (`after`), and an ask
 /// whose last word came later than it shows.
 public struct AskedCard: Sendable, Equatable {
-    /// What a row's mark says.
-    public enum Mark: Sendable, Equatable { case waitsForOwner, working, done, failed }
+    /// What a row's mark says. `quiet`: it only waits, and not for him: the mark of the task whose wait it says
+    /// (`FleetTask.mark`), muted, and that task's state word, as its row in the chat draws it (`ChatAskRow`).
+    public enum Mark: Sendable, Equatable { case waitsForOwner, working, done, failed, quiet(symbol: String, word: String) }
 
     public struct Row: Identifiable, Sendable, Equatable {
         public let id: String
@@ -205,15 +218,20 @@ public struct AskedCard: Sendable, Equatable {
         public let task: Int?
         /// For a row of an ask that ended: when its last word was said (`Ask.endedAt`). nil for an open ask.
         public let end: Double?
+        /// For a row that only waits: until when its agent parked the work, which the app writes as the Tasks board
+        /// does ("Until 15:00") in place of its line; nil when a hold or a usage limit stops it, or no time does.
+        public let until: Double?
 
         /// **The row's one muted line**: that it waits for him; the agent that works on it now, by its role, and what
-        /// its running turn does; that it is done; or the word of a result that did not succeed.
+        /// its running turn does; that it is done; the word of a result that did not succeed; or for one that only
+        /// waits, why, in the board's words ("Waiting for Shop Developer", "Queued").
         public var line: String {
             switch mark {
             case .waitsForOwner: String(l10n: "Waits for you")
             case .working: [worker?.agentLabel, doing].compactMap { $0 }.joined(separator: " · ")
             case .done: String(l10n: "Done")
             case .failed: failedWord ?? String(l10n: "Failed")
+            case .quiet(_, let word): word
             }
         }
         /// What the row says to the pointer and to VoiceOver under its title: what it waits for, else its line.
@@ -224,31 +242,48 @@ public struct AskedCard: Sendable, Equatable {
     public static var title: String { String(l10n: "Asked") }
     /// The row of the things that only wait, with their number.
     public static func waitingWords(_ count: Int) -> String { String(l10n: "\(count) waiting") }
+    /// **The most things that only wait that stand as rows of their own**; more are one row with their number, which
+    /// opens them in place and closes them again (his "Yes, fold them" of 17 November 2026, to the pictures of four
+    /// that wait, closed and open).
+    public static let ownRows = 3
 
     public let rows: [Row]
-    /// How many open things of this agent only wait: for a time, for another agent, for their turn.
-    public let waiting: Int
+    /// **The open things of this agent that only wait** — for a time, for another agent, for their turn — in the order
+    /// in which he asked, the newest first, each with the mark and the words of its row in the chat (`ChatAskRow`):
+    /// muted, in the Tasks board's words ("Until 15:00", "Waiting for Shop Developer", "Queued"), and its click opens
+    /// the task whose wait the line says.
+    public let waits: [Row]
+    /// How many open things of this agent only wait.
+    public var waiting: Int { waits.count }
 
-    public var isEmpty: Bool { rows.isEmpty && waiting == 0 }
+    public var isEmpty: Bool { rows.isEmpty && waits.isEmpty }
+    /// The things that only wait stand as rows of their own (`ownRows`), and need no row with their number.
+    public var waitsInRows: Bool { waits.count <= Self.ownRows }
 
     /// `asks`: `HubState.asks`. `agent`: the agent of the chat. `after`: an ask that ended shows when its last word
     /// came after this time: the newest end that he has seen in this agent's card, and for a Mac that reads a fleet
-    /// for the first time, that first reading's time, so that it does not show the fleet's whole past.
-    public init(_ asks: [Ask], agent: String, after: Double) {
-        var rows: [Row] = [], waiting = 0
+    /// for the first time, that first reading's time, so that it does not show the fleet's whole past. `state`: the
+    /// reading that `asks` came from, for the marks and the words of the things that only wait (the holds, the usage
+    /// limits and the subtasks that a task's wait reads).
+    public init(_ asks: [Ask], agent: String, after: Double, state: HubState? = nil) {
+        var rows: [Row] = [], waits: [Row] = []
         for ask in asks where ask.agent == agent {
             if let wait = ask.wait {
                 var request: Int?
                 if case .request(let id, _) = wait { request = id }
                 rows.append(Row(id: ask.id, title: ask.title, mark: .waitsForOwner, worker: nil, moves: false, doing: nil,
-                                request: request, waits: wait.words, failedWord: nil, task: ask.lead?.id, end: nil))
+                                request: request, waits: wait.words, failedWord: nil, task: ask.lead?.id, end: nil, until: nil))
             } else if let task = ask.working {
                 rows.append(Row(id: ask.id, title: ask.title, mark: .working, worker: task.owner == agent ? nil : task.owner,
                                 moves: task.mark(holds: [], limited: false).inWork, doing: task.doing, request: nil,
                                 waits: nil, failedWord: nil,
-                                task: task.id, end: nil))
+                                task: task.id, end: nil, until: nil))
             } else if !ask.isOver {
-                waiting += 1
+                // Why it waits, and the task that a click opens, as its row in the chat says them.
+                let quiet = ChatAskRow(ask, agent: agent, state: state)
+                waits.append(Row(id: ask.id, title: ask.title, mark: .quiet(symbol: quiet.symbol, word: quiet.line), worker: nil,
+                                 moves: quiet.moves, doing: nil, request: nil, waits: nil, failedWord: nil, task: quiet.task,
+                                 end: nil, until: quiet.until))
             } else {
                 let failed = ask.failed
                 // Nothing to say yet, or nothing new: somebody canceled it, a result of it waits for its check, or he
@@ -256,11 +291,11 @@ public struct AskedCard: Sendable, Equatable {
                 if (failed == nil && (ask.canceled || ask.unchecked)) || ask.endedAt <= after { continue }
                 rows.append(Row(id: ask.id, title: ask.title, mark: failed == nil ? .done : .failed, worker: nil, moves: false,
                                 doing: nil, request: nil, waits: nil, failedWord: failed?.failedResult,
-                                task: failed?.id ?? ask.tasks.first?.id, end: ask.endedAt))
+                                task: failed?.id ?? ask.tasks.first?.id, end: ask.endedAt, until: nil))
             }
         }
         self.rows = rows
-        self.waiting = waiting
+        self.waits = waits
     }
 
     /// The newest end that this card shows, or nil: what he has seen of this agent's asks once he leaves the chat.

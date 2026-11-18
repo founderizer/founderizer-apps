@@ -18,13 +18,20 @@ import SwiftUI
 /// **Asked: the things that he asked this agent for** (`AskedCard`; the owner, 15 November 2026: "a super short summary
 /// of the status ... on the right sidebar ... I am not interested in the specific individual tasks to be done but in the
 /// thing I asked for to be done", and to its picture, "Both places"). It is not the Activity card again: no task and no
-/// message between agents is in it, only his own messages that became work, one row each, and a row only while it has
-/// news. A thing that waits for him has the orange raised hand of a request that stops work; one that is in progress
-/// has the mark of work, which turns only while a turn of it runs, and says which other agent works on it and what its
-/// turn does; one that ended shows its checked result one time, until he leaves this chat, a failed one with its red
-/// word. Every other open one is behind one row with their number, which opens Tasks for all agents. A row that comes
-/// or goes fades, and the rows that show keep the order in which he asked. The card is not there while there is
-/// nothing to say. It reads the fleet's own state, so it stands in the panel's first frame.
+/// message between agents is in it, only his own messages that became work, one row each. A thing that waits for him
+/// has the orange raised hand of a request that stops work; one that is in progress has the mark of work, which turns
+/// only while a turn of it runs, and says which other agent works on it and what its turn does; one that ended shows
+/// its checked result one time, until he leaves this chat, a failed one with its red word. **Every other open one only
+/// waits, and stands under them as its row in the chat does** (`ChatAskLine`): muted, in the Tasks board's words, and
+/// a click opens its task (the owner, 17 November 2026, of the row "2 waiting", which opened Tasks for all agents and
+/// not these things: "if it's only 3 elements you could have shown them there directly!"). **Four or more are one row
+/// with their number**, which opens them in place under it and closes them again, its chevron turned down while they
+/// are open (his "Yes, fold them" to the pictures of four, closed and open). **Its last row is always View all**, which
+/// opens Tasks with this agent chosen, where each thing that he asked it is one card, in the board's period (his words of
+/// the same day: "I also want a way to see them - so I see the tasks page but filtered by agent, maybe after the fold
+/// always add like a button/link to View all?", and his "Yes, build it" to its picture). A row that comes or goes
+/// fades, and the rows that show keep the order in which he asked. The card is not there while there is nothing to
+/// say. It reads the fleet's own state, so it stands in the panel's first frame.
 struct AgentStatusPanel: View {
     @Bindable var store: FleetStore
     let agent: String
@@ -37,10 +44,17 @@ struct AgentStatusPanel: View {
     private var machine: MachineStatus? { machines?.machines.first { $0.agent == agent } }
     /// The read of this visit failed and none was kept: "Not reported" in place of the wait.
     @State private var readFailed = false
-    /// A machine reading came, or the read failed.
-    private var machineRead: Bool { machines != nil || readFailed }
+    /// When the first of the reads that failed in a row failed: one break of them says nothing (`saysFailed`).
+    @State private var readFailedSince: ContinuousClock.Instant?
+    /// The machines' reads have failed one whole break, or the fleet's state is old (`FleetStore.pageReadingIsOld`;
+    /// 17 November 2026): only then is the last reading gray, and "Server not reported" said.
+    private var saysFailed: Bool { readFailed && store.pageReadingIsOld(failedSince: readFailedSince) }
+    /// A machine reading came, or the reads failed one whole break.
+    private var machineRead: Bool { machines != nil || saysFailed }
     /// The read has gone on for a second: only then does the row say so.
     @State private var slow = false
+    /// He opened the row of the things that only wait, in the card Asked, to their own rows.
+    @State private var showsWaits = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var time: Double { store.state?.time ?? 0 }
     private var features: [String] { store.state?.ui_features ?? [] }
@@ -66,7 +80,7 @@ struct AgentStatusPanel: View {
                 // **A row of Asked that comes or goes fades, and the cards under it move with it**, not in one frame:
                 // the column stays, so the change of the card's rows is its to move. Nothing moves under Reduce Motion.
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.2),
-                           value: asked.rows.map(\.id) + (asked.waiting > 0 ? ["waiting"] : []) + (work.map(Self.workKeys) ?? []))
+                           value: asked.rows.map(\.id) + askedWaitKeys(asked) + (work.map(Self.workKeys) ?? []))
         }
         // Its cards a step lighter than a page's, so they stand out from the rail they stand on (fix round 2).
         .environment(\.cardFill, FleetStyle.chrome)
@@ -90,7 +104,8 @@ struct AgentStatusPanel: View {
         let seen = seenTimes
         // A fleet that this Mac has not drawn the card for yet shows nothing that ended.
         return AskedCard(store.asks, agent: agent,
-                         after: max(seen["\(state.db)/"] ?? .infinity, seen["\(state.db)/\(agent)"] ?? -.infinity))
+                         after: max(seen["\(state.db)/"] ?? .infinity, seen["\(state.db)/\(agent)"] ?? -.infinity),
+                         state: state)
     }
 
     /// He has seen what ended in this agent's card.
@@ -136,7 +151,7 @@ struct AgentStatusPanel: View {
                 // away, and not in the column of the rows' words under it.
                 HStack(spacing: FormMetrics.markGap) {
                     // The avatar keeps the look of the last reading while it is old (`presence`); the words say it is old.
-                    AgentAvatar(name: agent.name, presence: presence, size: GlyphSize.hero, moves: true)
+                    AgentAvatar(name: agent.name, presence: presence, size: GlyphSize.hero, moves: store.marksMove)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(agent.name.agentLabel).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(1)
                         // **Its name under its role** (the owner, 10 November 2026); no line where the role says the name
@@ -194,7 +209,7 @@ struct AgentStatusPanel: View {
                         }
                         .padding(.vertical, room)
                         .help(words)
-                        Text("\(Int(window.used_percent.rounded()))%").monospacedDigit()
+                        Text("\(Int(window.used_percent.rounded()))%").monospacedDigit().rolls(Int(window.used_percent.rounded()))
                             .frame(height: Self.line).padding(.vertical, room)
                             .foregroundStyle(stale ? FleetStyle.muted : FleetStyle.text).help(words)
                             .gridColumnAlignment(.trailing)
@@ -250,7 +265,7 @@ struct AgentStatusPanel: View {
         if let machine, features.contains("machines") {
             // **After a failed read the last words stay, grey, with the reading's time on hover** (T-14), as every old
             // reading of this panel: the notice over the page says that the hub does not answer.
-            let old = readFailed || !store.isFresh
+            let old = saysFailed || !store.isFresh
             Button { store.destination = .server(machine.machine) } label: {
                 row(machine.machine, symbol: "desktopcomputer", muted: old, opens: true)
             }.buttonStyle(FleetRowButtonStyle())
@@ -285,24 +300,47 @@ struct AgentStatusPanel: View {
         .accessibilityLabel("Reading")
     }
 
-    /// **The rows of Asked**: one for each thing with news, then the number of the things that only wait.
+    /// **The rows of Asked**: one for each thing with news, then the things that only wait (`AskedCard.waits`): their
+    /// own rows while they are three or fewer, else one row with their number, which opens them under it and closes them
+    /// again, as the "more" of the Tasks board's Ended does; then View all. The row with their number opened Tasks for
+    /// all agents, the whole fleet's board and not these things (the owner, 17 November 2026: "it takes me to the
+    /// entire Tasks page, without any filter at all"): View all opens it with this agent chosen.
     @ViewBuilder private func askedRows(_ card: AskedCard) -> some View {
         ForEach(card.rows) { row in askedRow(row).transition(.opacity) }
-        if card.waiting > 0 {
-            // Tasks, for all agents: that board has one card for each thing he asked for, the open ones whatever its
-            // period. With one agent chosen there it lists that agent's tasks one by one, so the choice is taken out.
-            Button { UserDefaults.standard.set("", forKey: "activityAgent"); store.destination = .activity } label: {
-                self.row(AskedCard.waitingWords(card.waiting), muted: true, opens: true) { Color.clear.frame(width: 1, height: 1) }
+        if !card.waitsInRows {
+            Button { showsWaits.toggle() } label: {
+                self.row(AskedCard.waitingWords(card.waiting), muted: true, opens: true, opened: showsWaits) {
+                    Color.clear.frame(width: 1, height: 1)
+                }
             }
             .buttonStyle(FleetRowButtonStyle())
+            .accessibilityValue(showsWaits ? String(localized: "Open (a state)", defaultValue: "Open", bundle: Localized.bundle,
+                                                    locale: Localized.digits) : String(l10n: "Closed"))
             .accessibilityIdentifier("panel-asked-waiting")
         }
+        if card.waitsInRows || showsWaits {
+            ForEach(card.waits) { row in askedRow(row).transition(.opacity) }
+        }
+        // Tasks keeps the agent chosen for its next visit, as its own filter does.
+        Button { UserDefaults.standard.set(agent, forKey: "activityAgent"); store.destination = .activity } label: {
+            self.row(String(l10n: "View all"), muted: true, opens: true) { Color.clear.frame(width: 1, height: 1) }
+        }
+        .buttonStyle(FleetRowButtonStyle())
+        .accessibilityIdentifier("panel-asked-all")
+    }
+
+    /// What of the card Asked's things that only wait shows, for its fade: their rows, and the row of their number.
+    private func askedWaitKeys(_ card: AskedCard) -> [String] {
+        (card.waitsInRows || showsWaits ? card.waits.map { "wait-\($0.id)" } : []) + (card.waitsInRows ? [] : ["waiting"])
     }
 
     /// One thing that he asked for: its mark, its name on one line, and under it one muted line that says where it
-    /// stands. The row opens the request that it waits on, on Needs you, else its task.
+    /// stands. The row opens the request that it waits on, on Needs you, else its task. **One that only waits says
+    /// why as its row in the chat says it** (`ChatAskLine`): until when its work is parked, in the Tasks board's words
+    /// ("Until 15:00"), else its task's state word.
     private func askedRow(_ row: AskedCard.Row) -> some View {
-        let line = row.line
+        let line = row.until.map { String(l10n: "Until \(fleetComingTime($0, now: time))") } ?? row.line
+        let words = row.until == nil ? row.words : line
         return Button {
             if let request = row.request { store.selectedNeed = request; store.destination = .needs }
             else if let task = row.task { store.destination = .task(task) }
@@ -314,10 +352,14 @@ struct AgentStatusPanel: View {
                     case .waitsForOwner: Image(systemName: "hand.raised.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(.orange)
                     case .working:
                         // The mark turns only while its task is work now (`moves`); else it stands still, muted.
-                        if row.moves { WorkMark(size: Self.mark) }
+                        if row.moves { WorkMark(size: Self.mark, moves: store.marksMove) }
                         else { Image(systemName: "circle.dotted").font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetStyle.muted) }
                     case .done: Image(systemName: "checkmark.circle.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetTask.MarkTint.checked.color)
                     case .failed: Image(systemName: "exclamationmark.circle.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetTask.MarkTint.failed.color)
+                    // What only waits: its task's mark at rest, muted, as the board draws a task that waits.
+                    case .quiet(let symbol, _):
+                        if row.moves { WorkMark(size: Self.mark, moves: store.marksMove) }
+                        else { Image(systemName: symbol).font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetStyle.muted) }
                     }
                 }.accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
@@ -334,16 +376,16 @@ struct AgentStatusPanel: View {
             .frame(minHeight: 44).contentShape(Rectangle())
         }
         .buttonStyle(FleetRowButtonStyle())
-        .help([row.title, row.words].filter { !$0.isEmpty }.joined(separator: "\n"))
+        .help([row.title, words].filter { !$0.isEmpty }.joined(separator: "\n"))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel([row.title, row.words].filter { !$0.isEmpty }.joined(separator: ", "))
+        .accessibilityLabel([row.title, words].filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("panel-asked-\(row.id)")
     }
 
-    /// **The rows of Work** (`WorkCard`; the owner's pick of the picture "A: counts", 16 November 2026): each task that
-    /// waits for him, the task that a turn works on now, then the number of the other open tasks and of the tasks done
-    /// today, which open the agent's Tasks; their titles are on hover.
+    /// **The rows of Work** (`WorkCard`; the owner's "Yes, as drawn" of 17 November 2026): each task that waits for him,
+    /// each thing that a turn works on now by its name, then the newest things that ended, each with how it ended and
+    /// how long ago. A row of a thing opens its page (`WorkItemPage`).
     @ViewBuilder private func workRows(_ card: WorkCard) -> some View {
         ForEach(card.waits) { wait in
             // The orange raised hand of a request that stops work, as Asked draws it, and it opens what Asked's opens.
@@ -354,41 +396,50 @@ struct AgentStatusPanel: View {
                 Image(systemName: "hand.raised.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(.orange)
             }.transition(.opacity)
         }
-        ForEach(card.working) { task in
-            workRow(title: task.title, line: task.doing ?? "", id: "now-\(task.id)") { store.destination = .task(task.id) } mark: {
-                // It turns only by a current reading: motion says that the work goes on now (UI-PATTERNS, "Statuses
-                // must be true").
-                if store.isFresh { WorkMark(size: Self.mark) }
+        ForEach(card.working) { row in
+            workRow(title: row.title, line: row.words, id: "now-\(Self.key(row.id))", opensPage: true) {
+                store.destination = .work(agent, row.id)
+            } mark: {
+                // It turns only by a current reading of this wake (`marksMove`), and rests green before the hub's
+                // first answer after a wake: motion says that the work goes on now (UI-PATTERNS, "Statuses must be
+                // true").
+                if store.isFresh { WorkMark(size: Self.mark, moves: store.marksMove) }
                 else { Image(systemName: "circle.dotted").font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetStyle.muted) }
             }.transition(.opacity)
         }
-        if !card.waiting.isEmpty {
-            Button(action: openTasks) { row(AskedCard.waitingWords(card.waiting.count), symbol: "clock") }
-                .buttonStyle(FleetRowButtonStyle())
-                .help(Self.titles(card.waiting))
-                .accessibilityIdentifier("panel-work-waiting")
-                .transition(.opacity)
-        }
-        if !card.done.isEmpty {
-            Button(action: openTasks) { row(WorkCard.doneWords(card.done.count), symbol: "checkmark") }
-                .buttonStyle(FleetRowButtonStyle())
-                .help(Self.titles(card.done))
-                .accessibilityIdentifier("panel-work-done")
-                .transition(.opacity)
+        ForEach(card.ended) { row in
+            // How it ended and how long ago, "Drafted · 50 min ago"; a result that did not succeed is red, as on Asked.
+            let line = [row.words, row.endedAt.map { activityAge($0, now: time) } ?? ""].filter { !$0.isEmpty }
+                .joined(separator: " · ")
+            workRow(title: row.title, line: line, id: "ended-\(Self.key(row.id))", failed: row.end == .failed, opensPage: true) {
+                store.destination = .work(agent, row.id)
+            } mark: {
+                switch row.end {
+                case .done: Image(systemName: "checkmark.circle.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetTask.MarkTint.checked.color)
+                case .failed: Image(systemName: "exclamationmark.circle.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetTask.MarkTint.failed.color)
+                default: Image(systemName: "circle").font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetStyle.muted)
+                }
+            }.transition(.opacity)
         }
     }
 
-    /// One task row of Work, as one row of Asked: its mark, its title on one line, and one muted line under it.
-    private func workRow<Mark: View>(title: String, line: String, id: String, open: @escaping () -> Void,
-                                     @ViewBuilder mark: () -> Mark) -> some View {
+    /// One row of Work, as one row of Asked: its mark, its title on one line, and one line under it, muted, or red
+    /// for a result that did not succeed. A row of a thing, which opens its page, ends in the chevron of a row that
+    /// opens a page of its own, as the picture of 17 November 2026 drew it.
+    private func workRow<Mark: View>(title: String, line: String, id: String, failed: Bool = false, opensPage: Bool = false,
+                                     open: @escaping () -> Void, @ViewBuilder mark: () -> Mark) -> some View {
         Button(action: open) {
             HStack(spacing: 0) {
                 RowMark { mark() }.accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(FormMetrics.text).foregroundStyle(FleetStyle.text).lineLimit(1)
-                    if !line.isEmpty { Text(line).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1) }
+                    if !line.isEmpty {
+                        Text(line).font(FormMetrics.detail).lineLimit(1)
+                            .foregroundStyle(failed ? EndedRow.failedWords : FleetStyle.muted)
+                    }
                 }
                 Spacer(minLength: 8)
+                if opensPage { chevron }
             }
             .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 9)
             .frame(minHeight: 44).contentShape(Rectangle())
@@ -401,24 +452,18 @@ struct AgentStatusPanel: View {
         .accessibilityIdentifier("panel-work-\(id)")
     }
 
-    /// The agent's own Tasks, where its open and its finished tasks are; Tasks for all agents for an agent that has no
-    /// such part (`AgentTab.available`: the manager owns no task).
-    private func openTasks() {
-        let role = store.state?.agents.first { $0.name == agent }?.role
-        if AgentTab.available(features: features, role: role).contains(.tasks) { store.destination = .agentDetail(agent, .tasks) }
-        else { UserDefaults.standard.set("", forKey: "activityAgent"); store.destination = .activity }
-    }
-
-    /// The hover words of a count: the titles of its tasks, at most ten, and how many more.
-    private static func titles(_ tasks: [FleetTask]) -> String {
-        let shown = tasks.prefix(10).map(\.title)
-        return (shown + (tasks.count > 10 ? [String(l10n: "\(tasks.count - 10) more")] : [])).joined(separator: "\n")
+    /// A thing of the work in a row's name: "case-906", "task-12".
+    private static func key(_ key: WorkItem.Key) -> String {
+        switch key {
+        case .dutyCase(let id): "case-\(id)"
+        case .task(let id): "task-\(id)"
+        }
     }
 
     /// What of the card Work comes or goes, for its fade.
     private static func workKeys(_ card: WorkCard) -> [String] {
-        card.waits.map { "work-wait-\($0.id)" } + card.working.map { "work-now-\($0.id)" }
-            + (card.waiting.isEmpty ? [] : ["work-waiting"]) + (card.done.isEmpty ? [] : ["work-done"])
+        card.waits.map { "work-wait-\($0.id)" } + card.working.map { "work-now-\(key($0.id))" }
+            + card.ended.map { "work-ended-\(key($0.id))" }
     }
 
     // MARK: parts
@@ -442,7 +487,7 @@ struct AgentStatusPanel: View {
     }
 
     /// One row of a card: a muted mark in the column every mark stands in, its text, and the chevron of a row that
-    /// opens a page of its own.
+    /// opens a page of its own, or its rows in place.
     private func row(_ text: String, symbol: String? = nil, muted: Bool = false, opens: Bool = false) -> some View {
         row(text, muted: muted, opens: opens, marked: symbol != nil) {
             if let symbol { Image(systemName: symbol).font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetStyle.muted) }
@@ -450,20 +495,23 @@ struct AgentStatusPanel: View {
     }
 
     /// The same row with a mark of its own, such as a provider's icon; `marked: false` leaves the mark's column out.
-    private func row<Mark: View>(_ text: String, muted: Bool = false, opens: Bool = false, marked: Bool = true,
-                                 @ViewBuilder mark: () -> Mark) -> some View {
+    /// `opened`: a row that opens its rows in place under it has them open, and its chevron turns down, as the "more"
+    /// of the Tasks board's Ended.
+    private func row<Mark: View>(_ text: String, muted: Bool = false, opens: Bool = false, opened: Bool = false,
+                                 marked: Bool = true, @ViewBuilder mark: () -> Mark) -> some View {
         HStack(spacing: 0) {
             if marked { RowMark { mark() }.accessibilityHidden(true) }
             Text(text).font(FormMetrics.text).foregroundStyle(muted ? FleetStyle.muted : FleetStyle.text)
                 .lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 8)
-            if opens { chevron }
+            if opens { chevron.rotationEffect(.degrees(opened ? 90 : 0)) }
         }
         .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 11)
         .frame(minHeight: 44)
     }
 
-    /// The chevron of a row that opens a page of its own, as on People and Conversations.
+    /// The chevron of a row that opens a page of its own, as on People and Conversations, or its rows in place, turned
+    /// down while they are open.
     private var chevron: some View {
         Image(systemName: "chevron.right").font(IconMetrics.symbol(11, weight: .semibold)).foregroundStyle(FleetStyle.muted)
             .accessibilityHidden(true)
@@ -478,11 +526,13 @@ struct AgentStatusPanel: View {
                 let list = try? await HubClient().machines(hub: hub, database: database)
                 guard !Task.isCancelled else { return }
                 if store.hub == hub, store.state?.db == database {
-                    if let list { machines = list; readFailed = false } else { readFailed = true }
+                    if let list { machines = list; readFailed = false; readFailedSince = nil }
+                    else { readFailed = true; readFailedSince = readFailedSince ?? .now }
                 }
             }
             guard !Task.isCancelled else { return }
-            do { try await store.nap(machineRead ? 30 : 5) } catch { return }
+            // 3 s after a read that failed, as the lists do: the gray goes as soon as the hub is back.
+            do { try await store.nap(readFailed ? 3 : machineRead ? 30 : 5) } catch { return }
         }
     }
 }

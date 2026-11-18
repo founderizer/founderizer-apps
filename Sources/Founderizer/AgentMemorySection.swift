@@ -164,39 +164,58 @@ struct AgentMemorySection: View {
     // MARK: Reading
 
     /// Reads both halves. A first reading waits until a loading line that showed has stood half a second
-    /// (`FleetStore.settle`).
+    /// (`FleetStore.settle`). **One break of the hub says nothing** (17 November 2026): a half whose read fails is read
+    /// again every 3 seconds, and says that it could not be read only once its own reads have failed one whole break
+    /// (`FleetStore.pageReadsFailedABreak`); until then it keeps what it showed, its last reading or "Reading the
+    /// memory…".
     private func read() async {
         guard let database = store.state?.db else { return }
         let hub = store.hub, start = ContinuousClock.now
-        if notesOffered { await readNotes(hub: hub, database: database, since: start) }
-        if lessonsOffered { await readLessons(hub: hub, database: database, since: start) }
+        var failedSince: ContinuousClock.Instant?, notesLeft = notesOffered, lessonsLeft = lessonsOffered
+        while !Task.isCancelled {
+            let notesWords = notesLeft ? await readNotes(hub: hub, database: database, since: start) : nil
+            let lessonsWords = lessonsLeft ? await readLessons(hub: hub, database: database, since: start) : nil
+            notesLeft = notesWords != nil; lessonsLeft = lessonsWords != nil
+            guard !Task.isCancelled, notesLeft || lessonsLeft else { return }
+            failedSince = failedSince ?? .now
+            if store.pageReadsFailedABreak(failedSince: failedSince) {
+                if let notesWords { notesFailure = notesWords }
+                if let lessonsWords { memoryFailure = lessonsWords }
+                return
+            }
+            do { try await store.nap(3) } catch { return }
+        }
     }
 
-    private func readNotes(hub: URL, database: String, since start: ContinuousClock.Instant) async {
+    /// One read of the notes; the words of its failure, or nil.
+    private func readNotes(hub: URL, database: String, since start: ContinuousClock.Instant) async -> String? {
         let first = notes == nil
         do {
             let fresh = try await HubClient().notes(hub: hub, database: database, agent: agent)
             if first { await store.settle(since: start) }
-            guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
+            guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return nil }
             notes = fresh; notesFailure = nil
+            return nil
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return nil }
             if first { await store.settle(since: start) }
-            notesFailure = HubError.said(error) ?? Self.notesUnread
+            return HubError.said(error) ?? Self.notesUnread
         }
     }
 
-    private func readLessons(hub: URL, database: String, since start: ContinuousClock.Instant) async {
+    /// One read of the lessons; the words of its failure, or nil.
+    private func readLessons(hub: URL, database: String, since start: ContinuousClock.Instant) async -> String? {
         let first = memory == nil
         do {
             let fresh = try await HubClient().memory(hub: hub, database: database, agent: agent)
             if first { await store.settle(since: start) }
-            guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
+            guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return nil }
             memory = fresh; memoryFailure = nil
+            return nil
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return nil }
             if first { await store.settle(since: start) }
-            memoryFailure = HubError.said(error) ?? Self.lessonsUnread
+            return HubError.said(error) ?? Self.lessonsUnread
         }
     }
 }

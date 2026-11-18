@@ -114,8 +114,8 @@ extension FleetTask {
 }
 
 extension HubState {
-    /// The tasks of the Tasks board for one agent (nil: all agents) and one period, newest activity first in each
-    /// column, **and in Waiting the tasks that wait for the owner before the others** (`ownerWaits`). The hub's time is
+    /// The tasks of one agent (nil: all agents) in one period, one by one, newest activity first in each column (the
+    /// Tasks page reads `HubState.board`, which keeps these rules and shows each thing that he asked for as one card), **and in Waiting the tasks that wait for the owner before the others** (`ownerWaits`). The hub's time is
     /// the present; the period starts at a calendar day of this Mac. **A task that waits for the owner shows whatever
     /// the period** (review of 11 November 2026): a task that waits gets no new activity, so with "Last 7 days" one
     /// that waited for his answer for 8 days left the board.
@@ -295,7 +295,7 @@ public struct EndedTasks: Sendable {
         self.init(items: tasks.map(BoardItem.task), calendar: calendar)
     }
 
-    /// `items`: the Ended column of the board for all agents, newest first (`HubState.board`). **One thing that he
+    /// `items`: the Ended column of the board, of all agents or of one, newest first (`HubState.board`). **One thing that he
     /// asked for is one row**: among the results that he must see when the task that has its last word did not
     /// succeed (`Ask.failed`), else behind "more" on the day that it ended, where the row opens its tasks
     /// as the row of a schedule's runs does. It counts as one in `rest`.

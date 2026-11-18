@@ -124,7 +124,7 @@ struct WhatsAppSetupPage: View {
             // What stopped it, in one orange line over the one way on.
             SetupStep(title: String(l10n: "Link \(name)'s WhatsApp number")) { mark } content: {
                 SetupWarning(problem).accessibilityIdentifier("whatsapp-problem")
-                if store.isFresh {
+                if store.writesNow {
                     Button("Try again") { Task { await begin() } }
                         .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
                         .accessibilityIdentifier("whatsapp-again")
@@ -144,7 +144,7 @@ struct WhatsAppSetupPage: View {
         defer { starting = false }
         do {
             // Back ends this wait too: nothing was made yet, so Back has nothing to take away.
-            while (!store.isFresh || accounts == nil) && !leaving { _ = try await store.nap(1) }
+            while (!store.writesNow || accounts == nil) && !leaving { _ = try await store.nap(1) }
             guard !leaving else { return }
             if found == nil { found = number.map { $0.neverLinked ? .leftOver : .worked } ?? .made }
             let id = try await start { !leaving }
@@ -264,7 +264,7 @@ struct ChannelFollowSteps: View {
     }
     /// The owner can write from this app already.
     private var ownerLinked: Bool { people.map { !$0.handles(of: app).isEmpty } == true }
-    private var canWrite: Bool { store.isFresh && store.state?.db != nil && writing == nil }
+    private var canWrite: Bool { store.writesNow && store.state?.db != nil && writing == nil }
     /// People can write to a worker and to a lead that can hold a conversation, never to the fleet's manager (the hub
     /// refuses it) and not to an agent that other people cannot reach yet (`People.cannotChat`): such an agent's steps
     /// have no tiles, and the owner's own link stands in their place.
@@ -425,7 +425,7 @@ struct ChannelFollowSteps: View {
     }
 
     private func makeCode() async {
-        guard store.isFresh, let db = store.state?.db, let people, let id = account?.id else { return }
+        guard store.writesNow, let db = store.state?.db, let people, let id = account?.id else { return }
         do {
             let new = try await chat.makeCode(hub: store.hub, database: db, client: store.installation, app: app)
             guard store.state?.db == db else { return }

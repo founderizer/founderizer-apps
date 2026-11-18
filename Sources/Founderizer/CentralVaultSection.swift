@@ -780,7 +780,7 @@ struct CentralVaultSection: View {
                     Image(systemName: "exclamationmark.circle").font(IconMetrics.symbol(14)).foregroundStyle(.orange)
                         .help(reason).accessibilityLabel("Needs you").accessibilityValue(reason)
                 }
-                Button(words, action: action).buttonStyle(FleetOutlineButtonStyle()).disabled(!store.isFresh || model.working)
+                Button(words, action: action).buttonStyle(FleetOutlineButtonStyle()).disabled(!store.writesNow || model.working)
             }
         }
     }

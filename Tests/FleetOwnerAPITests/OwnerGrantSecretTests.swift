@@ -56,7 +56,7 @@ enum GrantSecretSample {
                          GrantSecret.noFleet, GrantSecret.noVaultReading, GrantSecret.vaultSilent,
                          GrantSecret.noOwnerKey, GrantSecret.noOwnerKeyTakeBack, GrantSecret.noSecret,
                          GrantSecret.noAgent, GrantSecret.notWorker, GrantSecret.noServer, GrantSecret.readNeedsKey,
-                         GrantSecret.readsTwice, GrantSecret.busy, GrantSecret.ended]
+                         GrantSecret.readsTwice, GrantSecret.clockApart, GrantSecret.busy, GrantSecret.ended]
     /// Each sentence for a refusal after a write went out, and the program's words for a lost answer.
     static let after = [GrantSecret.signRefused, GrantSecret.signNotKnown, GrantSecret.grantRefusedTakenBack,
                         GrantSecret.grantRefusedSignatureLeft, GrantSecret.grantRefusedListHasOne,
@@ -100,6 +100,10 @@ final class StandInGrantDesk {
     /// The vault's page, or nil for a read that fails.
     var vault: GrantSecret.Vault? = GrantSecret.Vault(fleet: GrantSecretSample.fleet, central: .answers)
     var holdsKey = true
+    /// Whether this Mac's clock and the hub's differ by more than an hour, or nil for no answer of the hub in this
+    /// launch. It is not recorded in `asked`: `clockAsked` says whether a call asked it.
+    var clockApart: Bool? = false
+    var clockAsked = false
     /// What each signed statement and each grant of the hub gets, in the order of the sends: nil when it was taken.
     /// The last one serves each later send too.
     var signAnswers: [(any Error)?] = [nil]
@@ -178,6 +182,10 @@ final class StandInGrantDesk {
             },
             // The vault's own rule for a server's name, as the app's wiring asks it.
             isMachine: { CentralVault.isMachine($0) },
+            clockApart: { [self] _ in
+                clockAsked = true
+                return clockApart
+            },
             sign: { [self] place, statement in
                 asked.append(statement.machine.map { "sign grant \($0)" } ?? "sign ungrant")
                 statements.append(statement)
@@ -557,6 +565,11 @@ struct OwnerGrantSecretWordsTests {
         #expect(GrantSecret.readsTwice == "That agent already reads another API key of the same variable name, and "
                 + "a session has one value for one name. Ask the owner which of the two keys that agent reads. "
                 + "Nothing was sent.")
+        #expect(GrantSecret.clockApart == "This Mac's clock and the hub's clock differ by more than an hour, so the "
+                + "app signs no grant now. Ask the owner to check this Mac's date and time (System Settings, General, "
+                + "Date & Time), and then call grant_secret again. If this Mac's clock is right, the hub's clock is "
+                + "probably wrong: tell the owner. A take-back (level null) does not wait for the clocks. Nothing was "
+                + "sent.")
         #expect(GrantSecret.busy == "Another call of grant_secret or answer_secret_request is at its writes now. "
                 + "Call again when it has answered. Nothing was sent.")
         #expect(GrantSecret.ended == "The call ended before its first write. Nothing was sent.")
@@ -928,6 +941,8 @@ struct OwnerGrantSecretAppTests {
         let app = StandInGrantDesk()
         app.teams = [GrantSecretSample.list(grants: [worker: "read"])]
         let answer = try await app.went(takeBack)
+        // A take-back never asks for the clocks, so it goes at a launch and while they are apart.
+        #expect(!app.clockAsked)
         #expect(app.asked == checks + ["grant null", "sign ungrant", "refresh"])
         #expect(app.grants == ["\(key) \(worker) null"])
         #expect(app.statements == [GrantSecret.Statement(fleet: fleet, login: key, agent: worker, machine: nil)])
@@ -1034,6 +1049,15 @@ struct OwnerGrantSecretAppTests {
         await refused(read, GrantSecret.readsTwice, asked: checks) {
             $0.teams = [GrantSecretSample.list(twin: [GrantSecretSample.worker: "read"])]
         }
+        // Last of a give's: the clocks. The last check before them wins over them.
+        await refused(read, GrantSecret.readsTwice, asked: checks) {
+            $0.teams = [GrantSecretSample.list(twin: [GrantSecretSample.worker: "read"])]; $0.clockApart = true
+        }
+        // This Mac's clock and the hub's differ by more than an hour, at use and at read; and with no answer of the
+        // hub in this launch, a give is not ready (it fails closed).
+        await refused(give, GrantSecret.clockApart, asked: checks) { $0.clockApart = true }
+        await refused(read, GrantSecret.clockApart, asked: checks) { $0.clockApart = true }
+        await refused(give, GrantSecret.notReady, asked: checks) { $0.clockApart = nil }
     }
 
     /// **The order of the checks**: of two faults in one call, the earlier check's sentence is the answer.

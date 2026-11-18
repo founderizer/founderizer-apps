@@ -79,8 +79,9 @@ struct SecretsPage: View {
     private var resources: ResourceList? {
         get { store.reading(AccessSettings.name(agent)) } nonmutating set { store.keep(newValue, as: AccessSettings.name(agent)) }
     }
-    /// The last read failed. `reading` is then the last good one, or nil.
-    @State private var failed = false
+    /// When the first of the reads that failed in a row failed, or nil while the last read answered: `reading` is then
+    /// the last good one, or nil. One break of them says nothing (`FleetStore.pageReadingIsOld`).
+    @State private var failedSince: ContinuousClock.Instant?
     /// When this visit began: a kept list that this visit reads again is not old before that read has had a second.
     @State private var opened = ContinuousClock.now
     /// The form of Add secret shows in the list's place.
@@ -112,7 +113,7 @@ struct SecretsPage: View {
         let profiles = try? await client.profiles(hub: hub, database: database)
         return LoginReading(team: team, profiles: profiles?.profiles)
     }
-    private var canChange: Bool { offered && store.isFresh && working == nil }
+    private var canChange: Bool { offered && store.writesNow && working == nil }
     private var agents: [String] { store.state?.agents.map(\.name) ?? [] }
     /// The central vault of this hub (owner feature `central_vault`), which the store keeps in order by itself: this
     /// page shows only its rows that need the owner, and each secret's servers. A hub without it shows none of them.
@@ -170,9 +171,11 @@ struct SecretsPage: View {
                               ? "Update the hub to add and share secrets here." : "This hub does not list its secrets yet.", symbol: "key")
                 }
             } else if let reading { catalog(reading) }
-            else if failed || !store.isFresh {
+            else if store.pageReadingIsOld(failedSince: failedSince) {
                 // **Not while the window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item 33:
-                // an outage is said once): an agent's group keeps its heading alone, as while it reads.
+                // an outage is said once): an agent's group keeps its heading alone, as while it reads. **One break of
+                // the hub says nothing** (17 November 2026): the loading line stays until the reads have failed one
+                // whole break, or the fleet's state is old.
                 if !store.hubNoticeShows {
                     FormSection(grouped ? String(l10n: "Secrets") : nil) {
                         FormRow("Founderizer cannot read the secrets now.", detail: String(l10n: "It reads again when the hub answers."))
@@ -235,7 +238,7 @@ struct SecretsPage: View {
     /// Give in the secret's detail does. Only while there is one to give and the hub answers; it waits while a change
     /// goes on.
     @ViewBuilder private func giveMenu(_ reading: LoginReading) -> some View {
-        if let agent, offered, store.isFresh {
+        if let agent, offered, store.writesNow {
             let open = reading.catalog.filter { !reading.holders($0.key, $0.value, agents: agents).contains(agent) }
                 .sorted { ($0.value.name.lowercased(), $0.key) < ($1.value.name.lowercased(), $1.key) }
             if !open.isEmpty {
@@ -260,9 +263,11 @@ struct SecretsPage: View {
     /// **"Last reading", only for a list that is old, and only after this visit's read has had its second** (D-1 rule 2,
     /// as Runs on holds its warning): it came 50 ms after Can use opened, over a list that the read on its way confirmed
     /// at 700 ms. It stands in the group's own heading row, at its right — on the page, beside the header's actions —
-    /// so nothing under it moves when it comes or goes: every group of Can use moved 38 pt down and back.
+    /// so nothing under it moves when it comes or goes: every group of Can use moved 38 pt down and back. **One break
+    /// of the hub says nothing** (17 November 2026): it stood from the first read that a restart of the hub refused.
+    /// Not while the window's notice says the outage (fix round 3, item 33: an outage is said once).
     @ViewBuilder private var lastReading: some View {
-        if failed || !store.isFresh {
+        if store.pageReadingIsOld(failedSince: failedSince) && !store.hubNoticeShows {
             Held(since: opened) {
                 Label("Last reading", systemImage: "clock.arrow.circlepath")
                     .font(FormMetrics.detail).foregroundStyle(.orange).lineLimit(1)
@@ -588,7 +593,7 @@ struct SecretsPage: View {
     /// hub or hub generation starts again without the form of the old connection; its readings are the store's, which
     /// keeps none of another hub or generation.
     private func poll() async {
-        failed = false; before = nil; adding = false; importing = false; note = nil; shown = nil; removed = nil
+        failedSince = nil; before = nil; adding = false; importing = false; note = nil; shown = nil; removed = nil
         let start = ContinuousClock.now
         while !Task.isCancelled {
             let current = await read(since: start)
@@ -603,7 +608,9 @@ struct SecretsPage: View {
         let first = reading == nil
         guard let team = try? await client.team(hub: hub, database: database) else {
             if first, let start { await store.settle(since: start) }
-            if !Task.isCancelled, store.hub == hub, store.state?.db == database { failed = true }
+            if !Task.isCancelled, store.hub == hub, store.state?.db == database {
+                if failedSince == nil { failedSince = .now }
+            }
             return false
         }
         let profiles = withProfiles ? try? await client.profiles(hub: hub, database: database) : nil
@@ -613,7 +620,7 @@ struct SecretsPage: View {
         guard !Task.isCancelled else { return false }
         if first, let start { await store.settle(since: start) }
         guard store.hub == hub, store.state?.db == database else { return false }
-        reading = LoginReading(team: team, profiles: profiles?.profiles); failed = false
+        reading = LoginReading(team: team, profiles: profiles?.profiles); failedSince = nil
         store.keep(team, as: "team.snapshot")
         if let standings { resources = standings }
         return true

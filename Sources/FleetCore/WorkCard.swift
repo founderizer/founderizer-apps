@@ -1,14 +1,19 @@
 import Foundation
 
 /// **The card Work of an agent's chat panel** (the owner, 16 November 2026: "no indication of what it is doing, what's
-/// done etc on the right side panel ... I though we added something there to see what the agent was doing right? at
-/// high level?", and his pick of the picture "A: counts"). The card Asked shows only what he asked that agent for, and
-/// an agent whose work comes from its duties or from its lead showed nothing there. This card is the agent's own tasks,
-/// whoever gave them, in a few rows **only while a row has news**: one row for each open task that waits for him, by
-/// what it waits for (the title of his request in Needs you); one row while a turn of a task works now; then the
-/// number of its other open tasks, and the number of its tasks that ended done today. **The tasks of what he asked
-/// this agent for are the card Asked's** (its rows and its "N waiting"), so this card leaves them out, and no task is
-/// in both cards. With nothing to say there is no card.
+/// done etc on the right side panel ... at high level?"; and 17 November 2026: "not the specific tasks but at a higher
+/// level. For example: 'resolved ticket TCK-xxxxx' instead of the specific tasks performed to resolve it ... Just show
+/// the most recent ones on the sidebar, and let me go to the detail page if clicked", with his "Yes, as drawn" to its
+/// pictures). The card Asked shows only what he asked that agent for; this card is the rest of its work, whoever gave
+/// it, **by the things that it works on and not by their tasks** (`WorkItem`: a case of a duty, such as a ticket, or a
+/// task with its subtasks and follow-ups). In a few rows, only while a row has news: one row for each open task that
+/// waits for him, by what it waits for (the title of his request in Needs you); one row for each thing that a turn
+/// works on now, by that thing's name; then the newest things that ended in the last 72 hours, at most three, each
+/// with how it ended ("Drafted", "Done"), a result that succeeded or one that did not (a result that waits for its
+/// check, and work that somebody canceled, have no row, as on Asked). A row of a thing opens its page. The counts of
+/// what waits and of what ended went (his pick, "Remove the counts"): the agent's Tasks has the rest. **The tasks of
+/// what he asked this agent for are the card Asked's**, so this card leaves them out, and no task is in both cards.
+/// With nothing to say there is no card.
 public struct WorkCard: Sendable {
     /// One open task of the agent that waits for him.
     public struct Wait: Identifiable, Sendable, Equatable {
@@ -22,26 +27,38 @@ public struct WorkCard: Sendable {
         public let request: Int?
     }
 
+    /// One thing of its work: its name, and under it what it does now, or how it ended and when.
+    public struct Row: Identifiable, Sendable, Equatable {
+        /// The thing, whose page the row opens.
+        public let id: WorkItem.Key
+        public let title: String
+        /// In work: what its turn does now, or "". Ended: how it ended ("Drafted", "Done").
+        public let words: String
+        /// When it ended, or nil for work that goes on now.
+        public let endedAt: Double?
+        /// The look of the mark of a thing that ended, or nil for work that goes on now.
+        public let end: WorkItem.End?
+    }
+
     /// The card's name over its rows.
     public static var title: String { String(l10n: "Work") }
-    /// The row of the tasks that ended done today, with their number.
-    public static func doneWords(_ count: Int) -> String { String(l10n: "\(count) done today") }
+    /// How many of the things that ended the card shows.
+    public static let newest = 3
+    /// How long ago a thing may have ended and still be news: the hub's own window of the cases that closed lately.
+    public static let window: Double = 72 * 3600
 
     /// Its open tasks that wait for him, the one that moved last first.
     public let waits: [Wait]
-    /// Its tasks that a turn works on now (`FleetTask.mark(in:)`'s `inWork`), the one that moved last first: each
-    /// one is news, and seldom more than one.
-    public let working: [FleetTask]
-    /// Its other open tasks, the one that moved last first: they wait for a time, for another agent, or for their turn.
-    public let waiting: [FleetTask]
-    /// Its tasks that ended done today by this Mac's calendar, the newest first: completed, and accepted by their
-    /// requester's check, as the card Asked says "Done" (a "Done" that a refused result takes back is worse than none).
-    public let done: [FleetTask]
+    /// The things that a turn of its tasks works on now (`FleetTask.mark(in:)`'s `inWork`), the one that moved last
+    /// first: each one is news, and seldom more than one.
+    public let working: [Row]
+    /// The newest things that ended in the last 72 hours, at most three, the newest first.
+    public let ended: [Row]
 
-    public var isEmpty: Bool { waits.isEmpty && working.isEmpty && waiting.isEmpty && done.isEmpty }
+    public var isEmpty: Bool { waits.isEmpty && working.isEmpty && ended.isEmpty }
 
     /// `asks`: `HubState.asks`, whose tasks of what he asked this agent for this card leaves to the card Asked.
-    public init(_ state: HubState, agent: String, asks: [Ask], calendar: Calendar = .current) {
+    public init(_ state: HubState, agent: String, asks: [Ask]) {
         let asked = Set(asks.filter { $0.agent == agent }.flatMap { $0.tasks.map(\.id) })
         let mine = state.tasks.filter { $0.owner == agent && !asked.contains($0.id) }
         let open = mine.filter { !$0.isTerminal }.sorted { ($0.activityTime, $0.id) > ($1.activityTime, $1.id) }
@@ -56,11 +73,34 @@ public struct WorkCard: Sendable {
             }
         }
         self.waits = waits
-        working = open.filter { owner[$0.id] == nil && $0.mark(in: state).inWork }
-        let rowed = Set(waits.map(\.id)).union(working.map(\.id))
-        waiting = open.filter { !rowed.contains($0.id) }
-        let start = calendar.startOfDay(for: Date(timeIntervalSince1970: state.time)).timeIntervalSince1970
-        done = mine.filter { $0.state == "completed" && $0.accepted == 1 && ($0.delivered ?? $0.checked_at ?? 0) >= start }
-            .sorted { ($0.delivered ?? $0.checked_at ?? 0, $0.id) > ($1.delivered ?? $1.checked_at ?? 0, $1.id) }
+        let items = state.workItems(of: agent, asked: asked)
+        let byKey = Dictionary(items.map { ($0.id, $0) }) { first, _ in first }
+        let byID = Dictionary(state.tasks.map { ($0.id, $0) }) { first, _ in first }
+        var working: [Row] = [], seen: Set<WorkItem.Key> = []
+        for task in open where owner[task.id] == nil && task.mark(in: state).inWork {
+            let key = state.workKey(of: task, byID: byID)
+            guard seen.insert(key).inserted, let item = byKey[key] else { continue }
+            working.append(Row(id: key, title: item.title, words: task.doing ?? "", endedAt: nil, end: nil))
+        }
+        self.working = working
+        // A case that the reading does not have closed before the hub's window, when the hub sends that window: a
+        // check of one of its tasks today is no news of it.
+        let closedBefore = state.responsibilities?.knowsRecent == true
+        ended = items.compactMap { item -> (WorkItem, Double)? in
+            if case .dutyCase = item.id, item.dutyCase == nil, closedBefore { return nil }
+            // A case closes while the task that closed it still delivers: it is the row of work now until then.
+            guard !seen.contains(item.id) else { return nil }
+            // Only a result that succeeded and one that did not, as the card Asked says them: a result that waits for
+            // its check is no "Done" yet, and work that somebody canceled has no row.
+            guard let at = item.endedAt, at >= state.time - Self.window, let end = item.result?.end, end != .quiet
+            else { return nil }
+            return (item, at)
+        }
+        .sorted { ($0.1, $0.0.tasks.last?.id ?? 0) > ($1.1, $1.0.tasks.last?.id ?? 0) }
+        .prefix(Self.newest)
+        .map { item, at in
+            let result = item.result!
+            return Row(id: item.id, title: item.title, words: result.words, endedAt: at, end: result.end)
+        }
     }
 }

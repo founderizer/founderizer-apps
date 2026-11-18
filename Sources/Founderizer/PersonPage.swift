@@ -32,7 +32,7 @@ struct PersonPage: View {
     private var person: PeopleSnapshot.Person? { snapshot?.person(id) }
     private var roles: [PeopleSnapshot.Role] { snapshot?.roleList ?? [] }
     private var now: Double { store.state?.time ?? Date().timeIntervalSince1970 }
-    private var canWrite: Bool { store.isFresh && store.state?.db != nil }
+    private var canWrite: Bool { store.writesNow && store.state?.db != nil }
     /// The agents a person may reach: every configured agent but the fleet's manager, which the hub refuses.
     private var agents: [FleetAgent] { (store.state?.agents ?? []).filter { $0.role != "manager" } }
 

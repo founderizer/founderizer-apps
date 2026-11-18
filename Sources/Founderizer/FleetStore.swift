@@ -29,7 +29,11 @@ enum Destination: Hashable {
          app(AppsGroup), connectKey,
          /// The page of a later change of the fleet's shape, on the step where he let go of the slider of Settings ›
          /// Servers (`ShapeChangePage`): a wizard that fills the window.
-         shapeChange(ServersStep)
+         shapeChange(ServersStep),
+         /// The page of one thing of an agent's work, a ticket or an incident with its tasks, from a row of the card
+         /// Work of that agent's chat panel (`WorkItemPage`; the owner's "Yes, as drawn" of 17 November 2026). Its
+         /// back link goes to that chat.
+         work(String, WorkItem.Key)
 
     /// The page of a later change of the fleet's shape.
     var isShapeChange: Bool { if case .shapeChange = self { true } else { false } }
@@ -37,7 +41,7 @@ enum Destination: Hashable {
     /// The agent whose page shows, or nil on every other page.
     var agentName: String? {
         switch self {
-        case .agent(let name), .agentDetail(let name, _), .agentRule(let name, _), .signIn(let name): name
+        case .agent(let name), .agentDetail(let name, _), .agentRule(let name, _), .signIn(let name), .work(let name, _): name
         default: nil
         }
     }
@@ -320,6 +324,7 @@ final class FleetStore {
         didSet {
             AgentNames.shared.read((state?.agents ?? []).map { ($0.name, $0.title) })
             askCache = nil
+            closeAnsweredTakeOvers()        // owner feature need_takeover: the way in closes at his answer
         }
     }
     /// **What he asked for (`HubState.asks`), read once for each reading**: an agent's chat reads it at each of its
@@ -470,6 +475,9 @@ final class FleetStore {
     /// The machines' readings that Run takes a Mac of the fleet from (`NeedRun.place`): read while a card shows a
     /// command for one, and again at each press.
     var runMachines: [MachineStatus]?
+    /// owner feature need_takeover: the Screen Sharing tunnel that a press of Take over opened, by its item, which
+    /// `closeAnsweredTakeOvers` closes once a reading shows that item answered or gone.
+    @ObservationIgnored var takeOvers: [Int: ScreenSharingConnection] = [:]
     @ObservationIgnored private var runJobs: [Int: NeedRunJob] = [:]
     @ObservationIgnored private var runMachinesRead: ContinuousClock.Instant?
     @ObservationIgnored private var runQuitWatch: NSObjectProtocol?
@@ -609,6 +617,8 @@ final class FleetStore {
     /// A page of an agent the hub no longer lists, or of a task it no longer has, cannot open again: Back passes over it.
     private func canOpen(_ page: Destination) -> Bool {
         guard let state else { return true }
+        // A thing of an agent's work that the hub lists no more is no page for Back and Forward either.
+        if case .work(_, let key) = page, state.workItem(key) == nil { return false }
         if let agent = page.agentName { return state.agents.contains { $0.name == agent } }
         if case .task(let id) = page { return state.tasks.contains { $0.id == id } }
         // His Tailscale key page of Turn on is a page only while that turn waits for the key: Back and Forward pass
@@ -1111,10 +1121,9 @@ final class FleetStore {
     /// that part, so one unanswered save is said once; on any other page, and for every other write, the line says it.
     var pendingInItsRow: (id: UUID, agent: String, tab: AgentTab)?
     /// **A read has taken more than eight seconds, and none has answered since** (`readPatience`; fix round 3b, item
-    /// 17): the reading it reads again is old from then on, and the old-reading notice stands until a read answers or
-    /// the hub's own notice takes its place. A running app marked its reading old only 12 s after the last answer, so a
-    /// read that hung failed at its 10-s limit first, and no notice stood for about 30 s. It outlives the read that
-    /// failed: the notice never goes before an answer.
+    /// 17). It outlives the read that failed: the notice never goes before an answer. Only the launch's first read
+    /// makes the reading old with it: while the app runs, a slow read is part of one break of the hub
+    /// (`StateReading.limit`), and the end of the break says it (`watchBreak`).
     private(set) var readHeld = false
     /// The reads of `/ui/state` so far, to tell the one on its way from the next.
     @ObservationIgnored private var readCount = 0
@@ -1127,10 +1136,11 @@ final class FleetStore {
     /// fleet's state now takes 0.7 s, and under load on this Mac 2 to 7 s for some reads: each of those put the notice
     /// "This reading of your fleet is old" over the page and drew every mark of every page as its last reading, for the
     /// rest of that read, and then took both away (seen on his own app on 10 November 2026: once in 150 s, for 2 s). A
-    /// reading that is 3 to 11 seconds old while its read goes on is no news; a read that hangs still says so before it
-    /// fails at its 10-second limit, and a reading is old 12 seconds after the last answer in any case.
+    /// reading that is 3 to 11 seconds old while its read goes on is no news. Since 17 November 2026 this holds the
+    /// launch's first read only: a slow read of a running app is part of one break (`StateReading.limit`).
     private static let readPatience: Duration = .seconds(StateReading.patience)
-    /// The old-reading notice shows: a slow read left the reading old, and no read had failed before the notice stood.
+    /// The old-reading notice shows: the reading is old with no failed read before the notice stood — the launch's
+    /// first read is slow, or the hub left the app one whole break (`StateReading.limit`) and no read failed.
     var staleNoticeShows: Bool { !isFresh && state != nil && connectionError == nil && (!readsFail || staleNoticeStood) }
     /// A notice of the window says that the hub does not answer or that the reading is old: a page says it no more
     /// (fix round 3, item 33: Servers said one outage three times).
@@ -1254,6 +1264,11 @@ final class FleetStore {
     @ObservationIgnored private var lastWrite: Task<Void, Never>?
     /// The observer of the app's quit, which writes the newest reading.
     @ObservationIgnored private var quitting: NSObjectProtocol?
+    /// **When the Mac last woke from sleep**, and its observer: a page's reads that failed before it count from then
+    /// (`pageReadingIsOld`), as the break of the hub does (`sinceAnswer`), so a Mac that wakes starts no break; and
+    /// an agent's work moves again only by an answer after it (`marksMove`).
+    private(set) var wokeAt: ContinuousClock.Instant?
+    @ObservationIgnored private var waking: NSObjectProtocol?
 
     /// The hub addresses that have answered this Mac, kept between launches.
     private static var answeredHubs: [String] {
@@ -1377,6 +1392,10 @@ final class FleetStore {
                                                           queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.writeReading(now: true) }
         }
+        waking = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil,
+                                                                   queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.wokeAt = .now }
+        }
         // The link's answers come from this store (`SetupChannel`, which listens from the app's start).
         SetupChannel.shared.attach(self)
         // Work that runs in this start passes the welcome page of an unfinished setup (`welcomeCovers`).
@@ -1387,21 +1406,54 @@ final class FleetStore {
     /// while the launch's first read is on its way, and old as soon as that read fails or has taken eight seconds: a
     /// reading that is being read again is not old yet (the loading contract's rule, D-1). It was current for one second
     /// at most, and a launch whose first read took 1.4 s had the old-reading notice over its page from 1.2 to 1.6 s (10
-    /// November 2026). **While the app runs** (fix round 3b, item 17), a reading is old once a read of it has taken more
-    /// than eight seconds (`readHeld`, `readPatience`), until a read answers; and 12 seconds after the last answer in
-    /// any case. **One read that fails at once says nothing** (the owner, 27 October 2026: "never for one short break"):
-    /// three in a row bring the hub's own notice, and with it the old look.
+    /// November 2026). **While the app runs, one break of the hub says nothing** (`StateReading.limit`; the owner, 27
+    /// October 2026: "never for one short break", and 17 November 2026): a reading is old once the hub has left the app
+    /// for 30 seconds with no answer, whatever its reads did meanwhile, and the hub's own notice comes at that moment
+    /// (`watchBreak`, `HubReach.tells`). A control writes only within 12 seconds of the last answer (`writesNow`).
     var isFresh: Bool {
         guard state != nil, connectionError == nil else { return false }
-        return StateReading.isCurrent(held: readHeld,
-                                      sinceAnswer: lastSuccess.map { max(clock, Date()).timeIntervalSince($0) },
-                                      firstReadEnded: firstReadEnded)
+        return StateReading.isCurrent(held: readHeld, sinceAnswer: sinceAnswer, firstReadEnded: firstReadEnded)
     }
-    /// The hub answered this launch, within the last 12 seconds, and no connection notice stands. A read that is slow or
-    /// failed once leaves a write as it was (fix round 3b): the old look is the reading's, and a write has its own answer.
+    /// **The seconds since the hub's last answer of this launch**, or nil before the first one. They are counted on the
+    /// Mac's uptime, which stops while the Mac sleeps: a Mac that wakes up starts no break, its first read comes at
+    /// once, and the reading on the screen is old only when the hub then leaves it one whole break with no answer. Its
+    /// agents' work rests until the hub's first answer after the wake (`marksMove`).
+    var sinceAnswer: TimeInterval? {
+        // Read, so that a view that asks draws again at the end of each read and of each break (`clock`).
+        _ = clock
+        return answeredUptime.map { max(0, ProcessInfo.processInfo.systemUptime - $0) }
+    }
+    /// The Mac's uptime at the hub's last answer of this launch (`sinceAnswer`).
+    @ObservationIgnored private var answeredUptime: TimeInterval?
+    /// When the read that brought the hub's last answer of this launch began, on the clock that counts the Mac's sleep
+    /// (`marksMove`): an answer to a read sent before the sleep is from before the wake.
+    @ObservationIgnored private var lastAnswer: ContinuousClock.Instant?
+    /// **An agent's work moves on the screen** (`StateReading.workMoves`): the reading is current, and the hub answered
+    /// to a read that began after the Mac's last wake. Only the motion of an agent's work reads it: its glyph, the line
+    /// of its sidebar row, the chat's "Thinking" and the marks of its work, which rest in their colour, with no dot,
+    /// while it is false. Every look follows `isFresh`, so a wake shows nothing new.
+    var marksMove: Bool { StateReading.workMoves(stateIsCurrent: isFresh, readBegan: lastAnswer, wokeAt: wokeAt) }
+    /// The task that says the hub at the end of a break with no answer (`watchBreak`).
+    @ObservationIgnored private var breakEnds: Task<Void, Never>?
+    /// The hub answered this launch, within the last 12 seconds on the wall clock, and no connection notice stands. A
+    /// read that is slow or failed once leaves a write as it was (fix round 3b): the old look is the reading's, and a
+    /// write has its own answer. **Not one break** (`StateReading.limit`): a write waits quietly for the hub's next
+    /// answer, and never goes on a reading that is 25 seconds old, or one from before the Mac slept.
     private var answersWrites: Bool {
         guard state != nil, connectionError == nil, let lastSuccess else { return false }
-        return max(clock, Date()).timeIntervalSince(lastSuccess) < 12
+        return max(clock, Date()).timeIntervalSince(lastSuccess) < Self.writesWithin
+    }
+    /// How long after the hub's last answer the app still writes (`answersWrites`, `writesNow`), on the wall clock.
+    static let writesWithin: TimeInterval = 12
+    /// **A control may write now** (its `canChange`, `canWrite`, its `.disabled`): the reading is current, and while
+    /// the app runs the hub answered within the last 12 seconds. A reading is current for one break of the hub
+    /// (`StateReading.limit`, 30 s), and a write never went on one more than 12 seconds old: 12 to 30 seconds into a
+    /// break, a control waits greyed, as it does while a change of it is on its way, and says nothing. Before the
+    /// launch's first answer it follows the reading, as before: no control greys out for the moment of that read.
+    var writesNow: Bool {
+        guard isFresh else { return false }
+        guard let lastSuccess else { return true }
+        return max(clock, Date()).timeIntervalSince(lastSuccess) < Self.writesWithin
     }
     /// Nothing is written on a kept reading alone: a write waits for the hub's own answer of this launch.
     var canWrite: Bool { answersWrites && !sending && pending == nil && storageError == nil }
@@ -1439,8 +1491,10 @@ final class FleetStore {
                     // read that a change of the hub asked for takes the place of this one instead of adding one.
                     if self.untilRead == 0 { await self.refresh() }
                     // The copy he asked for, if one is due. This app runs only while he runs it, so the fleet's own
-                    // poll is the only clock there is; until a copy is due this is two dates compared.
-                    await self.copies.tick(store: self)
+                    // poll is the only clock there is; until a copy is due this is two dates compared. **Beside the
+                    // poll, never in it**: a copy takes minutes, and no read of the fleet ran while it did, so the
+                    // reading turned old over a hub that answered. `busy` holds the ticks while one runs.
+                    Task { await self.copies.tick(store: self) }
                     // A new build of this app, read every 5 minutes and when he comes back, in place while he is away.
                     self.updates.tick(store: self)
                     // The fleet's central vault, read once a minute and kept in order by itself, on every page.
@@ -1544,7 +1598,7 @@ final class FleetStore {
         do {
             let next = try HubClient.address(addressText)
             guard !sending else { return }
-            if next != hub { childThreadRequest = nil; cancelEdit(); endProviderSetups(); state = nil; chatTimeline = ChatTimeline(); lastSuccess = nil; lastReceipt = nil; stopWatching(); stateToken = nil }
+            if next != hub { childThreadRequest = nil; cancelEdit(); endProviderSetups(); state = nil; chatTimeline = ChatTimeline(); lastSuccess = nil; answeredUptime = nil; lastAnswer = nil; lastReceipt = nil; stopWatching(); stateToken = nil }
             // Another hub is not the fleet that this start of the app opened on (`welcomeCovers`).
             if next != hub { welcomePassed = true }
             hub = next
@@ -1575,7 +1629,8 @@ final class FleetStore {
         let old = hub, address = old.absoluteString
         // In memory first: a value that this store writes itself would come back with its next write.
         childThreadRequest = nil; cancelEdit(); endProviderSetups(); stopWatching()
-        state = nil; chatTimeline = ChatTimeline(); lastSuccess = nil; lastReceipt = nil; stateToken = nil
+        state = nil; chatTimeline = ChatTimeline(); lastSuccess = nil; answeredUptime = nil; lastAnswer = nil; lastReceipt = nil
+        stateToken = nil
         unwrittenReading = nil; unwrittenKept = [:]
         keptHealth = KeptReading(); keptReleases = KeptReading()
         let bar = "\(address)|"
@@ -1618,23 +1673,26 @@ final class FleetStore {
         hub = (try? HubClient.address(HubClient.defaultAddress)) ?? old
         addressText = ""
         hubAnsweredBefore = false; startedWithFleet = false; firstRunHolds = false
+        // The next first run opens on its welcome page, with none of an earlier one's work (`FirstRunWork`).
+        FirstRunWork.drop()
         connectionError = nil; lastReadError = nil; failedReads = 0; readsFail = false; staleNoticeStood = false; readHeld = false
         history = PageHistory(); homeChosen = false
     }
 
     // MARK: A reading waits while he scrolls
 
-    /// The scroll views of chats and threads that move now, and the readings that wait for them (`ScrollHold`).
+    /// The scroll views of chats, threads and knowledge files that move now, and the readings that wait for them
+    /// (`ScrollHold`).
     @ObservationIgnored private let scrollHold = ScrollHold()
 
-    /// A chat's or a thread's scroll view began to move, or came to rest (`scrollsAsAChat`).
+    /// The scroll view of a chat, a thread or a knowledge file began to move, or came to rest (`scrollsAsAChat`).
     func scroll(_ view: ObjectIdentifier, moving: Bool) { scrollHold.scroll(view, moving: moving) }
 
-    /// **A new reading waits while a chat or a thread scrolls** (`ScrollHold`): a reading draws again every view that
-    /// reads it, and a scroll lost frames to it every three seconds. It comes in when the scroll rests, and at the
-    /// latest three seconds before the reading on the screen would count as old.
+    /// **A new reading waits while a chat, a thread or a knowledge file scrolls** (`ScrollHold`): a reading draws again
+    /// every view that reads it, and a scroll lost frames to it every three seconds. It comes in when the scroll rests,
+    /// and at the latest nine seconds after the hub's last answer (`StateReading.scrollWaitMost`).
     func readingsRest() async {
-        await scrollHold.rest(sinceAnswer: lastSuccess.map { max(clock, Date()).timeIntervalSince($0) })
+        await scrollHold.rest(sinceAnswer: sinceAnswer)
     }
 
     /// Reads the fleet's state. **A call while a read is on its way is never dropped**: that read runs once more when
@@ -1646,7 +1704,7 @@ final class FleetStore {
     private func readState() async {
         refreshing = true
         let requestedHub = hub
-        // Eight seconds into this read, its reading is old until a read answers (`readPatience`; fix round 3b, item 17).
+        // Eight seconds into this read, it is held until a read answers (`readPatience`; fix round 3b, item 17).
         readCount += 1
         let count = readCount, began = ContinuousClock.now
         let held = Task { [weak self, lastReadTook] in
@@ -1663,8 +1721,8 @@ final class FleetStore {
             let (fresh, data) = try await client.stateReading(at: requestedHub, present: OwnerPresenceProbe.now())
             guard requestedHub == hub else { return }
             // The hub answered, so this read is not slow, whatever waits now (`readPatience`), and the reading's age
-            // counts from this answer (`lastSuccess`). A read that is slow already comes in at once.
-            let answered = ContinuousClock.now, answeredAt = Date()
+            // counts from this answer (`lastSuccess`, `sinceAnswer`). A read that is slow already comes in at once.
+            let answered = ContinuousClock.now, answeredAt = Date(), answeredUp = ProcessInfo.processInfo.systemUptime
             held.cancel()
             if !readHeld { await readingsRest() }
             guard requestedHub == hub else { return }
@@ -1683,6 +1741,9 @@ final class FleetStore {
             follow(fresh)
             markRepliesSeen()
             lastSuccess = answeredAt
+            answeredUptime = answeredUp
+            lastAnswer = began
+            watchBreak()
             lastReadTook = answered - began
             if readHeld { readHeld = false }
             connectionError = nil
@@ -1709,8 +1770,29 @@ final class FleetStore {
             lastReadError = error
             failedReads += 1
             if !readsFail { readsFail = true }
-            if HubReach.tells(failedReads: failedReads, answeredBefore: state != nil) {
+            if HubReach.tells(failedReads: failedReads, answeredBefore: state != nil, sinceAnswer: sinceAnswer) {
                 connectionError = HubReach.words(error, hub: requestedHub).line
+            }
+        }
+    }
+
+    /// **At the end of one break with no answer, the screen says it** (`StateReading.limit`): the reading turns old at
+    /// that moment, and when reads failed meanwhile the hub's own notice stands at once, in the words of the last one
+    /// ("Your hub did not answer.", "Your hub took too long to answer"). Without this, a hub whose reads hang (10
+    /// seconds each) was said only at the next read that failed, up to 13 seconds after the break. The clock stops while
+    /// the Mac sleeps, as `sinceAnswer` does.
+    private func watchBreak() {
+        breakEnds?.cancel()
+        let answered = answeredUptime, watched = hub
+        // From the answer itself: a scroll can hold the answer for some seconds before it comes in (`readingsRest`).
+        let left = StateReading.limit - (sinceAnswer ?? 0)
+        breakEnds = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(max(0, left)), clock: .suspending) } catch { return }
+            guard let self, self.hub == watched, self.answeredUptime == answered else { return }
+            self.clock = Date()
+            if self.connectionError == nil, let error = self.lastReadError,
+               HubReach.tells(failedReads: self.failedReads, answeredBefore: self.state != nil, sinceAnswer: self.sinceAnswer) {
+                self.connectionError = HubReach.words(error, hub: watched).line
             }
         }
     }

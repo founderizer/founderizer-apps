@@ -29,9 +29,11 @@ struct PeoplePage: View {
     var routeBinding: Binding<[Route]>? = nil
     /// The readings are the store's (`FleetStore.reading`), the fleet's and each agent's under its own name: the people
     /// he saw last show in the first frame when he comes back, and the read that starts then changes only what changed.
-    private var reading: PeopleReading<PeopleSnapshot> {
+    private var kept: PeopleReading<PeopleSnapshot> {
         get { store.reading(peopleName) ?? .loading } nonmutating set { store.keep(newValue, as: peopleName) }
     }
+    /// The people as the page draws them: one break of failed reads says nothing (`PeopleReading.shown`).
+    private var reading: PeopleReading<PeopleSnapshot> { kept.shown(store) }
     /// The fleet's roles (plan P1, owner feature `contact_roles`), read with the people on the fleet's own page.
     private var roleReading: PeopleReading<RoleList> {
         get { store.reading(Self.rolesName) ?? .loading } nonmutating set { store.keep(newValue, as: Self.rolesName) }
@@ -89,7 +91,7 @@ struct PeoplePage: View {
     private var offered: Bool { store.state?.ui_features?.contains(People.feature) == true }
     /// The roles are the fleet's, so only the fleet's own page has them, and only after the switch (`RoleList.feature`).
     private var offersRoles: Bool { agent == nil && store.state?.ui_features?.contains(RoleList.feature) == true }
-    private var canWrite: Bool { store.isFresh && store.state?.db != nil }
+    private var canWrite: Bool { store.writesNow && store.state?.db != nil }
 
     var body: some View {
         Group {
@@ -135,6 +137,9 @@ struct PeoplePage: View {
             // The part's person stays open: this view is made again as it opens and closes.
             if routeBinding == nil { ownRoute = [] }
             problem = nil
+            // Reads that failed in an earlier visit say nothing to this one before its own break (`PageReading.visited`).
+            if kept.failedSince != nil { kept = kept.visited() }
+            if roleReading.failedSince != nil { roleReading = roleReading.visited() }
             let start = ContinuousClock.now
             while !Task.isCancelled {
                 await read(since: start)
@@ -324,10 +329,11 @@ struct PeoplePage: View {
                 FormSection("Roles") { ForEach(roles) { roleRow($0) } }
             } else if let why = roleReading.failure {
                 held(Self.rolesName) {
-                    // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`): the card keeps its
-                    // heading alone.
+                    // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`), and not before the
+                    // reads have failed one whole break (17 November 2026): the card keeps its heading alone, so the
+                    // cards under it do not move.
                     FormSection("Roles") {
-                        if !store.hubNoticeShows {
+                        if !store.hubNoticeShows && store.pageReadingIsOld(failedSince: roleReading.failedSince) {
                             FormRow("The roles are unavailable", symbol: "exclamationmark.circle", warning: why)
                                 .accessibilityIdentifier("roles-failed")
                         }
@@ -425,24 +431,26 @@ struct PeoplePage: View {
     /// The people and, on the fleet's own page, the roles, kept together: a first reading draws its cards in one frame.
     private func read(since start: ContinuousClock.Instant? = nil) async {
         guard offered, let db = store.state?.db else { return }
-        let hub = store.hub, first = waits
+        let hub = store.hub
+        // From the kept readings: the drawn one is loading while its reads fail inside one break.
+        let first: Bool = if case .loading = kept { true } else if offersRoles, case .loading = roleReading { true } else { false }
         let people: PeopleReading<PeopleSnapshot>
         do {
             people = .current(try await client.people(hub: hub, database: db), at: now)
         } catch {
-            people = reading.aged ?? .failed(People.reason(error))
+            people = kept.failed(People.reason(error))
         }
         var roles: PeopleReading<RoleList>?
         if offersRoles {
             do {
                 roles = .current(try await client.roles(hub: hub, database: db), at: now)
             } catch {
-                roles = roleReading.aged ?? .failed(People.reason(error))
+                roles = roleReading.failed(People.reason(error))
             }
         }
         if first, let start { await store.settle(since: start) }
         guard store.hub == hub, store.state?.db == db else { return }
-        reading = people
+        kept = people
         if let roles { roleReading = roles }
     }
 }

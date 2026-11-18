@@ -44,6 +44,12 @@ struct ConversationsPage: View {
     private var agentMessages: [AgentMessage]? { store.reading(AgentMessagesReading.name(scope)) }
     /// The words of this visit's failed read of them, while the store keeps none.
     @State private var agentsFailure: String?
+    /// When the first of the reads of them that failed in a row failed: one break of them says nothing.
+    @State private var agentsFailedSince: ContinuousClock.Instant?
+    /// The words of the failed reads of them, once they have failed one whole break (`FleetStore.pageReadingIsOld`).
+    private var agentsSaid: String? {
+        agentsFailure.flatMap { store.pageReadingIsOld(failedSince: agentsFailedSince) ? $0 : nil }
+    }
     @State private var agent = ""
     @State private var person = 0
     @State private var ownOpen: Int?
@@ -76,7 +82,9 @@ struct ConversationsPage: View {
     /// **One person's list only once it is read** (review of 3 November 2026): the list of the person chosen before, or
     /// everybody's, stood under a new choice until its read came, and an empty one said "No conversations" over a person
     /// who has some.
-    private var reading: PeopleReading<[Conversation]> { person == 0 ? all : narrowed ?? .loading }
+    private var kept: PeopleReading<[Conversation]> { person == 0 ? all : narrowed ?? .loading }
+    /// The reading as the page draws it: one break of failed reads says nothing (`PeopleReading.shown`).
+    private var reading: PeopleReading<[Conversation]> { kept.shown(store) }
     private var now: Double { store.state?.time ?? Date().timeIntervalSince1970 }
     private var offered: Bool { store.state?.ui_features?.contains(People.conversationsFeature) == true && people }
     private var conversations: [Conversation] { reading.value ?? [] }
@@ -96,8 +104,10 @@ struct ConversationsPage: View {
         }
         .font(FleetStyle.body).foregroundStyle(FleetStyle.text)
         .task(id: "\(store.hub)/\(store.state?.db ?? "")") {
-            narrowed = nil; agent = scope; person = 0
+            narrowed = nil; agent = scope; person = 0; agentsFailure = nil; agentsFailedSince = nil
             if openBinding == nil { ownOpen = nil }
+            // Reads that failed in an earlier visit say nothing to this one before its own break (`PageReading.visited`).
+            if all.failedSince != nil { all = all.visited() }
             let start = ContinuousClock.now
             while !Task.isCancelled {
                 await read(since: start)
@@ -118,7 +128,7 @@ struct ConversationsPage: View {
         let peopleRead = !offered || reading.value != nil
         let agentsRead = !agentsOffered || person != 0 || agentMessages != nil
         let peopleLoading: Bool = if case .loading = reading { offered } else { false }
-        let loading = peopleLoading || agentsOffered && person == 0 && agentMessages == nil && agentsFailure == nil
+        let loading = peopleLoading || agentsOffered && person == 0 && agentMessages == nil && agentsSaid == nil
         let rows = (conversations.map(GroupRow.person) + agentConversations.map(GroupRow.agent))
             .sorted { ($0.last, $0.id) > ($1.last, $1.id) }
         return VStack(alignment: .leading, spacing: FleetSpace.block) {
@@ -315,7 +325,7 @@ struct ConversationsPage: View {
 
     @ViewBuilder private var readingRow: some View {
         // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3, item 33).
-        let failure = reading.failure ?? (agentMessages == nil ? agentsFailure : nil)
+        let failure = reading.failure ?? (agentMessages == nil ? agentsSaid : nil)
         if (failure != nil || store.connectionError != nil) && !store.hubNoticeShows {
             held {
                 FormSection {
@@ -341,7 +351,7 @@ struct ConversationsPage: View {
         guard offered, let db = store.state?.db else { return }
         let hub = store.hub, who = agent, which = person
         var first = false
-        if case .loading = reading { first = true }
+        if case .loading = kept { first = true }
         do {
             let list = try await client.conversations(hub: hub, database: db, agent: who.isEmpty ? nil : who,
                                                       person: which == 0 ? nil : which)
@@ -351,7 +361,7 @@ struct ConversationsPage: View {
         } catch {
             if first, let start { await store.settle(since: start) }
             guard store.hub == hub, store.state?.db == db, agent == who, person == which else { return }
-            let failed = reading.aged ?? .failed(People.reason(error))
+            let failed = kept.failed(People.reason(error))
             if which == 0 { all = failed } else { narrowed = failed }
         }
         // The people are only for the dropdown: a hub without them keeps the page working.
@@ -366,8 +376,8 @@ struct ConversationsPage: View {
     private func readAgents() async {
         guard agentsOffered else { return }
         switch await AgentMessagesReading.read(store, agent: scope) {
-        case .read: agentsFailure = nil
-        case .failed(let reason): agentsFailure = reason
+        case .read: agentsFailure = nil; agentsFailedSince = nil
+        case .failed(let reason): agentsFailure = reason; agentsFailedSince = agentsFailedSince ?? .now
         case .notAsked: break
         }
     }

@@ -125,15 +125,40 @@ public struct CloudServers: Sendable {
     /// run (`CloudError.taken`), so the next one is the next free server, of any size that fits, also when it costs
     /// more (the owner, 15 November 2026: "it should still show some servers even if more expensive").
     public func offer(use: CloudServerUse, except: Set<String> = []) async throws -> CloudOffer {
+        try await offers(use: use, except: except)[0]
+    }
+
+    /// **Every type of this provider that fits what the server is for, each once** (slice 2b of the one wizard: the
+    /// owner's "Yes, build them" of 18 November 2026 to the list under each server of "Your fleet", after his "hetzner
+    /// has alternatives even if more expensive, we need to show more options!"): each type at its cheapest place free
+    /// now, and at one price the nearest, the cheapest type first, so the first is `offer(use:except:)`'s. `except` as
+    /// there: a taken place of a type gives that type's next place. Another provider's rows are its sizes (`row`).
+    public func offers(use: CloudServerUse, except: Set<String> = []) async throws -> [CloudOffer] {
         let call = try heldCall()
-        guard let first = try await offers(use, call).first(where: { !except.contains(Self.key($0.type, $0.location)) })
-        else { throw CloudError.noRoom(provider) }
-        return CloudOffer(provider: provider, type: first.type, location: first.location, cores: first.cores,
-                          memoryGB: first.memoryGB, diskGB: first.diskGB, monthlyPrice: first.price, currency: first.currency)
+        var rows = Set<String>()
+        let each = try await offers(use, call).filter {
+            !except.contains(Self.key($0.type, $0.location)) && rows.insert(Self.row($0, of: provider)).inserted
+        }
+        guard !each.isEmpty else { throw CloudError.noRoom(provider) }
+        return each.map {
+            CloudOffer(provider: provider, type: $0.type, location: $0.location, cores: $0.cores, memoryGB: $0.memoryGB,
+                       diskGB: $0.diskGB, monthlyPrice: $0.price, currency: $0.currency, dedicated: $0.dedicated)
+        }
     }
 
     /// One offer's name in a set of offers: its type and its location.
     static func key(_ type: String, _ location: String) -> String { "\(type)@\(location)" }
+
+    /// **One row of the list under a server** (`offers(use:except:)`): Hetzner's type, which the row names; another
+    /// provider's size as its row says it (cores, memory, own cores), whose kinds of one size (a regular and an AMD
+    /// droplet) would read the same.
+    static func row(_ offer: Offer, of provider: CloudProvider) -> String {
+        kind(provider, type: offer.type, cores: offer.cores, memoryGB: offer.memoryGB, dedicated: offer.dedicated)
+    }
+
+    static func kind(_ provider: CloudProvider, type: String, cores: Int?, memoryGB: Double?, dedicated: Bool) -> String {
+        provider == .hetzner ? type : "\(cores ?? 0) \(memoryGB ?? 0) \(dedicated)"
+    }
 
     /// Every offer of this provider for what the server is for, the one to show first first.
     private func offers(_ use: CloudServerUse, _ call: CloudCall) async throws -> [Offer] {
@@ -292,7 +317,10 @@ public struct CloudServers: Sendable {
                     "name": made.name, "server_type": offer.type, "location": offer.location, "image": provider.image,
                     "ssh_keys": [keyID], "user_data": userData, "firewalls": [["firewall": firewallID]],
                     "labels": ["founderizer": use.rawValue], "start_after_create": true,
-                    "public_net": ["enable_ipv4": true, "enable_ipv6": true]])
+                    // One public address, IPv4, for what the server reaches out to: each address takes one of the
+                    // account's primary IPs, which Hetzner limits for each customer across all its projects. The fleet
+                    // reaches the server over Tailscale.
+                    "public_net": ["enable_ipv4": true, "enable_ipv6": false]])
                 // None free there after all, since the offers were read: the next offer.
                 if answer.code == "resource_unavailable" || answer.code == "placement_error" { continue }
                 guard answer.ok else { throw call.failure(answer) }
@@ -332,13 +360,13 @@ public struct CloudServers: Sendable {
 
     /// Each of Hetzner's types that fits what the server is for, in each location where Hetzner has it free and not on its
     /// way out, cheapest first and, at one price, nearest first, with what it costs there a month: the type, and the
-    /// public addresses it comes with, which Hetzner prices on their own. Hetzner's own list, not one of this app's,
+    /// one public IPv4 address it comes with, which Hetzner prices on its own. Hetzner's own list, not one of this app's,
     /// because its types change: on 5 November 2026 it had no CX or CAX type free anywhere, and new CPX types.
     private func hetznerOffers(_ use: CloudServerUse, _ call: CloudCall) async throws -> [Offer] {
         guard let pricing = try await call.send("GET", "pricing")["pricing"] as? [String: Any],
               let currency = pricing["currency"] as? String, !currency.isEmpty else { throw CloudError.notUnderstood(provider) }
         let addresses = ((pricing["primary_ips"] as? [[String: Any]]) ?? [])
-            .filter { ["ipv4", "ipv6"].contains($0["type"] as? String) }
+            .filter { $0["type"] as? String == "ipv4" }
             .map { ($0["prices"] as? [[String: Any]]) ?? [] }
         let near = provider.near(zone)
         let listed = try await call.send("GET", "server_types", query: [URLQueryItem(name: "per_page", value: "50")])
@@ -354,7 +382,8 @@ public struct CloudServers: Sendable {
                 let extra = addresses.compactMap { Self.monthly($0, at: location) }.reduce(Decimal(0), +)
                 offers.append((Offer(type: type, location: location, price: server + extra, currency: currency,
                                      cores: entry["cores"] as? Int, memoryGB: (entry["memory"] as? NSNumber)?.doubleValue,
-                                     diskGB: entry["disk"] as? Int), place, order))
+                                     diskGB: entry["disk"] as? Int, dedicated: entry["cpu_type"] as? String == "dedicated"),
+                               place, order))
             }
         }
         return offers.sorted { ($0.offer.price, $0.place, $0.order) < ($1.offer.price, $1.place, $1.order) }.map(\.offer)
@@ -1265,6 +1294,8 @@ struct Offer: Equatable, Sendable {
     var cores: Int? = nil
     var memoryGB: Double? = nil
     var diskGB: Int? = nil
+    /// Its cores are its own (Hetzner's `cpu_type` "dedicated"), not shared with other servers.
+    var dedicated = false
 }
 
 /// **The server this app would make**: its type and what it is made of, where, and what it costs a month, as the
@@ -1279,12 +1310,19 @@ public struct CloudOffer: Equatable, Sendable {
     public let monthlyPrice: Decimal
     /// The currency of that price, as ISO 4217 writes it.
     public let currency: String
+    /// Its cores are its own, not shared with other servers (Hetzner's dedicated types).
+    public var dedicated = false
 
     /// The city and country of its location, in this app's own words ("Nuremberg, Germany").
     public var place: String { provider.place(location) }
 
     /// Its name in a set of offers (`CloudServers.offer(use:except:)`).
     public var key: String { CloudServers.key(type, location) }
+
+    /// **Its row in the list under a server** (`CloudServers.offers`): Hetzner's type; another provider's size.
+    public var kind: String {
+        CloudServers.kind(provider, type: type, cores: cores, memoryGB: memoryGB, dedicated: dedicated)
+    }
 }
 
 /// **One server that the provider's account holds already**, as its provider lists it.

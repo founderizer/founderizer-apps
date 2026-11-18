@@ -4,42 +4,16 @@ import SwiftUI
 // The small views that People, a person, Conversations and one conversation share: the four states of a reading, the
 // role dropdown, the agents a person may reach, and the delivery mark under a reply.
 
-/// The four states of a page that reads the hub again and again (UI-PATTERNS, "Statuses must be true"): loading, a
-/// current reading, an old one, and a failed read. An old reading is never shown as current.
-enum PeopleReading<Value> {
-    case loading
-    case current(Value, at: Double)
-    case stale(Value, at: Double)
-    case failed(String)
+/// The four states of a page that reads the hub again and again (`PageReading` in FleetCore).
+typealias PeopleReading<Value> = PageReading<Value>
 
-    var value: Value? {
-        switch self {
-        case .current(let value, _), .stale(let value, _): value
-        case .loading, .failed: nil
-        }
-    }
-
-    var at: Double {
-        switch self {
-        case .current(_, let at), .stale(_, let at): at
-        case .loading, .failed: 0
-        }
-    }
-
-    var isOld: Bool { if case .stale = self { true } else { false } }
-    var failure: String? { if case .failed(let why) = self { why } else { nil } }
-
-    /// The same reading, marked old; nil when there is none to keep.
-    var aged: PeopleReading<Value>? {
-        switch self {
-        case .current(let value, let at), .stale(let value, let at): .stale(value, at: at)
-        case .loading, .failed: nil
-        }
+extension PageReading {
+    /// **The reading as the page draws it: one break of the hub says nothing** (`PageReading.shown`): until the reads
+    /// have failed one whole break, or while the fleet's state is old (`FleetStore.pageReadingIsOld`).
+    @MainActor func shown(_ store: FleetStore) -> PageReading<Value> {
+        shown { store.pageReadingIsOld(failedSince: $0) }
     }
 }
-
-/// A reading that the store reads before its page opens (`PagePrefetch`) crosses from the read to the store.
-extension PeopleReading: Sendable where Value: Sendable {}
 
 /// The role of a person: a dropdown, and under it the one line the agent is told. The words are the hub's own
 /// (`GET /ui/people` `roles`), so the app writes none of them.
@@ -231,7 +205,7 @@ struct ConversationDeliveryLine: View {
                     MessageAction(symbol: "arrow.clockwise", label: String(l10n: "Send again"),
                                   help: String(l10n: "Send again. The first one can still arrive."), height: 16) {
                         Task { await sendAgain() }
-                    }.foregroundStyle(FleetStyle.muted).disabled(sending || !store.isFresh)
+                    }.foregroundStyle(FleetStyle.muted).disabled(sending || !store.writesNow)
                 }
                 if sending { ProgressView().controlSize(.mini) }
             }

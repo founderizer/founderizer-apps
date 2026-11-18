@@ -786,7 +786,8 @@ public enum StartAgain {
     /// Always: the kept address when it is this hub's, the hub in the list of hubs that answered, the servers made for
     /// it and its ended installs, the agents that wait for a server and the servers that they joined, the pinned
     /// agents, the kept checks and install targets of its machines, the chat's kept marks, the marks of the owner's
-    /// access and of the hardening on its servers, the mark of its TCP step, the page that the app left on it, a turn
+    /// access, of the hardening, of the memory limit and of the system packages on its servers (`ServerHardening`,
+    /// `ServerMemory`, `ServerLibraries`), the mark of its TCP step, the page that the app left on it, a turn
     /// of connected apps that a quit cut off, and what the door's sync keeps of it (the keys that a server refused, the
     /// refusals, the hosts and the holdings that the hub recorded).
     ///
@@ -813,7 +814,8 @@ public enum StartAgain {
             defaults.set(all.filter { !$0.hasPrefix(bar) }, forKey: key)
         }
         var tables: [(key: String, prefix: String)] = [
-            ("serversJoinedFor", bar), ("hubTCPDone", bar), ("ownerAccessInPlace", space), ("serverHardening", space)]
+            ("serversJoinedFor", bar), ("hubTCPDone", bar), ("ownerAccessInPlace", space), ("serverHardening", space),
+            ("serverMemoryLimit", space), (ServerLibraries.keptKey, space)]
         if hubServerDeleted { tables.append(("centralVaultPins", bar)) }
         for table in tables {
             guard let all = defaults.dictionary(forKey: table.key),
