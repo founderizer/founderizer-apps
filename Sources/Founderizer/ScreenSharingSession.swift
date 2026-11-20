@@ -56,7 +56,7 @@ final class ScreenSharingSession {
         }
         guard (1024...65535).contains(result.0) else {
             opened.remove(request)
-            errors[request] = result.1.isEmpty ? String(l10n: "Screen Sharing could not connect.") : result.1
+            errors[request] = request.failureWords(result.1)
             return
         }
         opened.insert(request)

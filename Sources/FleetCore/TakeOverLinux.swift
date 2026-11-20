@@ -139,3 +139,53 @@ extension ScreenSharingConnection {
         return parts.url
     }
 }
+
+/// **What the first line of a screen's program says about it** (the owner's yes of 20 November 2026 to this guard and
+/// to its words, after S6's live check; the hub's SECURITY.md). A Linux agent's screen is its own `x11vnc`, which
+/// greets with version 3.8 of the protocol: the tunnel helper reads the 12 bytes of the greeting before Screen Sharing
+/// opens, and the relay reads them again on each of Screen Sharing's own connections (`ScreenRelay`), so Apple's
+/// greeting, the measured way to Screen Sharing's warning "could not verify the authenticity", or any other greeting
+/// no longer reaches Screen Sharing from an agent's port. What a program that greets as `x11vnc` does can do after its
+/// greeting is not checked here (the hub's SECURITY.md). A Mac's own screen is not checked: any whole greeting of the
+/// protocol opens it, as before this guard (the owner's "Drop the Mac half").
+public enum ScreenGreeting: Equatable, Sendable {
+    /// The program that should answer there: Screen Sharing opens.
+    case expected
+    /// Fewer than 12 bytes came (or, on a Mac, no greeting of the protocol): the screen did not answer, as before.
+    case none
+    /// 12 bytes on a Linux agent's screen that are not x11vnc's greeting: another program, and Screen Sharing stays
+    /// closed.
+    case foreign
+
+    /// The helper's answer for `foreign`, which the app says in the owner's words
+    /// (`ScreenSharingConnection.failureWords`).
+    public static let foreignDetail = "screen-greeting-foreign"
+    /// The greeting of a Linux agent's `x11vnc`: version 3.8, the only one that the fleet's `x11vnc` sends
+    /// (`fleet.vnc_arguments` names no other; x11vnc 0.9.16 with libvncserver 0.9.14 greeted so through SSH on 20
+    /// November 2026) and the only one measured.
+    static let linux: Set<String> = ["RFB 003.008\n"]
+}
+
+extension ScreenSharingConnection {
+    /// What the first 12 bytes of this screen's program say about it (`ScreenGreeting`): a Linux agent's screen
+    /// (`agent` set) must greet as `x11vnc` does; a Mac's own screen opens for any whole greeting of the protocol, as
+    /// before.
+    public func greeting(_ banner: [UInt8]) -> ScreenGreeting {
+        guard banner.count == 12 else { return .none }
+        guard agent != nil else {
+            return banner.starts(with: Array("RFB ".utf8)) && banner.last == 10 ? .expected : .none
+        }
+        return ScreenGreeting.linux.contains(String(decoding: banner, as: UTF8.self)) ? .expected : .foreign
+    }
+
+    /// What the owner reads when Screen Sharing did not open this screen: the tunnel helper's own sentence, or, for a
+    /// Linux agent's screen whose program is not the one that should answer there (`ScreenGreeting.foreignDetail`), the
+    /// words that the owner approved.
+    public func failureWords(_ detail: String) -> String {
+        guard detail == ScreenGreeting.foreignDetail, agent != nil else {
+            return detail.isEmpty || detail == ScreenGreeting.foreignDetail
+                ? String(l10n: "Screen Sharing could not connect.") : detail
+        }
+        return String(l10n: "Another program answered on this agent's screen, so Screen Sharing did not open it. Do not press Take over again: stop the agent's task, and treat the logins of its browser as exposed.")
+    }
+}

@@ -4689,6 +4689,16 @@
         }
       }
     },
+    "Another program answered on this agent's screen, so Screen Sharing did not open it. Do not press Take over again: stop the agent's task, and treat the logins of its browser as exposed." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otro programa respondió en la pantalla de este agente, así que Compartir pantalla no la abrió. No pulses Tomar el control de nuevo: detén la tarea del agente y da por expuestos los inicios de sesión de su navegador."
+          }
+        }
+      }
+    },
     "Another provider" : {
       "localizations" : {
         "es" : {

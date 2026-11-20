@@ -48,6 +48,7 @@
     "drive_folder_unseen": "{account} cannot open this folder. Share it with {account}, or connect the account that has it.",
     "drive_folder_file": "That is the link of a file, not of a folder.",
     "drive_folder_google": "Google did not answer about this folder: {reason}. Try again.",
+    "repo_vendor": "The door refuses {repo} in every fleet, so no grant of it works: leave it out.",
     "package_unknown": "{registry} has no package {name}",
     "package_unread": "{registry} did not give the record of {name} ({http_status})",
     "package_registry_away": "{registry} cannot be reached now",
@@ -107,6 +108,9 @@
     ],
     "drive_folder_google": [
       "reason"
+    ],
+    "repo_vendor": [
+      "repo"
     ],
     "package_unknown": [
       "registry",

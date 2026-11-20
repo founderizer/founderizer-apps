@@ -51,6 +51,32 @@ struct ScreenSharingTests {
         #expect(try JSONDecoder().decode(ScreenSharingConnection.self, from: sent) == alpha)
     }
 
+    /// **Only x11vnc's greeting opens a Linux agent's screen** (the owner's yes of 20 November 2026 to this guard and
+    /// to its words): a program that answers an agent's port with Apple's greeting (the way to Screen Sharing's
+    /// warning) or with any other 12 bytes is another program, and the owner reads the approved words in his language,
+    /// never the helper's code. A Mac's own screen opens for any whole greeting, as before; fewer than 12 bytes are no
+    /// answer.
+    @Test func onlyX11vncsGreetingOpensALinuxAgentsScreen() throws {
+        let agent = ScreenSharingConnection(address: "100.80.1.7", user: "root", port: 22, remotePort: 5911,
+                                            agent: "alpha")
+        func line(_ text: String) -> [UInt8] { Array(text.utf8) }
+        #expect(agent.greeting(line("RFB 003.008\n")) == .expected && mac.greeting(line("RFB 003.008\n")) == .expected)
+        for other in ["RFB 003.889\n", "RFB 003.003\n", "RFB 003.007\n", "RFB 004.001\n", "HTTP/1.1 200"] {
+            #expect(agent.greeting(line(other)) == .foreign, "\(other)")
+        }
+        #expect(agent.greeting(line("RFB 003.00") + [0xff, 0x0a]) == .foreign)
+        #expect(mac.greeting(line("RFB 003.889\n")) == .expected && mac.greeting(line("HTTP/1.1 200")) == .none)
+        for part in ["", "RFB 003.00"] {
+            #expect(agent.greeting(line(part)) == .none && mac.greeting(line(part)) == .none, "\(part)")
+        }
+        #expect(agent.failureWords("SSH could not start.") == "SSH could not start.")
+        #expect(mac.failureWords(ScreenGreeting.foreignDetail) == "Screen Sharing could not connect.")
+        let english = agent.failureWords(ScreenGreeting.foreignDetail)
+        #expect(english.hasSuffix("treat the logins of its browser as exposed."))
+        let spanish = try SpanishTable.run { agent.failureWords(ScreenGreeting.foreignDetail) }
+        #expect(spanish.hasSuffix("da por expuestos los inicios de sesión de su navegador."))
+    }
+
     /// Only as root: the server's port rule lets root and its worker user reach an agent's screen-sharing port, and a
     /// user who becomes root with sudo would be refused there. A key's path or an agent's name of another shape is none.
     @Test func noLinuxWayButAsRootAndOfItsShape() {

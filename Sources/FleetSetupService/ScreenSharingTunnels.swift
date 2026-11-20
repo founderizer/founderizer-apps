@@ -4,7 +4,11 @@ import Foundation
 
 final class ScreenSharingTunnels: @unchecked Sendable {
     private let queue = DispatchQueue(label: "fleet.screen-sharing")
-    private struct Connection { let process: Process; let port: Int; let folder: URL }
+    // `port` is what Screen Sharing opens: the relay's for an agent's screen on a Linux server, which checks the line
+    // on each of Screen Sharing's own connections (ScreenRelay), and the tunnel's own `inner` port for a Mac.
+    private struct Connection {
+        let process: Process; let port: Int; let folder: URL; let inner: Int; let relay: ScreenRelay?
+    }
     private var connections: [ScreenSharingConnection: Connection] = [:]
 
     // XPC reply blocks are delivered on this private queue only.
@@ -16,7 +20,11 @@ final class ScreenSharingTunnels: @unchecked Sendable {
         queue.async {
             guard let request = self.request(data) else { reply.call(0, "The machine connection is invalid."); return }
             if let existing = self.connections[request] {
-                if existing.process.isRunning, self.desktopReady(port: existing.port) {
+                if existing.relay?.refused == true {       // a connection of Screen Sharing met another program
+                    self.stop(existing); self.connections.removeValue(forKey: request)
+                    reply.call(0, ScreenGreeting.foreignDetail); return
+                }
+                if existing.process.isRunning, self.greeting(port: existing.inner, request) == .expected {
                     reply.call(existing.port, ""); return
                 }
                 self.stop(existing); self.connections.removeValue(forKey: request)
@@ -29,7 +37,7 @@ final class ScreenSharingTunnels: @unchecked Sendable {
                 reply.call(0, "A local Screen Sharing connection could not be opened."); return
             }
             let child = self.ssh(arguments)
-            let connection = Connection(process: child, port: port, folder: folder)
+            var connection = Connection(process: child, port: port, folder: folder, inner: port, relay: nil)
             guard mkdir(folder.path, 0o700) == 0 else {
                 reply.call(0, "A private Screen Sharing connection could not be created."); return
             }
@@ -42,10 +50,25 @@ final class ScreenSharingTunnels: @unchecked Sendable {
                 Thread.sleep(forTimeInterval: 0.1)
             }
             let forwarding = self.ssh(forward)
-            if child.isRunning, FileManager.default.fileExists(atPath: control),
-               self.runControl(forwarding), self.desktopReady(port: port), child.isRunning {
-                self.connections[request] = connection; keep = true
-                reply.call(port, ""); return
+            if child.isRunning, FileManager.default.fileExists(atPath: control), self.runControl(forwarding) {
+                // Only the program that should answer there opens Screen Sharing (ScreenGreeting); on a Linux
+                // agent's screen, Screen Sharing's own connections go through the relay, which checks each of them.
+                switch self.greeting(port: port, request) {
+                case .expected where child.isRunning:
+                    if request.agent != nil {
+                        guard let relay = ScreenRelay(inner: port, request: request) else {
+                            reply.call(0, "A local Screen Sharing connection could not be opened."); return
+                        }
+                        connection = Connection(process: child, port: relay.port, folder: folder, inner: port,
+                                                relay: relay)
+                    }
+                    self.connections[request] = connection; keep = true
+                    reply.call(connection.port, ""); return
+                case .foreign:
+                    reply.call(0, ScreenGreeting.foreignDetail); return
+                default:
+                    break
+                }
             }
             reply.call(0, "Screen Sharing did not answer through SSH. Open Terminal to check SSH sign-in, host trust and Screen Sharing on the Mac.")
         }
@@ -93,6 +116,7 @@ final class ScreenSharingTunnels: @unchecked Sendable {
     }
 
     private func stop(_ connection: Connection) {
+        connection.relay?.close()
         stop(connection.process)
         try? FileManager.default.removeItem(at: connection.folder)
     }
@@ -129,9 +153,9 @@ final class ScreenSharingTunnels: @unchecked Sendable {
         return result ? Int(UInt16(bigEndian: value.sin_port)) : nil
     }
 
-    private func desktopReady(port: Int) -> Bool {
+    private func greeting(port: Int, _ request: ScreenSharingConnection) -> ScreenGreeting {
         let fd = socket(AF_INET, SOCK_STREAM, 0)
-        guard fd >= 0 else { return false }
+        guard fd >= 0 else { return .none }
         defer { Darwin.close(fd) }
         var timeout = timeval(tv_sec: 1, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
@@ -139,10 +163,10 @@ final class ScreenSharingTunnels: @unchecked Sendable {
         let connected = withUnsafePointer(to: &value) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
         }
-        guard connected == 0 else { return false }
+        guard connected == 0 else { return .none }
         var banner = [UInt8](repeating: 0, count: 12)
         let count = recv(fd, &banner, banner.count, MSG_WAITALL)
         // Read only the public protocol greeting. Screen Sharing owns authentication.
-        return count == 12 && banner.starts(with: Array("RFB ".utf8)) && banner.last == 10
+        return request.greeting(Array(banner.prefix(max(count, 0))))
     }
 }

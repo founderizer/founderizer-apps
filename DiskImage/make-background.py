@@ -2,14 +2,14 @@
 
     python3 make-background.py .
 
-It writes `background.png` (640 x 400) and `background@2x.png` (1280 x 800). `release.sh` gives the first to
-`dmgbuild`, which finds the second beside it and joins both into one picture for normal and Retina screens.
+It writes `background.png` (640 x 400) and `background@2x.png` (1280 x 800). `window.py` joins both into one
+picture for normal and Retina screens (`tiffutil -cathidpicheck`).
 
 **The picture is white, in dark mode too** (measured on 14 November 2026 in Finder on macOS 27 in dark mode): Finder
 draws the names under the icons in black on a disk image's picture, whatever the Mac's appearance. On a dark picture
 "Applications" could not be read, and a clear picture is drawn on white anyway.
 
-**The arrow stands where the icons are**: `settings.py` puts their centres at (160, 190) and (480, 190) of the
+**The arrow stands where the icons are**: `window.py` puts their centres at (160, 190) and (480, 190) of the
 window's content, and the picture starts at the top of that content too, under the title bar. Change both together.
 
 The owner's yes of 14 November 2026 is to an arrow and no words: no line of text goes on this picture.
