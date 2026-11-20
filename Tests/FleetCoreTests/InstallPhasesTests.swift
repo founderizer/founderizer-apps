@@ -39,7 +39,7 @@ struct InstallPhasesTests {
         let done = try #require(InstallPhases(steps: steps(hub, done: 9), planned: hub))
         #expect(done.parts == [1, 1, 1, 1] && done.step == nil)
         // A join: read, network, join, verify.
-        let joining = try #require(InstallPhases(steps: steps(join, done: 2), planned: join, runningFor: 210))
+        let joining = try #require(InstallPhases(steps: steps(join, done: 2), planned: join, runningFor: 180))
         #expect(joining.parts == [1, 1, 0.5, 0] && joining.step == "join")
     }
 
@@ -58,7 +58,8 @@ struct InstallPhasesTests {
         #expect(try #require(InstallPhases(steps: steps(hub, done: 0))).minutesLeft == 15, "850 seconds, rounded up")
         let waiting = try #require(InstallPhases(steps: steps(hub, done: 7)))
         #expect(waiting.minutesLeft == 13, "the wait for the installer's end, then its checks: 725 seconds")
-        #expect(try #require(InstallPhases(steps: steps(join, done: 0))).minutesLeft == 10)
+        // 495 seconds: the join runs no checks of its own since 20 November 2026 (FLEET_VERIFY=caller), a minute less
+        #expect(try #require(InstallPhases(steps: steps(join, done: 0))).minutesLeft == 9)
     }
 
     /// The second proof run of 5 November 2026: the installer reports a step only when it starts, so at "start" the
@@ -75,7 +76,7 @@ struct InstallPhasesTests {
         #expect(try #require(InstallPhases(steps: first, planned: hub)).current == 0)
         #expect(try #require(InstallPhases(steps: first, planned: hub)).minutesLeft == 15)
         // A join counts its own plan.
-        #expect(try #require(InstallPhases(steps: Array(steps(join, done: 1).prefix(2)), planned: join)).minutesLeft == 9)
+        #expect(try #require(InstallPhases(steps: Array(steps(join, done: 1).prefix(2)), planned: join)).minutesLeft == 8)
     }
 
     @Test func theMinutesGoDownWithinALongStepAndStandAtItsLastHalfMinute() throws {

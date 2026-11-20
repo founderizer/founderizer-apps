@@ -254,9 +254,11 @@ public actor MachineInstaller {
         case .run(let program):
             return try await ssh(program, title: step.title, timeout: 1800)
         case .join(let line):
-            // A non-zero status is the line's own answer about `verify`, not about the join: it is tolerated only
-            // when the machine printed `verify`'s last word, and the checks that follow say what is true.
-            let answer = try await remote(line, stdin: nil, timeout: 3600, runs: .root)
+            // The line leaves its own checks to the plan's next step (`InstallPlan.verifyLater`). A join.sh from before
+            // that runs them, and its non-zero status is then the line's own answer about `verify`, not about the join:
+            // it is tolerated only when the machine printed `verify`'s last word, and the checks that follow say what is
+            // true.
+            let answer = try await remote(InstallPlan.verifyLater + line, stdin: nil, timeout: 3600, runs: .root)
             let lines = self.lines(of: redact(answer.output))
             lastOutput = redact(answer.output)
             guard answer.status == 0 || lines.contains(where: { $0.contains(VerifyChecklist.readyLine) }) else {

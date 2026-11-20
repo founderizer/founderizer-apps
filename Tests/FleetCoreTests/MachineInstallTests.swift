@@ -108,6 +108,10 @@ struct MachineInstallTests {
         // Every step ran, in the order of the plan, and each one is reported twice: running, then done.
         #expect(progress.filter { $0.state == .done }.map(\.step) == ["read", "network", "join", "verify"])
         #expect(progress.contains { $0.state == .failed } == false)
+        // The checks run once: the join line is told to leave them to the plan's own step, with hub.sh's word, which
+        // join.sh reads (FLEET_VERIFY=caller; its test holds the same word).
+        let joined = standIn.programs.filter { $0.contains("FLEET_JOIN=") }
+        #expect(joined.count == 1 && joined.allSatisfy { $0.hasPrefix("export FLEET_VERIFY=caller; ") })
     }
 
     /// Both installers let SSH in over the private network only (`hubsetup.py firewall`), so every step after the

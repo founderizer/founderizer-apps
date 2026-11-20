@@ -488,7 +488,8 @@ public struct InstallPlan: Equatable, Sendable {
     /// A machine that joins a hub which runs already (INSTALL-PROMPT.md job B).
     ///
     /// `line` is the join line the hub gave for this machine (`POST /ui/servers/join`): it carries the hub's own
-    /// address and the one-time code, and it is run exactly as the hub wrote it.
+    /// address and the one-time code, and it is run as the hub wrote it, after the word that leaves its checks to the
+    /// plan's own step (`verifyLater`).
     public static func join(target: InstallTarget, line: String, code: String, authKey: String?) -> InstallPlan {
         let network: InstallStep.Action = authKey == nil
             ? NetworkSignIn.action(install: tailscaleInstall, tags: NetworkSignIn.tags(inLine: line))
@@ -508,6 +509,12 @@ public struct InstallPlan: Equatable, Sendable {
         return InstallPlan(job: .join, target: target, steps: steps, redactions: [authKey, code].compactMap { $0 },
                            installs: true)
     }
+
+    /// **What the app puts before a join line** (`.join`): join.sh then leaves its own checks out, because the plan's
+    /// next step runs them in the form that the app reads (`verify --json`): the self-test runs once, not twice (point
+    /// 7 of the review of 20 November 2026). hub.sh's word (`callerVerifies`). A join.sh from before it runs its checks
+    /// as before.
+    public static let verifyLater = "export \(callerVerifies); "
 
     /// Only the checks of one machine, and no install: `python3 fleet.py verify --json` there, over the owner's own
     /// SSH connection (PRODUCT.md 4.1). A machine answers for itself, and the app shows that answer as a checklist.

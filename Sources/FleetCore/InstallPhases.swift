@@ -31,7 +31,7 @@ public struct InstallPhases: Equatable, Sendable {
     /// same first updates in its join. A step that is not here counts `otherStep`.
     public static let seconds: [String: Int] = ["read": 15, "network": 45, "code": 15, "plan": 5, "start": 5,
                                                 "wait_claim": 30, "claim": 10, "wait_ready": 650, "verify": 75,
-                                                "join": 420]
+                                                "join": 360]
     public static let otherStep = 30
 
     /// The steps of an install that has a private network step, which every install of a hub or a server has; a
