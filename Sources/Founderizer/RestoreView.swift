@@ -5,11 +5,10 @@ import UniformTypeIdentifiers
 
 /// Putting a copy of the fleet back, from the app (owner API 1.5, `POST /ui/restore`).
 ///
-/// It is offered in two places because they are two moments. **At the claim**, which is the one that matters:
-/// standing in front of a fresh hub on the day his old machine died, the next thing the app offers is a choice —
-/// start a new fleet, or put a copy back. **On System status**, beside Save a copy, because the two belong
-/// together and because a man who pressed past the claim screen needs a way back in. `RESTORE.md`, which the hub
-/// writes into every copy, names both.
+/// It is offered on Settings › Backup, beside Save a copy, because the two belong together. The end of the first
+/// run asked "New fleet" or "Restore copy" until the owner's "Take it away" of 18 November 2026: he did not
+/// understand that question there; its own restore page went with it. `RESTORE.md`, which the hub writes into every
+/// copy, names Settings › Backup.
 ///
 /// Four things this has to get right, and they are all here:
 ///
@@ -27,7 +26,7 @@ import UniformTypeIdentifiers
 @MainActor @Observable
 final class RestoreModel {
     enum Phase: Equatable {
-        /// Nothing chosen. The one button is Restore a copy.
+        /// Nothing chosen. The one button is Restore copy.
         case idle
         /// A copy is read and what is in it is on the screen. Nothing has been sent.
         case chosen
@@ -203,20 +202,12 @@ final class RestoreModel {
 
 // MARK: - the rows
 
-/// The whole flow, as rows that drop into a card. System status puts them in its copy section, beside Save a
-/// copy; the first-run wizard puts them in a card of their own.
+/// The whole flow, as rows that drop into a card: Settings › Backup puts them beside Save a copy.
 struct RestoreRows: View {
     @Bindable var store: FleetStore
     @Bindable var model: RestoreModel
-    /// A page of this app, for the reconnect steps. The wizard leaves it and then opens the page.
+    /// A page of this app, for the reconnect steps.
     var go: (Destination) -> Void
-    /// The wizard's way on once the fleet is back. Settings > Backup passes none, because it is already the app.
-    var whenDone: (() -> Void)?
-    /// Whether the first row says what a restore does. The first-run wizard does, because there he is choosing
-    /// between a new fleet and this one and has read nothing yet. Settings > Backup does not: a sentence under a
-    /// control that says the same thing every day is wallpaper (the owner, 20 October 2026, "avoid as much text
-    /// as possible everywhere!!"), and the wizard this button opens says it all again where he decides.
-    var explains = true
 
     var body: some View {
         switch model.phase {
@@ -231,10 +222,9 @@ struct RestoreRows: View {
     // ---------------------------------------------------------------- nothing chosen yet
 
     private var start: some View {
-        FormRow("Put a copy back", symbol: "arrow.counterclockwise",
-                // One sentence (D-2 item 29): what the copy brings back, and no second one about the address.
-                detail: explains ? String(l10n: "Your fleet as it was when the copy was taken.") : nil,
-                warning: model.failure) {
+        // No sentence under it: one that says the same thing every day is wallpaper (the owner, 20 October 2026,
+        // "avoid as much text as possible everywhere!!"), and the rows this button opens say it where he decides.
+        FormRow("Put a copy back", symbol: "arrow.counterclockwise", warning: model.failure) {
             // Only while it can act: never grey (the owner: "dont show the send button if it's not clickable").
             if store.isFresh {
                 Button("Restore copy") { model.choose() }
@@ -390,13 +380,8 @@ struct RestoreRows: View {
                 Text(String(l10n: "Read the open tasks before anything runs. They are from the moment the copy was taken, so a task that was open then is open again now, and its agent cannot know what the old server did after that."))
                     .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                if let whenDone {
-                    Button("Open Founderizer") { whenDone() }
-                        .buttonStyle(FleetPrimaryButtonStyle()).accessibilityIdentifier("restore-open-app")
-                } else {
-                    Button("Done") { model.forget() }
-                        .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("restore-done")
-                }
+                Button("Done") { model.forget() }
+                    .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("restore-done")
             }
         }
         .accessibilityIdentifier("restore-landed")

@@ -118,12 +118,14 @@ struct ProviderAccountSection: View {
     }
 
     /// A sign-in is going on.
-    private var signInShown: Bool { machine?.login?.isOpen == true }
+    /// Of the agent's own provider (`MachineStatus.ownLogin`): a sign-in of another provider of its server is not this
+    /// account's.
+    private var signInShown: Bool { machine?.ownLogin?.isOpen == true }
     /// **A press that led nowhere says why, where he pressed.** The last sign-in failed and the runtime is still
     /// signed out: its words belong on the account's row, not only on the machine's own page.
     private var signInFailure: String? {
         guard let line = machine?.signInLine(working: false), line.warn else { return nil }
-        return machine?.login?.reason ?? line.says
+        return machine?.ownLogin?.reason ?? line.says
     }
 
     // MARK: the usage
@@ -197,7 +199,8 @@ struct ProviderAccountSection: View {
     }
 
     /// An agent whose desktop tasks run on a second account of their own (Codex on a Mac) says so in one row. It has
-    /// no control: Fleet drives no sign-in for a desktop route.
+    /// no control: the sign-in of that Codex is on the page of its server (`ScreenSignIn`) and on the row of a task
+    /// that failed for it (`RuntimeErrorLine`).
     @ViewBuilder private func desktopRow(_ agentState: FleetAgent) -> some View {
         if let screen = agentState.usage?.screen?.limits,
            let email = AccountEmail(limits: screen, at: time, fresh: store.isFresh, features: features), email != .unknown {

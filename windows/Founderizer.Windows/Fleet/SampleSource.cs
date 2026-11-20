@@ -119,6 +119,8 @@ public sealed partial class SampleSource : IFleetSource
 
     public void Press(long need, int choice) { }
 
+    public void Reply(long need, string words) { }
+
     public Task<string?> ControlAsync(long task, TaskControl action) => Task.FromResult<string?>(null);
 
     public Task<string?> GuideAsync(long task, string text) => Task.FromResult<string?>(null);

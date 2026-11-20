@@ -58,8 +58,8 @@ public struct BuildRecord: Codable, Equatable, Sendable, Identifiable {
             switch error {
             case .leftBehind: return .leftBehind
             case .unreachable, .notUnderstood: return .notKnown
-            case .notAToken, .noToken, .tokenNotAccepted, .readOnlyToken, .rateLimited, .refused, .noRoom, .taken, .notReady,
-                 .notAServerName, .notAPublicKey, .notAnAuthKey: return .nothing
+            case .notAToken, .noToken, .tokenNotAccepted, .readOnlyToken, .rateLimited, .refused, .noRoom, .full, .taken,
+                 .notReady, .notAServerName, .notAPublicKey, .notAnAuthKey: return .nothing
             }
         }
     }
@@ -161,6 +161,17 @@ public struct BuildRecord: Codable, Equatable, Sendable, Identifiable {
         case .stopped, .cancelled, .interrupted: atProvider != .nothing
         case .running, .joined: false
         }
+    }
+
+    /// **The names that a new server of this Mac must not take**: of each build that did not join, left something at
+    /// its provider (or does not know yet) and began less than its key's life ago (`CloudServers.joinKeyLife`, with
+    /// `StartAgain.deviceSlack`). Its server can still join under its name, and then Tailscale gives the new server
+    /// another name, while the new build's wait finds the old server and installs onto it (a review of 19 November
+    /// 2026: with the hour's key, a try after Back took the name of a server that still waited for apt's lock).
+    public static func namesInUse(_ records: [BuildRecord], at now: Date = Date()) -> [String] {
+        let life = TimeInterval(CloudServers.joinKeyLife) + StartAgain.deviceSlack
+        return records.filter { $0.outcome != .joined && $0.atProvider != .nothing && now.timeIntervalSince($0.began) < life }
+            .map(\.name)
     }
 
     /// The provider answered with the server's id, so the server exists there for sure (`atProvider` is `server`).

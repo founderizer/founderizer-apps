@@ -11,7 +11,8 @@ public enum ActivityColumn { InProgress, Waiting, Done }
 public enum ActivityPeriod { Today, Week, Month, All }
 
 /// <summary>What a task waits for from the owner (FleetCore's OwnerWait): the request it waits on, an outcome that nobody
-/// knows, a stop that its helper did not confirm, a sign-in of its agent's AI provider.</summary>
+/// knows and that its agent does not check first (<see cref="TaskOutcome.WaitsOnOwner"/>), a stop that its helper did not
+/// confirm, a sign-in of its agent's AI provider.</summary>
 public sealed record OwnerWait(OwnerWait.Kinds Kind, long Need = 0, string Title = "")
 {
     public enum Kinds { Request, Outcome, Stop, SignIn }
@@ -125,14 +126,42 @@ public static class Activity
         return snapshot.Tasks.Concat(ended ?? []).Concat(snapshot.Recent).Where(t => seen.Add(t.Id)).ToList();
     }
 
-    /// <summary>The tasks that only the owner can move: an outcome that is not known, a stop that was not confirmed.</summary>
-    public static IReadOnlySet<long> OwnerOnly(MobileSnapshot snapshot) =>
-        snapshot.Outcomes.Where(o => o.State == "unknown").Select(o => o.Task)
-            .Concat(snapshot.Holds.Where(h => h.State == "not_confirmed").Select(h => h.Task)).ToHashSet();
+    /// <summary>The tasks that only the owner can move (HubState.ownerOnly): an outcome that is not known and that no
+    /// session of its agent checks first (<see cref="TaskOutcome.WaitsOnOwner"/>), a stop that was not confirmed. The
+    /// heads of <paramref name="ended"/> are the reading's own, as in <see cref="AllTasks"/>.</summary>
+    public static IReadOnlySet<long> OwnerOnly(MobileSnapshot snapshot, IReadOnlyList<MobileTaskHead>? ended = null)
+    {
+        var owner = snapshot.Holds.Where(h => h.State == "not_confirmed").Select(h => h.Task).ToHashSet();
+        var unknown = snapshot.Outcomes.Where(o => o.State == "unknown").Select(o => o.Task).ToHashSet();
+        if (unknown.Count == 0) return owner;
+        var rows = AllTasks(snapshot, ended).Where(t => unknown.Contains(t.Id)).ToDictionary(t => t.Id);
+        foreach (var task in unknown) if (OwnerChecks(snapshot, task, rows.GetValueOrDefault(task))) owner.Add(task);
+        return owner;
+    }
 
-    /// <summary>What each task waits for from the owner, by task (HubState.ownerWaits): an unknown outcome first, then a
-    /// stop that was not confirmed, and for an open task the request it waits on (`waiting_on` "N-53" names the request,
-    /// "Q-68" the question that a request carries) or its agent's sign-in.</summary>
+    /// <summary>Whether the owner checks an unknown outcome of the task <paramref name="task"/>, from its own head
+    /// (HubState.outcomeUnknown(of:)): a hold holds it, it has ended, or its agent records no outcome
+    /// (<see cref="TaskOutcome.WaitsOnOwner"/>). Otherwise the next session of its agent checks it first.</summary>
+    public static bool OutcomeUnknown(MobileSnapshot snapshot, MobileTaskHead task) => OwnerChecks(snapshot, task.Id, task);
+
+    /// <summary>Whether the sessions of the agent <paramref name="name"/> record no outcome (<see cref="TaskOutcome.ShellOff"/>),
+    /// with a Tools list that the hub did not send read as [], as the iPhone's MobileStore.shellOff reads it. An agent
+    /// that the reading does not have is not.</summary>
+    public static bool ShellOff(MobileSnapshot? snapshot, string name) =>
+        snapshot?.Agents.FirstOrDefault(a => a.Name == name) is { } agent && TaskOutcome.ShellOff(agent.Role, agent.Can ?? []);
+
+    /// <summary>Whether an unknown outcome of the task <paramref name="task"/> waits on the owner: <paramref name="row"/>
+    /// is its head, null when the reading has none (which counts as ended).</summary>
+    private static bool OwnerChecks(MobileSnapshot snapshot, long task, MobileTaskHead? row)
+    {
+        var shellOff = row is not null && ShellOff(snapshot, row.Owner);
+        return snapshot.Outcomes.Any(o => o.Task == task && o.WaitsOnOwner(snapshot.Holds, row?.IsTerminal, shellOff));
+    }
+
+    /// <summary>What each task waits for from the owner, by task (HubState.ownerWaits): an unknown outcome that its agent
+    /// does not check first (<see cref="OutcomeUnknown"/>) first, then a stop that was not confirmed, and for an open task
+    /// the request it waits on (`waiting_on` "N-53" names the request, "Q-68" the question that a request carries) or its
+    /// agent's sign-in.</summary>
     public static IReadOnlyDictionary<long, OwnerWait> OwnerWaits(MobileSnapshot snapshot, IReadOnlyList<MobileTaskHead>? ended = null)
     {
         var unknown = snapshot.Outcomes.Where(o => o.State == "unknown").Select(o => o.Task).ToHashSet();
@@ -148,7 +177,7 @@ public static class Activity
         var waits = new Dictionary<long, OwnerWait>();
         foreach (var task in AllTasks(snapshot, ended))
         {
-            if (unknown.Contains(task.Id)) { waits[task.Id] = new OwnerWait(OwnerWait.Kinds.Outcome); continue; }
+            if (unknown.Contains(task.Id) && OutcomeUnknown(snapshot, task)) { waits[task.Id] = new OwnerWait(OwnerWait.Kinds.Outcome); continue; }
             if (unconfirmed.Contains(task.Id)) { waits[task.Id] = new OwnerWait(OwnerWait.Kinds.Stop); continue; }
             if (task.IsTerminal) continue;
             OwnerNeed? need = null;
@@ -177,8 +206,11 @@ public static class Activity
 
     /// <summary>How many items need the owner: the open requests and the tasks that only he can move
     /// (HubState.needsYouCount): the count of the pane's Needs you row, which shows only while it is above 0.</summary>
-    public static int NeedsYouCount(MobileSnapshot snapshot, IReadOnlyList<MobileTaskHead>? ended = null) =>
-        snapshot.Needs.Count(n => n.IsOpen) + AllTasks(snapshot, ended).Count(t => OwnerOnly(snapshot).Contains(t.Id));
+    public static int NeedsYouCount(MobileSnapshot snapshot, IReadOnlyList<MobileTaskHead>? ended = null)
+    {
+        var owner = OwnerOnly(snapshot, ended);
+        return snapshot.Needs.Count(n => n.IsOpen) + AllTasks(snapshot, ended).Count(t => owner.Contains(t.Id));
+    }
 
     /// <summary>The tasks of the board for one agent (null: all) and one period, newest activity first in each lane, and in
     /// Waiting the tasks that wait for the owner before the others (HubState.activity). A task that waits for the owner
@@ -189,7 +221,7 @@ public static class Activity
         var start = period.Start(snapshot.Time, context) ?? double.NegativeInfinity;
         var held = snapshot.Holds.Where(h => h.State != "released").Select(h => h.Task).ToHashSet();
         var limited = snapshot.Agents.Where(a => a.Limit is not null).Select(a => a.Name).ToHashSet();
-        var owner = OwnerOnly(snapshot);
+        var owner = OwnerOnly(snapshot, ended);
         var waits = OwnerWaits(snapshot, ended);
         var subtasks = SubtaskWaits(snapshot);
         var lanes = new Dictionary<ActivityColumn, List<MobileTaskHead>>

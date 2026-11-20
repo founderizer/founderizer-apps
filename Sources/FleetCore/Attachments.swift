@@ -53,6 +53,24 @@ public struct MessageAttachment: Decodable, Identifiable, Sendable, Equatable {
                                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
                                     "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx"]
 
+    /// **A file that a session with no shell can open**: a picture or a text, which the hub gives in the tool's answer
+    /// itself (`t_read_attachment`). A session of an agent whose Shell box is off opens no other file of the owner's
+    /// guidance (owner API 1.223), so its guidance box takes only these.
+    public static func opensWithoutShell(_ mime: String) -> Bool {
+        types[mime] != nil && (mime.hasPrefix("image/") || isText(mime))
+    }
+
+    /// A text that the hub gives in a tool's answer: its own check in `t_read_attachment`.
+    public static func isText(_ mime: String) -> Bool {
+        types[mime] != nil && (mime.hasPrefix("text/") || mime == "application/json")
+    }
+
+    /// **The largest picture that the hub gives in a tool's answer** (`hub.py` `ATTACH_SHOWN_BYTES` and
+    /// `ATTACH_SHOWN_SIDE`): a larger one does not reach a session with no shell, so such a session's box makes each
+    /// picture this small before it goes up (`imageForSending`).
+    public static let shownPictureBytes = 3_750_000
+    public static let shownPictureSide = 8000
+
     public var isImage: Bool { mime.hasPrefix("image/") }
 
     /// The four types whose own words can become one of the owner's knowledge files in one press (`POST
@@ -146,12 +164,16 @@ extension MessageAttachment {
     /// The bytes that an app sends for a picture that the owner picked. PNG and a small JPEG go as they are; every
     /// other picture (a photo of an iPhone is HEIC) becomes JPEG, and a very large one is made smaller first, so a
     /// message from a phone is quick and the hub's limit holds.
-    public static func imageForSending(_ data: Data, maxPixels: Int = 2048) throws -> (data: Data, mime: String) {
+    /// `shown`: for a session with no shell, which gets a picture only up to `shownPictureBytes` and
+    /// `shownPictureSide`; a larger PNG or JPEG is made smaller here, as every other kind of picture is.
+    public static func imageForSending(_ data: Data, maxPixels: Int = 2048, shown: Bool = false) throws
+        -> (data: Data, mime: String) {
         guard !data.isEmpty else { throw AttachmentError.bytes }
-        if data.starts(with: [0x89, 0x50, 0x4E, 0x47]), data.count <= sizeLimit { return (data, "image/png") }
-        if data.starts(with: [0xFF, 0xD8, 0xFF]), data.count <= 4 * 1024 * 1024 { return (data, "image/jpeg") }
-        guard let source = CGImageSourceCreateWithData(data as CFData,
-                                                       [kCGImageSourceShouldCache: false] as CFDictionary),
+        let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
+        let fits = !shown || (data.count <= shownPictureBytes && source.map { pictureSide($0) <= shownPictureSide } == true)
+        if fits, data.starts(with: [0x89, 0x50, 0x4E, 0x47]), data.count <= sizeLimit { return (data, "image/png") }
+        if fits, data.starts(with: [0xFF, 0xD8, 0xFF]), data.count <= 4 * 1024 * 1024 { return (data, "image/jpeg") }
+        guard let source,
               let smaller = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                   kCGImageSourceCreateThumbnailFromImageAlways: true,
                   kCGImageSourceCreateThumbnailWithTransform: true,
@@ -162,10 +184,59 @@ extension MessageAttachment {
             throw AttachmentError.type
         }
         CGImageDestinationAddImage(out, smaller, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
-        guard CGImageDestinationFinalize(out), made.length > 0, made.length <= sizeLimit else {
+        guard CGImageDestinationFinalize(out), made.length > 0, made.length <= (shown ? shownPictureBytes : sizeLimit) else {
             throw AttachmentError.tooLarge
         }
         return (made as Data, "image/jpeg")
+    }
+
+    /// The longer side of a picture in pixels, or `Int.max` when the file does not say it.
+    private static func pictureSide(_ source: CGImageSource) -> Int {
+        guard let facts = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = facts[kCGImagePropertyPixelWidth] as? Int, let height = facts[kCGImagePropertyPixelHeight] as? Int
+        else { return .max }
+        return max(width, height)
+    }
+}
+
+/// A file of a message as a file of this Mac: for the preview window, for a drag to Finder and for the save icon of an
+/// agent's file (the owner's yes of 18 November 2026).
+extension MessageAttachment {
+    /// The name as one file of a folder: a slash, a colon or a NUL becomes "_", an invisible format or control character
+    /// (a right-to-left override) goes, a name that begins with a dot gets a "_" in front, and an empty name is "file".
+    /// So the name never leaves its folder, never hides its file and never shows another extension than its own. It
+    /// reads each code point: as a Character, a slash with an accent mark on it is no slash.
+    public static func diskName(_ name: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        for scalar in name.unicodeScalars {
+            switch scalar.properties.generalCategory {
+            case .format, .control, .lineSeparator, .paragraphSeparator: continue
+            default: scalars.append("/:".unicodeScalars.contains(scalar) ? "_" : scalar)
+            }
+        }
+        let cleaned = String(scalars).trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty { return "file" }
+        // The first code point, not the first Character: a dot with an accent mark on it still hides the file.
+        return cleaned.unicodeScalars.first == "." ? "_" + cleaned : cleaned
+    }
+
+    /// Writes the bytes into `folder` under the file's own name, or as a browser saves a download, with " 2", " 3" …
+    /// before the extension when that name is taken: a file that is in the folder already is never replaced. Gives
+    /// the place that it wrote.
+    public static func save(_ data: Data, named name: String, in folder: URL) throws -> URL {
+        let whole = diskName(name)
+        let ext = (whole as NSString).pathExtension, stem = (whole as NSString).deletingPathExtension
+        for count in 1...1000 {
+            let next = count == 1 ? whole : ext.isEmpty ? "\(stem) \(count)" : "\(stem) \(count).\(ext)"
+            let place = folder.appendingPathComponent(next, isDirectory: false)
+            do {
+                try data.write(to: place, options: .withoutOverwriting)
+                return place
+            } catch CocoaError.fileWriteFileExists {
+                continue
+            }
+        }
+        throw CocoaError(.fileWriteFileExists)
     }
 }
 

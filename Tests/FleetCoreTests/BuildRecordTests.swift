@@ -100,6 +100,23 @@ struct BuildRecordTests {
         #expect(silent.atProvider == .notKnown && silent.isUnjoined && silent.ended == time(3) && silent.lastChange == time(3))
     }
 
+    /// **A new server never takes the name of an earlier build's server that can still join**: one that did not join,
+    /// left something at its provider or does not know yet, and began less than its key's hour and five minutes ago.
+    @Test func aNameStaysTakenWhileItsServerCanStillJoin() {
+        let running = build("worker-2")                     // its call has no answer yet
+        let waiting = stopped("worker-3")                   // made, and stopped while this Mac waited for it
+        var joined = build("worker-4")
+        joined.made(id: "9", at: time(8))
+        joined.joined(at: time(90))
+        var refused = build("worker-5")
+        refused.callEnded(with: CloudError.refused(.hetzner, "the name is in use"))
+        refused.end(at: time(3))
+        let old = stopped("worker-6", at: -4000)
+        #expect(BuildRecord.namesInUse([running, waiting, joined, refused, old], at: time(600)) == ["worker-2", "worker-3"])
+        #expect(BuildRecord.namesInUse([waiting], at: time(3899)) == ["worker-3"])
+        #expect(BuildRecord.namesInUse([waiting], at: time(3900)).isEmpty)
+    }
+
     /// The provider answered with the server: it exists for sure, and a stop while this Mac waits for it is the server
     /// that was made and never joined. An error after that says nothing of what the provider has.
     @Test func aServerThatWasMadeAndNeverJoined() {

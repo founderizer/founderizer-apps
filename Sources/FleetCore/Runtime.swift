@@ -31,6 +31,29 @@ public struct TaskOutcome: Decodable, Identifiable, Sendable {
     public let kind: String
     public let state: String
     public let note: String?
+
+    /// **Whether the owner checks this action, and not its agent** (the owner, 19 November 2026, of an orange "Check
+    /// before repeating" on a task whose new session had not started yet: "what does this mean?? who needs to
+    /// check?", then "Yes, fix it" to "Should the card show only when the check is yours?"): its outcome is not known,
+    /// and no session of the task's agent comes to check it, because a hold holds the task, the task has ended, or
+    /// the agent's sessions cannot record a finding (`shellOff`: a worker's or a lead's whose Shell box is off has no
+    /// `resolve_outcome`). Any hold counts, also the stop of a requester's restart: a restart that does not go on
+    /// leaves that stop in place, and nobody else is told of the outcomes that it cut. While the task runs or waits
+    /// for its next session, each new session of its agent gets the list of these actions first (the hub's start of
+    /// a resumed session) and records each one with `resolve_outcome`, and the hub refuses its completed result, a
+    /// sign-in and a send until it has. `taskEnded` is nil when the reading has no such task: it counts as ended, as
+    /// before. The hub's `owner_count` keeps the same rule for the count on the phone's icon.
+    public func waitsOnOwner(holds: [TaskHold], taskEnded: Bool?, shellOff: Bool) -> Bool {
+        state == "unknown"
+            && (shellOff || taskEnded != false || holds.contains { $0.task == task && $0.state != "released" })
+    }
+
+    /// Whether the sessions of an agent with this role and these boxes have no `resolve_outcome`: a worker or a lead
+    /// whose Shell box is off, as the hub's `shell_off` reads it. An agent that the reading does not have is not. The
+    /// hub sends a missing Tools list as `[]`, which reads here as off: `owner_count` reads it the same way.
+    public static func shellOff(role: String?, can: [String]?) -> Bool {
+        ["worker", "lead"].contains(role ?? "") && can.map { !$0.contains("shell") } == true
+    }
 }
 
 public struct RuntimeLimit: Decodable, Sendable {
@@ -599,10 +622,19 @@ public struct RuntimeEvent: Decodable, Identifiable, Equatable, Sendable {
     public let text: String?
     public let tool_call_id: String?
     public let title: String?
+    /// **The agent's own line for a call**, as the hub's events give it: Claude Code's description of a shell command
+    /// ("Clone the three candidate repositories"), which the helper keeps. A task's thread shows it in the place of the
+    /// command (`StepWords`). No page is refused for it: a long one is cut where it shows.
+    public let says: String?
     public let kind: String?
+    /// The MCP server of a call, or nil for a tool of the runtime itself: "fleet" for a Fleet tool.
+    public let server: String?
     public let status: String?
     public let output: String?
     public let message: String?
+    /// The code of an `error` record, as the hub's events give it: "usage_limit" for a usage limit, else the provider's
+    /// own kind or "other". The thread's row reads only the usage limit from it (`RuntimeErrorLine`).
+    public let code: String?
     public let entries: [PlanEntry]?
     public let parent: String?
     public let locations: [Location]?
@@ -646,14 +678,22 @@ public struct TaskSteer: Decodable, Identifiable, Equatable, Sendable {
     public let read_at: Double?
     public let request_id: String
     public let client: String
+    /// **The files that the owner sent with it** (owner API 1.223), each as a message's file is; `[]` or nil for none
+    /// (nil from a hub before 1.223). The thread shows them under the guidance's bubble, as a chat shows a message's.
+    public let attachments: [MessageAttachment]?
+    /// Its files are not part of it: a file that this app does not know (a type of a later hub) is checked where it
+    /// opens, as a message's file is, and never makes the whole state unreadable.
     public var isValid: Bool { id > 0 && task > 0 && attempt > 0 && !text.isEmpty && text.count <= 4000 && created.isFinite }
     public func deliveryLabel(currentAttempt: Int) -> String {
         read_at != nil ? String(localized: "Read (guidance)", defaultValue: "Read", bundle: Localized.bundle, locale: Localized.digits) : currentAttempt > attempt ? String(l10n: "Not delivered · task restarted") : String(l10n: "Received")
     }
     public func matches(_ pending: PendingRequest) -> Bool {
         guard case .steer(let task, let attempt) = pending.command else { return false }
+        // A receipt with other files than the ones sent is no receipt of this guidance: a hub that dropped them would
+        // otherwise read as one that took them.
         return isValid && self.task == task && self.attempt == attempt && client == pending.client &&
-            request_id.lowercased() == pending.requestID.uuidString.lowercased() && text == normalizedOwnerText(pending.text)
+            request_id.lowercased() == pending.requestID.uuidString.lowercased() && text == normalizedOwnerText(pending.text) &&
+            (attachments ?? []).map(\.id).sorted() == pending.attachments.sorted()
     }
 }
 
@@ -732,6 +772,31 @@ public struct ActivityTimeline: Sendable {
     }
     public func children(of key: RuntimeToolKey) -> [ActivityRow] {
         rows.filter { $0.event.attempt == key.attempt && $0.event.session == key.session && $0.event.parent == key.call }
+    }
+    /// **True while this error is what the thread of `attempt` stops at**: an error of the thread's own level in that
+    /// attempt, with no row of that level and attempt after it. An error that the session went on from, an error of
+    /// another attempt and an error of a child's thread are a record of what happened (the owner, 19 November 2026,
+    /// after his sign-in from such a row: "that task still shows an orange error label, probably not updated").
+    ///
+    /// **A usage limit stops the task for as long as it holds it**, whatever its session wrote after the record (the
+    /// hub asks a session at its limit for one more progress note, so rows can come after it). `limit`: the limit that
+    /// holds task `task` now, as the task's own mark says it, or nil. Then the newest limit record of the attempt
+    /// stands, when it is of that limit: the limit came from this task, or the record is not older than the limit. A
+    /// record of a limit that ended stays a record at each later limit of the agent, and no limit record stands while
+    /// no limit holds the task: the limit is over, or a hold or an unknown outcome comes first.
+    ///
+    /// Known, and both err to grey or end by themselves: a session of another task that met the same limit in the
+    /// seconds before the hub stored the first report of it has a record that is older than the limit, so its row is
+    /// grey while the task's own mark says the limit; and a limit that a subagent of this task reported makes the
+    /// newest record of the thread's own level stand, also an old one, until the session's own record comes.
+    public func stands(_ row: ActivityRow, attempt: Int, limit: RuntimeLimit? = nil, task: Int? = nil) -> Bool {
+        guard row.event.type == "error", row.event.parent == nil, row.event.attempt == attempt else { return false }
+        let own: (ActivityRow) -> Bool = { $0.event.parent == nil && $0.event.attempt == attempt }
+        guard row.event.code == RuntimeErrorLine.limit else { return rows.last(where: own)?.id == row.id }
+        guard let limit, rows.last(where: { own($0) && $0.event.type == "error" && $0.event.code == RuntimeErrorLine.limit })?.id == row.id
+        else { return false }
+        if let task, limit.task == task { return true }
+        return (row.event.ts ?? 0) >= limit.since
     }
     public var changedFiles: [FileChange] {
         // Updates replace a tool's report. The latest completed report for each

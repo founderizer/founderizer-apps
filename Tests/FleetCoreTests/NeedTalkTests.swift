@@ -37,6 +37,30 @@ struct NeedTalkTests {
         #expect(try need(["door_call": String(repeating: "a", count: 64)]).taskInFront == false)  // his yes signs a hash
     }
 
+    /// The lane "Give on the iPhone" (the owner's "Line to the Mac" and "Yes, add it", 19 November 2026): the hub takes
+    /// Give, a team card's yes and the door card's Full access only from a Mac (or a PC), so the phone draws one line to
+    /// the Mac in their place, and every other option stays by its own index, which its press sends.
+    @Test func thePhoneDrawsOneLineInThePlaceOfWhatOnlyAMacOrAPCPresses() throws {
+        let give: [String: Any] = ["agent": "dev", "level": "write", "repos": ["acme/web"]]
+        let hash = String(repeating: "a", count: 64)
+        let all: [OwnerNeed.PhoneRow] = [.option(0), .option(1), .option(2)]
+        #expect(try need().phoneRows == all && need().onlyOnAComputer == nil)   // also before API 1.244: no `team`
+        #expect(try need(["team": false]).phoneRows == all)
+        #expect(try need(["door_call": hash]).phoneRows == all)     // a door call with no server has no Full access
+        // No is 1 here, never Give's 0; on the door's card Run it once and No keep 0 and 2 around the line
+        let giveCard = try need(["give": give, "options": ["Give Dev write", "No"]])
+        #expect(giveCard.phoneRows == [.onTheComputer(0), .option(1)] && giveCard.onlyOnAComputer == .give)
+        #expect(try need(["give": give, "options": ["Give Dev write", "Not now", "No"]]).phoneRows
+                == [.onTheComputer(0), .option(1), .option(2)])
+        let teamCard = try need(["team": true, "options": ["Yes: add nova", "Yes: add lia", "No"]])
+        #expect(teamCard.phoneRows == [.onTheComputer(0), .option(2)] && teamCard.onlyOnAComputer == .teamYes)
+        let doorCard = try need(["door_call": hash, "door_host": "web-1",
+                                 "options": ["Run it once", "Full access on web-1", "No"]])
+        #expect(doorCard.phoneRows == [.option(0), .onTheComputer(1), .option(2)] && doorCard.onlyOnAComputer == .fullAccess)
+        let oneOption = try need(["team": true, "options": ["Yes: remove scout"]])       // one option is no choice
+        #expect(oneOption.phoneRows.isEmpty && oneOption.onlyOnAComputer == nil)
+    }
+
     @Test func theTickedOptionsTravelAsIndexesInOrderAndTheirWordsStayHere() throws {
         let request = PendingRequest(hub: hub, database: "db", client: "mac", needID: 7, choices: [2, 0, 2],
                                      text: "Mia moves them; Retire the copies")

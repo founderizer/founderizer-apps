@@ -18,11 +18,15 @@ struct MachineTests {
         #expect(Array(forward.prefix(8)) == ["-F", "/dev/null", "-S", "/private/tmp/fleet-vnc-test/c", "-O", "forward", "-L", "127.0.0.1:49152:127.0.0.1:5900"])
         #expect(connection.forwardArguments(controlPath: "/tmp/c", localPort: 22) == nil)
         #expect(connection.forwardArguments(controlPath: "/tmp/c", localPort: 65536) == nil)
+        // Every forward is 127.0.0.1, so the address names the machine's user, never a sign-in saved for another one.
+        #expect(connection.screenSharingAddress(localPort: 49152)?.absoluteString == "vnc://sam@127.0.0.1:49152")
+        #expect(connection.screenSharingAddress(localPort: 22) == nil)
         for bad in [ScreenSharingConnection(address: "100.96.100.4;id", user: "sam", port: 22),
                     ScreenSharingConnection(address: "100.96.100.4", user: "-oProxyCommand=id", port: 22),
                     ScreenSharingConnection(address: "100.96.100.4", user: "sam", port: 0)] {
             #expect(bad.masterArguments(controlPath: "/tmp/c") == nil)
             #expect(bad.forwardArguments(controlPath: "/tmp/c", localPort: 49152) == nil)
+            #expect(bad.screenSharingAddress(localPort: 49152) == nil)
         }
     }
 

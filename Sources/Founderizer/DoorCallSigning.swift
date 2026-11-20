@@ -78,10 +78,8 @@ enum DoorCallSigning {
                       features: [String]) -> Result<(String) -> String, Stop>? {
         if choice == 0, let call = need.door_call, features.contains(feature) {
             var signs = call
-            if let host = need.door_host {      // the door's card of a run: the hash of what the card shows
-                switch DoorCall.checked(title: need.title, answers: need.options ?? [], host: host, call: call,
-                                        script: need.door_script, details: need.details,
-                                        words: [need.why, need.todo] + (need.door_task.map { [$0] } ?? [])) {
+            if let checked = DoorCall.checked(need) {      // the door's card of a run: the hash of what the card shows
+                switch checked {
                 case .success(let computed): signs = computed
                 case .failure(.noScript) where !features.contains(modeSet): return .failure(.olderHub)
                 case .failure(let why): return .failure(.card(why))

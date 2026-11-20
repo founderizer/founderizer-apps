@@ -86,6 +86,11 @@ public struct MachineReach: Equatable, Sendable {
 ///
 /// The form is three fields, and only one of them is a question: the port is 22 and Screen Sharing is off unless
 /// he says otherwise, and the user is the one thing nothing here can derive.
+///
+/// **No view of the apps draws this form** since 19 November 2026: its row ("Not on record") stood only in the old
+/// details of a server, which no hub since October 2026 showed, and went with them. The form and its route
+/// (`HubClient.recordMachineAccess`) stay as the client of the hub's `POST /ui/team/access`; a view that uses them
+/// again is a new element of the owner's screen and needs his yes first.
 public struct MachineAccessForm: Equatable, Sendable {
     public static let feature = "machine_access"
     /// The hub's own rule, so the app refuses what the route would refuse instead of sending it: `hub.SSH_USER`.
@@ -102,7 +107,7 @@ public struct MachineAccessForm: Equatable, Sendable {
     /// **Whether this machine is one the owner is asked about at all.** The hub must serve the route, and the
     /// fleet must have no SSH user for the machine: a connection already on record is the state nothing new is
     /// drawn for, which is the owner's own rule of 20 October 2026 — no row that reports only that everything is
-    /// fine. So the control is there exactly where there is something to ask for.
+    /// fine. So a control would be there exactly where there is something to ask for.
     public static func isAsked(of reading: MachineStatus?, features: [String]?) -> Bool {
         guard let reading, features?.contains(feature) == true else { return false }
         return reading.access?.ssh == nil

@@ -174,7 +174,6 @@ private func manifest(_ fields: [String: Any]) throws -> FleetManifest {
 /// four numbers are the whole of what is about to be replaced.
 @Test func saysWhatAHubHoldsBeforeItIsReplaced() {
     let holds = FleetHolds(agents: 4, tasks: 12, goals: 2, needs: 1, reports: 0)
-    #expect(!holds.seesNothing)
     #expect(holds.says.contains("12 tasks, 2 goals and 1 thing that needed you"))
     #expect(holds.says.contains("conversations, duties and wake-up rules"))
     #expect(holds.says.contains("kept on the hub server"))
@@ -185,21 +184,19 @@ private func manifest(_ fields: [String: Any]) throws -> FleetManifest {
     // A hub whose only work is a duty or a wake-up rule refuses the restore while this count is empty, so the
     // sentence never claims there is nothing there.
     let unseen = FleetHolds(agents: 2, tasks: 0, goals: 0, needs: 0, reports: 0)
-    #expect(unseen.seesNothing)
     #expect(!unseen.says.contains("This hub holds"))
     #expect(unseen.says.contains("conversations, duties and wake-up rules"))
 }
 
-// MARK: - whether the choice is offered at all
+// MARK: - where a copy can be put back
 
 private func hub(features: [String] = ["health", "restore"], agents: [String] = ["manager"],
-                 tasks: [[String: Any]] = [], goals: [[String: Any]] = [],
-                 needs: [[String: Any]] = []) throws -> HubState {
+                 tasks: [[String: Any]] = [], goals: [[String: Any]] = []) throws -> HubState {
     let object: [String: Any] = [
         "schema_version": 1, "db": "dff7118cbef9", "time": 1000.0, "ui_features": features,
         "agents": agents.map { ["name": $0, "role": $0 == "manager" ? "manager" : "worker",
                                 "runtime": "claude", "can": []] },
-        "goals": goals, "tasks": tasks, "notes": [], "needs": needs, "permissions": [], "messages": [],
+        "goals": goals, "tasks": tasks, "notes": [], "needs": [], "permissions": [], "messages": [],
         "reports": []]
     return try HubState.decode(JSONSerialization.data(withJSONObject: object))
 }
@@ -214,31 +211,11 @@ private func task(_ id: Int) -> [String: Any] {
 /// must offer nothing it cannot do. `health` is not the same feature and does not stand in for it.
 @Test func aHubThatCannotPutACopyBackIsNeverOfferedOne() throws {
     #expect(!RestoreOffer.inHealth(try hub(features: ["health"])))
-    #expect(!RestoreOffer.atClaim(try hub(features: ["health"]), claimed: true))
     #expect(!RestoreOffer.inHealth(nil))
-    #expect(!RestoreOffer.atClaim(nil, claimed: true))
     #expect(RestoreOffer.inHealth(try hub()))
-}
-
-/// The claim is the moment the owner asked for: on the day his machine dies he is standing in front of a fresh
-/// hub, not hunting through Settings.
-@Test func theChoiceIsOfferedOnAHubThisMacJustClaimed() throws {
-    #expect(RestoreOffer.atClaim(try hub(), claimed: true))
-    // A fleet with work on it, just claimed: still offered. The route's own 409 is what asks him again, and the
-    // app must not decide for him that a hub he claimed is one he meant to keep.
-    #expect(RestoreOffer.atClaim(try hub(agents: ["manager", "vps"], tasks: [task(1)]), claimed: true))
-}
-
-/// "I already have one" is not a claim. A hub with nothing on it is the same fresh hub by another road and gets
-/// the choice; a working fleet he is reconnecting the app to does not, and has it on System status.
-@Test func pointingTheAppAtAWorkingFleetIsNotAnInvitationToReplaceIt() throws {
-    #expect(RestoreOffer.atClaim(try hub(), claimed: false))                        // one agent, no work
-    #expect(!RestoreOffer.atClaim(try hub(agents: ["manager", "vps", "studio"]), claimed: false))
-    #expect(!RestoreOffer.atClaim(try hub(tasks: [task(1)]), claimed: false))
-    #expect(!RestoreOffer.atClaim(try hub(needs: [["id": 3, "title": "Which one?", "why": "", "todo": "",
-                                                   "raised": 900.0, "by": "manager"]]), claimed: false))
-    // Wherever the claim screen keeps quiet, System status still has it.
-    #expect(RestoreOffer.inHealth(try hub(agents: ["manager", "vps", "studio"])))
+    // A fleet with work on it is offered it too, because the first run no longer asks: the route's own 409 asks the
+    // owner before a copy replaces that work.
+    #expect(RestoreOffer.inHealth(try hub(agents: ["manager", "vps", "studio"], tasks: [task(1)])))
 }
 
 /// The route answers 409 for two different things and the words beside the status are prose this app does not

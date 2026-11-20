@@ -206,7 +206,26 @@ struct ServerBoxChoice {
     let label: String
     let options: [FleetOption<Pick>]
     let selected: Pick?
+    /// **After a refusal of the server, on the build page** (slice 3, the picture's third element): why, in one plain
+    /// line over the capsule, and the press that makes the server of the capsule, under it. Never a stop.
+    var why: String? = nil
+    var press: (title: String, act: () -> Void)? = nil
+    /// **How to get more servers at the provider whose account had no room** (the owner's "Yes, build it" of 18
+    /// November 2026 to its picture): a link under `why`, whose press shows that provider's own steps and one note in
+    /// its place.
+    var more: More? = nil
     let pick: (Pick) -> Void
+
+    struct More {
+        let link: String
+        let steps: [String]
+        let note: String
+        let shown: Bool
+        let show: () -> Void
+    }
+
+    /// The width of those steps and their note, under the server's box.
+    static let stepsWidth: CGFloat = 270
 
     /// **The provider's five cheapest types**, as the picture has them: with the three other providers, eight rows, so
     /// the list never needs its filter (`FleetSelect` filters a list of more than eight).
@@ -222,12 +241,6 @@ struct ServerBoxChoice {
 /// box is ("Server", or "Mac"), and each thing that runs there is its mark over its name: the hub, the manager by its
 /// name, each agent by its role, and, before a team exists, each agent to come as a dotted ring over "Agent".
 ///
-/// **A later change of a fleet that runs** (`change`, Settings › Servers; the owner's yes of 15 November 2026 to the
-/// pictures in `~/dev/founderizer-plans/shape-change-later/`) draws the servers after it: a server that is there has its
-/// name over its box, a server that the change makes says "New server" and has an edge in the dots of the agents to
-/// come. While the change runs, an agent that is not on its new server yet is faint (`later`), and one that waits for
-/// the owner wears its dot (`waits`). Without `change`, the first run's pages are drawn as before.
-///
 /// **The servers that a press makes** (`under`, the first run's page "Your fleet"; slice 2 of the one wizard, the
 /// owner's "that is brilliant!" of 16 November 2026 to the build page's picture): a box with a line under it is a
 /// server that the press makes, with its edge in dots, and the line says its size and its price ("CX23 · €5.49 a
@@ -235,34 +248,28 @@ struct ServerBoxChoice {
 struct ServerBoxes: View {
     let plan: FleetPlan
     let step: ServersStep
-    var change: ShapeChangePlan?
-    var later: Set<String> = []
-    var waits: [String: AgentPresence] = [:]
     /// The line under each box, by the box's place; nil, or no entry, for none.
     var under: [String?] = []
     /// **A capsule under each box in place of its line** (slice 2b of the one wizard; the owner's "Yes, build them" of 18
     /// November 2026): the server's provider, type and price, whose list offers the provider's other types and the
     /// other providers (`ServerBoxChoice`). nil, or no entry, for none.
     var choices: [ServerBoxChoice?] = []
+    /// **The build page's line under each box** (`FleetBuildLine`, slice 3 of the one wizard), by the box's place, in
+    /// place of `under`: every box of the page keeps a line's room, and a box with a line is as wide as the line.
+    var rows: [FleetBuildRow?] = []
 
     private func line(_ index: Int) -> String? { under.indices.contains(index) ? under[index] : nil }
     private func choice(_ index: Int) -> ServerBoxChoice? { choices.indices.contains(index) ? choices[index] : nil }
+    private func buildRow(_ index: Int) -> FleetBuildRow? { rows.indices.contains(index) ? rows[index] : nil }
 
-    /// `named`: an agent of a fleet that runs, by its own name (a later change).
-    private enum Tile: Hashable { case hub, manager, agent(Int), next, named(String) }
+    private enum Tile: Hashable { case hub, manager, agent(Int), next }
     /// In a box, at most this many things stand in one row.
     private static let row = 6
 
-    private var boxes: [(mac: Bool, tiles: [Tile], title: String?, new: Bool)] {
-        if let change {
-            return change.boxes.map { box in
-                (box.mac, (box.hub ? [Tile.hub] : []) + box.agents.map(Tile.named),
-                 box.server ?? String(l10n: "New server"), box.server == nil && !box.hub)
-            }
-        }
+    private var boxes: [(mac: Bool, tiles: [Tile])] {
         guard !plan.agents.isEmpty else {
             return ServersSketch.servers(step).map { parts in
-                (false, parts.map { $0 == .hub ? Tile.hub : $0 == .manager ? .manager : .next }, nil, false)
+                (false, parts.map { $0 == .hub ? Tile.hub : $0 == .manager ? .manager : .next })
             }
         }
         return plan.places(step).map { place in
@@ -272,12 +279,12 @@ struct ServerBoxes: View {
                 case .manager: .manager
                 case .agent(let index): .agent(index)
                 }
-            }, nil, false)
+            })
         }
     }
 
     var body: some View {
-        CenteredRows(spacing: ShapeMetrics.serverGap) {
+        CenteredRows(spacing: ShapeMetrics.serverGap, top: !rows.isEmpty || !choices.isEmpty) {
             ForEach(Array(boxes.enumerated()), id: \.offset) { index, box in
                 VStack(spacing: 8) {
                     VStack(spacing: 10) {
@@ -289,9 +296,10 @@ struct ServerBoxes: View {
                             if let choice = choice(index) {
                                 ServerBoxChoice.capsule(choice.label).hidden().frame(height: 0).accessibilityHidden(true)
                             }
+                            if buildRow(index) != nil { Color.clear.frame(width: FleetBuildLine.width - 20, height: 0) }
                             HStack(spacing: 5) {
                                 Image(systemName: box.mac ? "desktopcomputer" : "server.rack").font(IconMetrics.symbol(ShapeMetrics.kindMark))
-                                Text(box.title ?? (box.mac ? String(l10n: "Mac") : String(l10n: "Server"))).font(ShapeMetrics.underFont)
+                                Text(box.mac ? String(l10n: "Mac") : String(l10n: "Server")).font(ShapeMetrics.underFont)
                             }
                             .foregroundStyle(FleetStyle.muted).accessibilityHidden(true)
                         }
@@ -306,7 +314,6 @@ struct ServerBoxes: View {
                                                 .lineLimit(1).minimumScaleFactor(0.8)
                                         }
                                         .frame(width: ShapeMetrics.serverTile)
-                                        .opacity(agent(tile).map(later.contains) == true ? 0.35 : 1)
                                     }
                                 }
                             }
@@ -315,7 +322,7 @@ struct ServerBoxes: View {
                     .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 12)
                     .background(ShapeMetrics.islandFill, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
                     .overlay {
-                        if box.new || line(index) != nil || choice(index) != nil {
+                        if line(index) != nil || choice(index) != nil {
                             RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(ShapeMetrics.line,
                                 style: StrokeStyle(lineWidth: ShapeMetrics.lineWidth, lineCap: .round, dash: ShapeMetrics.dots))
                         } else {
@@ -323,17 +330,37 @@ struct ServerBoxes: View {
                         }
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel(box.title ?? (box.mac ? String(l10n: "A Mac") : String(l10n: "A server")))
+                    .accessibilityLabel(box.mac ? String(l10n: "A Mac") : String(l10n: "A server"))
                     // Every box of a page with lines keeps the line's room, so that the boxes of a row stay level.
-                    if !under.isEmpty {
+                    if !rows.isEmpty {
+                        FleetBuildLine(row: buildRow(index))
+                    } else if !under.isEmpty {
                         Text(line(index) ?? " ").font(ShapeMetrics.underFont).foregroundStyle(FleetStyle.muted)
                             .lineLimit(1).minimumScaleFactor(0.8)
                             .accessibilityHidden(line(index) == nil)
                     }
                     if !choices.isEmpty {
                         if let choice = choice(index) {
+                            if let why = choice.why {
+                                Text(why).font(ShapeMetrics.underFont).foregroundStyle(FleetStyle.muted)
+                                    .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: FleetBuildLine.width)
+                            }
+                            if let more = choice.more {
+                                if more.shown {
+                                    SetupSteps(more.steps, width: ServerBoxChoice.stepsWidth)
+                                    Text(more.note).font(ShapeMetrics.underFont).foregroundStyle(FleetStyle.muted)
+                                        .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: ServerBoxChoice.stepsWidth)
+                                } else {
+                                    SetupLink(more.link) { more.show() }
+                                }
+                            }
                             FleetSelect(choice.title, options: choice.options, selection: choice.selected,
                                         onSelect: choice.pick) { FleetSelectLabel(title: choice.label) }
+                            if let press = choice.press {
+                                Button(press.title) { press.act() }.buttonStyle(FleetPrimaryButtonStyle())
+                            }
                         } else {
                             ServerBoxChoice.capsule(" ").hidden().accessibilityHidden(true)
                         }
@@ -341,27 +368,13 @@ struct ServerBoxes: View {
                 }
             }
         }
-        // Only a change's own states: without one, each glyph keeps what the window knows of its agent.
-        .transformEnvironment(\.glyphPresence) { presence in if change != nil { presence = waits } }
-    }
-
-    /// The agent of a tile, for its state while a change runs.
-    private func agent(_ tile: Tile) -> String? {
-        switch tile {
-        case .manager: plan.names.first
-        case .agent(let index): plan.agents[index].name
-        case .named(let name): name
-        case .hub, .next: nil
-        }
     }
 
     @ViewBuilder private func mark(_ tile: Tile) -> some View {
         switch tile {
         case .hub: HubTile(size: ShapeMetrics.serverMark)
-        case .manager: AgentGlyph(name: plan.names[0], size: ShapeMetrics.serverMark, dot: waits[plan.names[0]] != nil)
-        case .agent(let index): AgentGlyph(name: plan.agents[index].name, size: ShapeMetrics.serverMark,
-                                           dot: waits[plan.agents[index].name] != nil)
-        case .named(let name): AgentGlyph(name: name, size: ShapeMetrics.serverMark, dot: waits[name] != nil)
+        case .manager: AgentGlyph(name: plan.names[0], size: ShapeMetrics.serverMark, dot: false)
+        case .agent(let index): AgentGlyph(name: plan.agents[index].name, size: ShapeMetrics.serverMark, dot: false)
         case .next:
             Circle().strokeBorder(ShapeMetrics.line, style: StrokeStyle(lineWidth: ShapeMetrics.lineWidth, lineCap: .round, dash: [0.1, 5.2]))
                 .frame(width: ShapeMetrics.serverMark, height: ShapeMetrics.serverMark).accessibilityHidden(true)
@@ -373,7 +386,6 @@ struct ServerBoxes: View {
         case .hub: String(l10n: "Hub")
         case .manager: ManagerName.shown(plan.manager)
         case .agent(let index): plan.agents[index].role
-        case .named(let name): name.agentLabel
         case .next: String(l10n: "Agent")
         }
     }
@@ -389,10 +401,6 @@ struct ServersSlider: View {
     @Binding var step: ServersStep
     /// The words under each step, in the steps' order.
     let counts: [String]
-    /// **He let go of the knob** (Settings › Servers, whose slider opens the page of a change): at the end of a drag
-    /// and of a press, at Return after the arrow keys, and at VoiceOver's own press. nil on the first run's page, where
-    /// the step itself is the answer.
-    var settled: ((ServersStep) -> Void)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focused: Bool
     /// Where a drag holds the knob, between the track's two ends; nil while nothing holds it.
@@ -497,12 +505,6 @@ struct ServersSlider: View {
             default: break
             }
         }
-        .onKeyPress(.return) {
-            guard let settled else { return .ignored }
-            settled(step)
-            return .handled
-        }
-        .modifier(SettlePress(settled: settled, step: step))
         .accessibilityIdentifier("first-run-servers-slider")
     }
 
@@ -516,23 +518,11 @@ struct ServersSlider: View {
         guard held != nil || grab != nil else { return }
         grab = nil
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { held = nil }
-        settled?(step)
     }
 
     private func choose(_ next: ServersStep) {
         guard next != step else { return }
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { step = next }
-    }
-}
-
-/// VoiceOver's own press of the slider, only where it opens something (`ServersSlider.settled`): the first run's page
-/// gets none, and its Continue stays the step's one press.
-private struct SettlePress: ViewModifier {
-    let settled: ((ServersStep) -> Void)?
-    let step: ServersStep
-
-    func body(content: Content) -> some View {
-        if let settled { content.accessibilityAction { settled(step) } } else { content }
     }
 }
 
@@ -571,6 +561,9 @@ struct HubTile: View {
 /// Rows of views in the middle of the room: a view that does not fit on a row starts the next one.
 struct CenteredRows: Layout {
     var spacing: CGFloat
+    /// The columns of a row stand from its top, not around its middle: a server's choice after a refusal makes its
+    /// column taller than its neighbours', and their boxes stay level (slice 3).
+    var top = false
 
     private func rows(_ subviews: Subviews, width: CGFloat) -> [[(index: Int, size: CGSize)]] {
         var rows: [[(index: Int, size: CGSize)]] = [[]], used: CGFloat = 0
@@ -598,7 +591,8 @@ struct CenteredRows: Layout {
             let high = row.map(\.size.height).max() ?? 0
             var x = bounds.midX - wide / 2
             for item in row {
-                subviews[item.index].place(at: CGPoint(x: x, y: y + (high - item.size.height) / 2), proposal: .unspecified)
+                subviews[item.index].place(at: CGPoint(x: x, y: y + (top ? 0 : (high - item.size.height) / 2)),
+                                           proposal: .unspecified)
                 x += item.size.width + spacing
             }
             y += high + spacing

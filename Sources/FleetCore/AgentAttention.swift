@@ -1,9 +1,8 @@
 import Foundation
 
 /// The machine problems of one agent that need the owner, most important first. They count only for an online agent
-/// in a fresh hub state; the agent's status shows the rest (unknown, in setup, offline, limited). Each one is resolved
-/// in Technical details (Check machine, Update Fleet, Terminal). A vault token that is not isolated is not one: the
-/// owner can keep administrator access on purpose.
+/// in a fresh hub state; the agent's status shows the rest (unknown, in setup, offline, limited). A vault token that is
+/// not isolated is not one: the owner can keep administrator access on purpose.
 public enum AgentAttention: Hashable, Sendable {
     case staleReading
     case signIn

@@ -213,8 +213,17 @@ struct DeviceSigningKey: Sendable {
 
     /// The owner's signed yes to a door call: the statement and its signature, or nil for an item with no door call,
     /// another option or a phone with no signing key. The hub then refuses the unsigned yes, and the item stays open.
+    ///
+    /// **On the door's card of a run** (an item with a `door_host`) it signs only the hash that this phone computed from
+    /// the script that the card shows (`NeedScript`), by the Mac's own check (`DoorCall.checked(_:)`, the call that the
+    /// Mac makes), and nothing when that check fails (the lane "Give on the iPhone"; the owner's "Show the script" of
+    /// 19 November 2026). Before, the phone signed the hub's hash of a script that it never showed.
     func approval(for need: OwnerNeed, choice: Int) -> (statement: String, signature: String)? {
-        guard choice == 0, let call = need.door_call, let fleet = need.door_fleet else { return nil }
+        guard choice == 0, var call = need.door_call, let fleet = need.door_fleet else { return nil }
+        if let checked = DoorCall.checked(need) {
+            guard case .success(let computed) = checked else { return nil }
+            call = computed
+        }
         let statement = OwnerStatement.doorCall(fleet: fleet, need: need.id, call: call)
         guard let signature = try? sign(statement) else { return nil }
         return (statement, signature)

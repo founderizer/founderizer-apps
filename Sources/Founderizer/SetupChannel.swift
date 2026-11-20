@@ -218,12 +218,12 @@ enum AppFront {
 /// program of this own bundle. That proves which program calls, not who wanted the call: each process of the owner's
 /// user can start the program. So the safety of the link is in what its tools can do: they read typed facts, and
 /// `setup_show` asks macOS to bring one of this app's own pages to the front; none presses, rents or pays. Two carry a
-/// secret (`LinkTools`). `save_bot_token` sends a Discord bot's token to the hub's route that any process of the
-/// owner's user reaches already. `save_secret` adds a new entry to the hub's list of secrets and passes its value,
-/// sealed to the central vault's key, on to the vault: through the hub's routes that any process of the owner's
-/// user reaches already, so it gives such a process no new power; it gives the secret to no agent, replaces nothing
-/// and sets no site itself. Proved with the released, Developer ID signed build (14 November 2026), before
-/// `save_secret` was on the link; `save_secret` ran in the released build 0.1.275 on a test fleet (16 November 2026).
+/// secret (`LinkTools`). `save_bot_token` sends a Discord or Telegram bot's token to the hub's route that any process
+/// of the owner's user reaches already. `save_secret` adds a new entry to the hub's list of secrets and passes its
+/// value, sealed to the central vault's key, on to the vault: through the hub's routes that any process of the owner's
+/// user reaches already, so it gives such a process no new power; it gives the secret to no agent, replaces nothing and
+/// sets no site itself. Proved with the released, Developer ID signed build (14 November 2026), before `save_secret`
+/// was on the link; `save_secret` ran in the released build 0.1.275 on a test fleet (16 November 2026).
 ///
 /// **Four tools sign, and that is a new power.** `grant_secret` makes this app sign the owner's grant of a secret of
 /// the list to a worker or a lead, or its end, with the owner key of this Mac and with no question to the owner (the
@@ -627,7 +627,7 @@ final class SetupChannel {
         }
         switch destination {
         case .needs: return .needs
-        case .activity: return .tasks
+        case .activity, .activityFrom: return .tasks
         case .agents: return .agents
         case .addAgent: return .addAgent(pages.addAgent)
         case .server(let name): return .server(name)
@@ -652,13 +652,11 @@ final class SetupChannel {
             case .canUse: return .agentPart(name, .canUse)
             case .capabilities: return .agentPart(name, .capabilities)
             }
-        case .signIn(let name): return .agentSignIn(name, pages.signIn(of: name))
+        case .signIn(let name, _): return .agentSignIn(name, pages.signIn(of: name))
         case .agentRule(let name, _): return .agentRule(name)
         case .settings(let tab): return .settings(settingsPage(tab))
         case .app(let group): return .app(appGroup(group))
         case .connectKey: return .connectKey
-        // The slider's step is the owner's choice and no page: the wizard's own pages have no name yet.
-        case .shapeChange: return .shapeChange
         // One thing of an agent's work, from its chat panel (`WorkItemPage`), is a page of the agent's work: the name of
         // its Tasks, which lists the same work task by task. A name of its own waits for a lane of the owner's places.
         case .work(let name, _): return .agentPart(name, .tasks)

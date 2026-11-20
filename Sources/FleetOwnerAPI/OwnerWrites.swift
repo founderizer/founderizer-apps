@@ -48,10 +48,11 @@ extension OwnerTools {
         return try hub.command("/ui/messages", body, "the message", requestID: args["request_id"])
     }
 
-    /// `answer_needs_you`: `POST /ui/needs/<need>`.
+    /// `answer_needs_you`: `POST /ui/needs/<need>`, with the files of `attachments` beside an answer in words or
+    /// alone (`OwnerTools.filesWithAChoice` refused them beside a choice before any request).
     func answerNeed(_ args: [String: JSONValue], on hub: OwnerHub) throws -> JSONValue? {
         var body: [String: JSONValue] = [:]
-        for key in ["answer", "choice", "choices"] {
+        for key in ["answer", "choice", "choices", "attachments"] {
             if let value = args[key], !value.isNull { body[key] = value }
         }
         let need = try Self.wholeNumber(args, "need")

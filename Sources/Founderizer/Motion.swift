@@ -81,15 +81,17 @@ extension Destination {
     var page: String {
         switch self {
         case .needs: "needs"
-        case .activity: "tasks"
+        // Tasks, also as an agent's chat panel opens it (`activityFrom`): one board, so it does not fade in again when
+        // only its back link goes.
+        case .activity, .activityFrom: "tasks"
         case .agents: "agents"
         case .addAgent: "add-agent"
         case .task(let id): "task/\(id)"
         case .work(let name, let key): "work/\(name)/\(key)"
         case .agent(let name): "agent/\(name)"
-        case .signIn(let name): "sign-in/\(name)"
+        case .signIn(let name, let runtime): "sign-in/\(name)/\(runtime ?? "")"
         case .agentDetail(let name, _), .agentRule(let name, _): "details/\(name)"
-        case .settings, .server, .addServer, .app, .connectKey, .shapeChange: "settings"
+        case .settings, .server, .addServer, .app, .connectKey: "settings"
         }
     }
 

@@ -56,6 +56,9 @@ public enum DoorAccess {
     /// --fleet`): its own install script's line for that option. Before that release, no fleet server gets parts, and
     /// none fails for an option that the script does not know.
     public static let fleetProbe = "grep -qs -- '--fleet) FLEET=1' /opt/fleet-door/current/host/install.sh && echo fleet=yes; true"
+    /// Whether the door's check takes `--first` (API 1.241): the parser's line in the door's own `door.py`, which
+    /// `test_door` checks is there. A door from before gets no flag, so it gives no refusal that would count as no step.
+    public static let firstProbe = "grep -qs -- 'probing.add_argument(\"--first\"' /opt/fleet-door/current/door.py && echo first=yes; true"
     /// The OS users of the agents on an operator box: the members of the group that every agent's user is in.
     public static let boxProgram = "getent group fleet-agents | cut -d: -f4"
     /// The door's service port on the private network, the default of its entry in the fleet's configuration.
@@ -252,6 +255,10 @@ public enum DoorAccess {
         }
         /// nil from a hub before API 1.210: no machine of the fleet is a host of the door then, as before.
         public var fleet: Fleet? = nil
+        /// What this view gives, as one mark (API 1.234), the same while it gives the same. Once the door's file holds
+        /// what this view gives, each read of the hub's view says this mark (`held`), and only that word ends the
+        /// hub's wait for a new grant. nil from a hub before that.
+        public var mark: String? = nil
 
         /// The names of a hold that keeps a server's parts and makes it rule-only.
         public static let ruleOnlyHolds: Set<String> = ["rule-only", "judged"]
@@ -420,6 +427,10 @@ public enum DoorAccess {
         public let holdings: [String: [String: String]]
         /// The servers of a business whose parts did not answer: not in the file until their second sshd does.
         public let waiting: [String]
+        /// The agents whose GitHub grants the file does not hold: they have no entry, and the door's code takes no
+        /// entry for an agent that only gets its tokens yet (`Facts.tokensOnly`). While one is left out, the round does
+        /// not tell the hub that the file holds the hub's view (API 1.234).
+        public var leftOut: [String] = []
     }
 
     /// The servers that this Mac's Tailscale shows, each with its businesses: every device with a business tag, except
@@ -609,6 +620,7 @@ public enum DoorAccess {
             }
             agents[found.agent] = entry
         }
+        var leftOut: [String] = []
         if let hub = facts.hub {
             var credentials = file["credentials"] as? [String: Any] ?? [:]
             for name in Array(credentials.keys) where cardCredential(name) && hub.credentials[name] == nil {
@@ -632,8 +644,12 @@ public enum DoorAccess {
             // once the hub asks it for every one. An agent with no entry gets one with its grants alone, when the
             // door's code takes such an entry (`Facts.tokensOnly`).
             for (name, agent) in hub.agents where isName(name) {
-                guard let repos = agent.repos, agents[name] != nil || facts.tokensOnly else { continue }
+                guard let repos = agent.repos else { continue }
                 let grants = repos.filter { repoName($0.key) && ["read", "write", "deploy"].contains($0.value) }
+                guard agents[name] != nil || facts.tokensOnly else {
+                    if !grants.isEmpty { leftOut.append(name) }
+                    continue
+                }
                 var entry = agents[name] as? [String: Any] ?? [:]
                 if grants.isEmpty { entry["github"] = nil } else { entry["github"] = grants }
                 if entry.isEmpty { agents[name] = nil } else { agents[name] = entry }
@@ -651,7 +667,8 @@ public enum DoorAccess {
         if let found = fleetHolder {
             for name in fleetHosts { recorded[found.agent]?[name] = "patch" }
         }
-        return Plan(file: data, changed: data != canonical(current), holdings: recorded, waiting: waiting.sorted())
+        return Plan(file: data, changed: data != canonical(current), holdings: recorded, waiting: waiting.sorted(),
+                    leftOut: leftOut.sorted())
     }
 
     /// **Each Operator's GitHub entries, from the hub's grants** (new-projects plan, N8, in DevOps plan 5.12; the
@@ -836,15 +853,93 @@ public enum DoorAccess {
     /// (`IdentitiesOnly`), and not every key of the SSH agent before them (7 November 2026): four Teleport keys there and
     /// the four files of `Host *` made eight tries, and a server whose sshd stops at six (`MaxAuthTries`) logged
     /// "maximum authentication attempts exceeded" each round, until its fail2ban shut this Mac out for an hour. `key`:
-    /// one more key file for a device with no kept connection, offered before those files (`LoginKeys`).
-    public static func sshArguments(kept: InstallTarget?, address: String, program: String, key: String? = nil) -> [String]? {
-        var target = kept ?? InstallTarget(host: address, user: "root", identityFile: key)
+    /// one more key file for a device with no kept connection, offered before those files (`LoginKeys`). `port`: the
+    /// port of that device's SSH, where this Mac's SSH configuration names one (`configured`).
+    public static func sshArguments(kept: InstallTarget?, address: String, program: String, key: String? = nil,
+                                    port: Int = 22) -> [String]? {
+        var target = kept ?? InstallTarget(host: address, user: "root", port: port, identityFile: key)
         target.host = address
         target.becomeRoot = target.user != "root"
         guard target.isValid else { return nil }
         let arguments = CentralVaultRemote.arguments(target: target, program: program)
         return kept == nil ? ["-o", "IdentitiesOnly=yes"] + arguments : arguments
     }
+
+    /// **What this Mac's SSH configuration gives the round's root login on a device with no kept connection**
+    /// (19 November 2026: a business's server whose root SSH answers only on port 2222 got no door parts, because the
+    /// round went to port 22, while an entry of `~/.ssh/config` with the server's address as its `HostName` named the
+    /// port). The install reads a server's port in the same way (`InstallTarget.named`).
+    public struct Configured: Equatable, Sendable {
+        /// The port of the device's SSH.
+        public var port: Int
+        /// The entry's own key file for root, which `ssh` does not offer by itself at the device's address, or nil.
+        public var key: String?
+
+        public init(port: Int, key: String? = nil) { self.port = port; self.key = key }
+    }
+
+    #if os(macOS)
+    /// **The entry of this Mac's SSH configuration for a device, read with the install's own read**
+    /// (`SSHOptions.configured`, which connects to nothing), or nil when the configuration says nothing of its own
+    /// for the device: the round then goes to port 22, as before.
+    ///
+    /// The entry is what the configuration says for the device's address: a `Host` line that names the address, else
+    /// the entry that gives the address as its `HostName`. With none of these, and with `byName`, it is the entry
+    /// for the device's name in Tailscale, when that entry's host is this device: its address, its name, or its name
+    /// with the domain of the private network. An entry through another host (`ProxyJump`, `ProxyCommand`) is not
+    /// used: the round's `ssh` goes straight to the address, and a `Host` line of the address with a proxy stays
+    /// `ssh`'s own to read, at port 22 as before. `byName` is false for a device that this Mac's Tailscale did not
+    /// name.
+    ///
+    /// **Only an entry for root counts**: its user is root, or it names no user. An entry for another user gives
+    /// nothing, because its port can be the port of another program on that server (a second sshd for one user, a
+    /// git server), where a root login fails at each try. For the same reason the port of the door's own second sshd
+    /// (`sshdPort`) is never used: root has no login there. With several entries for one address, the read gives the
+    /// one with user root, else the first one of the files.
+    ///
+    /// The port and the key are that one entry's. The key is the entry's own key file, one that the configuration
+    /// does not give every host. A `Host` line that names the address gives no key here, because `ssh` reads that
+    /// line itself and offers its key.
+    ///
+    /// Known and not changed: a `Host` line that names the address with a key of its own makes `ssh` offer that key
+    /// beside the files of `Host *` and the one key of `LoginKeys`, which can be six keys in one try. An entry's
+    /// `HostKeyAlias` is not used: the round knows a host key by the device's address, with or without the port
+    /// (`ssh` takes a key that it knows for the address alone also at another port).
+    public static func configured(_ device: Device, address: String, byName: Bool = true, ssh: String = "/usr/bin/ssh",
+                                  home: String = NSHomeDirectory(), localUser: String = NSUserName(),
+                                  run: ShellRunner = Shell.local,
+                                  exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }) async -> Configured? {
+        guard let read = await SSHOptions.configured(for: address, aliases: true, ssh: ssh, home: home, run: run),
+              let general = read.general else { return nil }
+        func own(_ options: SSHOptions) -> Bool {
+            options.user != general.user || options.port != general.port || options.identityFiles != general.identityFiles
+        }
+        var entry = read.mine.flatMap { own($0) ? $0 : nil }
+        var offered = entry != nil && !read.alias        // ssh itself reads a Host line that names the address
+        if entry == nil, byName,
+           let named = await SSHOptions.configured(for: device.name, aliases: true, ssh: ssh, home: home, run: run)?.mine,
+           own(named), names(named.hostname, device: device.name, address: address) {
+            entry = named
+            offered = false
+        }
+        // an entry for root only, never one through another host, and never the port of the door's own second sshd
+        guard let entry, !entry.proxied, entry.user == "root" || entry.user == general.user, entry.port != sshdPort else {
+            return nil
+        }
+        let target = InstallTarget.named("root@" + address, options: entry, general: general, localUser: localUser,
+                                         home: home, exists: exists)
+        return Configured(port: target.port, key: offered ? nil : target.identityFile)
+    }
+
+    /// Whether the host of an entry for a device's name is that device: its address on the private network, its name
+    /// in Tailscale, or that name with the domain of the private network (`<name>.<tailnet>.ts.net`).
+    static func names(_ hostname: String, device: String, address: String) -> Bool {
+        var host = hostname.lowercased()
+        if host.hasSuffix(".") { host.removeLast() }
+        return host == address.lowercased() || host == device.lowercased()
+            || (host.hasPrefix(device.lowercased() + ".") && host.hasSuffix(".ts.net"))
+    }
+    #endif
 
     /// **The one key file, besides those of `~/.ssh/config`, that the round offers a device with no kept connection**
     /// (7 November 2026: two servers of another business take root only with the key of the app's kept
@@ -868,6 +963,14 @@ public enum DoorAccess {
 
         /// A refusal of the device with this key: its next try offers the next one.
         public mutating func refused(_ device: Device, key: String) { refused[DoorAccess.line(device)] = key }
+
+        /// The key files that a try can offer a device, in their order: the key that this Mac's SSH configuration
+        /// gives root on that device (`Configured.key`) first, then the kept root connections' key files. It is
+        /// still one key a try.
+        public static func candidates(configured: String?, kept: [String]) -> [String] {
+            guard let configured else { return kept }
+            return [configured] + kept.filter { $0 != configured }
+        }
 
         static func key(hub: URL) -> String { "doorLoginKeys|\(hub.absoluteString)" }
 
@@ -975,12 +1078,10 @@ public struct DoorSetupClient: Sendable {
 
     public init(session: URLSession = .shared) { self.session = session }
 
-    public func view(hub: URL, database: String) async throws -> DoorAccess.HubDoor {
-        var parts = URLComponents(url: hub.appendingPathComponent("ui/door"), resolvingAgainstBaseURL: false)!
-        // renew=form: this build's GitHub App rows take the new key of the App that the hub held, so the hub may ask for
-        // it (plan 13, item 4; an older app shows no form, and the hub raises nothing while only such an app reads)
-        parts.queryItems = [.init(name: "db", value: database), .init(name: "renew", value: "form")]
-        var request = URLRequest(url: parts.url!)
+    /// `held`: the mark of the newest view whose plan the door's file holds (API 1.234), empty when the caller names
+    /// none, as the GitHub App flow's read does.
+    public func view(hub: URL, database: String, held: String = "") async throws -> DoorAccess.HubDoor {
+        var request = URLRequest(url: Self.viewURL(hub: hub, database: database, held: held))
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, response) = try await session.hubData(for: request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
@@ -989,6 +1090,18 @@ public struct DoorSetupClient: Sendable {
         let view = try JSONDecoder().decode(DoorAccess.HubDoor.self, from: data)
         guard view.db == database else { throw HubError.invalidResponse }
         return view
+    }
+
+    /// The address of a read of `GET /ui/door`. renew=form: this build's GitHub App rows take the new key of the App
+    /// that the hub held, so the hub may ask for it (plan 13, item 4; an older app shows no form, and the hub raises
+    /// nothing while only such an app reads). held, also when empty (API 1.234): a read with no `held` is an app before
+    /// that word, for which the hub takes two reads after a grant as the door having it, so this read would end a
+    /// restart's wait while the door's file may not have the grant yet.
+    public static func viewURL(hub: URL, database: String, held: String) -> URL {
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/door"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database), .init(name: "renew", value: "form"),
+                            .init(name: "held", value: held)]
+        return parts.url!
     }
 
     public func save(hub: URL, database: String, client: String, address: String, port: Int) async throws {
@@ -1019,8 +1132,9 @@ public struct DoorSetupClient: Sendable {
         guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }
     }
 
-    /// `POST /ui/door/host` (API 1.100): what this Mac's round did on one server, `installed`, `passed` or `failed`,
-    /// with one line. The hub tells the manager of the first server that passed, and of each failure.
+    /// `POST /ui/door/host` (API 1.100): what this Mac's round did on one server, `installed`, `passed` or `failed`, or
+    /// (API 1.241) `unchecked`, with one line. The hub tells the manager of the first server that passed, of each
+    /// failure, of each cause of `unchecked`, and of a pass after either.
     public func hostReport(hub: URL, database: String, client: String, host: String, state: String, said: String) async throws {
         var request = URLRequest(url: hub.appendingPathComponent("ui/door/host"))
         request.httpMethod = "POST"

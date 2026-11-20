@@ -86,6 +86,32 @@ import Testing
         #expect(MessageAttachment.safeName("rows", mime: "text/csv") == "rows.csv")
     }
 
+    /// The save icon of an agent's file writes into Downloads: a file that the owner has there already stays as it
+    /// was, and a name from the hub never reaches outside the folder.
+    @Test func aSavedFileNeverReplacesAFileOrLeavesItsFolder() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let first = try MessageAttachment.save(Data("one".utf8), named: "Report.pdf", in: folder)
+        let second = try MessageAttachment.save(Data("two".utf8), named: "Report.pdf", in: folder)
+        #expect(first.lastPathComponent == "Report.pdf")
+        #expect(second.lastPathComponent == "Report 2.pdf")
+        #expect(try Data(contentsOf: first) == Data("one".utf8))
+        #expect(try Data(contentsOf: second) == Data("two".utf8))
+        _ = try MessageAttachment.save(Data("a".utf8), named: "notes", in: folder)
+        #expect(try MessageAttachment.save(Data("b".utf8), named: "notes", in: folder).lastPathComponent == "notes 2")
+        for name in ["../../escape", "a/\u{301}../../escape"] {
+            let place = try MessageAttachment.save(Data("x".utf8), named: name, in: folder)
+            #expect(place.deletingLastPathComponent().standardizedFileURL.path == folder.standardizedFileURL.path)
+            #expect(!place.lastPathComponent.unicodeScalars.contains("/"))
+        }
+        #expect(MessageAttachment.diskName("../../escape") == "_.._.._escape")
+        #expect(MessageAttachment.diskName("invoice\u{202E}fdp.exe") == "invoicefdp.exe")
+        #expect(MessageAttachment.diskName(".hidden.pdf") == "_.hidden.pdf")
+        #expect(MessageAttachment.diskName(".\u{301}x.pdf") == "_.\u{301}x.pdf")
+        #expect(MessageAttachment.diskName(" ") == "file")
+    }
+
     @Test func nothingIsShownWhoseBytesAreNotTheBytesTheHubNamed() throws {
         let bytes = Data("a picture, say".utf8)
         let item = try file(["size": bytes.count, "sha256": MessageAttachment.digest(bytes)])
@@ -107,6 +133,13 @@ import Testing
         #expect(props[kCGImagePropertyPixelWidth] as! Int == 512)
         #expect(MessageAttachment.thumbnail(try picture("public.png"), maxPixels: 48)?.width == 48)
         #expect(MessageAttachment.thumbnail(Data("words".utf8)) == nil)
+        // For a session with no shell, a picture that the hub would not give in a tool's answer is made small enough
+        // (`shownPictureSide`, `shownPictureBytes`); one that fits goes as it is.
+        let wide = try picture("public.png", width: MessageAttachment.shownPictureSide + 1, height: 10)
+        #expect(try MessageAttachment.imageForSending(wide).mime == "image/png")
+        let shown = try MessageAttachment.imageForSending(wide, shown: true)
+        #expect(shown.mime == "image/jpeg" && shown.data.count <= MessageAttachment.shownPictureBytes)
+        #expect(try MessageAttachment.imageForSending(try picture("public.png"), shown: true).mime == "image/png")
     }
 
     @Test func aRequestCarriesTheNumbersOfItsFiles() throws {
@@ -130,6 +163,16 @@ import Testing
         older.removeValue(forKey: "attachments")
         let old = try JSONDecoder().decode(PendingRequest.self, from: JSONSerialization.data(withJSONObject: older))
         #expect(old.attachments.isEmpty)
+        // A guidance carries its files beside its words (owner API 1.223): a body without them was a file dropped in
+        // silence. No other command carries a file.
+        let guidance = PendingRequest(hub: hub, database: "gen-1", client: "c", command: .steer(task: 8, attempt: 2),
+                                      attachments: [3, 4], text: "Use this screenshot.")
+        let steer = try JSONSerialization.jsonObject(with: guidance.body()) as! [String: Any]
+        #expect(steer["attachments"] as? [Int] == [3, 4])
+        #expect(steer["text"] as? String == "Use this screenshot." && steer["expected_attempt"] as? Int == 2)
+        let other = PendingRequest(hub: hub, database: "gen-1", client: "c",
+                                   command: .triggerState(id: 2, revision: 1, action: .pause), attachments: [3], text: "")
+        #expect(throws: (any Error).self) { try other.body() }
     }
 
     @Test func theOutboxKeepsOneRequestWithItsOwnFiles() throws {
@@ -251,7 +294,79 @@ import Testing
             return try JSONDecoder().decode(SendReceipt.self, from: JSONSerialization.data(withJSONObject: fields))
         }
         #expect(try receipt([3]).matches(sending))
+        // The hub's replay lists the files by number, whatever their order in the request.
+        let two = PendingRequest(hub: hub, database: "gen-1", client: "c", recipient: "studio",
+                                 attachments: [4, 3], text: "Look.")
+        let replayed = try JSONDecoder().decode(SendReceipt.self, from: JSONSerialization.data(withJSONObject: [
+            "ok": true, "request_id": two.requestID.uuidString.lowercased(), "event_id": 9, "created": 1.0,
+            "replayed": true, "client": "c", "recipient": "studio", "attachments": [3, 4]]))
+        #expect(replayed.matches(two))
         #expect(try !receipt([3, 4]).matches(sending))
         #expect(try !receipt(nil).matches(sending))     // a hub without the feature never confirms a file
+        // A guidance's receipt, the same: its steer must hold the files that were sent (owner API 1.223).
+        let guidance = PendingRequest(hub: hub, database: "gen-1", client: "c", command: .steer(task: 8, attempt: 2),
+                                      attachments: [3], text: "Look.")
+        func steer(_ files: [Int]?) throws -> TaskSteer {
+            var fields: [String: Any] = ["id": 9, "task": 8, "attempt": 2, "text": "Look.", "created": 100.0,
+                                         "request_id": guidance.requestID.uuidString.lowercased(), "client": "c"]
+            if let files { fields["attachments"] = files.map { ["id": $0, "name": "mockup.png", "mime": "image/png",
+                "size": 412, "sha256": String(repeating: "a", count: 64), "created": 1000.0] as [String: Any] } }
+            return try JSONDecoder().decode(TaskSteer.self, from: JSONSerialization.data(withJSONObject: fields))
+        }
+        #expect(try steer([3]).matches(guidance))
+        #expect(try !steer([]).matches(guidance))
+        #expect(try !steer(nil).matches(guidance))      // a hub before 1.223 dropped the file
+        #expect(try !steer([3, 4]).matches(guidance))
+        // A steer's file of a type that this app does not know (a later hub's) is checked where it opens, as a
+        // message's is: the state that carries it is still read, so one file never stops the whole app.
+        let later: [String: Any] = ["id": 9, "task": 8, "attempt": 2, "text": "Look.", "created": 100.0,
+                                    "request_id": guidance.requestID.uuidString.lowercased(), "client": "c",
+                                    "attachments": [["id": 3, "name": "photo.heic", "mime": "image/heic", "size": 412,
+                                                     "sha256": String(repeating: "a", count: 64), "created": 1000.0]]]
+        let state = try HubState.decode(JSONSerialization.data(withJSONObject: [
+            "schema_version": 1, "db": "gen-1", "time": 110.0, "agents": [], "tasks": [], "notes": [], "needs": [],
+            "permissions": [], "messages": [], "reports": [], "steers": [later]]))
+        #expect(state.steers?.first?.attachments?.first?.mime == "image/heic")
+    }
+
+    /// **The plus of a guidance shows only where the file reaches its task alone** (the owner's "Yes, build it" of 19
+    /// November 2026 to the pictures): not on a hub that does not say it takes a steer's files (an older one dropped
+    /// them in silence), not on a task that a person's conversation drives (that person could get what the file says),
+    /// and for a worker or a lead whose Shell box is off only what its session opens: pictures and texts, or texts
+    /// alone where its AI program shows no picture. Fails when the box takes a file that the hub drops, that a person
+    /// reads, or that the agent cannot open, or when it limits the manager, whose session always has a shell.
+    @Test func aGuidanceTakesFilesOnlyWhereItsOwnTaskAloneReadsThem() throws {
+        func state(_ features: [String], conversation: Bool?, shell: Bool = true, role: String = "worker",
+                   runtime: String = "claude") throws -> HubState {
+            var task: [String: Any] = ["id": 8, "title": "Fix the form", "details": "", "done_when": "Fixed.",
+                                       "needs": "none", "goal": "", "owner": "nova", "requester": "manager",
+                                       "state": "working", "created": 1.0, "attempt": 1, "restarts": 0,
+                                       "nudge_level": 0, "stop_sent": 0]
+            if let conversation { task["from_conversation"] = conversation }
+            let agent: [String: Any] = ["name": "nova", "role": role, "runtime": runtime, "can": shell ? ["shell"] : []]
+            return try HubState.decode(JSONSerialization.data(withJSONObject: [
+                "schema_version": 1, "db": "gen-1", "time": 10.0, "agents": [agent], "tasks": [task], "notes": [],
+                "needs": [], "permissions": [], "messages": [], "reports": [], "ui_features": features]))
+        }
+        let both = ["attachments", "steer_files"]
+        let open = try state(both, conversation: false)
+        #expect(open.tasks[0].guidanceTakesFiles(in: open) && open.tasks[0].guidanceFiles(in: open) == .any)
+        for refused in [try state(["attachments"], conversation: false), try state(["steer_files"], conversation: false),
+                        try state(both, conversation: true), try state(both, conversation: nil)] {
+            #expect(!refused.tasks[0].guidanceTakesFiles(in: refused))
+        }
+        let closed = try state(both, conversation: false, shell: false)
+        #expect(closed.tasks[0].guidanceTakesFiles(in: closed) && closed.tasks[0].guidanceFiles(in: closed) == .shown)
+        let lead = try state(both, conversation: false, shell: false, role: "lead", runtime: "codex")
+        #expect(lead.tasks[0].guidanceFiles(in: lead) == .shown)
+        let grok = try state(both, conversation: false, shell: false, runtime: "grok")
+        #expect(grok.tasks[0].guidanceFiles(in: grok) == .texts)
+        let manager = try state(both, conversation: false, shell: false, role: "manager")
+        #expect(manager.tasks[0].guidanceFiles(in: manager) == .any)
+        let pictures = ["image/png", "image/jpeg"], texts = ["text/plain", "text/markdown", "text/csv", "application/json"]
+        let neither = ["application/pdf", "application/zip", "image/heic", "text/html"]
+        #expect((pictures + texts).allSatisfy(GuidanceFiles.shown.takes) && !neither.contains(where: GuidanceFiles.shown.takes))
+        #expect(texts.allSatisfy(GuidanceFiles.texts.takes) && !(pictures + neither).contains(where: GuidanceFiles.texts.takes))
+        #expect(["application/pdf", "application/zip"].allSatisfy(GuidanceFiles.any.takes))
     }
 }

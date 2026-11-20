@@ -167,6 +167,9 @@ internal sealed class Field : Grid
 
     public TextBox Box => box;
 
+    /// <summary>The round Send, for a watch of its pointer presses (a request's second click: AnswerParts).</summary>
+    public Button SendButton => send;
+
     /// <summary>Enter sends even with no Send shown (Settings' address: Enter is Connect).</summary>
     public bool EnterAlwaysSends { get; set; }
 

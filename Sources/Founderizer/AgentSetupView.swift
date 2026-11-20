@@ -488,28 +488,35 @@ struct AgentSetupView: View {
 
     // MARK: "…"
 
-    /// **The page's one "…" is the agent's one menu** (`AgentMenu`, the owner's yes of 28 October 2026 to D-5): the same
-    /// items as the right-click of its row, in the same three groups. Its name and Deactivate, which he uses about once a
-    /// year, are not rows of the card; an agent in setup has no Deactivate, as its setup is what makes it active.
+    /// **The page's "…" has what acts on the agent itself** (`AgentMenu.pageItems`; the owner's "Yes, build both" of 17
+    /// November 2026): Rename… and Deactivate, then Delete…; the right-click of its row has them too, with the items
+    /// that act on that row. Its name and Deactivate, which he uses about once a year, are not rows of the card; an agent
+    /// in setup has no Deactivate, as its setup is what makes it active. **An agent that has none of them has no "…"**:
+    /// the Fleet Manager, which keeps its name and its activity and is never deleted. The menu shows only the items that
+    /// can act now (T-05); while none can (the hub cannot take a write now, as during a save), the "…" stays, dimmed, as
+    /// it is while this page renames or deactivates the agent: it does not come and go with each save.
     @ViewBuilder private var more: some View {
-        let items = AgentMenu.items(agent, store: store)
-        let title = String(l10n: "More \(agent.agentLabel) actions")
-        FleetSelect(title, options: items.map { item in
-            // A line between two groups: a section with no words (`FleetSelect`).
-            FleetOption(item.action, item.title, mark: .symbol(item.symbol),
-                        section: item.group == 0 ? nil : String(repeating: " ", count: item.group),
-                        destructive: item.action == .delete)
-        }, onSelect: { action in act(action) }) {
-            // **A 28-pt circle, as every icon button** (T-21; the sidebar's search and +): it was a 40.5 × 28 capsule.
-            Image(systemName: "ellipsis").font(IconMetrics.symbol(13)).foregroundStyle(FleetStyle.muted)
+        let items = AgentMenu.pageItems(agent, store: store)
+        if !items.isEmpty {
+            let acting = items.filter(\.enabled)
+            let title = String(l10n: "More \(agent.agentLabel) actions")
+            FleetSelect(title, options: acting.map { item in
+                // A line between two groups: a section with no words (`FleetSelect`); the first group has none over it.
+                FleetOption(item.action, item.title, mark: .symbol(item.symbol),
+                            section: item.group == 0 ? nil : String(repeating: " ", count: item.group),
+                            destructive: item.action == .delete)
+            }, onSelect: { action in act(action) }) {
+                // **A 28-pt circle, as every icon button** (T-21; the sidebar's search and +): it was a 40.5 × 28 capsule.
+                Image(systemName: "ellipsis").font(IconMetrics.symbol(13)).foregroundStyle(FleetStyle.muted)
+            }
+            .buttonStyle(FleetIconButtonStyle(rest: true)).disabled(busy || acting.isEmpty).help(title)
+            .accessibilityLabel(title)
+            .accessibilityIdentifier("settings-more")
         }
-        .buttonStyle(FleetIconButtonStyle(rest: true)).disabled(busy).help(title)
-        .accessibilityLabel(title)
-        .accessibilityIdentifier("settings-more")
     }
 
     /// One item of the agent's menu, done on this page: Rename… opens the name's field and Deactivate stops new work here,
-    /// where their words are; the others do what they do from the row.
+    /// where their words are; Delete… does what it does from the row.
     private func act(_ action: AgentMenu.Action) {
         switch action {
         case .rename: newName = agent; newRole = currentRole ?? ""; renameError = nil; roleError = nil; renameFocus = true

@@ -24,6 +24,37 @@ struct ErrorReportsTests {
 
     // ------------------------------------------------------------ the switch
 
+    /// **The first run's answer reaches a hub, and only a hub's receipt ends its wait** (the page "Help improve
+    /// Founderizer", 18 November 2026). The page stands before any hub: a hub that does not offer the switch gets
+    /// nothing, a call that fails keeps the answer for the next hub, and the receipt ends the wait while the card keeps
+    /// its check mark. A press while a call runs is the owner's newer answer, and it still waits after that call. A
+    /// first run that starts again ends the wait with no send, and the check mark stays.
+    @Test func theFirstRunsAnswerWaitsUntilAHubTookIt() async throws {
+        let suite = "FirstRunReportsTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(FirstRunReports.chosen(in: defaults) == nil)
+        #expect(await !FirstRunReports.deliver(offered: true, in: defaults) { _ in Issue.record("no answer, no call") })
+
+        FirstRunReports.choose(true, in: defaults)
+        var sent: [Bool] = []
+        #expect(await !FirstRunReports.deliver(offered: false, in: defaults) { sent.append($0) })
+        #expect(await !FirstRunReports.deliver(offered: true, in: defaults) { _ in throw HubError.invalidResponse })
+        #expect(sent.isEmpty && FirstRunReports.waiting(in: defaults) == true)
+
+        #expect(await FirstRunReports.deliver(offered: true, in: defaults) { sent.append($0) })
+        #expect(sent == [true] && FirstRunReports.waiting(in: defaults) == nil)
+        #expect(FirstRunReports.chosen(in: defaults) == true)
+
+        FirstRunReports.choose(true, in: defaults)
+        #expect(await FirstRunReports.deliver(offered: true, in: defaults) { _ in FirstRunReports.choose(false, in: defaults) })
+        #expect(FirstRunReports.waiting(in: defaults) == false && FirstRunReports.chosen(in: defaults) == false)
+
+        FirstRunReports.forget(in: defaults)
+        #expect(await !FirstRunReports.deliver(offered: true, in: defaults) { _ in Issue.record("a forgotten answer goes nowhere") })
+        #expect(FirstRunReports.chosen(in: defaults) == false)
+    }
+
     /// The hub's answer is `{"send", "db"}`: both, of their kinds, and the generation that was asked.
     @Test func theSwitchIsReadFromTheHubsAnswer() throws {
         let on = try JSONDecoder().decode(ErrorReportsState.self, from: Data(#"{"send": true, "db": "g1"}"#.utf8))

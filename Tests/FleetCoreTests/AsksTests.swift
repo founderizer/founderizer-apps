@@ -19,7 +19,7 @@ struct AsksTests {
     private func task(_ id: Int, _ state: String, ask: String? = nil, owner: String = "dev", last: Double? = nil,
                       waitingOn: String? = nil, accepted: Int? = nil, title: String? = nil, parked: Double? = nil,
                       follows: Int? = nil, works: Bool? = nil, doing: String? = nil, parent: Int? = nil,
-                      checked: Double? = nil) -> [String: Any] {
+                      checked: Double? = nil, delivered: Double? = nil) -> [String: Any] {
         let moved = last ?? Self.now - 600
         var row: [String: Any] = ["id": id, "title": title ?? "Task \(id)", "details": "", "done_when": "Checked", "needs": "none",
                                   "goal": "", "owner": owner, "requester": "manager", "state": state, "created": moved - 60,
@@ -28,7 +28,7 @@ struct AsksTests {
         row["last_activity"] = state == "submitted" ? nil : moved
         row["waiting_on"] = waitingOn; row["accepted"] = accepted; row["parked_until"] = parked
         row["follows"] = follows; row["works"] = works; row["doing"] = doing; row["ask"] = ask
-        row["parent"] = parent; row["checked_at"] = checked
+        row["parent"] = parent; row["checked_at"] = checked; row["delivered"] = delivered
         return row
     }
 
@@ -52,7 +52,7 @@ struct AsksTests {
             "outcomes": outcomes, "notes": [], "needs": needs, "permissions": [], "messages": messages, "reports": []]))
     }
 
-    private func ids(_ board: [ActivityColumn: [BoardItem]], _ column: ActivityColumn) -> [String] { board[column, default: []].map(\.id) }
+    private func ids(_ board: [ActivityColumn: [Job]], _ column: ActivityColumn) -> [String] { board[column, default: []].map(\.id) }
 
     @Test func theTasksOfOneMessageAreOneAskUnderItsNameAndItsAgent() throws {
         let state = try hub([
@@ -132,25 +132,31 @@ struct AsksTests {
             task(8, "completed", ask: "old", last: Self.now - 86_400 * 9, accepted: 1),
         ], messages: ["a", "b", "c", "old"].map { message($0, asked: "Ask \($0)") }, needs: [need(7)])
         let board = state.board(period: .week, calendar: Self.utc)
-        // An ask moved when its newest task moved: its card stands before the task that moved earlier.
-        #expect(ids(board, .inProgress) == ["ask a", "task 3"])
+        // A card stands by when its job began, the newest first: the ask began with his message an hour ago, under the
+        // task of a few minutes ago, also when a task of it moved last (the owner, 19 November 2026: "do not reorder the
+        // tasks in the same column, keep them in their position").
+        #expect(ids(board, .inProgress) == ["task 3", "ask a"])
         // What waits for him first, whatever the period; then the rest.
         #expect(ids(board, .waiting) == ["ask b", "task 5"])
         #expect(ids(board, .done) == ["task 7", "ask c"])           // the ask that ended nine days ago is outside the period
-        // An ask that is open shows whatever the period, also when it waits for nobody.
+        // An ask that is open shows whatever the period, also when it waits for nobody, and so does a task that its agent
+        // parked (the review of 18 November 2026): it moves no more until its time, and must not leave "later" before.
         let parked = try hub([task(1, "working", ask: "p", last: Self.now - 86_400 * 9, parked: Self.now + 3600, works: false),
-                              task(2, "working", last: Self.now - 86_400 * 9, parked: Self.now + 3600, works: false)],
+                              task(2, "working", last: Self.now - 86_400 * 9, parked: Self.now + 3600, works: false),
+                              task(3, "working", last: Self.now - 86_400 * 9, works: false)],                   // not parked
                              messages: [message("p", asked: "Parked for long")])
-        #expect(ids(parked.board(period: .today, calendar: Self.utc), .waiting) == ["ask p"])
+        #expect(Set(ids(parked.board(period: .today, calendar: Self.utc), .waiting)) == ["ask p", "task 2"])
+        #expect(ids(parked.board(period: .today, calendar: Self.utc), .inProgress).isEmpty)
         #expect(parked.asks.first?.lead?.id == 1)
         #expect(ids(state.board(period: .all, calendar: Self.utc), .done) == ["task 7", "ask c", "ask old"])
         // No task of an ask is a card of its own.
-        let cards = board.values.flatMap { $0 }.compactMap { item -> Int? in if case .task(let task) = item { task.id } else { nil } }
+        let cards = board.values.flatMap { $0 }.compactMap { job -> Int? in if case .task(let id) = job.key { id } else { nil } }
         #expect(Set(cards) == [3, 5, 7])
         // The board of one agent (View all of the card Asked): what he asked that agent is one card, whoever does its
-        // tasks; the agent's other tasks are cards of their own, its work on what he asked another agent too. An agent
-        // that owns no task of its own, as the Fleet Manager, shows what he asked it. As on every board, what waits for
-        // him shows whatever the period and stands first in Waiting, and so does an open thing that he asked for.
+        // tasks; the agent's other tasks are cards of their own, and its work on what he asked another agent is a card
+        // under that thing's name, with this agent's tasks of it alone. An agent that owns no task of its own, as the
+        // Fleet Manager, shows what he asked it. As on every board, what waits for him shows whatever the period and
+        // stands first in Waiting, and so does an open thing that he asked for.
         let one = try hub([task(1, "working", ask: "mine", owner: "lead", last: Self.now - 300, works: true),
                            task(2, "working", ask: "mine", owner: "dev", last: Self.now - 200, works: true, parent: 1),
                            task(3, "input-required", ask: "theirs", owner: "lead", last: Self.now - 86_400 * 9, waitingOn: "N-7"),
@@ -158,8 +164,14 @@ struct AsksTests {
                            task(5, "submitted", owner: "lead", last: Self.now - 50)],
                           messages: [message("mine", asked: "Mine"), message("theirs", asked: "Theirs", to: "ops")], needs: [need(7)])
         let lead = one.board(period: .today, agent: "lead", calendar: Self.utc)
-        #expect(ids(lead, .inProgress) == ["ask mine", "task 4"] && ids(lead, .waiting) == ["task 3", "task 5"])
-        #expect(ids(one.board(period: .today, agent: "dev", calendar: Self.utc), .inProgress) == ["task 2"])
+        #expect(ids(lead, .inProgress) == ["task 4", "ask mine"] && ids(lead, .waiting) == ["ask theirs of lead", "task 5"])
+        #expect(lead[.inProgress]?.last?.tasks.map(\.id) == [2, 1] && lead[.waiting]?.first?.tasks.map(\.id) == [3])
+        let dev = one.board(period: .today, agent: "dev", calendar: Self.utc)
+        #expect(ids(dev, .inProgress) == ["ask mine of dev"] && dev[.inProgress]?.first?.tasks.map(\.id) == [2])
+        #expect(dev[.inProgress]?.first?.title == "Mine" && dev[.inProgress]?.first?.agent == "dev")
+        // Its part of what he asked another agent for is that agent's work, not a thing that he asked it for: it shows
+        // by its period and ends behind "more", and the whole of it is on the card of the agent that he asked.
+        #expect(dev[.inProgress]?.first?.asked == false && lead[.inProgress]?.last?.asked == true)
         #expect(one.board(period: .today, agent: "ops", calendar: Self.utc).mapValues { $0.map(\.id) } == [.waiting: ["ask theirs"]])
     }
 
@@ -169,21 +181,35 @@ struct AsksTests {
             task(2, "completed", ask: "fine", last: Self.at(13, 12), accepted: 1, title: "Second part"),
             task(3, "failed", ask: "bad", last: Self.at(13, 11), title: "The step that failed"),
             task(4, "completed", last: Self.at(13, 13), accepted: 1, title: "A daily check"),
-            task(5, "failed", last: Self.at(13, 9), title: "A check that failed"),
-            task(6, "completed", ask: "day", last: Self.at(12, 9), accepted: 1),
+            task(5, "failed", last: Self.at(13, 14), title: "A check that failed"),      // routine work, the last to end
+            task(6, "completed", ask: "day", last: Self.at(12, 9), title: "Its first part"),          // waits for its check
+            task(7, "completed", ask: "day", last: Self.at(12, 10), title: "Its second part", delivered: Self.at(12, 10)),
+            task(8, "canceled", ask: "gone", last: Self.at(13, 8)),
         ], messages: [message("fine", asked: "Move the images"), message("bad", asked: "Write the invoice", to: "ops"),
-                      message("day", asked: "Yesterday's thing")])
+                      message("day", asked: "Yesterday's thing"), message("gone", asked: "Dropped")])
         let ended = EndedTasks(items: state.board(period: .all, calendar: Self.utc)[.done] ?? [], calendar: Self.utc)
         // The ask whose task did not succeed, under its own name and the agent that he asked, with that task.
-        #expect(ended.failedRows.map(\.title) == ["Write the invoice", "A check that failed"])
-        #expect(ended.failedRows.map(\.owner) == ["ops", "dev"] && ended.failedRows.map(\.task.id) == [3, 5])
-        #expect(ended.failed.map(\.id) == [3, 5])
-        // Every other one behind "more": an ask is one row and counts as one, on the day that its last task ended.
-        #expect(ended.rest == 3 && ended.days.count == 2)
+        #expect(ended.failedRows.map(\.title) == ["A check that failed", "Write the invoice"])
+        #expect(ended.failedRows.map(\.owner) == ["dev", "ops"] && ended.failedRows.map(\.task.id) == [5, 3])
+        #expect(ended.failed.map(\.id) == [5, 3])
+        // The cards of Done: what he asked for first, with its checked result or the word of a result that did not
+        // succeed, the one that ended last first; then the other work that did not succeed, also when it ended later
+        // (his answer of 18 November 2026: the results of what he asked for and what failed).
+        #expect(ended.cards.map(\.id) == ["ask fine", "ask bad", "task 5"])
+        // Every other one behind "more": a daily check, and a thing that somebody canceled. An ask is one row and counts
+        // as one, on the day that its last task ended.
+        #expect(ended.rest == 2 && ended.days.count == 1)
         let today = ended.days[0].groups
-        #expect(today.map(\.title) == ["A daily check", "Move the images"])
-        #expect(today[1].tasks.map(\.id) == [2, 1] && today[1].owner == "lead" && today[0].owner == "dev")
-        #expect(ended.days[1].groups.map(\.title) == ["Yesterday's thing"])
+        #expect(today.map(\.title) == ["A daily check", "Dropped"])
+        #expect(today[0].owner == "dev" && today[1].owner == "lead" && today[1].tasks.map(\.id) == [8])
+        // What he asked for is not done until its result is checked: it waits on the board, where he sees it, and its
+        // card opens the result that waits. In his chat it is as before (`Ask`).
+        let waiting = state.board(period: .all, calendar: Self.utc)[.waiting] ?? []
+        #expect(waiting.map(\.id) == ["ask day"] && waiting.first?.unchecked?.id == 7 && waiting.first?.lead?.id == 7)
+        #expect(waiting.first?.tasks.map(\.id) == [7, 6] && waiting.first?.onlyLater == false)
+        #expect(waiting.first?.checkWords == "Waiting for Manager's check")            // its card says who checks it
+        #expect(state.board(period: .today, calendar: Self.utc)[.waiting]?.map(\.id) == ["ask day"])       // whatever the period
+        #expect(state.asks.first { $0.id == "day" }?.column == .done)
         // With no ask, the column is what it was.
         let plain = EndedTasks(state.tasks.filter { $0.ask == nil }, calendar: Self.utc)
         #expect(plain.failed.map(\.id) == [5] && plain.rest == 1 && plain.failedRows.map(\.title) == ["A check that failed"])

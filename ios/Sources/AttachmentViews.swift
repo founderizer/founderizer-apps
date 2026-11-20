@@ -238,7 +238,7 @@ private struct PictureTile: View {
     init(store: MobileStore, file: MessageAttachment) {
         self.store = store
         self.file = file
-        _slot = State(initialValue: Self.slot(for: store.picture(file.id)))
+        _slot = State(initialValue: Self.slot(for: store.picture(of: file)))
     }
 
     /// The chat's box for a picture whose shape is not known.
@@ -260,7 +260,7 @@ private struct PictureTile: View {
     var body: some View {
         ZStack {
             Brand.bubble
-            if let picture = store.picture(file.id) {
+            if let picture = store.picture(of: file) {
                 Image(decorative: picture, scale: 1).resizable().aspectRatio(contentMode: .fit)
             } else {
                 // **Until it comes, the grey plate and the photo mark; "Reading…" only after a second** (fix round 3,
@@ -277,7 +277,11 @@ private struct PictureTile: View {
         }
         .frame(width: slot.width, height: slot.height)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .task { if store.picture(file.id) == nil { await store.load(file) } }
+        // Read again after a new hub or generation, which empties the store's files, and when this tile's number
+        // names another file: a tile that SwiftUI keeps would stand on "Reading…" for ever.
+        .task(id: "\(store.filesGeneration) \(file.sha256)") {
+            if store.picture(of: file) == nil { await store.load(file) }
+        }
     }
 }
 
@@ -299,7 +303,7 @@ struct AttachmentGallery: View {
     var body: some View {
         VStack(alignment: alignment, spacing: 8) {
             ForEach(files) { file in
-                if file.isImage && store.notLoaded.contains(file.id) {
+                if file.isImage && store.didNotLoad(file) {
                     notLoaded(file)
                 } else {
                     Button { open(file) } label: { item(file) }
@@ -372,7 +376,7 @@ struct AttachmentGallery: View {
     private func open(_ file: MessageAttachment) {
         Task {
             await store.load(file)
-            guard let data = store.fileData[file.id] else { return }
+            guard let data = store.heldBytes(of: file) else { return }
             let folder = FileManager.default.temporaryDirectory.appendingPathComponent("attachments", isDirectory: true)
             let place = folder.appendingPathComponent("\(file.id)-\(file.name)")
             do {

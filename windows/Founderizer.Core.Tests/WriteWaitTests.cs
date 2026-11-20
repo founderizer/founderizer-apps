@@ -96,6 +96,43 @@ public sealed class WriteWaitTests
         Assert.AreEqual("Second.", hub.Writes.ElementAt(2).Body.GetProperty("text").GetString());
     }
 
+    /// <summary>The owner, 18 November 2026: "If I click done, I want to send it directly! not paste it into the text
+    /// input!". A quick reply of a request with no options is his answer at once; one that comes while another write is
+    /// on its way waits in the box and goes after it; words that he changed while it waited stay in the box.</summary>
+    [TestMethod]
+    public async Task AQuickReplyAnswersAtOnceOrWaitsForTheWriteBeforeItAndWordsHeChangedStay()
+    {
+        var needs = hub.Snapshot["needs"]!.AsArray();
+        needs.Add(SampleFleet.Need(3, "Is the deploy done?", "The release waits on it.", "manager", SampleFleet.Now - 600));
+        needs.Add(SampleFleet.Need(4, "Can I restart the hub?", "It takes a minute.", "manager", SampleFleet.Now - 500));
+        needs.Add(SampleFleet.Need(5, "Shall I renew the domain?", "It ends in a week.", "manager", SampleFleet.Now - 400));
+        await using var store = await Store();
+        string? Answer(long need) => hub.Writes.Where(w => w.Path == $"/ui/needs/{need}")
+                                                .Select(w => w.Body.GetProperty("answer").GetString()).SingleOrDefault();
+
+        store.Reply(3, "Done");
+        Assert.AreEqual(3L, store.State.Pending?.NeedId, "the press itself took the outbox, with no second press");
+        await Until(() => Answer(3) is not null && store.State.Pending is null, "its receipt came");
+        Assert.AreEqual("Done", Answer(3));
+
+        hub.Hold = new ManualResetEventSlim(false);
+        var first = store.SendMessageAsync("manager", "First.");
+        await Until(() => hub.Writes.Count(w => w.Path == "/ui/messages") == 1, "the message is at the hub");
+        store.Reply(4, "Not now");
+        store.Reply(5, "Tell me more");
+        store.SetAnswerDraft(5, "Tell me more about the price");
+        await Task.Delay(300);
+        Assert.AreEqual("Not now", store.State.AnswerDrafts[4], "the words stand in the box while the press waits");
+        Assert.IsNull(Answer(4), "nothing goes while a write is on its way");
+        hub.Hold.Set();
+        Assert.IsNull(await first);
+        await Until(() => Answer(4) is not null && !store.State.Sending, "the reply that waited went");
+        Assert.AreEqual("Not now", Answer(4));
+        await Task.Delay(600);
+        Assert.IsNull(Answer(5), "words that he changed while it waited do not go");
+        Assert.AreEqual("Tell me more about the price", store.State.AnswerDrafts[5]);
+    }
+
     [TestMethod]
     public async Task APressThatCannotGoForALastingReasonGivesTheOwnersWords()
     {

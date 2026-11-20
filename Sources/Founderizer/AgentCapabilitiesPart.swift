@@ -6,8 +6,9 @@ import SwiftUI
 /// own page and a short description of what each permission is?", and his "Yes, as shown" the same day to its picture):
 /// a switch for each box that the agent's AI and its server can have (`AgentBoxes`, owner API 1.216), each with one line
 /// of what it allows and what it risks, and the desktop model and reasoning under Screen. They are not the same for
-/// every AI: Shell goes off only where a session can be held to a fixed list of tools (Claude Code), and the browser
-/// and the screen need a Mac. A box that stays on has no switch: "On", and why on its hover. Each switch saves at once,
+/// every AI: Shell goes off only where a session can be held to a fixed list of tools (Claude Code), the screen needs a
+/// Mac, and the browser a Mac or a Linux server that runs one. A box that stays on has no switch: "On", and why on its
+/// hover. Each switch saves at once,
 /// through the agent's settings model, which Runs on shares; its mark and a refusal stand on the row that he switched.
 struct AgentCapabilitiesPart: View {
     @Bindable var store: FleetStore
@@ -70,7 +71,8 @@ struct AgentCapabilitiesPart: View {
     }
 
     /// One box: its name, its line, and a switch, or "On" where a write cannot turn it off. A box that it holds and
-    /// that does nothing for it now (a browser on a Linux server, a screen with the Shell box off) says so in its line.
+    /// that does nothing for it now (a browser on a Linux server with no place for it, a screen with the Shell box off)
+    /// says so in its line.
     private func boxRow(_ box: String, can: [String], boxes: AgentBoxes) -> some View {
         let title = Self.title(box)
         let stays = boxes.stays_on.contains(box), idle = boxes.idle.contains(box)

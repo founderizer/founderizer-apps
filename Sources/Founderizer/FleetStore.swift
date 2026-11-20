@@ -25,23 +25,39 @@ enum Destination: Hashable {
     /// November 2026 to its split), as `server` is one server's page of Settings › Servers. `connectKey` is his Tailscale
     /// key page of Turn on for the connected apps (`ConnectAppKeyStep`), a page of Settings › Servers too.
     case needs, activity, agents, addAgent, server(String), addServer, task(Int), agent(String),
-         agentDetail(String, AgentTab), signIn(String), agentRule(String, ProfileSectionID?), settings(SettingsTab),
+         agentDetail(String, AgentTab),
+         /// The sign-in page of an agent's server (`SignInWizard`). Its second value is the provider that the page was
+         /// opened for, from "Sign in again" on the error row of a task's thread (`RuntimeErrorLine`; the owner's "Yes,
+         /// build it" of 18 November 2026): the provider of that task's attempt, which can be another one than the
+         /// server's own choice (`MachineStatus.signInRuntime`, the agent's own provider), such as Codex of the screen
+         /// tasks of an agent on Claude Code. It is a part of the page, so a step of Back or Forward opens the page for
+         /// the provider that it was opened for, and the page's Back and Done go to the page that he came from. Nil for
+         /// every other opening (`signIn(_:)`), which signs in the server's own choice.
+         signIn(String, String?), agentRule(String, ProfileSectionID?), settings(SettingsTab),
          app(AppsGroup), connectKey,
-         /// The page of a later change of the fleet's shape, on the step where he let go of the slider of Settings ›
-         /// Servers (`ShapeChangePage`): a wizard that fills the window.
-         shapeChange(ServersStep),
          /// The page of one thing of an agent's work, a ticket or an incident with its tasks, from a row of the card
          /// Work of that agent's chat panel (`WorkItemPage`; the owner's "Yes, as drawn" of 17 November 2026). Its
          /// back link goes to that chat.
          work(String, WorkItem.Key)
 
-    /// The page of a later change of the fleet's shape.
-    var isShapeChange: Bool { if case .shapeChange = self { true } else { false } }
+    /// **Tasks, opened from an agent's chat panel** (View all of its card Asked): the board of `activity`, with that
+    /// agent's back link over its title, which goes back to its chat (the owner's "Yes, build both" of 17 November 2026
+    /// to "when you open Tasks from an agent's panel, '‹ Fleet Manager' (the agent's name) shows at the top left, as on
+    /// the agent's other pages"). The sidebar's Tasks row opens `activity`, with no back link. The page is Tasks, so the
+    /// sidebar selects Tasks on it, it has no `agentName`, and Back opens it also when the hub lists that agent no more
+    /// (renamed or deleted elsewhere): then it is Tasks with no back link (`ActivityBoard`).
+    case activityFrom(String)
+
+    /// The agent whose chat panel opened Tasks (`activityFrom`), for the board's back link; nil on every other page.
+    var tasksFrom: String? { if case .activityFrom(let name) = self { name } else { nil } }
+
+    /// The sign-in page of an agent's server for the server's own choice of provider.
+    static func signIn(_ agent: String) -> Destination { .signIn(agent, nil) }
 
     /// The agent whose page shows, or nil on every other page.
     var agentName: String? {
         switch self {
-        case .agent(let name), .agentDetail(let name, _), .agentRule(let name, _), .signIn(let name), .work(let name, _): name
+        case .agent(let name), .agentDetail(let name, _), .agentRule(let name, _), .signIn(let name, _), .work(let name, _): name
         default: nil
         }
     }
@@ -50,7 +66,7 @@ enum Destination: Hashable {
     var settingsTab: SettingsTab? {
         switch self {
         case .settings(let tab): tab
-        case .server, .addServer, .connectKey, .shapeChange: .servers
+        case .server, .addServer, .connectKey: .servers
         case .app: .apps
         default: nil
         }
@@ -60,7 +76,7 @@ enum Destination: Hashable {
     /// over it (`pageNotices`).
     var ownsSidebar: Bool {
         switch self {
-        case .agentDetail, .agentRule, .settings, .server, .addServer, .app, .connectKey, .shapeChange: true
+        case .agentDetail, .agentRule, .settings, .server, .addServer, .app, .connectKey: true
         default: false
         }
     }
@@ -325,6 +341,8 @@ final class FleetStore {
             AgentNames.shared.read((state?.agents ?? []).map { ($0.name, $0.title) })
             askCache = nil
             closeAnsweredTakeOvers()        // owner feature need_takeover: the way in closes at his answer
+            forgetFilesOfAnotherFleet()     // a new hub or database numbers its files from 1 again
+            dropUnsendableGuidanceFiles()   // a task's box that can send no more keeps no file
         }
     }
     /// **What he asked for (`HubState.asks`), read once for each reading**: an agent's chat reads it at each of its
@@ -478,6 +496,12 @@ final class FleetStore {
     /// owner feature need_takeover: the Screen Sharing tunnel that a press of Take over opened, by its item, which
     /// `closeAnsweredTakeOvers` closes once a reading shows that item answered or gone.
     @ObservationIgnored var takeOvers: [Int: ScreenSharingConnection] = [:]
+    /// The lane "Give on a card": the names that requests' words link, with the key of what they were made of
+    /// (`cardNames(for:)`).
+    @ObservationIgnored var cardBook: (key: Int, book: CardNames)?
+    /// build plan 04, S6: the hub's servers, read for a take-over's card, whose readings name a Linux agent's
+    /// screen-sharing port (`readTakeOverServers`).
+    var takeOverServers: [ServerEntry]?
     @ObservationIgnored private var runJobs: [Int: NeedRunJob] = [:]
     @ObservationIgnored private var runMachinesRead: ContinuousClock.Instant?
     @ObservationIgnored private var runQuitWatch: NSObjectProtocol?
@@ -566,7 +590,7 @@ final class FleetStore {
     func fillsWindow(_ page: Destination) -> Bool {
         guard let state else { return false }
         switch page {
-        case .addServer, .addAgent, .shapeChange: return true
+        case .addServer, .addAgent: return true
         case .agent(let name):
             return AgentSetupFlow.fillsWindow(state.agents.first { $0.name == name }, adding: isAdding(name),
                                               features: state.ui_features ?? [], placing: placing(name),
@@ -610,7 +634,7 @@ final class FleetStore {
         let page = history.leave(from: wizard) { self.canOpen($0) && !self.fillsWindow($0) }
         let home = FleetStore.home(state)
         stepping = true
-        destination = page ?? (wizard == .addServer || wizard.isShapeChange ? .settings(.servers) : fillsWindow(home) ? .agents : home)
+        destination = page ?? (wizard == .addServer ? .settings(.servers) : fillsWindow(home) ? .agents : home)
         stepping = false
     }
 
@@ -654,7 +678,8 @@ final class FleetStore {
     static func keptName(_ page: Destination) -> String? {
         switch page {
         case .needs: "needs"
-        case .activity: "tasks"
+        // Tasks that an agent's panel opened opens at the next start as Tasks, with no back link.
+        case .activity, .activityFrom: "tasks"
         case .agents: "agents"
         case .task(let number): "task.\(number)"
         case .agent(let name): "agent.\(name)"
@@ -717,6 +742,10 @@ final class FleetStore {
     var agentDrafts: [String: String] {
         didSet { UserDefaults.standard.set(agentDrafts, forKey: "agentDrafts") }
     }
+    /// **The words of each task's guidance box** (`TaskSteering`), by its key (`stageKey(task:database:)`): the store's,
+    /// as a chat's draft is, so a guidance that a later read confirms also empties its box (`finish`), and a second
+    /// press cannot send it again.
+    var guidanceDrafts: [String: String] = [:]
     var supportsDirectChat: Bool { state?.ui_features?.contains("direct_chat") == true }
     func canChat(with agent: String) -> Bool { state?.supportsChat(with: agent) == true }
     var supportsCorrections: Bool { state?.ui_features?.contains("corrections") == true }
@@ -735,14 +764,80 @@ final class FleetStore {
         let size: Int
         var attachmentID: Int?
         var failure: String?
+        /// When the hub took its upload, by the hub's own clock (`MessageAttachment.created`); nil for a file that is
+        /// not on the hub, or one that an older version of this app kept.
+        var hubCreated: Double?
         var id: UUID { requestID }
         var isOnHub: Bool { attachmentID != nil }
     }
+
+    /// **How long an upload stays the file that its number names**: the hub lets a file that no message carries go an
+    /// hour after its upload (`hub.py` `ATTACH_WAIT`), and a later upload can then get the same number. So a file that
+    /// went up longer ago than this goes up again before it is sent (`freshFiles`), with a margin for the sweep's
+    /// ten minutes and the send itself.
+    static let uploadStaysFor: Double = 45 * 60
 
     var supportsAttachments: Bool { state?.ui_features?.contains("attachments") == true }
     /// The composer of one chat, or of one open request of Needs you.
     static func stageKey(agent: String) -> String { "agent:\(agent)" }
     static func stageKey(need: Int) -> String { "need:\(need)" }
+    /// The composer of one task's guidance (owner API 1.223, feature `steer_files`), with its hub's database: a task
+    /// of another database with the same number never shows these files.
+    static func stageKey(task: Int, database: String) -> String { "task:\(database):\(task)" }
+    /// The composer whose files a request carries: a guidance's, a request's answer's or a chat's.
+    static func stageKey(of request: PendingRequest) -> String {
+        if case .steer(let task, _) = request.command { return stageKey(task: task, database: request.database) }
+        return request.needID.map { stageKey(need: $0) } ?? stageKey(agent: request.recipient ?? "manager")
+    }
+
+    /// The composer of this task's guidance, or nil while it takes no file (`FleetTask.guidanceTakesFiles`).
+    func guidanceComposer(for task: FleetTask) -> String? {
+        guard let state, task.guidanceTakesFiles(in: state) else { return nil }
+        return Self.stageKey(task: task.id, database: state.db)
+    }
+
+    /// The task of a guidance's composer in the current database, or nil for any other composer.
+    private func guidanceTask(_ composer: String) -> FleetTask? {
+        guard let state, composer.hasPrefix("task:\(state.db):"),
+              let id = Int(composer.dropFirst("task:\(state.db):".count)) else { return nil }
+        return state.tasks.first { $0.id == id }
+    }
+
+    /// The files that this composer takes (`FleetTask.guidanceFiles`): every kind, but in the guidance of a task whose
+    /// session opens only some.
+    func filesTaken(by composer: String) -> GuidanceFiles { guidanceTask(composer)?.guidanceFiles(in: state) ?? .any }
+
+    /// Why this composer refuses a kind of file, or nil while it takes every kind.
+    func refusedKindWords(_ composer: String) -> String? {
+        switch filesTaken(by: composer) {
+        case .any: nil
+        case .shown: String(l10n: "This agent's Shell box is off: it opens only pictures and text files.")
+        case .texts: String(l10n: "This agent opens only text files: its Shell box is off, and its AI program shows no pictures.")
+        }
+    }
+
+    /// The words of a picture too large for a tool's answer, in a box whose session has no shell.
+    private var largePictureWords: String {
+        String(l10n: "This picture is too large for this agent, whose Shell box is off: take it out and pick it again.")
+    }
+
+    /// **Why this composer holds a file that it takes no more**, or nil: the agent's Shell box went off after the owner
+    /// picked it, and its kind, or a picture's size, is more than its session opens. Picked again, a picture is made
+    /// small enough (`imageForSending`).
+    func refusedFileWords(_ composer: String) -> String? {
+        let taken = filesTaken(by: composer), files = stagedFiles(for: composer)
+        if files.contains(where: { !taken.takes($0.mime) }) { return refusedKindWords(composer) }
+        if taken == .shown, files.contains(where: { $0.mime.hasPrefix("image/") && $0.size > MessageAttachment.shownPictureBytes }) {
+            return largePictureWords
+        }
+        return nil
+    }
+
+    /// The words of the most files that one composer sends at once: a message's, or a guidance's.
+    func atMostFiles(_ composer: String) -> String {
+        composer.hasPrefix("task:") ? String(l10n: "Guidance carries at most \(MessageAttachment.perMessage) files.")
+                                    : String(l10n: "A message carries at most \(MessageAttachment.perMessage) files.")
+    }
     func stagedFiles(for composer: String) -> [StagedFile] { staged[composer] ?? [] }
     func readyFiles(for composer: String) -> [Int] { stagedFiles(for: composer).compactMap(\.attachmentID) }
     func filesAreWaiting(for composer: String) -> Bool { stagedFiles(for: composer).contains { !$0.isOnHub } }
@@ -755,10 +850,20 @@ final class FleetStore {
     func stage(_ data: Data, name: String, mime: String, for composer: String) async {
         guard storageError == nil else { return }
         guard stagedFiles(for: composer).count < MessageAttachment.perMessage else {
-            fileErrors[composer] = String(l10n: "A message carries at most \(MessageAttachment.perMessage) files.")
+            fileErrors[composer] = atMostFiles(composer)
             return
         }
         guard MessageAttachment.types[mime] != nil else { fileErrors[composer] = AttachmentError.type.errorDescription; return }
+        // A dropped or pasted file takes the same rule as the plus's own list.
+        guard filesTaken(by: composer).takes(mime) else {
+            fileErrors[composer] = refusedKindWords(composer)
+            return
+        }
+        guard filesTaken(by: composer) != .shown || !mime.hasPrefix("image/") || data.count <= MessageAttachment.shownPictureBytes
+        else {
+            fileErrors[composer] = largePictureWords
+            return
+        }
         guard !data.isEmpty, data.count <= MessageAttachment.sizeLimit else {
             fileErrors[composer] = AttachmentError.tooLarge.errorDescription
             return
@@ -773,7 +878,6 @@ final class FleetStore {
             fileFailed(String(l10n: "Cannot keep this file on this Mac. Nothing was sent."), cause: error, for: composer)
             return
         }
-        fileErrors[composer] = nil
         staged[composer, default: []].append(file)
         keepStaged()
         await upload(file, for: composer)
@@ -791,8 +895,12 @@ final class FleetStore {
             fileErrors[composer] = String(l10n: "That file did not open.")
             return
         }
-        if mime.hasPrefix("image/"), let picture = try? MessageAttachment.imageForSending(data) {
+        let shown = filesTaken(by: composer) == .shown
+        if mime.hasPrefix("image/"), let picture = try? MessageAttachment.imageForSending(data, shown: shown) {
             await stage(picture.data, name: url.lastPathComponent, mime: picture.mime, for: composer)
+        } else if mime.hasPrefix("image/"), shown {
+            // A picture that could not be made small enough would not reach a session with no shell as it is.
+            fileErrors[composer] = String(l10n: "That file did not open.")
         } else {
             await stage(data, name: url.lastPathComponent, mime: mime, for: composer)
         }
@@ -818,7 +926,7 @@ final class FleetStore {
         do {
             let sent = try await client.upload(data, name: file.name, mime: file.mime, requestID: file.requestID,
                                                client: installation, hub: hub, database: state.db)
-            change(file, in: composer) { $0.attachmentID = sent.id; $0.failure = nil }
+            change(file, in: composer) { $0.attachmentID = sent.id; $0.hubCreated = sent.created; $0.failure = nil }
         } catch {
             change(file, in: composer) {
                 $0.failure = (error as? LocalizedError)?.errorDescription ?? String(l10n: "The file did not go up.")
@@ -832,6 +940,38 @@ final class FleetStore {
         staged[composer] = stagedFiles(for: composer).filter { $0.requestID != file.requestID }
         if staged[composer]?.isEmpty == true { staged[composer] = nil }
         keepStaged()
+    }
+
+    /// **The numbers of a composer's files, each one still the file that the hub holds under it**: a file that went
+    /// up longer ago than `uploadStaysFor` goes up again first, under its own request number, so the hub makes a new
+    /// row for it once its sweep took the old one. nil while a file is not on the hub, or did not go up again: its
+    /// chip says why, and Send stays.
+    func freshFiles(for composer: String) async -> [Int]? {
+        let now = state?.time ?? 0
+        for file in stagedFiles(for: composer) where file.isOnHub && now - (file.hubCreated ?? 0) > Self.uploadStaysFor {
+            change(file, in: composer) { $0.attachmentID = nil; $0.hubCreated = nil }
+            if let again = stagedFiles(for: composer).first(where: { $0.requestID == file.requestID }) {
+                await upload(again, for: composer)
+            }
+        }
+        guard !filesAreWaiting(for: composer) else { return nil }
+        return readyFiles(for: composer)
+    }
+
+    /// **A task's box that can send no more keeps no file**: its task ended or is now a person's, or it belongs to
+    /// another database, whose numbers name other files. Their bytes would stay on this Mac with nothing to send them.
+    /// A task that the reading does not list keeps its box: a reading need not list every task.
+    private func dropUnsendableGuidanceFiles() {
+        guard let state else { return }
+        let here = "task:\(state.db):"
+        for composer in Array(staged.keys) where composer.hasPrefix("task:") {
+            if composer.hasPrefix(here), let id = Int(composer.dropFirst(here.count)) {
+                let task = state.tasks.first { $0.id == id }
+                guard task?.isTerminal == true || task?.from_conversation == true else { continue }
+            }
+            for file in stagedFiles(for: composer) { removeStaged(file, for: composer) }
+            fileErrors[composer] = nil
+        }
     }
 
     /// The files that the hub took leave the composer; one that the owner picked while the message was on its way
@@ -865,24 +1005,59 @@ final class FleetStore {
         stagedDirectory.appendingPathComponent(file.requestID.uuidString.lowercased())
     }
 
+    /// The bytes held for this file, for a view that draws them (`PictureTile`): only bytes whose read checked this
+    /// file's size and SHA-256. A number can name another file: the hub can give a number again after its file went.
+    func heldBytes(of file: MessageAttachment) -> Data? {
+        guard let data = fileData[file.id], data.count == file.size, fileSums[file.id] == file.sha256 else { return nil }
+        return data
+    }
+
     /// The bytes of one file of a message, for the chat that shows it. Nothing is kept before its size and its
     /// SHA-256 match what the hub said.
     func load(_ file: MessageAttachment) async {
+        // Bytes held under this number for another file go, so that this file is read.
+        if fileData[file.id] != nil, heldBytes(of: file) == nil {
+            fileData[file.id] = nil
+            fileSums[file.id] = nil
+            fileOrder.removeAll { $0 == file.id }
+        }
         guard let state, fileData[file.id] == nil, !fileReads.contains(file.id) else { return }
+        let generation = filesGeneration
         fileReads.insert(file.id)
-        defer { fileReads.remove(file.id) }
+        defer { if generation == filesGeneration { fileReads.remove(file.id) } }
         do {
             let data = try await client.attachment(file, hub: hub, database: state.db)
+            // A read that a change of hub or database overtook keeps nothing: its number names another file now.
+            guard generation == filesGeneration else { return }
             fileData[file.id] = data
+            fileSums[file.id] = file.sha256
             fileOrder.append(file.id)
             while fileOrder.count > 16, let oldest = fileOrder.first {
                 fileData[oldest] = nil
+                fileSums[oldest] = nil
                 fileOrder.removeFirst()
             }
             unloadedFiles.remove(file.id)
         } catch {
-            unloadedFiles.insert(file.id)
+            if generation == filesGeneration { unloadedFiles.insert(file.id) }
         }
+    }
+
+    /// The bytes of one file of a message for a press on it (open, save): read now, or by the read that is already on
+    /// its way, such as the one that its row started when it came on the screen. nil when the read failed.
+    func bytes(of file: MessageAttachment) async -> Data? {
+        // Bytes held under this number that are not this file's go, and the file is read: a new fleet numbers its
+        // files from 1 again, and open, save and a drag would give out the other file.
+        if let held = fileData[file.id] {
+            if file.matches(held) { return held }
+            fileData[file.id] = nil
+            fileOrder.removeAll { $0 == file.id }
+        }
+        await load(file)
+        while fileData[file.id] == nil, fileReads.contains(file.id) {
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { return nil }
+        }
+        return fileData[file.id].flatMap { file.matches($0) ? $0 : nil }
     }
 
     // MARK: Keeping a file he attached (owner feature attachment_knowledge)
@@ -918,11 +1093,14 @@ final class FleetStore {
         guard let state, supportsKeptFiles, !keeping.contains(file.id) else { return }
         keeping.insert(file.id)
         defer { keeping.remove(file.id) }
+        // After a change of hub or database the number is another file's: its line is not this press's.
+        let generation = filesGeneration
         do {
             try await send(state)
-            fileProblems[file.id] = nil
+            if generation == filesGeneration { fileProblems[file.id] = nil }
             await refresh()
         } catch {
+            guard generation == filesGeneration else { return }
             fileProblems[file.id] = HubError.said(error) ?? String(l10n: "This file could not be kept. Try again.")
         }
     }
@@ -1034,7 +1212,7 @@ final class FleetStore {
         switch page {
         case .agent(was): .agent(now)
         case .agentDetail(was, let tab): .agentDetail(now, tab)
-        case .signIn(was): .signIn(now)
+        case .signIn(was, let runtime): .signIn(now, runtime)
         case .agentRule(was, let rule): .agentRule(now, rule)
         default: nil
         }
@@ -1195,8 +1373,31 @@ final class FleetStore {
     func setFileProblem(_ words: String?, for file: Int) { fileProblems[file] = words }
     /// The bytes of the files that the chat shows, by attachment number, oldest first.
     private(set) var fileData: [Int: Data] = [:]
+    /// The SHA-256 that the read of each file of `fileData` checked (`heldBytes(of:)`).
+    private var fileSums: [Int: String] = [:]
     private var fileOrder: [Int] = []
     private var fileReads: Set<Int> = []
+    /// The hub and the database whose files this store holds, and one more at each change of them: a picture reads
+    /// its file again at a change (`PictureTile`), also when the new database has the same file under the same number.
+    @ObservationIgnored private var filesFleet: String?
+    private(set) var filesGeneration = 0
+
+    /// After a change of hub or database (`connect()`, "Start again", a new database) the same number names another
+    /// file, so what this store holds of the files before goes, and a read on its way keeps nothing (`load`).
+    private func forgetFilesOfAnotherFleet() {
+        let fleet = state.map { "\(hub.absoluteString)\n\($0.db)" }
+        guard fleet != filesFleet else { return }
+        filesFleet = fleet
+        filesGeneration += 1
+        // A chip that went up to the hub before names a file of that hub: it goes up again before its send
+        // (`freshFiles`). A chip of the same hub gets its own row back, under its own request number.
+        for (composer, files) in staged where files.contains(where: { $0.hubCreated != nil }) {
+            staged[composer] = files.map { var file = $0; file.hubCreated = nil; return file }
+        }
+        keepStaged()
+        fileData = [:]; fileSums = [:]; fileOrder = []; fileReads = []
+        unloadedFiles = []; fileProblems = [:]
+    }
     private let client = HubClient()
     private let knowledge = KnowledgeClient()
     private let outbox: Outbox
@@ -1510,6 +1711,8 @@ final class FleetStore {
                     self.hardeningModel().tick(store: self)
                     // This app's crashes, to our own site while his Error reports switch is on, with nothing on a page.
                     ErrorReportsSender.shared.tick(store: self)
+                    // The answer of the first run's page "Help improve Founderizer", to the hub, with nothing on a page.
+                    FirstRunReportsSender.tick(store: self)
                     self.releasesTick()
                     // The Mac's language and name for the agents, once for each hub generation, with nothing on a page.
                     self.ownerProfileTick()
@@ -1890,7 +2093,9 @@ final class FleetStore {
         let text = needID.map { answers[String($0)] ?? "" } ?? draft(for: chatAgent)
         let recipient = needID.flatMap { id in state?.needs.first { $0.id == id }?.by } ?? chatAgent
         let composer = needID.map { Self.stageKey(need: $0) } ?? Self.stageKey(agent: chatAgent)
-        await sendText(text, needID: needID, recipient: recipient, files: readyFiles(for: composer))
+        // A file that went up an hour ago may be another file under its number by now: it goes up again first.
+        guard let files = await freshFiles(for: composer) else { return }
+        await sendText(text, needID: needID, recipient: recipient, files: files)
     }
 
     /// A message of the owner's that the app writes for him: the line that names a secret he saved from this chat, its
@@ -2081,10 +2286,12 @@ final class FleetStore {
     }
 
     @discardableResult
-    func command(_ command: OwnerCommand, note: String = "") async -> Bool {
+    func command(_ command: OwnerCommand, note: String = "", attachments: [Int] = []) async -> Bool {
         guard canWrite, let state, state.ui_features?.contains(command.requiredFeature) == true else { return false }
         lastControlReceipt = nil
-        let request = PendingRequest(hub: hub, database: state.db, client: installation, command: command, text: note)
+        // `attachments`: a guidance's files, which the hub already holds (owner API 1.223).
+        let request = PendingRequest(hub: hub, database: state.db, client: installation, command: command,
+                                     attachments: attachments, text: note)
         do {
             guard try request.body().count <= 65_536 else { sendError = String(l10n: "This request is too large. Shorten it before saving."); return false }
         } catch { sendError = String(l10n: "The command fields are invalid. Nothing was sent."); return false }
@@ -2094,8 +2301,24 @@ final class FleetStore {
         return pending == nil && storageError == nil && sendError == nil
     }
 
+    /// **How long a request's own files stay the files that it names**: each went up at most `uploadStaysFor` before
+    /// its send (`freshFiles`), and the hub lets an uncarried upload go an hour after it went up, after which a later
+    /// file can take its number. So a Try again later than this could carry another file.
+    static let retryKeepsFilesFor: Double = 10 * 60
+
     func retry() async {
         guard canRetry, let pending else { return }
+        // A request with files that waited longer than that is not sent again as it is: a read first finishes it if
+        // the hub took it after all; else it stands refused with Discard, and a new Send takes its files up again.
+        if !pending.attachments.isEmpty, Date().timeIntervalSince(pending.createdAt) > Self.retryKeepsFilesFor {
+            await refresh()
+            guard var late = self.pending, late.requestID == pending.requestID, late.refusal == nil else { return }
+            let line = String(l10n: "Its files waited too long. Discard it and send it again: its files go up again first.")
+            late.refusal = line
+            do { try outbox.save(late); self.pending = late; sendError = line }
+            catch { storageFailed(String(l10n: "Cannot save the refusal. The original request is retained."), cause: error) }
+            return
+        }
         await transmit(pending)
     }
 
@@ -2248,6 +2471,7 @@ final class FleetStore {
                 draft = ""
                 answers = [:]
                 agentDrafts = [:]
+                guidanceDrafts = [:]
                 cancelEdit()
                 do { pending = try outbox.rejectSecret(matching: request.requestID, drafts: .standard) }
                 catch { storageError = String(l10n: "Cannot remove rejected text from local storage. Sending is blocked.") }
@@ -2279,7 +2503,7 @@ final class FleetStore {
               fresh != base, let rebuilt = command.rebased(to: fresh),
               pending?.requestID == request.requestID else { return nil }
         let next = PendingRequest(hub: request.hub, database: request.database, client: request.client,
-                                  command: rebuilt, text: request.text)
+                                  command: rebuilt, attachments: request.attachments, text: request.text)
         do {
             try outbox.clear(matching: request.requestID)
             try outbox.save(next)
@@ -2293,8 +2517,14 @@ final class FleetStore {
 
     private func finish(_ request: PendingRequest) throws {
         try outbox.clear(matching: request.requestID)
-        if request.command != nil {
-            // Commands have no chat draft and are acknowledged by their own receipt.
+        if let command = request.command {
+            // Commands have no chat draft and are acknowledged by their own receipt. A guidance's files that the hub
+            // took leave its box.
+            if case .steer = command {
+                let box = Self.stageKey(of: request)
+                clearStaged(box, sent: request.attachments)
+                if guidanceDrafts[box] == request.text { guidanceDrafts[box] = nil }
+            }
         } else if request.replacesRequestID != nil {
             if editingMessage?.id == request.replacesRequestID { cancelEdit() }
         } else if request.needID == nil {

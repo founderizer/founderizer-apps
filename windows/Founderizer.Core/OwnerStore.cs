@@ -57,6 +57,8 @@ public sealed class OwnerStore : IAsyncDisposable
     private long outputsOperation;
     private bool outputsWereFresh;
     private readonly Dictionary<long, CancellationTokenSource> pressWaits = new();
+    /// <summary>The words of each quick reply that waits for the store (<see cref="Reply"/>).</summary>
+    private readonly Dictionary<long, string> replyWaits = new();
     private string? key;
     private string? etag;
     private string? keptDatabase;
@@ -1063,12 +1065,14 @@ public sealed class OwnerStore : IAsyncDisposable
         WriteAsync(text ?? State.Drafts.GetValueOrDefault(agent, ""), recipient: agent, files: State.ReadyFiles("agent:" + agent));
 
     /// <summary>Sends the typed answer of an open request (its draft, or <paramref name="text"/>) with its files.</summary>
-    public Task<string?> AnswerAsync(long need, string? text = null)
+    public Task<string?> AnswerAsync(long need, string? text = null) => Answer(need, text, still: null);
+
+    private Task<string?> Answer(long need, string? text, Func<StoreState, bool>? still)
     {
         var item = State.Fleet?.Needs.FirstOrDefault(n => n.Id == need);
         if (item is null) return NoWrite;
         return WriteAsync(text ?? State.AnswerDrafts.GetValueOrDefault(need, ""), needId: need, recipient: item.By,
-                          files: State.ReadyFiles("need:" + need));
+                          files: State.ReadyFiles("need:" + need), still: still);
     }
 
     /// <summary>A press on one of a request's options. It is never refused: while the store cannot write, the newest
@@ -1111,6 +1115,62 @@ public sealed class OwnerStore : IAsyncDisposable
             Update(x => x with { WaitingPresses = x.WaitingPresses.Remove(need) });
             lock (pressWaits) pressWaits.Remove(need);
         });
+    }
+
+    /// <summary>A press on one of the app's three replies of a request with no options of its own ("Done", "Not now",
+    /// "Tell me more"): its words are the answer, with the files of the request's box, and they go at once by the path of
+    /// a typed answer (<see cref="AnswerAsync"/>: the outbox, its receipt and its retry). The owner, 18 November 2026: "If
+    /// I click done, I want to send it directly! not paste it into the text input!". The words take the place of the
+    /// box's draft. A press that comes while the store cannot write waits, as an option's press does, and goes when it
+    /// can; the words stand in the box meanwhile, and stay there with nothing sent while a file of the box waits, when
+    /// the hub or its generation changes, or when he changed them while it waited. The wait ends when the request
+    /// leaves: no clock ends it. A newer press of the same request takes the place of the one that waits.</summary>
+    public void Reply(long need, string words)
+    {
+        words = words.Trim();
+        SetAnswerDraft(need, words);
+        bool waits;
+        // The newest words and the question whether a wait runs, in one step with the wait's own check (ReplyAsync):
+        // a press never finds a wait that ends without it.
+        lock (replyWaits)
+        {
+            waits = replyWaits.ContainsKey(need);
+            replyWaits[need] = words;
+        }
+        if (!waits) _ = ReplyAsync(need, State.Hub, State.Fleet?.Db);
+    }
+
+    /// <summary>The wait of a quick reply: its first turn runs in the press, so a reply that can go goes at once, in the
+    /// order of the presses.</summary>
+    private async Task ReplyAsync(long need, Uri? hub, string? database)
+    {
+        while (true)
+        {
+            string? words;
+            bool goes;
+            lock (replyWaits)
+            {
+                var s = State;
+                if (disposed || !replyWaits.TryGetValue(need, out words) || s.Hub != hub || s.Fleet?.Db != database ||
+                    s.StorageError is not null || s.Fleet?.Needs.Any(n => n.Id == need && n.IsOpen) != true ||
+                    s.AnswerDrafts.GetValueOrDefault(need, "").Trim() != words || s.FilesWait("need:" + need))
+                {
+                    replyWaits.Remove(need);
+                    return;
+                }
+                goes = s.CanWrite(clock.Now);
+                if (goes) replyWaits.Remove(need);
+            }
+            if (goes)
+            {
+                // The write can still wait behind a write that came before it (WriteAsync's turn): the words are checked
+                // again before it goes, so words that he changed meanwhile, or a file that he added, still keep it back.
+                var composer = "need:" + need;
+                await Answer(need, words, still: s => s.AnswerDrafts.GetValueOrDefault(need, "").Trim() == words && !s.FilesWait(composer));
+                return;
+            }
+            await clock.Delay(TimeSpan.FromMilliseconds(250), CancellationToken.None);
+        }
     }
 
     private Task<string?> SendChoiceAsync(long need, int choice)
@@ -1177,7 +1237,8 @@ public sealed class OwnerStore : IAsyncDisposable
 
     private async Task<string?> WriteAsync(string value, long? needId = null, string? recipient = null, int? choice = null,
                                            IReadOnlyList<long>? choices = null, IReadOnlyList<long>? files = null,
-                                           OwnerCommand? command = null, string? feature = null)
+                                           OwnerCommand? command = null, string? feature = null,
+                                           Func<StoreState, bool>? still = null)
     {
         var ticket = Interlocked.Increment(ref writeTickets);
         lock (waitingWrites) waitingWrites.Add(ticket);
@@ -1194,6 +1255,8 @@ public sealed class OwnerStore : IAsyncDisposable
                     first ??= (h, f.Db);
                     if (first != (h, f.Db)) return StoreState.ConnectionChanged;
                 }
+                // A write whose reason to go ended while it waited for its turn goes nowhere (a quick reply: Reply).
+                if (still is not null && !still(s)) return null;
                 var hold = s.HoldsWrites(now);
                 if (hold is { Waits: false } refused) return refused.Words;
                 if (hold is null)

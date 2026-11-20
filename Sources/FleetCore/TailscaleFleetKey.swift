@@ -73,7 +73,9 @@ public struct KeychainShelf: CredentialShelf {
 ///      machine that carries it. Its id and its secret stay in this Mac's keychain.
 ///
 /// After that, `mintAuthKey(hostname:)` makes one key for one machine: single-use, pre-authorized, tagged, not ephemeral
-/// (ephemeral minutes are metered on the free plan), and worthless in fifteen minutes.
+/// (ephemeral minutes are metered on the free plan), and worthless in fifteen minutes, or after the life that its caller
+/// gives it (a cloud server's first boot: one hour, `CloudServers.joinKeyLife`; a bare Mac: two hours,
+/// `PrivateNetwork.macKeyLifeSeconds`).
 public struct TailscaleFleetKey: Sendable {
     /// The tag every machine of a fleet carries.
     public static let tag = "tag:founderizer"
@@ -271,15 +273,16 @@ public struct TailscaleFleetKey: Sendable {
 
     // MARK: - Each time: one key for one machine
 
-    /// One key for one machine, from the fleet key: single-use, pre-authorized, tagged, not ephemeral, and worthless in
-    /// fifteen minutes. The machine's name is in its description, so the owner reads in Tailscale what each key was for.
-    public func mintAuthKey(hostname: String) async throws -> String {
+    /// One key for one machine, from the fleet key: single-use, pre-authorized, tagged, not ephemeral, and worthless after
+    /// `life` seconds, fifteen minutes unless the caller says otherwise. The machine's name is in its description, so the
+    /// owner reads in Tailscale what each key was for.
+    public func mintAuthKey(hostname: String, life: Int = TailscaleFleetKey.keyLifeSeconds) async throws -> String {
         guard let client = shelf.read().flatMap(FleetClient.init(stored:)) else { throw FleetKeyError.noFleetKey }
         let access = try await accessToken(client)
         let body: [String: Any] = [
             "capabilities": ["devices": ["create": [
                 "reusable": false, "ephemeral": false, "preauthorized": true, "tags": [Self.tag]]]],
-            "expirySeconds": Self.keyLifeSeconds,
+            "expirySeconds": life,
             "description": Self.keyDescription(hostname),
         ]
         let (data, http) = try await reach(request("tailnet/-/keys", token: access, method: "POST", json: body))

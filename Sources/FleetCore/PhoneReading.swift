@@ -33,9 +33,10 @@ extension HubState {
 }
 
 extension FleetAgent {
-    /// An agent as the phone knows it for the rules of a task's mark: its name, its role, its runtime and the usage
-    /// limit that holds its work. Everything else is unknown.
-    public init(phoneName name: String, role: String, runtime: String, limit: RuntimeLimit?) {
+    /// An agent as the phone knows it for the rules of a task's mark: its name, its role, its runtime, its Tools boxes
+    /// (`can`, which decides who checks an unknown outcome: `TaskOutcome.shellOff`) and the usage limit that holds its
+    /// work. Everything else is unknown.
+    public init(phoneName name: String, role: String, runtime: String, limit: RuntimeLimit?, can: [String] = []) {
         self.name = name
         self.role = role
         title = nil
@@ -44,7 +45,7 @@ extension FleetAgent {
         direct_chat = nil
         local_model = nil
         reports_to = nil
-        can = []
+        self.can = can
         last_seen = nil
         alive_ts = nil
         client_seen = nil

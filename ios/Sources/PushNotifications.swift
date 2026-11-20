@@ -150,8 +150,16 @@ enum NeedPress {
                 throw MobileError.invalidResponse
             }
             database = read.snapshot.db
+            let item = read.snapshot.needs.first { $0.id == need }
+            // the lane "Give on the iPhone": a ping shows no script, so a press on it never signs Run it once of the
+            // door's card of a run (the owner's "Show the script" of 19 November 2026): he answers it on the card,
+            // which shows the script. A hub of API 1.247 sends such a ping no buttons; this holds for an older ping.
+            if let item, choice == 0, item.door_host?.isEmpty == false {
+                return await tell(named ?? String(l10n: "Answer not sent"), String(l10n: "Open Founderizer to answer."),
+                                  need: need)
+            }
             // owner feature door_calls: the yes to a door call is signed with this phone's own key, as in the app
-            approval = read.snapshot.needs.first { $0.id == need }.flatMap { DeviceSigningKey().approval(for: $0, choice: choice) }
+            approval = item.flatMap { DeviceSigningKey().approval(for: $0, choice: choice) }
         } catch {
             return await tell(named ?? String(l10n: "Answer not sent"), words(error, need: need), need: need)
         }

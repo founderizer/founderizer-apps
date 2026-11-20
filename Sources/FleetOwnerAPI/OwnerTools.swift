@@ -381,6 +381,7 @@ public final class OwnerTools: @unchecked Sendable {
     /// route (a part that the arguments do not give, or "." or ".."), and the id of a `with_revision` tool, which its
     /// page needs before the read of its revision.
     static func beforeAnyRequest(_ tool: OwnerTable.Tool, _ args: [String: JSONValue]) throws {
+        if tool.name == "answer_needs_you" { try filesWithAChoice(args) }
         switch tool.kind {
         case .plain:
             _ = try route(tool.route, args)
@@ -389,6 +390,22 @@ public final class OwnerTools: @unchecked Sendable {
                 throw OwnerRefusal("the page \(tool.revisionPage ?? "") is about one thing: give its id.")
             }
         default: break
+        }
+    }
+
+    /// **Files go with words only, as in the app**: `answer_needs_you` refuses `attachments` beside a `choice` or
+    /// `choices`, before any request, with `owner_mcp.py`'s own sentence (`FILES_WITH_A_CHOICE`) and by its rule
+    /// (Python's truth of `attachments`, and a choice or choices that is not null). The app's request card sends its
+    /// staged files with an answer in words or alone, and a press of an option sends none (`NeedRequestCard`). It runs
+    /// before the route of a door card's press (`AnswerDoor.press`), which carries no file to the app: a file there
+    /// would be left behind in silence.
+    static let filesWithAChoiceWords = "A choice or choices carries no file, as in the Founderizer app. Send the "
+        + "choice alone, or send the files with an answer in words. An item takes one answer."
+
+    static func filesWithAChoice(_ args: [String: JSONValue]) throws {
+        guard args["attachments"]?.truthy == true else { return }
+        for key in ["choice", "choices"] where !(args[key]?.isNull ?? true) {
+            throw OwnerRefusal(filesWithAChoiceWords)
         }
     }
 

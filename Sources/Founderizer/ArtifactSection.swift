@@ -101,10 +101,9 @@ struct ArtifactSection: View {
                     .buttonStyle(FleetOutlineButtonStyle()).controlSize(.small).disabled(!isFresh || preview.loading != nil)
                     .accessibilityIdentifier("view-checked-outputs")
             }
-            if !isFresh {
-                Text("Connection required. Reload outputs after the hub reconnects.")
-                    .font(FormMetrics.detail).foregroundStyle(.orange)
-            }
+            // **No line of its own for an old reading** (the owner's yes of 17 November 2026 to the pictures of the Task
+            // page): the window's notice says it, and View waits until a reading is current. Two orange lines stood
+            // here for that one cause ("Connection required…", "Output discarded…").
             if let loading = preview.loading {
                 HStack {
                     Text(loading).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
@@ -165,8 +164,9 @@ struct ArtifactSection: View {
                 }.padding(12).background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.radius))
             }
         }
+        // An output that shows goes with a reading that is not current, as before, and says nothing of its own.
         .onChange(of: isFresh) { _, fresh in
-            if !fresh { preview.clear(message: String(l10n: "Output discarded because the hub state is stale.")) }
+            if !fresh { preview.clear() }
         }
         .onDisappear { preview.clear() }
     }

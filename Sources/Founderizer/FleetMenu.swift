@@ -7,7 +7,7 @@ import SwiftUI
 // dark panel with round corners, rows of 32 points with words of 14 points and a muted symbol before them, the
 // highlight a rounded fill inside the panel's inset of 6 points, groups parted by a line that stops short of the
 // edges, and an item that deletes in red. It draws every right-click menu of the app (`FleetContextMenus`) and every
-// list of a `FleetSelect`, so the right-click of an agent's row and the "…" of its Runs on are one menu.
+// list of a `FleetSelect`, so the right-click of an agent's row and the "…" of its Runs on look the same.
 //
 // It is a window of its own that never takes the keyboard, as a macOS menu: the window under it keeps its key focus
 // (the composer keeps its cursor), its own watch of the keys takes the arrows, Return, Esc and a filter's letters while
@@ -61,7 +61,7 @@ struct FleetMenuItem {
     /// An item that deletes, in red.
     var destructive = false
     /// The heading of its group, which shows where the section changes; a section of spaces alone is a line between
-    /// two groups (the agent's one menu), and an item with no section stands in the first group.
+    /// two groups (the agent's menus), and an item with no section stands in the first group.
     var section: String?
 }
 

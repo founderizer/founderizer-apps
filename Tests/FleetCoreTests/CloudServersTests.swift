@@ -66,13 +66,151 @@ struct CloudServersTests {
         #expect(CloudProvider.allCases.map(\.name) == ["Hetzner", "DigitalOcean", "Vultr", "Akamai"])
     }
 
-    @Test func theFirstBootJoinsThePrivateNetworkOnce() {
+    /// **The first boot waits for apt's lock, then joins the private network once.** Tailscale's installer runs apt-get
+    /// with no wait for the lock, which a new server's first updates hold for about nine minutes: so each try waits for
+    /// it first, in the words of hub.py's TAILSCALE_INSTALL, which stand here character for character.
+    @Test func theFirstBootWaitsForAptsLockThenJoinsThePrivateNetworkOnce() {
+        let hubsWords = "for try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q "
+            + "install </dev/null >/dev/null 2>&1; curl -fsSL https://tailscale.com/install.sh | sh && "
+            + "command -v tailscale >/dev/null && break; sleep 20; done"
         #expect(CloudServers.userData(authKey: Self.authKey, hostname: "hub-1") == """
         #!/bin/sh
-        curl -fsSL https://tailscale.com/install.sh | sh
+        \(hubsWords)
         tailscale up --auth-key=tskey-auth-kAUTH1234CNTRL-notarealkey --hostname=hub-1 --accept-dns=false
 
         """)
+    }
+
+    /// **A first boot that meets the server's first updates waits for them, and then joins**, as cloud-init runs it: as
+    /// root, under this Mac's `/bin/sh` and under dash, on the stand-in server of the network prompt's tests, whose
+    /// apt-get needs dpkg's lock as apt's own does while the first updates hold it for 540 seconds more, and whose curl
+    /// gives Tailscale's installer. A try that curl got no script for is made again after 20 seconds; after three such
+    /// tries the server has no Tailscale, and it does not join. Until 11 November 2026 the boot ran the installer at once,
+    /// whose apt-get stopped on the lock, so its server never joined.
+    @Test func aFirstBootThatMeetsTheFirstUpdatesWaitsForThemAndJoins() throws {
+        let firstBoot = CloudServers.userData(authKey: Self.authKey, hostname: "worker-3")
+        for sh in NetworkPromptRootTests.shells {
+            for misses in [0, 1, 3] {
+                let server = try NetworkPromptRootTests.StandInServer()
+                defer { server.remove() }
+                try server.holdAptLock(540)
+                try server.failCurl(misses)
+                let ran = try server.boot(firstBoot, sh: sh)
+                let who = "\(sh), \(misses) tries of curl with nothing"
+                #expect(server.aptWaits == [540], "\(who): the boot waited \(server.aptWaits) seconds for apt's lock: \(ran.err)")
+                #expect(server.slept == Array(repeating: 20, count: misses), "\(who): the boot slept \(server.slept)")
+                #expect(server.installed == (misses < 3), "\(who): Tailscale there: \(server.installed): \(ran.err)")
+                if misses < 3 {
+                    #expect(ran.status == 0, "\(who): the boot ended with \(ran.status): \(ran.err)")
+                    #expect(server.upInWords() == "--auth-key=\(Self.authKey) --hostname=worker-3 --accept-dns=false\n",
+                            "\(who): tailscale up got \(String(describing: server.upInWords()))")
+                } else {
+                    #expect(ran.status != 0 && server.upInWords() == nil, "\(who): the boot ended with \(ran.status)")
+                }
+            }
+        }
+    }
+
+    /// **The app waits for a new server until its key ends, one hour** (the owner's choice of 11 November 2026): a first
+    /// boot that meets the server's first updates waits for them, about nine minutes, so its server comes after the five
+    /// minutes that the app waited before. A server that is there but not online yet does not count, nor does another
+    /// device. A server that never comes ends the wait when its key ends, with the step's one failure line, and Back
+    /// ends the wait at once.
+    @Test func theAppWaitsForANewServerUntilItsKeyEnds() async throws {
+        #expect(CloudServers.joinKeyLife == 3600)
+        let made = Date(timeIntervalSince1970: 1_800_000_000)
+        let late = Clock(made)
+        let address = try await CloudServers.joined("worker-3", since: made, status: {
+            let gone = late.now.timeIntervalSince(made)
+            return gone < 600 ? Self.network(nil) : Self.network(gone >= 620)
+        }, now: { late.now }, pause: { late.pass($0) })
+        #expect(address == .online("100.64.0.31"))
+        #expect(late.now.timeIntervalSince(made) == 620)
+        let never = Clock(made)
+        let none = try await CloudServers.joined("worker-3", since: made, status: { Self.network(false) },
+                                                 now: { never.now }, pause: { never.pass($0) })
+        #expect(none == .ended)
+        #expect(never.now.timeIntervalSince(made) == TimeInterval(CloudServers.joinKeyLife))
+        #expect(CloudServers.notJoined("worker-3", at: .hetzner)
+                == "worker-3 did not join your network within an hour. Open it in Hetzner's console.")
+        let waiting = Task {
+            try await CloudServers.joined("worker-3", since: made, status: { Self.network(false) }, now: { made },
+                                          pause: { _ in try await Task.sleep(for: .seconds(3600)) })
+        }
+        waiting.cancel()
+        await #expect(throws: CancellationError.self) { try await waiting.value }
+        // Back during a read that sees the server: no install starts.
+        let backDuringRead = Task {
+            try await CloudServers.joined("worker-3", since: made, status: {
+                withUnsafeCurrentTask { $0?.cancel() }
+                return Self.network(true)
+            }, now: { made }, pause: { _ in })
+        }
+        await #expect(throws: CancellationError.self) { try await backDuringRead.value }
+        // A Mac that slept past the end: the last look still finds the server.
+        let slept = Clock(made)
+        let woke = try await CloudServers.joined("worker-3", since: made, status: {
+            Self.network(slept.now.timeIntervalSince(made) > 3600)
+        }, now: { slept.now }, pause: { _ in slept.pass(.seconds(3601)) })
+        #expect(woke == .online("100.64.0.31"))
+    }
+
+    /// **A server that joined and that this Mac does not see is told after six minutes, not after the hour**: the
+    /// tailnet's own list is read from five minutes on, once a minute, and when two reads in a row have the server the
+    /// wait ends, so the step says why (`FleetReach`). A list without the server lets the wait go on; a server that
+    /// the list has a moment before this Mac sees it is found.
+    @Test func aServerThatJoinedOutOfThisMacsSightEndsTheWaitAfterFiveMinutes() async throws {
+        let made = Date(timeIntervalSince1970: 1_800_000_000)
+        let hidden = Clock(made), asked = Times()
+        let none = try await CloudServers.joined("worker-3", since: made, status: { Self.network(false) }, listed: {
+            asked.add(hidden.now.timeIntervalSince(made))
+            return Self.listed
+        }, now: { hidden.now }, pause: { hidden.pass($0) })
+        #expect(none == .listed(Self.listed))
+        #expect(asked.all == [300, 360])
+        #expect(hidden.now.timeIntervalSince(made) == 360)
+        let notYet = Clock(made), times = Times()
+        let late = try await CloudServers.joined("worker-3", since: made, status: {
+            Self.network(notYet.now.timeIntervalSince(made) >= 600 ? true : nil)
+        }, listed: {
+            times.add(notYet.now.timeIntervalSince(made))
+            return nil
+        }, now: { notYet.now }, pause: { notYet.pass($0) })
+        #expect(late == .online("100.64.0.31"))
+        #expect(times.all == [300, 360, 420, 480, 540])
+        let between = Clock(made)
+        let found = try await CloudServers.joined("worker-3", since: made, status: {
+            Self.network(between.now.timeIntervalSince(made) > 300 ? true : nil)  // seen only after the list had it
+        }, listed: { Self.listed }, now: { between.now }, pause: { between.pass($0) })
+        #expect(found == .online("100.64.0.31"))
+        #expect(between.now.timeIntervalSince(made) == 305)
+    }
+
+    /// worker-3 as the tailnet's own list has it (`TailscaleFleetKey.joined`).
+    private static let listed = JoinedDevice(name: "worker-3", addresses: ["100.64.0.31"])
+
+    /// The moments at which a stand-in was asked, in order.
+    private final class Times: @unchecked Sendable {
+        private let lock = NSLock()
+        private var at: [TimeInterval] = []
+        func add(_ time: TimeInterval) { lock.withLock { at.append(time) } }
+        var all: [TimeInterval] { lock.withLock { at } }
+    }
+
+    /// This Mac's network as `tailscale status --json` gives it: another server online, and worker-3 when it is there.
+    private static func network(_ online: Bool?) -> String {
+        let three = online.map { #", "c": {"DNSName": "worker-3.tail1234.ts.net.", "TailscaleIPs": ["100.64.0.31"], "Online": \#($0)}"# }
+        return #"{"Self": {"DNSName": "macbook.tail1234.ts.net."}, "Peer": {"a": {"DNSName": "worker-1.tail1234.ts.net.", "#
+            + #""TailscaleIPs": ["100.96.100.130"], "Online": true}"# + (three ?? "") + "}}"
+    }
+
+    /// A clock that only the wait's own pauses move, so a wait of an hour takes no time.
+    private final class Clock: @unchecked Sendable {
+        private let lock = NSLock()
+        private var at: Date
+        init(_ at: Date) { self.at = at }
+        var now: Date { lock.withLock { at } }
+        func pass(_ time: Duration) { lock.withLock { at += TimeInterval(time.components.seconds) } }
     }
 
     @Test func thisAppsKeyIsReadWithItsFingerprint() throws {
@@ -342,7 +480,8 @@ struct CloudServersTests {
         let limit = Self.hetzner()
         limit.clear("POST", "/v1/servers")
         limit.answer("POST", "/v1/servers", 403, "{\"error\":{\"code\":\"resource_limit_exceeded\",\"message\":\"server limit reached\"}}")
-        await #expect(throws: CloudError.refused(.hetzner, "server limit reached")) { try await Self.make(.hetzner, limit) }
+        // The account's limit is its own stop (slice 3): "no room in your account", whose way on is another provider.
+        await #expect(throws: CloudError.full(.hetzner)) { try await Self.make(.hetzner, limit) }
         #expect(limit.calls("POST", "/v1/servers").count == 1)
         #expect(limit.calls.filter { $0.method == "DELETE" }.map(\.path) == ["/v1/firewalls/77"])
     }
@@ -510,7 +649,8 @@ struct CloudServersTests {
         let limit = Self.digitalOcean()
         limit.clear("POST", "/v2/droplets")
         limit.answer("POST", "/v2/droplets", 422, "{\"id\":\"unprocessable_entity\",\"message\":\"creating this droplet will exceed your droplet limit\"}")
-        await #expect(throws: CloudError.refused(.digitalOcean, "creating this droplet will exceed your droplet limit")) {
+        // The account's limit is its own stop (slice 3), whose way on is another provider.
+        await #expect(throws: CloudError.full(.digitalOcean)) {
             try await Self.servers(.digitalOcean, limit).createServer(name: "hub-1", use: .hub, publicKey: Self.publicKey,
                                                                        authKey: Self.authKey, offer: chosen)
         }
@@ -518,7 +658,7 @@ struct CloudServersTests {
         let limited = Self.digitalOcean()
         limited.clear("POST", "/v2/droplets")
         limited.answer("POST", "/v2/droplets", 422, "{\"id\":\"unprocessable_entity\",\"message\":\"creating this droplet will exceed your droplet limit\"}")
-        await #expect(throws: CloudError.refused(.digitalOcean, "creating this droplet will exceed your droplet limit")) {
+        await #expect(throws: CloudError.full(.digitalOcean)) {
             try await Self.make(.digitalOcean, limited)
         }
         #expect(limited.calls("POST", "/v2/droplets").count == 1)

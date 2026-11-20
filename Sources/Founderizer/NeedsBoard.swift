@@ -591,8 +591,11 @@ private struct NeedStep: View {
     private var expanded: Bool { memory.expanded }
 
     private var ended: Bool { !need.isOpen || onItsWay != nil }
-    /// What it needs from him. A secret request's is the hub's one sentence about its form, which is right below it.
-    private var todo: String { need.asksForSecret ? "" : need.todo }
+    /// What it needs from him. A secret request's is the hub's one sentence about its form, which is right below it, and
+    /// an item that carries its grant has none: Give is its step (`OwnerNeed.give`).
+    private var todo: String { need.asksForSecret || need.give != nil ? "" : need.todo }
+    /// The names that the step's words link (`CardNames`): an agent, a repository, a server, a page of the app.
+    private var names: CardNames { store.cardNames(for: need) }
     /// A reason of one or two sentences, shown whole (`NeedTalk.why`); a longer one, of a request for a key or of an
     /// item from before the rule, shows its first three lines until Show all.
     private var short: Bool { need.details != nil || need.why.count <= NeedTalk.why }
@@ -634,12 +637,18 @@ private struct NeedStep: View {
                 if pressedTakeOver { NeedTakeOverLine(connection: way, pressed: true).padding(.top, 6) }
             }
             if !need.why.isEmpty { why.padding(.top, 12) }
-            if !task.isEmpty { taskWords.padding(.top, 12) }
+            if !task.isEmpty {
+                taskWords.padding(.top, 12)
+                // the owner's "Open the page" (19 November 2026): a step on one page of the app opens it
+                CardPageButton(store: store, need: need, task: task, top: 12, centred: centred)
+            }
             if hasMore { moreLink.padding(.top, 10) }
             if expanded, need.details != nil || (!todo.isEmpty && task.isEmpty) { more.padding(.top, 14) }
             answers.padding(.top, 24)
         }
         .frame(maxWidth: SetupMetrics.cardsWidth)
+        // a name in its words opens its page in this window (`FleetStore.openCardLink`)
+        .environment(\.openURL, OpenURLAction { store.openCardLink($0) })
         // What stands under the title takes the step's one size (`stepText`): the options, the form, the buttons.
         .environment(\.stepText, SetupMetrics.text)
         .environment(\.fleetButtonText, SetupMetrics.text)
@@ -676,12 +685,12 @@ private struct NeedStep: View {
 
     @ViewBuilder private var why: some View {
         if short || expanded {
-            MessageText(text: need.why, step: true).foregroundStyle(FleetStyle.text)
+            MessageText(text: need.why, step: true, names: names).foregroundStyle(FleetStyle.text)
                 .multilineTextAlignment(centred ? .center : .leading)
                 .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
         } else {
             // The start of a long reason, on three lines, until Show all.
-            Text(MessageBlock.inline(need.why.components(separatedBy: .newlines).joined(separator: " ")))
+            Text(names.link(MessageBlock.inline(need.why.components(separatedBy: .newlines).joined(separator: " "))))
                 .font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text).lineSpacing(5).tint(FleetStyle.link)
                 .lineLimit(3).multilineTextAlignment(centred ? .center : .leading).fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
@@ -692,7 +701,8 @@ private struct NeedStep: View {
     /// steps as a list.
     private var taskWords: some View {
         // owner feature need_run: the block of its command has Run (the owner's "Yes, as drawn")
-        MessageText(text: task, step: true, run: NeedRunTarget.of(need, store: store)).foregroundStyle(FleetStyle.text)
+        MessageText(text: task, step: true, run: NeedRunTarget.of(need, store: store), names: names)
+            .foregroundStyle(FleetStyle.text)
             .multilineTextAlignment(centred ? .center : .leading)
             .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
     }
@@ -718,11 +728,12 @@ private struct NeedStep: View {
         VStack(alignment: .leading, spacing: 12) {
             // The door's card wraps its script (API 1.125): no end of a line is off the screen when Script is open.
             if let details = need.details {
-                MessageText(text: details, step: true, script: need.door_script != nil).foregroundStyle(FleetStyle.text)
+                MessageText(text: details, step: true, script: need.door_script != nil,
+                            names: need.door_script != nil ? nil : names).foregroundStyle(FleetStyle.text)
             }
             if !todo.isEmpty, task.isEmpty {
                 Text("What it needs from you").font(.system(size: SetupMetrics.text, weight: .medium)).foregroundStyle(FleetStyle.muted)
-                MessageText(text: todo, step: true).foregroundStyle(FleetStyle.text)
+                MessageText(text: todo, step: true, names: names).foregroundStyle(FleetStyle.text)
             }
         }
         .multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)

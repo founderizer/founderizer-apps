@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Founderizer.Core;
 using Founderizer.Windows.Marks;
 using Microsoft.UI.Text;
@@ -16,6 +17,8 @@ namespace Founderizer.Windows.Pages;
 internal interface IAnswers
 {
     void Press(long need, int choice);
+    /// <summary>A quick reply ("Done", "Not now", "Tell me more"): its words are his answer, sent at once (OwnerStore.Reply).</summary>
+    void Reply(long need, string words);
     void Tick(long need, IReadOnlyCollection<int> choices);
     void Type(long need, string text);
     void Answer(long need);
@@ -30,9 +33,10 @@ internal interface IAnswers
 }
 
 /// <summary>A request's options and its answer box, as the pictures draw them in a chat's card (rows of 14) and in the
-/// request at hand (rows of 15, 44 high). A press sends that option (OptionsKind.Press); a quick reply fills an empty
-/// box and sends nothing; ticks (options that combine) mark each pressed row, and "Send N" sends them. An option whose
-/// press waits for the store says "Sending…" at its end after a second.</summary>
+/// request at hand (rows of 15, 44 high). A press sends that option (OptionsKind.Press); a quick reply sends its words
+/// as his answer with the box's files, and they stand in the box while it waits for the store (OwnerStore.Reply); ticks
+/// (options that combine) mark each pressed row, and "Send N" sends them. An option whose press waits for the store
+/// says "Sending…" at its end after a second.</summary>
 internal sealed class AnswerParts
 {
     private readonly IAnswers answers;
@@ -46,6 +50,43 @@ internal sealed class AnswerParts
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer? sendingTimer;
     private long need;
     private OptionsModel shown = new();
+    private bool filesWait;
+    /// <summary>The pointer's press under the click that comes (its time in microseconds and its place), and the press
+    /// of the last click that answered, for <see cref="SecondClick"/>.</summary>
+    private (ulong At, global::Windows.Foundation.Point Place)? pressed, lastPress;
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDoubleClickTime();
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetricsForDpi(int index, uint dpi);
+
+    /// <summary>A click that answers (an option, a quick reply, "Send N", the box's Send) is the second click of a
+    /// double-click on the request at hand: the next request comes to hand under the pointer as the first click answers,
+    /// and the second would answer that one too (the Mac's SecondClick, on the same four). A second click is Windows'
+    /// own, by the pointer's presses and not by when the window gets to the click: within its double-click time of the
+    /// press before it and within its double-click rectangle, so a quick press on another row goes. A press of the
+    /// keyboard or of an assistive app has no pointer press, and is never one. Each click of a run of quick clicks counts
+    /// as a second one.</summary>
+    private bool SecondClick()
+    {
+        var press = pressed;
+        pressed = null;
+        var previous = lastPress;
+        lastPress = press;
+        if (!step || press is not { } now || previous is not { } before || now.At < before.At) return false;
+        return now.At - before.At < GetDoubleClickTime() * 1000UL &&
+               Math.Abs(now.Place.X - before.Place.X) * 2 <= GetSystemMetricsForDpi(36, 96) &&    // SM_CXDOUBLECLK
+               Math.Abs(now.Place.Y - before.Place.Y) * 2 <= GetSystemMetricsForDpi(37, 96);      // SM_CYDOUBLECLK
+    }
+
+    /// <summary>The pointer's press on a control that answers, also when the button takes the press as its own.</summary>
+    private void Watch(UIElement control) =>
+        control.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
+        {
+            var point = e.GetCurrentPoint(null);
+            pressed = (point.Timestamp, point.Position);
+        }), handledEventsToo: true);
 
     public AnswerParts(IAnswers answers, bool step)
     {
@@ -55,17 +96,20 @@ internal sealed class AnswerParts
         answerBox = new Field(step ? 44 : 40, step ? 15 : 14, 42);
         answerBox.Typed += text => answers.Type(need, text);
         answerBox.PlusPressed += () => answers.AddFiles(need);
+        Watch(answerBox.SendButton);
         answerBox.Sent += () =>
         {
+            if (SecondClick()) return;
             answers.Answer(need);
             answerBox.Clear();
         };
         sendTicks = Buttons.Plain("");
         sendTicksWords = (TextBlock)((Border)sendTicks.Content).Child;
         sendTicks.HorizontalAlignment = HorizontalAlignment.Left;
+        Watch(sendTicks);
         sendTicks.Click += (_, _) =>
         {
-            if (ticked.Count == 0) return;
+            if (ticked.Count == 0 || SecondClick()) return;
             answers.Tick(need, ticked.OrderBy(i => i).ToList());
             ticked.Clear();
             DrawTicks();
@@ -91,6 +135,7 @@ internal sealed class AnswerParts
             ticked.Clear();
         }
         need = id;
+        filesWait = box.FilesWait;
         answerBox.Show(box.Placeholder, box.ShowsPlus, canSend);
         answerBox.Hovers(box.PlusHover, box.SendHover);
         answerBox.ShowChips(box.Chips.Select(chip => (UIElement)new FileChipView(chip, (c, again) => answers.Chip(id, c, again))).ToList());
@@ -108,11 +153,13 @@ internal sealed class AnswerParts
             int choice = i;
             string label = model.Labels[i];
             var row = Row(label, model.Kind == OptionsKind.Ticks, model.SendingWords);
+            Watch(row);
             row.Click += (_, _) =>
             {
                 switch (model.Kind)
                 {
                     case OptionsKind.Press:
+                        if (SecondClick()) break;
                         answers.Press(need, choice);
                         break;
                     case OptionsKind.Ticks:
@@ -120,10 +167,16 @@ internal sealed class AnswerParts
                         DrawTicks();
                         break;
                     case OptionsKind.QuickReplies:
-                        if (answerBox.Box.Text.Trim().Length == 0)
+                        // The owner, 18 November 2026: "If I click done, I want to send it directly! not paste it into
+                        // the text input!".
+                        if (SecondClick()) break;
+                        answerBox.Load(label);
+                        answers.Reply(need, label);
+                        // A file of the box still goes up: the words wait in the box for Enter or Send, with the caret.
+                        if (filesWait)
                         {
-                            answerBox.Load(label);
-                            answers.Type(need, label);
+                            answerBox.Box.Focus(FocusState.Programmatic);
+                            answerBox.Box.Select(label.Length, 0);
                         }
                         break;
                 }

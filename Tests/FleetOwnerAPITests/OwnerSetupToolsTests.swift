@@ -252,10 +252,10 @@ struct OwnerSetupBoardTests {
         #expect(cases.count == 15)
         #expect(Set(cases) == Set(FirstRunPage.ofStep.keys))
         #expect(Set(FirstRunPage.ofStep.values).union([.building]) == Set(FirstRunPage.allCases))
-        #expect(Set(FirstRunPage.allCases.map(\.rawValue)) == ["welcome", "paste", "name", "ai_provider", "servers", "vps",
+        #expect(Set(FirstRunPage.allCases.map(\.rawValue)) == ["welcome", "paste", "error_reports", "name", "ai_provider", "servers", "vps",
                                                                "tailscale", "tailscale_key",
                                                                "token", "building", "other_vps", "machine",
-                                                               "installing", "address", "done", "restore"])
+                                                               "installing", "address", "done"])
     }
 
     /// Each title that `setup_state` may give is a key of the app's string table in English.
@@ -408,8 +408,8 @@ struct OwnerSetupBoardTests {
     /// stays allowed.
     @Test func setupShowChangesThePageOnlyFromAStartPage() {
         let others = FirstRunPage.allCases.filter { !SetupShow.startPages.contains($0) }
-        #expect(Set(others) == [.name, .aiProvider, .servers, .tailscale, .tailscaleKey, .token, .building, .otherVPS,
-                                .machine, .installing, .address, .done, .restore])
+        #expect(Set(others) == [.errorReports, .name, .aiProvider, .servers, .tailscale, .tailscaleKey, .token, .building, .otherVPS,
+                                .machine, .installing, .address, .done])
         for page in others {
             for target in ["welcome", "name"] {
                 let words = SetupShow.refusal(page: target, seen: page.rawValue, firstRun: Self.page(page))

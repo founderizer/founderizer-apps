@@ -121,7 +121,8 @@ struct AgentStatusPanel: View {
         let state = store.state
         let open = state?.tasks.filter { $0.owner == agent.name && !$0.isTerminal } ?? []
         let presence = agent.presence(isFresh: store.isFresh, serverTime: time, openTasks: open, holds: state?.holds ?? [],
-                                      waits: state?.ownerWaits(of: open) ?? [:], thinking: store.thinks(agent.name))
+                                      waits: state?.ownerWaits(of: open) ?? [:], request: state?.ownKeyRequest(of: agent.name),
+                                      thinking: store.thinks(agent.name))
         let bar = UsageBar.bars(for: state?.agents ?? [], time: time, isFresh: store.isFresh)[agent.name]
         FormSection { agentRow(agent, presence: presence) }
         if !asked.isEmpty { section(AskedCard.title) { askedRows(asked) }.transition(.opacity) }
@@ -321,8 +322,8 @@ struct AgentStatusPanel: View {
         if card.waitsInRows || showsWaits {
             ForEach(card.waits) { row in askedRow(row).transition(.opacity) }
         }
-        // Tasks keeps the agent chosen for its next visit, as its own filter does.
-        Button { UserDefaults.standard.set(agent, forKey: "activityAgent"); store.destination = .activity } label: {
+        // Tasks keeps the agent chosen for its next visit, as its own filter does, and has this chat's back link.
+        Button { UserDefaults.standard.set(agent, forKey: "activityAgent"); store.destination = .activityFrom(agent) } label: {
             self.row(String(l10n: "View all"), muted: true, opens: true) { Color.clear.frame(width: 1, height: 1) }
         }
         .buttonStyle(FleetRowButtonStyle())

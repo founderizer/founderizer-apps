@@ -139,11 +139,11 @@ struct StartAgainTests {
         }
         #expect(found(device("n1", "worker-2", created: 60)) == "n1")
         #expect(found(device("n1", "Worker-2", created: 60)) == "n1")
-        // Five minutes before the build's start, and thirty minutes after the provider's answer, and no more.
+        // Five minutes before the build's start, and the key's hour and five minutes after the provider's answer.
         #expect(found(device("n1", "worker-2", created: -300)) == "n1")
         #expect(found(device("n1", "worker-2", created: -301)) == nil)
-        #expect(found(device("n1", "worker-2", created: 8 + 1800)) == "n1")
-        #expect(found(device("n1", "worker-2", created: 8 + 1801)) == nil)
+        #expect(found(device("n1", "worker-2", created: 8 + 3900)) == "n1")     // as long as its key lives
+        #expect(found(device("n1", "worker-2", created: 8 + 3901)) == nil)
         // Another name, no tag of the fleet, not authorized, another tailnet's, no time.
         #expect(found(device("n1", "worker-20", created: 60)) == nil)
         #expect(found(device("n1", "worker-2", created: 60, tags: ["tag:server"])) == nil)
@@ -161,8 +161,8 @@ struct StartAgainTests {
         #expect(StartAgain.device(of: build("worker-2", id: nil), in: [device("n1", "worker-2", created: 60)]) == nil)
         var early = build("worker-2", id: "102")
         early.madeAt = nil
-        #expect(StartAgain.device(of: early, in: [device("n1", "worker-2", created: 1800)])?.id == "n1")
-        #expect(StartAgain.device(of: early, in: [device("n1", "worker-2", created: 1801)]) == nil)
+        #expect(StartAgain.device(of: early, in: [device("n1", "worker-2", created: 3900)])?.id == "n1")
+        #expect(StartAgain.device(of: early, in: [device("n1", "worker-2", created: 3901)]) == nil)
     }
 
     /// A build of another hub, or a first run's with no hub, can have made the machine: a device that fits its times
@@ -720,7 +720,8 @@ struct StartAgainTests {
         for key in ["serversJoinedFor", "hubTCPDone", "centralVaultPins"] {
             defaults.set(["\(mine)|db1|manager": "worker-2", "\(theirs)|db9|manager": "worker-9"], forKey: key)
         }
-        for key in ["ownerAccessInPlace", "serverHardening", "serverMemoryLimit", ServerLibraries.keptKey] {
+        for key in ["ownerAccessInPlace", "serverHardening", "serverMemoryLimit", ServerLibraries.keptKey,
+                    ServerRestart.keptKey] {
             defaults.set(["\(mine) worker-2 100.64.0.9": "aa", "\(theirs) worker-9 100.64.0.99": "bb"], forKey: key)
         }
         for key in ["pinnedAgents", "fleetIdsByHub", "lastPages"] { defaults.set([mine: "one", theirs: "two"], forKey: key) }
@@ -768,7 +769,8 @@ struct StartAgainTests {
         for key in ["serversJoinedFor", "hubTCPDone", "centralVaultPins"] {
             #expect(defaults.dictionary(forKey: key) as? [String: String] == ["\(theirs)|db9|manager": "worker-9"], "\(key)")
         }
-        for key in ["ownerAccessInPlace", "serverHardening", "serverMemoryLimit", ServerLibraries.keptKey] {
+        for key in ["ownerAccessInPlace", "serverHardening", "serverMemoryLimit", ServerLibraries.keptKey,
+                    ServerRestart.keptKey] {
             #expect(defaults.dictionary(forKey: key) as? [String: String] == ["\(theirs) worker-9 100.64.0.99": "bb"], "\(key)")
         }
         for key in ["pinnedAgents", "fleetIdsByHub", "lastPages"] { #expect(defaults.dictionary(forKey: key) as? [String: String] == [theirs: "two"], "\(key)") }

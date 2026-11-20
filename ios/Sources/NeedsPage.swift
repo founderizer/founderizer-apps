@@ -386,6 +386,10 @@ struct NeedCard: View {
                 RowLine()
                 FieldRow(title: String(l10n: "Why"), value: need.why)
             }
+            if NeedScript.text(need) != nil {
+                RowLine()
+                NeedScript(need: need)
+            }
             if NeedOptions.asksInWords(need) {
                 RowLine()
                 FieldRow(title: String(l10n: "What it wants"), value: need.todo)
@@ -394,7 +398,7 @@ struct NeedCard: View {
             if need.asksForSecret {
                 NeedSecretNote(need: need)
             } else {
-                if !need.choices.isEmpty {
+                if !need.phoneRows.isEmpty {
                     NeedOptions(store: store, need: need, given: answerGiven)
                         .opacity(answerGiven?.words != nil ? NeedOptions.dimmed : 1)
                 }
@@ -484,7 +488,8 @@ private struct NothingNeedsYou: View {
 /// folds it again. **The check is for an option that he pressed** ("✓ Correos"; the owner, 14 November 2026: "when I
 /// typed a custom answer instead of choosign one of the suggested ones, do not show the CHECK animation because it is
 /// misleading"): words that he wrote can ask something back or say no, so they stand with no check, and where they
-/// are his own message in the chat (`spoken`) the card folds to its title alone, as the Mac's does.
+/// are his own message in the chat (`spoken`) the card folds to its title alone. (The Mac's card says his answer
+/// always, and stands where he answered it, since 19 November 2026: `ChatRequestPlaces.Answered`.)
 private struct NeedAnswered: View {
     let store: MobileStore
     let need: OwnerNeed
@@ -651,6 +656,10 @@ private struct NeedHead: View {
 /// **They are never drawn grey** (fix round 2, item 51): a press while the hub cannot take it waits and goes when it
 /// can, and the item says "Sending…" under it (`MobileStore.press`). They went grey at 1.71:1 whenever the hub was slow
 /// or away or another write waited.
+///
+/// **An option that only a Mac or a PC can press is not drawn** (`OwnerNeed.phoneRows`): Give, a team card's yes and
+/// the door card's Full access, whose place `NeedComputerNote` takes. The others keep their own index, which their
+/// press sends.
 struct NeedOptions: View {
     let store: MobileStore
     let need: OwnerNeed
@@ -665,29 +674,44 @@ struct NeedOptions: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
-            ForEach(Array(need.choices.enumerated()), id: \.offset) { index, option in
-                let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-                Button { store.press(needID: need.id, choice: index) } label: {
-                    // The agent's words, drawn as a plain label: they are data, never markup.
-                    HStack(spacing: 10) {
-                        if given == .option(index) { DrawnMark(symbol: "checkmark").fontWeight(.semibold) }
-                        Text(verbatim: option)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .padding(.horizontal, 14)
-                        .background(Brand.bubble, in: shape)
-                        .contentShape(shape)
+        let rows = need.phoneRows
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(rows, id: \.self) { row in
+                switch row {
+                case .option(let index):
+                    option(index)
+                case .onTheComputer:
+                    // it stands for answers that he does not give here, so it dims with them once he presses one; as the
+                    // first row it keeps 16 points to the row under it, as the line of Give and of a team card had
+                    NeedComputerNote(need: need)
+                        .padding(.bottom, row == rows.first ? 4 : 0)
+                        .opacity(given?.option != nil ? Self.dimmed : 1)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.primary)
-                .opacity(given?.option.map { $0 != index } == true ? Self.dimmed : 1)
-                .accessibilityAddTraits(given?.option == index ? .isSelected : [])
-                .accessibilityIdentifier("need-option-\(need.id)-\(index)")
             }
         }
+    }
+
+    /// One option to press: its press sends its own index.
+    private func option(_ index: Int) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return Button { store.press(needID: need.id, choice: index) } label: {
+            // The agent's words, drawn as a plain label: they are data, never markup.
+            HStack(spacing: 10) {
+                if given == .option(index) { DrawnMark(symbol: "checkmark").fontWeight(.semibold) }
+                Text(verbatim: need.choices[index])
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.horizontal, 14)
+                .background(Brand.bubble, in: shape)
+                .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.primary)
+        .opacity(given?.option.map { $0 != index } == true ? Self.dimmed : 1)
+        .accessibilityAddTraits(given?.option == index ? .isSelected : [])
+        .accessibilityIdentifier("need-option-\(need.id)-\(index)")
     }
 }
 
@@ -768,6 +792,38 @@ struct NeedAnswerBox: View {
     }
 }
 
+/// **The root script that the door card's Run it once lets through once** (the lane "Give on the iPhone"; the owner's
+/// "Show the script" of 19 November 2026 to its picture): under Why, the text of the card's details, one code block,
+/// byte for byte as the check reads it (`DoorCall.shown`), in the code font of a chat. **Each line wraps, as the Mac's
+/// card wraps its script** (`MessageText.script`), so the end of a long line is on screen before he signs: the hub's
+/// rules of a script (no wide gap, no run of blank lines) keep a command in his sight only where nothing scrolls. On
+/// the card's own fill it stands in a well of the page's colour, as on the Mac's card, or no edge would show. The phone
+/// signs Run it once only for the hash of that script (`DeviceSigningKey.approval`).
+struct NeedScript: View {
+    let need: OwnerNeed
+
+    /// The script that the card shows, or nil: no door card of a run, no script, or details that are not one code block.
+    static func text(_ need: OwnerNeed) -> String? {
+        guard need.door_host?.isEmpty == false, need.door_script != nil, let details = need.details else { return nil }
+        return DoorCall.shown(details: details)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(String(l10n: "Script")).font(.caption).foregroundStyle(Brand.muted)
+            Text(verbatim: Self.text(need) ?? "")
+                .font(.system(.footnote, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Brand.canvas, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 /// A request for a key or a login takes no answer here. A key typed on this phone would go out as words, into the
 /// agent's conversation, before anything could mask it, and the hub refuses an answer in words. Founderizer on the
 /// Mac answers it with its secure form, which puts the value straight into the vault.
@@ -781,6 +837,34 @@ struct NeedSecretNote: View {
             .font(.callout)
             .padding(.vertical, 4)
             .accessibilityIdentifier("secret-need-\(need.id)")
+    }
+}
+
+/// **Give, and a team card's yes, are pressed in Founderizer on a Mac or a PC, and the door card's Full access on the
+/// Mac** (the lane "Give on the iPhone"; the owner's "Line to the Mac" of 19 November 2026 to the phone's picture of an
+/// item that carries its grant, and his "Yes, add it" of the same day for the door's card): the hub takes them only
+/// from there, so one line with a key stands in their place, as on a request for a key. No, the agent's other options
+/// and an answer in words stay: the hub takes them from here, except words that are the own words of Give, of a yes
+/// option, or of Run it once or Full access on the door's card.
+struct NeedComputerNote: View {
+    let need: OwnerNeed
+
+    var body: some View {
+        MarkedLine(symbol: "key.horizontal", words: words)
+            .font(.callout)
+            .padding(.vertical, 4)
+            .accessibilityIdentifier("computer-need-\(need.id)")
+    }
+
+    /// The first word of the hub's own answers that it stands for (`OwnerNeed.onlyOnAComputer`): a team card's yes
+    /// options start with "Yes:", and Give's one with "Give". The door card's Full access is signed only by the owner
+    /// key on the Mac (the owner's "Yes, add it" of 19 November 2026), so no PC is named there.
+    private var words: String {
+        switch need.onlyOnAComputer {
+        case .teamYes: return String(l10n: "Press Yes in Founderizer on your Mac or PC.")
+        case .fullAccess: return String(l10n: "Press Full access in Founderizer on your Mac.")
+        case .give, nil: return String(l10n: "Press Give in Founderizer on your Mac or PC.")
+        }
     }
 }
 

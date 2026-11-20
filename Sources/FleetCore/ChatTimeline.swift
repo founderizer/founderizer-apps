@@ -74,23 +74,6 @@ public enum WordsOnTheirWay {
                        where: { $0.needID == need.id })
     }
 
-    /// **His answer in his own words to one of `needs`, an agent's requests, on its way**, until `messages`, the fleet's
-    /// reading, hold the hub's copy of it: in that agent's chat it is his message from the frame he sends it
-    /// (`ChatRequestPlaces.inTime`). An option that he pressed is not: its card shows it. The request of an answer
-    /// names no agent, so it is found by the request that it answers.
-    public static func answerInWords(toOneOf needs: [OwnerNeed], pending: PendingRequest?, kept: PendingRequest?,
-                                     receipt: SendReceipt?, hub: URL, database: String?,
-                                     messages: [OwnerMessage]) -> PendingRequest? {
-        let asked = Set(needs.map(\.id))
-        guard let request = request(pending: pending, kept: kept, receipt: receipt, hub: hub, database: database,
-                                    where: { $0.answersInWords && $0.needID.map(asked.contains) == true }),
-              !messages.contains(where: {
-                  $0.request_id.caseInsensitiveCompare(request.requestID.uuidString) == .orderedSame
-              })
-        else { return nil }
-        return request
-    }
-
     /// What a field shows of `draft`: nothing while the draft is the words on their way, which the store clears itself
     /// with the hub's receipt; words he writes meanwhile are his next draft.
     public static func field(_ draft: String, sending request: PendingRequest?) -> String {

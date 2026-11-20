@@ -492,6 +492,81 @@ struct SecretTests {
         for (host, expected) in hosts { #expect(ProviderSites.contains(host: host) == expected, "\(host)") }
     }
 
+    /// The card of a key request takes the request's note and account, each one line within the hub's bounds, and its
+    /// answer carries the note only with a secret; his words about the request go alone (API 1.249). A note that
+    /// went with a decline, or words that went with a secret, would be a command that the hub refuses after he typed.
+    @Test func aRequestsNoteAndHisWordsAboutItGoInTheAnswerEachInItsOwnCommand() throws {
+        func asked(_ fields: [String: Any]) throws -> NeedSecret {
+            try JSONDecoder().decode(NeedSecret.self, from: JSONSerialization.data(withJSONObject: fields))
+        }
+        let request = try asked(["kind": "login", "site": "https://shop.example.test/login", "note": " The second shop ",
+                                 "account": "second@example.test"])
+        #expect(request.note == "The second shop" && request.account == "second@example.test" && !request.clarified)
+        let long = String(repeating: "n", count: NeedSecret.noteMost + 1)
+        #expect(try asked(["kind": "login", "note": long, "account": "two\nlines"]) == NeedSecret(kind: .login))
+        #expect(try asked(["kind": "login", "clarified": 12.5]).clarified)
+        #expect(try !asked(["kind": "login", "clarified": NSNull()]).clarified)
+
+        // The lengths are counted in code points, as the hub counts: a family emoji is one character and seven code
+        // points, so 29 of them are 203 where Swift counts 29. A note is counted after the fold that the hub makes
+        // first, which gives "…" three and "ﬁ" two, so a note that fits here fits there. A cut is at a whole character.
+        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"
+        let wide = String(repeating: family, count: 29)
+        #expect(wide.count == 29 && NeedSecret.length(wide) == 203)
+        #expect(NeedSecret.oneLine(wide, most: NeedSecret.noteMost) == String(repeating: family, count: 28))
+        #expect(NeedSecret.oneLine(" The second shop,\nfor refunds ", most: 200) == "The second shop, for refunds")
+        #expect(try asked(["kind": "login", "note": wide]).note == nil)
+        let folded = String(repeating: "a", count: 199) + "\u{2026}"
+        #expect(NeedSecret.length(folded) == 200 && NeedSecret.noteLength(folded) == 202)
+        #expect(NeedSecret.oneLine(folded, most: NeedSecret.noteMost) == String(repeating: "a", count: 199))
+        #expect(NeedSecret.cut(String(repeating: family, count: 400), most: NeedSecret.clarifyMost).count == 285)
+        #expect(NeedSecret.cut("abc", most: 5) == "abc")
+
+        // The value of the form's own field in a note or in a message: only as a word of its own, and only a value
+        // of 8 characters or more, so that a weak password does not stop ordinary words.
+        #expect(NeedSecret.holds(value: "Tr0ub4dor&3x", in: "Use Tr0ub4dor&3x for it."))
+        #expect(NeedSecret.holds(value: "Tr0ub4dor&3x", in: "Tr0ub4dor&3x"))
+        #expect(!NeedSecret.holds(value: "Tr0ub4dor&3x", in: "xTr0ub4dor&3x1 and Tr0ub4dor&3"))
+        #expect(!NeedSecret.holds(value: "second", in: "the second account"))
+        #expect(!NeedSecret.holds(value: "abc123!", in: "abc123!"))                      // 7 characters: no find
+        #expect(NeedSecret.holds(value: " Tr0ub4dor&3x ", in: "xTr0ub4dor&3x1 Tr0ub4dor&3x"))  // the second place counts
+
+        // "Answer with it": the request's note goes only to a secret of the list with no note, of the asked account.
+        func entry(_ title: String, note: String? = nil) -> TeamLogin { TeamLogin(title: title, protected: false, kind: "login", note: note) }
+        #expect(request.noteGoes(to: entry("shop.example.test · Second@example.test")))
+        #expect(!request.noteGoes(to: entry("shop.example.test · first@example.test")))
+        #expect(!request.noteGoes(to: entry("shop.example.test · second@example.test", note: "Its own note")))
+        #expect(!request.noteGoes(to: entry("shop.example.test")))
+        #expect(try asked(["kind": "login", "note": "A shop"]).noteGoes(to: entry("shop.example.test · any@example.test")))
+        #expect(try !asked(["kind": "login", "account": "second@example.test"]).noteGoes(to: entry("shop.example.test · second@example.test")))
+
+        let id = UUID(), reference = "bws://11111111-2222-4333-8444-555555555555"
+        func body(_ data: Data) throws -> [String: String] { try #require(JSONSerialization.jsonObject(with: data) as? [String: String]) }
+        let saved = try body(SecretCommand.answer(requestID: id, database: "d", login: reference, decline: nil, note: " The second shop "))
+        #expect(saved == ["request_id": id.uuidString.lowercased(), "db": "d", "login": reference, "note": "The second shop"])
+        let words = try body(SecretCommand.answer(requestID: id, database: "d", login: nil, decline: nil, clarify: " Which one?\n"))
+        #expect(words == ["request_id": id.uuidString.lowercased(), "db": "d", "clarify": "Which one?"])
+        #expect(try body(SecretCommand.answer(requestID: id, database: "d", login: reference, decline: nil))["note"] == nil)
+        #expect(throws: (any Error).self) { try SecretCommand.answer(requestID: id, database: "d", login: reference, decline: nil, clarify: "Why?") }
+        #expect(throws: (any Error).self) { try SecretCommand.answer(requestID: id, database: "d", login: nil, decline: "", clarify: "Why?") }
+        #expect(throws: (any Error).self) { try SecretCommand.answer(requestID: id, database: "d", login: nil, decline: "", note: "A note") }
+        #expect(throws: (any Error).self) { try SecretCommand.answer(requestID: id, database: "d", login: nil, decline: nil, clarify: "  ") }
+        #expect(throws: (any Error).self) { try SecretCommand.answer(requestID: id, database: "d", login: reference, decline: nil, note: long) }
+        #expect(throws: (any Error).self) { try SecretCommand.answer(requestID: id, database: "d", login: reference, decline: nil, note: wide) }
+        let most = String(repeating: "w", count: NeedSecret.clarifyMost + 1)
+        #expect(throws: (any Error).self) { try SecretCommand.answer(requestID: id, database: "d", login: nil, decline: nil, clarify: most) }
+        // ... in code points: 286 family emoji are 286 characters and 2,002 code points
+        let families = String(repeating: "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}", count: 286)
+        #expect(throws: (any Error).self) { try SecretCommand.answer(requestID: id, database: "d", login: nil, decline: nil, clarify: families) }
+        #expect(throws: (any Error).self) { try SecretCommand.answer(requestID: id, database: "d", login: reference, decline: nil,
+                                                                     note: String(repeating: "a", count: 199) + "\u{2026}") }
+
+        // The catalog's entry gives the note and its writer; an entry of a hub before the note has neither.
+        let entry = try JSONDecoder().decode(TeamLogin.self, from: Data(#"{"title":"shop.example.test · second","protected":false,"note":"The second shop","note_by":"agent"}"#.utf8))
+        #expect(entry.note == "The second shop" && entry.note_by == "agent")
+        #expect(try JSONDecoder().decode(TeamLogin.self, from: Data(#"{"title":"T","protected":false}"#.utf8)).note == nil)
+    }
+
     @Test func saltsReceiptsAndTheCatalogAreChecked() throws {
         func salts(_ fields: [String: String]) throws -> SecretSalts { try JSONDecoder().decode(SecretSalts.self, from: JSONSerialization.data(withJSONObject: fields)) }
         let good = try salts(["login": reference, "password": String(repeating: "1", count: 32), "totp": String(repeating: "2", count: 32)])

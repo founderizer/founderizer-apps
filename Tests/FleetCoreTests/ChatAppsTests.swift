@@ -305,6 +305,10 @@ struct ChatAppsLogicTests {
 
     @Test func eachAppHasItsNameAndTheCardsTheirOrder() {
         #expect(ChatApps.title("discord") == "Discord" && ChatApps.title("whatsapp") == "WhatsApp" && ChatApps.title("telegram") == "Telegram")
-        #expect(ChatApps.apps == ["whatsapp", "discord"])
+        #expect(ChatApps.apps == ["whatsapp", "discord", "telegram"])
+        // Telegram's card only for a hub that serves it (owner API 1.243)
+        #expect(ChatApps.shown(features: ["chat_apps"]) == ["whatsapp", "discord"])
+        #expect(ChatApps.shown(features: nil) == ["whatsapp", "discord"])
+        #expect(ChatApps.shown(features: ["chat_apps", "telegram"]) == ["whatsapp", "discord", "telegram"])
     }
 }

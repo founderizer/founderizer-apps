@@ -31,9 +31,10 @@ struct TaskActivity {
             timeline.append(page.events)
             topRows = timeline.rows.filter { $0.event.parent == nil }.shown(keeping: keptScripts).count
             files = timeline.changedFiles
+            // A child by what it was asked (`StepWords.childTitle`), else by its kind ("general-purpose").
             children = timeline.rows.compactMap { row in
                 guard let agent = row.subagent, let key = row.event.toolKey else { return nil }
-                return TaskChild(id: key, name: agent.name, status: row.status)
+                return TaskChild(id: key, name: StepWords.childTitle(row.event.title) ?? agent.name, status: row.status)
             }
         }
         cursor = page.next
@@ -70,6 +71,22 @@ struct RuntimeActivity: View {
     @Binding var childRequest: RuntimeToolKey?
     /// The rows whose words can be selected (`ChatSelection`): the task's view keeps it, with its scroll view.
     let selection: ChatSelection
+    /// When the task began: the time of the row over the thread's first, for its first stamp (`ChatStamp`).
+    var startedAt: Double? = nil
+    /// The reading of the server of the task's agent, and the hub's time: an error's row reads from them whether its
+    /// provider is signed out there now (`RuntimeErrorLine`).
+    var machine: MachineStatus? = nil
+    var time: Double = 0
+    /// The task's agent: one on a local model signs in nowhere, so its own provider is never "signed out".
+    var agent: FleetAgent? = nil
+    /// The usage limit that holds this task now, as the task's own mark says it, or nil: the row of that limit's
+    /// record stays orange for that time (`ActivityTimeline.stands`).
+    var limit: RuntimeLimit? = nil
+    /// Opens the sign-in of a provider on that server, for "Sign in again" on an error's row; nil on a hub that has
+    /// no sign-in, and then the row has its words alone.
+    var signIn: ((String) -> Void)? = nil
+    /// The store, which opens and saves the files of a guidance (`MessageFilesView`); nil shows none.
+    var store: FleetStore? = nil
     @State private var visibleCount = 80
     @State private var childPath: [RuntimeToolKey] = []
 
@@ -97,7 +114,7 @@ struct RuntimeActivity: View {
                 spoken += 1
             }
         }
-        for shown in topRows where !shown.row.isFleetTool {
+        for shown in topRows where !shown.row.isFleetTool && !StepWords.isToolSearch(shown.row.event.title) {
             clock = max(clock, shown.time)
             say(until: clock)
             if shown.row.isSpoken {
@@ -132,12 +149,14 @@ struct RuntimeActivity: View {
                 Button { childPath.removeLast() } label: {
                     Label("Back", systemImage: "arrow.left").font(FormMetrics.text).foregroundStyle(FleetStyle.muted).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityIdentifier("child-thread-back")
-                Text(timeline.rows.first { $0.event.toolKey == key }?.subagent?.name ?? String(l10n: "Agent thread")).font(FormMetrics.heading).lineLimit(2)
+                // The child by what it was asked, as its row in the thread and in the panel names it.
+                let call = timeline.rows.first { $0.event.toolKey == key }
+                Text(StepWords.childTitle(call?.event.title) ?? call?.subagent?.name ?? String(l10n: "Agent thread")).font(FormMetrics.heading).lineLimit(2)
                 Spacer()
                 Text("Attempt \(key.attempt)").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
             }
             ChildActivity(rows: timeline.children(of: key), timeline: timeline, kept: keptScripts, ended: ended, open: openChild,
-                          selection: selection).id(key)
+                          errorLine: errorLine, selection: selection).id(key)
         }
     }
 
@@ -145,14 +164,20 @@ struct RuntimeActivity: View {
         VStack(alignment: .leading, spacing: activitySpacing - activityFooter) {
             if let error { Label(error, systemImage: "exclamationmark.circle").font(ChatStyle.detail).foregroundStyle(.orange).padding(.bottom, activityFooter) }
             if !isFresh { Text("Offline · last activity").font(ChatStyle.detail).foregroundStyle(.orange).padding(.bottom, activityFooter) }
-            if entries.count > visibleCount {
+            let all = entries
+            if all.count > visibleCount {
                 Button("Earlier activity", systemImage: "arrow.up") { visibleCount += 80 }
                     .buttonStyle(.plain).foregroundStyle(FleetStyle.muted).font(ChatStyle.detail).padding(.bottom, activityFooter)
             }
-            ForEach(entries.suffix(visibleCount)) { entry in
+            ForEach(Array(all.enumerated()).suffix(visibleCount), id: \.element.id) { index, entry in
                 Group {
+                // **The chat's stamps** (the owner's yes of 17 November 2026 to the pictures of the Task page): the
+                // day and the time over a row that comes an hour or a day after the one before it.
+                if let time = Self.stamp(all, at: index, startedAt: startedAt) { ChatStamp(time: time) }
                 switch entry {
-                case .said(let shown): RuntimeRow(row: shown.row, script: shown.script, children: childRows(shown.row), ended: ended(shown.row), open: openChild)
+                case .said(let shown):
+                    RuntimeRow(row: shown.row, script: shown.script, children: childRows(shown.row), ended: ended(shown.row), open: openChild,
+                               errorLine: errorLine(shown.row), signIn: signIn)
                 case .steps(let rows):
                     StepsRow(rows: rows, children: childRows, ended: ended, open: openChild).padding(.bottom, activityFooter)
                 case .note(let note): AgentReply(text: note.text, time: note.ts, compact: true)
@@ -168,6 +193,10 @@ struct RuntimeActivity: View {
                 case .steer(let steer):
                     VStack(alignment: .trailing, spacing: 5) {
                         OwnerBubble(text: steer.text)
+                        // Its files under its bubble, as a chat message's are (owner API 1.223).
+                        if let store, let files = steer.attachments, !files.isEmpty {
+                            MessageFilesView(store: store, files: files, plain: true)
+                        }
                         Text("Guidance · Attempt \(steer.attempt) · \(steer.deliveryLabel(currentAttempt: attempt))")
                             .font(ChatStyle.detail).foregroundStyle(FleetStyle.muted).help(fleetDate(steer.read_at ?? steer.created))
                     }.padding(.bottom, activityFooter)
@@ -182,7 +211,26 @@ struct RuntimeActivity: View {
             if !terminal, !timeline.plan.isEmpty { LivePlan(entries: timeline.plan) }
         }
     }
+    /// The time of the stamp over the entry at `index`, or nil: its own time when it comes an hour or a day after the end
+    /// of the newest entry before it that has a time (a run of steps ends with its last step), or after the task began
+    /// (`ChatStamp`'s rule). A row with no time has none, and stops none under it.
+    private static func stamp(_ entries: [ThreadEntry], at index: Int, startedAt: Double?) -> Double? {
+        let time = entries[index].time
+        guard time > 0, let previous = entries[..<index].last(where: { $0.end > 0 })?.end ?? startedAt, previous > 0
+        else { return nil }
+        return ChatStamp.time(time, after: previous)
+    }
     private func childRows(_ row: ActivityRow) -> [ActivityRow] { row.subagent == nil ? [] : row.event.toolKey.map { timeline.children(of: $0) } ?? [] }
+    /// **What an error's row says, and whether it is orange** (`RuntimeErrorLine`; the owner's "Yes, build it" of 18 and
+    /// of 19 November 2026): "is signed out", and orange, only on the error that the current attempt of a task that is
+    /// still open stops at (`ActivityTimeline.stands`), because both are about now; the row of the usage limit that
+    /// holds the task now (`limit`). An error of a child's thread says "reported an error", in grey.
+    private func errorLine(_ row: ActivityRow) -> RuntimeErrorLine? {
+        guard row.event.type == "error" else { return nil }
+        return RuntimeErrorLine(error: row.event, runtimes: timeline.runtimes[row.event.attempt] ?? [], machine: machine,
+                                standsLast: !terminal && timeline.stands(row, attempt: attempt, limit: limit, task: task),
+                                time: time, own: agent?.runtime, localModel: agent?.local_model == true)
+    }
     private func ended(_ row: ActivityRow) -> Bool { row.endedWithoutResult(current: attempt, stopped: stoppedAttempt) }
     private func openChild(_ key: RuntimeToolKey) { if !childPath.contains(key) { childPath.append(key) } }
 }
@@ -207,6 +255,11 @@ private enum ThreadEntry: Identifiable {
         case .permission(let value): value.created
         case .steer(let value): value.created
         }
+    }
+    /// When it ended: a run of steps with its last step, every other row when it came.
+    var end: Double {
+        if case .steps(let rows) = self { return rows.map(\.time).max() ?? 0 }
+        return time
     }
 }
 
@@ -280,31 +333,32 @@ private extension Array where Element == ActivityRow {
     }
 }
 
-/// One run of work, as one row: "14 steps", or the step that runs now while it runs. The steps themselves are the
-/// rows this app has always drawn, and they open from here.
+/// One run of work, as one row: "14 steps", with "1 running" while a step of it runs and "2 failed" in orange. The
+/// steps themselves are the rows this app has always drawn, in the agent's own words (`StepWords`), and they open from
+/// here. **What runs now is the thread's live line** (the owner's yes of 17 November 2026 to the pictures of the Task
+/// page): this row named the running step by its call's title, a shell command of up to four lines.
 private struct StepsRow: View {
     let rows: [ShownRow]
     let children: (ActivityRow) -> [ActivityRow]
     let ended: (ActivityRow) -> Bool
     let open: (RuntimeToolKey) -> Void
 
-    /// The step the runtime has not finished, in an attempt that is still running.
-    private var running: ActivityRow? {
-        rows.map(\.row).last { $0.event.type == "tool_call" && !["completed", "failed"].contains($0.status ?? "") && !ended($0) }
+    /// The steps the runtime has not finished, in an attempt that is still running.
+    private var running: Int {
+        rows.map(\.row).filter { $0.event.type == "tool_call" && !["completed", "failed"].contains($0.status ?? "") && !ended($0) }.count
     }
     private var failures: Int { rows.filter { $0.row.status == "failed" }.count }
-    private var title: String {
-        if let running { return toolTitle(running.event.title) }
-        return rows.count == 1 ? String(l10n: "1 step") : String(l10n: "\(rows.count) steps")
-    }
+    private var title: String { rows.count == 1 ? String(l10n: "1 step") : String(l10n: "\(rows.count) steps") }
+    /// "1 running" while a step runs, muted, as the running step's words were; else the failures, in orange. One word
+    /// in one colour: "1 failed · 1 running" stood all in orange.
     private var status: String {
-        if running != nil { return rows.count == 1 ? String(l10n: "Running") : String(l10n: "Step \(rows.count) · Running") }
+        if running > 0 { return String(l10n: "\(running) running") }
         return failures == 0 ? "" : failures == 1 ? String(l10n: "1 failed") : String(l10n: "\(failures) failed")
     }
 
     var body: some View {
-        FoldRow(title: title, symbol: running.map { toolSymbol($0.event.kind) } ?? "list.bullet.indent",
-                status: status, statusColor: failures == 0 ? FleetStyle.muted : .orange, chat: true) {
+        FoldRow(title: title, symbol: "list.bullet.indent",
+                status: status, statusColor: running > 0 || failures == 0 ? FleetStyle.muted : .orange, chat: true) {
             VStack(alignment: .leading, spacing: activitySpacing - activityFooter) {
                 ForEach(rows) { shown in
                     RuntimeRow(row: shown.row, script: shown.script, children: children(shown.row),
@@ -321,18 +375,21 @@ private struct ChildActivity: View {
     let kept: Set<Int>
     let ended: (ActivityRow) -> Bool
     let open: (RuntimeToolKey) -> Void
+    /// What an error's row says (`RuntimeActivity.errorLine`).
+    let errorLine: (ActivityRow) -> RuntimeErrorLine?
     let selection: ChatSelection
     @State private var visibleCount = 80
     var body: some View {
-        // A child's thread is already one level in: its steps stay a plain list, without Fleet's own calls.
-        let shown = rows.shown(keeping: kept).filter { !$0.row.isFleetTool }
+        // A child's thread is already one level in: its steps stay a plain list, without Fleet's own calls and
+        // without its searches for tools.
+        let shown = rows.shown(keeping: kept).filter { !$0.row.isFleetTool && !StepWords.isToolSearch($0.row.event.title) }
         // The task view scrolls; this thread is part of it.
         VStack(alignment: .leading, spacing: activitySpacing - activityFooter) {
             if rows.isEmpty { Text("Waiting for agent activity.").foregroundStyle(FleetStyle.muted).padding(.bottom, activityFooter) }
             if shown.count > visibleCount { Button("Earlier activity") { visibleCount += 80 }.buttonStyle(.plain).padding(.bottom, activityFooter) }
             ForEach(shown.suffix(visibleCount)) { item in
                 RuntimeRow(row: item.row, script: item.script, children: item.row.subagent == nil ? [] : item.row.event.toolKey.map { timeline.children(of: $0) } ?? [],
-                           ended: ended(item.row), open: open)
+                           ended: ended(item.row), open: open, errorLine: errorLine(item.row))
                     .wordsSelectable(in: selection, row: "child-\(item.id)")
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -347,6 +404,10 @@ private struct RuntimeRow: View {
     /// The call has no finish and its attempt is over (`endedWithoutResult`): it does not show as running.
     var ended = false
     let open: (RuntimeToolKey) -> Void
+    /// What an error's row says (`RuntimeErrorLine`); nil for every other row.
+    var errorLine: RuntimeErrorLine? = nil
+    /// Opens the sign-in of a provider on the agent's server, for the row's "Sign in again".
+    var signIn: ((String) -> Void)? = nil
     /// An agent message has its footer; every other shown row gets the same height below it.
     var body: some View {
         switch row.event.type {
@@ -360,9 +421,13 @@ private struct RuntimeRow: View {
         case "agent_thought":
             FoldRow(title: String(l10n: "Thinking"), symbol: "sparkle", chat: true) { Text(verbatim: row.event.text ?? "").selectableWords() }
         case "tool_call":
-            FoldRow(title: row.subagent?.name ?? toolTitle(row.event.title), symbol: row.subagent == nil ? toolSymbol(row.event.kind) : "person.crop.square", status: ended ? String(l10n: "Result unknown") : toolStatus(row.status), statusColor: row.status == "failed" ? .orange : FleetStyle.muted, chat: true) {
+            // **A step in the agent's own words** (`StepWords`), a child by what it was asked; the call itself, a
+            // command or a path, stands first inside it.
+            let words = row.subagent.map { StepWords.childTitle(row.event.title) ?? $0.name }
+                ?? StepWords.of(row.event, locations: row.locations) ?? toolTitle(row.event.title)
+            FoldRow(title: words, symbol: row.subagent == nil ? toolSymbol(row.event.kind) : "person.crop.square", status: ended ? String(l10n: "Result unknown") : toolStatus(row.status), statusColor: row.status == "failed" ? .orange : FleetStyle.muted, chat: true) {
                 VStack(alignment: .leading, spacing: 10) {
-                    if let title = row.event.title, toolTitle(title) != title {
+                    if row.subagent == nil, let title = row.event.title, words != title {
                         Text(verbatim: title).font(ChatStyle.code).selectableWords()
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -385,8 +450,11 @@ private struct RuntimeRow: View {
                     }
                     if row.subagent != nil, let key = row.event.toolKey {
                         VStack(alignment: .leading, spacing: 8) {
-                            ForEach(children.suffix(3)) { child in
-                                Text(child.event.title ?? child.event.text ?? child.event.message ?? String(l10n: "Activity"))
+                            // Its newest three rows in the thread's own words: no Fleet call and no search for tools,
+                            // and a step by the agent's line for it (`StepWords`), as the child's own thread draws them.
+                            ForEach(children.filter { !$0.isFleetTool && !StepWords.isToolSearch($0.event.title) }.suffix(3)) { child in
+                                Text(StepWords.of(child.event, locations: child.locations) ?? child.event.title ?? child.event.text
+                                     ?? child.event.message ?? String(l10n: "Activity"))
                                     .font(ChatStyle.detail).lineLimit(2).foregroundStyle(FleetStyle.muted)
                             }
                             Button("Open agent thread", systemImage: "arrow.up.right") { open(key) }.buttonStyle(.plain).font(ChatStyle.detail)
@@ -395,7 +463,19 @@ private struct RuntimeRow: View {
                 }
             }.id(script?.id ?? row.id)
         case "plan": RuntimePlan(entries: row.event.entries ?? [])
-        case "error": Label(row.event.message ?? String(l10n: "Runtime error"), systemImage: "exclamationmark.circle").foregroundStyle(.orange)
+        case "error":
+            // **Plain words, the provider's own under the pointer, and the one thing that he can do** (`RuntimeErrorLine`;
+            // the owner, 18 November 2026, of "workspace routing discovery unauthorized (401)" here: "I dont know what
+            // it means or what I can do about it"). Orange only while the thread stops at it; grey once it is a record
+            // (his words of 19 November 2026: "that task still shows an orange error label, probably not updated").
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Label(errorLine?.says ?? row.event.message ?? String(l10n: "Runtime error"), systemImage: "exclamationmark.circle")
+                    .foregroundStyle(errorLine?.stands == false ? FleetStyle.muted : .orange).help(errorLine?.raw ?? "")
+                if let runtime = errorLine?.signIn, let signIn {
+                    Button("Sign in again") { signIn(runtime) }.buttonStyle(.plain).foregroundStyle(FleetStyle.link)
+                        .accessibilityIdentifier("task-sign-in-again")
+                }
+            }
         default: Text("The worker reached its activity record limit.").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
         }
     }
@@ -451,11 +531,20 @@ private struct PlanSteps: View {
 }
 
 /// A task's guidance, under its thread. **It is the chat's composer** (one kind, one look: the capsule of one line at
-/// rest that grows upward, `ComposerCapsule`), with no plus, because its route carries text only, and up to five lines.
+/// rest that grows upward, `ComposerCapsule`), up to five lines. **Its plus sends files with the guidance** (owner API
+/// 1.223; the owner's "Yes, build it" of 19 November 2026 to the pictures): the chat's plus, its chips over the line,
+/// and a file dropped on the task's page or a picture pasted with Cmd+V, all where its composer takes files
+/// (`FleetStore.guidanceComposer`). Send needs words too: the hub keeps a guidance's words as its record.
 struct TaskSteering: View {
     @Bindable var store: FleetStore
     let task: FleetTask
-    @State private var text = ""
+    /// The box's key in the store, for its words (`guidanceDrafts`) and its files.
+    private var key: String { FleetStore.stageKey(task: task.id, database: store.state?.db ?? "") }
+    /// Its words: the store's draft, which `finish` empties when the hub confirms this guidance, also at a later read.
+    private var text: String {
+        get { store.guidanceDrafts[key] ?? "" }
+        nonmutating set { store.guidanceDrafts[key] = newValue.isEmpty ? nil : newValue }
+    }
     /// The box's whole capsule gives its field the cursor (`ComposerCapsule`).
     @FocusState private var focused: Bool
     private var allowed: Bool { Self.shows(task, in: store.state) }
@@ -472,10 +561,26 @@ struct TaskSteering: View {
     }
 
     private var box: some View {
-        // The chat's Send: only while it can send (`SendSlot`), in the violet of what he presses (D-8).
+        let composer = store.guidanceComposer(for: task)
+        // A file that its rule takes no more (the agent's Shell box went off after he picked it) holds Send, with the
+        // rule's words, until he takes it out with its x.
+        let refusal = composer.flatMap(store.refusedFileWords)
+        // The chat's Send: only while it can send (`SendSlot`), in the violet of what he presses (D-8), and not while
+        // a file of it still goes up.
         let canSend = store.canWrite && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.count <= 4000
+            && composer.map { !store.filesAreWaiting(for: $0) } != false && refusal == nil
+        let words = Binding(get: { text }, set: { text = $0 })
         return ComposerCapsule(focus: $focused) {
-            TextField("Guide this task…", text: $text, axis: .vertical)
+            // The files that wait, and what is wrong with one, over the line, as in the chat's composer.
+            if let composer {
+                StagedFilesStrip(store: store, composer: composer)
+                if let line = refusal ?? store.fileError(for: composer) {
+                    Text(line).font(ChatStyle.detail).foregroundStyle(.orange).help(store.fileCause(for: composer) ?? "")
+                }
+            }
+        } line: {
+            if let composer { AttachFilesButton(store: store, composer: composer) }
+            TextField("Guide this task…", text: words, axis: .vertical)
                 .focused($focused)
                 .accessibilityIdentifier("task-guidance")
                 // The same keys as the chat composer: Return sends, Shift+Return makes a new line.
@@ -485,7 +590,7 @@ struct TaskSteering: View {
                     send()
                     return .handled
                 }
-                .composerField(alone: true, lines: 1...5)
+                .composerField(alone: composer == nil, lines: 1...5)
             SendSlot(shows: canSend) {
                 Button { send() } label: { SendMark() }
                     .buttonStyle(FleetIconButtonStyle(filled: true)).help("Send this guidance to the task")
@@ -493,109 +598,129 @@ struct TaskSteering: View {
                     .disabled(!canSend)
             }
         }
+        .pasteAttachments(store: store, composer: focused ? composer : nil)
+        .stageDroppedFiles(store: store, composer: composer)
         .chatColumn().padding(.top, 10).padding(.bottom, FleetSpace.under)
         .onChange(of: store.secretRefusals) { _, _ in text = "" }
     }
 
+    /// The hub's confirmation empties the box (`finish`); a file that went up an hour ago goes up again first, because
+    /// the hub may have let it go and given its number to another file (`freshFiles`).
     private func send() {
-        let sent = text
-        Task { if await store.command(.steer(task: task.id, attempt: task.attempt), note: sent), text == sent { text = "" } }
+        let sent = text, composer = store.guidanceComposer(for: task)
+        Task {
+            var files: [Int] = []
+            if let composer {
+                guard let fresh = await store.freshFiles(for: composer) else { return }
+                files = fresh
+            }
+            await store.command(.steer(task: task.id, attempt: task.attempt), note: sent, attachments: files)
+        }
     }
 }
 
-struct TaskControls: View {
+/// **Pause, Stop and Resume of a task, at the end of its state row in the task's panel** (`TaskPanel`; the owner's
+/// "Yes, build it" of 17 November 2026 to the pictures of the Task page): they stood on a line of their own over the
+/// guidance box, with the state word that the panel says too. Under the thread there is now only the box, as a chat
+/// has only its composer. Each control is the one it was: the same holds decide which shows.
+struct TaskHoldControls: View {
     @Bindable var store: FleetStore
     let task: FleetTask
-    @State private var resolving: TaskOutcome?
-    @State private var finding: OutcomeFinding?
-    @State private var note = ""
     private var hold: TaskHold? { store.state?.holds?.first { $0.task == task.id && $0.state != "released" } }
-    private var unknown: [TaskOutcome] { store.state?.outcomes?.filter { $0.task == task.id && $0.state == "unknown" } ?? [] }
+    private var unknown: Bool { store.state?.outcomes?.contains { $0.task == task.id && $0.state == "unknown" } == true }
+
+    /// Whether the row has a control: a task that is not over, on a hub that takes controls.
+    static func shows(_ task: FleetTask, in state: HubState?) -> Bool {
+        !task.isTerminal && state?.ui_features?.contains("task_controls") == true
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if !task.isTerminal {
-                HStack(spacing: 12) {
-                    if let hold {
-                        // The hold's word is the task's one state word (`TaskWords`, review B5), not a copy of it.
-                        Label(task.stateWord(in: store.state),
-                              systemImage: hold.state == "not_confirmed" ? "exclamationmark.circle" : "pause.circle")
-                            .foregroundStyle(hold.state == "not_confirmed" ? .orange : FleetStyle.muted)
-                        Spacer()
-                        if hold.state == "stopped" {
-                            let goal = store.state?.goals?.first(where: { $0.id == task.goal_id })
-                            if let goal, goal.state == "paused" {
-                                // **Its goal is paused: the button resumes the goal, which resumes its tasks** (11
-                                // November 2026, when the Goals page went: "Goal controls" led there). The hub refuses
-                                // a resume of the task alone ("Resume the goal, not the task.").
-                                Button("Resume goal", systemImage: "play") {
-                                    Task { await store.command(.goalState(id: goal.id, revision: goal.revision, action: .resume)) }
-                                }.buttonStyle(FleetOutlineButtonStyle()).help("Its goal is paused. This resumes the goal and its tasks.")
-                            } else if goal == nil || goal?.state == "active" {
-                                // **No Resume on a task whose goal is done or dropped** (review of 11 November 2026):
-                                // the hub refuses it ("Reopen the goal to work on it again."), and the Fleet Manager
-                                // cancels such a task.
-                                // One word (fix round 2): "Check and resume" when a result is not known, which the
-                                // hub checks before the task goes on.
-                                Button("Resume", systemImage: "play") {
-                                    send(unknown.isEmpty ? .resume : .resume_check)
-                                }.buttonStyle(FleetOutlineButtonStyle())
-                            }
-                        }
-                        // The owner's Stop takes over the stop of a requester's restart, so the hub starts no new session.
-                        if hold.state == "not_confirmed" || hold.kind == "pause" || hold.isAgentStop { controlButton(String(l10n: "Stop"), symbol: "stop", action: .stop) }
-                    } else {
-                        // The panel's word for the task (`stateWord`): "Usage limit" while its agent's usage limit holds it.
-                        Text(task.stateWord(in: store.state)).foregroundStyle(FleetStyle.muted)
-                        Spacer()
-                        controlButton(String(l10n: "Pause"), symbol: "pause", action: .pause)
-                        controlButton(String(l10n: "Stop"), symbol: "stop", action: .stop)
-                    }
-                }.font(FormMetrics.detail).disabled(!store.canWrite)
-            }
-            if let outcome = resolving, unknown.contains(where: { $0.id == outcome.id }) {
-                // The check of one result, in place of the list; no sheet.
-                FormSection("Check the result", detail: String(l10n: "Confirm what happened before the task repeats an action.")) {
-                    FormRow(outcome.title) {
-                        FleetSelect("Result", selection: $finding, options: [
-                            FleetOption(.done, "Completed", mark: .symbol("checkmark.circle")),
-                            FleetOption(.not_done, "Did not happen", mark: .symbol("xmark.circle")),
-                        ], placeholder: String(l10n: "Choose a result")).accessibilityIdentifier("outcome-result")
-                    }
-                    FormBlock("How you checked", detail: String(l10n: "Optional.")) {
-                        // The one field look (`.fleetField`, T-30), where the stock bezel stood; its placeholder the muted
-                        // words, with or without the cursor (`fieldPlaceholder`; fix round 3, item 55).
-                        TextField(text: $note, prompt: Text(verbatim: "")) { Text("How you checked") }
-                            .fieldPlaceholder(String(l10n: "How you checked"), shows: note.isEmpty).fleetField()
-                    }
-                    FormRow("", warning: store.pending != nil ? String(l10n: "A saved request waits. Check it below.") : nil) {
-                        HStack(spacing: 8) {
-                            Button("Cancel") { resolving = nil }.buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.cancelAction)
-                            Button("Save finding") {
-                                guard let finding else { return }
-                                Task { await store.command(.outcome(id: outcome.id, finding: finding), note: note); if store.pending == nil { resolving = nil } }
-                            }.buttonStyle(FleetPrimaryButtonStyle()).disabled(finding == nil || !store.canWrite || note.count > 2000)
-                        }
+        HStack(spacing: 4) {
+            if let hold {
+                if hold.state == "stopped" {
+                    let goal = store.state?.goals?.first(where: { $0.id == task.goal_id })
+                    if let goal, goal.state == "paused" {
+                        // **Its goal is paused: the button resumes the goal, which resumes its tasks** (11
+                        // November 2026, when the Goals page went: "Goal controls" led there). The hub refuses
+                        // a resume of the task alone ("Resume the goal, not the task.").
+                        Button("Resume goal", systemImage: "play") {
+                            Task { await store.command(.goalState(id: goal.id, revision: goal.revision, action: .resume)) }
+                        }.buttonStyle(FleetOutlineButtonStyle()).help("Its goal is paused. This resumes the goal and its tasks.")
+                    } else if goal == nil || goal?.state == "active" {
+                        // **No Resume on a task whose goal is done or dropped** (review of 11 November 2026):
+                        // the hub refuses it ("Reopen the goal to work on it again."), and the Fleet Manager
+                        // cancels such a task.
+                        // One word (fix round 2): "Check and resume" when a result is not known, which the
+                        // hub checks before the task goes on.
+                        Button("Resume", systemImage: "play") {
+                            send(unknown ? .resume_check : .resume)
+                        }.buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("task-resume")
                     }
                 }
-            } else if !unknown.isEmpty {
-                VStack(alignment: .leading, spacing: 9) {
-                    Label("Check before repeating", systemImage: "exclamationmark.circle").foregroundStyle(.orange)
-                    ForEach(unknown) { outcome in
-                        // The row clicks in 26 points and more, over and under its words (`IconMetrics.reach`, T-21):
-                        // its line of 14 points was all that took the click. The card keeps its rhythm.
-                        Button { finding = nil; note = ""; resolving = outcome } label: {
-                            HStack { Text(outcome.title).lineLimit(2); Spacer(); Image(systemName: "chevron.right").font(IconMetrics.symbol(9)) }
-                                .padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
-                        }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).disabled(!store.canWrite)
-                    }
-                }.font(FormMetrics.detail).padding(12).background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+                // The owner's Stop takes over the stop of a requester's restart, so the hub starts no new session.
+                if hold.state == "not_confirmed" || hold.kind == "pause" || hold.isAgentStop { controlButton(String(l10n: "Stop"), symbol: "stop", action: .stop) }
+            } else {
+                controlButton(String(l10n: "Pause"), symbol: "pause", action: .pause)
+                controlButton(String(l10n: "Stop"), symbol: "stop", action: .stop)
             }
-        }
+        }.font(FormMetrics.detail).disabled(!store.canWrite)
     }
     private func send(_ action: ControlAction) { Task { await store.command(.control(task: task.id, action: action)) } }
     private func controlButton(_ title: String, symbol: String, action: ControlAction) -> some View {
         IconButton(symbol: symbol, words: title, tint: FleetStyle.text) { send(action) }
             .accessibilityIdentifier("task-\(action.rawValue)")
+    }
+}
+
+/// **A result that nobody knows, checked under the thread**: the one form a task thread holds, as a request's card is
+/// a form in a chat (UI-PATTERNS, "A conversation also takes no card"). The list of the actions whose outcome is not
+/// known, then the check of one of them in its place; the task's Pause and Stop are in its panel (`TaskHoldControls`).
+struct TaskOutcomeCheck: View {
+    @Bindable var store: FleetStore
+    let task: FleetTask
+    @State private var resolving: TaskOutcome?
+    @State private var finding: OutcomeFinding?
+    @State private var note = ""
+    private var unknown: [TaskOutcome] { store.state?.outcomes?.filter { $0.task == task.id && $0.state == "unknown" } ?? [] }
+
+    var body: some View {
+        if let outcome = resolving, unknown.contains(where: { $0.id == outcome.id }) {
+            // The check of one result, in place of the list; no sheet.
+            FormSection("Check the result", detail: String(l10n: "Confirm what happened before the task repeats an action.")) {
+                FormRow(outcome.title) {
+                    FleetSelect("Result", selection: $finding, options: [
+                        FleetOption(.done, "Completed", mark: .symbol("checkmark.circle")),
+                        FleetOption(.not_done, "Did not happen", mark: .symbol("xmark.circle")),
+                    ], placeholder: String(l10n: "Choose a result")).accessibilityIdentifier("outcome-result")
+                }
+                FormBlock("How you checked", detail: String(l10n: "Optional.")) {
+                    // The one field look (`.fleetField`, T-30), where the stock bezel stood; its placeholder the muted
+                    // words, with or without the cursor (`fieldPlaceholder`; fix round 3, item 55).
+                    TextField(text: $note, prompt: Text(verbatim: "")) { Text("How you checked") }
+                        .fieldPlaceholder(String(l10n: "How you checked"), shows: note.isEmpty).fleetField()
+                }
+                FormRow("", warning: store.pending != nil ? String(l10n: "A saved request waits. Check it below.") : nil) {
+                    HStack(spacing: 8) {
+                        Button("Cancel") { resolving = nil }.buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.cancelAction)
+                        Button("Save finding") {
+                            guard let finding else { return }
+                            Task { await store.command(.outcome(id: outcome.id, finding: finding), note: note); if store.pending == nil { resolving = nil } }
+                        }.buttonStyle(FleetPrimaryButtonStyle()).disabled(finding == nil || !store.canWrite || note.count > 2000)
+                    }
+                }
+            }
+        } else if !unknown.isEmpty {
+            VStack(alignment: .leading, spacing: 9) {
+                Label("Check before repeating", systemImage: "exclamationmark.circle").foregroundStyle(.orange)
+                ForEach(unknown) { outcome in
+                    // The row clicks in 26 points and more, over and under its words (`IconMetrics.reach`, T-21):
+                    // its line of 14 points was all that took the click. The card keeps its rhythm.
+                    Button { finding = nil; note = ""; resolving = outcome } label: {
+                        HStack { Text(outcome.title).lineLimit(2); Spacer(); Image(systemName: "chevron.right").font(IconMetrics.symbol(9)) }
+                            .padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
+                    }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).disabled(!store.canWrite)
+                }
+            }.font(FormMetrics.detail).padding(12).background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+        }
     }
 }

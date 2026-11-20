@@ -118,6 +118,9 @@ public struct ChatAppsSnapshot: Decodable, Sendable {
         public let link: Link?
         /// When a message last came in on this account (hub time); nil when none ever did.
         public let last_event: Double?
+        /// A message of one of the owner's handles came in through this account (hub 1.243; nil from an older hub). A
+        /// Telegram bot writes first to the owner only then: each bot needs his own Start (CHAT-APPS.md 19.4).
+        public let owner_wrote: Bool?
 
         public var isEnabled: Bool { enabled != false }
         /// **No phone holds this WhatsApp number now**: it is not connected, the bridge knows no number for it, and the
@@ -137,6 +140,9 @@ public struct ChatAppsSnapshot: Decodable, Sendable {
         public var isConnected: Bool { isEnabled && state == "connected" }
         /// The account of this agent alone: only it answers there.
         public func belongs(to agent: String) -> Bool { agents == [agent] }
+        /// The owner's own link is done on this account: he has an ID of its app (`handles`), and on Telegram he also
+        /// wrote to this bot, which can write to him first only then. A hub before 1.243 says nothing of the bot.
+        public func ownerLinked(handles: Bool) -> Bool { handles && (app != "telegram" || owner_wrote != false) }
     }
 
     public let db: String
@@ -172,6 +178,22 @@ public struct ChatAppsSnapshot: Decodable, Sendable {
         let own = accounts.filter { $0.app == app && $0.belongs(to: agent) }
         return own.first(where: \.isConnected) ?? own.first(where: \.isEnabled) ?? own.first
     }
+
+    /// **The account that a person's Telegram invite to this agent goes through** (CHAT-APPS.md 19.4), or nil when
+    /// none can take one now: a Telegram account of this agent alone that is on, whose bot has said its name, which the
+    /// link needs; a connected one first. It is the hub's own test (`new_invite_code`, `telegram_link`), so a person's
+    /// Add handle offers Telegram only where the hub makes the link; `channel` also gives an account that is off, whose
+    /// card still shows.
+    public func telegramInviteAccount(of agent: String) -> Account? {
+        let takers = accounts.filter { account in
+            account.app == "telegram" && account.belongs(to: agent) && account.isEnabled
+                && (account.name ?? "").range(of: "^[A-Za-z][A-Za-z0-9_]{3,31}$", options: .regularExpression) != nil
+        }
+        return takers.first(where: \.isConnected) ?? takers.first
+    }
+
+    /// A person's Telegram invite to this agent can be made now (`telegramInviteAccount`).
+    public func canInviteOnTelegram(to agent: String) -> Bool { telegramInviteAccount(of: agent) != nil }
 
     /// A channel of this agent needs the owner: its card is orange. The sidebar's dot and the card read the same state.
     public func needsOwner(_ agent: String, serverTime: Double?) -> Bool {
@@ -278,6 +300,8 @@ public struct ChannelCard: Equatable, Sendable {
     public var title: String {
         guard kind == .connected, let account else { return ChatApps.title(app) }
         if app == "whatsapp" { return (account.name ?? account.user).map { ChatApps.masked($0, app: app) } ?? ChatApps.title(app) }
+        // A Telegram bot is known by its username, which Telegram writes with an @.
+        if app == "telegram", let name = account.name, !name.isEmpty { return "@" + name }
         return account.name ?? account.label
     }
 
@@ -287,7 +311,9 @@ public struct ChannelCard: Equatable, Sendable {
     /// The owner has no ID of this app yet, and this card's account can take the owner's code: the card's menu then has
     /// Link my phone (or Link my Discord), the owner's own link ("Write to <agent> from your phone").
     public func asksForOwnerLink(_ people: PeopleSnapshot?) -> Bool {
-        kind == .connected && people.map { $0.handles(of: app).isEmpty } == true
+        guard kind == .connected, let people else { return false }
+        let handles = !people.handles(of: app).isEmpty
+        return !(account?.ownerLinked(handles: handles) ?? handles)
     }
 
     /// The card's "…" menu: the owner's own link first, only while it is still to do.
@@ -428,8 +454,8 @@ public struct LinkCode: Decodable, Sendable {
         public let account: String
         public let label: String?
         public let url: String?
-        /// The address to show as a QR code and as a link: only a Discord or WhatsApp address over HTTPS.
-        public var link: URL? { ChatApps.safeLink(url, hosts: ["discord.com", "wa.me"]) }
+        /// The address to show as a QR code and as a link: only a Discord, WhatsApp or Telegram address over HTTPS.
+        public var link: URL? { ChatApps.safeLink(url, hosts: ["discord.com", "wa.me", "t.me"]) }
     }
     public let ok: Bool
     public let request_id: String
@@ -441,6 +467,14 @@ public struct LinkCode: Decodable, Sendable {
     /// The code as the owner types it: `XXXX-XXXX`.
     public var display: String { ChatApps.displayCode(code ?? "") }
 
+    /// **The link of this code on one account's bot**, or nil: the account of a person's Telegram invite. An answer
+    /// with none for it is the line "The hub gave no link." (CHAT-APPS.md 19.4), on a person's page as on the setup
+    /// steps, never a form that waits for ever.
+    public func link(on account: String?) -> URL? {
+        guard let account else { return nil }
+        return targets.first { $0.account == account }?.link
+    }
+
     /// Where to send the code: the first of `accounts` that has a link, else any target with a link, else the first
     /// of `accounts`, else the first target.
     public func target(preferring accounts: [String]) -> Target? {
@@ -449,11 +483,55 @@ public struct LinkCode: Decodable, Sendable {
     }
 }
 
-/// A Discord bot token that the owner pasted, for one send with `POST /ui/chat-apps/<id>/token`. It lives only in a
-/// view's state and in that request: it never prints, never goes into a draft or the pending outbox, and its
+/// **A person's Telegram invite as this Mac made it** (CHAT-APPS.md 19.4). The hub keeps no code, and a new invite of a
+/// person replaces their open one, so a page that made a new one at each visit stopped the link that the owner had sent
+/// already. A visit shows the kept invite again while it works for another hour, is for the same agent and the same bot
+/// (its account and its username, which the link names), for the same person (with their `added` time, a second guard:
+/// since owner API 1.232 a removed person's number never comes back), and the person took no Telegram link since; else
+/// it asks the hub for a new one. **It keeps only an invite with a link on its bot**: one with none would show "The hub
+/// gave no link." at each visit for its 7 days, and make no new one.
+public struct KeptInvite: Sendable {
+    public let invite: LinkCode
+    public let agent: String
+    /// The bot's account and its username, which the link names.
+    public let bot: String
+    public let added: Double?
+    /// The person's Telegram handles when the invite was made.
+    public let handles: [String]
+
+    /// The invite to keep for this person's next visit, or nil when it has no link on its bot.
+    public init?(_ invite: LinkCode, person: PeopleSnapshot.Person, agent: String, bot: ChatAppsSnapshot.Account?) {
+        guard invite.link(on: bot?.id) != nil else { return nil }
+        self.invite = invite
+        self.agent = agent
+        self.bot = Self.name(of: bot)
+        self.added = person.added
+        self.handles = Self.telegramHandles(of: person)
+    }
+
+    /// A visit shows this invite again: the same person, agent and bot, no Telegram link of the person's since, and
+    /// more than an hour left by the hub's clock (`ChatApps.remaining`).
+    public func serves(_ person: PeopleSnapshot.Person, agent: String, bot: ChatAppsSnapshot.Account?,
+                       serverTime: Double, readAt: Date, now: Date) -> Bool {
+        self.agent == agent && bot != nil && self.bot == Self.name(of: bot) && added == person.added
+            && handles == Self.telegramHandles(of: person)
+            && ChatApps.remaining(expires: invite.expires, serverTime: serverTime, readAt: readAt, now: now) > 3600
+    }
+
+    static func name(of bot: ChatAppsSnapshot.Account?) -> String { bot.map { "\($0.id) \($0.name ?? "")" } ?? "" }
+
+    static func telegramHandles(of person: PeopleSnapshot.Person) -> [String] {
+        person.handles.filter { $0.app == "telegram" }.map(\.handle).sorted()
+    }
+}
+
+/// A Discord or Telegram bot token that the owner pasted, for one send with `POST /ui/chat-apps/<id>/token`. It lives
+/// only in a view's state and in that request: it never prints, never goes into a draft or the pending outbox, and its
 /// description and mirror hide the value.
 public struct BotToken: Sendable, Equatable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     let value: String
+    /// The app whose form the token has: `discord` or `telegram`.
+    let app: String
 
     /// The pasted text without spaces and line ends at its ends, if it has the hub's form: 50 to 100 characters of
     /// `A-Z a-z 0-9 . _ -`.
@@ -461,10 +539,18 @@ public struct BotToken: Sendable, Equatable, CustomStringConvertible, CustomDebu
         let text = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (50...100).contains(text.count), text.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || ".-_".contains($0)) })
         else { return nil }
-        value = text
+        value = text; app = "discord"
     }
 
-    public var description: String { "Discord bot token (hidden)" }
+    /// A Telegram bot's token as @BotFather gives it (CHAT-APPS.md 19.1): the bot's number, a colon and its key, of
+    /// 30 to 80 characters of `A-Z a-z 0-9 _ -`.
+    public init?(telegram pasted: String) {
+        let text = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.range(of: "^[0-9]{5,20}:[A-Za-z0-9_-]{30,80}$", options: .regularExpression) != nil else { return nil }
+        value = text; app = "telegram"
+    }
+
+    public var description: String { app == "telegram" ? "Telegram bot token (hidden)" : "Discord bot token (hidden)" }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [], displayStyle: .struct) }
 }
@@ -595,13 +681,22 @@ public enum ChatApps {
     public static let peopleFeature = "people"
     /// The bridge reports every 60 seconds: an older report is an old reading.
     public static let statusAge: Double = 180
-    /// The two cards of a Channels page, in their order.
-    public static let apps = ["whatsapp", "discord"]
+    /// The hub serves Telegram (CHAT-APPS.md 19, owner API 1.243): only then a Channels page shows its card.
+    public static let telegramFeature = "telegram"
+    /// The cards of a Channels page, in their order.
+    public static let apps = ["whatsapp", "discord", "telegram"]
+
+    /// The cards that a hub with these features serves: Telegram only where the hub knows it, so that Connect never
+    /// writes an account that an older hub refuses.
+    public static func shown(features: [String]?) -> [String] {
+        apps.filter { $0 != "telegram" || features?.contains(telegramFeature) == true }
+    }
 
     public static func title(_ app: String) -> String {
         switch app {
         case "discord": "Discord"
         case "whatsapp": "WhatsApp"
+        case "telegram": "Telegram"
         default: app.capitalized
         }
     }
@@ -621,9 +716,9 @@ public enum ChatApps {
         return "\(stem)-\(number)"
     }
 
-    /// One agent's own number or bot: the account `whatsapp-<agent>` or `discord-<agent>` (then `-2`, `-3` and so on)
-    /// with that agent only, labelled as the apps name the agent (its role, else its name: `agentLabel`), and the number
-    /// of a second account ("Studio 2").
+    /// One agent's own number or bot: the account `whatsapp-<agent>`, `discord-<agent>` or `telegram-<agent>` (then
+    /// `-2`, `-3` and so on) with that agent only, labelled as the apps name the agent (its role, else its name:
+    /// `agentLabel`), and the number of a second account ("Studio 2").
     public static func agentAccount(app: String, agent: String, taken: Set<String>) -> (id: String, account: ChatAccountInput) {
         let id = accountID(app: app, agent: agent, taken: taken), stem = accountID(app: app, agent: agent, taken: [])
         let suffix = id == stem ? "" : " " + id.dropFirst(stem.count + 1)
@@ -791,8 +886,19 @@ public final class ChatAppsClient: Sendable {
         return code
     }
 
-    /// Sends a Discord bot's token to the hub, once and directly: the hub writes the bot's token file. nil removes the
-    /// file. A send without an answer can have arrived; the caller asks the owner to paste the token again.
+    /// A person's invite link on Telegram (CHAT-APPS.md 19.4): one code for that person, for 7 days, in the deep link
+    /// of `agent`'s bot. A new one replaces the open one.
+    public func makeInvite(hub: URL, database: String, client: String, person: Int, agent: String) async throws -> LinkCode {
+        let requestID = UUID().uuidString.lowercased()
+        let code = try JSONDecoder().decode(LinkCode.self, from: await post(.invite(person: person, agent: agent), requestID: requestID,
+                                                                           hub: hub, database: database, client: client))
+        guard code.ok, code.request_id.lowercased() == requestID, code.client == client, code.code?.isEmpty == false
+        else { throw HubError.invalidResponse }
+        return code
+    }
+
+    /// Sends a Discord or Telegram bot's token to the hub, once and directly: the hub writes the bot's token file. nil
+    /// removes the file. A send without an answer can have arrived; the caller asks the owner to paste the token again.
     public func saveToken(hub: URL, database: String, client: String, account: String, token: BotToken?) async throws -> TokenReceipt {
         let requestID = UUID().uuidString.lowercased()
         let receipt = try JSONDecoder().decode(TokenReceipt.self, from: await post(.token(account: account, token: token), requestID: requestID,
@@ -821,6 +927,8 @@ public final class ChatAppsClient: Sendable {
         case sendAgain(Int)
         case code(String)
         case token(account: String, token: BotToken?)
+        /// A person's invite on Telegram (CHAT-APPS.md 19.4): a code for that person, in the deep link of the agent's bot.
+        case invite(person: Int, agent: String)
 
         var route: String? {
             switch self {
@@ -831,6 +939,7 @@ public final class ChatAppsClient: Sendable {
             case .sendAgain(let outbound): outbound > 0 ? "ui/outbound/\(outbound)/again" : nil
             case .code: "ui/people/codes"
             case .token(let account, _): ChatApps.isAccountID(account) ? "ui/chat-apps/\(account)/token" : nil
+            case .invite(let person, let agent): person > 0 && !agent.isEmpty ? "ui/people/codes" : nil
             }
         }
 
@@ -841,6 +950,7 @@ public final class ChatAppsClient: Sendable {
             case .link, .unlink, .sendAgain: [:]
             case .code(let app): ["purpose": "owner", "app": app]
             case .token(_, let token): token.map { ["token": $0.value] } ?? ["delete": true]
+            case .invite(let person, let agent): ["purpose": "invite", "app": "telegram", "person": person, "agent": agent]
             }
         }
 

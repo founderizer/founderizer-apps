@@ -10,7 +10,8 @@ namespace Founderizer.Core;
 /// <summary>What the owner does to a task from a device: its control (pause, stop, resume) and its guidance.</summary>
 public enum TaskControl { Pause, Stop, Resume, ResumeCheck }
 
-/// <summary>The owner commands that a device may send (hub.py DEVICE_PATHS: POST /ui/tasks and POST /ui/needs), as
+/// <summary>The owner commands that a device may send (hub.py DEVICE_PATHS: POST /ui/tasks; DEVICE_NEED: POST
+/// /ui/needs/&lt;id&gt; and its /secret), as
 /// FleetCore's OwnerCommand writes them.</summary>
 public sealed record OwnerCommand
 {

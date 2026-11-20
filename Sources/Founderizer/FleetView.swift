@@ -85,13 +85,17 @@ struct FleetView: View {
                     // margins of 30 October 2026, row 2, with the owner's crop: they began 36 pt down).
                     if !store.destination.ownsSidebar { Color.clear.frame(height: FleetSpace.lights) }
                     content.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // **Under a task's thread, its guidance box alone, as a chat has its composer** (the owner's yes of 17
+                    // November 2026 to the pictures of the Task page): its Pause and Stop are in its panel's state row
+                    // (`TaskHoldControls`). Only the check of a result that nobody knows stands over the box, and only
+                    // while it is his: while the task runs or waits for its next session, its agent checks first
+                    // (`TaskOutcome.waitsOnOwner`).
                     if let task = store.currentTask, store.state?.ui_features?.contains("task_controls") == true,
-                       !task.isTerminal || store.state?.outcomes?.contains(where: { $0.task == task.id && $0.state == "unknown" }) == true {
-                        // **Room under them where no guidance box stands under them** (the margins of 30 October 2026, row
-                        // 7): a paused task's controls and an unconfirmed stop's stood on the window's bottom edge.
+                       store.state?.outcomeUnknown(task.id) == true {
+                        // **Room under it where no guidance box stands under it** (the margins of 30 October 2026, row 7).
                         let boxUnder = !task.isTerminal && store.state?.ui_features?.contains("task_steering") == true
                             && TaskSteering.shows(task, in: store.state)
-                        TaskControls(store: store, task: task)
+                        TaskOutcomeCheck(store: store, task: task)
                             .id("\(store.hub)/\(task.id)")
                             .chatColumn().padding(.top, 8).padding(.bottom, boxUnder ? 0 : FleetSpace.under)
                     }
@@ -135,9 +139,11 @@ struct FleetView: View {
                         .id("\(store.hub)/\(name)")
                         .opacity(pageClear ? 0 : 1)
                         .sideMenu(.trailing, width: $panelWidth, range: FleetStyle.panelWidths)
-                } else if store.currentTask != nil {
+                } else if let task = store.currentTask {
                     Rule(vertical: true).opacity(pageClear ? 0 : 1)
-                    inspector.opacity(pageClear ? 0 : 1).sideMenu(.trailing, width: $panelWidth, range: FleetStyle.panelWidths)
+                    TaskPanel(store: store, task: task).id("\(store.hub)/\(task.id)")
+                        .opacity(pageClear ? 0 : 1)
+                        .sideMenu(.trailing, width: $panelWidth, range: FleetStyle.panelWidths)
                 }
             }
             }
@@ -250,7 +256,6 @@ struct FleetView: View {
         case .addServer: AddServerView(store: store, addAgent: { openAddAgent($0) }, goOnToAddAgent: addAgentOnNewServer,
                                               newAgent: addAgent.newServerAgent)
         case .addAgent: addAgentPage
-        case .shapeChange(let step): ShapeChangePage(store: store, step: step).id("\(store.hub)/shape/\(step.rawValue)")
         default: content
         }
     }
@@ -340,7 +345,7 @@ struct FleetView: View {
             // this wake (`marksMove`). `.working` and `.workingAtLastRead` differ only in motion.
             presences[agent.name] = agent.presence(isFresh: store.marksMove, serverTime: state.time, openTasks: open,
                                                    holds: state.holds ?? [], waits: state.ownerWaits(of: open),
-                                                   thinking: store.thinks(agent.name))
+                                                   request: state.ownKeyRequest(of: agent.name), thinking: store.thinks(agent.name))
         }
         return presences
     }
@@ -472,7 +477,7 @@ struct FleetView: View {
         if isSettings { return "settings" }
         switch store.destination {
         case .needs: return "needs"
-        case .activity, .task: return "tasks"
+        case .activity, .activityFrom, .task: return "tasks"
         case .agents: return "agents"
         default: return store.destination.agentName.map { "agent/\($0)" } ?? ""
         }
@@ -597,7 +602,7 @@ struct FleetView: View {
     /// **Tasks**, the board that was Activity (the iPhone's word for it). It stays selected on the page its board
     /// opens (T-32), a task's thread, so every page has one row that says where he is.
     private var tasksRow: some View {
-        let selected = switch store.destination { case .activity, .task: true; default: false }
+        let selected = switch store.destination { case .activity, .activityFrom, .task: true; default: false }
         return SidebarRow(String(l10n: "Tasks"), symbol: "rectangle.split.3x1", selected: selected) { store.destination = .activity }
             .accessibilityIdentifier("nav-tasks")
     }
@@ -621,7 +626,7 @@ struct FleetView: View {
         let open = store.state?.tasks.filter { $0.owner == agent.name && !$0.isTerminal } ?? []
         let presence = agent.presence(isFresh: store.isFresh, serverTime: store.state?.time ?? 0, openTasks: open,
                                       holds: store.state?.holds ?? [], waits: store.state?.ownerWaits(of: open) ?? [:],
-                                      thinking: store.thinks(agent.name))
+                                      request: store.state?.ownKeyRequest(of: agent.name), thinking: store.thinks(agent.name))
         let reply = store.hasNewReply(from: agent.name)
         let selected = store.destination.agentName == agent.name
         // An old reading keeps the agent's look (fix round 2, item 2): VoiceOver hears that it is the last reading.
@@ -670,9 +675,10 @@ struct FleetView: View {
         .accessibilityValue(marks.joined(separator: ", "))
     }
 
-    /// The right-click of an agent's row: **the agent's one menu** (`AgentMenu`, the owner's yes of 28 October 2026 to
-    /// D-5), the same items as the "…" of its Runs on — Pin to top, Mark as unread, Rename…, Deactivate, Agent details
-    /// and Server — in three groups. Rename is two clicks: this menu, and the name's field on its Runs on.
+    /// The right-click of an agent's row: **the agent's menu** (`AgentMenu`, the owner's yes of 28 October 2026 to D-5) —
+    /// Pin to top, Mark as unread, Rename…, Deactivate, Agent details and Server — in three groups, then Delete…. The "…"
+    /// of its Runs on has only Rename…, Deactivate and Delete… (the owner's "Yes, build both" of 17 November 2026). Rename
+    /// is two clicks: this menu, and the name's field on its Runs on.
     @ViewBuilder private func agentMenu(_ agent: FleetAgent, reply: Bool) -> some View {
         let items = AgentMenu.items(agent.name, store: store)
         Group {
@@ -702,10 +708,12 @@ struct FleetView: View {
         } else {
             switch store.destination {
             case .needs: needsView
-            case .activity: ActivityBoard(store: store)
+            // Tasks, from the sidebar or from an agent's chat panel with the back link to that chat: one case, so that the
+            // board keeps its open rows when the sidebar's Tasks takes the link away.
+            case .activity, .activityFrom: ActivityBoard(store: store, back: store.destination.tasksFrom)
             case .agents: AgentsPage(store: store) { openAgent($0, .chat) }
             case .addAgent: addAgentPage
-            case .settings, .server, .addServer, .app, .connectKey, .shapeChange: EmptyView()
+            case .settings, .server, .addServer, .app, .connectKey: EmptyView()
             case .task: if let task = store.currentTask {
                 TaskView(store: store, task: task, state: store.state!, hub: store.hub, isFresh: store.isFresh)
                     .id("\(store.hub)/\(task.id)")
@@ -716,7 +724,8 @@ struct FleetView: View {
                            detail: String(l10n: "This hub does not list that task. Tasks has the tasks it has."), centered: true)
             }
             // Signing a machine's runtime in: its own wizard, as adding a machine has one.
-            case .signIn(let name): SignInWizard(store: store, agent: name).id("\(store.hub)/\(name)")
+            case .signIn(let name, let runtime):
+                SignInWizard(store: store, agent: name, asked: runtime).id("\(store.hub)/\(name)/\(runtime ?? "")")
             // The chat directly: the composer is under it and the agent's status panel at its right.
             // Not the generation: his own message is in that composer, and an owner write must not take the view
             // it is typed into (`SettingsPage`).
@@ -772,7 +781,7 @@ struct FleetView: View {
     /// that does not answer says so over it (`FleetNotices`).
     @ViewBuilder private var waitingPage: some View {
         let title: String? = switch store.destination {
-        case .activity: String(l10n: "Tasks")
+        case .activity, .activityFrom: String(l10n: "Tasks")
         case .needs: String(l10n: "Needs you")
         case .agents: String(l10n: "Agents")
         default: nil
@@ -853,152 +862,6 @@ struct FleetView: View {
     /// lane, and the request at hand beside it (`NeedsBoard`). The sidebar's row counts the lane's cards, so the page
     /// shows what its row says (D-4).
     private var needsView: some View { NeedsBoard(store: store) }
-
-    /// The task's one state word, the same rule as its panel's and its guidance box's (`FleetTask.stateWord`).
-    private func taskStatus(_ task: FleetTask) -> String { task.stateWord(in: store.state) }
-
-    /// The panel of a task thread: the task's own name at its head, then the facts of that task, which the thread
-    /// itself does not say. It shows on a task and nowhere else; the summary it once held on the other pages is the
-    /// Dashboard, and the connection and the hub generation it held at its foot are in Settings.
-    ///
-    /// **The head is what names the thread.** A task thread is the one screen no page title names (the sidebar's
-    /// Activity row is selected under it, its list), and it was the last thing in the app to keep a strip at the top
-    /// of the window for that one reason.
-    /// The name belongs here and not over the conversation: the first thing in the thread is the owner's own request
-    /// in his bubble, and the title is a short form of that request, so a capsule over it would add chrome to the
-    /// reading column to say in fewer words what the row beneath it already says. It stands **above** the panel's
-    /// scroll, because a name that scrolls out of reach is no name, and the panel is always there on a task.
-    private var inspector: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if let task = store.currentTask {
-                taskName(task)
-                Rule()
-            }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 15) {
-                    if let task = store.currentTask {
-                        if let database = store.state?.db, store.state?.ui_features?.contains("machines") == true {
-                            TaskMachineAccess(store: store, agent: task.owner)
-                                .id("\(store.hub)/\(database)/\(task.owner)")
-                        }
-                        // **The facts come with the thread, in one frame** (`TaskView.shows`): on a first open they
-                        // wait for the thread's reads, so "Runtime used" and the models are never inserted above the
-                        // rows that showed first.
-                        if TaskView.shows(task, store: store) { taskFacts(task) }
-                    }
-                }.padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 16)
-            }
-        }.background(FleetStyle.rail)
-    }
-
-    /// The rows of the task panel: the facts of the task that its thread does not say.
-    @ViewBuilder private func taskFacts(_ task: FleetTask) -> some View {
-        // **No goal line** (the owner, 11 November 2026: "remove the screen and keep as internal tool"): a goal is the
-        // Fleet Manager's own record, and the line showed the hub's code for it ("G-3").
-        if let project = task.project { DetailField(title: String(l10n: "Project"), value: project) }
-        // **His words, not the hub's** (T-12): the agents by their names as the sidebar writes them, the state as the
-        // thread and Goals say it, and the provider by the word his Settings use. "Owner: atlas" put the agent under the
-        // word that means him, and "State: input-required" the hub's own token beside the thread's "Waiting for an answer".
-        // The agent's 16-point glyph before its name (D-8); the owner, who asked many a task, keeps his words alone.
-        DetailField(title: String(l10n: "Asked by"), value: task.requester.agentLabel, agent: task.requester)
-        if let why = task.why, !why.isEmpty { DetailField(title: String(l10n: "Why this agent"), value: why) }
-        if let trigger = task.trigger_id {
-            DetailField(title: String(l10n: "Schedule"), value: task.trigger_run.map { String(l10n: "\(trigger) · run \($0)") } ?? "\(trigger)")
-        }
-        DetailField(title: String(l10n: "Agent"), value: task.owner.agentLabel, agent: task.owner)
-        DetailField(title: String(l10n: "State"), value: taskStatus(task))
-        // **A row only when it says something** (D-2): "Attempt 1 · 0 restarts", "Model used · Not reported" and
-        // "Result check · No result yet" stood on every task.
-        if task.attempt > 1 || task.restarts > 0 {
-            DetailField(title: String(l10n: "Attempt"), value: [task.attempt > 1 ? String(l10n: "Attempt \(task.attempt)") : nil,
-                                                  task.restarts > 0 ? (task.restarts == 1 ? String(l10n: "Restarted \(task.restarts) time")
-                                                                          : String(l10n: "Restarted \(task.restarts) times")) : nil]
-                .compactMap { $0 }.joined(separator: " · "))
-        }
-        if let runtimes = store.taskRuntimes[task.attempt], !runtimes.isEmpty {
-            DetailField(title: String(l10n: "AI provider"), value: runtimes.sorted().map {
-                switch $0 { case "claude": "Claude Code"; case "codex": "Codex"; case "grok": "Grok Build"; default: $0 }
-            }.joined(separator: ", "))
-        }
-        let models = store.taskModels.filter { $0.attempt == task.attempt }
-        if !models.isEmpty {
-            ForEach(models) { model in
-                VStack(alignment: .leading, spacing: 6) {
-                    DetailField(title: String(l10n: "Model requested"), value: model.requestedModel ?? automaticChoice)
-                    DetailField(title: String(l10n: "Model used"), value: model.model ?? String(l10n: "Not reported"))
-                    DetailField(title: String(l10n: "Reasoning requested"), value: model.requestedEffort.map(reasoningName) ?? automaticChoice)
-                    DetailField(title: String(l10n: "Reasoning used"), value: model.effort.map(reasoningName) ?? String(l10n: "Not reported"))
-                    if model.differs { Label("The AI provider used other settings", systemImage: "exclamationmark.circle").font(FormMetrics.detail).foregroundStyle(.orange) }
-                }
-            }
-        }
-        DetailField(title: String(l10n: "Last activity"), value: fleetDate(task.last_activity))
-        DetailField(title: String(l10n: "Done when"), value: task.done_when)
-        if task.delivered != nil || task.accepted != nil { DetailField(title: String(l10n: "Result check"), value: task.checkStatus) }
-        if let follows = task.follows { DetailField(title: String(l10n: "Follow-up to"), value: store.state?.tasks.first { $0.id == follows }?.title ?? String(l10n: "An earlier task")) }
-        if let parent = task.parent {
-            // The click reaches over and under the words (`IconMetrics.reach`), and the panel does not move for it.
-            Button { store.destination = .task(parent) } label: {
-                Text(store.state?.tasks.first { $0.id == parent }.map { String(l10n: "Parent task · \($0.title)") } ?? String(l10n: "Parent task")).padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
-            }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).font(FormMetrics.detail).foregroundStyle(FleetStyle.link)
-                .opensTask(parent, store: store)
-        }
-        let subtasks = (store.state?.tasks ?? []).filter { $0.parent == task.id }
-        if !subtasks.isEmpty {
-            Text("Subtasks").font(FormMetrics.detailTitle)
-            ForEach(subtasks) { child in
-                Button { store.destination = .task(child.id) } label: {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(child.title).lineLimit(2)
-                        Text(taskStatus(child)).foregroundStyle(FleetStyle.muted)
-                    }.font(FormMetrics.detail)
-                }.buttonStyle(.plain).opensTask(child.id, store: store)
-            }
-        }
-        if !store.taskChildren.isEmpty {
-            Rule()
-            Text("Child agents").font(FormMetrics.detailTitle)
-            ForEach(store.taskChildren.prefix(20)) { child in
-                Button { store.childThreadRequest = child.id } label: {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: child.status == "completed" ? "checkmark.circle" : child.status == "failed" ? "exclamationmark.circle" : "circle.dotted")
-                            .foregroundStyle(child.status == "failed" ? .orange : FleetStyle.muted)
-                        Text(child.name).lineLimit(2)
-                        Spacer(minLength: 0)
-                        Image(systemName: "arrow.up.right").font(IconMetrics.symbol(9))
-                    }.font(FormMetrics.detail).contentShape(Rectangle())
-                }.buttonStyle(.plain).help("Open child thread · Attempt \(child.id.attempt)")
-            }
-            if store.taskChildren.count > 20 { Text("More agents in the task thread").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
-        }
-        if !store.taskFiles.isEmpty {
-            Rule()
-            Text("Changed files").font(FormMetrics.detailTitle)
-            ForEach(store.taskFiles) { change in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(verbatim: change.path).font(FormMetrics.detail).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    HStack(spacing: 6) {
-                        Text(change.action.capitalized)
-                        if let added = change.added { Text("+\(added)").foregroundStyle(.green) }
-                        if let removed = change.removed { Text("−\(removed)").foregroundStyle(.orange) }
-                    }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                }
-            }
-            Text("Latest completed tool report per file.").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-        }
-    }
-
-    /// The name of the task this thread is: its title, and no hub number under it (3 November 2026: "I dont want these
-    /// codes, I just want human chats").
-    private func taskName(_ task: FleetTask) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(task.title).font(FormMetrics.title).lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16).padding(.top, FleetSpace.underBand + FleetSpace.lights).padding(.bottom, 14)
-        .accessibilityIdentifier("task-name")
-    }
 
     /// The chat composer: the owner's message to the agent of this page. The answer of a Needs-you
     /// request has its own composer, `NeedAnswerBox`, on the request itself.
@@ -1156,8 +1019,7 @@ struct FleetView: View {
                 Text(pending.name(hub: store.hub, state: store.state, schedules: (store.reading("triggers.list") as TriggerList?)?.triggers ?? []))
                     .font(FormMetrics.detail).lineLimit(3).textSelection(.enabled)
                 if !pending.attachments.isEmpty {
-                    StagedFilesStrip(store: store, composer: pending.needID.map { FleetStore.stageKey(need: $0) }
-                        ?? FleetStore.stageKey(agent: pending.recipient ?? "manager"), sending: pending.attachments)
+                    StagedFilesStrip(store: store, composer: FleetStore.stageKey(of: pending), sending: pending.attachments)
                 }
                 // **Each button only while it can act** (fix round 2, item 51), never grey: Refresh always can — a press
                 // during a read loses nothing, the store reads once more after it (`refresh`) — and the bar stands only
@@ -1225,7 +1087,7 @@ struct FleetNotices: View {
     private var managerSetupUnder: Bool {
         guard let manager = store.state?.agents.first(where: { $0.role == "manager" })?.name else { return false }
         switch store.destination {
-        case .signIn(let name): return name == manager
+        case .signIn(let name, _): return name == manager
         case .agent(let name), .agentDetail(let name, .settings), .agentDetail(let name, .chat):
             return name == manager && store.setupShows(manager)
         default: return false

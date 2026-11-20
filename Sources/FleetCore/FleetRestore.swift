@@ -285,10 +285,6 @@ public struct FleetHolds: Sendable, Equatable {
                   needs: state.needs.count, reports: state.reports.count)
     }
 
-    /// Nothing this app can see. The hub may still be counting something of its own, which is why the sentence
-    /// below never says "nothing".
-    public var seesNothing: Bool { tasks == 0 && goals == 0 && needs == 0 && reports == 0 }
-
     /// What putting a copy over this hub would take away, in his words.
     public var says: String {
         var parts: [String] = []
@@ -319,18 +315,10 @@ extension HubState {
 
 /// Where the app offers to put a copy back, and where it says nothing.
 public enum RestoreOffer {
-    /// At the end of the first-run wizard: begin a new fleet, or restore one. This is the moment that matters,
-    /// because on the day he needs it he is standing in front of a fresh hub and not hunting through Settings.
+    /// The end of the first run asks no question of a copy (the owner, 18 November 2026: "Take it away"): a copy
+    /// goes back from Settings › Backup, as on any other day.
     ///
-    /// A hub this Mac has just claimed always gets the choice. A hub it was only pointed at — "I already have
-    /// one" — gets it when there is plainly nothing on it: one agent, which is the manager its own installer
-    /// wrote, and no work. A fleet he is simply reconnecting to does not, and has it on System status.
-    public static func atClaim(_ state: HubState?, claimed: Bool) -> Bool {
-        guard let state, state.putsACopyBack else { return false }
-        return claimed || (state.agents.count <= 1 && FleetHolds(state).seesNothing)
-    }
-
-    /// On System status, beside Save a copy: wherever the hub serves the route. This is the way back that
+    /// On Settings › Backup, beside Save a copy: wherever the hub serves the route. This is the way back that
     /// `RESTORE.md` promises inside every copy, so it is not conditional on the hub looking empty — the 409 is
     /// what stands between a working fleet and a copy, and it asks him first.
     public static func inHealth(_ state: HubState?) -> Bool { state?.putsACopyBack == true }

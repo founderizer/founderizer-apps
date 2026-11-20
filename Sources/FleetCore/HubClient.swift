@@ -435,6 +435,22 @@ public final class HubClient: Sendable {
         return list
     }
 
+    /// **Each agent's part of its account's main window** (`GET /ui/costs`, owner feature `costs`), for the week bars of
+    /// the Agents page. The shares do not depend on the period that the route is asked for, so it asks for the last
+    /// minute before the hub's `time`. The route still builds the fleet's whole report of costs under the hub's lock,
+    /// so the page reads it seldom (`AgentsPage.pollShares`).
+    public func accountShares(hub: URL, database: String, at time: Double) async throws -> AccountShares {
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/costs"), resolvingAgainstBaseURL: false)!
+        let stamp = ISO8601DateFormatter()
+        parts.queryItems = [.init(name: "db", value: database),
+                            .init(name: "from", value: stamp.string(from: Date(timeIntervalSince1970: time - 60))),
+                            .init(name: "to", value: stamp.string(from: Date(timeIntervalSince1970: time)))]
+        let (data, _) = try await boundedArtifactRead(URLRequest(url: parts.url!), limit: 4_194_304)
+        let shares = try JSONDecoder().decode(AccountShares.self, from: data)
+        guard shares.db == database else { throw HubError.invalidResponse }
+        return shares
+    }
+
     /// **The hub's record of its own server** (`GET /ui/vault`, its `hub`: the machine's name, its address and the
     /// fleet's `access` entry for it), or nil from a hub that names none. The key of this Mac needs it for a hub's
     /// server that runs no agent, which `machines` does not name (`OwnerKeyPlan.record`). It reads these two fields of

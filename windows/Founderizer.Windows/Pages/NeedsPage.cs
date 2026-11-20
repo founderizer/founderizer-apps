@@ -112,6 +112,8 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
 
     public void Press(long need, int choice) => source.Press(need, choice);
 
+    public void Reply(long need, string words) => source.Reply(need, words);
+
     public void Type(long need, string text) => source.SetAnswerDraft(need, text);
 
     public void Answer(long need) => _ = source.AnswerAsync(need);

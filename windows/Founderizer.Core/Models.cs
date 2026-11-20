@@ -50,7 +50,10 @@ public sealed record MobileSnapshot(
 
 public sealed record MobileCounts(long TasksOpen, long NeedsOpen, long Messages, long Reports);
 
-/// <summary>One agent's row of GET /ui/mobile (MobileAgent).</summary>
+/// <summary>One agent's row of GET /ui/mobile (MobileAgent). `can` is its Tools boxes (team.json `can`): without "shell",
+/// a worker's or a lead's sessions record no outcome, and the owner checks its tasks' unknown outcomes
+/// (<see cref="TaskOutcome.ShellOff"/>). Null from a hub that does not send it, which reads as [], as the hub sends a
+/// missing list.</summary>
 public sealed record MobileAgent(
     string Name,
     string Role,
@@ -66,7 +69,8 @@ public sealed record MobileAgent(
     string? Machine = null,
     double? TurnEndedAfter = null,
     double? WaitsSince = null,
-    bool? ChatUndelivered = null)
+    bool? ChatUndelivered = null,
+    IReadOnlyList<string>? Can = null)
 {
     /// <summary>The helper answered in the last minute of the hub's own clock (helperIsRecent).</summary>
     public bool HelperIsRecent(double serverTime) =>
@@ -213,7 +217,26 @@ public sealed record TaskHold(
     string? By = null);
 
 public sealed record TaskOutcome(long Id, long Task, long Attempt, string Title, string Kind, string State,
-                                 string? Note = null);
+                                 string? Note = null)
+{
+    /// <summary>Whether the owner checks this action, and not its agent (FleetCore's TaskOutcome.waitsOnOwner; the owner,
+    /// 19 November 2026, of an orange check on a task whose new session had not started yet: "who needs to check?"): its
+    /// outcome is not known, and no session of the task's agent comes to check it, because a hold that is not released
+    /// holds the task (any hold), the task has ended (<paramref name="taskEnded"/> null: the reading has no such task,
+    /// which counts as ended), or its agent's sessions cannot record a finding (<paramref name="shellOff"/>). While the
+    /// task runs or waits for its next session, each new session of its agent gets the list of these actions first and
+    /// records each one, so no Needs-you row, count or orange line asks the owner. The hub's owner_count keeps the same
+    /// rule for the number on the phone's icon.</summary>
+    public bool WaitsOnOwner(IReadOnlyList<TaskHold> holds, bool? taskEnded, bool shellOff) =>
+        State == "unknown" && (shellOff || taskEnded != false || holds.Any(h => h.Task == Task && h.State != "released"));
+
+    /// <summary>Whether the sessions of an agent with this role and these Tools boxes have no resolve_outcome (FleetCore's
+    /// TaskOutcome.shellOff): a worker's or a lead's whose Shell box is off, as the hub's shell_off reads it. A manager's
+    /// sessions always have it. Null boxes read as not off; <see cref="Activity.ShellOff"/> gives a missing list as [],
+    /// as the iPhone does.</summary>
+    public static bool ShellOff(string? role, IReadOnlyList<string>? can) =>
+        role is "worker" or "lead" && can is not null && !can.Contains("shell");
+}
 
 public sealed record RuntimeLimit(double Since, double Until, bool ResetKnown, long? Task = null);
 

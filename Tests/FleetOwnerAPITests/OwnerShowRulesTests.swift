@@ -107,7 +107,7 @@ struct OwnerShowRulesTests {
     @Test func thesePlacesAreNeverOpened() {
         var never: [AppPlace] = [.agentPart("nova", .runsOn), .agentPart("nova", .capabilities), .settings(.servers),
                                  .settings(.backup),
-                                 .addServer(nil), .addAgent(nil), .shapeChange, .connectKey, .server("fleet-1"),
+                                 .addServer(nil), .addAgent(nil), .connectKey, .server("fleet-1"),
                                  .agentRule("nova"), .agentSetup("nova", nil), .agentSetup("nova", .name),
                                  .agentSetup("nova", .servers), .agentSettingUp("nova"), .agentSignIn("nova", nil)]
         never += AppPlace.AddServerPage.allCases.map { .addServer($0) }
@@ -229,9 +229,9 @@ struct OwnerShowRulesTests {
                     + "of the fleet. Read setup_diagnosis for the reason. setup_show with page front still asks macOS "
                     + "to bring the app to the front.")
         }
-        // A setup fills the window: Add server, Add agent, a change of the fleet's shape, by the place alone; the
+        // A setup fills the window: Add server and Add agent, by the place alone; the
         // setup of an agent that is being added, or of a new fleet's manager, by the store's own word.
-        for place in [AppPlace.addServer(.ways), .addServer(nil), .addAgent(.name), .shapeChange] {
+        for place in [AppPlace.addServer(.ways), .addServer(nil), .addAgent(.name)] {
             for fills in [true, nil] {
                 let facts = Self.facts(on: place, fills: fills)
                 #expect(SetupShow.now(facts) == .setup)
@@ -543,7 +543,7 @@ struct OwnerShowRulesTests {
         #expect(show.contains("It changes the page only from these places: " + SetupShow.fromWords
                               + ", because on every other place the owner can be in the middle of typing or of work."))
         for words in ["not agent.<name>.runs_on, settings.servers or settings.backup",
-                      "never add_server, add_agent, shape_change, connect_key, server.<name>, app.<app>, an agent's "
+                      "never add_server, add_agent, connect_key, server.<name>, app.<app>, an agent's "
                         + "rule editor, or a place of an agent's setup, \"Setting up\" or sign-in",
                       "seen: the place that setup_state gave last",
                       "after it changed the page and until a click of the owner reached the app's main window (one "

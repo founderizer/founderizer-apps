@@ -82,6 +82,7 @@ enum LinkTools {
         let client = ChatAppsClient()
         let desk = SaveBotToken.Desk<BotToken, Place>(
             token: { BotToken(pasted: $0) },
+            telegramToken: { BotToken(telegram: $0) },
             isAccountID: { ChatApps.isAccountID($0) },
             ready: {
                 guard let store = store(), store.writesNow, let database = store.state?.db else { return nil }

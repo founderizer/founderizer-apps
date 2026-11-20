@@ -594,8 +594,11 @@ public struct PersonInput: Equatable, Sendable {
 }
 
 extension People {
-    /// The chat apps a handle can be on.
+    /// The chat apps of a handle that the owner types.
     public static let apps = ["whatsapp", "discord"]
+    /// Every chat app a handle can be on: Telegram's comes from the person's own invite link, never typed (CHAT-APPS.md
+    /// 19.4), because Telegram's apps do not show a person their ID.
+    public static let chatApps = ["whatsapp", "discord", "telegram"]
 
     /// What the owner is asked for on each chat app, because the app makes the ID itself.
     public static func handleAsk(_ app: String) -> String {
@@ -722,7 +725,7 @@ public struct Conversation: Decodable, Equatable, Sendable, Identifiable {
     /// The chat app of the account, which is its first part (`whatsapp-studio`).
     public var app: String? {
         guard let account, let first = account.split(separator: "-").first else { return nil }
-        return People.apps.contains(String(first)) ? String(first) : nil
+        return People.chatApps.contains(String(first)) ? String(first) : nil
     }
 
     /// The one line a row shows: who said the last thing, and what it was.

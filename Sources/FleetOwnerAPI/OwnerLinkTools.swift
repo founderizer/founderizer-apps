@@ -11,7 +11,7 @@ import Foundation
 /// goes to the app as the value part after the request line (`OwnerChannel.Value`); or from the clipboard, which the
 /// app reads itself, in its own process (the secrets plan, step C). No tool gives a value back.
 ///
-/// **The six tools.** `save_bot_token` (below): a Discord bot's token to the hub. `prepare_problem_report`
+/// **The six tools.** `save_bot_token` (below): a Discord or Telegram bot's token to the hub. `prepare_problem_report`
 /// (`OwnerProblemReport.swift`): the agent's own text into the app's report form, with no value. `save_secret`
 /// (`OwnerSaveSecret.swift`, `OwnerSaveSecretApp.swift`): a new login or API key into the fleet's central vault,
 /// with work that outlives its call (`LinkWork`). `grant_secret` (`OwnerGrantSecret.swift`): one secret to one
@@ -193,10 +193,11 @@ public enum ValueSource {
 
 // ------------------------------------------------------------ save_bot_token
 
-/// **`save_bot_token`**: a Discord bot's token to the hub, from a file, a pipe or the clipboard of this Mac, or its
-/// delete. The program checks the fields and reads a file or a pipe (`plan`, `ValueSource`); the app checks both again,
-/// because a process on the socket can send any bytes, reads the clipboard itself, and sends the token as its own
-/// Discord page does (`answer`, with the app's own client in `Desk`). The program takes no command lock of `~/.founderizer/lock`: the app does the write, as its form does.
+/// **`save_bot_token`**: a Discord or Telegram bot's token to the hub, from a file, a pipe or the clipboard of this
+/// Mac, or its delete. The program checks the fields and reads a file or a pipe (`plan`, `ValueSource`); the app checks
+/// both again, because a process on the socket can send any bytes, reads the clipboard itself, and sends the token as
+/// its own Discord or Telegram page does (`answer`, with the app's own client in `Desk`). The program takes no command
+/// lock of `~/.founderizer/lock`: the app does the write, as its form does.
 ///
 /// **`replace`, in the form that the app can keep** (the plan's section 2): nothing says before the send whether the hub
 /// holds a token file (the route learns it only in its act). But the chat apps page that the tool reads gives each
@@ -213,25 +214,27 @@ public enum SaveBotToken {
 
     public static let tool = OwnerTable.Tool(
         name: name, description: """
-            Saves the token of a Discord bot of the fleet on the hub, or deletes it. account: the id of a Discord chat \
-            account that the fleet has already (fleet_read page chat_apps); this tool does not make the account. The \
-            token is never a field of this tool and never a word of a command line. You never see it, type it or \
-            repeat it, and you never ask the owner to paste it into a chat. It comes from this Mac, from a \
+            Saves the token of a Discord or Telegram bot of the fleet on the hub, or deletes it. account: the id of a \
+            Discord or Telegram chat account that the fleet has already (fleet_read page chat_apps); this tool does \
+            not make the account. The token is never a field of this tool and never a word of a command line. You \
+            never see it, type it or repeat it, and you never ask the owner to paste it into a chat. It comes from \
+            this Mac, from a \
             file or a pipe that founderizer-cli reads and sends to the Founderizer app as a part after the request, or \
             from the clipboard, which the app reads itself. from file, with path: a regular file \
             of this Mac that holds only the token (at most 64 KiB). from stdin: only with founderizer-cli write, the \
             standard input from a program's pipe (never pbpaste or another read of the clipboard: for the clipboard, \
             use from clipboard), never an echo or a here-string of the token; the MCP form refuses \
             it. from clipboard: the app reads the clipboard itself, after every other check passed, once the owner \
-            copied the bot's token in Discord's Developer Portal and said so; never read the clipboard yourself. \
-            When macOS asks whether Founderizer may access the \
+            copied the bot's token (in Discord's Developer Portal, or from Telegram's BotFather) and said so; never \
+            read the clipboard yourself. When macOS asks whether Founderizer may access the \
             pasteboard, the owner presses Allow Paste. After a clipboard save the app clears the clipboard when \
             nothing else changed it since the read, and the answer's clipboard says cleared or kept. replace true is \
             needed only when the bot is connected now: then the hub holds a token that works, and \
             a save replaces it. In every other state a save replaces what is there, and replaced says so; the state \
             is the bridge's last report and can be late. delete true removes the bot's token from the hub and takes \
-            no from, no path and no replace. The app checks that the bytes have the form of a Discord bot token. It \
-            answers account, set (whether the hub holds a token for the bot now) and replaced (whether one was there \
+            no from, no path and no replace. The app checks that the bytes have the form of a bot token of the \
+            account's app. It answers account, set (whether the hub holds a token for the bot now) and replaced \
+            (whether one was there \
             before, or null when the hub does not say), and never the token, its length or a fingerprint of it.
             """,
         inputSchema: .object([
@@ -252,7 +255,7 @@ public enum SaveBotToken {
 
     // The fixed sentences: each names only the tool's own fields, and none quotes anything that the caller sent.
     static let only = "save_bot_token takes only account, from, path, replace and delete. Nothing was sent."
-    static let account = "account must be the id of a Discord chat account of the fleet, as fleet_read(page="
+    static let account = "account must be the id of a Discord or Telegram chat account of the fleet, as fleet_read(page="
         + "\"chat_apps\") gives it. Nothing was sent."
     static let deleteWord = "delete must be true or false. Nothing was sent."
     static let replaceWord = "replace must be true or false. Nothing was sent."
@@ -283,6 +286,11 @@ public enum SaveBotToken {
         + "bot's id) is copied, or macOS did not allow the read. Ask the owner to copy the bot's token again in "
         + "Discord's Developer Portal, to say when it is copied, and to press Allow Paste if macOS asks. Nothing was "
         + "sent."
+    /// The same for a Telegram bot: the clipboard is read after the account, so its sentence is of that app.
+    static let notOnClipboardTelegram = "The Founderizer app got no Telegram bot token from the clipboard: nothing "
+        + "with a bot token's parts (the bot's number, a colon and 30 to 80 characters of A-Z a-z 0-9 _ -) is copied, "
+        + "or macOS did not allow the read. Ask the owner to copy the bot's token again from Telegram's BotFather, to "
+        + "say when it is copied, and to press Allow Paste if macOS asks. Nothing was sent."
     /// The call ended while the read waited (macOS's question waits for the owner with no limit, and the program
     /// waits about a minute): nobody reads this, and nothing is sent or cleared.
     static let endedDuringRead = "The call ended while it waited for the clipboard, so nothing was sent."
@@ -297,13 +305,15 @@ public enum SaveBotToken {
         + "again. Nothing was sent."
     /// One sentence for bytes that are not UTF-8 and for a text that is no token: the answer says as little as it can
     /// of a file's bytes.
-    static let notToken = "That is not a Discord bot token (50 to 100 characters of A-Z a-z 0-9 . _ - in three parts "
-        + "with two dots, the first part the bot's id): copy the bot's token again from Discord's Developer Portal. "
-        + "Nothing was sent."
+    static let notToken = "That is not a bot token: a Discord bot token has 50 to 100 characters of A-Z a-z 0-9 . _ - "
+        + "in three parts with two dots, the first part the bot's id, and a Telegram bot token is the bot's number, a "
+        + "colon and 30 to 80 characters of A-Z a-z 0-9 _ -. Copy the bot's token again (Discord's Developer Portal, "
+        + "or Telegram's BotFather). Nothing was sent."
+
     static let noAccount = "The fleet has no chat account of that id: read fleet_read(page=\"chat_apps\") for the ones "
         + "there are. This tool does not make the account. Nothing was sent."
-    static let notDiscord = "That chat account is not a Discord account: a bot token is for a Discord account. Nothing "
-        + "was sent."
+    static let notBotApp = "That chat account is not a Discord or Telegram account: a bot token is for one of those. "
+        + "Nothing was sent."
     static let notReady = "The Founderizer app's reading of the fleet is not current now, or the app has no fleet, so "
         + "it sent nothing. Call save_bot_token again in a moment."
     static let accountsUnread = "The Founderizer app could not read the fleet's chat accounts from the hub. Call "
@@ -497,6 +507,8 @@ public enum SaveBotToken {
     public struct Desk<Token, Place> {
         /// The app's own check of a pasted token (`BotToken(pasted:)`, which trims white space at the ends).
         public var token: (String) -> Token?
+        /// The same for a Telegram bot's token (`BotToken(telegram:)`).
+        public var telegramToken: (String) -> Token?
         /// The form of a chat account's id (`ChatApps.isAccountID`).
         public var isAccountID: (String) -> Bool
         /// The hub, its database and the installation when the app's reading is current, as the form asks
@@ -513,11 +525,13 @@ public enum SaveBotToken {
         /// cleared.
         public var clearClipboard: (Int) async -> Bool
 
-        public init(token: @escaping (String) -> Token?, isAccountID: @escaping (String) -> Bool,
+        public init(token: @escaping (String) -> Token?, telegramToken: @escaping (String) -> Token?,
+                    isAccountID: @escaping (String) -> Bool,
                     ready: @escaping () -> Place?, accounts: @escaping (Place) async throws -> [Account],
                     save: @escaping (Place, String, Token?) async throws -> Receipt,
                     readClipboard: @escaping () async -> Clipboard, clearClipboard: @escaping (Int) async -> Bool) {
             self.token = token
+            self.telegramToken = telegramToken
             self.isAccountID = isAccountID
             self.ready = ready
             self.accounts = accounts
@@ -542,10 +556,25 @@ public enum SaveBotToken {
         return id.allSatisfy { (0x30...0x39).contains($0) }
     }
 
+    /// **The parts of a Telegram bot token**, as BotFather gives it and the hub takes it (`TELEGRAM_TOKEN`): the bot's
+    /// number (5 to 20 digits), a colon and 30 to 80 characters of `A-Z a-z 0-9 _ -`. The colon after a number is what
+    /// no Discord token and few other keys have.
+    static func hasTelegramParts(_ text: String) -> Bool {
+        let parts = text.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return false }
+        let number = parts[0].utf8, key = parts[1].utf8
+        let keyByte: (UInt8) -> Bool = {
+            (0x30...0x39).contains($0) || (0x41...0x5A).contains($0) || (0x61...0x7A).contains($0) || $0 == 0x5F || $0 == 0x2D
+        }
+        return (5...20).contains(number.count) && number.allSatisfy { (0x30...0x39).contains($0) }
+            && (30...80).contains(key.count) && key.allSatisfy(keyByte)
+    }
+
+
     /// **The app's answer**, in a fixed order: the fields; the account's form (short ids only, so that no account can
     /// hold a token); the value part (none for a delete or for `from` clipboard; present, UTF-8 and of a token's form
-    /// for a save from a file or a pipe); a current reading; the read of the accounts; the account among them, and a
-    /// Discord one; the `replace` rule; for `from` clipboard, the clipboard's read; then the send. The value is compared
+    /// for a save from a file or a pipe, of Discord's or Telegram's form); a current reading; the read of the accounts;
+    /// the account among them, a Discord or Telegram one, and the value of that app's form; the `replace` rule; for `from` clipboard, the clipboard's read; then the send. The value is compared
     /// with nothing that the caller sent. The answer is `account`, `set` and `replaced` from the hub's receipt, and
     /// never the token, its length or a fingerprint.
     ///
@@ -566,6 +595,7 @@ public enum SaveBotToken {
         // Before anything of the value is read as text: an id (at most 40 characters) cannot have a token's form.
         guard desk.isAccountID(read.account) else { return .refused(noAccount) }
         var token: Token?
+        var valueText: String?
         var hidden: [String] = [read.account]
         let fromClipboard = !read.delete && read.from == "clipboard"
         if read.delete {
@@ -575,10 +605,11 @@ public enum SaveBotToken {
         } else {
             guard let value else { return .refused(noValue) }
             let trimmed = value.text?.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let text = trimmed, hasTokenParts(text), let made = desk.token(text) else {
+            // The form of either app's token here; the account's app, read below, decides which one it must be.
+            guard let text = trimmed, hasTokenParts(text) || hasTelegramParts(text) else {
                 return .refused(notToken)
             }
-            token = made
+            valueText = text
             hidden.append(text)
         }
         guard let place = desk.ready() else { return .refused(notReady) }
@@ -589,7 +620,15 @@ public enum SaveBotToken {
             return .refused(accountsUnread)
         }
         guard let found = accounts.first(where: { $0.id == read.account }) else { return .refused(noAccount) }
-        guard found.app == "discord" else { return .refused(notDiscord) }
+        guard found.app == "discord" || found.app == "telegram" else { return .refused(notBotApp) }
+        if let valueText {
+            // the token of the account's own app only, made here, as the clipboard's below; a token of the other
+            // app's form gets the one sentence of no token, so an answer tells nothing more of a file's bytes
+            let made = found.app == "telegram" ? (hasTelegramParts(valueText) ? desk.telegramToken(valueText) : nil)
+                : (hasTokenParts(valueText) ? desk.token(valueText) : nil)
+            guard let made else { return .refused(notToken) }
+            token = made
+        }
         if !read.delete && found.state == "connected" && !read.replace { return .refused(connected) }
         var readCount: Int?
         if fromClipboard {
@@ -608,12 +647,15 @@ public enum SaveBotToken {
             case .busy:
                 return .refused(clipboardBusy)
             case .nothing:
-                return .refused(notOnClipboard)
+                return .refused(found.app == "telegram" ? notOnClipboardTelegram : notOnClipboard)
             case .text(let copied, let count):
+                let nothing = found.app == "telegram" ? notOnClipboardTelegram : notOnClipboard
                 // Bounded as a value part is, before any work on its text on the main actor.
-                guard copied.utf8.count <= OwnerChannel.valueMax else { return .refused(notOnClipboard) }
+                guard copied.utf8.count <= OwnerChannel.valueMax else { return .refused(nothing) }
                 let text = copied.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard hasTokenParts(text), let made = desk.token(text) else { return .refused(notOnClipboard) }
+                let made = found.app == "telegram" ? (hasTelegramParts(text) ? desk.telegramToken(text) : nil)
+                    : (hasTokenParts(text) ? desk.token(text) : nil)
+                guard let made else { return .refused(nothing) }
                 token = made
                 hidden.append(text)
                 readCount = count

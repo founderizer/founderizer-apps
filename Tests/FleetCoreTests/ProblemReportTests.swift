@@ -80,6 +80,8 @@ struct ProblemReportTests {
         #expect(ProblemReport.screenName("server(\"vps-1\")") == "Server")
         #expect(ProblemReport.screenName("dashboard") == "Dashboard")
         #expect(ProblemReport.screenName("addAgent") == "Add agent")
+        // Tasks as an agent's chat panel opens it is Tasks, not the board's old name with the agent's.
+        #expect(ProblemReport.screenName("activityFrom(\"studio\")") == "Tasks")
         // A page this app has never heard of still gives a name, and still gives no number and no agent.
         #expect(ProblemReport.screenName("somethingNew(7, \"vps\")") == "Something new")
         #expect(ProblemReport.screenName("") == "Founderizer")

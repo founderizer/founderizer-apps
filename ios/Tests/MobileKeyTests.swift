@@ -300,6 +300,14 @@ struct SealedPingTests {
         dee6cc4b7f97e36ed7379089ca005b577823ba5a02bec11e17d980c3dd101c8013335ba4ef822b00472c733e6b36ec3a874059fab52fff\
         4b4481b67e
         """
+    /// API 1.245: a door card's part, with `no_button` [1] (Full access), as the hub's `push.seal` seals it for the same
+    /// key and nonce.
+    static let doorSealed = """
+        070000004041424344454647e4598b326584628037b0fa9516ee64cbe1b2e7507d211dbdafe3a0f375ed6d8539fba9159db17c079abed0\
+        2dc0f962d94737865b885e557601c6a7e333d67e3c9893fe6d7635ccc28335bcb63a120616ace11af5c18f238e5794c5c455379bf507a4\
+        e9e08e4b6486b075d8268189ca00534d606fee540fb4c30510dbb281df13109652675bb2ef8d304e7b7373371957acec367c3999943694\
+        64f7d32cec14f20df0efab684796afcef3a2a4
+        """
     static let account = "seal-key-check"
 
     static func bytes(_ hex: String) -> Data {
@@ -353,6 +361,24 @@ struct SealedPingTests {
         closed.userInfo = Self.ping(Self.bytes(Self.sealed))
         #expect(!SealedPing.show(in: closed, key: Data(count: 32)))
         #expect(closed.title == "Needs you" && closed.body.isEmpty && closed.categoryIdentifier.isEmpty)
+    }
+
+    /// Full access on a door card counts only with the owner key on the Mac, so its ping names it in `no_button`, and
+    /// `NeedActions` draws no button for it while Run it once and No keep their index. Bug: the field is lost on its way
+    /// to the extension, and the lock screen offers a button whose press the hub refuses.
+    @Test("A door card's ping names the option that gets no button, and the extension's fields carry it")
+    func aDoorPingNamesFullAccessAsNoButton() {
+        let said = SealedPing.open(Self.ping(Self.bytes(Self.doorSealed)), key: Self.key)
+        #expect(said == SealedPing(need: 24, db: "0123456789ab", title: "Atlas", body: "Run one root script on web-1?",
+                                   options: ["Run it once", "Full access on web-1", "No"], noButton: [1]))
+        let content = UNMutableNotificationContent()
+        content.userInfo = Self.ping(Self.bytes(Self.doorSealed))
+        #expect(SealedPing.show(in: content, key: Self.key))
+        #expect(content.userInfo["no_button"] as? [Int] == [1])
+        #expect(content.userInfo["options"] as? [String] == ["Run it once", "Full access on web-1", "No"])
+        let older = UNMutableNotificationContent()              // a ping that names none puts none in the fields
+        older.userInfo = Self.ping(Self.bytes(Self.sealed))
+        #expect(SealedPing.show(in: older, key: Self.key) && older.userInfo["no_button"] == nil)
     }
 
     @Test("The phone makes its seal key once and keeps it for the extension")
@@ -432,6 +458,30 @@ struct DeviceSigningKeyTests {
         #expect(holder.approval(for: try Self.need(#", "door_call": "\#(call)""#), choice: 0) == nil)
         try holder.remove()
         #expect(holder.approval(for: need, choice: 0) == nil)
+    }
+
+    /// The owner's "Show the script" (19 November 2026): on the door's card of a run the phone signs only the hash that
+    /// it computed from the script that the card shows, as the Mac does. Bug: it signs the hub's hash of a script that
+    /// it never showed, or of another script than the one that it shows.
+    @Test("On the door's card of a run the phone signs only the hash of the script that the card shows")
+    func aRunIsSignedOnlyForTheScriptThatTheCardShows() throws {
+        let holder = DeviceSigningKey(account: Self.account)
+        _ = try holder.make()
+        let script = "systemctl reload nginx\n"
+        let call = DoorCall.hash(target: "web-1", action: DoorCall.run, arguments: [], content: Data(script.utf8))
+        func card(_ shown: String?) throws -> OwnerNeed {
+            var fields: [String: Any] = ["id": 7, "by": "manager", "title": DoorCall.title(host: "web-1"), "why": "",
+                                         "todo": "", "raised": 20, "options": DoorCall.answers(host: "web-1"),
+                                         "door_call": call, "door_fleet": "fleet-1", "door_host": "web-1"]
+            if let shown { fields["door_script"] = shown; fields["details"] = DoorCall.details(script: shown) }
+            return try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: fields))
+        }
+        let approval = try #require(holder.approval(for: try card(script), choice: 0))
+        let said = try #require(try JSONSerialization.jsonObject(with: Data(approval.statement.utf8)) as? [String: Any])
+        #expect(said["call"] as? String == call)
+        #expect(holder.approval(for: try card("systemctl stop nginx\n"), choice: 0) == nil)    // another script
+        #expect(holder.approval(for: try card(nil), choice: 0) == nil)                         // no script to show
+        try holder.remove()
     }
 }
 

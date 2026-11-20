@@ -161,14 +161,15 @@ public enum WelcomeRules {
         case paste
         /// "A VPS for your fleet", the page of the first way.
         case cloud
-        /// "Name your manager", the first page of the first way, which the sign of the owner's own agent opens too.
+        /// The pages of the first way before this Mac's network: "Help improve Founderizer", the first, which the sign
+        /// of the owner's own agent opens too, "Name your manager", the manager's AI provider and the fleet's servers.
         case name
         /// Any other page of the first run.
         case other
     }
 
-    /// **The owner's own agent started the guide** (`founderizer-cli guide`): the app goes to "Name your manager", the
-    /// first page of the first way, and comes to the front, only while the welcome page or the page after it shows and no connect of the wizard runs (the owner's
+    /// **The owner's own agent started the guide** (`founderizer-cli guide`): the app goes to "Help improve
+    /// Founderizer", the first page of the first way, and comes to the front, only while the welcome page or the page after it shows and no connect of the wizard runs (the owner's
     /// "Yes" of 14 November 2026 to "May the app come to the front by itself when your own agent needs you there?").
     /// Any process of the user can send that notification, so in every other state it does nothing. **An install that
     /// began and stopped does not stop it** (`atStart`): back on these two pages the wizard is at its start again. No
@@ -223,8 +224,8 @@ public enum WelcomeRules {
         }
     }
 
-    /// Where Back goes from these pages: from the page after the press, from the name page and from the VPS page to
-    /// the welcome page (the first run sends the VPS page back to the name page when the owner came through it). The
+    /// Where Back goes from these pages: from the page after the press, from the first way's first page ("Help improve
+    /// Founderizer") and from the VPS page to the welcome page (the first run sends the VPS page back to the name page when the owner came through it). The
     /// welcome page has no Back; nil for a page that these rules do not decide.
     public static func back(from page: Page) -> Page? {
         switch page {

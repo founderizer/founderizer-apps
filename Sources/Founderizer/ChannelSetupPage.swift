@@ -8,10 +8,12 @@ import SwiftUI
 //
 //   WhatsApp   1. Link <agent>'s WhatsApp number: the QR code of the bridge.
 //   Discord    1. Add a Discord bot for <agent>, 2. Add it to your server (`DiscordBotPage`).
-//   Both       then "Who can write to <agent>?", with You first: a click on You opens "Write to <agent> from your
-//              phone" (or "from your Discord"), the owner's own link; and "<agent> is on WhatsApp" (or Discord), with
-//              Done. An agent that no person can write to (the fleet's manager) has the owner's own link in place of
-//              the tiles.
+//   Telegram   1. Add a Telegram bot for <agent> (`TelegramBotPage`; CHAT-APPS.md 19, the owner's "Yes, build it" of
+//              15 November 2026 to its seven pictures).
+//   All three  then "Who can write to <agent>?", with You first: a click on You opens "Write to <agent> from your
+//              phone" (or "from your Discord", "from your Telegram"), the owner's own link; and "<agent> is on
+//              WhatsApp" (or Discord, Telegram), with Done. An agent that no person can write to (the fleet's
+//              manager) has the owner's own link in place of the tiles.
 //
 // He named three faults of the cards before these steps: "it says remove number when I haven't entered or linked any,
 // it shows Removed outside of the card all the time", and "I need an entire experience, including choosing who each
@@ -27,7 +29,9 @@ enum ChannelSetup: Equatable {
     case whatsApp
     /// Connect of the Discord card (`adding`), or Fix token and Change token.
     case discord(adding: Bool)
-    /// The owner's own link alone, from a connected card's menu: Link my phone, Link my Discord.
+    /// Connect of the Telegram card (`adding`), or Fix token and Change token.
+    case telegram(adding: Bool)
+    /// The owner's own link alone, from a connected card's menu: Link my phone, Link my Discord, Link my Telegram.
     case me(app: String)
 }
 
@@ -253,17 +257,24 @@ struct ChannelFollowSteps: View {
     @State private var newPeople: Set<Int> = []
     @State private var draft = PersonInput.HandleInput()
     @State private var writing: Int?
+    /// Telegram: the invite of the person whose page shows (CHAT-APPS.md 19.4), and that person.
+    @State private var invite: LinkCode?
+    @State private var invited: Int?
     private let chat = ChatAppsClient()
     private let client = PeopleClient()
 
     private var whatsApp: Bool { app == "whatsapp" }
+    private var telegram: Bool { app == "telegram" }
     private var name: String { ChatAppWords.agent(agent) }
     private var people: PeopleSnapshot? { store.reading("channels.people.\(agent)") }
     private var account: ChatAppsSnapshot.Account? {
         (store.reading("channels.accounts.\(agent)") as ChatAppsSnapshot?)?.channel(app, of: agent)
     }
-    /// The owner can write from this app already.
-    private var ownerLinked: Bool { people.map { !$0.handles(of: app).isEmpty } == true }
+    /// The owner can write from this app already, and on Telegram to this bot too (CHAT-APPS.md 19.4).
+    private var ownerLinked: Bool {
+        let handles = people.map { !$0.handles(of: app).isEmpty } == true
+        return account?.ownerLinked(handles: handles) ?? handles
+    }
     private var canWrite: Bool { store.writesNow && store.state?.db != nil && writing == nil }
     /// People can write to a worker and to a lead that can hold a conversation, never to the fleet's manager (the hub
     /// refuses it) and not to an agent that other people cannot reach yet (`People.cannotChat`): such an agent's steps
@@ -290,7 +301,8 @@ struct ChannelFollowSteps: View {
                 // Add person is a setup of its own, with its own Back: this agent is theirs from its first step.
                 AddPersonView(store: store, roles: people?.roleList ?? [], existing: people?.peopleList.count ?? 0, handle: nil,
                               agent: agent, back: { chosen = .who },
-                              added: { id in newPeople.insert(id); chosen = .who; Task { await refresh() } })
+                              // Telegram: a new person writes from it only after their invite (CHAT-APPS.md 19.4)
+                              added: { id in newPeople.insert(id); chosen = telegram ? .handle(id) : .who; Task { await refresh() } })
             } else {
                 SetupPage {
                     SetupBack(action: back).keyboardShortcut(.cancelAction).accessibilityIdentifier("channel-steps-back")
@@ -337,11 +349,16 @@ struct ChannelFollowSteps: View {
     }
 
     @ViewBuilder private var me: some View {
-        let title = whatsApp ? String(l10n: "Write to \(name) from your phone") : String(l10n: "Write to \(name) from your Discord")
+        let title = whatsApp ? String(l10n: "Write to \(name) from your phone")
+            : telegram ? String(l10n: "Write to \(name) from your Telegram") : String(l10n: "Write to \(name) from your Discord")
         if let code, let target {
             SetupStep(title: title) { mark } content: {
                 if whatsApp {
                     SetupSteps([String(l10n: "Scan this code with your own phone"), String(l10n: "Send the message that is ready")])
+                    QRCodeView(text: target.absoluteString, size: 196).accessibilityIdentifier("channel-me-qr")
+                } else if telegram {
+                    // The deep link of the agent's bot with the code in it: Telegram sends /start <code> (19.3).
+                    SetupSteps([String(l10n: "Scan this code with your phone"), String(l10n: "Press Start")])
                     QRCodeView(text: target.absoluteString, size: 196).accessibilityIdentifier("channel-me-qr")
                 } else {
                     SetupSteps([String(l10n: "Press Open Discord"), String(l10n: "Send the bot this message")])
@@ -356,6 +373,9 @@ struct ChannelFollowSteps: View {
                     if whatsApp {
                         Link(destination: target) { Text("Open WhatsApp on this Mac") }
                             .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("channel-me-open")
+                    } else if telegram {
+                        Link(destination: target) { Text("Open Telegram") }
+                            .buttonStyle(FleetPrimaryButtonStyle()).accessibilityIdentifier("channel-me-open")
                     } else {
                         Link(destination: target) { Text("Open Discord") }
                             .buttonStyle(FleetPrimaryButtonStyle()).accessibilityIdentifier("channel-me-open")
@@ -609,7 +629,11 @@ struct ChannelFollowSteps: View {
 
     // MARK: their number or ID of this app
 
-    private func handle(_ person: PeopleSnapshot.Person) -> some View {
+    @ViewBuilder private func handle(_ person: PeopleSnapshot.Person) -> some View {
+        if telegram { invitePage(person) } else { typedHandle(person) }
+    }
+
+    private func typedHandle(_ person: PeopleSnapshot.Person) -> some View {
         SetupStep(title: whatsApp ? String(l10n: "\(person.name)'s phone number") : String(l10n: "\(person.name)'s Discord user ID")) {
             mark
         } content: {
@@ -642,6 +666,69 @@ struct ChannelFollowSteps: View {
         if await write(person, handle: draft) { draft = .init(); chosen = .who }
     }
 
+    // MARK: Telegram — a person's invite link (CHAT-APPS.md 19.4)
+
+    /// Telegram's apps do not show a person their own ID, so the person gets a link of their own to the agent's bot. He
+    /// sends it to them in any way; when they open it and press Start, the hub binds their Telegram to them. Continue
+    /// gives them this agent now, so their first message after Start reaches it. The link works once, for 7 days.
+    private func invitePage(_ person: PeopleSnapshot.Person) -> some View {
+        let link = invited == person.id ? invite?.link(on: account?.id) : nil
+        return SetupStep(title: String(l10n: "Invite \(person.name) on Telegram"), waits: link == nil && problem == nil) {
+            mark
+        } content: {
+            if let link {
+                QRCodeView(text: link.absoluteString, size: 196).accessibilityIdentifier("channel-invite-qr")
+                HStack(spacing: 8) {
+                    Text(verbatim: link.absoluteString).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                        .accessibilityIdentifier("channel-invite-link")
+                    Spacer(minLength: 8)
+                    MessageAction(symbol: "square.on.square", label: String(l10n: "Copy link")) { copyMessage(link.absoluteString) }
+                        .foregroundStyle(FleetStyle.muted)
+                }
+                .padding(.leading, 12).padding(.trailing, 6).frame(width: SetupMetrics.field, height: SetupMetrics.fieldHeight)
+                .background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+                .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(FleetStyle.line, lineWidth: 0.5))
+                Text("\(person.name) opens it and presses Start. It works for 7 days.").foregroundStyle(FleetStyle.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            SetupAction {
+                if let problem { SetupWarning(problem).accessibilityIdentifier("channel-invite-problem") }
+                if link != nil || problem != nil {
+                    Button("Continue") { Task { await keepInvite(person) } }
+                        .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction).disabled(!canWrite)
+                        .accessibilityIdentifier("channel-invite-on")
+                }
+            }
+        }
+        // again when the app may write again (`writesNow`, as for the owner's own code): the link comes by itself
+        .task(id: "\(person.id)/\(store.writesNow)") { await makeInvite(person) }
+    }
+
+    /// The person's invite, once for each visit of their page: a new one replaces the one before it at the hub.
+    private func makeInvite(_ person: PeopleSnapshot.Person) async {
+        guard invited != person.id, store.writesNow, let db = store.state?.db else { return }
+        problem = nil
+        do {
+            let made = try await store.telegramInvite(for: person, agent: agent, bot: account) {
+                try await chat.makeInvite(hub: store.hub, database: db, client: store.installation, person: person.id, agent: agent)
+            }
+            guard store.state?.db == db else { return }
+            guard made.link(on: account?.id) != nil else {
+                problem = String(l10n: "The hub gave no link.")
+                return
+            }
+            invite = made; invited = person.id
+        } catch {
+            // a read that the page stopped (it went on, or the hub's reading turned old) says nothing
+            if !Task.isCancelled { problem = People.reason(error) }
+        }
+    }
+
+    /// Continue: the person gets this agent (their Telegram comes with their Start), and the tiles show again.
+    private func keepInvite(_ person: PeopleSnapshot.Person) async {
+        if await write(person, handle: nil) { invite = nil; invited = nil; chosen = .who }
+    }
+
     // MARK: the end
 
     /// What these steps did, each line ticked: the channel, the owner's own link, and each person they gave it to
@@ -649,10 +736,13 @@ struct ChannelFollowSteps: View {
     private var doneLines: [String] {
         var lines: [String] = []
         if let account {
-            let shown = whatsApp ? (account.name ?? account.user).map { ChatApps.masked($0, app: app) } : account.name
+            let shown = whatsApp ? (account.name ?? account.user).map { ChatApps.masked($0, app: app) }
+                : telegram ? account.name.map { "@" + $0 } : account.name
             lines.append(shown ?? ChatApps.title(app))
         }
-        if ownerLinked { lines.append(whatsApp ? String(l10n: "Your phone") : String(l10n: "Your Discord")) }
+        if ownerLinked {
+            lines.append(whatsApp ? String(l10n: "Your phone") : telegram ? String(l10n: "Your Telegram") : String(l10n: "Your Discord"))
+        }
         lines += (people?.peopleList ?? []).filter { (ticked[$0.id] != nil || newPeople.contains($0.id)) && reaches($0) }.map(\.name)
         return lines
     }

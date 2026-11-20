@@ -109,10 +109,15 @@ struct ShimmeringWords: NSViewRepresentable {
     /// the line under an agent's name in the sidebar, whose width is the sidebar's. False for a word or two that
     /// always fit, which keep their own width whatever they are offered.
     var fits = false
+    /// The words' colour and the light's, where they stand on another fill than the window's: the white row of Give
+    /// (`SendingWords`). Nil: muted words and the text's light, as everywhere else.
+    var base: NSColor? = nil
+    var light: NSColor? = nil
 
     func makeNSView(context: Context) -> ShimmerView { ShimmerView() }
     func updateNSView(_ view: ShimmerView, context: Context) {
-        view.show(text, tail: tail, fits: fits, font: font, base: NSColor(FleetStyle.muted), light: NSColor(FleetStyle.text))
+        view.show(text, tail: tail, fits: fits, font: font, base: base ?? NSColor(FleetStyle.muted),
+                  light: light ?? NSColor(FleetStyle.text))
     }
     /// **SwiftUI has to be told, or it hands a representable the whole width it is offered.** The first build of
     /// this built the sweep out of `bounds.width`, got a view far wider than the word, and swept most of each

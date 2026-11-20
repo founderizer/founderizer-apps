@@ -162,7 +162,7 @@ extension SetupShow {
         case .agentSettingUp: return "agent.<name>.setting_up"
         case .agentSignIn(_, let page): return "agent.<name>.sign_in" + (page.map { "." + $0.rawValue } ?? "")
         case .server: return "server.<name>"
-        case .needs, .tasks, .agents, .settings, .app, .addServer, .addAgent, .connectKey, .shapeChange, .firstRun,
+        case .needs, .tasks, .agents, .settings, .app, .addServer, .addAgent, .connectKey, .firstRun,
              .waiting, .none, .someAgent, .someServer, .someTask:
             return place.name
         }
@@ -179,10 +179,10 @@ extension SetupShow {
         if case .firstRun = facts.place { return .firstRun }
         if facts.firstRun.shows || facts.firstRunHolds == true { return .firstRun }
         if !facts.hasReading { return .noReading }
-        // Add server, Add agent and a change of the fleet's shape fill the window whenever there is a reading
+        // Add server and Add agent fill the window whenever there is a reading
         // (`FleetStore.fillsWindow`); an agent's setup that fills it is the store's to say.
         let wizard: Bool = switch facts.place {
-        case .addServer, .addAgent, .shapeChange: true
+        case .addServer, .addAgent: true
         default: false
         }
         if facts.setupFills ?? wizard { return .setup }

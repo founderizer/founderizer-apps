@@ -615,8 +615,7 @@ struct BackupSettings: View {
             // the copy routes and not this one, and the app offers nothing a hub cannot do.
             if RestoreOffer.inHealth(store.state) {
                 FormSection {
-                    RestoreRows(store: store, model: restore, go: { store.destination = $0 },
-                                explains: false)
+                    RestoreRows(store: store, model: restore, go: { store.destination = $0 })
                 }
             }
         } actions: {

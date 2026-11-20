@@ -36,7 +36,7 @@ Mac, and a device route is all that the PC reaches.
 | `machine_check` | waits (2.1) | |
 | `file_changes` | built | the latest completed report of each path from the task's record (`ActivityTimeline.ChangedFiles`, `ChangedFilesModel`); the panel's "Changed files" (`Pages/TasksPages.cs` `ChangedFiles`, fourth set, 2a) |
 | `subagents` | built | the child agents of the record (`ActivityTimeline.ChildAgents`, `ChildAgentsModel`, `Screens.ChildThread`); a step's child rows and "Open agent thread" (`Pages/TaskRows.cs`), the panel's "Child agents" (`Pages/TasksPages.cs` `ChildAgentsView`) and the child agent's thread with "Back" (`ChildHeadRowView`) |
-| `vault_isolation` | waits (2.3) | |
+| `vault_isolation` | not planned | the Mac app's row "Vault token" stood only in the old details of a server, which no hub since October 2026 showed; it went with them on 19 November 2026 |
 | `triggers` | waits (2.4) | wake-up rules. For that phase: a rule's check can have the form `read` (UI-API.md 1.191), and a last run in the state `joined` is no trouble (`TriggerRun.goodStates`) |
 | `trigger_checks` | waits (2.4) | |
 | `agent_setup` | waits (2.2) | `active` of an agent is read (built) |
@@ -76,12 +76,12 @@ Mac, and a device route is all that the PC reaches.
 | `entitlement` | not planned | Founderizer has no subscription since 10 November 2026 |
 | `agent_signin` | waits (2.2) | |
 | `github_app` | waits (2.4) | |
-| `need_options` | built | `OwnerNeed.Choices`, `OptionsModel` (presses, ticks, the quick replies), `OwnerStore.Press` and `TickAsync` |
+| `need_options` | built | `OwnerNeed.Choices`, `OptionsModel` (presses, ticks, the quick replies), `OwnerStore.Press`, `TickAsync` and `Reply` (a quick reply sends at once) |
 | `restore` | waits (2.1) | |
 | `manager_start` | waits (2.5) | |
 | `agent_notes` | waits (2.2) | |
 | `edit_in_place` | built | `SendReceipt.Edited` and `MessageRequestId` |
-| `machine_access` | waits (2.1) | |
+| `machine_access` | not planned | the Mac app's row "Not on record" stood only in the old details of a server and went with them on 19 November 2026; no view of the apps writes the record |
 | `push` | not planned | decision D4: a ping goes through founderizer.com to Apple; the PC notifies while it is open |
 | `attachment_knowledge` | waits (step 2) | |
 | `asking_and_waiting` | built | `TaskWords` and the task page's "Waiting on" or "Waiting for" (`Screens.Task`) |

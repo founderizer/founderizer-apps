@@ -102,7 +102,9 @@ public struct HubState: Decodable, Sendable {
                 && $0.kind == (request.needID == nil ? "message" : "answer")
                 && $0.need_id == request.needID && $0.text == request.text && $0.client == request.client
                 && (request.needID != nil || $0.chatRecipient == (request.recipient ?? "manager"))
-                && $0.replaces_request_id == request.replacesRequestID && $0.attachmentIDs == request.attachments
+                && $0.replaces_request_id == request.replacesRequestID
+                // The same files: the reading lists them by number, the request in the order of its chips.
+                && $0.attachmentIDs.sorted() == request.attachments.sorted()
         }
     }
 }
@@ -259,6 +261,11 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     /// board shows it in Waiting with "Until 10:00". nil on a hub that does not send it, where a parked task still
     /// shows as work.
     public let parked_until: Double?
+    /// **Since when an open task is in the state that its mark shows** (owner API 1.237), from the hub's own records: a
+    /// hold, a usage limit of its agent, a stall or a lost session since it began, the start of what it waits on, its
+    /// park, its creation while it is queued, else its return to work (`stateSince`). nil for a task that ended, and
+    /// from an older hub.
+    public let since: Double?
     /// **Whether its session works on it now** (hub 1.147): true while a turn of its session runs or a call that it
     /// started in the background is open, false when its last turn ended and nothing of it runs. nil: the hub knows no
     /// turn of its attempt yet, or it is an older hub; the task's state then says it, as before. On the first fleet, on
@@ -280,6 +287,23 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     /// **The case of a duty that this task works**, by the case's id, or nil: work of no case, a subtask or a follow-up
     /// of a case's task (which belongs to that case all the same: `HubState.workKey`), or an older reading.
     public let duty_case: Int?
+    /// **The task whose job this task joins** (owner feature `jobs`, hub 1.226), by that task's id, or nil: a task that
+    /// begins a job, a task that only follows another, or an older hub. An agent names it for a further part of work
+    /// that is there already, and the hub writes it for a later part of one step of a plan and for a lead's subtask
+    /// (`HubState.jobs`).
+    public let job: Int?
+    /// On the task that begins a job: the name of the whole job, when its title names only the first step; else nil.
+    public let job_name: String?
+    /// **What came of the task, in plain words for the owner** (hub 1.226), on one line, or nil: the agent gave none,
+    /// the task ended in another way, or an older hub. The hub writes it for a typed result of a session whose Shell
+    /// box is off. The card of a job that ended shows it (`Job.result`), and so does the result on the task's page at
+    /// rest (`FleetTask.resultAtRest`).
+    public let plain: String?
+    /// **A person's conversation drives this task's session** (owner feature `steer_files`, owner API 1.231): the
+    /// conversation opened it, or a task that it is a part of, also the conversation window's own task. That person
+    /// could get what a file of the owner's guidance says, so its guidance box takes no file (the owner's "Yes, build
+    /// it" of 19 November 2026 to the pictures). nil from a hub without the feature.
+    public let from_conversation: Bool?
 
     public var isTerminal: Bool { ["completed", "failed", "rejected", "canceled"].contains(state) }
     /// Who checks the result, by the name the app gives everywhere: an agent's capitalised ("Accepted by Manager"),
@@ -382,8 +406,34 @@ extension FleetTask {
 }
 
 extension HubState {
-    /// Whether the owner must check if an action of the task `task` took effect: its outcome is not known.
-    public func outcomeUnknown(_ task: Int) -> Bool { outcomes?.contains { $0.task == task && $0.state == "unknown" } == true }
+    /// Whether the owner must check if an action of the task `task` took effect: its outcome is not known, and the
+    /// task's agent does not check it first (`TaskOutcome.waitsOnOwner`).
+    public func outcomeUnknown(_ task: Int) -> Bool {
+        guard outcomes?.contains(where: { $0.task == task && $0.state == "unknown" }) == true else { return false }
+        return ownerChecks(task, row: tasks.first { $0.id == task })
+    }
+
+    /// The same for the task `row` of this reading, with no search of the tasks.
+    public func outcomeUnknown(of row: FleetTask) -> Bool { ownerChecks(row.id, row: row) }
+
+    /// The outcomes that the owner checks (`TaskOutcome.waitsOnOwner`), of every task.
+    public var ownerOutcomes: [TaskOutcome] {
+        let unknown = (outcomes ?? []).filter { $0.state == "unknown" }
+        guard !unknown.isEmpty else { return [] }
+        let ids = Set(unknown.map(\.task))
+        let rows = Dictionary(tasks.filter { ids.contains($0.id) }.map { ($0.id, $0) }) { first, _ in first }
+        let theirs = Set(ids.filter { ownerChecks($0, row: rows[$0]) })     // once for each task
+        return unknown.filter { theirs.contains($0.task) }
+    }
+
+    /// Whether an unknown outcome of the task `task` (its row `row`, nil when the reading has none) waits on the owner.
+    private func ownerChecks(_ task: Int, row: FleetTask?) -> Bool {
+        let shellOff = row.flatMap { row in agents.first { $0.name == row.owner } }
+            .map { TaskOutcome.shellOff(role: $0.role, can: $0.can) } ?? false
+        return (outcomes ?? []).contains {
+            $0.task == task && $0.waitsOnOwner(holds: holds ?? [], taskEnded: row?.isTerminal, shellOff: shellOff)
+        }
+    }
 }
 
 /// **One task's state in a few words, the same on every screen of both apps** (T-12; fix round 2 of 29 October 2026). A
@@ -493,6 +543,14 @@ public struct NeedMessage: Decodable, Equatable, Sendable {
     public var fromOwner: Bool { who == "owner" }
 }
 
+/// What the first option of an item for access gives at his press (API 1.235): the agent, the level, and each
+/// repository as owner/name.
+public struct NeedGive: Decodable, Equatable, Sendable {
+    public let agent: String
+    public let level: String
+    public let repos: [String]
+}
+
 public struct OwnerNeed: Decodable, Identifiable, Sendable {
     public let id: Int
     public let title: String
@@ -564,6 +622,70 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// `NeedRun.command(of:)` says.
     public let run_command: String?
     public let run_on: String?
+    /// The lane "Give on a card" (owner feature `need_give`, API 1.235): the grant that the item's first option makes at
+    /// his press, and nil on every other item. The hub writes that option's words ("Give <role> <level>"), so the card
+    /// draws it as its one main action (`NeedAnswerBox`), and the press is the item's whole step.
+    public let give: NeedGive?
+    /// API 1.244: true on a team card of the manager (`change_team`, API 1.214), whose options are its yes options and
+    /// then No; false on every other item, and nil from a hub before that version.
+    public let team: Bool?
+    /// **The options that only Founderizer on a Mac or a PC can press, by their index in `choices`** (the lane "Give on
+    /// the iPhone": the owner's "Line to the Mac" of 19 November 2026 to the phone's picture, and his "Yes, add it" of
+    /// the same day for the door's card). The hub refuses them from a phone: Give, the first option of an item that
+    /// carries its grant, and each yes of a team card, every option but its last, because there the card shows what
+    /// they change; and Full access, the second of the door card's three fixed answers ("Run it once", "Full access on
+    /// <server>", "No"), because only the owner key on the Mac signs a server's mode. Empty on every other item.
+    public var optionsOnlyOnAComputer: [Int] {
+        switch onlyOnAComputer {
+        case .give: return [0]
+        case .teamYes: return Array(0..<(choices.count - 1))
+        case .fullAccess: return [1]
+        case nil: return []
+        }
+    }
+
+    /// Which options of the item only a Mac or a PC presses (`optionsOnlyOnAComputer`), so that the phone's line names
+    /// them by the first word of the hub's own answers.
+    public enum OnlyOnAComputer: Sendable, Equatable {
+        /// Give, which a Mac or a PC presses.
+        case give
+        /// The yes options of a team card, each starting with "Yes:", which a Mac or a PC presses.
+        case teamYes
+        /// Full access on the door card's server, which only the owner key on the Mac signs.
+        case fullAccess
+    }
+
+    /// What only a Mac or a PC presses on this item, or nil for an item whose every option a phone presses.
+    public var onlyOnAComputer: OnlyOnAComputer? {
+        guard choices.count >= 2 else { return nil }
+        if team == true { return .teamYes }
+        if let host = door_host, !host.isEmpty { return .fullAccess }
+        return give != nil ? .give : nil
+    }
+
+    /// One row of the options that the iPhone draws (`NeedOptions`).
+    public enum PhoneRow: Hashable, Sendable {
+        /// An option to press, by its index in `choices`, which its press sends: the hub reads a press by it.
+        case option(Int)
+        /// The one line to the Mac, in the place of options that only a Mac or a PC presses, by the index of the first
+        /// of them, so that each row stays one of its own.
+        case onTheComputer(Int)
+    }
+
+    /// The iPhone's rows of the item's options, in their order: each option that a phone presses, and one line in the
+    /// place of each run of options that only a Mac or a PC presses (`optionsOnlyOnAComputer`).
+    public var phoneRows: [PhoneRow] {
+        let computer = Set(optionsOnlyOnAComputer)
+        var rows: [PhoneRow] = []
+        for index in choices.indices {
+            if !computer.contains(index) {
+                rows.append(.option(index))
+            } else if !computer.contains(index - 1) {
+                rows.append(.onTheComputer(index))
+            }
+        }
+        return rows
+    }
     /// Once he pressed Run: the command's exit status and the end of its output, which the hub masked; nil after an
     /// answer in words.
     public let run_status: Int?
@@ -579,7 +701,7 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
             && same(details, other.details) && same(door_call, other.door_call) && same(door_host, other.door_host)
             && same(door_script, other.door_script) && same(door_task, other.door_task)
             && same(github_app, other.github_app) && same(run_command, other.run_command) && same(run_on, other.run_on)
-            && add_device == other.add_device && (options ?? []).count == (other.options ?? []).count
+            && add_device == other.add_device && give == other.give && (options ?? []).count == (other.options ?? []).count
             && zip(options ?? [], other.options ?? []).allSatisfy { same($0, $1) }
     }
     /// The options combine: he ticks any of them and sends them together (`NeedRequestCard`).
@@ -600,7 +722,9 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// of a conversation's item, which says where the answer goes. **And not an item with a door call**, the door's
     /// card of a run among them: his yes there signs a call by its hash, and he runs nothing, so no command of the
     /// agent's own words stands on the front of that card with a copy icon, as if it were the call.
-    public var taskInFront: Bool { kind == nil && door_call == nil }
+    /// **Nor an item that carries its grant** (`give`): Give is its step, and the hub's sentence about that press says
+    /// nothing that the button does not.
+    public var taskInFront: Bool { kind == nil && door_call == nil && give == nil }
 
     /// An answer that goes into a conversation carries no file: the window a person talks to can open none, so the
     /// hub refuses one. Such a request therefore offers no file at all, rather than taking one and being refused. A
@@ -681,6 +805,25 @@ public struct ManagerReport: Decodable, Identifiable, Sendable, Equatable {
     /// reply to a message written in the app, a worker's sentence before its task. It is no link (never `in_reply_to`),
     /// and only the row of what he asked for stands under it (`ChatAskPlaces`). A hub from before it sends none.
     public let turn: String?
+    /// **The parts of a line that says a grant** (owner API 1.236): the Mac's chat shows a run of such lines as one
+    /// card (`ChatGrantPlaces`). Nil for every other report, for a grant line whose agent was removed since (the hub
+    /// has no record of that grant any more), and from a hub before it: such a line stays a line.
+    public let grant: ReportGrant?
+}
+
+/// What one line of a grant says, in parts (`ManagerReport.grant`; owner API 1.236): the agent that got it, by the name
+/// that it has now; the resource, by its id and in the owner's words; and the level, with the line's own words for it
+/// ("write and deploy"). The hub gives them from its own record of the grant, so each one is there; the level and its
+/// words are optional here only so that a hub that sent none would not stop the reading.
+public struct ReportGrant: Decodable, Equatable, Sendable {
+    public let agent: String
+    public let resource: String
+    public let kind: String?
+    /// What kind of thing the resource is, in the line's own words ("Gmail", "MCP server"), or nil.
+    public let word: String?
+    public let title: String
+    public let level: String?
+    public let words: String?
 }
 
 public struct SendReceipt: Decodable, Sendable {
@@ -706,7 +849,8 @@ public struct SendReceipt: Decodable, Sendable {
         ok && request_id.caseInsensitiveCompare(request.requestID.uuidString) == .orderedSame && client == request.client
             && (request.needID != nil || (recipient ?? "manager") == (request.recipient ?? "manager"))
             && replaces_request_id == request.replacesRequestID
-            && (attachments ?? []) == request.attachments
+            // The same files: the hub's replay of a request lists them by number, the request in its chips' order.
+            && (attachments ?? []).sorted() == request.attachments.sorted()
     }
 }
 

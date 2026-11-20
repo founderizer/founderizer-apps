@@ -220,7 +220,7 @@ extension HubState {
         var current = task, own = task, seen: Set<Int> = [task.id]
         while true {
             if let id = current.duty_case { return .dutyCase(responsibilities?.thing[id] ?? id) }
-            let next = [current.follows, current.parent].compactMap { $0.flatMap { byID[$0] } }.first
+            let next = [current.follows, current.parent, current.job].compactMap { $0.flatMap { byID[$0] } }.first
             guard let next, seen.insert(next.id).inserted else { return .task(own.id) }
             current = next
             if current.owner == task.owner { own = current }

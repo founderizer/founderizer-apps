@@ -99,6 +99,9 @@ public struct MachineStatus: Decodable, Identifiable, Sendable {
             public let browser: Bool?
             /// The sign-in of the ChatGPT app on this Mac, which Computer Use runs through.
             public let chatgpt: Bool?
+            /// Whether this Mac has the ChatGPT app with its copy of Codex at all: `chatgpt` is false without it and
+            /// for an app that is signed out. nil from a Mac whose server service is older than 19 November 2026.
+            public let chatgpt_app: Bool?
         }
         public struct Vault: Decodable, Sendable {
             public let mode: String?
@@ -117,7 +120,6 @@ public struct MachineStatus: Decodable, Identifiable, Sendable {
         guard stale != true, let reported_at else { return false }
         return time - reported_at >= -5 && time - reported_at < 600
     }
-    public var updatePending: Bool { ["requested", "waiting_idle", "updating"].contains(update.state ?? "") }
     /// This helper runs a revision that is not the fleet's own, and nothing it does by itself will change that: a
     /// helper reports the revision it loaded when it started, so a restart of its service is what moves it.
     public var isBehind: Bool { update.state == "behind" }
@@ -142,7 +144,8 @@ public struct MachineStatus: Decodable, Identifiable, Sendable {
     public func brokerCreates(at time: Double) -> Bool? { isCurrent(at: time) ? security.vault?.creates : nil }
 }
 
-/// Only the configured SSH endpoint is variable. The remote desktop target is always loopback:5900.
+/// The SSH endpoint and the screen's port on the far side are variable: loopback:5900 for a Mac's own Screen Sharing,
+/// or an agent's screen-sharing port on its Linux server (build plan 04, S6).
 private struct Failable<Value: Decodable>: Decodable {
     let value: Value?
     init(from decoder: Decoder) throws { value = try? Value(from: decoder) }
@@ -152,15 +155,39 @@ public struct ScreenSharingConnection: Codable, Hashable, Sendable {
     public let address: String
     public let user: String
     public let port: Int
+    /// The screen's port on the far side of the tunnel, on that machine's loopback: 5900, a Mac's own Screen Sharing,
+    /// or an agent's screen-sharing port on its Linux server (build plan 04, S6).
+    public let remotePort: Int
+    /// The private key of this Mac's record of a Linux server (`InstallTarget.identityFile`), or nil for the keys of
+    /// the owner's SSH agent.
+    public let identityFile: String?
+    /// The agent whose screen this is on a Linux server, or nil for a Mac's own screen: two agents of one server have
+    /// two tunnels and two records (`FleetStore.takeOvers`), never one.
+    public let agent: String?
 
-    public init(address: String, user: String, port: Int) {
+    public init(address: String, user: String, port: Int, remotePort: Int = 5900, identityFile: String? = nil,
+                agent: String? = nil) {
         self.address = address; self.user = user; self.port = port
+        self.remotePort = remotePort; self.identityFile = identityFile; self.agent = agent
+    }
+
+    private enum CodingKeys: String, CodingKey { case address, user, port, remotePort, identityFile, agent }
+    public init(from decoder: Decoder) throws {
+        let keys = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(address: try keys.decode(String.self, forKey: .address), user: try keys.decode(String.self, forKey: .user),
+                  port: try keys.decode(Int.self, forKey: .port),
+                  remotePort: try keys.decodeIfPresent(Int.self, forKey: .remotePort) ?? 5900,
+                  identityFile: try keys.decodeIfPresent(String.self, forKey: .identityFile),
+                  agent: try keys.decodeIfPresent(String.self, forKey: .agent))
     }
 
     public var isValid: Bool {
         (IPv4Address(address) != nil || IPv6Address(address) != nil) &&
         user.range(of: "^[A-Za-z_][A-Za-z0-9_.-]{0,63}$", options: .regularExpression) != nil &&
-        (1...65535).contains(port)
+        (1...65535).contains(port) && (1...65535).contains(remotePort) &&
+        identityFile.map { $0.range(of: "^/[A-Za-z0-9 ._@+-]+(/[A-Za-z0-9 ._@+-]+)*$", options: .regularExpression) != nil &&
+            !$0.split(separator: "/").contains("..") && $0.utf8.count < 1024 } != false &&
+        agent.map { $0.range(of: "^[a-z0-9][a-z0-9_-]{0,63}$", options: .regularExpression) != nil } != false
     }
 
     public func masterArguments(controlPath: String) -> [String]? {
@@ -171,8 +198,9 @@ public struct ScreenSharingConnection: Codable, Hashable, Sendable {
                 "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
                 "-o", "PermitLocalCommand=no", "-o", "RemoteCommand=none",
                 "-o", "ClearAllForwardings=yes", "-o", "ForwardAgent=no", "-o", "ForwardX11=no",
-                "-o", "ControlMaster=yes", "-o", "ControlPersist=no", "-o", "ForkAfterAuthentication=no",
-                "-p", String(port), "-l", user, address]
+                "-o", "ControlMaster=yes", "-o", "ControlPersist=no", "-o", "ForkAfterAuthentication=no"]
+            + (identityFile.map { ["-o", "IdentitiesOnly=yes", "-i", $0] } ?? [])
+            + ["-p", String(port), "-l", user, address]
     }
 
     public func forwardArguments(controlPath: String, localPort: Int) -> [String]? {
@@ -180,8 +208,19 @@ public struct ScreenSharingConnection: Codable, Hashable, Sendable {
         // The master keeps existing identity/host-trust settings but clears configured forwards.
         // This control request adds exactly one forward and fails if another process owns the port.
         return ["-F", "/dev/null", "-S", controlPath, "-O", "forward",
-                "-L", "127.0.0.1:\(localPort):127.0.0.1:5900",
+                "-L", "127.0.0.1:\(localPort):127.0.0.1:\(remotePort)",
                 "-p", String(port), "-l", user, address]
+    }
+
+    /// The address that Screen Sharing opens for the local forward to a Mac's own screen. It names the machine's own
+    /// user: every forward listens on 127.0.0.1, so with no user Screen Sharing tries a sign-in that it saved for
+    /// 127.0.0.1, and that sign-in can be another machine's. An agent's screen on a Linux server (`agent`) has none
+    /// here: it opens only with its one-time password (`viewerAddress`), so a caller that forgets it opens nothing.
+    public func screenSharingAddress(localPort: Int) -> URL? {
+        guard isValid, agent == nil, (1024...65535).contains(localPort) else { return nil }
+        var parts = URLComponents()
+        parts.scheme = "vnc"; parts.user = user; parts.host = "127.0.0.1"; parts.port = localPort
+        return parts.url
     }
 }
 

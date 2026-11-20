@@ -23,6 +23,26 @@ struct InstallPhasesTests {
         #expect(Set(hub + join).isSubset(of: Set(InstallPhases.seconds.keys)))
     }
 
+    /// **The share of each of the four steps that is done** (the bar under a server on the first run's build page, slice
+    /// 3 of the one wizard): by the measured seconds, with the time of the step that runs, up to its estimate.
+    @Test func eachOfTheFourStepsSaysHowMuchOfItIsDone() throws {
+        let start = try #require(InstallPhases(steps: steps(hub, done: 0), planned: hub))
+        #expect(start.parts == [0, 0, 0, 0] && start.step == "read")
+        // "read" ran longer than its 15 seconds: the VPS step is full, and no more.
+        let read = try #require(InstallPhases(steps: steps(hub, done: 0), planned: hub, runningFor: 60))
+        #expect(read.parts == [1, 0, 0, 0])
+        // In the wait for the installer's end: Install has code, plan, start, wait_claim and claim (65 of its 715
+        // seconds), and 300 seconds of wait_ready.
+        let waiting = try #require(InstallPhases(steps: steps(hub, done: 7), planned: hub, runningFor: 300))
+        #expect(waiting.parts[0] == 1 && waiting.parts[1] == 1 && waiting.parts[3] == 0)
+        #expect(abs(waiting.parts[2] - 365.0 / 715.0) < 0.0001 && waiting.step == "wait_ready")
+        let done = try #require(InstallPhases(steps: steps(hub, done: 9), planned: hub))
+        #expect(done.parts == [1, 1, 1, 1] && done.step == nil)
+        // A join: read, network, join, verify.
+        let joining = try #require(InstallPhases(steps: steps(join, done: 2), planned: join, runningFor: 210))
+        #expect(joining.parts == [1, 1, 0.5, 0] && joining.step == "join")
+    }
+
     @Test func aHubsInstallMovesThroughTheFourStepsInOrder() throws {
         #expect(try #require(InstallPhases(steps: steps(hub, done: 0))).current == 0)
         #expect(try #require(InstallPhases(steps: steps(hub, done: 1))).current == 1)

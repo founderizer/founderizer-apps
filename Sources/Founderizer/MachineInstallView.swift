@@ -204,23 +204,19 @@ final class MachineInstallModel {
         return target.problem
     }
 
-    /// The key this machine needs, or nil when this Mac holds no credential: the machine is on the private network
-    /// already, or it signs in by Tailscale's own link. One key for one machine, used once and worthless in fifteen minutes
-    /// (`NetworkClient.key`). A credential Tailscale refuses stops the install with Tailscale's own words, instead
-    /// of installing a machine that cannot be reached.
+    /// The key this machine needs, or none when this Mac holds no way to make one: the machine is on the private network
+    /// already, or it signs in by Tailscale's own link (`PrivateNetwork.joinKey`: the fleet's own key first). One key for
+    /// one machine, used once, and worthless after `life` seconds: fifteen minutes, or two hours for a bare Mac. A key
+    /// Tailscale refuses stops the install with Tailscale's own words, instead of installing a machine that cannot be
+    /// reached.
     private func mintKey(for machine: String, life: Int = PrivateNetwork.keyLifeSeconds,
                          tags: [String] = [PrivateNetwork.tag]) async throws {
-        // **The fleet's own key first** (the onboarding of 4 November 2026): made once from one pasted access token
-        // (`TailscaleFleetKey`), it makes each server's join key, tagged and pre-approved, so no server waits for a
-        // press and none expires. The credential of before stays the way for a fleet that has only it.
         let fleetKey = TailscaleFleetKey()
-        if fleetKey.isHeld {
-            do { authKey = try await fleetKey.mintAuthKey(hostname: machine); return }
-            catch { throw NetworkKeyRefused((error as? LocalizedError)?.errorDescription ?? error.localizedDescription) }
-        }
-        guard let credential = NetworkCredentialStore.read() else { authKey = ""; return }
-        do { authKey = try await NetworkClient().key(for: machine, with: credential, life: life, tags: tags) }
-        catch {
+        do {
+            // The credential of before is read only for a fleet that has no fleet key.
+            authKey = try await PrivateNetwork.joinKey(for: machine, life: life, tags: tags, fleetKey: fleetKey,
+                                                       credential: fleetKey.isHeld ? nil : NetworkCredentialStore.read()) ?? ""
+        } catch {
             // A credential Tailscale no longer accepts asks the same question as a machine that is not on the
             // network, so it reaches the same screen instead of ending as one more line of a failed install.
             throw NetworkKeyRefused((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
@@ -260,6 +256,7 @@ final class MachineInstallModel {
         work?.cancel()      // the reading of a Mac's order before this one
         running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; checklist = nil
         job = .hub
+        joinHub = nil
         // A new hub has no address yet: its record gets one at its claim step.
         begin(.hub, hub: nil, host: target.host)
         work = Task { [weak self] in
@@ -275,17 +272,35 @@ final class MachineInstallModel {
         }
     }
 
+    /// **The hub that a join goes to**: its address, the database of its reading, and whether it asks for a server's
+    /// name. The store's own hub (`installMachine(store:)`), or a hub that the store does not read yet: the first run's
+    /// new hub right after its claim (slice 3 of the one wizard), whose join of the manager's server then runs while the
+    /// hub's own install ends (the proof of 16 November 2026: a join began 20 seconds after a claim, during the hub's
+    /// security updates, and ended with the self-test passed).
+    struct JoinHub: Equatable {
+        let url: URL
+        let database: String
+        let asksName: Bool
+    }
+    /// The hub of the join that runs or ran last; nil for a hub's install, which has its own address from its claim.
+    private(set) var joinHub: JoinHub?
+
     /// Joins a machine to the hub this app is connected to: the hub gives the one-time line, and this Mac runs it
-    /// over the owner's own connection.
-    func installMachine(store: FleetStore) {
-        guard !running, let database = store.state?.db else { return }
+    /// over the owner's own connection. `hub`: another hub, with its database (`JoinHub`); the store's own when nil.
+    func installMachine(store: FleetStore, at hub: JoinHub? = nil) {
+        guard !running, let to = hub ?? store.state.map({
+            JoinHub(url: store.hub, database: $0.db, asksName: Servers.asksName($0.ui_features))
+        }) else { return }
+        let database = to.database
         // A hub with `server_names` names the server by its name in Tailscale at its join, so it is sent no name.
-        let machine = Servers.asksName(store.state?.ui_features) ? name : nil
+        let machine = to.asksName ? name : nil
         work?.cancel()      // the reading of a Mac's order before this one
         running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; checklist = nil
         job = .join
+        // Only another hub is kept: a join to the store's own reads the store's hub and database as before.
+        joinHub = hub
         server = machine; made = nil
-        begin(.join, hub: store.hub.absoluteString, host: target.host, server: machine)
+        begin(.join, hub: to.url.absoluteString, host: target.host, server: machine)
         work = Task { [weak self] in
             guard let self else { return }
             // **A retry runs the same line** (`InstallRetry.freshCode`): the hub takes the same server's repeat of a
@@ -298,7 +313,7 @@ final class MachineInstallModel {
                 if freshCode || given == nil
                     || !InstallRetry.keepsCode(expiresAt: made?.expiresAt ?? 0, now: Date().timeIntervalSince1970) {
                     given = nil; made = nil
-                    let join = try await HubClient().joinCode(hub: store.hub, database: database,
+                    let join = try await HubClient().joinCode(hub: self.joinHub?.url ?? store.hub, database: database,
                                                               client: store.installation, name: machine, kind: "linux")
                     made = (join.name, join.kind, join.expires_at)
                     guard let line = join.line, let code = join.code else {
@@ -359,7 +374,7 @@ final class MachineInstallModel {
                 // Reads of this Mac's hub at the pace of the wait for a server (`InstallRetry.readEvery`).
                 await InstallRetry.wait(retry.wait,
                                         pause: { try? await Task.sleep(for: .seconds(InstallRetry.readEvery)) },
-                                        read: { await MachineInstaller.readHub(at: store.hub) != .silent },
+                                        read: { await MachineInstaller.readHub(at: self.joinHub?.url ?? store.hub) != .silent },
                                         cancelled: { Task.isCancelled })
                 guard !Task.isCancelled else { return }
             }
@@ -378,7 +393,10 @@ final class MachineInstallModel {
             return
         }
         guard Servers.setsUpMacs(store.state?.ui_features) else {
-            cannotLink(String(l10n: "Your hub needs the newest Founderizer first: Settings, Updates."))
+            // The sidebar's Update takes a release of the fleet (`UpdateBanner`): Settings › Updates is gone since
+            // 15 November 2026. Add server fills the window, which has no sidebar, so the page is closed first (the
+            // owner's choice of 19 November 2026 of these words, "Close this page first").
+            cannotLink(String(l10n: "Your hub needs the newest Founderizer first. Close this page, then press Update in the sidebar."))
             return
         }
         // A hub with `server_names` names this Mac by its name in Tailscale at its join, so its code is made with no
@@ -393,6 +411,7 @@ final class MachineInstallModel {
         // set, this link was drawn as the network's question while it ran and after its good end (`MachineInstallRun`).
         running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; checklist = nil
         job = .join
+        joinHub = nil
         server = asks ? machine : nil; made = nil
         begin(.mac, hub: store.hub.absoluteString, host: installer.host ?? "", server: asks ? machine : nil)
         // The link code seals the order: it is in no kept word.
@@ -512,16 +531,19 @@ final class MachineInstallModel {
         log?.done()
         keepRecord()
         guard let machine else { return }
-        // Add server for that machine on this Mac: a removal mark of it goes (package 4 of the vault's gates).
-        store.vaultModel().added(machine)
-        InstallTargets.remember(reached, machine: machine, hub: store.hub)
-        MachineChecks.remember(answer, machine: machine, hub: store.hub)
+        // The hub of a join, which the store may not read yet (`JoinHub`); the store's own for a hub's install.
+        let fleet = plan.job == .join ? joinHub?.url ?? store.hub : store.hub
+        // Add server for that machine on this Mac: a removal mark of it goes (package 4 of the vault's gates). The
+        // vault's marks are the store's hub's.
+        if fleet == store.hub { store.vaultModel().added(machine) }
+        InstallTargets.remember(reached, machine: machine, hub: fleet)
+        MachineChecks.remember(answer, machine: machine, hub: fleet)
         // A server's install ran to its last step from this Mac (`InstallEnds`).
         if plan.job == .join {
-            InstallEnds.note(machine, address: reached.host, hub: store.hub)
+            InstallEnds.note(machine, address: reached.host, hub: fleet)
             // A server that this Mac made for this hub and never saw join did join after all (`BuildRecord`): by the
             // hub that this install began with.
-            let hub = log?.record.hub ?? store.hub.absoluteString
+            let hub = log?.record.hub ?? fleet.absoluteString
             BuildRecords.shared.noteJoined(name: machine, hub: hub)
             // A server of the provider's list is proved by its id too, also when its record has no hub.
             if let proven = provenServer {
@@ -552,15 +574,23 @@ final class MachineInstallModel {
     /// from the join's commit, which the install's last step comes after. Up to five reads, three seconds apart, for a
     /// hub that is slow to answer; nil after them.
     private func joinedName(store: FleetStore) async -> String? {
-        guard let made, let database = store.state?.db else { return nil }
+        let hub = joinHub?.url ?? store.hub
+        guard let made, let database = joinHub?.database ?? store.state?.db else { return nil }
         for read in 0..<5 {
             if read > 0 { try? await Task.sleep(for: .seconds(3)) }
             guard !Task.isCancelled else { return nil }
-            if let join = (try? await HubClient().servers(hub: store.hub, database: database))?.join,
+            if let join = (try? await HubClient().servers(hub: hub, database: database))?.join,
                join.isOf(name: made.name, kind: made.kind, expiresAt: made.expiresAt), join.state == "joined",
                let server = join.server { return server }
         }
         return nil
+    }
+
+    /// **The new hub's address once its claim step is done** (a hub's install), for a join that goes to it before the
+    /// store reads it (`JoinHub`); nil before.
+    var claimedHubURL: URL? {
+        guard steps.contains(where: { $0.step == "claim" && $0.state == .done }) else { return nil }
+        return claimedAddress().flatMap { try? HubClient.address($0) }
     }
 
     /// The hub's own address, out of the claim step this install already made.
@@ -586,8 +616,9 @@ final class MachineInstallModel {
     /// **A Mac's link that cannot start**: its own line and its own kind of stop, with no cause and no wait for the
     /// network of the install before it. While that wait stayed set, `setup_diagnosis` said that the install waits
     /// for the network beside `cannot_start` (seen by a review of the lane "Agent install", 15 November 2026). The
-    /// steps, the checklist and the record of the install before it stay as they are, as before: the page's Back
-    /// does not start the model again (`AddServerView`), which is not this function's to change.
+    /// steps, the checklist and the record of the install before it stay as they are, as before. Add server's Back
+    /// from the install page starts the model again after a stop (`AddMachineView`, its `back`): this line shows on
+    /// the Mac's form, where Back starts nothing again.
     private func cannotLink(_ words: String?) {
         failure = words; failureDetail = nil
         needsNetworkKey = false; networkFailure = nil
@@ -666,7 +697,7 @@ final class MachineInstallModel {
         work?.cancel(); work = nil
         runCount += 1
         steps = []; planned = []; checklist = nil; failure = nil; failureDetail = nil; hubAddress = nil; needsNetworkKey = false; networkFailure = nil
-        job = nil
+        job = nil; joinHub = nil
         server = nil; made = nil; provenServer = nil; forAgent = nil
         // The record of the install that ended stays in its file; this model writes it no more.
         stop = nil; cause = nil; log = nil

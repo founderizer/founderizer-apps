@@ -169,7 +169,7 @@ public enum TransportFailure: Error, Sendable {
 }
 
 /// **How much one request reads, and how long it waits.** An owner call reads at most 8 MiB (`owner_mcp.py`
-/// READ_MAX) and waits 30 seconds for each part and 60 for the whole. A file (`attach_file`, `read_attachment`,
+/// READ_MAX; the whole snapshot 64 MiB, `state`) and waits 30 seconds for each part and 60 for the whole. A file (`attach_file`, `read_attachment`,
 /// `take_backup`) reads up to the hub's own limit of that file and waits 60 seconds for each part and 900 for the whole,
 /// as the Mac app reads a copy (`FleetCopy.takeCopy`) and as `owner_mcp.py` does since 14 November 2026 (FILE_WAIT,
 /// FILE_TOTAL).
@@ -178,6 +178,12 @@ public struct Transfer: Sendable, Equatable {
     public let file: Bool
 
     public static let call = Transfer(limit: 8 * 1024 * 1024, file: false)
+    /// The whole snapshot (`/ui/state`), `owner_mcp.py` STATE_MAX: an answer that holds a fleet's whole history,
+    /// which a process reads before its first call, for the hub's generation. On 19 November 2026 a fleet with about
+    /// 1,400 tasks answered 57 KB more than a call reads, and from that minute each tool refused. Every other answer
+    /// that is no file keeps `call`.
+    public static let state = Transfer(limit: 64 * 1024 * 1024, file: false)
+    static let stateRoute = "/ui/state"
     /// `hub.py` ATTACH_MAX: the largest file that the owner attaches.
     public static let attachment = Transfer(limit: 25 * 1024 * 1024, file: true)
     /// `hub.py` BACKUP_MAX: the largest copy that the hub serves.
@@ -411,6 +417,9 @@ public final class OwnerHub: @unchecked Sendable {
         guard let url = URL(string: base + path) else {
             throw OwnerRefusal("The hub's address \(base) and the route \(path) make no address.")
         }
+        // the snapshot's own limit; an answer that is no success keeps the limit of a call (Loader)
+        let transfer = transfer == .call && path.split(separator: "?").first.map(String.init) == Transfer.stateRoute
+            ? Transfer.state : transfer
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")

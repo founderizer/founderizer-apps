@@ -538,6 +538,21 @@ extension NetworkPromptRootTests {
                 .split(whereSeparator: \.isWhitespace).map(String.init)
         }
 
+        /// What `tailscale up` got in its own words, key and all, as a cloud server's first boot gives them
+        /// (`CloudServers.userData`), or nil when it got none that way. Only a key from a file is the key that
+        /// `keyGivenToTailscale` reads, so a step of the prompt that gave the key in its words would still fail.
+        func upInWords() -> String? {
+            try? String(contentsOf: state.appendingPathComponent("up"), encoding: .utf8)
+        }
+
+        /// A script that root runs by itself, as cloud-init runs a new server's first boot (`CloudServers.userData`):
+        /// under `sh`, with the system's programs and the tools on its PATH, and root's folders open.
+        func boot(_ script: String, sh: String) throws -> Ran {
+            try open(true)
+            defer { try? open(false) }
+            return try execute(sh, script, sh: sh, extra: ["PATH": system.path + ":" + tools.path])
+        }
+
         /// The first updates of a new server, which hold the lock of dpkg for `seconds` more (`aptGet`).
         func holdAptLock(_ seconds: Int) throws {
             try Data("\(seconds)\n".utf8).write(to: state.appendingPathComponent("apt-lock"))
@@ -666,11 +681,16 @@ extension NetworkPromptRootTests {
         /// no `--timeout` waits for ever, which this one says, and ends at once with 125, so that no test waits.
         /// `status` ends with 1 while Tailscale does not run, with the line that Tailscale 1.104.6 prints for that state on
         /// standard output (`cmd/tailscale/cli/status.go`), and `status --json` gives the state.
+        /// A cloud server's first boot gives `up` its key in its own words, with its name and no DNS of Tailscale's
+        /// (`CloudServers.userData`): only that shape is taken so, and its words are kept apart (`STATE/up`,
+        /// `upInWords`), so that only a key from a file is the key of the steps.
         static let tailscale = #"""
             #!/bin/sh
             case $1 in
             version) echo 1.90.6 ;;
             up) key= reset= wait= missing=
+                case $2 in --auth-key=tskey-auth-*) case " $* " in *" --hostname="*" --accept-dns=false ")
+                    shift; echo "$*" > "$STATE/up" && echo Running > "$STATE/backend"; exit ;; esac ;; esac
                 for word in "$@"; do
                     case $word in
                     --auth-key=file:*) key=${word#--auth-key=file:} ;;

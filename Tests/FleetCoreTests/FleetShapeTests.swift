@@ -259,7 +259,7 @@ struct FleetShapeTests {
         let steps: [(String, FirstRunSteps?)] = [
             ("name", .manager), ("aiProvider", .aiProvider), ("servers", .servers), ("network", .network),
             ("key", .network), ("cloud", .vps), ("token", .vps), ("vps", .vps), ("machine", .vps), ("building", nil),
-            ("installing", nil), ("welcome", nil), ("paste", nil), ("done", nil), ("restore", nil), ("address", nil),
+            ("installing", nil), ("welcome", nil), ("paste", nil), ("done", nil), ("address", nil),
             ("", nil)]
         for (page, step) in steps {
             #expect(FirstRunSteps.of(page: page, named: true) == step, "\(page)")

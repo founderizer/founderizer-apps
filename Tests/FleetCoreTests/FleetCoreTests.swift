@@ -66,6 +66,19 @@ private func receiptRow(_ request: PendingRequest) -> [String: Any] {
     altered = row
     altered["client"] = "other-installation"
     #expect(try HubState.decode(stateData(messages: [altered])).receipt(for: pending) == nil)
+    // A message's files: the reading lists them by number, the request in the order of its chips (a chip that went
+    // up again has a higher number); the same files confirm it, other files do not.
+    let carrying = PendingRequest(hub: pending.hub, database: "test-db", client: pending.client, attachments: [4, 3],
+                                  text: pending.text)
+    func file(_ id: Int) -> [String: Any] {
+        ["id": id, "name": "f\(id).png", "mime": "image/png", "size": 9, "sha256": String(repeating: "a", count: 64),
+         "created": 990.0]
+    }
+    var filed = receiptRow(carrying)
+    filed["attachments"] = [file(3), file(4)]
+    #expect(try HubState.decode(stateData(messages: [filed])).receipt(for: carrying) != nil)
+    filed["attachments"] = [file(3)]
+    #expect(try HubState.decode(stateData(messages: [filed])).receipt(for: carrying) == nil)
 }
 
 @Test func pendingIdentityAndBodySurviveRelaunch() throws {

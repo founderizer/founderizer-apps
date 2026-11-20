@@ -222,13 +222,19 @@ struct DoorAccessTests {
             "otto": .init(address: "100.64.0.11", user: "fleet-ops-one", repos: ["one-org/ops": "write", "bad name": "read"]),
             "mia": .init(address: "100.64.0.40", user: "fleet-mia", repos: ["one-org/shop": "deploy", "one-org/x": "admin"]),
             "kai": .init(address: "100.64.0.41", user: "fleet-kai", repos: [:])])
-        var file = Self.object(DoorAccess.plan(current: Self.access, facts: facts).file)
+        var plan = DoorAccess.plan(current: Self.access, facts: facts)
+        var file = Self.object(plan.file)
         #expect(Self.agent(file, "otto")["github"] as? [String: String] == ["one-org/ops": "write"])
         #expect(Self.agent(file, "mia").isEmpty)                        // the door's code does not take it yet
+        // so the round says no word that the file holds the hub's view (API 1.234): a restart for mia's grant would
+        // start with no token. kai has no grant to leave out.
+        #expect(plan.leftOut == ["mia"])
         facts.tokensOnly = true
-        file = Self.object(DoorAccess.plan(current: Self.access, facts: facts).file)
+        plan = DoorAccess.plan(current: Self.access, facts: facts)
+        file = Self.object(plan.file)
         #expect(Self.agent(file, "mia") as NSDictionary == ["github": ["one-org/shop": "deploy"]] as NSDictionary)
         #expect(Self.agent(file, "kai").isEmpty)
+        #expect(plan.leftOut.isEmpty)
         #expect(Self.agent(file, "builder")["address"] as? String == "100.64.0.13")     // not the hub's: it stays
     }
 
@@ -357,6 +363,24 @@ struct DoorAccessTests {
         #expect(view.name(of: .init(agent: "ops-one", address: "100.64.0.99")) == nil)
         let none = try JSONDecoder().decode(DoorAccess.HubDoor.self, from: Data(#"{"door": null, "credentials": {}, "agents": {}, "db": "g"}"#.utf8))
         #expect(none.door == nil)
+        #expect(none.mark == nil)
+        let marked = #"{"door": null, "credentials": {}, "agents": {}, "db": "g", "mark": "0123456789abcdef0123456789abcdef"}"#
+        #expect(try JSONDecoder().decode(DoorAccess.HubDoor.self, from: Data(marked.utf8)).mark == "0123456789abcdef0123456789abcdef")
+    }
+
+    /// API 1.234: each read of `GET /ui/door` by this app says which view the door's file holds (`held`), empty when
+    /// it names none, as the GitHub App flow's read does. A read with no `held` is an app before that word, for which
+    /// the hub takes two reads after a grant as the door having it: a read that loses the word ends a restart's wait
+    /// while the door's file may not have the grant yet, and the new session has no token.
+    @Test func eachReadOfTheHubsViewSaysWhatTheDoorsFileHolds() throws {
+        func items(_ held: String) throws -> [String: String] {
+            let url = DoorSetupClient.viewURL(hub: URL(string: "http://100.64.0.2:8765")!, database: "g", held: held)
+            #expect(url.path == "/ui/door")
+            let parts = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+            return Dictionary(parts.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
+        }
+        #expect(try items("0123456789abcdef0123456789abcdef") == ["db": "g", "renew": "form", "held": "0123456789abcdef0123456789abcdef"])
+        #expect(try items("") == ["db": "g", "renew": "form", "held": ""])
     }
 
     /// The Support session's case (plan v50): the hub, or the file, can call an agent a business's DevOps agent, and
@@ -823,13 +847,84 @@ struct DoorAccessTests {
         #expect(after["cloudflare:one"] != nil)
     }
 
+    /// The value after each `flag` of `ssh`'s arguments.
+    private static func after(_ flag: String, in arguments: [String]) -> [String] {
+        arguments.indices.filter { arguments[$0] == flag && $0 + 1 < arguments.count }.map { arguments[$0 + 1] }
+    }
+
     /// 7 November 2026: a server with no connection that the app keeps got root with every key of the SSH agent and of
     /// `Host *`, eight tries where its sshd stops at six, each round, until its fail2ban shut this Mac out for an hour.
-    @Test func aServerWithNoKeptConnectionIsOfferedOnlyTheConfiguredKeyFiles() throws {
+    ///
+    /// 19 November 2026: a server whose root SSH answers only on port 2222 got no door parts, because the round went to
+    /// port 22. The round takes the port, and root's own key, from the entry of `~/.ssh/config` that gives the server's
+    /// address as its `HostName`, or that has the server's name in Tailscale. It takes nothing from an entry through
+    /// another host, from an entry for another user (its port can be another program's), or from an entry with the
+    /// port of the door's own second sshd.
+    @Test func aServerWithNoKeptConnectionIsOfferedOnlyTheConfiguredKeyFiles() async throws {
         let arguments = try #require(DoorAccess.sshArguments(kept: nil, address: "100.96.20.60", program: DoorAccess.hostProgram))
         #expect(Array(arguments.prefix(2)) == ["-o", "IdentitiesOnly=yes"])
         #expect(arguments.contains("StrictHostKeyChecking=yes") && arguments.contains("BatchMode=yes") && !arguments.contains("-i"))
         #expect(Array(arguments.suffix(2)) == ["root@100.96.20.60", DoorAccess.hostProgram])
+        #expect(Self.after("-p", in: arguments) == ["22"])
+
+        let home = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("door-ssh-" + UUID().uuidString)
+        let folder = home.appendingPathComponent(".ssh")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Data("""
+        Host shop-root
+          HostName 100.96.20.60
+        Host shop-jump
+          HostName 100.96.20.61
+        Host shop-deploy
+          HostName 100.96.10.20
+        Host shop-ops
+          HostName 100.96.200.70
+        """.utf8).write(to: folder.appendingPathComponent("config"))
+        try Data().write(to: folder.appendingPathComponent("shop_root"))
+        // what `ssh -G` prints: for a name that no entry names, what the configuration gives every host
+        let every = "user me\nport 22\nidentityfile ~/.ssh/id_ed25519\n"
+        let prints = [
+            "shop-root": "hostname 100.96.20.60\nuser root\nport 2222\nidentityfile ~/.ssh/shop_root\nidentityfile ~/.ssh/id_ed25519\n",
+            "shop-jump": "hostname 100.96.20.61\nuser root\nport 2200\nidentityfile ~/.ssh/id_ed25519\nproxyjump bastion\n",
+            "shop-deploy": "hostname 100.96.10.20\nuser deploy\nport 2022\nidentityfile ~/.ssh/shop_root\nidentityfile ~/.ssh/id_ed25519\n",
+            "shop-ops": "hostname 100.96.200.70\nuser root\nport \(DoorAccess.sshdPort)\nidentityfile ~/.ssh/id_ed25519\n",
+            "shop-testing-4": "hostname shop-testing-4.tail1234.ts.net\nuser me\nport 2223\nidentityfile ~/.ssh/id_ed25519\n",
+            "shop-testing-5": "hostname 203.0.113.9\nuser me\nport 2224\nidentityfile ~/.ssh/id_ed25519\n",
+            "shop-testing-6": "hostname shop-testing-6\nuser root\nport 2225\nidentityfile ~/.ssh/id_ed25519\nproxyjump bastion\n",
+        ]
+        func configured(_ name: String, _ address: String, byName: Bool = true) async -> DoorAccess.Configured? {
+            await DoorAccess.configured(DoorAccess.Device(name: name, address: address, tags: []), address: address,
+                                        byName: byName, home: home.path, localUser: "me",
+                                        run: { _, arguments, _, _ in
+                let asked = arguments.last ?? ""
+                return LocalShell.Answer(status: 0, output: prints[asked] ?? "hostname \(asked)\n" + every)
+            })
+        }
+        // the entry by HostName: its port, and its own key for root, as the one key of the try
+        let key = folder.appendingPathComponent("shop_root").path
+        let found = await configured("shop-testing-1", "100.96.20.60")
+        #expect(found == DoorAccess.Configured(port: 2222, key: key))
+        let candidates = DoorAccess.LoginKeys.candidates(configured: found?.key, kept: ["/Users/o/.ssh/fleet_root", key])
+        #expect(candidates == [key, "/Users/o/.ssh/fleet_root"])
+        #expect(DoorAccess.LoginKeys.candidates(configured: nil, kept: ["/Users/o/.ssh/fleet_root"]) == ["/Users/o/.ssh/fleet_root"])
+        let moved = try #require(DoorAccess.sshArguments(kept: nil, address: "100.96.20.60", program: "true",
+                                                         key: candidates.first, port: found?.port ?? 22))
+        #expect(Self.after("-p", in: moved) == ["2222"] && Self.after("-i", in: moved) == [key])
+        #expect(Array(moved.prefix(2)) == ["-o", "IdentitiesOnly=yes"] && moved.contains("StrictHostKeyChecking=yes"))
+        #expect(Array(moved.suffix(2)) == ["root@100.96.20.60", "true"])
+        // no entry: port 22, as before; an entry through another host is not used
+        #expect(await configured("shop-testing-9", "100.96.1.50") == nil)
+        #expect(await configured("shop-testing-2", "100.96.20.61") == nil)
+        // an entry for another user gives nothing: its port can be another program's, and its key is not root's
+        #expect(await configured("shop-testing-3", "100.96.10.20") == nil)
+        // the port of the door's own second sshd is never root's
+        #expect(await configured("shop-testing-7", "100.96.200.70") == nil)
+        // the entry with the server's name in Tailscale, when its host is that server
+        #expect(await configured("shop-testing-4", "100.96.100.4") == DoorAccess.Configured(port: 2223))
+        #expect(await configured("shop-testing-4", "100.96.100.4", byName: false) == nil)
+        #expect(await configured("shop-testing-5", "100.96.100.130") == nil)
+        #expect(await configured("shop-testing-6", "100.96.100.131") == nil)
         // a kept connection keeps its user and its key, at the address that Tailscale gives, with IdentitiesOnly once
         let kept = InstallTarget(host: "203.0.113.163", user: "root", identityFile: "/Users/o/.ssh/shop_hetzner")
         let keyed = try #require(DoorAccess.sshArguments(kept: kept, address: "100.96.200.70", program: "true"))

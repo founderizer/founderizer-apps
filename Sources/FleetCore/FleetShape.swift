@@ -50,24 +50,6 @@ extension ServersStep {
     public var firstPress: String { managersOwnServer ? String(l10n: "Make 2 servers") : String(l10n: "Make the server") }
 }
 
-extension ServersStep {
-    /// **The step where a fleet stands now**, from where its agents run (`places`, the hub's list): every agent that
-    /// the slider moves on the hub's own server is 1 server; the hub alone and all of them on one other server is 2
-    /// servers; the hub alone and each of them alone is 1 per agent. A fleet whose one such agent is alone on its
-    /// server fits 2 servers and 1 per agent: `kept`, the step that the owner chose last, settles it, and with none
-    /// the first run's default, 2 servers. Any other fleet stands between two steps, and gets nil.
-    public static func now(_ places: [ShapePlace], kept: ServersStep? = nil) -> ServersStep? {
-        let onHub = places.first { $0.hub }?.movable ?? []
-        let others = places.filter { !$0.hub && !$0.movable.isEmpty }
-        if !onHub.isEmpty { return others.isEmpty ? .one : nil }
-        switch others.count {
-        case 0: return nil
-        case 1: return others[0].movable.count > 1 || kept != .each ? .two : .each
-        default: return others.allSatisfy { $0.movable.count == 1 } ? .each : nil
-        }
-    }
-}
-
 /// **The page "Your fleet's servers" before a team exists**: the first run asks for the servers after the manager's
 /// name, when the fleet is the hub and the manager. The page then draws the agents to come too, so that the three steps
 /// differ in the drawing: without them the last two steps are the same two servers.

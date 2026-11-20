@@ -34,6 +34,26 @@
         }
       }
     },
+    "%@ %@ was published on %@, less than %@ days ago" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ %@ se publicó el %@, hace menos de %@ días."
+          }
+        }
+      }
+    },
+    "%@ %@ was published on %@, less than %@ days ago; the newest version that is older is %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ %@ se publicó el %@, hace menos de %@ días; la versión más reciente que ya cumple ese plazo es %@."
+          }
+        }
+      }
+    },
     "%@ %@: not supported" : {
       "localizations" : {
         "es" : {
@@ -304,6 +324,16 @@
         }
       }
     },
+    "%@ cannot be reached now" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede conectar con %@ ahora."
+          }
+        }
+      }
+    },
     "%@ cannot chat now" : {
       "localizations" : {
         "es" : {
@@ -340,6 +370,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ no puede dar todas sus capacidades."
+          }
+        }
+      }
+    },
+    "%@ cannot have a browser on a Linux server while its Shell box is off: turn its Shell box on, or its Browser box off" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no puede tener un navegador en un servidor Linux con su shell desactivada: activa su shell o desactiva su navegador"
           }
         }
       }
@@ -444,6 +484,16 @@
         }
       }
     },
+    "%@ did not give the record of %@ (%@)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no dio los datos de %@ (%@)."
+          }
+        }
+      }
+    },
     "%@ did not install" : {
       "localizations" : {
         "es" : {
@@ -504,22 +554,12 @@
         }
       }
     },
-    "%@ did not join your network within five minutes. Open it in %@'s console." : {
+    "%@ did not join your network within an hour. Open it in %@'s console." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ no se unió a tu red en cinco minutos. Ábrelo en la consola de %@."
-          }
-        }
-      }
-    },
-    "%@ did not join your network. Open Add server to use it." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ no se unió a tu red. Abre Añadir servidor para usarlo."
+            "value" : "%@ no se unió a tu red en una hora. Ábrelo en la consola de %@."
           }
         }
       }
@@ -634,6 +674,16 @@
         }
       }
     },
+    "%@ gave no record of %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no dio datos de %@."
+          }
+        }
+      }
+    },
     "%@ gets %@ in its next task session." : {
       "localizations" : {
         "es" : {
@@ -694,6 +744,16 @@
         }
       }
     },
+    "%@ has no Telegram bot" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no tiene un bot de Telegram."
+          }
+        }
+      }
+    },
     "%@ has no access" : {
       "localizations" : {
         "es" : {
@@ -724,6 +784,46 @@
         }
       }
     },
+    "%@ has no package %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no tiene el paquete %@."
+          }
+        }
+      }
+    },
+    "%@ has no release that is at least %@ days old" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no tiene ninguna versión con al menos %@ días de antigüedad."
+          }
+        }
+      }
+    },
+    "%@ has no room for another server in your account." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no tiene sitio para otro servidor en tu cuenta."
+          }
+        }
+      }
+    },
+    "%@ has no room for the browser of %@ beside its other agents: turn its Browser box off first, or move it to a server with more memory" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no tiene espacio para el navegador de %@ junto a sus otros agentes: desactiva primero su navegador o muévelo a un servidor con más memoria"
+          }
+        }
+      }
+    },
     "%@ has no server free now." : {
       "localizations" : {
         "es" : {
@@ -740,6 +840,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ no tiene servicio de servidor: no se unió con una línea de unión."
+          }
+        }
+      }
+    },
+    "%@ has no version %@ of %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no tiene la versión %@ de %@."
           }
         }
       }
@@ -920,16 +1030,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ está vinculado"
-          }
-        }
-      }
-    },
-    "%@ is no longer in this fleet." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ ya no está en este equipo."
           }
         }
       }
@@ -1204,22 +1304,32 @@
         }
       }
     },
+    "%@ is signed out on %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no tiene la sesión iniciada en %@"
+          }
+        }
+      }
+    },
+    "%@ is still at %@ and still costs money. Press again to make a new server." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ sigue en %@ y sigue costando dinero. Pulsa de nuevo para crear un servidor nuevo."
+          }
+        }
+      }
+    },
     "%@ joined Founderizer." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ se unió a Founderizer."
-          }
-        }
-      }
-    },
-    "%@ joined, and the hub has no reading of it yet. Try again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ se unió, y el hub todavía no tiene ninguna lectura de él. Vuelve a intentarlo."
           }
         }
       }
@@ -1250,16 +1360,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ no necesita iniciar sesión. Founderizer lo añadió sin inicio de sesión."
-          }
-        }
-      }
-    },
-    "%@ needs your sign-in" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ necesita que inicies sesión"
           }
         }
       }
@@ -1344,12 +1444,32 @@
         }
       }
     },
+    "%@ opens it and presses Start. It works for 7 days." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lo abre y pulsa Iniciar. Funciona durante 7 días."
+          }
+        }
+      }
+    },
     "%@ percent used" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ por ciento usado"
+          }
+        }
+      }
+    },
+    "%@ percent used, %@ by this agent" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ por ciento usado, %2$@ por este agente"
           }
         }
       }
@@ -1424,6 +1544,16 @@
         }
       }
     },
+    "%@ reported an error" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ informó de un error"
+          }
+        }
+      }
+    },
     "%@ reports to" : {
       "localizations" : {
         "es" : {
@@ -1464,6 +1594,16 @@
         }
       }
     },
+    "%@ runs no browser for an agent: in this version only a Linux server with x86 Ubuntu 24.04 or 26.04 that is not the hub's own server runs one" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no ejecuta ningún navegador para un agente: en esta versión solo lo hace un servidor Linux con Ubuntu 24.04 o 26.04 en x86 que no sea el servidor del hub"
+          }
+        }
+      }
+    },
     "%@ runs on its server." : {
       "localizations" : {
         "es" : {
@@ -1494,32 +1634,12 @@
         }
       }
     },
-    "%@ sign in again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ vuelven a iniciar sesión."
-          }
-        }
-      }
-    },
     "%@ sign-in is unknown." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "No se sabe si %@ tiene la sesión iniciada."
-          }
-        }
-      }
-    },
-    "%@ signs in again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ vuelve a iniciar sesión."
           }
         }
       }
@@ -1620,16 +1740,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ se lo quitó a %@"
-          }
-        }
-      }
-    },
-    "%@ took other work. Try again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ tomó otro trabajo. Vuelve a intentarlo."
           }
         }
       }
@@ -1776,12 +1886,32 @@
         }
       }
     },
+    "%@ · done: %lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · hechas: %2$lld"
+          }
+        }
+      }
+    },
     "%@ · last refresh %@" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ · última actualización %@"
+          }
+        }
+      }
+    },
+    "%@%% by %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@%% de %2$@"
           }
         }
       }
@@ -1806,6 +1936,26 @@
         }
       }
     },
+    "%@'s browser does not run now, so there is no screen to take over" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El navegador de %@ no se ejecuta ahora, así que no hay ninguna pantalla que controlar"
+          }
+        }
+      }
+    },
+    "%@'s browser shows an AI provider's site, which is never taken over" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El navegador de %@ muestra el sitio de un proveedor de IA: en esos sitios nunca se toma el control"
+          }
+        }
+      }
+    },
     "%@'s own service, which is what loads the new checkout." : {
       "localizations" : {
         "es" : {
@@ -1826,6 +1976,16 @@
         }
       }
     },
+    "%@'s screen cannot be opened now: its server or its Founderizer is not ready for it" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La pantalla de %@ no se puede abrir ahora: su servidor o su Founderizer no están listos para ello"
+          }
+        }
+      }
+    },
     "%@'s server" : {
       "localizations" : {
         "es" : {
@@ -1842,6 +2002,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Servidor de %@ en %@"
+          }
+        }
+      }
+    },
+    "%@'s server could not share its screen: press Take over again" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El servidor de %@ no pudo compartir su pantalla: pulsa Tomar el control de nuevo"
+          }
+        }
+      }
+    },
+    "%@'s server did not open its screen in time: press Take over again" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El servidor de %@ no abrió su pantalla a tiempo: pulsa Tomar el control de nuevo"
           }
         }
       }
@@ -2132,6 +2312,16 @@
         }
       }
     },
+    "%lld done" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld hechas"
+          }
+        }
+      }
+    },
     "%lld failed" : {
       "localizations" : {
         "es" : {
@@ -2212,6 +2402,26 @@
         }
       }
     },
+    "%lld later" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld para más tarde"
+          }
+        }
+      }
+    },
+    "%lld min" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld min"
+          }
+        }
+      }
+    },
     "%lld min ago" : {
       "localizations" : {
         "es" : {
@@ -2248,16 +2458,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld más"
-          }
-        }
-      }
-    },
-    "%lld new servers" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld servidores nuevos"
           }
         }
       }
@@ -2342,6 +2542,16 @@
         }
       }
     },
+    "%lld running" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld en marcha"
+          }
+        }
+      }
+    },
     "%lld seconds ago" : {
       "localizations" : {
         "es" : {
@@ -2402,16 +2612,6 @@
         }
       }
     },
-    "%lld security updates are installed and waiting." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld actualizaciones de seguridad están instaladas y en espera."
-          }
-        }
-      }
-    },
     "%lld security updates are waiting." : {
       "localizations" : {
         "es" : {
@@ -2468,6 +2668,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld tareas abiertas"
+          }
+        }
+      }
+    },
+    "%lld the week before" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld la semana anterior"
           }
         }
       }
@@ -2542,6 +2752,16 @@
         }
       }
     },
+    "%lld working" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld en curso"
+          }
+        }
+      }
+    },
     "%lld wrote today and were not answered" : {
       "localizations" : {
         "es" : {
@@ -2552,17 +2772,17 @@
         }
       }
     },
-    "%lld · run %lld" : {
+    "%lld%%" : {},
+    "%lld%% of results" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld · ejecución %lld"
+            "value" : "%lld%% de los resultados"
           }
         }
       }
     },
-    "%lld%%" : {},
     "(not shown)" : {
       "localizations" : {
         "es" : {
@@ -2604,6 +2824,16 @@
         }
       }
     },
+    "1 done" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 hecha"
+          }
+        }
+      }
+    },
     "1 failed" : {
       "localizations" : {
         "es" : {
@@ -2640,16 +2870,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "hace 1 minuto"
-          }
-        }
-      }
-    },
-    "1 new server" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 servidor nuevo"
           }
         }
       }
@@ -2724,16 +2944,6 @@
         }
       }
     },
-    "1 security update is installed and waiting." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 actualización de seguridad está instalada y en espera."
-          }
-        }
-      }
-    },
     "1 server" : {
       "localizations" : {
         "es" : {
@@ -2776,6 +2986,16 @@
     },
     "100.84.1.20" : {},
     "123456" : {},
+    "14 days" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "14 días"
+          }
+        }
+      }
+    },
     "2. Its permissions" : {
       "localizations" : {
         "es" : {
@@ -2824,6 +3044,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "5. Aquí"
+          }
+        }
+      }
+    },
+    "A Disconnect of this account came during this Connect, so nothing was connected. Start Connect again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se desconectó esta cuenta durante esta conexión, así que no se conectó nada. Vuelve a pulsar Conectar."
           }
         }
       }
@@ -3448,6 +3678,16 @@
         }
       }
     },
+    "Access given" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acceso concedido"
+          }
+        }
+      }
+    },
     "Access of %@" : {
       "localizations" : {
         "es" : {
@@ -3624,6 +3864,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Añade un bot de Discord para %@"
+          }
+        }
+      }
+    },
+    "Add a Telegram bot for %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añade un bot de Telegram para %@"
           }
         }
       }
@@ -3848,6 +4098,16 @@
         }
       }
     },
+    "Add to this guidance" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir a estas indicaciones"
+          }
+        }
+      }
+    },
     "Add to this message" : {
       "localizations" : {
         "es" : {
@@ -3864,6 +4124,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Añadido: %@."
+          }
+        }
+      }
+    },
+    "Added (a file)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadido"
           }
         }
       }
@@ -3994,6 +4264,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Los agentes reciben un token de una hora para sus propios repositorios."
+          }
+        }
+      }
+    },
+    "Agents no longer in the team %lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agentes que ya no están en el equipo %lld"
           }
         }
       }
@@ -4244,6 +4524,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ya existe un agente con este nombre."
+          }
+        }
+      }
+    },
+    "An agent wrote this note" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un agente escribió esta nota"
           }
         }
       }
@@ -4528,16 +4818,6 @@
         }
       }
     },
-    "As Founderizer on %@ last read it." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Según la última lectura de Founderizer en %@."
-          }
-        }
-      }
-    },
     "As the installer shows it, for example 192.168.1.42." : {
       "localizations" : {
         "es" : {
@@ -4604,6 +4884,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pedida por"
+          }
+        }
+      }
+    },
+    "Asked by %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pedida por %@"
+          }
+        }
+      }
+    },
+    "Asked by you" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pedida por ti"
           }
         }
       }
@@ -5168,6 +5468,16 @@
         }
       }
     },
+    "Changed (a file)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modificado"
+          }
+        }
+      }
+    },
     "Changed elsewhere" : {
       "localizations" : {
         "es" : {
@@ -5288,16 +5598,6 @@
         }
       }
     },
-    "Check complete" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprobación terminada"
-          }
-        }
-      }
-    },
     "Check failed" : {
       "localizations" : {
         "es" : {
@@ -5344,16 +5644,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Comprobar la programación"
-          }
-        }
-      }
-    },
-    "Check server" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprobar el servidor"
           }
         }
       }
@@ -5448,16 +5738,6 @@
         }
       }
     },
-    "Check the reference in the agent's logins. Then check the server again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprueba la referencia en los inicios de sesión del agente. Luego vuelve a comprobar el servidor."
-          }
-        }
-      }
-    },
     "Check the reporting lines before saving." : {
       "localizations" : {
         "es" : {
@@ -5484,36 +5764,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Comprobar el servidor"
-          }
-        }
-      }
-    },
-    "Check the server again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vuelve a comprobar el servidor."
-          }
-        }
-      }
-    },
-    "Check the server again. If the result stays, the vault of that server is not available or cannot test logins yet." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vuelve a comprobar el servidor. Si el resultado sigue igual, la bóveda de ese servidor no está disponible o aún no puede probar inicios de sesión."
-          }
-        }
-      }
-    },
-    "Check the vault of that server. Then check the server again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprueba la bóveda de ese servidor. Luego vuelve a comprobar el servidor."
           }
         }
       }
@@ -5568,16 +5818,6 @@
         }
       }
     },
-    "Checked %@ · %@" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprobado %@ · %@"
-          }
-        }
-      }
-    },
     "Checked outputs" : {
       "localizations" : {
         "es" : {
@@ -5594,6 +5834,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Comprobando %@"
+          }
+        }
+      }
+    },
+    "Checking %@'s server" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comprobando el servidor de %@"
           }
         }
       }
@@ -5634,16 +5884,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Comprobando tu hub"
-          }
-        }
-      }
-    },
-    "Checking…" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprobando…"
           }
         }
       }
@@ -5914,16 +6154,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Borrar lo que la app guarda de este equipo"
-          }
-        }
-      }
-    },
-    "Client" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cliente"
           }
         }
       }
@@ -6298,32 +6528,12 @@
         }
       }
     },
-    "Connection" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conexión"
-          }
-        }
-      }
-    },
     "Connection lost. View stopped." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Se perdió la conexión. La vista se detuvo."
-          }
-        }
-      }
-    },
-    "Connection required. Reload outputs after the hub reconnects." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Se necesita conexión. Vuelve a cargar las salidas cuando el hub se reconecte."
           }
         }
       }
@@ -6434,6 +6644,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Copiar su referencia, %@"
+          }
+        }
+      }
+    },
+    "Copy link" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar el enlace"
           }
         }
       }
@@ -6958,6 +7178,16 @@
         }
       }
     },
+    "Deleted (a file)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminado"
+          }
+        }
+      }
+    },
     "Deleted at %@" : {
       "localizations" : {
         "es" : {
@@ -6984,6 +7214,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Eliminando"
+          }
+        }
+      }
+    },
+    "Deleting %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminando %@"
+          }
+        }
+      }
+    },
+    "Deleting a file" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminando un archivo"
           }
         }
       }
@@ -7198,12 +7448,32 @@
         }
       }
     },
+    "Don't send" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No enviar"
+          }
+        }
+      }
+    },
     "Done" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hecho"
+          }
+        }
+      }
+    },
+    "Done in 14 days: %lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hechas en 14 días: %lld"
           }
         }
       }
@@ -7224,6 +7494,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hecha cuando"
+          }
+        }
+      }
+    },
+    "Done · 7 days" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hechas · 7 días"
           }
         }
       }
@@ -7424,6 +7704,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Editado %@"
+          }
+        }
+      }
+    },
+    "Editing %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Editando %@"
+          }
+        }
+      }
+    },
+    "Editing a file" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Editando un archivo"
           }
         }
       }
@@ -7758,6 +8058,16 @@
         }
       }
     },
+    "Failed · 7 days" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fallidas · 7 días"
+          }
+        }
+      }
+    },
     "Falkenstein, Germany" : {
       "localizations" : {
         "es" : {
@@ -8068,16 +8378,6 @@
         }
       }
     },
-    "Founderizer cannot delete a server yet." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Founderizer todavía no puede eliminar un servidor."
-          }
-        }
-      }
-    },
     "Founderizer cannot give this kind yet." : {
       "localizations" : {
         "es" : {
@@ -8104,16 +8404,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Founderizer no puede abrir este PDF."
-          }
-        }
-      }
-    },
-    "Founderizer cannot put agents together on one server yet." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Founderizer todavía no puede juntar agentes en un mismo servidor."
           }
         }
       }
@@ -8578,16 +8868,6 @@
         }
       }
     },
-    "Founderizer holds no server provider's key on this Mac. Make one server with Add server, then try again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Founderizer no tiene en este Mac la clave de ningún proveedor de servidores. Crea un servidor con Añadir servidor y vuelve a intentarlo."
-          }
-        }
-      }
-    },
     "Founderizer installs %@ on this agent's server. You sign in yourself." : {
       "localizations" : {
         "es" : {
@@ -8674,26 +8954,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Founderizer está actualizado. Se reinicia ahora."
-          }
-        }
-      }
-    },
-    "Founderizer is waiting for the hub. The record can be written when it answers." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Founderizer está esperando al hub. El registro se podrá escribir cuando responda."
-          }
-        }
-      }
-    },
-    "Founderizer keeps this in your fleet's own team.json, so every screen and every agent reads the same connection. It holds no password and no key: the key stays on this Mac." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Founderizer guarda esto en el propio team.json de tu equipo, para que todas las pantallas y todos los agentes lean la misma conexión. No guarda ninguna contraseña ni ninguna clave: la clave se queda en este Mac."
           }
         }
       }
@@ -8938,16 +9198,6 @@
         }
       }
     },
-    "Founderizer update" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Actualización de Founderizer"
-          }
-        }
-      }
-    },
     "Founderizer update failed" : {
       "localizations" : {
         "es" : {
@@ -8964,6 +9214,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Founderizer usa la clave propia de este teléfono para conectar con el hub."
+          }
+        }
+      }
+    },
+    "Founderizer's Google app cannot be read from founderizer.com now, so nothing was started. Try again in a few minutes." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede obtener ahora la app de Google de Founderizer desde founderizer.com, así que no se inició nada. Vuelve a intentarlo en unos minutos."
           }
         }
       }
@@ -9398,6 +9658,16 @@
         }
       }
     },
+    "Google refused: %@. Start Connect again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google rechazó la conexión: %@. Vuelve a pulsar Conectar."
+          }
+        }
+      }
+    },
     "Google will ask you to give Founderizer access to the Google Drive of one account. Your hub keeps this access on your server. The agents that you give the account search, read, make, change, move and trash its files, as far as their level allows, and send what they read to the AI provider that they run on, and to the people and apps that their tasks reach. Founderizer's servers never receive your files." : {
       "localizations" : {
         "es" : {
@@ -9424,6 +9694,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Google, una cuenta cada vez"
+          }
+        }
+      }
+    },
+    "Guidance carries at most %lld files" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las indicaciones pueden llevar como máximo %lld archivos"
+          }
+        }
+      }
+    },
+    "Guidance carries at most %lld files." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las indicaciones pueden llevar como máximo %lld archivos."
           }
         }
       }
@@ -9558,22 +9848,22 @@
         }
       }
     },
-    "Helper" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ayudante"
-          }
-        }
-      }
-    },
     "Helsinki, Finland" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Helsinki, Finlandia"
+          }
+        }
+      }
+    },
+    "Hetzner answers by hand, in its business hours. An account younger than a month cannot ask yet." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hetzner responde a mano, en su horario laboral. Una cuenta de menos de un mes aún no puede pedirlo."
           }
         }
       }
@@ -9618,6 +9908,16 @@
         }
       }
     },
+    "Hide the tasks" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ocultar las tareas"
+          }
+        }
+      }
+    },
     "Hide these repositories" : {
       "localizations" : {
         "es" : {
@@ -9658,16 +9958,6 @@
         }
       }
     },
-    "How the fleet reaches %@" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cómo accede el equipo a %@"
-          }
-        }
-      }
-    },
     "How this Mac reaches %@" : {
       "localizations" : {
         "es" : {
@@ -9684,6 +9974,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cómo se comporta y cómo suena este agente, en una o dos frases."
+          }
+        }
+      }
+    },
+    "How to get more servers at %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cómo conseguir más servidores en %@"
           }
         }
       }
@@ -9734,16 +10034,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Si Google dice que no ha verificado Founderizer, pulsa Configuración avanzada y luego Ir a Founderizer."
-          }
-        }
-      }
-    },
-    "If this hub replaces one you lost, put your copy back first." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Si este hub sustituye a uno que perdiste, restaura primero tu copia."
           }
         }
       }
@@ -9818,6 +10108,16 @@
         }
       }
     },
+    "In Telegram, open [@BotFather](%@)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En Telegram, abre [@BotFather](%@)"
+          }
+        }
+      }
+    },
     "In [1Password](https://support.1password.com/export/), choose File › Export, then your account." : {
       "localizations" : {
         "es" : {
@@ -9878,16 +10178,6 @@
         }
       }
     },
-    "In progress" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "En curso"
-          }
-        }
-      }
-    },
     "In setup" : {
       "localizations" : {
         "es" : {
@@ -9914,6 +10204,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ya en la bóveda"
+          }
+        }
+      }
+    },
+    "In work" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En curso"
+          }
+        }
+      }
+    },
+    "In work: %lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En curso: %lld"
           }
         }
       }
@@ -10084,6 +10394,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Instalando el servidor"
+          }
+        }
+      }
+    },
+    "Invite %@ on Telegram" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invita a %@ en Telegram"
           }
         }
       }
@@ -10498,16 +10818,6 @@
         }
       }
     },
-    "Its code is “%@”." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Su código es «%@»."
-          }
-        }
-      }
-    },
     "Its configuration was already the one on this server." : {
       "localizations" : {
         "es" : {
@@ -10534,6 +10844,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sus archivos"
+          }
+        }
+      }
+    },
+    "Its files waited too long. Discard it and send it again: its files go up again first." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sus archivos esperaron demasiado. Descártalo y envíalo de nuevo: sus archivos se suben otra vez antes."
           }
         }
       }
@@ -10768,6 +11088,26 @@
         }
       }
     },
+    "Its tasks done on each of the last 14 days" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sus tareas hechas en cada uno de los últimos 14 días"
+          }
+        }
+      }
+    },
+    "Its tasks in work, and its part of what needs you" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sus tareas en curso y su parte de lo que te necesita"
+          }
+        }
+      }
+    },
     "Its vault signs in with it. No agent sees the password." : {
       "localizations" : {
         "es" : {
@@ -10978,12 +11318,12 @@
         }
       }
     },
-    "Last activity" : {
+    "Last activity %@" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Última actividad"
+            "value" : "Última actividad %@"
           }
         }
       }
@@ -11128,16 +11468,6 @@
         }
       }
     },
-    "Last seen" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Visto por última vez"
-          }
-        }
-      }
-    },
     "Last used: %@ · %@, %@" : {
       "localizations" : {
         "es" : {
@@ -11174,16 +11504,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Más recientes"
-          }
-        }
-      }
-    },
-    "Latest completed tool report per file." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Último informe de herramienta completado por archivo."
           }
         }
       }
@@ -11288,6 +11608,16 @@
         }
       }
     },
+    "Limits › Request change › Limit increase" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limits › Request change › Limit increase"
+          }
+        }
+      }
+    },
     "Link %@'s WhatsApp number" : {
       "localizations" : {
         "es" : {
@@ -11334,6 +11664,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vincular mi Discord"
+          }
+        }
+      }
+    },
+    "Link my Telegram" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vincular mi Telegram"
           }
         }
       }
@@ -11408,16 +11748,6 @@
         }
       }
     },
-    "Loaded provider" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Proveedor cargado"
-          }
-        }
-      }
-    },
     "Loading and verifying output…" : {
       "localizations" : {
         "es" : {
@@ -11484,16 +11814,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Inicio de sesión"
-          }
-        }
-      }
-    },
-    "Login without a name …%@" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inicio de sesión sin nombre …%@"
           }
         }
       }
@@ -11578,6 +11898,16 @@
         }
       }
     },
+    "Made for your hub" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creado para tu hub"
+          }
+        }
+      }
+    },
     "MagicDNS is off on your private network. Turn it on in Tailscale's DNS page." : {
       "localizations" : {
         "es" : {
@@ -11588,42 +11918,12 @@
         }
       }
     },
-    "Maintenance" : {
+    "Make %@'s server" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mantenimiento"
-          }
-        }
-      }
-    },
-    "Make %lld servers and move %lld agents" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Crear %lld servidores y mover %lld agentes"
-          }
-        }
-      }
-    },
-    "Make 1 server and move %lld agents" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Crear 1 servidor y mover %lld agentes"
-          }
-        }
-      }
-    },
-    "Make 1 server and move 1 agent" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Crear 1 servidor y mover 1 agente"
+            "value" : "Crear el servidor de %@"
           }
         }
       }
@@ -11644,16 +11944,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Crear una credencial"
-          }
-        }
-      }
-    },
-    "Make one server with Add server first: Founderizer then holds your provider's key." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Primero crea un servidor con Añadir servidor: así Founderizer tendrá la clave de tu proveedor."
           }
         }
       }
@@ -11694,16 +11984,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Creando un código…"
-          }
-        }
-      }
-    },
-    "Making a server · %lld of %lld" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Creando un servidor · %lld de %lld"
           }
         }
       }
@@ -11948,26 +12228,6 @@
         }
       }
     },
-    "Move %lld agents" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mover %lld agentes"
-          }
-        }
-      }
-    },
-    "Move 1 agent" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mover 1 agente"
-          }
-        }
-      }
-    },
     "Move the checkout on" : {
       "localizations" : {
         "es" : {
@@ -11978,12 +12238,32 @@
         }
       }
     },
-    "Moving %@ · %lld of %lld" : {
+    "Moved (a file)" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moviendo a %@ · %lld de %lld"
+            "value" : "Movido"
+          }
+        }
+      }
+    },
+    "Moving %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moviendo %@"
+          }
+        }
+      }
+    },
+    "Moving a file" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moviendo un archivo"
           }
         }
       }
@@ -12008,12 +12288,42 @@
         }
       }
     },
+    "Needs clarification" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Necesita aclaración"
+          }
+        }
+      }
+    },
     "Needs you" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Te necesita"
+          }
+        }
+      }
+    },
+    "Needs you: %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Te necesita: %@"
+          }
+        }
+      }
+    },
+    "Needs you: %lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Te necesita: %lld"
           }
         }
       }
@@ -12108,16 +12418,6 @@
         }
       }
     },
-    "New fleet" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Equipo nuevo"
-          }
-        }
-      }
-    },
     "New line" : {
       "localizations" : {
         "es" : {
@@ -12204,16 +12504,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Siguiente"
-          }
-        }
-      }
-    },
-    "No" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No"
           }
         }
       }
@@ -13058,26 +13348,6 @@
         }
       }
     },
-    "Not automatic" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No automático"
-          }
-        }
-      }
-    },
-    "Not available" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No disponible"
-          }
-        }
-      }
-    },
     "Not checked" : {
       "localizations" : {
         "es" : {
@@ -13094,16 +13364,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No elegido"
-          }
-        }
-      }
-    },
-    "Not configured" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sin configurar"
           }
         }
       }
@@ -13218,12 +13478,12 @@
         }
       }
     },
-    "Not isolated" : {
+    "Not installed. %@" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No aislado"
+            "value" : "No instalado. %@"
           }
         }
       }
@@ -13284,16 +13544,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No se ofrece ahora"
-          }
-        }
-      }
-    },
-    "Not on record" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sin registrar"
           }
         }
       }
@@ -13438,26 +13688,6 @@
         }
       }
     },
-    "Not set up" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sin configurar"
-          }
-        }
-      }
-    },
-    "Not set up. %@" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sin configurar. %@"
-          }
-        }
-      }
-    },
     "Not signed in" : {
       "localizations" : {
         "es" : {
@@ -13508,12 +13738,12 @@
         }
       }
     },
-    "Not verified" : {
+    "Note" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sin verificar"
+            "value" : "Nota"
           }
         }
       }
@@ -13734,16 +13964,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Activado"
-          }
-        }
-      }
-    },
-    "On %@." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "En %@."
           }
         }
       }
@@ -14068,6 +14288,16 @@
         }
       }
     },
+    "Open Telegram" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir Telegram"
+          }
+        }
+      }
+    },
     "Open WhatsApp on this Mac" : {
       "localizations" : {
         "es" : {
@@ -14144,6 +14374,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abre [Google AI Studio](%@)"
+          }
+        }
+      }
+    },
+    "Open [Hetzner Console](%@)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre [Hetzner Console](%@)"
           }
         }
       }
@@ -14678,16 +14918,6 @@
         }
       }
     },
-    "Output discarded because the hub state is stale." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Salida descartada porque el estado del hub está desactualizado."
-          }
-        }
-      }
-    },
     "Owner" : {
       "localizations" : {
         "es" : {
@@ -14714,26 +14944,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tarea principal"
-          }
-        }
-      }
-    },
-    "Parent task · %@" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tarea principal · %@"
-          }
-        }
-      }
-    },
-    "Passed" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Superado"
           }
         }
       }
@@ -15118,6 +15328,26 @@
         }
       }
     },
+    "Press Full access in Founderizer on your Mac." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulsa «Full access» en Founderizer en tu Mac."
+          }
+        }
+      }
+    },
+    "Press Give in Founderizer on your Mac or PC." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulsa «Give» en Founderizer en tu Mac o PC."
+          }
+        }
+      }
+    },
     "Press Open Discord" : {
       "localizations" : {
         "es" : {
@@ -15134,6 +15364,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pulsa Actualizar. Si sigue desactualizada, el hub está accesible pero no responde."
+          }
+        }
+      }
+    },
+    "Press Start" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulsa Iniciar"
+          }
+        }
+      }
+    },
+    "Press Yes in Founderizer on your Mac or PC." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulsa «Yes» en Founderizer en tu Mac o PC."
           }
         }
       }
@@ -15238,16 +15488,6 @@
         }
       }
     },
-    "Protected" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Protegido"
-          }
-        }
-      }
-    },
     "Provider installed" : {
       "localizations" : {
         "es" : {
@@ -15264,16 +15504,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Restaurar una copia"
-          }
-        }
-      }
-    },
-    "Put it on record" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Registrarlo"
           }
         }
       }
@@ -15468,6 +15698,16 @@
         }
       }
     },
+    "Reading %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leyendo %@"
+          }
+        }
+      }
+    },
     "Reading Founderizer Vault…" : {
       "localizations" : {
         "es" : {
@@ -15484,6 +15724,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Leyendo GitHub…"
+          }
+        }
+      }
+    },
+    "Reading a file" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leyendo un archivo"
+          }
+        }
+      }
+    },
+    "Reading a web page" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leyendo una página web"
           }
         }
       }
@@ -15854,26 +16114,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Reconectando"
-          }
-        }
-      }
-    },
-    "Record" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Registrar"
-          }
-        }
-      }
-    },
-    "Record it" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Registrarla"
           }
         }
       }
@@ -16418,26 +16658,6 @@
         }
       }
     },
-    "Requesting…" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Solicitando…"
-          }
-        }
-      }
-    },
-    "Required for activation." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Necesario para la activación."
-          }
-        }
-      }
-    },
     "Resets %@" : {
       "localizations" : {
         "es" : {
@@ -16594,16 +16814,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Reiniciando…"
-          }
-        }
-      }
-    },
-    "Restore a copy" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Restaurar una copia"
           }
         }
       }
@@ -16888,6 +17098,16 @@
         }
       }
     },
+    "Running a command" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ejecutando un comando"
+          }
+        }
+      }
+    },
     "Runs commands and changes files on %@." : {
       "localizations" : {
         "es" : {
@@ -16914,16 +17134,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Se ejecuta en"
-          }
-        }
-      }
-    },
-    "Runtime" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Entorno"
           }
         }
       }
@@ -17018,6 +17228,16 @@
         }
       }
     },
+    "Save %@ to Downloads" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar %@ en Descargas"
+          }
+        }
+      }
+    },
     "Save a copy of your fleet" : {
       "localizations" : {
         "es" : {
@@ -17108,6 +17328,16 @@
         }
       }
     },
+    "Save to Downloads" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar en Descargas"
+          }
+        }
+      }
+    },
     "Saved" : {
       "localizations" : {
         "es" : {
@@ -17148,6 +17378,16 @@
         }
       }
     },
+    "Saved to Downloads" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardado en Descargas"
+          }
+        }
+      }
+    },
     "Saving the connection…" : {
       "localizations" : {
         "es" : {
@@ -17184,6 +17424,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Escanea este código con tu propio teléfono"
+          }
+        }
+      }
+    },
+    "Scan this code with your phone" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escanea este código con tu teléfono"
           }
         }
       }
@@ -17284,6 +17534,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Busca y lee los archivos"
+          }
+        }
+      }
+    },
+    "Searching the files" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscando en los archivos"
+          }
+        }
+      }
+    },
+    "Searching the web" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscando en la web"
           }
         }
       }
@@ -17438,6 +17708,26 @@
         }
       }
     },
+    "Send /newbot › name it %@ › give it a username that ends in bot" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envía /newbot › llámalo %@ › dale un nombre de usuario que termine en bot"
+          }
+        }
+      }
+    },
+    "Send /token › choose %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envía /token › elige %@"
+          }
+        }
+      }
+    },
     "Send a correction under this message. The first one stays in the history." : {
       "localizations" : {
         "es" : {
@@ -17448,12 +17738,42 @@
         }
       }
     },
+    "Send a picture or a text file with this guidance" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envía una imagen o un archivo de texto con estas indicaciones"
+          }
+        }
+      }
+    },
+    "Send a picture, a PDF, a ZIP or a text file with this guidance" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envía una imagen, un PDF, un ZIP o un archivo de texto con estas indicaciones"
+          }
+        }
+      }
+    },
     "Send a picture, a PDF, a ZIP or a text file with this message" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Envía una imagen, un PDF, un ZIP o un archivo de texto con este mensaje"
+          }
+        }
+      }
+    },
+    "Send a text file with this guidance" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envía un archivo de texto con estas indicaciones"
           }
         }
       }
@@ -17494,6 +17814,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enviar la corrección"
+          }
+        }
+      }
+    },
+    "Send error reports" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviar informes de errores"
           }
         }
       }
@@ -17594,6 +17924,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enviar estas indicaciones a la tarea"
+          }
+        }
+      }
+    },
+    "Send this message" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviar este mensaje"
           }
         }
       }
@@ -17848,16 +18188,6 @@
         }
       }
     },
-    "Server check" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprobación del servidor"
-          }
-        }
-      }
-    },
     "Server check failed" : {
       "localizations" : {
         "es" : {
@@ -17884,26 +18214,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Servidor sin informar"
-          }
-        }
-      }
-    },
-    "Server offline" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Servidor sin conexión"
-          }
-        }
-      }
-    },
-    "Server status is unavailable." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El estado del servidor no está disponible."
           }
         }
       }
@@ -17978,16 +18288,6 @@
         }
       }
     },
-    "Sessions" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sesiones"
-          }
-        }
-      }
-    },
     "Set Linodes and Firewalls to Read/Write" : {
       "localizations" : {
         "es" : {
@@ -18044,16 +18344,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Configurar %@ en %@"
-          }
-        }
-      }
-    },
-    "Set up this server's vault before using logins here." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Configura la bóveda de este servidor antes de usar inicios de sesión aquí."
           }
         }
       }
@@ -18124,16 +18414,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ajustes…"
-          }
-        }
-      }
-    },
-    "Setup check" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprobación de la configuración"
           }
         }
       }
@@ -18234,6 +18514,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mostrar los pasos"
+          }
+        }
+      }
+    },
+    "Show the tasks" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar las tareas"
           }
         }
       }
@@ -18418,16 +18708,6 @@
         }
       }
     },
-    "Sign-in not reported" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inicio de sesión sin informar"
-          }
-        }
-      }
-    },
     "Sign-in on %@ is not known." : {
       "localizations" : {
         "es" : {
@@ -18464,16 +18744,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Iniciar sesión te toca a ti, y su tarjeta está en esta página."
-          }
-        }
-      }
-    },
-    "Signing in is your own step: the Sign in card below takes it." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Iniciar sesión te toca a ti: lo haces en la tarjeta «Iniciar sesión» de abajo."
           }
         }
       }
@@ -18788,16 +19058,6 @@
         }
       }
     },
-    "State" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Estado"
-          }
-        }
-      }
-    },
     "Step %lld of %lld: %@." : {
       "localizations" : {
         "es" : {
@@ -18834,16 +19094,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Paso %lld de %lld: %@. Quedan unos %lld minutos."
-          }
-        }
-      }
-    },
-    "Step %lld · Running" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Paso %lld · En marcha"
           }
         }
       }
@@ -19248,16 +19498,6 @@
         }
       }
     },
-    "Tailscale, which every server of your fleet is reached over." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tailscale, a través de la cual se accede a cada servidor de tu equipo."
-          }
-        }
-      }
-    },
     "Tailscale, with a sign-in link for you when this server is not on it yet." : {
       "localizations" : {
         "es" : {
@@ -19394,6 +19634,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tareas"
+          }
+        }
+      }
+    },
+    "Tasks done each day" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tareas hechas cada día"
           }
         }
       }
@@ -19604,6 +19854,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Parece una clave, así que no se pegó."
+          }
+        }
+      }
+    },
+    "That looks like a key. Never send a key in a message." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eso parece una clave. Nunca envíes una clave en un mensaje."
           }
         }
       }
@@ -20038,16 +20298,6 @@
         }
       }
     },
-    "The change stopped" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El cambio se detuvo"
-          }
-        }
-      }
-    },
     "The channel answered something this app could not read." : {
       "localizations" : {
         "es" : {
@@ -20174,16 +20424,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La firma del canal no es una firma."
-          }
-        }
-      }
-    },
-    "The check gives no reason that Founderizer can explain." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La comprobación no da ningún motivo que Founderizer pueda explicar."
           }
         }
       }
@@ -20628,16 +20868,6 @@
         }
       }
     },
-    "The fleet reaches %@ as %@ from now on." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A partir de ahora, el equipo accede a %@ como %@."
-          }
-        }
-      }
-    },
     "The fleet's manager never talks with other people." : {
       "localizations" : {
         "es" : {
@@ -20828,16 +21058,6 @@
         }
       }
     },
-    "The hub did not say the new server's name. Try again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El hub no dijo el nombre del servidor nuevo. Vuelve a intentarlo."
-          }
-        }
-      }
-    },
     "The hub did not say which fleet this is, so Founderizer signed nothing." : {
       "localizations" : {
         "es" : {
@@ -20944,6 +21164,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El hub no dio ninguna línea. Crea una línea nueva."
+          }
+        }
+      }
+    },
+    "The hub gave no link." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El hub no dio ningún enlace."
           }
         }
       }
@@ -21388,16 +21618,6 @@
         }
       }
     },
-    "The hub's own server takes no agents in this fleet." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "En este equipo, el servidor del hub no acepta agentes."
-          }
-        }
-      }
-    },
     "The hub's own status" : {
       "localizations" : {
         "es" : {
@@ -21614,16 +21834,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El instalador se ejecuta en el servidor y escribe lo que hace en un log."
-          }
-        }
-      }
-    },
-    "The item is not a login that Founderizer can use. A login has a user name and a password." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El elemento no es un inicio de sesión que Founderizer pueda usar. Un inicio de sesión tiene un nombre de usuario y una contraseña."
           }
         }
       }
@@ -22038,22 +22248,22 @@
         }
       }
     },
-    "The new server did not join your network. Try again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El servidor nuevo no se unió a tu red. Vuelve a intentarlo."
-          }
-        }
-      }
-    },
     "The note is at most %@ characters." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "La nota puede tener como máximo %@ caracteres."
+          }
+        }
+      }
+    },
+    "The note looks like it holds a key. A note is never a key." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parece que la nota contiene una clave. Una nota nunca es una clave."
           }
         }
       }
@@ -22548,16 +22758,6 @@
         }
       }
     },
-    "The server for %@ is not there. Try again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El servidor para %@ no está. Vuelve a intentarlo."
-          }
-        }
-      }
-    },
     "The server is installing its updates." : {
       "localizations" : {
         "es" : {
@@ -22584,16 +22784,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El servidor sigue ahí y sigue costando dinero."
-          }
-        }
-      }
-    },
-    "The server reported no count of waiting updates." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El servidor no informó de cuántas actualizaciones tiene pendientes."
           }
         }
       }
@@ -22684,16 +22874,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Últimas líneas del servidor:"
-          }
-        }
-      }
-    },
-    "The server's own firewall, as it reported it." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El firewall del propio servidor, tal como lo indicó."
           }
         }
       }
@@ -22978,16 +23158,6 @@
         }
       }
     },
-    "The user you reach this server as over SSH." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El usuario con el que accedes a este servidor por SSH."
-          }
-        }
-      }
-    },
     "The vault gave no key for this account." : {
       "localizations" : {
         "es" : {
@@ -23174,6 +23344,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este token de Akamai no puede crear servidores. Crea uno con Read/Write para Linodes y Firewalls, y pégalo."
+          }
+        }
+      }
+    },
+    "This Connect expired, or another one took its place. Start Connect again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta conexión caducó, o otra ocupó su lugar. Vuelve a pulsar Conectar."
           }
         }
       }
@@ -23468,6 +23648,16 @@
         }
       }
     },
+    "This Mac is not on your private network. Open Tailscale, then press again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este Mac no está en tu red privada. Abre Tailscale y pulsa de nuevo."
+          }
+        }
+      }
+    },
     "This Mac is on your private network." : {
       "localizations" : {
         "es" : {
@@ -23658,6 +23848,26 @@
         }
       }
     },
+    "This agent opens only text files: its Shell box is off, and its AI program shows no pictures." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este agente solo abre archivos de texto: tiene su shell desactivada y su IA no muestra imágenes."
+          }
+        }
+      }
+    },
+    "This agent's Shell box is off: it opens only pictures and text files." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este agente tiene su shell desactivada: solo abre imágenes y archivos de texto."
+          }
+        }
+      }
+    },
     "This answer is not for the Connect that Founderizer started. Start Connect again in Founderizer." : {
       "localizations" : {
         "es" : {
@@ -23758,16 +23968,6 @@
         }
       }
     },
-    "This check uses no AI. Actual model use is reported after a real session." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Esta comprobación no usa IA. El uso real del modelo se informa después de una sesión real."
-          }
-        }
-      }
-    },
     "This code did not work. Make a new one on your Mac." : {
       "localizations" : {
         "es" : {
@@ -23838,6 +24038,16 @@
         }
       }
     },
+    "This file did not drag out of the chat." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este archivo no salió del chat."
+          }
+        }
+      }
+    },
     "This file did not open on the phone." : {
       "localizations" : {
         "es" : {
@@ -23864,6 +24074,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este archivo ya no está en la lista."
+          }
+        }
+      }
+    },
+    "This file was not saved." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este archivo no se guardó."
           }
         }
       }
@@ -24138,6 +24358,16 @@
         }
       }
     },
+    "This hub's release has no Google client. Update the hub, then connect again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La versión de este hub no incluye un cliente de Google. Actualiza el hub y vuelve a conectar."
+          }
+        }
+      }
+    },
     "This is a setting of this app, not of your hub. Tell us, and we will put it right." : {
       "localizations" : {
         "es" : {
@@ -24164,26 +24394,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Esto no es un token de acceso a la API de Tailscale. Crea uno en la página Keys de Tailscale: empieza por tskey-api-."
-          }
-        }
-      }
-    },
-    "This is work on the server itself. Help → Report a problem sends it to one of your agents." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Esto es trabajo en el propio servidor. Ayuda → Informar de un problema lo envía a uno de tus agentes."
-          }
-        }
-      }
-    },
-    "This is work on the server itself. Help → Report a problem sends it, with this check, to one of your agents." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Esto es trabajo en el propio servidor. Ayuda → Informar de un problema lo envía, con esta comprobación, a uno de tus agentes."
           }
         }
       }
@@ -24304,6 +24514,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La clave de este teléfono no es la que guarda el hub. Vuelve a añadir este teléfono con un código nuevo."
+          }
+        }
+      }
+    },
+    "This picture is too large for this agent, whose Shell box is off: take it out and pick it again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta imagen es demasiado grande para este agente, que tiene su shell desactivada: quítala y vuelve a elegirla."
           }
         }
       }
@@ -24548,22 +24768,22 @@
         }
       }
     },
+    "This server is called %@ in Tailscale, and Fleet keeps that name for itself. Rename this server in Tailscale, then run the line again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este servidor se llama %@ en Tailscale, y Founderizer reserva ese nombre para sí mismo. Cambia el nombre de este servidor en Tailscale y vuelve a ejecutar la línea de unión."
+          }
+        }
+      }
+    },
     "This server is in your fleet. It is not signed in to your provider yet, which is your own next step: no installer can do it for you." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este servidor está en tu equipo. Aún no ha iniciado sesión en tu proveedor, y ese siguiente paso es tuyo: ningún instalador puede hacerlo por ti."
-          }
-        }
-      }
-    },
-    "This server is not registered." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este servidor no está registrado."
           }
         }
       }
@@ -24588,92 +24808,12 @@
         }
       }
     },
-    "This server's agents run as %@, so the fleet may be recorded as %@ or as root." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Los agentes de este servidor se ejecutan como %@, así que el equipo puede quedar registrado como %@ o como root."
-          }
-        }
-      }
-    },
-    "This server's vault could not open this login. It gave no more exact reason." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La bóveda de este servidor no pudo abrir este inicio de sesión. No dio un motivo más exacto."
-          }
-        }
-      }
-    },
-    "This server's vault did not finish the check in time." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La bóveda de este servidor no terminó la comprobación a tiempo."
-          }
-        }
-      }
-    },
-    "This server's vault gave no answer for this login, so the check did not test it." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La bóveda de este servidor no dio ninguna respuesta sobre este inicio de sesión, así que la comprobación no lo probó."
-          }
-        }
-      }
-    },
-    "This server's vault has no login with this reference." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La bóveda de este servidor no tiene ningún inicio de sesión con esta referencia."
-          }
-        }
-      }
-    },
-    "This server's vault has no store that opens." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La bóveda de este servidor no tiene ningún almacén que se pueda abrir."
-          }
-        }
-      }
-    },
-    "This server's vault opened this login in the check." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La bóveda de este servidor abrió este inicio de sesión en la comprobación."
-          }
-        }
-      }
-    },
     "This server's vault program is older than the hub's release. The server brings it up to date by itself." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "El programa de la bóveda de este servidor es más antiguo que la versión del hub. El servidor lo pone al día por sí solo."
-          }
-        }
-      }
-    },
-    "This server's vault was not allowed to open this login." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La bóveda de este servidor no tenía permiso para abrir este inicio de sesión."
           }
         }
       }
@@ -24704,6 +24844,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este enlace de inicio de sesión no es de un proveedor compatible."
+          }
+        }
+      }
+    },
+    "This step is answered or no longer open" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este paso ya tiene respuesta o ya no está abierto"
           }
         }
       }
@@ -24754,6 +24904,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Token rechazado"
+          }
+        }
+      }
+    },
+    "Tomorrow" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mañana"
           }
         }
       }
@@ -25108,16 +25268,6 @@
         }
       }
     },
-    "Update Founderizer" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Actualizar Founderizer"
-          }
-        }
-      }
-    },
     "Update Founderizer on %@'s server" : {
       "localizations" : {
         "es" : {
@@ -25318,16 +25468,6 @@
         }
       }
     },
-    "Updates when this worker is idle. Active tasks continue." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Se actualiza cuando este trabajador está inactivo. Las tareas activas continúan."
-          }
-        }
-      }
-    },
     "Updating" : {
       "localizations" : {
         "es" : {
@@ -25464,16 +25604,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Usar otra cuenta de %@ para %@"
-          }
-        }
-      }
-    },
-    "Use another login." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Usa otro inicio de sesión."
           }
         }
       }
@@ -25688,16 +25818,6 @@
         }
       }
     },
-    "Vault token" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Token de la bóveda"
-          }
-        }
-      }
-    },
     "Verified download · %@" : {
       "localizations" : {
         "es" : {
@@ -25724,16 +25844,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Versión %lld"
-          }
-        }
-      }
-    },
-    "Version not reported" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Versión sin informar"
           }
         }
       }
@@ -25888,32 +25998,12 @@
         }
       }
     },
-    "Waiting for a restart" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Esperando un reinicio"
-          }
-        }
-      }
-    },
     "Waiting for agent activity." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Esperando actividad del agente."
-          }
-        }
-      }
-    },
-    "Waiting for idle" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Esperando a que esté inactivo"
           }
         }
       }
@@ -25984,6 +26074,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Esperando tu comprobación"
+          }
+        }
+      }
+    },
+    "Waiting for your hub" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperando a tu hub"
+          }
+        }
+      }
+    },
+    "Waiting for your sign-in" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperando tu inicio de sesión"
           }
         }
       }
@@ -26348,6 +26458,16 @@
         }
       }
     },
+    "When %@ says yes, make the server again" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuando %@ diga que sí, crea el servidor otra vez"
+          }
+        }
+      }
+    },
     "When this copy was made your hub had no GitHub App, no Google account, no connected MCP server and no attached file, so there is nothing of that kind to put back." : {
       "localizations" : {
         "es" : {
@@ -26404,36 +26524,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dónde está la salida"
-          }
-        }
-      }
-    },
-    "Whether the server installs its own security updates." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Si el servidor instala sus propias actualizaciones de seguridad."
-          }
-        }
-      }
-    },
-    "Whether this server answers Screen Sharing, so the app offers its screen." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Si este servidor responde a Compartir pantalla, para que la app ofrezca su pantalla."
-          }
-        }
-      }
-    },
-    "Whether this server's vault keeps its token apart from the agents." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Si la bóveda de este servidor guarda su token aparte de los agentes."
           }
         }
       }
@@ -26608,16 +26698,6 @@
         }
       }
     },
-    "Without it no agent can be added to this server, and nothing here can reach it." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sin ella no se puede añadir ningún agente a este servidor, y nada de aquí puede conectar con él."
-          }
-        }
-      }
-    },
     "Without one they cannot reach %@." : {
       "localizations" : {
         "es" : {
@@ -26664,6 +26744,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Trabajando"
+          }
+        }
+      }
+    },
+    "Working (a lane)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En curso"
           }
         }
       }
@@ -26798,12 +26888,32 @@
         }
       }
     },
+    "Write to %@ about this request" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribe a %@ sobre esta solicitud"
+          }
+        }
+      }
+    },
     "Write to %@ from your Discord" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Escribe a %@ desde tu Discord"
+          }
+        }
+      }
+    },
+    "Write to %@ from your Telegram" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribe a %@ desde tu Telegram"
           }
         }
       }
@@ -26834,16 +26944,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Escribe desde"
-          }
-        }
-      }
-    },
-    "Writing it to your fleet…" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Escribiéndolo en tu equipo…"
           }
         }
       }
@@ -26918,6 +27018,16 @@
         }
       }
     },
+    "You already have this server. Nothing new was made." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya tienes este servidor. No se creó nada nuevo."
+          }
+        }
+      }
+    },
     "You and the fleet manager" : {
       "localizations" : {
         "es" : {
@@ -26934,6 +27044,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Respondiste"
+          }
+        }
+      }
+    },
+    "You can change this later in Settings › Help." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Puedes cambiarlo más tarde en Ajustes › Ayuda."
           }
         }
       }
@@ -27178,6 +27298,16 @@
         }
       }
     },
+    "Your Telegram" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu Telegram"
+          }
+        }
+      }
+    },
     "Your VPS" : {
       "localizations" : {
         "es" : {
@@ -27278,16 +27408,6 @@
         }
       }
     },
-    "Your fleet as it was when the copy was taken." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tu equipo tal como estaba cuando se hizo la copia."
-          }
-        }
-      }
-    },
     "Your fleet has not asked our channel yet." : {
       "localizations" : {
         "es" : {
@@ -27334,16 +27454,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Leyendo tu equipo"
-          }
-        }
-      }
-    },
-    "Your fleet is up" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tu equipo está en marcha"
           }
         }
       }
@@ -27678,12 +27788,12 @@
         }
       }
     },
-    "Your hub needs the newest Founderizer first: Settings, Updates." : {
+    "Your hub needs the newest Founderizer first. Close this page, then press Update in the sidebar." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tu hub necesita primero el Founderizer más reciente: Ajustes, Actualizaciones."
+            "value" : "Tu hub necesita primero el Founderizer más reciente. Cierra esta página y pulsa Actualizar en la barra lateral."
           }
         }
       }
@@ -27808,6 +27918,16 @@
         }
       }
     },
+    "Your message did not reach the hub. %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu mensaje no llegó al hub. %@"
+          }
+        }
+      }
+    },
     "Your model server" : {
       "localizations" : {
         "es" : {
@@ -27864,6 +27984,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tu red está lista. Este Mac crea la clave que necesita cada servidor."
+          }
+        }
+      }
+    },
+    "Your note" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu nota"
           }
         }
       }
@@ -27968,6 +28098,16 @@
         }
       }
     },
+    "a person has at most %@ handles" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una persona puede tener como máximo %@ identificadores."
+          }
+        }
+      }
+    },
     "a registered login cannot be sent as a file" : {
       "localizations" : {
         "es" : {
@@ -27984,6 +28124,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Un inicio de sesión registrado no se puede enviar como texto."
+          }
+        }
+      }
+    },
+    "a token is for a Discord or Telegram account" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un token es para una cuenta de Discord o de Telegram."
           }
         }
       }
@@ -28238,6 +28388,16 @@
         }
       }
     },
+    "macOS does not let Founderizer save in Downloads. Allow it in System Settings, Privacy & Security, Files & Folders." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS no deja que Founderizer guarde en Descargas. Permítelo en Ajustes del Sistema, Privacidad y seguridad, Archivos y carpetas."
+          }
+        }
+      }
+    },
     "memory not read" : {
       "localizations" : {
         "es" : {
@@ -28274,6 +28434,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No existe ese agente."
+          }
+        }
+      }
+    },
+    "no such person" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No existe esa persona."
           }
         }
       }
@@ -28578,6 +28748,66 @@
         }
       }
     },
+    "the Google file of the hub cannot be read: it is not a JSON object with accounts" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede leer el archivo de Google del hub: no es un objeto JSON con cuentas."
+          }
+        }
+      }
+    },
+    "the Google file of the hub does not open with its key: connect each Google account again" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El archivo de Google del hub no se abre con su clave: vuelve a conectar cada cuenta de Google."
+          }
+        }
+      }
+    },
+    "the Google file of the hub must be a regular file of the hub user with mode 600" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El archivo de Google del hub debe ser un archivo regular del usuario del hub, con permisos 600."
+          }
+        }
+      }
+    },
+    "the MCP Registry cannot be reached now" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede conectar con el MCP Registry ahora."
+          }
+        }
+      }
+    },
+    "the MCP Registry gave no list of servers" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El MCP Registry no dio ninguna lista de servidores."
+          }
+        }
+      }
+    },
+    "the MCP server %@ gave no OAuth endpoints: %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El servidor MCP %@ no dio endpoints de OAuth: %@."
+          }
+        }
+      }
+    },
     "the account is locked." : {
       "localizations" : {
         "es" : {
@@ -28594,6 +28824,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "el agente"
+          }
+        }
+      }
+    },
+    "the bot has not said its name yet: try again when the bot is connected" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no se conoce el nombre del bot. Vuelve a intentarlo cuando el bot esté conectado."
           }
         }
       }
@@ -28638,12 +28878,32 @@
         }
       }
     },
+    "the hub cannot read the key of its Google file now" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El hub no puede leer ahora la clave de su archivo de Google."
+          }
+        }
+      }
+    },
     "the install's answer" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "la respuesta de la instalación"
+          }
+        }
+      }
+    },
+    "the record of %@ at %@ is larger than %@ MB" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los datos de %@ en %@ superan %@ MB."
           }
         }
       }
@@ -28728,6 +28988,16 @@
         }
       }
     },
+    "this time has passed; change the time first" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esa hora ya pasó. Cambia primero la hora."
+          }
+        }
+      }
+    },
     "tomorrow %@" : {
       "localizations" : {
         "es" : {
@@ -28754,6 +29024,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "semana sin informar"
+          }
+        }
+      }
+    },
+    "you blocked this person" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bloqueaste a esta persona."
           }
         }
       }

@@ -65,6 +65,9 @@ struct SealedPing: Equatable, Sendable {
     let title: String
     let body: String
     let options: [String]?
+    /// API 1.245: the indexes of the options that get no button, because only the Mac presses them (Full access on a
+    /// door card); the other buttons keep their own index. Empty on every other ping.
+    var noButton: [Int] = []
 
     /// The ping that a notification carries, or nil: no sealed part, no key, or a part that this key does not open.
     static func open(_ info: [AnyHashable: Any], key: Data?) -> SealedPing? {
@@ -76,7 +79,8 @@ struct SealedPing: Equatable, Sendable {
               let title = said["title"] as? String, let body = said["body"] as? String
         else { return nil }
         let options = said["options"] as? [String]
-        return SealedPing(need: need, db: db, title: title, body: body, options: options?.isEmpty == false ? options : nil)
+        return SealedPing(need: need, db: db, title: title, body: body, options: options?.isEmpty == false ? options : nil,
+                          noButton: said["no_button"] as? [Int] ?? [])
     }
 
     /// Shows what the ping says on the notification that iOS is about to show (`NeedSeal`): the agent as the title,
@@ -94,6 +98,7 @@ struct SealedPing: Equatable, Sendable {
         info["db"] = said.db
         if let options = said.options {
             info["options"] = options
+            if !said.noButton.isEmpty { info["no_button"] = said.noButton }
             content.categoryIdentifier = "need"
         }
         content.userInfo = info

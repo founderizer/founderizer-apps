@@ -97,6 +97,9 @@ struct MobileCounts: Decodable, Sendable {
 struct MobileAgent: Decodable, Identifiable, Sendable {
     let name: String
     let role: String
+    /// Its Tools boxes (team.json `can`): without "shell", a worker's or a lead's sessions record no outcome, and the
+    /// owner checks its task's unknown outcomes (`TaskOutcome.shellOff`). nil from a hub that does not send it.
+    let can: [String]?
     /// **Its role in the team** (team.json `title`, hub 1.112), which the phone shows as its name, with the name
     /// under it on its page. nil: none set, or an older hub.
     let title: String?

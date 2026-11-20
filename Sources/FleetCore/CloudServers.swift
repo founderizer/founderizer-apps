@@ -14,8 +14,8 @@ import Foundation
 ///     that has it. At Vultr and Akamai, as at Hetzner, every plan of their own list that fits, where it is free now.
 ///     The price is the provider's own, for this account.
 ///   - **On the owner's private network from its first boot.** Its cloud-init installs Tailscale with Tailscale's own
-///     installer and joins once, under the name it was given (which is its name in Tailscale too), with a single-use key
-///     that the fleet key minted for it (`TailscaleFleetKey.mintAuthKey`).
+///     installer, once apt's lock is free, and joins once, under the name it was given (which is its name in Tailscale
+///     too), with a single-use key that the fleet key minted for it and that lives one hour (`joinKey`, `joinKeyLife`).
 ///   - **Behind a provider firewall with no inbound rule at all**, so the internet reaches no port of it: the fleet
 ///     reaches it over the private network only, and it reaches out freely.
 ///   - **With this app's own SSH key**, which is registered at the provider once and found again by its fingerprint.
@@ -32,6 +32,18 @@ public struct CloudServers: Sendable {
     static let waitReads = 100
     /// How many times a firewall that a deleted server still holds is asked to go.
     static let removeReads = 10
+    /// **How long a new server has to join the owner's private network, in seconds: the life of the single-use key that
+    /// its first boot joins with, and the app waits for it as long** (the owner's choice of 11 November 2026, "1 hour,
+    /// both"; until then the app waited five minutes, and the key lived fifteen). Most servers join in about a minute
+    /// and a half. The first boot waits for apt's lock before each try of Tailscale's installer (`userData`), and a new
+    /// server's first updates hold that lock for about nine minutes: a server whose boot meets them joins after about
+    /// ten. After that life the server cannot join with its key, so the wait ends with it.
+    public static let joinKeyLife = 3600
+    /// How often the private network is read while a new server joins it.
+    static let joinLookEvery = Duration.seconds(5)
+    /// From how long after the server was made, and how often, the tailnet's own list is read too while it joins
+    /// (`joined`'s `listed`): the five minutes that the whole wait had until 11 November 2026, then once a minute.
+    static let joinListAfter: TimeInterval = 300, joinListEvery: TimeInterval = 60
 
     public let provider: CloudProvider
     private let exchange: ProviderExchange
@@ -253,13 +265,92 @@ public struct CloudServers: Sendable {
         return names
     }
 
-    /// The server's first boot: Tailscale by Tailscale's own installer, and onto the owner's network once, under the
-    /// server's own name. The key stands in the provider's metadata for that boot, which is why it is single-use and
-    /// worthless in fifteen minutes. DNS stays the server's own, as every other install of the fleet leaves it.
+    /// **The server's first boot**: Tailscale by Tailscale's own installer, and onto the owner's network once, under the
+    /// server's own name. The installer runs apt-get with no wait for apt's lock, and apt's own timers start a new
+    /// server's first updates at a random time, which then hold that lock for minutes: so each try first waits for the
+    /// lock, with an `apt-get install` that installs nothing, and a try counts only when `tailscale` is there after it,
+    /// three tries at most. These are the words of hub.py's TAILSCALE_INSTALL (since 11 November 2026; before, a boot
+    /// that met the updates stopped at once, and its server never joined). A real first boot at Hetzner on that day met
+    /// no lock: the script started 62 seconds after the server was made and ended 15 seconds later, with Tailscale
+    /// installed at the first try, and the server's update timers were due 11 and 16 hours later. The key stands in the
+    /// provider's metadata for that boot, which is why it is single-use and worthless after `joinKeyLife`. DNS stays the
+    /// server's own, as every other install of the fleet leaves it.
     static func userData(authKey: String, hostname: String) -> String {
         ["#!/bin/sh",
-         "curl -fsSL https://tailscale.com/install.sh | sh",
+         "for try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=\(InstallPlan.aptLockWait) -q "
+            + "install </dev/null >/dev/null 2>&1; curl -fsSL https://tailscale.com/install.sh | sh && "
+            + "command -v tailscale >/dev/null && break; sleep 20; done",
          "tailscale up --auth-key=\(authKey) --hostname=\(hostname) --accept-dns=false"].joined(separator: "\n") + "\n"
+    }
+
+    // MARK: - After a server is made: its join
+
+    /// **The key that a new server's first boot joins the private network with**: from the fleet key, for this one
+    /// server, single-use, and worthless after `joinKeyLife`.
+    public static func joinKey(for name: String, from fleetKey: TailscaleFleetKey = TailscaleFleetKey()) async throws -> String {
+        try await fleetKey.mintAuthKey(hostname: name, life: joinKeyLife)
+    }
+
+    /// **The wait for a new server on the private network**, from `made`, the moment the provider made it, which is after
+    /// its key was minted: so the wait ends a little after the key. `status` is the network as this Mac sees it
+    /// (`MacNetwork.status()`), read every `joinLookEvery`, and once more at the end. The answer is `online` with the
+    /// server's private address the moment it is there and online, or `ended` once `joinKeyLife` has gone by with no
+    /// such server (`notJoined` says so). A wait that is ended (Back) throws `CancellationError`, also after a read that
+    /// saw the server.
+    ///
+    /// **`listed`, the tailnet's own list, ends the wait early** for a server that joined and that this Mac does not
+    /// see (a policy that keeps it from this Mac, or this Mac's Tailscale stopped or in another tailnet): it is read
+    /// from `joinListAfter` on, once in `joinListEvery`, and when two reads in a row have the server while this Mac's
+    /// network, read every `joinLookEvery` between them, never showed it online, the wait ends with `listed` and the
+    /// device of the second read, so the caller says why (`FleetReach`) with no read of its own that could fail. A
+    /// server that the list has a moment before this Mac sees it is found in that minute. Until the hour of 11
+    /// November 2026 that line came after the five minutes of the wait, and the hour is for a boot that waits for the
+    /// server's first updates, not for this line.
+    public static func joined(_ name: String, since made: Date, status: @Sendable () async -> String?,
+                              listed: (@Sendable () async -> JoinedDevice?)? = nil,
+                              now: @Sendable () -> Date = { Date() },
+                              pause: Pause = { try await Task.sleep(for: $0) }) async throws -> JoinEnd {
+        let until = made.addingTimeInterval(TimeInterval(joinKeyLife))
+        var nextList = made.addingTimeInterval(joinListAfter)
+        var listedBefore = false
+        while now() < until {
+            try Task.checkCancellation()
+            let json = await status()
+            try Task.checkCancellation()
+            if let address = online(name, in: json) { return .online(address) }
+            if let listed, now() >= nextList {
+                nextList = now().addingTimeInterval(joinListEvery)
+                let device = await listed()
+                try Task.checkCancellation()
+                if let device, listedBefore { return .listed(device) }
+                listedBefore = device != nil
+            }
+            try await pause(joinLookEvery)
+        }
+        // A last look at the end: a Mac that slept past the end did not read the network in the last minutes.
+        let last = await status()
+        try Task.checkCancellation()
+        return online(name, in: last).map(JoinEnd.online) ?? .ended
+    }
+
+    /// **How the wait for a new server ended** (`joined`).
+    public enum JoinEnd: Equatable, Sendable {
+        /// This Mac sees the server online, at this private address.
+        case online(String)
+        /// The tailnet's own list had the server at two reads in a row, and this Mac never showed it online.
+        case listed(JoinedDevice)
+        /// The key's life went by with no such server in this Mac's sight.
+        case ended
+    }
+
+    /// The private address of the device `name` in this Mac's network (`tailscale status --json`), when it is online.
+    private static func online(_ name: String, in json: String?) -> String? {
+        json.flatMap { FleetOnTailscale.devices(in: $0).first(where: { $0.name == name && $0.online })?.address }
+    }
+
+    /// The step's one line when a new server did not join within `joinKeyLife` (the owner's words of 11 November 2026).
+    public static func notJoined(_ name: String, at provider: CloudProvider) -> String {
+        String(l10n: "\(name) did not join your network within an hour. Open it in \(provider.name)'s console.")
     }
 
     /// A server's name as the hub takes it, and as a host name may be: it must not end in a hyphen.
@@ -1376,7 +1467,8 @@ public enum CloudStop {
     public static func readsListAgain(after error: Error, called: Bool) -> Bool {
         if let error = error as? CloudError {
             switch error {
-            case .taken, .noRoom, .notReady, .rateLimited: return called
+            // A full account reads the choice again too: its "Another provider" is the way on (slice 3).
+            case .taken, .noRoom, .notReady, .rateLimited, .full: return called
             default: return false
             }
         }
@@ -1407,6 +1499,9 @@ public enum CloudError: LocalizedError, Equatable, Sendable {
     case notUnderstood(CloudProvider)
     /// The provider has no type that fits free in any location now.
     case noRoom(CloudProvider)
+    /// **The account has no room for another server** (its limit of servers; slice 3 of the one wizard, the owner's
+    /// picture of 17 November 2026): no type of this provider helps, another provider may.
+    case full(CloudProvider)
     /// The server that the owner said yes to is not free any more: the provider refused it as taken, or no longer lists
     /// it as free. Nothing was made; the next offer is the next free server.
     case taken(CloudProvider)
@@ -1437,6 +1532,7 @@ public enum CloudError: LocalizedError, Equatable, Sendable {
         case .notUnderstood(let provider): String(l10n: "\(provider.name) answered something this app does not understand.")
         // Every size that fits was asked, in every location: "smallest" and "near you" were not what was looked at.
         case .noRoom(let provider): String(l10n: "\(provider.name) has no server free now.")
+        case .full(let provider): String(l10n: "\(provider.name) has no room for another server in your account.")
         case .taken(let provider): String(l10n: "That server is not free at \(provider.name) any more.")
         case .notReady(let provider): String(l10n: "The server did not come up at \(provider.name) in time, so it was deleted. Try again.")
         case .notAServerName: String(l10n: "Use a name of 2 to 31 characters: a-z, 0-9 and -, starting with a letter and not ending in -.")
@@ -1520,6 +1616,9 @@ struct CloudCall: Sendable {
         default: break
         }
         if provider == .vultr, answer.status == 401 { return .refused(provider, words(answer)) }
+        // The account's limit of servers: Hetzner's code, DigitalOcean's words ("will exceed your droplet limit").
+        if provider == .hetzner, answer.code == "resource_limit_exceeded" { return .full(provider) }
+        if provider == .digitalOcean, answer.says.localizedCaseInsensitiveContains("droplet limit") { return .full(provider) }
         switch (answer.status, answer.code) {
         case (401, "token_readonly"), (403, "token_readonly"), (403, "forbidden"): return .readOnlyToken(provider)
         case (401, _): return .tokenNotAccepted(provider)

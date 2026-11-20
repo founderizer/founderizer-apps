@@ -107,12 +107,11 @@ struct VaultTests {
         }
     }
 
-    @Test func browserRechecksOriginAndFormTargetBeforeFilling() throws {
+    @Test func theFillRechecksTheOriginAndQuotesTheLoginAsData() throws {
         let value = try JSONSerialization.data(withJSONObject: ["username": "test", "password": "quote\"\\\nsecret", "url": "https://example.test/login"])
         let login = try VaultLogin(data: value, label: "Test login")
         let script = try VaultBrowser.fillScript(login)
         #expect(script.contains("location.origin!==\"https:\\/\\/example.test\""))
-        #expect(script.contains("new URL(f.action||location.href,location.href).origin!==location.origin"))
         #expect(script.contains("quote\\\"\\\\\\nsecret"))
         #expect(!script.contains("quote\"\\\nsecret"))
         let explicitPort = try VaultLogin(data: JSONSerialization.data(withJSONObject: ["username": "test", "password": "test", "url": "https://Example.test:443/login"]), label: "Test")

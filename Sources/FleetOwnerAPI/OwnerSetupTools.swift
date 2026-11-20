@@ -20,7 +20,7 @@ public enum OwnerSetupTools {
             never a value of a field (no token, key, password, code, address or free text): the app's version and \
             build; the hub (none, set, or set and answering); the first run: whether it shows, its page by a fixed name \
             (welcome, paste, name, ai_provider, servers, vps, tailscale, tailscale_key, token, building, other_vps, machine, \
-            installing, address, done, restore), the page's title in English as the owner reads it (a title with a placeholder gives its \
+            installing, address, done), the page's title in English as the owner reads it (a title with a placeholder gives its \
             key, such as "Your %@ token"), whether work of the first run runs now, whether an install of it began, \
             whether it holds the window, the VPS provider on a provider's page, ai_provider (claude or codex: the \
             owner's choice on the page ai_provider, or null before it), and layout (one, two or each: the \
@@ -62,8 +62,7 @@ public enum OwnerSetupTools {
             settings.<section> with section general, servers, updates, backup, status, secrets, knowledge, apps, \
             people, team; app.<app> with app github, drive, gmail, mcp; server.<name>; add_server.<page> with page \
             ways, ai, opening, machine, install, key, token, vps, again, or add_server; add_agent.<step> with step server, \
-            name, progress, or add_agent; connect_key (the Tailscale key of Turn on); shape_change (a later change \
-            of the fleet's shape, which makes servers and moves agents); first_run.<page> with the page \
+            name, progress, or add_agent; connect_key (the Tailscale key of Turn on); first_run.<page> with the page \
             of first_run, or first_run; waiting (the hub answered this Mac before, and the app has no reading now); \
             none (nothing to name). A name of an agent or a server has only small letters, digits and "-" (2 to 31 \
             characters); another name is left out, and the place is then agent, server or task alone. A name comes \
@@ -74,11 +73,12 @@ public enum OwnerSetupTools {
             """, properties: ["after": .object(["type": .string("integer"), "minimum": .int(0)])], required: []),
         tool(show, """
             Asks macOS to bring the Founderizer app to the front, on one of its own pages. page: front (the app as it \
-            is, with no change of page, from any page), or for a first run welcome (its first page) or name ("Name your \
-            manager", the first page of the setup: the owner goes on from it with Continue), or a place of the \
+            is, with no change of page, from any page), or for a first run welcome (its first page) or name (the \
+            setup's first page: "Help improve Founderizer", where the owner answers with a press of their own, and then \
+            "Name your manager", where the owner goes on with Continue), or a place of the \
             fleet's own pages, by the name that setup_state gives a place: \(SetupShow.targetForms.joined(separator: ", ")). \
             It opens no other place: not agent.<name>.runs_on, settings.servers or settings.backup, whose pages can \
-            act by themselves when they show, and never add_server, add_agent, shape_change, connect_key, \
+            act by themselves when they show, and never add_server, add_agent, connect_key, \
             server.<name>, app.<app>, an agent's rule editor, or a place of an agent's setup, "Setting up" or \
             sign-in. seen: the place that setup_state gave last (for front, welcome and name the first run's page \
             alone, or none with no first run, passes too). welcome and name change the \
@@ -220,32 +220,36 @@ public enum OwnerSetupTools {
 /// **A page of the first run, by its fixed name**: what `setup_state` gives and `setup_show` takes, so that an agent
 /// never reads a page's words to know where the owner stands.
 public enum FirstRunPage: String, CaseIterable, Sendable {
-    case welcome, paste, name
+    case welcome, paste
+    /// "Help improve Founderizer", the first page of the first way, before the name (the owner's "Yes, build it" of 18
+    /// November 2026): the owner sends error reports, or not.
+    case errorReports = "error_reports"
+    case name
     /// The manager's AI provider, after its name (the lane "One wizard and the build page", 16 November 2026).
     case aiProvider = "ai_provider"
     case servers, vps, tailscale
     case tailscaleKey = "tailscale_key"
     case token, building
     case otherVPS = "other_vps"
-    case machine, installing, address, done, restore
+    case machine, installing, address, done
 
     /// **The name of each step of the first run** (`FirstRunModel.Step` in the app, by its case's name). A step of a
     /// provider's token is `building` while its server is made (the app decides). A test holds each case of
     /// `FirstRunModel.Step` to this table.
     public static let ofStep: [String: FirstRunPage] = [
-        "welcome": .welcome, "paste": .paste, "name": .name, "aiProvider": .aiProvider, "servers": .servers, "network": .tailscale, "machine": .machine, "installing": .installing,
-        "done": .done, "restore": .restore, "address": .address, "key": .tailscaleKey, "cloud": .vps, "token": .token,
+        "welcome": .welcome, "paste": .paste, "errorReports": .errorReports, "name": .name, "aiProvider": .aiProvider, "servers": .servers, "network": .tailscale, "machine": .machine, "installing": .installing,
+        "done": .done, "address": .address, "key": .tailscaleKey, "cloud": .vps, "token": .token,
         "vps": .otherVPS,
     ]
 
     /// **The titles that `setup_state` may give**, each a key of the app's string table in English. A title that the app
     /// shows and that is not here (a server's address as a title) is given as none.
     public static let titles: Set<String> = [
-        "Your own team of AI agents", "Paste this in %@", "Name your manager", "%@'s AI provider", "Your fleet's servers", "A VPS for your fleet", "Connect Tailscale",
+        "Your own team of AI agents", "Paste this in %@", "Help improve Founderizer", "Name your manager", "%@'s AI provider", "Your fleet's servers", "A VPS for your fleet", "Connect Tailscale",
         "Waiting for Tailscale", "Connecting your network", "Your Tailscale key", "Building your fleet", "Your fleet",
         "Your hub's server at %@", "Your %@ token", "Your VPS", "Checking %@", "Waiting for %@", "Password for %@@%@",
-        "Your hub did not install", "Connecting to your hub", "Your fleet is up", "Your hub is installed", "Your server",
-        "Checking your fleet", "Your hub's address", "Restore a copy",
+        "Your hub did not install", "Connecting to your hub", "Your hub is installed", "Your server",
+        "Checking your fleet", "Your hub's address",
     ]
 }
 
@@ -402,9 +406,10 @@ public struct SetupFacts: Equatable, Sendable {
 public enum SetupShow {
     /// `front`, and the pages of the first run that `setup_show` shows. Every other `page` is a place of the fleet's
     /// own pages (`targetForms` in `OwnerShowRules.swift`, with its rules).
-    /// `name` is "Name your manager", the first page of the welcome page's first way: the VPS page comes after its
-    /// Continue, so a first run that the owner's own agent leads asks for the manager's name as the owner's own
-    /// press does. (Until 15 November 2026 the second page was `vps`, which went past the name.)
+    /// `name` is "Name your manager": the VPS page comes after its Continue, so a first run that the owner's own agent
+    /// leads asks for the manager's name as the owner's own press does. (Until 15 November 2026 the second page was
+    /// `vps`, which went past the name.) The app opens "Help improve Founderizer" for it first, the page before the
+    /// name since 18 November 2026, as the owner's own press on the welcome page does.
     public static let pages = ["front", "welcome", "name"]
     /// The first run's start pages: the only pages that `setup_show` changes (round 2, S1).
     public static let startPages: Set<FirstRunPage> = [.welcome, .paste, .vps]

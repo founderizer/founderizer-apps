@@ -87,38 +87,6 @@ struct WordsOnTheirWayTests {
                                        hub: hub, database: "test-db") == nil)
     }
 
-    @Test("An answer that he wrote is his message in the chat of the agent that asked, until the reading holds the hub's copy")
-    func anAnswerInWordsIsHisMessage() throws {
-        func going(_ pending: PendingRequest?, kept: PendingRequest? = nil, receipt: SendReceipt? = nil,
-                   needs: [OwnerNeed], messages: [OwnerMessage] = []) -> PendingRequest? {
-            WordsOnTheirWay.answerInWords(toOneOf: needs, pending: pending, kept: kept, receipt: receipt, hub: hub,
-                                          database: "test-db", messages: messages)
-        }
-        let words = PendingRequest(hub: hub, database: "test-db", client: "test", needID: 7, text: "What is it for?")
-        let asked = [try need(6), try need(7)]
-        // The request of an answer names no agent: it belongs to the chat of the agent whose request it answers.
-        #expect(going(words, needs: asked) == words)
-        #expect(going(words, needs: [try need(8)]) == nil)
-        // An option that he pressed or ticked is no message: its card shows it.
-        let press = PendingRequest(hub: hub, database: "test-db", client: "test", needID: 7, choice: 1, text: "Refund neither")
-        let ticks = PendingRequest(hub: hub, database: "test-db", client: "test", needID: 7, choices: [0, 1], text: "A; B")
-        #expect(going(press, needs: asked) == nil && going(ticks, needs: asked) == nil)
-        // A message to the agent is the chat's own message, not an answer.
-        #expect(going(message(), needs: asked) == nil)
-        // After the receipt, the one that the chat saw go stays, until the reading holds the hub's copy.
-        #expect(going(nil, kept: words, receipt: try receipt(for: words), needs: asked) == words)
-        #expect(going(nil, kept: words, needs: asked) == nil)
-        let copy = try JSONDecoder().decode(OwnerMessage.self, from: JSONSerialization.data(withJSONObject: [
-            "request_id": words.requestID.uuidString.lowercased(), "kind": "answer", "need_id": 7, "text": words.text,
-            "event_id": 5, "created": 995.0, "client": "test", "recipient": "vps",
-        ]))
-        #expect(going(words, needs: asked, messages: [copy]) == nil)
-        // One that the hub refused is his to change or discard, and no message.
-        var refused = words
-        refused.refusal = "owner request is already answered"
-        #expect(going(refused, needs: asked) == nil)
-    }
-
     @Test("The field is empty while its draft is the words on their way, and keeps what he writes meanwhile")
     func theFieldEmptiesWithTheSend() {
         let sent = message()

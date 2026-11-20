@@ -56,8 +56,6 @@ struct ServersPage: View {
                     if list.servers.isEmpty {
                         FormSection { FormEmpty("No servers yet", symbol: "server.rack") }
                     } else {
-                        // The slider of the fleet's shape over the cards (the owner's yes of 15 November 2026).
-                        if ShapeServersCard.shows(store, list) { ShapeServersCard(store: store, list: list) }
                         ServerCards(store: store, list: list, helpers: helpers)
                     }
                 } else if older, let machines {
@@ -341,7 +339,6 @@ struct ServerPage: View {
     private var list: ServerList? {
         get { store.reading("servers.list") } nonmutating set { store.keep(newValue, as: "servers.list") }
     }
-    @State private var machine: String?
     /// The reading of each agent's machine (`GET /ui/machines`). This page needs it for four things: the link and
     /// the code of a sign-in live there, and only while that sign-in waits; whether a helper here runs the fleet's
     /// own revision, which only the hub can say; **how this Mac reaches the machine** — its address, and the user
@@ -372,7 +369,6 @@ struct ServerPage: View {
     /// page said "atlas" over nothing; it says that agent's name as everywhere, "Atlas".
     private var title: String {
         if let server { return server.name }
-        if !offered, let machine { return machine }
         return store.state?.agents.contains { $0.name == name } == true ? name.agentLabel : name
     }
 
@@ -417,8 +413,11 @@ struct ServerPage: View {
                     if server.agents.isEmpty && server.joined && !server.hub { removal(server) }
                 } else if offered && list != nil {
                     FormSection { FormEmpty("Founderizer has no server named \(name).", symbol: "server.rack") }
-                } else if !offered {
-                    TechnicalDetails(store: store, agent: name)
+                } else if store.state != nil && !offered {
+                    // A hub from before the `servers` feature (none since October 2026) has no server to read here: the
+                    // words of the Servers list for a hub with neither `servers` nor `machines`. Its old details of a
+                    // server are gone (19 November 2026).
+                    FormSection { FormEmpty("This hub does not report its servers yet.", symbol: "server.rack") }
                 } else if saysFailed || store.connectionError != nil {
                     // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3, item 33).
                     if !store.hubNoticeShows {
@@ -454,6 +453,22 @@ struct ServerPage: View {
             MachineSignInSection(store: store, agent: reading.agent, reading: reading,
                                  fresh: store.isFresh && reading.isCurrent(at: time), refresh: readMachines,
                                  title: waiting.count > 1 ? reading.agent.agentLabel : nil, alreadySaid: true)
+        }
+        // **Codex of the screen tasks of a Mac** (`ScreenSignIn`; the owner's "Yes, both rows" of 19 November 2026 to
+        // the drawing): the same card for a sign-in that ended or a sign-out, which opens the sign-in page of Codex
+        // for an agent of that Mac; and for a Mac that says that it has no ChatGPT app, one line with no button,
+        // because a sign-in there does not help its screen tasks. Nothing of the page said either, so the line says it.
+        switch server.screenSignIn(readings, at: time) {
+        case .signIn(let agent):
+            if signInOffered, let reading = readings.first(where: { $0.agent == agent }) {
+                MachineSignInSection(store: store, agent: agent, reading: reading,
+                                     fresh: store.isFresh && reading.isCurrent(at: time), refresh: readMachines,
+                                     title: nil, provider: ScreenSignIn.provider)
+            }
+        case .noApp:
+            FormSection { FormRow(ScreenSignIn.chatGPT, detail: ScreenSignIn.notInstalled) }
+                .accessibilityIdentifier("server-no-chatgpt-app")
+        case nil: EmptyView()
         }
     }
 
@@ -738,11 +753,10 @@ struct ServerPage: View {
                     // last one, so the word does not come and go with one unanswered request.
                     if let read = try? await HubClient().health(hub: hub, database: database),
                        store.hub == hub, store.state?.db == database { health = read }
-                } else if store.state?.ui_features?.contains("machines") == true, machine == nil {
-                    machine = try? await HubClient().machines(hub: hub, database: database).machines.first { $0.agent == name }?.machine
                 }
             }
-            let signingIn = signInOffered && server?.signIns(readings).contains { $0.login?.isOpen == true } == true
+            // A sign-in that runs for an agent of this server, also one of Codex of its screen tasks (`ScreenSignIn`).
+            let signingIn = signInOffered && readings.contains { server?.agents.contains($0.agent) == true && $0.login?.isOpen == true }
             do { try await store.nap(server?.job?.isOpen == true || signingIn ? 2 : 5) } catch { return }
         }
     }

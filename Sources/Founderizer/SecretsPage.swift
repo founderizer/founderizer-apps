@@ -364,6 +364,15 @@ struct SecretsPage: View {
                 Button("Done") { shown = nil }.buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("secret-done")
             }
+            // **Its note, only where it has one** (owner feature `secret_notes`; the owner, 19 November 2026: "only use
+            // when adding valuable context, otherwise leave empty"): the words that the agents read beside its name,
+            // and who wrote them under the pointer. A secret with no note has no line here.
+            if let words = entry?.note, !words.isEmpty {
+                Text(words).font(FormMetrics.text).foregroundStyle(FleetStyle.text)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    .help(entry?.note_by == "owner" ? String(l10n: "Your note") : String(l10n: "An agent wrote this note"))
+                    .accessibilityIdentifier("secret-note-words")
+            }
             if let entry, let reading {
                 let holders = reading.holders(reference, entry, agents: agents)
                 FormSection("Available to", footer: entry.isAPIKey

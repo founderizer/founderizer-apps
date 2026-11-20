@@ -73,19 +73,26 @@ public enum ServerMemory {
     /// What one round reads of a server's memory limit, in `ServerHardening`'s words: `.faulty` for no limit,
     /// `.holds` for a limit, `.unread` for everything that cannot say.
     public static func reading(of server: ServerEntry, join: JoinState?, at time: Double) -> ServerHardening.Reading {
+        reading(of: server, join: join, at: time, hub: { $0.memory_guard }, server: { $0.memory_guard })
+    }
+
+    /// What one round reads of one fact of a server, as `reading(of:join:at:)` reads the memory limit's: the hub's own
+    /// read of its own server (`hub`), else the server's own reading (`server`). `ServerRestart` reads its fact so.
+    static func reading(of server: ServerEntry, join: JoinState?, at time: Double, hub own: (HubHardening) -> Bool?,
+                        server fact: (ServerReading.Security) -> Bool?) -> ServerHardening.Reading {
         guard ServerHardening.applies(to: server), server.job?.isOpen != true else { return .unread }
         if let join, join.server == server.name, time - join.created < ServerHardening.joinGrace { return .unread }
-        let limited: Bool?
+        let holds: Bool?
         if server.hub {
-            guard let own = server.hardening, own.isCurrent(at: time),
-                  let claimed = own.claimed_at, time - claimed >= ServerHardening.joinGrace else { return .unread }
-            limited = own.memory_guard
+            guard let read = server.hardening, read.isCurrent(at: time),
+                  let claimed = read.claimed_at, time - claimed >= ServerHardening.joinGrace else { return .unread }
+            holds = own(read)
         } else {
             guard let reading = server.reading, reading.source == "server", reading.isCurrent(at: time),
                   let security = reading.security else { return .unread }
-            limited = security.memory_guard
+            holds = fact(security)
         }
-        return limited.map { $0 ? .holds : .faulty } ?? .unread
+        return holds.map { $0 ? .holds : .faulty } ?? .unread
     }
 
     // MARK: what
@@ -184,23 +191,41 @@ public enum ServerMemory {
     /// decides: it holds where the program set it or found the server's own, and a server whose kernel has no group
     /// to limit is left as it is. The swap file is a best try and never a failure of the run; the log has its word.
     public static func outcome(_ output: String) -> ServerHardening.Outcome {
+        let (parts, before): ([String: String], String)
+        switch marked(output, mark: mark, started: started) {
+        case .ended(let words, let said): (parts, before) = (words, said)
+        case .not(let outcome): return outcome
+        }
+        let swap = parts["swap"] ?? "", limit = parts["limit"] ?? ""
+        if limit == "no-group" { return .leftAsItIs }
+        if ["set", "own"].contains(limit) { return .holds }
+        return .failed("limit \(limit.isEmpty ? "?" : limit), swap \(swap.isEmpty ? "?" : swap)"
+                       + (before.isEmpty ? "" : ": " + String(before.prefix(300))))
+    }
+
+    /// A run's output up to its last `mark` line: that line's words as `name=value`, and the last three lines that the
+    /// program said before it; else what a run with no such line came to. Output without one is a run that did not end
+    /// where it has the program's first line (`started`): the connection broke, or the program was stopped. Without
+    /// that line too, it reads as a program that did not start. `ServerRestart` reads its own output so.
+    enum Marked {
+        case ended([String: String], before: String)
+        case not(ServerHardening.Outcome)
+    }
+
+    static func marked(_ output: String, mark: String, started: String) -> Marked {
         let all = output.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
         let lines = all.filter { $0 != started }
         guard let last = lines.last(where: { $0.hasPrefix(mark + " ") }) else {
             let said = lines.last(where: { !$0.isEmpty }).map { String($0.prefix(200)) } ?? "nothing"
-            return lines.count == all.count ? .notStarted("the program did not start: \(said)")
-                : .failed("the program started and did not end: \(said)")
+            return .not(lines.count == all.count ? .notStarted("the program did not start: \(said)")
+                        : .failed("the program started and did not end: \(said)"))
         }
         var parts: [String: String] = [:]
         for word in last.split(separator: " ").dropFirst() {
             let pair = word.split(separator: "=", maxSplits: 1).map(String.init)
             if pair.count == 2 { parts[pair[0]] = pair[1] }
         }
-        let swap = parts["swap"] ?? "", limit = parts["limit"] ?? ""
-        if limit == "no-group" { return .leftAsItIs }
-        if ["set", "own"].contains(limit) { return .holds }
-        let before = lines.prefix { $0 != last }.filter { !$0.isEmpty }.suffix(3).joined(separator: " ")
-        return .failed("limit \(limit.isEmpty ? "?" : limit), swap \(swap.isEmpty ? "?" : swap)"
-                       + (before.isEmpty ? "" : ": " + String(before.prefix(300))))
+        return .ended(parts, before: lines.prefix { $0 != last }.filter { !$0.isEmpty }.suffix(3)
+            .joined(separator: " "))
     }
 }

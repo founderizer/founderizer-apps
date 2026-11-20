@@ -61,6 +61,16 @@ final class OwnerEdgeTests {
 
     // ------------------------------------------------------------ a hub in trouble
 
+    /// 19 November 2026: a fleet's whole snapshot passed the 8 MiB of a call, and each tool refused at its first
+    /// read, the one of the hub's generation. The snapshot grows with a fleet's history and has a limit of its own;
+    /// every other answer keeps the limit of a call (the test below).
+    @Test func aSnapshotLargerThanACallIsStillRead() throws {
+        let hub = StandInHub(features: Fixture.everyFeature)
+        hub.state = ["pad": .string(String(repeating: "a", count: SessionTransport.readMax))]
+        let tools = Fixture.tools(hub, home: home)
+        #expect(tools.call("fleet_read", .object(["page": .string("health")])).isError == false)
+    }
+
     @Test func aHubInTroubleIsSaidInItsOwnWords() throws {
         let hub = StandInHub(features: Fixture.everyFeature)
         let tools = Fixture.tools(hub, home: home)

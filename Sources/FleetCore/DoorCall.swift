@@ -201,6 +201,16 @@ public enum DoorCall {
         return .success(computed)
     }
 
+    /// The check above for a press of Run it once on `need`, with the card's own words that the apps draw (its why,
+    /// what it needs from him and the task that asked): one call for the Mac (`DoorCallSigning.maker`) and the iPhone
+    /// (`DeviceSigningKey.approval`, the lane "Give on the iPhone"), so that the two sign by the same rule. nil for an
+    /// item that is not the door's card of a run: no door call, or no server.
+    public static func checked(_ need: OwnerNeed) -> Result<String, Refusal>? {
+        guard let call = need.door_call, let host = need.door_host else { return nil }
+        return checked(title: need.title, answers: need.options ?? [], host: host, call: call, script: need.door_script,
+                       details: need.details, words: [need.why, need.todo] + (need.door_task.map { [$0] } ?? []))
+    }
+
     /// The same bytes. A String's own `==` takes two spellings of one accented letter as equal, and they are two
     /// scripts with two hashes.
     static func same(_ a: String, _ b: String) -> Bool { a.utf8.elementsEqual(b.utf8) }

@@ -122,7 +122,12 @@ public struct PendingRequest: Codable, Equatable, Sendable {
 
     public func body() throws -> Data {
         if let command {
-            let fields = try command.bodyFields(text: text).merging(["request_id": requestID.uuidString.lowercased(), "db": database]) { _, new in new }
+            var fields = try command.bodyFields(text: text).merging(["request_id": requestID.uuidString.lowercased(), "db": database]) { _, new in new }
+            // A guidance's files (owner API 1.223): the only command that carries any.
+            if !attachments.isEmpty {
+                guard case .steer = command else { throw HubError.invalidResponse }
+                fields["attachments"] = attachments
+            }
             return try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])
         }
         var fields: [String: Any] = ["request_id": requestID.uuidString.lowercased(), "db": database]

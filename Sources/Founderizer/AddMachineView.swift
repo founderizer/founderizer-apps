@@ -407,7 +407,17 @@ struct AddServerView: View {
             SetupBack {
                 switch page {
                 case .again: again.close()          // nothing of a run is kept: the page reads again when it opens
-                case .install: model.cancel()       // a Mac's stopped order: this page reads it no more
+                // A Mac's stopped order: this page reads it no more. **An install that stopped goes with it**, as the
+                // first run's Back has it (`install.again()`; a review of 17 November 2026): before, the next form
+                // showed that install's stop in orange before any press. The form keeps what he typed, and the
+                // install's record stays in its file. An install that ended well stays, so that the next opening
+                // clears the form (`opened`), and so does another agent's hand-over (`forAgent`, `handsOver`) on Back:
+                // taken away, it left that agent's setup with no hand-over of that server.
+                case .install:
+                    model.cancel()
+                    if model.failure != nil, model.checklist == nil || model.forAgent == nil || model.forAgent == installFor {
+                        model.again()
+                    }
                 case .token: cloud.cancel()
                 case .vps: vps.reset()
                 default: break

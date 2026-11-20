@@ -22,6 +22,11 @@ struct SecretPreset: Identifiable {
     /// shown"): the vault's own form on a step, its Key field and Save alone, for a new key of this variable name
     /// and site, which no agent holds yet. The add gives the new agent its grant after the agent exists.
     var keyStep = false
+    /// **The note that the request gives the secret** (owner feature `secret_notes`): the form shows it as a field that
+    /// the owner can change, only when the request has one.
+    var note = ""
+    /// The account that a login request names: the start of the form's User name field.
+    var account = ""
 
     /// The preset of a key page: the variable name and the key's site, which the page sets under the hood.
     static func keyStep(variable: String, site: String) -> SecretPreset {
@@ -36,6 +41,7 @@ struct SecretPreset: Identifiable {
         let asked = need.secret ?? NeedSecret(kind: .apiKey)
         self.need = need.id
         kind = asked.kind; env = asked.env ?? ""; url = asked.site ?? ""; give = asked.give
+        note = asked.note ?? ""; account = asked.kind == .login ? asked.account ?? "" : ""
     }
 }
 
@@ -62,6 +68,9 @@ struct SecretProgress: Equatable {
     /// The hub's words when the request had its answer already.
     var answerNote: String?
     var answerProblem: String?
+    /// The secret's note as the form showed it at the save, which goes with the request's answer; nil where the form
+    /// showed no note, and for an answer with a secret of the list that the note does not go to (`NeedSecret.noteGoes`).
+    var note: String? = nil
     let tell: String?
     var told = false
     var tellProblem: String?
@@ -185,6 +194,33 @@ struct SecretEntryView: View {
     /// The owner says no to the request with one press of Decline: no reason, no second step (the owner, 30 October
     /// 2026: "remove the option, pressing decline should be enough").
     @State private var declineID = UUID()
+    /// **The secret's note**, which the request gave: the field's words (`showsNote`).
+    @State private var secretNote: String
+    /// **Needs clarification** (owner feature `secret_clarify`; the owner, 19 November 2026: "There should be a way to
+    /// Reply or comment to the card, to give more context or clarify something", then "I prefer Needs clarification",
+    /// and "THEN show the text input"): its link opened the field, and the words that he writes about the request.
+    /// They close the request and go to the agent that asked, which asks again.
+    @State private var clarifying: Bool
+    @State private var clarifyText: String
+    @State private var clarifyID = UUID()
+    @FocusState private var clarifyFocused: Bool
+    /// He pressed the link now: the field takes the cursor once it stands. Words that come back from memory do not
+    /// take it: a field that takes the cursor selects its words, and his next key would take their place.
+    @State private var cursorToWords = false
+    /// His words go to the hub: the wait says "Sending…", where a save says "Saving…".
+    @State private var sendingWords = false
+    /// **The words that he wrote and did not send, by the request, in memory only**: the request at hand is a new view
+    /// each time it comes to hand, and words that he wrote there were gone after a click on another card. They are
+    /// never written to a file, as the drafts of an answer are (`FleetStore.answers`), because a key that he pasted
+    /// here by mistake must not stay on the disk; words that look like a key are not kept at all, and words that hold
+    /// the value of the form's own field are not kept from their next change on. The key is the hub, its generation
+    /// and the request (`draftKey`), and the words go
+    /// when the request closes in any way (`forgetDraft`) and when the list of open requests no longer has it.
+    @MainActor private static var clarifyDrafts: [String: String] = [:]
+    private static func draftKey(hub: URL, database: String?, need: Int) -> String { "\(hub.absoluteString) \(database ?? "") \(need)" }
+    private var draftKey: String? { preset.need.map { Self.draftKey(hub: hub, database: database, need: $0) } }
+    private func forgetDraft() { if let draftKey { Self.clarifyDrafts[draftKey] = nil } }
+    @Environment(\.colorSchemeContrast) private var contrast
     /// The hub address and the generation when this form opened. A later connection change in the store ends its use.
     @State private var hub: URL
     @State private var database: String?
@@ -216,6 +252,14 @@ struct SecretEntryView: View {
         _login = State(initialValue: login)
         _access = State(initialValue: preset.give)
         _proposed = State(initialValue: Set(preset.give.keys))
+        _secretNote = State(initialValue: NeedSecret.oneLine(preset.note, most: NeedSecret.noteMost))
+        // The words of requests of this hub that are no longer open go: nothing shows them again.
+        let open = Set((store.state?.needs ?? []).filter(\.isOpen).map { Self.draftKey(hub: store.hub, database: store.state?.db, need: $0.id) })
+        let here = "\(store.hub.absoluteString) \(store.state?.db ?? "") "
+        Self.clarifyDrafts = Self.clarifyDrafts.filter { !$0.key.hasPrefix(here) || open.contains($0.key) }
+        let draft = preset.need.flatMap { Self.clarifyDrafts[Self.draftKey(hub: store.hub, database: store.state?.db, need: $0)] } ?? ""
+        _clarifyText = State(initialValue: draft)
+        _clarifying = State(initialValue: !draft.isEmpty)
     }
 
     /// The hub and the generation of this view, while the store still shows them and its reading is current.
@@ -226,6 +270,29 @@ struct SecretEntryView: View {
 
     private var features: [String] { store.state?.ui_features ?? [] }
     private var isRequest: Bool { preset.need != nil }
+    /// The form shows the note's field: the request gave a note, and the hub keeps one (`secret_notes`). A request
+    /// with no note has no such field: an agent writes a note where a name does not say which account it is.
+    private var showsNote: Bool { isRequest && !preset.note.isEmpty && features.contains("secret_notes") }
+    /// The note as it goes to the hub: one line of the hub's most, counted as the hub counts (`NeedSecret.oneLine`).
+    private var noteWords: String { NeedSecret.oneLine(secretNote, most: NeedSecret.noteMost) }
+    /// The request takes his words about it (`secret_clarify`).
+    private var clarifies: Bool { isRequest && features.contains("secret_clarify") }
+    private var clarifyWords: String { clarifyText.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var canClarify: Bool {
+        !busy && context != nil && !clarifyWords.isEmpty && NeedSecret.length(clarifyWords) <= NeedSecret.clarifyMost
+    }
+    /// The orange line for words that look like a key, or that hold the value of the form's own field (`holdsKey`):
+    /// they are not sent, and they stay in the field for him to change. True also while the form shows no field (the
+    /// vault does not answer).
+    static let keyInWords = String(l10n: "That looks like a key. Never send a key in a message.")
+    /// The orange line for a note that looks like it holds a key: the note is no secret, and each agent that holds
+    /// the secret reads it.
+    static let keyInNote = String(l10n: "The note looks like it holds a key. A note is never a key.")
+    /// His words hold what looks like a key, or the very value that the form's Key or Password field holds now, as a
+    /// word of its own and when it has 8 characters or more (`NeedSecret.holds`).
+    private func holdsKey(_ words: String) -> Bool {
+        KeyInText.contains(words) || NeedSecret.holds(value: login.password, in: words)
+    }
     /// A request's form on a step: what it draws stands in the middle, as a step's field and its button do.
     private var onStep: Bool { stepText != nil && (isRequest || preset.keyStep) }
     /// **On a step, a request that names all but the value is the fields for the value alone** (the owner's yes of 11
@@ -294,7 +361,14 @@ struct SecretEntryView: View {
     }
 
     @ViewBuilder private var actions: some View {
+        if clarifying, phase == .form || phase == .noVault { clarifyBox }
         HStack(spacing: 8) {
+            // Needs clarification, in a card: a button of the row's own look at its leading edge, which opens the field
+            if clarifies, !clarifying, phase == .form || phase == .noVault {
+                Button("Needs clarification") { clarifying = true; cursorToWords = true }.buttonStyle(FleetOutlineButtonStyle())
+                    .disabled(busy || context == nil)
+                    .help("Write to \(need?.by.agentLabel ?? String(l10n: "the agent")) about this request").accessibilityIdentifier("secret-clarify")
+            }
             Spacer()
             if case .saved(let progress) = phase {
                 if !progress.isDone {
@@ -323,8 +397,8 @@ struct SecretEntryView: View {
 
     private var saveLabel: String { preset.tell.map { String(l10n: "Save and tell \($0.agentLabel)") } ?? String(l10n: "Save") }
 
-    /// **The same actions under a request at hand, in the middle** (`onStep`): Save, the step's one button, and Decline
-    /// as the quiet link under it, where a step has its way back; after a save, Try again and Done.
+    /// **The same actions under a request at hand, in the middle** (`onStep`): Decline and Save in one row, Save the
+    /// step's one white button, and the quiet link Needs clarification under them; after a save, Try again and Done.
     /// Why the intake of a key page's key failed, once nothing runs (review M3).
     private var keyStepProblem: String? {
         guard preset.keyStep, !busy, case .saved(let progress) = phase else { return nil }
@@ -350,21 +424,92 @@ struct SecretEntryView: View {
             }
         } else {
             VStack(spacing: 14) {
-                // The second click of a double-click on the request before this one presses nothing here (`SecondClick`).
-                if phase == .form, let again {
-                    // The key is in the vault already: Save goes on with it.
-                    Button(saveLabel) { if !SecondClick.isNow { again() } }.buttonStyle(FleetPrimaryButtonStyle())
-                        .disabled(busy).accessibilityIdentifier("secret-save")
-                } else if phase == .form {
-                    Button(saveLabel) { if !SecondClick.isNow { Task { await save() } } }.buttonStyle(FleetPrimaryButtonStyle())
-                        .disabled(!canSave).accessibilityIdentifier("secret-save")
+                // **Decline and Save in one row** (the owner, 19 November 2026, of Decline as a link under Save: "show
+                // Save and decline in the same row to save space"): Decline in the outline of every second button,
+                // then Save, the step's one white button.
+                HStack(spacing: 10) {
+                    if isRequest {
+                        Button("Decline") { if !SecondClick.isNow { Task { await decline() } } }.buttonStyle(FleetOutlineButtonStyle())
+                            .disabled(busy || context == nil)
+                            .help("Tell \(need?.by.agentLabel ?? String(l10n: "the agent")) that you do not give it").accessibilityIdentifier("secret-decline")
+                    }
+                    // The second click of a double-click on the request before this one presses nothing here (`SecondClick`).
+                    if phase == .form, let again {
+                        // The key is in the vault already: Save goes on with it.
+                        Button(saveLabel) { if !SecondClick.isNow { again() } }.buttonStyle(FleetPrimaryButtonStyle())
+                            .disabled(busy).accessibilityIdentifier("secret-save")
+                    } else if phase == .form {
+                        Button(saveLabel) { if !SecondClick.isNow { Task { await save() } } }.buttonStyle(FleetPrimaryButtonStyle())
+                            .disabled(!canSave).accessibilityIdentifier("secret-save")
+                    }
                 }
-                if isRequest {
-                    SetupLink(String(l10n: "Decline")) { if !SecondClick.isNow { Task { await decline() } } }.disabled(busy || context == nil)
-                        .help("Tell \(need?.by.agentLabel ?? String(l10n: "the agent")) that you do not give it").accessibilityIdentifier("secret-decline")
+                // **Needs clarification**, the quiet link under the row, and then the field in its place.
+                if clarifies {
+                    if clarifying {
+                        clarifyBox.frame(maxWidth: SetupMetrics.field)
+                    } else {
+                        SetupLink(String(l10n: "Needs clarification")) { if !SecondClick.isNow { clarifying = true; cursorToWords = true } }
+                            .disabled(busy || context == nil)
+                            .help("Write to \(need?.by.agentLabel ?? String(l10n: "the agent")) about this request").accessibilityIdentifier("secret-clarify")
+                    }
                 }
             }
         }
+    }
+
+    /// **The field of Needs clarification**: the box of a request's answer (`NeedAnswerBox`), with no files and no
+    /// replies: one line at rest and a line more for each line he writes, Send with Return. Words that look like a key
+    /// are not sent: the form's orange line says so (`keyInWords`).
+    private var clarifyBox: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            TextField(String(l10n: "Message to \(need?.by.agentLabel ?? String(l10n: "the agent"))"), text: $clarifyText, axis: .vertical)
+                .focused($clarifyFocused)
+                .accessibilityIdentifier("secret-clarify-words")
+                .onKeyPress(keys: [.return], phases: .down) { press in
+                    if press.modifiers.contains(.shift) { return .ignored }
+                    if canClarify { Task { await clarify() } }
+                    return .handled
+                }
+                .composerField(alone: true, lines: 1...8, font: onStep ? SetupMetrics.textFont : ChatStyle.font,
+                               line: onStep ? 18 : ChatStyle.line)
+                .onChange(of: clarifyText) { old, now in
+                    if NeedSecret.length(now) > NeedSecret.clarifyMost {
+                        // A change that makes the words one character longer than they were, and too long, does not
+                        // go in: a typed character, anywhere in the words. Any other change that is too long is cut
+                        // at the end of the words.
+                        clarifyText = now.count == old.count + 1 && NeedSecret.length(old) <= NeedSecret.clarifyMost
+                            ? old : NeedSecret.cut(now, most: NeedSecret.clarifyMost)
+                        return
+                    }
+                    if message == Self.keyInWords, !holdsKey(now) { message = nil }
+                    // kept for the next time this request comes to hand; never words that look like a key
+                    let kept = now.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let draftKey { Self.clarifyDrafts[draftKey] = holdsKey(now) || kept.isEmpty ? nil : now }
+                }
+            SendSlot(shows: canClarify) {
+                // Not from the second click of a double-click on the request before this one (`SecondClick`): words
+                // that he left here stand with Send from the frame this request comes to hand.
+                Button { if !(onStep && SecondClick.isNow) { Task { await clarify() } } } label: { SendMark() }
+                    .buttonStyle(FleetIconButtonStyle(filled: true)).disabled(!canClarify)
+                    .help("Send this message").accessibilityLabel("Send message")
+                    .accessibilityIdentifier("secret-clarify-send")
+            }
+        }
+        // On a step the box at rest is as high as the fields over it (`SetupMetrics.fieldHeight`), in their width; in
+        // a card it has the room of the composer.
+        .padding(.vertical, onStep ? max(0, (SetupMetrics.fieldHeight - IconMetrics.side) / 2) : ComposerCapsule<EmptyView, EmptyView>.inset)
+        // (its words begin where the words of those fields begin, and Send has the same room at each side)
+        .padding(.leading, onStep ? 6 : ComposerCapsule<EmptyView, EmptyView>.inset)
+        .padding(.trailing, onStep ? 3 : ComposerCapsule<EmptyView, EmptyView>.inset)
+        .background(FleetStyle.composer, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+        .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner)
+            .strokeBorder(FleetStyle.hairline(0.32), lineWidth: FleetStyle.edgeWidth(contrast)))
+        .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
+        .onTapGesture { clarifyFocused = true }
+        .disabled(busy)
+        // The cursor comes once the field stands, as the answer box takes it (`NeedAnswerBox`): set in the press that
+        // makes the field, it could stay where it was, and Return in a chat then sent the chat's own message.
+        .task { if cursorToWords { clarifyFocused = true; cursorToWords = false } }
     }
 
     /// One field of a request at hand: the app's field in the step's size (`setupField`), its name as its placeholder,
@@ -390,6 +535,11 @@ struct SecretEntryView: View {
             } else {
                 stepField(String(l10n: "Key"), text: $login.password, secure: true, id: "secret-password")
             }
+            // The secret's note, only where the request gave one: he reads it here and can change it.
+            if showsNote {
+                stepField(String(l10n: "Note"), text: $secretNote, secure: false, id: "secret-note")
+                    .help(secretNote).onChange(of: secretNote) { old, now in noteChanged(old, now) }
+            }
             // In the middle, as the step's lines are: the line's own row keeps its words at its leading edge.
             waitRow.fixedSize()
         }
@@ -400,7 +550,7 @@ struct SecretEntryView: View {
     /// page, where moving words made each frame of a card take 241–325 ms (the 28 October rule).
     @ViewBuilder private var waitRow: some View {
         if busy || (phase == .form && central == nil) {
-            Held { LoadingLine(busy ? String(l10n: "Saving…") : String(l10n: "Reading Founderizer Vault…"), waits: false).padding(.vertical, 12) }
+            Held { LoadingLine(busy ? (sendingWords ? String(l10n: "Sending…") : String(l10n: "Saving…")) : String(l10n: "Reading Founderizer Vault…"), waits: false).padding(.vertical, 12) }
         }
     }
 
@@ -473,6 +623,11 @@ struct SecretEntryView: View {
                             .fieldPlaceholder("https://api.example.com", shows: login.url.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-url")
                     }
                 }
+            }
+            if showsNote {
+                FormRow("Note") { TextField(text: $secretNote, prompt: Text(verbatim: "")) { Text("Note") }
+                    .fieldPlaceholder(String(l10n: "Note"), shows: secretNote.isEmpty).fleetField().frame(width: 260).accessibilityIdentifier("secret-note")
+                    .help(secretNote).onChange(of: secretNote) { old, now in noteChanged(old, now) } }
             }
             waitRow
         }
@@ -611,10 +766,22 @@ struct SecretEntryView: View {
     private static func blank(_ preset: SecretPreset) -> LoginSecret {
         var login = LoginSecret()
         login.kind = preset.kind; login.env = preset.env; login.url = preset.url
+        if preset.kind == .login { login.username = preset.account }
         return login
     }
 
     private func clear() { login = Self.blank(preset); sameName = nil; withSeed = false }
+
+    /// The Note field holds no more than the hub takes (`NeedSecret.noteMost`, by `NeedSecret.noteLength`), so what he
+    /// reads there is what goes; and the line about a key in the note leaves once the note holds none.
+    private func noteChanged(_ old: String, _ now: String) {
+        if NeedSecret.noteLength(now) > NeedSecret.noteMost {
+            // A change that makes the note one character longer than it was, and too long, does not go in: a typed
+            // character, anywhere in the note. Any other change that is too long is cut at the end of the note.
+            secretNote = now.count == old.count + 1 && NeedSecret.noteLength(old) <= NeedSecret.noteMost
+                ? old : NeedSecret.cut(now, most: NeedSecret.noteMost, note: true)
+        } else if message == Self.keyInNote, !holdsKey(now) { message = nil }
+    }
 
     private func text(_ error: Error) -> String { (error as? LocalizedError)?.errorDescription ?? String(l10n: "The hub did not answer.") }
 
@@ -647,6 +814,9 @@ struct SecretEntryView: View {
         // C42: a value that the central vault never takes, said before anything is sent, so the list keeps no entry
         // with no value; Save stays as it is, so the owner reads why here
         if let problem = login.vaultProblem { message = problem; return }
+        // The note is in the fleet's settings, not in the vault: one that looks like a key, or that holds the value of
+        // this very form, stops the save before anything is sent.
+        if showsNote, holdsKey(noteWords) { message = Self.keyInNote; return }
         guard let context else { message = String(l10n: "No current status of this hub. Nothing was sent."); return }
         guard let central else { phase = .noVault; return }
         busy = true
@@ -729,7 +899,8 @@ struct SecretEntryView: View {
             message = String(l10n: "The hub did not register this secret. \(text(error)) Save again to try once more."); return
         }
         clear(); centralLogin = nil
-        let progress = SecretProgress(login: reference, title: title, kind: kind, grants: grants, need: preset.need, tell: preset.tell,
+        let progress = SecretProgress(login: reference, title: title, kind: kind, grants: grants, need: preset.need,
+                                      note: showsNote ? noteWords : nil, tell: preset.tell,
                                       sealed: sealed, statement: signed?.statement, signature: signed?.signature)
         phase = .saved(progress)
         await proceed(progress)
@@ -761,8 +932,16 @@ struct SecretEntryView: View {
             grants = holders.compactMap { agent in rows[agent].map { SecretProgress.Grant(agent: agent, grant: kind == .login ? .use : $0) } }
                 + doorGrant
         }
+        // The note as the card shows it, only to a secret of the list with no note of its own and of the account that
+        // the request names, or of any account when it names none (`NeedSecret.noteGoes`); else none, and the secret
+        // keeps what it has. A note that looks like a key stops the answer here, before anything is sent, with the
+        // line of a save: read before the fields are cleared, so that the value of the form's own field counts too.
+        let goes = showsNote && need?.secret?.noteGoes(to: entry) == true
+        if goes, holdsKey(noteWords) { message = Self.keyInNote; return }
+        let noted = goes ? noteWords : nil
         clear()
-        let progress = SecretProgress(login: reference, title: entry.name, kind: kind, grants: grants, need: preset.need, tell: nil)
+        let progress = SecretProgress(login: reference, title: entry.name, kind: kind, grants: grants, need: preset.need, note: noted,
+                                      tell: nil)
         phase = .saved(progress)
         await proceed(progress)
     }
@@ -818,8 +997,9 @@ struct SecretEntryView: View {
         if let need = progress.need, !progress.answered {
             do {
                 _ = try await secrets.answer(hub: context.hub, database: context.db, client: installation, need: need,
-                                             requestID: progress.answerID, login: progress.login)
+                                             requestID: progress.answerID, login: progress.login, note: progress.note)
                 progress.answered = true; progress.answerProblem = nil
+                forgetDraft()       // the request has its answer: words that he left in its message field go
             } catch {
                 // A request that had its answer already, here or on another of this Mac's views of it, takes no other.
                 if case HubError.refusal(let refused) = error, refused.status == 409, refused.means(.requestAnswered) {
@@ -884,11 +1064,36 @@ struct SecretEntryView: View {
             _ = try await SecretsClient().decline(hub: context.hub, database: context.db, client: store.installation, need: need,
                                                   requestID: declineID, words: "")
             clear()
+            forgetDraft()
             await store.refresh()
             onDone(nil)
         } catch {
             if case HubError.refusal(let refused) = error, refused.status == 409 { declineID = UUID() }      // the request had its answer; a new one is another command
             message = String(l10n: "The decline did not reach the hub. \(text(error))")
+        }
+    }
+
+    /// **Needs clarification**: his words about the request go to the hub, which closes the request with them and
+    /// gives them to the agent that asked. Words that look like a key stay here (`keyInWords`); the hub refuses a
+    /// registered login in them too.
+    private func clarify() async {
+        guard let need = preset.need, let context, canClarify else { return }
+        let words = clarifyWords
+        if holdsKey(words) { message = Self.keyInWords; return }
+        busy = true; sendingWords = true
+        defer { busy = false; sendingWords = false }
+        message = nil
+        do {
+            _ = try await SecretsClient().clarify(hub: context.hub, database: context.db, client: store.installation, need: need,
+                                                  requestID: clarifyID, words: words)
+            clear()
+            forgetDraft()
+            clarifyText = ""
+            await store.refresh()
+            onDone(nil)
+        } catch {
+            if case HubError.refusal(let refused) = error, refused.status == 409 { clarifyID = UUID() }      // the request had its answer; a new one is another command
+            message = String(l10n: "Your message did not reach the hub. \(text(error))")
         }
     }
 }

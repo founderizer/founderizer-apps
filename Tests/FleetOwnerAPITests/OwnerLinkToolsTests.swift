@@ -6,6 +6,8 @@ import Testing
 
 /// A token of the form that `BotToken` takes: made up, of no bot.
 let exampleToken = Data("198622483471925248".utf8).base64EncodedString() + ".Cl2FMQ." + String(repeating: "b", count: 29)
+/// A Telegram bot token of BotFather's form, made up: the bot's number, a colon and its key.
+let exampleTelegramToken = "7000000001:" + String(repeating: "c", count: 35)
 
 /// A text that no refusal may hold: each test puts it where a caller could (a field's value, a field's name, the path,
 /// the value) and looks for it in every refusal.
@@ -634,7 +636,7 @@ final class OwnerLinkProgramTests {
         #expect(OwnerLinkTools.tools.map(\.name) == OwnerLinkTools.names)
         #expect(Fixture.table.tool(SaveBotToken.name) == nil)
         let (status, out, _) = try run(["tools"], ValueLink())
-        #expect(status == 0 && out.contains { $0.hasPrefix("write save_bot_token: Saves the token of a Discord bot") })
+        #expect(status == 0 && out.contains { $0.hasPrefix("write save_bot_token: Saves the token of a Discord or Telegram bot") })
     }
 
     @Test func writeTakesItAndSendsNoPath() throws {
@@ -826,7 +828,8 @@ final class StandInDesk {
     var cancelOnAccounts = false
 
     var desk: SaveBotToken.Desk<BotToken, String> {
-        SaveBotToken.Desk(token: { BotToken(pasted: $0) }, isAccountID: { ChatApps.isAccountID($0) },
+        SaveBotToken.Desk(token: { BotToken(pasted: $0) }, telegramToken: { BotToken(telegram: $0) },
+                          isAccountID: { ChatApps.isAccountID($0) },
                           ready: { [self] in ready ? "hub-and-database" : nil },
                           accounts: { [self] place in
                               #expect(place == "hub-and-database")
@@ -876,6 +879,32 @@ struct OwnerSaveBotTokenTests {
                 == .result(.object(["account": .string("discord-example"), "set": .bool(true), "replaced": .bool(true)])))
     }
 
+    /// A Telegram bot takes a token of Telegram's form, from a file and from the clipboard, and each app's token goes
+    /// only to a bot of that app, as the hub's own check says (CHAT-APPS.md 19.1).
+    @Test func aTelegramBotTakesATelegramTokenAndNoOther() async {
+        let app = StandInDesk()
+        app.accounts.append(.init(id: "telegram-example", app: "telegram", state: "missing_token"))
+        let telegram: [String: JSONValue] = ["account": .string("telegram-example"), "from": .string("file")]
+        #expect(await app.answer(telegram, exampleTelegramToken + "\n")
+                == .result(.object(["account": .string("telegram-example"), "set": .bool(true), "replaced": .bool(false)])))
+        #expect(app.saved.count == 1 && app.saved.first?.1 == BotToken(telegram: exampleTelegramToken))
+        #expect(await app.answer(telegram, exampleToken) == .refused(SaveBotToken.notToken))
+        #expect(await app.answer(save, exampleTelegramToken) == .refused(SaveBotToken.notToken))
+        #expect(await app.answer(telegram, "7000000001:short") == .refused(SaveBotToken.notToken))
+        #expect(app.saved.count == 1)
+        #expect(SaveBotToken.hasTelegramParts(exampleTelegramToken) && !SaveBotToken.hasTelegramParts(exampleToken))
+        #expect(!SaveBotToken.hasTelegramParts("bot" + exampleTelegramToken))
+        #expect(!SaveBotToken.hasTelegramParts(exampleTelegramToken + ":c") && !SaveBotToken.hasTokenParts(exampleTelegramToken))
+        // From the clipboard, read after the account: its sentence is of the account's app.
+        let clip: [String: JSONValue] = ["account": .string("telegram-example"), "from": .string("clipboard")]
+        app.clipboard = .text(exampleToken, count: 41)
+        #expect(await app.answer(clip, nil) == .refused(SaveBotToken.notOnClipboardTelegram))
+        app.clipboard = .text(exampleTelegramToken, count: 41)
+        #expect(await app.answer(clip, nil) == .result(.object(["account": .string("telegram-example"), "set": .bool(true),
+                                                                 "replaced": .bool(false), "clipboard": .string("cleared")])))
+        #expect(app.saved.count == 2 && app.saved.last?.1 == BotToken(telegram: exampleTelegramToken))
+    }
+
     @Test func aDeleteSendsNil() async {
         let app = StandInDesk()
         app.receipt = .init(set: false, replaced: true)
@@ -894,7 +923,7 @@ struct OwnerSaveBotTokenTests {
         #expect(await app.answer(["account": .string("Not An Id"), "from": .string("file")], exampleToken)
                 == .refused(SaveBotToken.noAccount))
         #expect(await app.answer(["account": .string("whatsapp-example"), "from": .string("file")], exampleToken)
-                == .refused(SaveBotToken.notDiscord))
+                == .refused(SaveBotToken.notBotApp))
         #expect(await app.answer(save, "not a token") == .refused(SaveBotToken.notToken))
         // Bytes that are not UTF-8 get the same sentence as a text that is no token.
         let notUTF8 = await SaveBotToken.answer(fields: save, value: OwnerChannel.Value(copying: [0xFF, 0x41]),
@@ -1242,7 +1271,8 @@ struct OwnerSaveBotTokenClipboardTests {
             + "input from a program's pipe (never pbpaste or another read of the clipboard: for the clipboard, use "
             + "from clipboard), never an echo or a here-string of the token; the MCP form refuses it. from clipboard: "
             + "the app reads the clipboard itself, after every other check passed, once the owner copied the bot's "
-            + "token in Discord's Developer Portal and said so; never read the clipboard yourself."
+            + "token (in Discord's Developer Portal, or from Telegram's BotFather) and said so; never read the "
+            + "clipboard yourself."
         #expect(description.contains("this tool does not make the account. " + part + " When macOS asks whether "
                                      + "Founderizer may access the pasteboard, the owner presses Allow Paste."))
         // Each rule is said one time.
@@ -1296,7 +1326,7 @@ struct OwnerSaveBotTokenClipboardTests {
             (["account": .string("discord-other"), "from": .string("clipboard")], .refused(SaveBotToken.noAccount)),
             (["account": .string("Not An Id"), "from": .string("clipboard")], .refused(SaveBotToken.noAccount)),
             (["account": .string("whatsapp-example"), "from": .string("clipboard")],
-             .refused(SaveBotToken.notDiscord)),
+             .refused(SaveBotToken.notBotApp)),
             (["account": .string("discord-live"), "from": .string("clipboard")], .refused(SaveBotToken.connected)),
             (clip.merging(["force": .bool(true)]) { $1 }, .refused(SaveBotToken.only)),
             (clip.merging(["replace": .string("yes")]) { $1 }, .refused(SaveBotToken.replaceWord)),

@@ -195,6 +195,60 @@ public struct MacNeeds: Decodable, Equatable, Sendable {
     }
 }
 
+/// This Mac's own reading of Chrome and Claude's extension (`server.py desktop`, lifecycle's `Lifecycle.desktop`).
+public struct MacDesktop: Decodable, Equatable, Sendable {
+    /// Claude's extension in Chrome: on, off, or null where no profile has it or macOS hides Chrome's folder.
+    public let `extension`: Bool?
+    /// Chrome answers Claude Code's account. Read only while Claude Code is signed in and the extension is on or hidden.
+    public let browser: Bool?
+    /// macOS refuses this Mac's programs a list of Chrome's folder (macOS 27; lifecycle's `chrome_hidden`), so
+    /// `extension` is null whether Chrome has the extension or not. Null from a `server.py` before it.
+    public let hidden: Bool?
+    /// The account and the organization of Claude Code on this Mac, which the extension must be signed in to (owner
+    /// API 1.238). Null while Claude Code is signed out.
+    public let claude_account: ClaudeAccount?
+
+    public struct ClaudeAccount: Decodable, Equatable, Sendable {
+        public let email: String
+        public let org: String?
+    }
+
+    private enum Keys: String, CodingKey { case `extension`, browser, hidden, claude_account }
+
+    /// A `hidden` or an account of another shape reads as none: it never costs the reading of the extension and the link.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: Keys.self)
+        self.extension = try values.decodeIfPresent(Bool.self, forKey: .extension)
+        browser = try values.decodeIfPresent(Bool.self, forKey: .browser)
+        hidden = try? values.decodeIfPresent(Bool.self, forKey: .hidden)
+        claude_account = try? values.decodeIfPresent(ClaudeAccount.self, forKey: .claude_account)
+    }
+
+    /// The command's last line, as `MacNeeds` reads its own. Nil for an answer that is not this reading.
+    public static func read(_ output: String) -> MacDesktop? {
+        output.split(separator: "\n").last.flatMap { try? JSONDecoder().decode(MacDesktop.self, from: Data($0.utf8)) }
+    }
+
+    /// Claude Code's sign-in comes after the extension: one that is on, or one that macOS hides, which no reading can
+    /// say is on. Without the hidden one, a sitting on macOS 27 never started Claude Code's sign-in.
+    public var extensionReady: Bool { self.extension == true || hidden == true }
+
+    /// The Claude page's orange line when this Mac's Chrome opens no test page. It names the account and the
+    /// organization of Claude Code here, which the extension must use (the owner, 19 November 2026: "the step 1 should
+    /// mention the specific email address to use!"). Before, it said "the account made for this Mac".
+    public static func noAnswer(_ desktop: MacDesktop?) -> String {
+        var who = ", with the account made for this Mac."
+        if let account = desktop?.claude_account {
+            who = " as \(account.email)" + (account.org.map { ", organization \($0)" } ?? "")
+            if !who.hasSuffix(".") { who += "." }       // an organization such as "Example Inc." ends the sentence
+        }
+        // The steps of the hub's card for such a Mac (hub.unlinked_steps) have this too: the line is the step, and the
+        // installer cannot see whether Chrome has the extension there.
+        return "This Mac's Chrome did not open the test page. Check that Claude's extension is logged in here" + who
+            + (desktop?.hidden == true ? " If Chrome has no Claude extension, add it from the Chrome Web Store first." : "")
+    }
+}
+
 /// What the installer keeps on that Mac between two starts: the page it stands on, so that a power cut does not lose
 /// the owner's place, and the name of the root step it started. It holds no secret: the order stays in memory, and an
 /// install stopped before the join starts again from a new link code.

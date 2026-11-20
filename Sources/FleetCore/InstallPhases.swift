@@ -16,6 +16,13 @@ public struct InstallPhases: Equatable, Sendable {
     /// "some extra messages of status of what's actually doing would help, like a subheader"). nil once every step is
     /// done, and for a step that has no words of its own.
     public let status: String?
+    /// **How much of each of the four steps is done**, from 0 to 1, by the measured seconds of its plan's steps
+    /// (`seconds`): the bar of four parts under a server on the first run's build page (slice 3 of the one wizard; the
+    /// owner's "that is brilliant!" of 16 November 2026 to its picture). The step that runs counts its time so far, up
+    /// to its estimate.
+    public let parts: [Double]
+    /// The id of the plan's step that runs now or comes next; nil once every step is done.
+    public let step: String?
 
     /// **Seconds that each step takes, as the proof run of 5 November 2026 measured them** on a new Hetzner CX23 with
     /// Ubuntu 24.04 (the owner: "It's been showing 1 minute for like 5 minutes... better timing"). "start" ends at once,
@@ -52,6 +59,20 @@ public struct InstallPhases: Equatable, Sendable {
         }
         minutesLeft = Int((Double(left) / 60).rounded(.up))
         status = open.first.flatMap { Self.status(steps[$0]) }
+        var total = [Int](repeating: 0, count: Self.names.count)
+        var done = [Double](repeating: 0, count: Self.names.count)
+        for index in steps.indices {
+            let part = phase(index), estimate = Self.seconds[steps[index].step] ?? Self.otherStep
+            total[part] += estimate
+            if steps[index].state == .done {
+                done[part] += Double(estimate)
+            } else if index == open.first, steps[index].state == .running {
+                done[part] += min(max(0, runningFor), Double(estimate))
+            }
+        }
+        let current = current
+        parts = total.indices.map { total[$0] > 0 ? min(1, done[$0] / Double(total[$0])) : ($0 < current ? 1 : 0) }
+        step = open.first.map { steps[$0].step }
     }
 
     /// The words of one step that runs, in the order the first run meets them. The long wait for the hub's own installer

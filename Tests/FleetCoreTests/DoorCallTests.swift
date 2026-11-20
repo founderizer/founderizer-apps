@@ -258,14 +258,20 @@ struct DoorCallTests {
             row.merge(more) { $1 }
             return try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: row))
         }
-        let card = try need(["door_script": Self.script, "details": DoorCall.details(script: Self.script)])
+        let shows: [String: Any] = ["door_script": Self.script, "details": DoorCall.details(script: Self.script)]
+        let card = try need(shows)
         #expect(card.door_script == Self.script)
-        #expect(DoorCall.checked(title: card.title, answers: card.options ?? [], host: "web-1", call: Self.call,
-                                 script: card.door_script, details: card.details) == .success(Self.call))
+        #expect(DoorCall.checked(card) == .success(Self.call))
         let old = try need(["details": "cp -a /srv/app/uploads /root/uploads-copy"])      // a hub before API 1.125
         #expect(old.door_script == nil)
-        #expect(DoorCall.checked(title: old.title, answers: old.options ?? [], host: "web-1", call: Self.call,
-                                 script: old.door_script, details: old.details) == .failure(.noScript))
+        #expect(DoorCall.checked(old) == .failure(.noScript))
+        // the one call of the Mac and the iPhone (the lane "Give on the iPhone") holds each word of the card that the
+        // apps draw to the rule: its why, what it needs from him, and the task that asked
+        for words in [["why": "It runs `id` first."], ["todo": "Run `id`"],
+                      ["door_task": "Copy `rm -rf /` the uploads"]] as [[String: Any]] {
+            #expect(DoorCall.checked(try need(shows.merging(words) { $1 })) == .failure(.decoy), "\(words)")
+        }
+        #expect(DoorCall.checked(try need(shows.merging(["door_host": NSNull()]) { $1 })) == nil)   // no run of a server
     }
 
     /// The owner's "Yes, as shown" of 14 November 2026: two cards on one server read as two things. The title that

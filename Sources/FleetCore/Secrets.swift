@@ -181,9 +181,17 @@ public struct TeamLogin: Decodable, Equatable, Sendable {
     public let kind: String?
     public let env: String?
     public let grants: [String: String]?
+    /// **The secret's note** (owner feature `secret_notes`, API 1.249; the owner, 19 November 2026: "the need of adding
+    /// notes/context to each key/secret"): one line that says which account or key it is and when to use it, or nil
+    /// for a secret with none. An agent that holds the secret reads it beside the secret's name.
+    public let note: String?
+    /// Who wrote the words of the note: `owner` or `agent`.
+    public let note_by: String?
 
-    public init(title: String, protected: Bool?, kind: String? = nil, env: String? = nil, grants: [String: String]? = nil) {
+    public init(title: String, protected: Bool?, kind: String? = nil, env: String? = nil, grants: [String: String]? = nil,
+                note: String? = nil, note_by: String? = nil) {
         self.title = title; self.protected = protected; self.kind = kind; self.env = env; self.grants = grants
+        self.note = note; self.note_by = note_by
     }
 
     public var isAPIKey: Bool { kind == "api_key" }
@@ -795,12 +803,29 @@ public struct NeedSecret: Decodable, Equatable, Sendable {
     public let give: [String: SecretGrant]
     /// The reference of the secret that answered the request.
     public let saved: String?
+    /// **The note that the asker gives the secret** (owner feature `secret_notes`, API 1.249): the card shows it as a
+    /// field that the owner can change, and only when the request has one.
+    public let note: String?
+    /// The user name or email of the account that a login request names (API 1.249): the start of the card's User
+    /// name field. The request's reason names it too.
+    public let account: String?
+    /// **The owner answered with words about the request** (Needs clarification, owner feature `secret_clarify`):
+    /// the item's answer is his own words, which have no check (`OwnerNeed.answeredInWords`).
+    public let clarified: Bool
 
-    public init(kind: LoginSecret.Kind, env: String? = nil, site: String? = nil, give: [String: SecretGrant] = [:], saved: String? = nil) {
+    /// The hub's most for a note and for an account, which bound what the card takes from a request.
+    public static let noteMost = 200
+    public static let accountMost = 100
+    /// The hub's most for the owner's words about a request.
+    public static let clarifyMost = 2000
+
+    public init(kind: LoginSecret.Kind, env: String? = nil, site: String? = nil, give: [String: SecretGrant] = [:], saved: String? = nil,
+                note: String? = nil, account: String? = nil, clarified: Bool = false) {
         self.kind = kind; self.env = env; self.site = site; self.give = give; self.saved = saved
+        self.note = note; self.account = account; self.clarified = clarified
     }
 
-    private enum Keys: String, CodingKey { case kind, env, site, give, saved }
+    private enum Keys: String, CodingKey { case kind, env, site, give, saved, note, account, clarified }
 
     public init(from decoder: Decoder) throws {
         let data = try decoder.container(keyedBy: Keys.self)
@@ -811,6 +836,74 @@ public struct NeedSecret: Decodable, Equatable, Sendable {
         give = ((try? data.decodeIfPresent([String: String].self, forKey: .give)) ?? [:])
             .compactMapValues(SecretGrant.init(rawValue:))
         saved = (try? data.decodeIfPresent(String.self, forKey: .saved)).flatMap { LoginSecret.isReference($0) ? $0 : nil }
+        // One line each, within the hub's own bounds: the card draws no other text from a request.
+        note = (try? data.decodeIfPresent(String.self, forKey: .note)).flatMap { Self.line($0, most: Self.noteMost) }
+        account = (try? data.decodeIfPresent(String.self, forKey: .account)).flatMap { Self.line($0, most: Self.accountMost) }
+        // The hub writes the time of his words there: any value says that words answered the request.
+        clarified = data.contains(.clarified) && (try? data.decodeNil(forKey: .clarified)) != true
+    }
+
+    /// One line of text of at most `most` characters, or nil.
+    private static func line(_ text: String, most: Int) -> String? {
+        let words = text.trimmingCharacters(in: .whitespaces)
+        return words.isEmpty || noteLength(words) > most || words.contains(where: \.isNewline) ? nil : words
+    }
+
+    /// **The length of a text as the hub counts it**: its code points, where Swift's `count` gives its characters. An
+    /// emoji of several code points, or an accent that stands apart from its letter, is one character and more than
+    /// one code point, so words that the app counted as short enough came back refused. The words about a request
+    /// (`clarifyMost`) are counted so.
+    public static func length(_ text: String) -> Int { text.unicodeScalars.count }
+
+    /// **The length of a note, never less than the hub's count of it.** The hub folds the wide and joined forms first
+    /// (NFKC), which makes more code points of some characters ("…" becomes three, "ﬁ" two), and then only takes
+    /// characters away. So a note that is short enough here is short enough there.
+    public static func noteLength(_ text: String) -> Int { text.precomposedStringWithCompatibilityMapping.unicodeScalars.count }
+
+    /// `text` up to the last whole character that keeps it within `most`, by the note's count or by code points, in
+    /// one pass: a paste of a hundred thousand characters costs the first `most` of them.
+    public static func cut(_ text: String, most: Int, note: Bool = false) -> String {
+        var count = 0, end = text.startIndex
+        for index in text.indices {
+            let one = String(text[index])
+            count += note ? noteLength(one) : length(one)
+            if count > most { break }
+            end = text.index(after: index)
+        }
+        return String(text[..<end])
+    }
+
+    /// `text` as one line of at most `most` by the note's count: its line breaks are spaces, and what is over the most
+    /// is cut at a whole character. What the card's Note field holds, and what goes to the hub.
+    public static func oneLine(_ text: String, most: Int) -> String {
+        let line = text.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        return cut(line, most: most, note: true).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// **Whether `words` hold `value` as a word of its own**: a value of 8 characters or more, with no letter or digit
+    /// before or after it. What the form's Key or Password field holds must not go in a note or in a message; a short
+    /// or common password inside a longer word ("second" in "the second account") is no such find.
+    public static func holds(value: String, in words: String) -> Bool {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)      // as the vault keeps it, with no blank at an end
+        guard value.count >= 8 else { return false }
+        var from = words.startIndex
+        while let found = words.range(of: value, range: from..<words.endIndex) {
+            let before = found.lowerBound == words.startIndex ? nil : words[words.index(before: found.lowerBound)]
+            let after = found.upperBound == words.endIndex ? nil : words[found.upperBound]
+            if !(before.map { $0.isLetter || $0.isNumber } ?? false) && !(after.map { $0.isLetter || $0.isNumber } ?? false) { return true }
+            from = words.index(after: found.lowerBound)
+        }
+        return false
+    }
+
+    /// **Whether the request's note goes to a secret of the list that answers it** ("Answer with it"): only to one with
+    /// no note of its own, and only to one of the account that the request names, by the user name in its title. The
+    /// card offers each login of the site, also of another account, and the note says what one account is.
+    public func noteGoes(to entry: TeamLogin) -> Bool {
+        guard note != nil, (entry.note ?? "").isEmpty else { return false }
+        guard let account, !account.isEmpty else { return true }
+        guard let mark = entry.title.range(of: " · ") else { return false }
+        return entry.title[mark.upperBound...].trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(account) == .orderedSame
     }
 
     /// What the request asks for, in a few words: "the API key STRIPE_SECRET_KEY", "a login for dashboard.stripe.com".
@@ -835,12 +928,25 @@ extension SecretCommand {
     /// `POST /ui/needs/<id>/secret`: the answer of one secret request, with the reference of the secret that answers
     /// it, or a decline with the owner's own words or none. No value is in it, and the words that reach the agent are
     /// the hub's own.
-    public static func answer(requestID: UUID, database: String, login: String?, decline: String?) throws -> Data {
-        guard (login == nil) != (decline == nil), login.map(LoginSecret.isReference) ?? true,
-              decline.map({ $0.count <= 300 && !$0.contains(where: \.isNewline) }) ?? true else { throw HubError.invalidResponse }
+    ///
+    /// API 1.249: `note`, with `login`, is the secret's note as the card shows it at the save (owner feature
+    /// `secret_notes`); `clarify`, in place of both, is the owner's words about the request (Needs clarification,
+    /// owner feature `secret_clarify`), which close it and go to the agent that asked.
+    public static func answer(requestID: UUID, database: String, login: String?, decline: String?, note: String? = nil,
+                              clarify: String? = nil) throws -> Data {
+        let words = clarify?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The two lengths as the hub counts them: the words in code points, the note by `NeedSecret.noteLength`.
+        guard [login != nil, decline != nil, clarify != nil].filter({ $0 }).count == 1, login.map(LoginSecret.isReference) ?? true,
+              decline.map({ $0.count <= 300 && !$0.contains(where: \.isNewline) }) ?? true,
+              words.map({ !$0.isEmpty && NeedSecret.length($0) <= NeedSecret.clarifyMost }) ?? true,
+              note == nil || login != nil,
+              note.map({ NeedSecret.noteLength($0) <= NeedSecret.noteMost && !$0.contains(where: \.isNewline) }) ?? true
+        else { throw HubError.invalidResponse }
         var body: [String: Any] = ["request_id": requestID.uuidString.lowercased(), "db": database]
         body["login"] = login
         body["decline"] = decline?.trimmingCharacters(in: .whitespaces)
+        body["note"] = note?.trimmingCharacters(in: .whitespaces)
+        body["clarify"] = words
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
     }
 }
@@ -858,8 +964,18 @@ public struct SecretAnswerReceipt: Decodable, Sendable {
 extension SecretsClient {
     /// The answer of one secret request with a secret of the catalog. The same `requestID` again gives the same
     /// answer, so a retry after no reply is safe.
-    public func answer(hub: URL, database: String, client: String, need: Int, requestID: UUID, login: String) async throws -> SecretAnswerReceipt {
-        try await answer(hub: hub, database: database, client: client, need: need, requestID: requestID, login: login, decline: nil)
+    /// `note`: the secret's note as the card shows it at the save, or nil where the card shows none (API 1.249).
+    public func answer(hub: URL, database: String, client: String, need: Int, requestID: UUID, login: String,
+                       note: String? = nil) async throws -> SecretAnswerReceipt {
+        try await answer(hub: hub, database: database, client: client, need: need, requestID: requestID, login: login, decline: nil,
+                         note: note)
+    }
+
+    /// **Needs clarification** (owner feature `secret_clarify`, API 1.249): the owner's words about one secret request,
+    /// in place of an answer. They close it and go to the agent that asked.
+    public func clarify(hub: URL, database: String, client: String, need: Int, requestID: UUID, words: String) async throws -> SecretAnswerReceipt {
+        try await answer(hub: hub, database: database, client: client, need: need, requestID: requestID, login: nil, decline: nil,
+                         clarify: words)
     }
 
     /// The owner says no to one secret request, with his own words or none.
@@ -868,8 +984,9 @@ extension SecretsClient {
     }
 
     private func answer(hub: URL, database: String, client: String, need: Int, requestID: UUID, login: String?,
-                        decline: String?) async throws -> SecretAnswerReceipt {
-        let body = try SecretCommand.answer(requestID: requestID, database: database, login: login, decline: decline)
+                        decline: String?, note: String? = nil, clarify: String? = nil) async throws -> SecretAnswerReceipt {
+        let body = try SecretCommand.answer(requestID: requestID, database: database, login: login, decline: decline,
+                                            note: note, clarify: clarify)
         let receipt = try JSONDecoder().decode(SecretAnswerReceipt.self, from: await command("ui/needs/\(need)/secret", hub: hub, client: client, body: body))
         guard receipt.ok, receipt.request_id == requestID.uuidString.lowercased(), receipt.client == client, receipt.need == need,
               receipt.login == login else { throw HubError.invalidResponse }

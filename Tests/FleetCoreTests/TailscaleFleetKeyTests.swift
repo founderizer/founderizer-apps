@@ -565,6 +565,48 @@ struct TailscaleFleetKeyTests {
         #expect(tailscale.calls.allSatisfy { $0.url.host == "api.tailscale.com" && !$0.url.absoluteString.contains("secret") })
     }
 
+    /// **A cloud server's join key lives as long as the app waits for its server, one hour**, where a bare Mac's lives
+    /// two hours and every other key fifteen minutes (the owner's choice of 11 November 2026). It stands in the provider's metadata until the
+    /// server's first boot uses it, which a boot that meets the server's first updates does after about ten minutes.
+    @Test func aCloudServersJoinKeyLivesAsLongAsTheAppWaits() async throws {
+        let tailscale = Self.minting()
+        let key = try await CloudServers.joinKey(
+            for: "worker-3", from: TailscaleFleetKey(exchange: tailscale.exchange, shelf: MemoryShelf(Self.held.stored)))
+        #expect(key == "tskey-auth-kAUTH1234CNTRL-notarealkey")
+        let body = try #require(tailscale.call("POST", Self.keys)?.object)
+        #expect(body["expirySeconds"] as? Int == 3600 && CloudServers.joinKeyLife == 3600)
+        #expect(body["description"] as? String == "Founderizer worker-3")
+        let create = ((body["capabilities"] as? [String: Any])?["devices"] as? [String: Any])?["create"] as? [String: Any]
+        #expect(create?["reusable"] as? Bool == false && create?["preauthorized"] as? Bool == true)
+    }
+
+    /// **A machine's key lives as long as its install asks, from the fleet key too**: two hours for a bare Mac
+    /// (`PrivateNetwork.macKeyLifeSeconds`: its installer first installs what Tailscale needs, in minutes that nobody
+    /// can name), and fifteen minutes for every other install. Until 11 November 2026 a key from the fleet key lived
+    /// fifteen minutes whatever the install asked; only the credential of before gave a Mac its two hours. With neither
+    /// the fleet key nor a credential there is no key, and the machine signs in by Tailscale's own link.
+    @Test func aMachinesKeyLivesAsLongAsItsInstallAsks() async throws {
+        let fleet = Self.minting()
+        let fleetKey = TailscaleFleetKey(exchange: fleet.exchange, shelf: MemoryShelf(Self.held.stored))
+        for (asked, life) in [(PrivateNetwork.macKeyLifeSeconds, 7200), (PrivateNetwork.keyLifeSeconds, 900)] {
+            let key = try await PrivateNetwork.joinKey(for: "studio", life: asked, fleetKey: fleetKey, credential: nil)
+            #expect(key == "tskey-auth-kAUTH1234CNTRL-notarealkey")
+            #expect(fleet.call("POST", Self.keys)?.object?["expirySeconds"] as? Int == life)
+        }
+        // A fleet that has only the credential of before: the same life, from that credential.
+        let older = Self.minting()
+        let none = TailscaleFleetKey(exchange: older.exchange, shelf: MemoryShelf())
+        let credential = NetworkCredential(clientID: "kAbCd1234CNTRL", secret: "tskey-client-kAbCd1234CNTRL-secretpart")
+        let key = try await PrivateNetwork.joinKey(for: "studio", life: PrivateNetwork.macKeyLifeSeconds, fleetKey: none,
+                                                   credential: credential, client: NetworkClient(exchange: older.exchange))
+        #expect(key == "tskey-auth-kAUTH1234CNTRL-notarealkey")
+        #expect(older.call("POST", Self.keys)?.object?["expirySeconds"] as? Int == 7200)
+        let calls = older.calls.count
+        #expect(try await PrivateNetwork.joinKey(for: "studio", fleetKey: none, credential: nil,
+                                                 client: NetworkClient(exchange: older.exchange)) == nil)
+        #expect(older.calls.count == calls)
+    }
+
     @Test func aMachinesNameIsFitForTailscalesOwnScreen() {
         #expect(TailscaleFleetKey.keyDescription("hub-1") == "Founderizer hub-1")
         #expect(TailscaleFleetKey.keyDescription("") == "Founderizer server")

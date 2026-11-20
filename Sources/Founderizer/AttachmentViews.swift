@@ -1,5 +1,7 @@
 import AppKit
 import FleetCore
+import QuickLook
+import QuickLookUI
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -8,14 +10,26 @@ import UniformTypeIdentifiers
 /// dropped on the composer or anywhere in the conversation, and a picture pasted with Cmd+V.
 struct AttachFilesButton: View {
     @Bindable var store: FleetStore
-    /// The composer that the files belong to: one chat, or one open request of Needs you.
+    /// The composer that the files belong to: one chat, one open request of Needs you, or one task's guidance.
     let composer: String
     @State private var picking = false
 
     private var room: Int { max(0, MessageAttachment.perMessage - store.stagedFiles(for: composer).count) }
+    /// A task's guidance (`FleetStore.stageKey(task:database:)`), and the files that it takes
+    /// (`FleetStore.filesTaken`): its session may open only pictures and texts, or only texts.
+    private var guidance: Bool { composer.hasPrefix("task:") }
+    private var taken: GuidanceFiles { store.filesTaken(by: composer) }
     private var words: String {
-        room > 0 ? String(l10n: "Send a picture, a PDF, a ZIP or a text file with this message")
-                 : String(l10n: "A message carries at most \(MessageAttachment.perMessage) files")
+        if room == 0 {
+            return guidance ? String(l10n: "Guidance carries at most \(MessageAttachment.perMessage) files")
+                            : String(l10n: "A message carries at most \(MessageAttachment.perMessage) files")
+        }
+        switch taken {
+        case .texts: return String(l10n: "Send a text file with this guidance")
+        case .shown: return String(l10n: "Send a picture or a text file with this guidance")
+        case .any: return guidance ? String(l10n: "Send a picture, a PDF, a ZIP or a text file with this guidance")
+                                   : String(l10n: "Send a picture, a PDF, a ZIP or a text file with this message")
+        }
     }
 
     var body: some View {
@@ -24,11 +38,14 @@ struct AttachFilesButton: View {
         .disabled(room == 0 || store.storageError != nil)
         .accessibilityLabel("Attach a file")
         .accessibilityIdentifier("attach-file")
-        .fileImporter(isPresented: $picking, allowedContentTypes: Self.types, allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $picking, allowedContentTypes: Self.types(taken),
+                      allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else {
                 if case .failure(let error) = result { store.setFileError(error.localizedDescription, for: composer) }
                 return
             }
+            // A pick is one batch: the words of a file that it refuses stay while the next file of it goes in.
+            store.setFileError(nil, for: composer)
             Task { for url in urls.prefix(room) { await store.stage(contentsOf: url, for: composer) } }
         }
     }
@@ -36,6 +53,14 @@ struct AttachFilesButton: View {
     /// The types that the hub takes, as the open panel names them.
     static let types: [UTType] = [.png, .jpeg, .gif, .webP, .pdf, .zip, .plainText, .commaSeparatedText, .json,
                                   UTType(filenameExtension: "md") ?? .plainText]
+    /// The types of the open panel for the files that a composer takes (`GuidanceFiles`).
+    static func types(_ taken: GuidanceFiles) -> [UTType] {
+        switch taken {
+        case .any: types
+        case .shown: types.filter { $0 != .pdf && $0 != .zip }
+        case .texts: types.filter { ![.png, .jpeg, .gif, .webP, .pdf, .zip].contains($0) }
+        }
+    }
 }
 
 /// The files that wait in one composer: a picture shows itself, another file its kind. Each says when it is going up
@@ -174,43 +199,72 @@ struct KeepFileRow: View {
 }
 
 /// The files of one message, under its text: a picture is shown, another file is a row with its kind, its name and
-/// its size. A click opens it in the Mac's own viewer, from bytes whose SHA-256 the app checked. Under each file,
-/// what the owner presses to keep it past the ninety days (`KeepFileRow`).
+/// its size. **A click opens it in the Mac's preview window over the app** (Quick Look: every page of a PDF, the
+/// picture at its size, with the window's own Open with Preview and Share; Esc closes it; the owner's yes of 18
+/// November 2026, which replaced the open in the Preview app outside Founderizer), from bytes whose SHA-256 the app
+/// checked. Under each of his own files, what the owner presses to keep it past the ninety days (`KeepFileRow`);
+/// **an agent's file has a save icon while the pointer is on it** (the same yes): at the end of a file's row, at the
+/// top right of a picture. It writes the file into Downloads, never over a file that is there, and "Saved to
+/// Downloads" shows under it. **An agent's file also drags out of the chat** (the same yes) to Finder, or to any other
+/// app outside Founderizer, as the file itself (`ChatFileDrag`), and no place inside the app takes it.
 struct MessageFilesView: View {
     @Bindable var store: FleetStore
     let files: [MessageAttachment]
     var alignment: HorizontalAlignment = .trailing
-    /// The keep presses under each file, for his own files. An agent's file (CHAT-APPS.md 20) shows the file alone:
-    /// the element that he approved has no presses under it.
+    /// The keep presses under each file, for his own files. An agent's file (CHAT-APPS.md 20) has no keep presses,
+    /// and has the save icon in their place: `keeps` is false for an agent's files only.
     var keeps = true
+    /// A guidance's files in a task's thread: neither the keep presses nor the save icon, as the owner's pictures of
+    /// them showed (his "Yes, build it" of 19 November 2026).
+    var plain = false
     @State private var hovered: Int?
+    /// The file that the preview window shows now; nil when it is closed.
+    @State private var opened: URL?
+    /// The files that this view saved to Downloads: each says so under it.
+    @State private var saved: Set<Int> = []
+    /// The saves on their way: a second press while one runs makes no second copy.
+    @State private var saving: Set<Int> = []
+
+    private var saves: Bool { !keeps && !plain }
 
     var body: some View {
         VStack(alignment: alignment, spacing: 8) {
             ForEach(files) { file in
                 VStack(alignment: alignment, spacing: 1) {
-                    Button { open(file) } label: { item(file) }
+                    // The drag is on the button's content: on the button itself, a press that moved began no drag.
+                    Button { open(file) } label: { item(file).dragsOut(saves ? file : nil, store: store) { hovered = nil } }
                         .buttonStyle(.plain)
                         .help("Open \(file.name) (\(file.sizeWords))")
                         .accessibilityIdentifier("file-\(file.id)")
+                        .accessibilityActions {
+                            if saves { Button("Save to Downloads") { save(file) } }
+                        }
                     // What he did to this file and did not happen, under the file itself and in no composer.
                     if let problem = store.fileProblems[file.id] {
                         Text(problem).font(ChatStyle.detail).foregroundStyle(.orange).padding(.vertical, 2)
+                    } else if saved.contains(file.id) {
+                        Text("Saved to Downloads").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
+                            .padding(.vertical, 2)
                     }
-                    if keeps { KeepFileRow(store: store, file: file, hovered: hovered == file.id) }
+                    if keeps && !plain { KeepFileRow(store: store, file: file, hovered: hovered == file.id) }
                 }
                 .contentShape(Rectangle())
                 .onHover { over in
                     if over { hovered = file.id } else if hovered == file.id { hovered = nil }
+                    // An agent's file that the app does not hold reads its bytes while the pointer is on it, so a drag
+                    // finds them; a file that it holds costs nothing here.
+                    if over, saves, store.isFresh, store.fileData[file.id] == nil { Task { _ = await store.bytes(of: file) } }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: alignment == .trailing ? .trailing : .leading)
+        .quickLookPreview($opened)
     }
 
     @ViewBuilder private func item(_ file: MessageAttachment) -> some View {
         if file.isImage {
-            PictureTile(store: store, file: file, side: alignment)
+            PictureTile(store: store, file: file, side: alignment,
+                        save: saves && hovered == file.id ? { save(file) } : nil)
         } else {
             HStack(spacing: 9) {
                 Image(systemName: file.symbol).font(IconMetrics.symbol(14)).foregroundStyle(FleetStyle.accent)
@@ -222,6 +276,15 @@ struct MessageFilesView: View {
                     Text(unloaded ? String(l10n: "Not loaded") : file.sizeWords).font(ChatStyle.detail)
                         .foregroundStyle(unloaded && store.isFresh ? Color.orange : FleetStyle.muted)
                 }
+                // The icon's room is there while the pointer is away too, so the row keeps its width.
+                if saves {
+                    ZStack {
+                        if hovered == file.id {
+                            SaveFileIcon(file: file, side: IconMetrics.small) { save(file) }
+                        }
+                    }
+                    .frame(width: IconMetrics.small, height: IconMetrics.small)
+                }
             }
             .padding(.horizontal, 10).padding(.vertical, 7)
             .background(FleetStyle.bubble, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
@@ -230,23 +293,234 @@ struct MessageFilesView: View {
         }
     }
 
-    /// The Mac's own viewer opens a file, never an address: the bytes come from the hub, checked, and are written
-    /// where only this user can read them.
+    /// The preview window shows a file, never an address: the bytes come from the hub, checked, and are written where
+    /// only this user can read them, under the file's own name, which is the window's title.
     private func open(_ file: MessageAttachment) {
         Task {
-            await store.load(file)
-            guard let data = store.fileData[file.id] else { return }
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("fleet-attachments",
-                                                                                       isDirectory: true)
-            let place = folder.appendingPathComponent("\(file.id)-\(file.name)")
-            do {
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
-                                                        attributes: [.posixPermissions: 0o700])
-                try data.write(to: place, options: [.atomic])
-                NSWorkspace.shared.open(place)
+            guard let data = await store.bytes(of: file) else { return }
+            let result = await Task.detached(priority: .userInitiated) { Result { try ChatFileCopy.written(data, of: file) } }.value
+            switch result {
+            case .success(let place):
+                opened = place
                 store.setFileProblem(nil, for: file.id)
-            } catch { store.setFileProblem(String(l10n: "This file did not open on this Mac."), for: file.id) }
+            case .failure:
+                store.setFileProblem(String(l10n: "This file did not open on this Mac."), for: file.id)
+            }
         }
+    }
+
+    /// Into Downloads, as a browser saves a download: under the file's name, with " 2" before the extension when that
+    /// name is taken there, and with the mark of a download (`ChatFileCopy.markDownloaded`). The write runs off the main
+    /// thread: the first one asks macOS for Downloads, and the app does not stop while that question waits.
+    private func save(_ file: MessageAttachment) {
+        guard !saving.contains(file.id) else { return }
+        saving.insert(file.id)
+        Task {
+            defer { saving.remove(file.id) }
+            var result: Result<URL, Error> = .failure(CocoaError(.fileReadUnknown))
+            if let data = await store.bytes(of: file) {
+                let name = file.name
+                result = await Task.detached(priority: .userInitiated) {
+                    Result {
+                        guard let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+                        else { throw CocoaError(.fileNoSuchFile) }
+                        let place = try MessageAttachment.save(data, named: name, in: downloads)
+                        ChatFileCopy.markDownloaded(place)
+                        return place
+                    }
+                }.value
+            }
+            switch result {
+            case .success:
+                store.setFileProblem(nil, for: file.id)
+                saved.insert(file.id)
+            case .failure(let error):
+                saved.remove(file.id)
+                // macOS asks once whether Founderizer may use Downloads; after a no, each write is refused.
+                let refused = (error as? CocoaError)?.code == .fileWriteNoPermission
+                store.setFileProblem(refused
+                    ? String(l10n: "macOS does not let Founderizer save in Downloads. Allow it in System Settings, Privacy & Security, Files & Folders.")
+                    : String(l10n: "This file was not saved."), for: file.id)
+            }
+        }
+    }
+}
+
+/// The app's own copies of a chat's files, for the preview window: one folder for each file under this user's temporary
+/// folder, which only this user can read.
+enum ChatFileCopy {
+    static var folder: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("fleet-attachments", isDirectory: true)
+    }
+
+    /// The file under its own name, with the mark of a download.
+    static func written(_ data: Data, of file: MessageAttachment) throws -> URL {
+        let place = folder.appendingPathComponent(String(file.id), isDirectory: true)
+        try FileManager.default.createDirectory(at: place, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        let copy = place.appendingPathComponent(MessageAttachment.diskName(file.name), isDirectory: false)
+        try data.write(to: copy, options: [.atomic])
+        markDownloaded(copy)
+        return copy
+    }
+
+    /// A copy for one drag, in a new folder of its own: Finder copies it after the drop, and no open and no later drag
+    /// writes over it in that time. A copy that has no mark of a download is never given out. As a new drag begins, the
+    /// copies of drags of more than a day ago go, but not one that changed after it was written: an app that the file
+    /// was dropped on may have opened it where it is. The folder is this user's temporary folder all the same, which
+    /// macOS clears by its own rules, so a file that matters is the one in Finder.
+    static func forDrag(_ data: Data, of file: MessageAttachment) throws -> URL {
+        let drags = folder.appendingPathComponent("drag", isDirectory: true)
+        let manager = FileManager.default
+        let dayAgo = Date(timeIntervalSinceNow: -86_400)
+        for old in (try? manager.contentsOfDirectory(at: drags, includingPropertiesForKeys: [.creationDateKey])) ?? [] {
+            // Only the folder as the drag left it, or empty: its one copy, not changed after the folder was made. An
+            // app that saves by writing a new file keeps both of that file's dates new, so the folder's own date decides.
+            guard let made = try? old.resourceValues(forKeys: [.creationDateKey]).creationDate, made < dayAgo,
+                  let inside = try? manager.contentsOfDirectory(at: old, includingPropertiesForKeys: [.contentModificationDateKey])
+            else { continue }
+            let untouched = inside.isEmpty || (inside.count == 1
+                && (try? inside[0].resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+                    .map { $0.timeIntervalSince(made) < 2 } == true)
+            if untouched { try? manager.removeItem(at: old) }
+        }
+        let place = drags.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try manager.createDirectory(at: place, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let copy = place.appendingPathComponent(MessageAttachment.diskName(file.name), isDirectory: false)
+        try data.write(to: copy, options: [.withoutOverwriting])
+        markDownloaded(copy)
+        guard getxattr(copy.path, "com.apple.quarantine", nil, 0, 0, 0) > 0 else {
+            try? manager.removeItem(at: place)
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return copy
+    }
+
+    /// The mark that a browser puts on a download (`com.apple.quarantine`): macOS treats the file as one that came from
+    /// elsewhere, and a copy in Finder keeps the mark. An agent's file comes from outside this Mac.
+    nonisolated static func markDownloaded(_ place: URL) {
+        var url = place
+        var values = URLResourceValues()
+        values.quarantineProperties = [kLSQuarantineAgentNameKey as String: "Founderizer",
+                                       kLSQuarantineTypeKey as String: kLSQuarantineTypeOtherDownload as String]
+        try? url.setResourceValues(values)
+    }
+}
+
+/// An agent's file dragged out of the chat (the owner's yes of 18 November 2026: "You can also drag the file to
+/// Finder."). **AppKit's own drag, which may end outside the app only**: in Finder, which copies the file (the live
+/// check), or in another app outside Founderizer that takes a file (not checked), which may open it where it is. A
+/// SwiftUI drag
+/// (`onDrag`) also ended inside the app, and the message box took the file's address there as text; its file promise
+/// landed in Finder with no mark of a download and the extension twice (the live check of 18 November 2026). The drag
+/// carries the place of a copy of its own (`ChatFileCopy.forDrag`), written as the drag begins from bytes that match the
+/// file's size and SHA-256 then, under the file's own name and with the mark of a download, and `marker`, which the chat's own drop
+/// (`StageDroppedFiles`) refuses as well. A file whose bytes the app does not hold at that moment (a read that failed,
+/// or one past the 16 newest) does not drag this time and is read at once, so the next drag carries it: a drag that
+/// waited for the hub would stop the app until the hub answered.
+@MainActor final class ChatFileDrag: NSObject, NSDraggingSource {
+    static let marker = NSPasteboard.PasteboardType("com.founderizer.chat-file")
+    private static let source = ChatFileDrag()
+
+    /// Begins the drag of `file` from the press that moves now. False when no drag began.
+    static func begin(_ file: MessageAttachment, store: FleetStore) -> Bool {
+        // The bytes held under this number, only when they are this file's: a new fleet numbers its files from 1 again.
+        guard let data = store.fileData[file.id], file.matches(data) else {
+            Task { _ = await store.bytes(of: file) }
+            return false
+        }
+        // Only from the event that moved the press, in the window that it came to: a session needs a press or a drag
+        // of the pointer, and one begun from another event would keep the file under the pointer until a click.
+        guard let event = NSApp.currentEvent, [.leftMouseDown, .leftMouseDragged].contains(event.type),
+              let window = event.window, let view = window.contentView else { return false }
+        let place: URL
+        do { place = try ChatFileCopy.forDrag(data, of: file) } catch {
+            store.setFileProblem(String(l10n: "This file did not drag out of the chat."), for: file.id)
+            return false
+        }
+        store.setFileProblem(nil, for: file.id)
+        let carried = NSPasteboardItem()
+        carried.setString(place.absoluteString, forType: .fileURL)
+        carried.setData(Data(), forType: marker)
+        let item = NSDraggingItem(pasteboardWriter: carried)
+        // The Mac's own picture of a file of this kind under the pointer, as a drag from Finder shows it.
+        let point = view.convert(event.locationInWindow, from: nil)
+        item.setDraggingFrame(NSRect(x: point.x - 24, y: point.y - 24, width: 48, height: 48),
+                              contents: NSWorkspace.shared.icon(forFile: place.path))
+        let session = view.beginDraggingSession(with: [item], event: event, source: source)
+        source.carried[ObjectIdentifier(session)] = place
+        return true
+    }
+
+    /// The copy that each drag on its way carries, by its session: the end of one drag never takes another's copy.
+    private var carried: [ObjectIdentifier: URL] = [:]
+
+    /// Outside the app a copy, never a move; inside it nothing, so no view of the app takes the file.
+    nonisolated func draggingSession(_ session: NSDraggingSession,
+                                     sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        context == .outsideApplication ? .copy : []
+    }
+
+    /// A drag that nothing took leaves no copy behind.
+    nonisolated func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint,
+                                     operation: NSDragOperation) {
+        let key = ObjectIdentifier(session)
+        MainActor.assumeIsolated {
+            if let place = carried.removeValue(forKey: key), operation.isEmpty {
+                try? FileManager.default.removeItem(at: place.deletingLastPathComponent())
+            }
+        }
+    }
+
+    /// The drag pasteboard holds one of the chat's own files. Read it only while a drag is over a view of the app,
+    /// where that pasteboard is the drag's own: every drag writes it again as it begins.
+    static var isOver: Bool { NSPasteboard(name: .drag).types?.contains(marker) == true }
+
+    /// The place is one of the app's own copies of a chat's files.
+    nonisolated static func isCopy(_ url: URL) -> Bool {
+        let folder = ChatFileCopy.folder.resolvingSymlinksInPath().path + "/"
+        return url.isFileURL && url.resolvingSymlinksInPath().path.hasPrefix(folder)
+    }
+}
+
+/// The press on an agent's file that moves: the drag of the file out of the chat (`ChatFileDrag`), once for each press.
+private struct DragsOut: ViewModifier {
+    let store: FleetStore
+    let file: MessageAttachment
+    let begins: () -> Void
+    @GestureState private var began = false
+
+    func body(content: Content) -> some View {
+        content.simultaneousGesture(
+            DragGesture(minimumDistance: 4).updating($began) { _, began, _ in
+                guard !began else { return }
+                began = true
+                if ChatFileDrag.begin(file, store: store) { begins() }
+            }
+        )
+    }
+}
+
+/// The save icon of an agent's file (the owner's yes of 18 November 2026): the Mac's own mark for a download, in a
+/// round field of the page's surface, so it stands out on a picture of any colour.
+private struct SaveFileIcon: View {
+    let file: MessageAttachment
+    var side: CGFloat = IconMetrics.side
+    let action: () -> Void
+
+    var body: some View {
+        IconButton(symbol: "square.and.arrow.down", words: String(l10n: "Save \(file.name) to Downloads"), size: 12,
+                   side: side, tint: FleetStyle.text) {
+            // The second click of a double click is no second save: a save of bytes in memory ends before it comes.
+            // Only the click asks; the accessibility action comes with no event of its own.
+            if let event = NSApp.currentEvent, [.leftMouseDown, .leftMouseUp].contains(event.type), event.clickCount > 1 {
+                return
+            }
+            action()
+        }
+            .background(FleetStyle.surface, in: Circle())
+            .environment(\.onCard, true)
+            .accessibilityIdentifier("save-file-\(file.id)")
     }
 }
 
@@ -267,6 +541,8 @@ private struct PictureTile: View {
     let file: MessageAttachment
     /// The message's side: his own on the right, an agent's on the left.
     let side: HorizontalAlignment
+    /// The save icon at the picture's top right, while the pointer is on an agent's picture; nil otherwise.
+    var save: (() -> Void)? = nil
     @State private var slow = false
     /// The picture did not come and its tile said so: from then on the plate keeps the file's name until the picture
     /// comes, also while it is read again (fix round 3, items 4 and 15).
@@ -286,7 +562,7 @@ private struct PictureTile: View {
         // **"Reading…" stands half a second once it drew** (fix round 3b; D-1 rule 1, as a loading line's `settle`): the
         // picture, or "Not loaded", waits for it. It stood 0.45–0.55 s on a 1.5-s read, and 10–45 ms after ↻.
         let wordsStand = wordsDrawn.map { !QuietClock.shared.passed($0 + LoadingLine.stands) } ?? false
-        let data = wordsStand ? nil : store.fileData[file.id]
+        let data = wordsStand ? nil : store.heldBytes(of: file)
         let picture = data.flatMap { MessageAttachment.thumbnail($0, maxPixels: 720) }
         // A read that failed, or one that cannot go while the hub is away.
         let failed = !wordsStand && data == nil && (store.unloadedFiles.contains(file.id) || !store.isFresh)
@@ -300,6 +576,9 @@ private struct PictureTile: View {
                     .frame(maxWidth: min(Self.widest, Self.height * ratio))
                     .clipShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                     .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
+                    .overlay(alignment: .topTrailing) {
+                        if let save { SaveFileIcon(file: file, action: save).padding(6) }
+                    }
             } else {
                 plate(data: data, failed: failed)
             }
@@ -308,8 +587,9 @@ private struct PictureTile: View {
         // it is given up to its own width, and never more.
         .frame(maxWidth: Self.place.width, minHeight: Self.place.height, maxHeight: Self.place.height,
                alignment: Alignment(horizontal: side, vertical: .top))
-        // Read again when the hub answers again, so a picture that did not come while it was away comes by itself.
-        .task(id: store.isFresh) { if store.isFresh { await read() } }
+        // Read again when the hub answers again, so a picture that did not come while it was away comes by itself; after
+        // a change of hub or database, which empties the store's files; and when this tile's number names another file.
+        .task(id: "\(store.isFresh) \(store.filesGeneration) \(file.sha256)") { if store.isFresh { await read() } }
         .task {
             do { try await Task.sleep(for: LoadingLine.quiet) } catch { return }
             slow = true
@@ -412,11 +692,13 @@ enum PastedFiles {
 /// well. Both go through the store's own staging, so the size and the type rules, and the words of a refusal, are
 /// the ones that the plus and a dropped file have.
 @MainActor func stagePasted(_ pasted: PastedFiles, store: FleetStore, composer: String) async {
+    store.setFileError(nil, for: composer)      // one batch, as a drop is
     switch pasted {
     case .files(let urls):
         for url in urls.prefix(MessageAttachment.perMessage) { await store.stage(contentsOf: url, for: composer) }
     case .picture(let data):
-        guard let picture = try? MessageAttachment.imageForSending(data) else {
+        guard let picture = try? MessageAttachment.imageForSending(data, shown: store.filesTaken(by: composer) == .shown)
+        else {
             store.setFileError(AttachmentError.type.errorDescription, for: composer)
             return
         }
@@ -448,6 +730,8 @@ struct PasteAttachments: ViewModifier {
             // The monitor runs on the main thread, before the menu sees the key.
             let taken = MainActor.assumeIsolated { () -> Bool in
                 guard !AppFront.holdsKeys else { return false }     // no key after a front from outside (`AppFront`)
+                // Cmd+V in the preview window over the app is that window's, never a file for the composer behind it.
+                guard !event.inPreviewWindow else { return false }
                 // Cmd+V alone. Caps Lock does not count, and Cmd+Shift+V (paste as text) stays the text field's.
                 let keys = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                     .subtracting([.capsLock, .function, .numericPad])
@@ -470,12 +754,15 @@ struct PasteAttachments: ViewModifier {
 
 /// What a view shows while a file is over it: the dashed frame of a drop and the words of what the drop does.
 struct DropMark: View {
+    /// Over a task's page, the file goes into its guidance.
+    var guidance = false
+
     var body: some View {
         RoundedRectangle(cornerRadius: FormMetrics.radius, style: .continuous)
             .strokeBorder(FleetStyle.accent.opacity(0.7), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
             .padding(10)
             .overlay {
-                Label("Add to this message", systemImage: "plus")
+                Label(guidance ? "Add to this guidance" : "Add to this message", systemImage: "plus")
                     .font(FormMetrics.detailTitle).foregroundStyle(FleetStyle.text)
                     .padding(.horizontal, 14).padding(.vertical, 9)
                     .background(FleetStyle.surface, in: Capsule())
@@ -498,13 +785,20 @@ struct StageDroppedFiles: ViewModifier {
     func body(content: Content) -> some View {
         content
             .dropDestination(for: URL.self) { urls, _ in
-                guard let composer, store.supportsAttachments else { return false }
+                // An agent's file dragged out of the chat goes where he drops it outside, never into his own message.
+                // AppKit already refuses every place inside the app for that drag; this refuses it a second time, and
+                // also a copy of the app's own folder dragged with no marker (the mark can show for that one: it does
+                // not see the places that a drag carries).
+                guard let composer, store.supportsAttachments, !ChatFileDrag.isOver,
+                      !urls.contains(where: ChatFileDrag.isCopy) else { return false }
+                // A drop is one batch: the words of a file that it refuses stay while the next file of it goes in.
+                store.setFileError(nil, for: composer)
                 Task { for url in urls.prefix(MessageAttachment.perMessage) {
                     await store.stage(contentsOf: url, for: composer)
                 } }
                 return true
-            } isTargeted: { over = $0 && mark && composer != nil && store.supportsAttachments }
-            .overlay { if over { DropMark() } }
+            } isTargeted: { over = $0 && mark && composer != nil && store.supportsAttachments && !ChatFileDrag.isOver }
+            .overlay { if over { DropMark(guidance: composer?.hasPrefix("task:") == true) } }
     }
 }
 
@@ -514,8 +808,20 @@ extension View {
         modifier(PasteAttachments(store: store, composer: composer))
     }
 
+    /// A drag of this file out of the chat (`ChatFileDrag`); nil drags nothing. `begins` runs as the drag begins: the
+    /// pointer leaves the window with no exit that the view sees.
+    @ViewBuilder func dragsOut(_ file: MessageAttachment?, store: FleetStore, begins: @escaping () -> Void) -> some View {
+        if let file { modifier(DragsOut(store: store, file: file, begins: begins)) } else { self }
+    }
+
     /// A file dropped here is staged in this composer (`StageDroppedFiles`); nil takes no file.
     func stageDroppedFiles(store: FleetStore, composer: String?, mark: Bool = false) -> some View {
         modifier(StageDroppedFiles(store: store, composer: composer, mark: mark))
     }
+}
+
+extension NSEvent {
+    /// The key or click is the preview window's (Quick Look over the app): a watch of the app's keys leaves it alone,
+    /// so Cmd+V there puts nothing into the composer behind it.
+    var inPreviewWindow: Bool { window is QLPreviewPanel }
 }

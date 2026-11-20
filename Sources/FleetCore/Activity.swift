@@ -1,23 +1,26 @@
 import Foundation
 
-/// The three columns of the Tasks board (the owner's yes of 11 November 2026 to its picture). An open task is in
-/// progress while the hub reports it in work. It waits when it is queued for its agent, when the hub reports that it
+/// The three columns of the Tasks board (the owner's yes of 11 November 2026 to its picture), which shows them as the
+/// lanes Working, Waiting and Done (`title`). An open task is in progress while the hub reports it in work. It waits when it is queued for its agent, when the hub reports that it
 /// needs an answer or a sign-in, when it waits on something (`waiting_on`), when its agent parked it until a time
 /// (`parked_until`), when its session does no work now while subtasks of it are open (`subtaskWaits`), when a hold or
 /// its agent's usage limit holds it, and when only the owner can move it: an outcome that is not known after a stop or a
-/// pause, or a stop that was not confirmed, also on a task that ended. Every other task that ended is in Ended.
+/// pause, or a stop that was not confirmed, also on a task that ended. Every other task that ended is in Done.
 ///
 /// The board had a fourth column, Needs you, with the manager's open requests in it: the Needs you page shows them,
 /// one row above Tasks in the sidebar, so the column said them twice.
 public enum ActivityColumn: String, CaseIterable, Identifiable, Sendable {
     case inProgress, waiting, done
     public var id: String { rawValue }
+    /// **The lane's heading, in his words** (the owner, 18 November 2026: "4 tasks working - 1 waiting - 3 done", and
+    /// "Yes, build it" to the picture with the lanes Working, Waiting and Done). They were In progress, Waiting and
+    /// Ended. A job in Done that did not succeed says so in red.
     public var title: String {
         switch self {
-        case .inProgress: String(l10n: "In progress")
+        // A key of its own: in Spanish the lane is "En curso", and "Working", a task's state word, is "Trabajando".
+        case .inProgress: String(localized: "Working (a lane)", defaultValue: "Working", bundle: Localized.bundle, locale: Localized.digits)
         case .waiting: String(l10n: "Waiting")
-        // "Ended", the iPhone's word (T-33, fix round 2): it holds canceled, failed and rejected tasks too.
-        case .done: String(l10n: "Ended")
+        case .done: String(l10n: "Done")
         }
     }
 }
@@ -108,6 +111,12 @@ extension FleetTask {
         }
     }
 
+    /// **Its agent parked it, and the task waits on nothing else**: it is `working` and waits on nothing
+    /// (`waiting_on`). The hub also parks a task that asked a question or waits on something, and such a task's card
+    /// says that wait, not its time (`WaitingTasks`). A hold, a usage limit and a wait for the owner are records of
+    /// their own, which the caller reads.
+    public var parkedOnly: Bool { parked_until != nil && state == "working" && (waiting_on ?? "").isEmpty }
+
     /// **A result that he must see**: it failed, its requester rejected the task, or its requester did not accept the
     /// result. A canceled task is not one: somebody chose to end it.
     public var endedBadly: Bool { state == "failed" || state == "rejected" || (state == "completed" && accepted == 0) }
@@ -146,10 +155,10 @@ extension HubState {
         }) { first, _ in first }
     }
 
-    /// The tasks that only the owner can move, by id: an outcome that is not known, a stop that was not confirmed.
+    /// The tasks that only the owner can move, by id: an outcome that is not known and that its agent does not check
+    /// first (`TaskOutcome.waitsOnOwner`), a stop that was not confirmed.
     private var ownerOnly: Set<Int> {
-        Set((outcomes ?? []).filter { $0.state == "unknown" }.map(\.task) +
-            (holds ?? []).filter { $0.state == "not_confirmed" }.map(\.task))
+        Set(ownerOutcomes.map(\.task) + (holds ?? []).filter { $0.state == "not_confirmed" }.map(\.task))
     }
 
     /// **What each task waits for from the owner**, by task: an outcome that is not known first, then a stop that was
@@ -168,7 +177,8 @@ extension HubState {
         let byQuestion = Dictionary(open.compactMap { need in need.question.map { ($0, need) } }) { first, _ in first }
         var waits: [Int: OwnerWait] = [:]
         for task in some {
-            if unknown.contains(task.id) { waits[task.id] = .outcome; continue }
+            // only one that its agent does not check first (`TaskOutcome.waitsOnOwner`), from the task's own row
+            if unknown.contains(task.id) && outcomeUnknown(of: task) { waits[task.id] = .outcome; continue }
             if unconfirmed.contains(task.id) { waits[task.id] = .stop; continue }
             guard !task.isTerminal else { continue }
             if let need = Self.reference(task.waiting_on, "N").flatMap({ byID[$0] })
@@ -221,12 +231,13 @@ extension HubState {
     }
 
     /// How many items need the owner, for every agent: the manager's open requests and the tasks that only the owner
-    /// can move (an outcome that is not known, a stop that was not confirmed). The count of the sidebar's Needs you row,
-    /// and what the Needs you page lists.
+    /// can move (an outcome that is not known and that no session of its agent checks first, a stop that was not
+    /// confirmed). The count of the sidebar's Needs you row, and what the Needs you page lists.
     public var needsYouCount: Int { needs.filter(\.isOpen).count + ownerTasks.count }
 
-    /// The tasks that only the owner can move, newest first: an outcome that is not known, a stop that was not
-    /// confirmed. The Needs you page lists them under the open requests, so its row's count is what the page shows.
+    /// The tasks that only the owner can move, newest first: an outcome that is not known and that no session of its
+    /// agent checks first (`TaskOutcome.waitsOnOwner`), a stop that was not confirmed. The Needs you page lists them
+    /// under the open requests, so its row's count is what the page shows.
     public var ownerTasks: [FleetTask] {
         let owner = ownerOnly
         return tasks.filter { owner.contains($0.id) }.sorted { $0.id > $1.id }
@@ -242,8 +253,55 @@ extension HubState {
     }
 }
 
-/// **The Ended column, as it shows** (the owner's yes of 11 November 2026: "Ended shows only what did not succeed"):
-/// the results that he must see, one row each, and every other ended task behind one row that opens them by day. A
+/// **The Waiting column, as it shows** (the owner's "Yes, build it" of 18 November 2026 to its picture, after "would you
+/// still show them here as tasks?" of the cards that said "Until Thu 12:12", "Until 26 Nov"): a card for each thing that
+/// waits for something now, and **every task that only a time holds behind one row, "9 later"**, which opens them by
+/// the day that they start again. On his fleet that day 11 of 14 open tasks were parked, six of them until 21 to 28
+/// November, so Waiting was mostly a calendar, and a question or a hold was hard to find in it. A thing that he asked
+/// for keeps its card, with the earliest time of its tasks: it is his, and he looks for it.
+public struct WaitingTasks: Sendable {
+    /// One calendar day of this Mac, by its first moment, with the jobs that start again on it, the soonest first.
+    public struct Day: Identifiable, Sendable {
+        public let start: Double
+        public let jobs: [Job]
+        public var id: Double { start }
+    }
+
+    /// The cards, in the board's order: what waits for him first.
+    public let cards: [Job]
+    /// The jobs behind the row, by day, the soonest day first.
+    public let later: [Day]
+    /// How many jobs `later` holds.
+    public let laterCount: Int
+
+    /// `items`: the Waiting column of the board (`HubState.board`). **A job folds when nothing but a time holds it**
+    /// (`Job.onlyLater`): each open task of it is parked by its agent and waits on nothing else (`parkedOnly`), no hold
+    /// that is not released and no usage limit of its agent holds one, and it waits for nothing of the owner's. Each of
+    /// those is a wait of its own, which its card says ("Paused", "Usage limit", "Waiting for Fleet Manager", the
+    /// orange line), so such a job stays a card. So does a job that he asked for.
+    public init(items: [Job], calendar: Calendar = .current) {
+        var cards: [Job] = [], parked: [Job] = []
+        for job in items {
+            if job.onlyLater && !job.asked { parked.append(job) } else { cards.append(job) }
+        }
+        self.cards = cards
+        laterCount = parked.count
+        var days: [Day] = []
+        for job in parked.sorted(by: { ($0.until ?? 0, $0.order) < ($1.until ?? 0, $1.order) }) {
+            let start = calendar.startOfDay(for: Date(timeIntervalSince1970: job.until ?? 0)).timeIntervalSince1970
+            if days.last?.start == start {
+                days[days.count - 1] = Day(start: start, jobs: days[days.count - 1].jobs + [job])
+            } else {
+                days.append(Day(start: start, jobs: [job]))
+            }
+        }
+        later = days
+    }
+}
+
+/// **The Done column, as it shows** (the owner's yes of 11 November 2026: "Ended shows only what did not succeed",
+/// and his answer of 18 November 2026: the results of what he asked for too): the results that he must see, a card
+/// each (`cards`), and every other ended job behind one row that opens them by day. A
 /// fleet ends more than a hundred tasks a week, and nine of ten are a checked result: as one card each they hid the
 /// ones that failed.
 public struct EndedTasks: Sendable {
@@ -283,56 +341,68 @@ public struct EndedTasks: Sendable {
 
     /// The results that are not a success, newest first: failed, rejected, not accepted.
     public let failed: [FleetTask]
-    /// The same results as rows: a task, or the thing that he asked for whose task it is (`Failed`).
+    /// The same results as rows: a job under its own name and agent, with the task of it that did not succeed (`Failed`).
     public let failedRows: [Failed]
-    /// Every other ended task, newest day first.
+    /// **The jobs that are a card in Done**: a job that he asked for with the result that its requester checked
+    /// (`Job.showsResult`), and a job whose last word did not succeed (his answer of 18 November 2026 to "Where does a
+    /// routine one go when it is done?": "Behind 'more'", with the results of what he asked for and what failed as
+    /// cards). **What he asked for stands first**, the one that ended last first, then the other jobs that did not
+    /// succeed: on the first fleet 17 jobs of a week had failed, most of them routine work, and as one list by time
+    /// they stood over the answers that he looks for.
+    public let cards: [Job]
+    /// Every other ended job, newest day first.
     public let days: [Day]
-    /// How many tasks `days` holds.
+    /// How many jobs `days` holds.
     public let rest: Int
 
-    /// `tasks`: the Ended column, newest first.
+    /// `tasks`: ended tasks, newest first, each as a job of its own.
     public init(_ tasks: [FleetTask], calendar: Calendar = .current) {
-        self.init(items: tasks.map(BoardItem.task), calendar: calendar)
+        self.init(items: tasks.map(Job.init(ended:)), calendar: calendar)
     }
 
-    /// `items`: the Ended column of the board, of all agents or of one, newest first (`HubState.board`). **One thing that he
-    /// asked for is one row**: among the results that he must see when the task that has its last word did not
-    /// succeed (`Ask.failed`), else behind "more" on the day that it ended, where the row opens its tasks
-    /// as the row of a schedule's runs does. It counts as one in `rest`.
-    public init(items: [BoardItem], calendar: Calendar = .current) {
-        var failedRows: [Failed] = [], others: [BoardItem] = []
-        for item in items {
-            switch item {
-            case .task(let task):
-                if task.endedBadly { failedRows.append(Failed(title: task.title, owner: task.owner, task: task)) } else { others.append(item) }
-            case .ask(let ask):
-                if let task = ask.failed { failedRows.append(Failed(title: ask.title, owner: ask.agent, task: task)) } else { others.append(item) }
+    /// `items`: the Done column of the board, of all agents or of one, newest first (`HubState.board`). **One job is
+    /// one row or one card**: a card when its last word did not succeed (`Job.failed`) or when he asked for it and its
+    /// result is checked; else behind "more" on the day that it ended, where the row of a job of several tasks opens
+    /// them, as the row of a schedule's runs does. It counts as one in `rest`.
+    public init(items: [Job], calendar: Calendar = .current) {
+        var failedRows: [Failed] = [], cards: [Job] = [], others: [Job] = []
+        for job in items {
+            if let task = job.failed {
+                failedRows.append(Failed(title: job.title, owner: job.agent, task: task))
+                cards.append(job)
+            } else if job.showsResult {
+                cards.append(job)
+            } else {
+                others.append(job)
             }
         }
         self.failedRows = failedRows
         failed = failedRows.map(\.task)
+        self.cards = cards.sorted { ($0.asked ? 1 : 0, $0.endedAt, $0.order) > ($1.asked ? 1 : 0, $1.endedAt, $1.order) }
         rest = others.count
         var days: [Day] = []
-        var day: (start: Double, items: [BoardItem])?
+        var day: (start: Double, items: [Job])?
         func close() {
             guard let day else { return }
             var tasks: [FleetTask] = [], groups: [Group] = []
-            for item in day.items {
-                switch item {
-                case .task(let task): tasks.append(task)
-                case .ask(let ask): groups.append(Group(title: ask.title, tasks: ask.tasks, agent: ask.agent))
+            for job in day.items {
+                // A task that nothing joins to another is a row of the day's own, where the runs of one schedule are
+                // one row, as before. A job with a name of its own (an ask, a case) or with several tasks is one row.
+                if case .task = job.key, job.tasks.count == 1 {
+                    tasks.append(job.tasks[0])
+                } else {
+                    groups.append(Group(title: job.title, tasks: job.tasks, agent: job.agent))
                 }
             }
-            // With no thing that he asked for, the rows are the day's own, in their order, as before.
             let rows = groups.isEmpty ? Self.groups(tasks) : (Self.groups(tasks) + groups).sorted {
                 ($0.tasks[0].activityTime, $0.tasks[0].id) > ($1.tasks[0].activityTime, $1.tasks[0].id)
             }
             days.append(Day(start: day.start, groups: rows))
         }
-        for item in others {
-            let start = calendar.startOfDay(for: Date(timeIntervalSince1970: item.activityTime)).timeIntervalSince1970
+        for job in others {
+            let start = calendar.startOfDay(for: Date(timeIntervalSince1970: job.activityTime)).timeIntervalSince1970
             if day?.start != start { close(); day = (start, []) }
-            day?.items.append(item)
+            day?.items.append(job)
         }
         close()
         self.days = days

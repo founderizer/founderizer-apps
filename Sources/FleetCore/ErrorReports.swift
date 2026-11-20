@@ -32,6 +32,64 @@ public struct ErrorReportsState: Decodable, Equatable, Sendable {
     }
 }
 
+/// **The owner's answer on the first run's page "Help improve Founderizer"** (the owner, 18 November 2026: "durng the
+/// very first onboarding, one of the first steps should be asking if they wnat to share diagnosis data to improve the
+/// product. then they can change the setting again under logs", and "Yes, build it" to the page's picture, with
+/// Settings › Help as the place to change it). The page stands before any hub, so this Mac keeps the answer twice: the
+/// card that carries the check mark (`chosen`), and the answer that waits for a hub (`waiting`). The first hub that
+/// answers this Mac as its owner and offers the switch gets the waiting answer, as a press on Settings › Help › Help
+/// improve Founderizer gives it (`POST /ui/error-reports`), and only its receipt ends the wait (`deliver`). Before that
+/// nothing is sent anywhere: the switch is the hub's, and it is off until the hub takes an answer that turns it on.
+/// **The wait is of one first run** (the review of 18 November 2026): it ends without a send (`forget`) when the first
+/// run starts again on its welcome page, also at the next start of the app, and when the owner turns the switch in
+/// Settings › Help, so that an answer of a first run that he left never reaches a fleet months later, and a retry never
+/// undoes his newer press. Each of those fails closed: the switch stays as the hub has it.
+public enum FirstRunReports {
+    /// The card with the check mark: `send` or `none`. It stays after a hub took the answer.
+    public static let choiceKey = "firstRunErrorReports"
+    /// The answer that no hub took yet: `send` or `none`.
+    public static let waitingKey = "firstRunErrorReportsWaiting"
+
+    /// The card that the owner chose last on this Mac: true to send, false not to, nil before the first answer.
+    public static func chosen(in defaults: UserDefaults = .standard) -> Bool? { answer(defaults.string(forKey: choiceKey)) }
+
+    /// The answer that waits for a hub, or nil when none waits.
+    public static func waiting(in defaults: UserDefaults = .standard) -> Bool? { answer(defaults.string(forKey: waitingKey)) }
+
+    /// A press on a card of the page: the check mark, and the answer that the next hub gets.
+    public static func choose(_ send: Bool, in defaults: UserDefaults = .standard) {
+        defaults.set(word(send), forKey: choiceKey)
+        defaults.set(word(send), forKey: waitingKey)
+    }
+
+    /// **Gives the waiting answer to a hub**, with `send`, which makes the hub's call. True when the hub took it: the
+    /// wait then ends, unless a press of the owner wrote another answer while the call ran. A hub that does not offer
+    /// the switch (`offered`) gets nothing, and an answer that a call did not bring to the hub (no answer, a refusal)
+    /// waits for the next call. It runs on the caller's own actor (`isolation`), the app's main actor.
+    @discardableResult
+    public static func deliver(offered: Bool, in defaults: UserDefaults = .standard,
+                               isolation: isolated (any Actor)? = #isolation,
+                               send: (Bool) async throws -> Void) async -> Bool {
+        guard offered, let answer = waiting(in: defaults) else { return false }
+        do { try await send(answer) } catch { return false }
+        if waiting(in: defaults) == answer { defaults.removeObject(forKey: waitingKey) }
+        return true
+    }
+
+    /// The wait ends with no send. The check mark stays.
+    public static func forget(in defaults: UserDefaults = .standard) { defaults.removeObject(forKey: waitingKey) }
+
+    private static func word(_ send: Bool) -> String { send ? "send" : "none" }
+
+    private static func answer(_ word: String?) -> Bool? {
+        switch word {
+        case "send": true
+        case "none": false
+        default: nil
+        }
+    }
+}
+
 /// The hub's receipt of `POST /ui/error-reports`: the receipt of every owner command, and the switch as it is now
 /// when the hub says it.
 public struct ErrorReportsReceipt: Decodable, Sendable {

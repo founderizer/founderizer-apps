@@ -87,10 +87,11 @@ struct AgentDeleteCard: View {
         return String(l10n: "The hub has not answered. Try again.")
     }
 
-    /// A page of the agent that is gone gives way: its chat or details to Tasks, its server's page to that server's own,
-    /// and its pin goes, so a new agent of that name starts unpinned.
+    /// A page of the agent that is gone gives way: its chat or details to Tasks, Tasks that its panel opened to Tasks
+    /// with no back link to a chat that is gone, its server's page to that server's own, and its pin goes, so a new agent
+    /// of that name starts unpinned.
     private static func leave(_ agent: String, for server: String?, store: FleetStore) {
-        if store.destination.agentName == agent { store.destination = .activity }
+        if store.destination.agentName == agent || store.destination == .activityFrom(agent) { store.destination = .activity }
         if case .server(let name) = store.destination, name == agent {
             store.destination = server.map { .server($0) } ?? .settings(.servers)
         }

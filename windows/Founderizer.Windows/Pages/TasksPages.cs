@@ -685,6 +685,7 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
     // A task's thread has no request cards.
     public bool CanSendAnswer(RequestCard card) => false;
     public void Press(long need, int choice) { }
+    public void Reply(long need, string words) { }
     public void Tick(long need, IReadOnlyCollection<int> choices) { }
     public void Type(long need, string text) { }
     public void Answer(long need) { }

@@ -587,8 +587,8 @@ public static partial class Screens
         var hand = NeedsLane.AtHand(chosen, order ?? openIds, openIds);
         var waits = fleet is null ? new Dictionary<long, IReadOnlyList<string>>() : Activity.NeedWaits(fleet);
         var ownerWaits = fleet is null ? new Dictionary<long, OwnerWait>() : Activity.OwnerWaits(fleet, s.EndedTasks);
-        var ownerTasks = fleet is null ? [] : s.AllTasks().Where(t => Activity.OwnerOnly(fleet).Contains(t.Id))
-            .OrderByDescending(t => t.Id).ToList();
+        var owner = fleet is null ? new HashSet<long>() : Activity.OwnerOnly(fleet, s.EndedTasks);
+        var ownerTasks = s.AllTasks().Where(t => owner.Contains(t.Id)).OrderByDescending(t => t.Id).ToList();
         var cards = new List<NeedCardRow>();
         foreach (var need in lane.Open)
         {
@@ -867,7 +867,10 @@ public static partial class Screens
         var word = TaskWords.State(task.State, task.Accepted, task.Requester, s.Names, task.WaitingOn,
                                    task.StalledSince is not null || task.NudgeLevel > 0, task.MissingSince is not null,
                                    hold, limited);
+        // Resume checks every unknown outcome: the hub refuses a plain resume while one is unknown (the Mac's
+        // TaskHoldControls). The usage limit stands back only for a check that is the owner's (the Mac's limitHolding).
         var unknown = page.Outcomes.Any(o => o.State == "unknown");
+        var ownerChecks = page.Outcomes.Any(o => o.WaitsOnOwner(page.Holds, task.IsTerminal, Activity.ShellOff(fleet, task.Owner)));
         ControlsModel? controls = null;
         if (s.Offers("task_controls") && !task.IsTerminal)
         {
@@ -908,7 +911,7 @@ public static partial class Screens
             Title = task.Title,
             Asks = task.Details,
             StalledReason = task.StalledReason,
-            LimitWords = !task.IsTerminal && !unknown && hold is null && limited
+            LimitWords = !task.IsTerminal && !ownerChecks && hold is null && limited
                 ? (fleet!.Agents.First(a => a.Name == task.Owner).Limit is { ResetKnown: true } l
                     ? $"{s.Names.Label(task.Owner)} is at its usage limit until {ComingTime(l.Until, s.HubNow(now), context)}."
                     : $"{s.Names.Label(task.Owner)} is at its usage limit.") : null,
@@ -1421,8 +1424,8 @@ public sealed record AgentPanel
 
 public enum OptionsKind { QuickReplies, Ticks, Press }
 
-/// <summary>The options of a request: the app's quick replies (they fill an empty box and send nothing), ticks with a
-/// "Send N" button, or one press each.</summary>
+/// <summary>The options of a request: the app's quick replies (a press sends its words as his answer at once, or when the
+/// store can write: OwnerStore.Reply), ticks with a "Send N" button, or one press each.</summary>
 public sealed record OptionsModel
 {
     public OptionsKind Kind { get; init; }

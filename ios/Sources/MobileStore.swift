@@ -260,19 +260,34 @@ final class MobileStore {
     private(set) var staged: [String: [StagedFile]] = [:]
     /// The uploads that run now, by their own number.
     private(set) var uploading: Set<UUID> = []
-    /// The bytes of the files that the pages show, by attachment number, newest last.
-    private(set) var fileData: [Int: Data] = [:]
+    /// The bytes of the files that the pages show, by attachment number, newest last. A page reads them through
+    /// `heldBytes(of:)`: a number can name another file.
+    private var fileData: [Int: Data] = [:]
+    /// The SHA-256 that the read of each file of `fileData` checked.
+    @ObservationIgnored private var fileSums: [Int: String] = [:]
     private var fileOrder: [Int] = []
-    private var fileReads: Set<Int> = []
-    /// The pictures of the chats, drawn once from their bytes, by attachment number: a chat draws them in its first
-    /// frame, and its body never decodes an image.
-    private var pictures: [Int: CGImage] = [:]
+    /// A file as the reads and the marks name it: its number and its SHA-256, because the hub can give a number
+    /// again after its file went, while this phone still shows a message that carried the file before.
+    private struct FileKey: Hashable {
+        let id: Int
+        let sha256: String
+        init(_ file: MessageAttachment) { id = file.id; sha256 = file.sha256 }
+    }
+    private var fileReads: Set<FileKey> = []
+    /// One more at each new hub or hub generation (`forgetGeneration`): a read that one overtook keeps nothing, and a
+    /// picture's tile that SwiftUI kept reads its file again.
+    private(set) var filesGeneration = 0
+    /// The pictures of the chats, drawn once from their bytes, by attachment number, each with the SHA-256 of its
+    /// file: a chat draws them in its first frame, and its body never decodes an image.
+    private var pictures: [Int: (sha256: String, image: CGImage)] = [:]
     @ObservationIgnored private var pictureOrder: [Int] = []
     /// The pictures that the background reads (`readPictures`) still have to bring, and the ones that did not come.
     @ObservationIgnored private var picturesWaiting: [MessageAttachment] = []
-    @ObservationIgnored private var picturesFailed: Set<Int> = []
+    @ObservationIgnored private var picturesFailed: Set<FileKey> = []
     /// The pictures whose bytes did not come, which their tile says, with its ↻ (D-7).
-    private(set) var notLoaded: Set<Int> = []
+    private var notLoaded: Set<FileKey> = []
+    /// This picture's bytes did not come: its tile says so, with its ↻.
+    func didNotLoad(_ file: MessageAttachment) -> Bool { notLoaded.contains(FileKey(file)) }
     @ObservationIgnored private var picturesReading: Task<Void, Never>?
     @ObservationIgnored private var stagedThumbs: [UUID: CGImage] = [:]
     /// What went wrong with a file that the owner picked or opened, in plain words; nil when nothing did.
@@ -887,7 +902,9 @@ final class MobileStore {
         }
         guard !changed.isEmpty else { return }
         chatsReading = Task { [weak self] in
-            defer { self?.chatsReading = nil }
+            // Who stopped a reader (a new generation, the move to the back) let it go already, and may have started
+            // the next one: a stopped reader's end does not let that one go.
+            defer { if !Task.isCancelled { self?.chatsReading = nil } }
             for chat in changed {
                 guard let store = self, !Task.isCancelled, store.hub == requested, store.snapshot?.db == database
                 else { return }
@@ -1015,11 +1032,15 @@ final class MobileStore {
         picturesWaiting = []
         picturesFailed = []
         notLoaded = []
-        // A new generation numbers its files from the start again: what this phone holds of the old one goes.
+        // A new generation numbers its files from the start again: what this phone holds of the old one goes, and a
+        // read on its way keeps nothing (`load`).
+        filesGeneration += 1
         pictures = [:]
         pictureOrder = []
         fileData = [:]
+        fileSums = [:]
         fileOrder = []
+        fileReads = []
         keptDatabase = nil
         try? FileManager.default.removeItem(at: chatsFile)
         taskPages = [:]
@@ -1349,9 +1370,21 @@ final class MobileStore {
     var openTasks: [MobileTaskHead] { sorted(snapshot?.tasks ?? []) }
     /// The last tasks that ended, newest first.
     var endedTasks: [MobileTaskHead] { sorted(snapshot?.recent ?? []) }
-    /// The holds that still hold a task, and the outcomes that the owner must record.
+    /// The holds that still hold a task, and the outcomes that the owner must record: not those that the task's agent
+    /// checks first, while the task runs or waits for its next session (`TaskOutcome.waitsOnOwner`).
     var openHolds: [TaskHold] { snapshot?.holds ?? [] }
-    var openOutcomes: [TaskOutcome] { (snapshot?.outcomes ?? []).filter { $0.state == "unknown" } }
+    var openOutcomes: [TaskOutcome] {
+        (snapshot?.outcomes ?? []).filter { outcome in
+            let row = head(outcome.task)
+            return outcome.waitsOnOwner(holds: openHolds, taskEnded: row?.isTerminal, shellOff: shellOff(row?.owner))
+        }
+    }
+    /// Whether the agent `name`'s sessions record no outcome (`TaskOutcome.shellOff`), with a `can` that the hub did not
+    /// send read as `[]`, as `askReading` reads it.
+    func shellOff(_ name: String?) -> Bool {
+        guard let name, let agent = agent(name) else { return false }
+        return TaskOutcome.shellOff(role: agent.role, can: agent.can ?? [])
+    }
     /// **The Needs you tab's count is the Mac's Needs you row's** (the owner's yes of 28 October 2026 to D-4: "the same
     /// count as the iPhone tab"): the open requests, and each task that only he can move, once, as
     /// `HubState.ownerTasks` counts them. The page lists both, so the count is what it opens (fix round 1).
@@ -1432,7 +1465,9 @@ final class MobileStore {
         // A correction stands for the message that it replaced (`ChatAskPlaces`).
         for message in messages { if let replaced = message.replaces_request_id { here.insert(replaced.lowercased()) } }
         guard askTasks.contains(where: { $0.ask.map { here.contains($0.lowercased()) } == true }) else { return nil }
-        let agents = snapshot.agents.map { FleetAgent(phoneName: $0.name, role: $0.role, runtime: $0.runtime, limit: $0.limit) }
+        let agents = snapshot.agents.map {
+            FleetAgent(phoneName: $0.name, role: $0.role, runtime: $0.runtime, limit: $0.limit, can: $0.can ?? [])
+        }
         return HubState(phoneTime: snapshot.time, db: snapshot.db, agents: agents, tasks: askTasks,
                         needs: snapshot.needs + (snapshot.answered_needs ?? []), messages: messages,
                         holds: snapshot.holds, outcomes: snapshot.outcomes)
@@ -1686,32 +1721,58 @@ final class MobileStore {
 
     // MARK: The files that the hub holds
 
+    /// The bytes held for this file, for a page that shows them: only bytes whose read checked this file's size and
+    /// SHA-256. A number can name another file: the hub can give a number again after its file went.
+    func heldBytes(of file: MessageAttachment) -> Data? {
+        guard let data = fileData[file.id], data.count == file.size, fileSums[file.id] == file.sha256 else { return nil }
+        return data
+    }
+
     /// The bytes of one file of a message, for the page that shows it. Nothing is kept before its size and its
     /// SHA-256 match what the hub said.
     /// `quietly`: a read in the background, which says nothing when it fails; the page's own read says it.
     func load(_ file: MessageAttachment, quietly: Bool = false) async {
-        if let data = fileData[file.id] {
-            if file.isImage, pictures[file.id] == nil { keepPicture(data, of: file.id) }
+        if let data = heldBytes(of: file) {
+            if file.isImage, picture(of: file) == nil { keepPicture(data, of: file) }
             return
         }
-        guard let snapshot, !fileReads.contains(file.id) else { return }
-        fileReads.insert(file.id)
-        defer { fileReads.remove(file.id) }
+        // Bytes held under this number for another file do not stop this file's read: its bytes take their place.
+        let read = FileKey(file)
+        guard let snapshot, !fileReads.contains(read) else { return }
+        let generation = filesGeneration
+        fileReads.insert(read)
+        // The end of a read that a new generation overtook does not take away the mark of that generation's read.
+        defer { if generation == filesGeneration { fileReads.remove(read) } }
         do {
             let data = try await client.attachment(file, hub: hub, key: key, database: snapshot.db)
+            // A read that a new hub or generation overtook keeps nothing: its number names another file now.
+            guard generation == filesGeneration else { return }
             fileData[file.id] = data
+            fileSums[file.id] = file.sha256
+            fileOrder.removeAll { $0 == file.id }
             fileOrder.append(file.id)
             while fileOrder.count > 12, let oldest = fileOrder.first {
                 fileData[oldest] = nil
+                fileSums[oldest] = nil
                 fileOrder.removeFirst()
             }
-            if file.isImage { keepPicture(data, of: file.id) }
-            notLoaded.remove(file.id)
+            if file.isImage { keepPicture(data, of: file) }
+            notLoaded.remove(read)
         } catch {
+            // Nor does it mark anything: its failure was the hub's or the generation's of before. A read that its page
+            // stopped (the owner left the chat) or the app's move to the back stopped did not fail.
+            guard generation == filesGeneration, !Task.isCancelled else { return }
+            // The hub has a new generation that this phone does not know yet: the fleet's read learns it, and
+            // empties the files (`forgetGeneration`), and the pictures' tiles read their files again then.
+            if case MobileError.refusal(let refusal, _) = error, refusal.status == 409 {
+                Task { await self.refresh() }
+                return
+            }
             // A picture that did not come says so on its own tile, with the ↻ that reads it again; the line under
             // the composer is for a file that is not a picture.
-            if file.isImage { notLoaded.insert(file.id) }
-            if quietly { picturesFailed.insert(file.id); return }
+            // Each mark names this file, so a file that took its number after it is not marked with it.
+            if file.isImage { notLoaded.insert(read) }
+            if quietly { picturesFailed.insert(read); return }
             if let error = error as? MobileError { authProblem = error.auth }
             if !file.isImage { fileFailed((error as? LocalizedError)?.errorDescription ?? String(l10n: "This file did not come.")) }
         }
@@ -1719,18 +1780,23 @@ final class MobileStore {
 
     /// The owner pressed ↻ on a picture that did not come: its tile reads it again at once.
     func readAgain(_ file: MessageAttachment) async {
-        notLoaded.remove(file.id)
-        picturesFailed.remove(file.id)
+        notLoaded.remove(FileKey(file))
+        picturesFailed.remove(FileKey(file))
         await load(file)
     }
 
-    /// The picture of an image file, once its bytes came.
-    func picture(_ id: Int) -> CGImage? { pictures[id] }
+    /// The picture of an image file, once its bytes came: only one drawn from the bytes of this file.
+    func picture(of file: MessageAttachment) -> CGImage? {
+        guard let held = pictures[file.id], held.sha256 == file.sha256 else { return nil }
+        return held.image
+    }
 
     /// At most 60 pictures stay drawn, the newest last.
-    private func keepPicture(_ data: Data, of id: Int) {
+    private func keepPicture(_ data: Data, of file: MessageAttachment) {
         guard let picture = MessageAttachment.thumbnail(data, maxPixels: 640) else { return }
-        pictures[id] = picture
+        let id = file.id
+        pictures[id] = (file.sha256, picture)
+        pictureOrder.removeAll { $0 == id }
         pictureOrder.append(id)
         while pictureOrder.count > 60, let oldest = pictureOrder.first {
             pictures[oldest] = nil
@@ -1742,14 +1808,16 @@ final class MobileStore {
     /// opens with its pictures drawn in their slots and nothing arrives under the owner's eyes.
     private func readPictures() {
         guard pictures.count < 60 else { return }
-        let queued = Set(picturesWaiting.map(\.id))
+        let queued = Set(picturesWaiting.map(FileKey.init))
         let missing = chatItems.values.flatMap { $0.suffix(20).flatMap(\.attachments) }.filter {
-            $0.isImage && pictures[$0.id] == nil && !queued.contains($0.id) && !picturesFailed.contains($0.id)
+            $0.isImage && picture(of: $0) == nil && !queued.contains(FileKey($0)) && !picturesFailed.contains(FileKey($0))
         }
         picturesWaiting += missing
         guard picturesReading == nil, !picturesWaiting.isEmpty else { return }
         picturesReading = Task { [weak self] in
-            defer { self?.picturesReading = nil }
+            // Who stopped a reader (a new generation, the move to the back) let it go already, and may have started
+            // the next one: a stopped reader's end does not let that one go.
+            defer { if !Task.isCancelled { self?.picturesReading = nil } }
             while let store = self, !Task.isCancelled, !store.picturesWaiting.isEmpty {
                 let file = store.picturesWaiting.removeFirst()
                 await store.load(file, quietly: true)

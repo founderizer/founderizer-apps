@@ -412,8 +412,8 @@ extension VaultCallerTests {
         let selector = #"input[name="api \"key\""] > code.it's"#
         let script = try VaultBrowser.captureScript(origin: "https://shop.example.test", selector: selector)
         #expect(script.contains("location.origin!==" + (try VaultBrowser.jsonString("https://shop.example.test"))) &&
-                script.contains("document.querySelectorAll(") && script.contains("m.length!==1") && script.contains("JSON.stringify"))
-        #expect(script.contains(try VaultBrowser.jsonString(selector)) && !script.contains("querySelectorAll(" + selector))   // quoted as data
+                script.contains("$$(") && script.contains("m.length!==1") && script.contains("JSON.stringify"))
+        #expect(script.contains(try VaultBrowser.jsonString(selector)) && !script.contains("$$(" + selector))   // quoted as data
         func answer(_ object: [String: Any]) throws -> String { String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self) }
         // Every value comes back as the page has it: short, with white space, with quotes and other scripts.
         for value in ["x", " leading and trailing ", "two\nlines\tand a tab", #"quote " back \ slash"#, "kľúč-🔑-\u{301}e", String(repeating: "k", count: 4096)] {
@@ -455,7 +455,8 @@ extension VaultCallerTests {
 
     @Test func aModelProviderSiteMakesNothingAndReadsNoPage() async throws {
         // The hub refuses these first (`save_job`). The vault refuses them too, as `vault.py`'s `creation` does.
-        for url in ["https://chatgpt.com/signup", "https://auth.openai.com/log-in", "https://app.claude.ai/settings", "https://api.x.ai/keys"] {
+        // Not api.x.ai: Grok's paid API is a key site (VaultProviderSites.keySites, K3 of the AI providers build).
+        for url in ["https://chatgpt.com/signup", "https://auth.openai.com/log-in", "https://app.claude.ai/settings", "https://accounts.x.ai/sign-in"] {
             let items = FakeItems(), store = FakeKeychainJournal()
             FakeHub.reset(answer: Self.answering(Self.confirmation(["url": url])))
             let reply = try await Self.create(try Self.hub(), try Self.writer(items, store))

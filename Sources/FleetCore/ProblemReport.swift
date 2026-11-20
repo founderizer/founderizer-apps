@@ -202,8 +202,8 @@ extension ProblemReport {
         case "addAgent": return "Add agent"
         case "addServer": return "Add server"
         case "needs": return "Needs you"
-        // The task board, which the sidebar names Tasks.
-        case "activity": return "Tasks"
+        // The task board, which the sidebar names Tasks, also as an agent's chat panel opens it (`activityFrom`).
+        case "activity", "activityFrom": return "Tasks"
         default: break
         }
         // One word stays as it is; `agentMessages` becomes "Agent messages".

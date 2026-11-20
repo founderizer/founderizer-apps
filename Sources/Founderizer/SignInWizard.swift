@@ -28,6 +28,10 @@ import SwiftUI
 struct SignInWizard: View {
     @Bindable var store: FleetStore
     let agent: String
+    /// The provider that the page was opened for, when that is not the server's own choice (`Destination.signIn`):
+    /// Codex of the screen tasks of an agent on Claude Code, from the error row of a task's thread or from the page of
+    /// its Mac (`ScreenSignIn`).
+    var asked: String? = nil
 
     @State private var machine: MachineStatus?
     /// This view's own mark for the page that it tells the store (`WizardPages.tell`, `gone`).
@@ -58,12 +62,32 @@ struct SignInWizard: View {
         guard let login = machine?.login, login.id == mine else { return nil }
         return login
     }
-    private var runtime: String { machine?.signInRuntime ?? store.state?.agents.first { $0.name == agent }?.runtime ?? "claude" }
+    /// The agent's own provider, as its row of the fleet says.
+    private var ownRuntime: String? { store.state?.agents.first { $0.name == agent }?.runtime }
+    /// **The provider that this page signs in**: the one of the sign-in that runs, else the one that the page was opened
+    /// for (`asked`), else the server's own choice. With the server's choice alone, the page could sign in only the
+    /// agent's own provider, and a Codex that its server reported signed out had no sign-in in the app.
+    private var runtime: String { login?.runtime ?? asked ?? machine?.signInRuntime ?? ownRuntime ?? "claude" }
+    /// The page signs in a provider that is not the agent's own, because it was opened for that provider or a sign-in
+    /// of it runs: its words name the provider and not the agent, who is signed in, and it shows no account, because
+    /// the agent's reading has only its own. A plain opening with no such sign-in is never this, also while a change of
+    /// the agent's provider is under way and the server's own choice is still the old one.
+    private var named: Bool { (login?.runtime ?? asked).map { $0 != ownRuntime } ?? false }
     private var where_: String { machine?.machine ?? String(l10n: "its server") }
-    private var replacing: Bool { machine?.needsSignIn != true }
+    /// A sign-in of a provider that is signed in changes its account. Of a provider that is not the agent's own, only
+    /// the server's word that it is signed in says so, from a reading that is current, as the row that leads here
+    /// reads it (`RuntimeErrorLine`): before that word, with none and with an old one, the page offers its sign-in.
+    private var replacing: Bool {
+        if named { return fresh && machine?.signedIn(runtime) == true }
+        return machine?.needsSignIn != true
+    }
     private var fresh: Bool { store.isFresh && machine?.isCurrent(at: store.state?.time ?? 0) == true }
 
     private var page: Page {
+        // A provider that is not the agent's own, and that its server says is signed in, has nothing to do here: the
+        // page says so, also after a sign-in of it that failed. "Use another account" there would say that the agent
+        // stops, which is true only of its own, and "Try again" would sign the provider out first.
+        if named, replacing, login?.isOpen != true { return .done }
         guard let login else { return .start }
         switch login.state {
         case "done": return .done
@@ -78,7 +102,7 @@ struct SignInWizard: View {
     var body: some View {
         // Back to the agent stands at the page's top left, where every setup page has it.
         SetupPage {
-            SetupBack { store.destination = .agentDetail(agent, .settings) }.keyboardShortcut(.cancelAction)
+            SetupBack { leave() }.keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier("sign-in-back")
         } step: {
             Group {
@@ -106,9 +130,11 @@ struct SignInWizard: View {
     /// The name of the page he is on. Each one says what it asks, so no page needs a line to explain itself.
     private var title: String {
         switch page {
-        case .start: replacing ? String(l10n: "Use another \(providerName(runtime)) account") : String(l10n: "Sign \(agent.agentLabel) in")
+        // A provider that is not the agent's own is named: "Sign Solo in" would say that the agent is signed out.
+        case .start: replacing ? String(l10n: "Use another \(providerName(runtime)) account")
+            : named ? String(l10n: "Sign in to \(providerName(runtime))") : String(l10n: "Sign \(agent.agentLabel) in")
         case .link, .code: String(l10n: "Sign in to \(providerName(runtime))")
-        case .done: String(l10n: "\(agent.agentLabel) is signed in")
+        case .done: String(l10n: "\(named ? providerName(runtime) : agent.agentLabel) is signed in")
         case .failed: String(l10n: "The sign-in did not finish")
         }
     }
@@ -198,8 +224,8 @@ struct SignInWizard: View {
                 if signedIn {
                     // **The account is the whole of the news**: this page says what the sign-in did, and the machine's
                     // own reading of it is on the card.
-                    Text(account?.address ?? providerName(runtime)).foregroundStyle(FleetStyle.muted)
-                    Button("Done") { store.destination = .agentDetail(agent, .settings) }
+                    Text(named ? where_ : account?.address ?? providerName(runtime)).foregroundStyle(FleetStyle.muted)
+                    Button("Done") { leave() }
                         .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
                         .accessibilityIdentifier("sign-in-done")
                 } else {
@@ -214,8 +240,19 @@ struct SignInWizard: View {
         }
     }
 
+    /// **Where Back and Done go**: the agent's settings, where its sign-in row is. From a page that was opened for a
+    /// named provider, the page that he came from, which is the task whose row sent him here or the page of that Mac;
+    /// when no page that he left can open any more, the agent's settings too.
+    private func leave() {
+        if asked != nil { store.goBack() }
+        if case .signIn(agent, asked) = store.destination { store.destination = .agentDetail(agent, .settings) }
+    }
+
+    /// The agent's own account, on a sign-in of the agent's own provider. The account of another provider of its server
+    /// is not in the agent's reading, so its page names the provider alone.
     private var account: AccountEmail? {
-        AccountEmail(limits: store.state?.agents.first { $0.name == agent }?.accountLimits,
+        guard !named else { return nil }
+        return AccountEmail(limits: store.state?.agents.first { $0.name == agent }?.accountLimits,
                      at: store.state?.time ?? 0, fresh: store.isFresh,
                      features: store.state?.ui_features ?? [])
     }
@@ -232,7 +269,8 @@ struct SignInWizard: View {
         busy = true; refusal = nil; code = ""
         Task {
             defer { busy = false }
-            switch await store.save(.machineSignin(agent: agent, runtime: runtime, replace: replacing)) {
+            // Never a sign-out of a provider that is not the agent's own: each agent of that server's user has it.
+            switch await store.save(.machineSignin(agent: agent, runtime: runtime, replace: replacing && !named)) {
             case .saved, .unconfirmed, .behind: break      // .behind: only with queue false
             case .refused(let words), .conflict(let words): refusal = words
             }
@@ -274,5 +312,8 @@ struct SignInWizard: View {
         guard let list = try? await HubClient().machines(hub: hub, database: database),
               !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
         machine = list.machines.first { $0.agent == agent }
+        // The store's own reading has it too: the row that sent him here (`RuntimeErrorLine`) and each other page read
+        // that one, and after his sign-in they said "signed out" until their next read.
+        store.keep(list, as: "machines")
     }
 }

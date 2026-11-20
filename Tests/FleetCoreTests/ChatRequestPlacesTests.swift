@@ -3,6 +3,7 @@ import Testing
 @testable import FleetCore
 
 /// A request stands in the agent's chat where it was raised (the owner, 14 November 2026), on the Mac and the iPhone.
+/// On the Mac an answered one stands where he answered it (the owner, 19 November 2026; `atItsAnswer`).
 struct ChatRequestPlacesTests {
     private func mine(_ id: String, at created: Double, answering need: Int? = nil) throws -> ChatEntry {
         .message(try JSONDecoder().decode(OwnerMessage.self, from: JSONSerialization.data(withJSONObject: [
@@ -144,6 +145,42 @@ struct ChatRequestPlacesTests {
         #expect(whole.before == ["message-y": [7]] && whole.hidden == ["message-z"])
     }
 
+    @Test("On the Mac an answered request's card stands in the place of his answer, a press or his words, and every other one where it was raised")
+    func anAnsweredCardStandsAtItsAnswer() throws {
+        // His morning of 19 November 2026: requests of hours and days before, answered in a row, and the agent's
+        // replies with no link. Each reply must stand under the card of the answer before it. Request 9 was raised
+        // before the oldest entry that the chat holds, as his were.
+        let chat = [try agents(1, at: 10), try mine("a", at: 20), try mine("c", at: 60, answering: 7, saying: "Done"),
+                    try mine("d", at: 61, answering: 8, saying: "Yes"), try agents(2, at: 70),
+                    try mine("e", at: 80, answering: 9, saying: "Done"), try agents(3, at: 90)]
+        let needs = [try need(7, raised: 30, answered: 60), try need(8, raised: 31, answered: 61, options: ["Yes", "No"], chosen: 0),
+                     try need(9, raised: 5, answered: 80), try need(10, raised: 65),
+                     // Closed with no message of his in the chat, as when the hub or its agent closes it.
+                     try need(11, raised: 25, answered: 85)]
+        let places = ChatRequestPlaces.inTime(needs: needs, in: chat, whole: false, answered: .atItsAnswer)
+        let rows = places.rows(of: chat)
+        #expect(rows.map(\.id) == ["report-1", "message-a", "need-11", "need-7", "need-8", "need-10", "report-2", "need-9", "report-3"])
+        // No answer is a bubble of its own, and no card folds to its title alone: the card says the answer.
+        #expect(places.spoken.isEmpty && places.hidden.isEmpty)
+        // A card at its answer has that time for the marks of a day or an hour, and every other one its own.
+        #expect(ChatRequestPlaces.times(of: rows, raised: places.cardTimes(of: needs)) == [10, 20, 25, 60, 61, 65, 70, 80, 90])
+    }
+
+    @Test("On the Mac his answer on its way puts the card at the chat's end at once, and one request has one card")
+    func anAnswerOnItsWayMovesItsCard() throws {
+        let open = try need(7, raised: 15, options: ["Yes", "No"])
+        let chat = [try mine("a", at: 10), try agents(2, at: 30)]
+        // An option that he pressed, on its way (no event of the hub's yet): the reading still has the request open.
+        let going = chat + [try mine("c", at: 45, answering: 7, saying: "No", event: 0)]
+        let places = ChatRequestPlaces.inTime(needs: [open], in: going, whole: true, answered: .atItsAnswer)
+        #expect(places.rows(of: going).map(\.id) == ["message-a", "report-2", "need-7"])
+        // Should a reading hold the hub's copy beside the one on its way, which has the same id, the card stands once,
+        // and so does the waiting card that stands before that id.
+        let twice = chat + [try mine("c", at: 46, answering: 7, saying: "No"), try mine("c", at: 45, answering: 7, saying: "No", event: 0)]
+        let once = ChatRequestPlaces.inTime(needs: [open, try need(9, raised: 40)], in: twice, whole: true, answered: .atItsAnswer)
+        #expect(once.rows(of: twice).map(\.id) == ["message-a", "report-2", "need-9", "need-7"])
+    }
+
     @Test("The rows of a chat: each card in its place under one id, and a press that its card shows is no row")
     func rowsInOrder() throws {
         let chat = [try mine("a", at: 10), try agents(1, at: 20, replyingTo: "a"), try mine("b", at: 40),
@@ -199,6 +236,15 @@ struct ChatRequestPlacesTests {
         #expect(!(try need(1, raised: 1, answered: 2, options: ["Yes", "No"], chosen: 1).answeredInWords))
         #expect(!(try need(1, raised: 1, answered: 2, options: ["A", "B"], chose: [0], multi: true).answeredInWords))
         #expect(!(try need(1, raised: 1).answeredInWords))
+        // A key request: its form's save is no words, and his words about it (Needs clarification, API 1.249) are.
+        func key(_ secret: [String: Any]) throws -> OwnerNeed {
+            try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: [
+                "id": 2, "by": "manager", "title": "Synthetic", "why": "", "todo": "", "raised": 1, "answer": "Which account?",
+                "answered": 2, "kind": "secret", "secret": secret,
+            ]))
+        }
+        #expect(!(try key(["kind": "login", "saved": "bws://11111111-2222-4333-8444-555555555555"]).answeredInWords))
+        #expect(try key(["kind": "login", "clarified": 2.5]).answeredInWords)
         let hub = URL(string: "http://127.0.0.9:8765")!
         #expect(PendingRequest(hub: hub, database: "d", client: "c", needID: 1, text: "Why?").answersInWords)
         #expect(!PendingRequest(hub: hub, database: "d", client: "c", needID: 1, choice: 0, text: "Yes").answersInWords)

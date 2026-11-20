@@ -89,6 +89,12 @@ private func requesterStop(_ state: String, _ fields: [String: Any] = [:]) -> [S
     for (held, ended) in [("requested", nil), ("not_confirmed", nil), ("stopped", 1), ("released", nil)] as [(String, Int?)] {
         #expect(try hub(requesterStop(held)).stoppedAttempt(of: 7) == ended)
     }
+    // **The check is the new attempt's, not the owner's** (19 November 2026: his "who needs to check?" of such a
+    // task's orange card, while its new session had not started): no card, no Needs you and no "?" while the task
+    // runs again after the restart. While a hold holds it, the restart's own stop too (a restart that does not go on
+    // leaves it in place), the check is his.
+    #expect(!state.outcomeUnknown(7) && state.ownerTasks.isEmpty)
+    for held in ["requested", "not_confirmed", "stopped"] { #expect(try hub(requesterStop(held)).outcomeUnknown(7)) }
     #expect(try hub(requesterStop("stopped")).stoppedAttempt(of: 8) == nil)
 }
 

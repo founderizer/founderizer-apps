@@ -28,16 +28,25 @@ final class DoorSyncModel {
     /// What the last round could not do, one line each, for the log.
     private(set) var problems: [String] = []
     private var lastRead: Date?
-    private var lastRound: (key: String, at: Date)?
+    /// The last round with no problem; `whole`: its plan held every agent's GitHub grants (`Plan.leftOut`, API 1.234).
+    private var lastRound: (key: String, at: Date, whole: Bool)?
     /// The door said that it has its follow timer: it takes each release by itself, and this asks no more.
     private var followReady = false
     /// The door's code takes an entry for an agent that only gets its GitHub tokens (plan 13, item 4).
     private var tokensOnly = false
     /// The door's release installs a machine of the fleet (`install.sh --fleet`, API 1.210).
     private var fleetInstall = false
+    /// The door's check takes `--first` (API 1.241, `DoorAccess.firstProbe`).
+    private var probeFirst = false
     /// The servers that did not answer this Mac's SSH or run a release that the door's install does not cover, with
     /// when: each is passed over for an hour (N8 (b)).
     private var skipped: [String: Date] = [:]
+    /// The mark of the newest view of the hub whose plan the door's file holds (API 1.234): a round of this app wrote
+    /// the file from that view, or found it so, with every agent's grants. Each read of the hub's view says it, and
+    /// only that word ends the hub's wait for a new grant, so a read that wrote nothing ends none.
+    private var held: String?
+    /// The writes of the door's file outside a round (`addGitHubApp`): a round during which one came vouches for no file.
+    private var outsideWrites = 0
     private static let log = Logger(subsystem: "com.founderizer.app", category: "door")
 
     init(hub: URL) { self.hub = hub }
@@ -50,7 +59,14 @@ final class DoorSyncModel {
         lastRead = now
         working = true
         Task {
+            let before = held
             await round(store, now: now)
+            // a round that changed what the door's file holds says so at once, with one more read of the hub's view: a
+            // restart that waits for a new grant then starts at the end of this round, not at the next one's read. A
+            // read that fails changes nothing: the next round's read says it.
+            if let held, held != before, let database = store.state?.db {
+                _ = try? await DoorSetupClient().view(hub: hub, database: database, held: held)
+            }
             working = false
         }
     }
@@ -58,6 +74,7 @@ final class DoorSyncModel {
     /// One round: read, decide, write, record. Each failure is one line in `problems`, and the round stops there.
     private func round(_ store: FleetStore, now: Date) async {
         guard let database = store.state?.db else { return }
+        let writes = outsideWrites
         var said: [String] = []
         defer {
             problems = said
@@ -72,7 +89,7 @@ final class DoorSyncModel {
         var hubDoor: DoorAccess.HubDoor?
         if setup {
             do {
-                let view = try await DoorSetupClient().view(hub: hub, database: database)
+                let view = try await DoorSetupClient().view(hub: hub, database: database, held: held ?? "")
                 hubDoor = view
                 if view.door?.address != doorAddress {
                     do {
@@ -88,7 +105,12 @@ final class DoorSyncModel {
             }
         }
         let key = Self.fingerprint(devices, database: database) + (hubDoor.map { "\n" + $0.digest } ?? "")
-        if let last = lastRound, last.key == key, now.timeIntervalSince(last.at) < 3600 { return }
+        if let last = lastRound, last.key == key, now.timeIntervalSince(last.at) < 3600 {
+            // the door's file holds what the last full round wrote, since no write came after it (a write clears
+            // lastRound), and this view gives the same grants (API 1.234)
+            if last.whole, let mark = hubDoor?.mark { held = mark }
+            return
+        }
 
         let read = await ssh(door, address: doorAddress, DoorAccess.readProgram)
         guard let current = read.flatMap({ DoorAccess.file($0.output) }) else {
@@ -146,9 +168,12 @@ final class DoorSyncModel {
         }
         // plan 13, item 4: the agents' GitHub grants, and the move of the hub's App key, wait for door code that takes
         // an entry for an agent that only gets its tokens
-        if setup, !tokensOnly, let probe = await ssh(door, address: doorAddress, DoorAccess.tokensProbe),
-           probe.output.contains("tokens=yes") {
-            tokensOnly = true
+        if setup, !tokensOnly {
+            if let probe = await ssh(door, address: doorAddress, DoorAccess.tokensProbe) {
+                tokensOnly = probe.output.contains("tokens=yes")
+            } else {        // a problem, so the next round runs in full and asks again (API 1.234)
+                said.append("The door did not say whether it takes an entry for an agent that only gets its tokens: SSH did not answer.")
+            }
         }
         facts.tokensOnly = tokensOnly
         // plan 13, items 3 and 4: the hub seals a key for the door only to the key pinned under door, so the door's own
@@ -178,11 +203,24 @@ final class DoorSyncModel {
             Self.log.notice("\(found.agent, privacy: .public) holds none of the fleet's own servers: the door's file has it at another address with more than those servers, or at the hub's or the door's address.")
         }
         if plan.file != DoorAccess.canonical(current) {
+            // the Save of a GitHub App's key wrote the door's file after this round read it: this plan would take that
+            // App's entry away, so the next round, which runs in full, writes from the file as it is now
+            guard outsideWrites == writes else {
+                said.append("The door's access file changed during this round: the next round writes it.")
+                return
+            }
+            // the door's file changes now, and a write whose answer is lost may have landed: nothing vouches for a file
+            // until this write answers, and no early return until a round with no problem
+            lastRound = nil
+            held = nil
             guard let written = await ssh(door, address: doorAddress, DoorAccess.writeProgram, stdin: plan.file), written.ok else {
                 said.append("The door refused the new access file, or SSH did not answer. Nothing was recorded.")
                 return
             }
         }
+        // the door's file holds what this view gives (API 1.234), unless the plan left an agent's grants out or the
+        // Save of a GitHub App's key wrote the file while this round ran
+        if outsideWrites == writes, plan.leftOut.isEmpty, let mark = hubDoor?.mark { held = mark }
         var recorded = Self.recorded(hub: hub, database: database)
         for change in DoorAccess.changes(wanted: plan.holdings, recorded: recorded) {
             do {
@@ -195,7 +233,7 @@ final class DoorSyncModel {
             }
         }
         Self.keep(recorded, hub: hub, database: database)
-        if said.isEmpty && !placing { lastRound = (key, now) }
+        if said.isEmpty && !placing && outsideWrites == writes { lastRound = (key, now, plan.leftOut.isEmpty) }
     }
 
     /// **The agent that holds the fleet's own servers** (API 1.210; the owner, 17 November 2026): the hub's view and
@@ -230,8 +268,11 @@ final class DoorSyncModel {
     /// The door's parts on a business's servers, one step a round (`DoorHosts.next`): the door's check of a server
     /// that got them (test 1, as code), or the install of the next one, the canary first and the others after the
     /// manager's `door_rollout`. A failure stops it at that server until a new build of the app or a new release of the
-    /// door, with no clock, and the hub hears of each outcome. A server that does not answer, or runs a release that the
-    /// install does not cover, is passed over for an hour; the canary is waited for.
+    /// door, with no clock, and the hub hears of each outcome; then that server's check runs again. A check that makes
+    /// no step (it stops at its first connection, gives no answer, or the door's file does not hold the server) sets no
+    /// stop: from the third round in a row the hub hears why, as `unchecked`, once for each cause (API 1.241). A server
+    /// that does not answer, or runs a release that the install does not cover, is passed over for an hour; the canary
+    /// is waited for.
     /// True while a server is between its install and its check, so that the next round runs in full.
     @discardableResult
     private func placeParts(_ store: FleetStore, view: DoorAccess.HubDoor, current: [String: Any], facts: DoorAccess.Facts,
@@ -246,22 +287,16 @@ final class DoorSyncModel {
             await ssh(door, address: doorAddress, DoorHosts.revisionProgram)?.output
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "-"
         }
-        func report(_ host: String, _ outcome: String, _ words: String) async {
+        @discardableResult
+        func report(_ host: String, _ outcome: String, _ words: String) async -> Bool {
             do {
                 try await DoorSetupClient().hostReport(hub: hub, database: database, client: store.installation, host: host,
                                                        state: outcome, said: words)
+                return true
             } catch {
                 said.append("The hub did not take the word about \(host): \(Self.words(error))")
-            }
-        }
-        if let stop = state.stop {
-            let running = await revision()
-            guard stop.app != build || stop.door != running else {
-                said.append("The door's parts go on no further server: \(stop.host): \(stop.reason)")
                 return false
             }
-            state.stop = nil            // a new build of the app or release of the door: that server is tried again
-            state.hosts[stop.host] = nil
         }
         let now = Date()
         skipped = skipped.filter { now.timeIntervalSince($0.value) < 3600 }
@@ -281,18 +316,54 @@ final class DoorSyncModel {
         // a host with no second sshd running leaves the door's file this round, so a canary whose install stopped
         // stays the canary (7 November 2026: the next host became one, because the stopped install had made its key)
         let inFile = Set((current["hosts"] as? [String: Any] ?? [:]).keys).subtracting(facts.bare).subtracting(unmarked)
+        if let stop = state.stop {
+            let running = await revision()
+            guard stop.app != build || stop.door != running else {
+                said.append("The door's parts go on no further server: \(stop.host): \(stop.reason)")
+                return false
+            }
+            // a new build of the app or release of the door: that server's check runs again while the door's file holds
+            // it, else its install (API 1.241)
+            state.clearStop(holds: inFile)
+        }
         switch DoorHosts.next(order: order, state: state, inFile: inFile,
                               answered: Set(facts.hosts.keys).subtracting(unmarked), rollout: rollout,
                               skipped: Set(skipped.keys)) {
         case .wait:
-            return state.hosts.values.contains("installed")
+            // an installed server that the door's file does not hold makes no step either (API 1.241): the round after
+            // its install is the normal one, and from the third the hub hears why, once for each cause
+            if let host = order.first(where: { state.hosts[$0] == "installed" }), !inFile.contains(host) {
+                let cause = DoorHosts.waitCause(host: host, bare: facts.bare, answered: Set(facts.hosts.keys))
+                if let word = DoorHosts.noStep(host: host, cause: cause, state: &state) {
+                    said.append("The door has not checked \(host) yet: \(word).")
+                    if await report(host, "unchecked", word) { DoorHosts.reported(word, host: host, state: &state) }
+                }
+            }
+            // only a server of the order: one that door_hold took out stays installed, and would hold every round in full
+            return order.contains { state.hosts[$0] == "installed" }
         case .probe(let host):
-            guard let program = DoorHosts.probeProgram(host: host),
-                  let answer = await ssh(door, address: doorAddress, program, always: true),
-                  let result = DoorHosts.probe(answer.output, host: host) else {
-                said.append("The door's check of \(host) gave no answer.")
+            // only a door whose code takes --first gets it, so a door from before gives no refusal (API 1.241)
+            if !probeFirst {
+                probeFirst = await ssh(door, address: doorAddress, DoorAccess.firstProbe)?.output.contains("first=yes") == true
+            }
+            guard let program = DoorHosts.probeProgram(host: host, first: probeFirst) else { return false }
+            let started = Date()
+            let answer = await ssh(door, address: doorAddress, program, always: true)
+            guard let answer, let result = DoorHosts.probe(answer.output, host: host), result.stopped == nil else {
+                // no step (API 1.241): the check stopped at its first connection, or gave no answer. The server stays
+                // installed and is checked again each round; from the third round in a row the hub hears why as
+                // unchecked, once for each cause, and no stop is set
+                let cause = DoorHosts.noStepCause(answer.flatMap { DoorHosts.probe($0.output, host: host) },
+                                                  status: answer?.status,
+                                                  timedOut: Date().timeIntervalSince(started) >= DoorHosts.probeWait - 5)
+                said.append("The door's check of \(host) made no step: \(cause).")
+                if let word = DoorHosts.noStep(host: host, cause: cause, state: &state),
+                   await report(host, "unchecked", word) {
+                    DoorHosts.reported(word, host: host, state: &state)
+                }
                 return false
             }
+            DoorHosts.stepped(host: host, state: &state)
             if result.passed {
                 state.hosts[host] = "passed"
                 Self.log.notice("\(host, privacy: .public) has the door's parts, and the door's check of it passed.")
@@ -336,14 +407,17 @@ final class DoorSyncModel {
             guard let program = DoorHosts.installProgram(mode: mode, doorKey: bundle.doorKey, fleet: ofFleet) else {
                 return false
             }
+            let started = Date()
             let answer = await ssh(device, address: address, program, stdin: Data(bundle.tar.utf8))
             if let answer, answer.ok, answer.output.contains("host-key: ssh-ed25519 ") {
                 state.hosts[host] = "installed"
                 Self.log.notice("\(host, privacy: .public) has the door's parts now; the door checks it next.")
                 await report(host, "installed", "")
             } else {
-                let last = answer?.output.split(whereSeparator: \.isNewline).last.map(String.init) ?? "SSH did not answer"
-                let reason = "the install stopped: \(last.prefix(300))"
+                // fixed words only: the server prints all of the install's output, and the hub quotes this reason in
+                // the manager's [hub] line (DoorHosts.installStop)
+                let reason = DoorHosts.installStop(status: answer?.status, output: answer?.output ?? "",
+                                                   timedOut: Date().timeIntervalSince(started) >= DoorHosts.probeWait - 5)
                 state.stop = .init(host: host, reason: reason, app: build, door: bundle.revision)
                 await report(host, "failed", reason)
             }
@@ -395,8 +469,9 @@ final class DoorSyncModel {
             guard let host = hub.host, app.path.range(of: "^/[A-Za-z0-9._/-]{1,200}$", options: .regularExpression) != nil else {
                 return nil
             }
-            let device = devices.first { $0.address == host } ?? DoorAccess.Device(name: "hub", address: host, tags: [])
-            guard let read = await ssh(device, address: host, "cat -- '\(app.path)'") else {
+            let listed = devices.first { $0.address == host }
+            let device = listed ?? DoorAccess.Device(name: "hub", address: host, tags: [])
+            guard let read = await ssh(device, address: host, "cat -- '\(app.path)'", byName: listed != nil) else {
                 said.append("The hub's GitHub App key could not be read over SSH.")
                 return nil
             }
@@ -457,6 +532,8 @@ final class DoorSyncModel {
             return String(l10n: "The door did not take its new access file.")
         }
         lastRound = nil
+        held = nil      // this write began from a file that a round may have written after its read (API 1.234)
+        outsideWrites += 1
         return nil
     }
 
@@ -475,17 +552,23 @@ final class DoorSyncModel {
 
     /// One program as root on a device, over this Mac's own SSH, at the address that this Mac's Tailscale gives it.
     /// A connection that the app keeps for that machine gives its user, port and key; else root with the key files of
-    /// the owner's `~/.ssh/config` and one key of the app's kept root connections (`DoorAccess.LoginKeys`). A host key this Mac does not know stops it
+    /// the owner's `~/.ssh/config` and one key of the app's kept root connections (`DoorAccess.LoginKeys`), at the port
+    /// that the owner's `~/.ssh/config` names for that device, else 22 (`DoorAccess.configured`; `byName` is false for
+    /// a device that this Mac's Tailscale did not name). A host key this Mac does not know stops it
     /// (StrictHostKeyChecking=yes). A device that refused the login gets no try for an hour, or until its line in the
     /// fingerprint changes (`DoorAccess.Refusals`). nil when SSH did not answer.
     private func ssh(_ device: DoorAccess.Device, address: String, _ program: String, stdin: Data? = nil,
-                     always: Bool = false) async -> LocalShell.Answer? {
+                     always: Bool = false, byName: Bool = true) async -> LocalShell.Answer? {
+        guard !DoorAccess.Refusals.read(hub: hub).waits(device, now: Date()) else { return nil }
         let kept = InstallTargets.target(machine: device.name, hub: hub)
-        // a device with no kept connection: one key that this Mac already uses for root, besides ~/.ssh/config's
-        let extra = kept == nil ? DoorAccess.LoginKeys.read(hub: hub).key(for: device, candidates: InstallTargets.rootKeys(hub: hub))
-            : nil
-        guard !DoorAccess.Refusals.read(hub: hub).waits(device, now: Date()),
-              let arguments = DoorAccess.sshArguments(kept: kept, address: address, program: program, key: extra),
+        // a device with no kept connection: the port and root's key that ~/.ssh/config gives that device, and one key
+        // a try: that key first, then the keys that this Mac already uses for root, besides ~/.ssh/config's own
+        let configured = kept == nil ? await DoorAccess.configured(device, address: address, byName: byName) : nil
+        let extra = kept == nil ? DoorAccess.LoginKeys.read(hub: hub).key(
+            for: device, candidates: DoorAccess.LoginKeys.candidates(configured: configured?.key,
+                                                                     kept: InstallTargets.rootKeys(hub: hub))) : nil
+        guard let arguments = DoorAccess.sshArguments(kept: kept, address: address, program: program, key: extra,
+                                                      port: configured?.port ?? 22),
               let answer = try? await LocalShell.run("/usr/bin/ssh", arguments, stdin: stdin, timeout: 120) else { return nil }
         let refused = DoorAccess.loginRefused(status: answer.status, output: answer.output)
         if refused, let extra {

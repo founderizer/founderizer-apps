@@ -69,6 +69,14 @@ enum PhoneRefusalVectors {
             holes.reduce(template) { $0.replacingOccurrences(of: "{\($1)}", with: "%@") }
         }
 
+        /// The names in the order that the English holds them, a name that it holds twice twice: what the app's sentence
+        /// puts into its `%@`, one after the other (`holes` lists each name once).
+        var places: [String] {
+            template.components(separatedBy: "{").dropFirst().compactMap { part in
+                part.range(of: "}").map { String(part[..<$0.lowerBound]) }
+            }.filter(holes.contains)
+        }
+
         var names: [String: RefusalName] {
             Dictionary(uniqueKeysWithValues: holes.map { ($0, RefusalName.text(PhoneRefusalVectors.examples[$0] ?? $0)) })
         }
@@ -244,13 +252,21 @@ struct MobileRefusalTests {
     /// none: a code that waits for the owner's yes to its words has no Spanish yet, and the phone then says what the hub
     /// said (`HubRefusal.words`). Each is read inside the Spanish frame, in the refusal, in "Not sent: ..." and in the line
     /// under a refused request. Run it inside `PhoneSpanish.run`. (It reads the catalog's plain lines under the key made of
-    /// the hub's English with `%@` for each name. A code whose Spanish has plural forms, or a count in place of a name,
-    /// has another form: when the first such code gets its Spanish, this check has to learn that form.)
+    /// the hub's English with `%@` for each name, and puts the names into the line's `%@` one after the other, in the
+    /// order that the English holds them, as the phone's format does for `browser_no_room`'s server and agent. A line
+    /// with a positional `%1$@`, with a `%` of its own or with a name left out fails here; a code whose Spanish has
+    /// plural or device forms is not among the plain lines, so it reads as one with no Spanish. When the first such
+    /// code gets its Spanish, this check has to learn that form.)
     private func holdsInSpanish(_ entry: PhoneRefusalVectors.Entry, catalog spanish: [String: String]) {
         let words: String
         if let line = spanish[entry.key] {
-            words = entry.holes.reduce(line) { $0.replacingOccurrences(of: "%@", with: PhoneRefusalVectors.examples[$1] ?? $1) }
-            #expect(!words.contains("{") && !words.contains("%@"), "\(entry.code)")
+            let values = entry.places.map { PhoneRefusalVectors.examples[$0] ?? $0 }
+            #expect(line.components(separatedBy: "%@").count - 1 == values.count, "\(entry.code): a place for each name")
+            words = values.reduce(line) { text, value in      // each name into the next %@, in the order of the English
+                guard let at = text.range(of: "%@") else { return text }
+                return text.replacingCharacters(in: at, with: value)
+            }
+            #expect(!words.contains("{") && !words.contains("%"), "\(entry.code)")
         } else {
             words = MobileError.sentence(entry.english)
         }

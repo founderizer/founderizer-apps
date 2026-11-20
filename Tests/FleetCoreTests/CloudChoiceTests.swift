@@ -269,6 +269,198 @@ struct CloudChoiceTests {
         #expect(server(memory: 1536, system: nil, version: nil).summary == "CX23 · 1.5 GB")
     }
 
+    // MARK: the hub's server that this Mac made, in a first run's list (`hubAgain`)
+
+    /// A record of this Mac's build of the hub's server `worker-1`, which its provider calls by the id "1": made, and
+    /// seen on this Mac's network at `joined`. With none, the build stopped before that, and `onNetwork` says whether
+    /// the private network's own list had the server then.
+    private func hubBuild(_ name: String = "worker-1", id: String? = "1", provider: CloudProvider = .hetzner,
+                          use: CloudServerUse = .hub, joined: String? = "100.64.0.9", onNetwork: Bool = false,
+                          began: Date = Date(timeIntervalSince1970: 1_763_300_000)) -> BuildRecord {
+        var record = BuildRecord(provider: provider, use: use, hub: nil, name: name, at: began)
+        if let id { record.made(id: id, at: began.addingTimeInterval(20)) }
+        if let joined {
+            record.joined(at: began.addingTimeInterval(80), hub: "http://\(joined):8765")
+        } else {
+            record.end(onNetwork: onNetwork, at: began.addingTimeInterval(320))
+        }
+        return record
+    }
+
+    /// The hub's install on a server of a first run's list, with one device of its name at the join's address unless
+    /// the test names others.
+    private func hubAgain(_ server: CloudExisting, _ builds: [BuildRecord], devices: [FleetOnTailscale.Device]? = nil,
+                          provider: CloudProvider = .hetzner, except: Set<String> = []) -> CloudReuse? {
+        server.hubAgain(at: provider, builds: builds, devices: devices ?? [device("worker-1", address: "100.64.0.9")],
+                        except: except)
+    }
+
+    /// **The owner's report of 14 November 2026, for the fleet's own VPS**: the hub's server was made, its install
+    /// stopped, and the first run's list showed it grey beside "New server". This Mac's own record of the build proves
+    /// the server, and the install runs again at its address on the private network.
+    @Test func theHubsServerThatThisMacMadeTakesItsInstallAgain() {
+        let made = server("worker-1", madeFor: "hub")
+        // Its row keeps its words: the first run knows no fleet, so nothing more can be said of it.
+        #expect(made.unfit(for: .hub, fleet: []) == "Used by Founderizer")
+        #expect(hubAgain(made, [hubBuild()]) == .install(address: "100.64.0.9"))
+        // Tailscale gave the device another name, and the device keeps the name that it gave itself.
+        #expect(hubAgain(made, [hubBuild()], devices: [device("worker-1-1", address: "100.64.0.9", host: "worker-1")])
+                == .install(address: "100.64.0.9"))
+        // The record names the server by its id: a new name at the provider, and capitals in the record, change nothing.
+        #expect(hubAgain(server("renamed", madeFor: "hub"), [hubBuild("Worker-1")]) == .install(address: "100.64.0.9"))
+        // The newest record of the server is the one that counts.
+        let older = hubBuild(joined: "100.64.0.12", began: Date(timeIntervalSince1970: 1_763_200_000))
+        #expect(hubAgain(made, [older, hubBuild()]) == .install(address: "100.64.0.9"))
+        #expect(hubAgain(made, [hubBuild(), older]) == .install(address: "100.64.0.9"))
+    }
+
+    /// **Each proof is needed.** The provider's label names no Mac and no fleet: without this Mac's own record of the
+    /// build, by the provider's id, the row stays as it is.
+    @Test func aHubsServerStaysGreyWhereAProofIsMissing() {
+        let made = server("worker-1", madeFor: "hub")
+        // No record; a record of another provider's server with that id; of a server for agents; of another server.
+        #expect(hubAgain(made, []) == nil)
+        #expect(hubAgain(made, [hubBuild(provider: .digitalOcean)]) == nil)
+        #expect(hubAgain(made, [hubBuild()], provider: .digitalOcean) == nil)
+        #expect(hubAgain(made, [hubBuild(use: .agent)]) == nil)
+        #expect(hubAgain(made, [hubBuild(id: "2")]) == nil)
+        #expect(hubAgain(made, [hubBuild(id: nil, joined: nil)]) == nil)
+        // The provider says that it is off.
+        #expect(hubAgain(server("worker-1", running: false, madeFor: "hub"), [hubBuild()]) == nil)
+        // No device of its name, an offline one, and one at another address than the join's: no address to install at.
+        #expect(hubAgain(made, [hubBuild()], devices: []) == nil)
+        #expect(hubAgain(made, [hubBuild()], devices: [device("worker-1", address: "100.64.0.9", online: false)]) == nil)
+        #expect(hubAgain(made, [hubBuild()], devices: [device("worker-1", address: "100.64.0.12")]) == nil)
+        #expect(hubAgain(made, [hubBuild()], devices: [device("worker-2", address: "100.64.0.9")]) == nil)
+        // A record with no name is no proof by a name: a device that gave Tailscale no name of its own has none either.
+        #expect(hubAgain(made, [hubBuild("")], devices: [device("worker-2", address: "100.64.0.9")]) == nil)
+        // The record keeps the join's address: a hub that it knows by a name gives no device.
+        #expect(hubAgain(made, [hubBuild(joined: "worker-1.example.ts.net")]) == nil)
+        // The hub that the app is connected to, a hub that "Start again" left alive, and a hub that refuses this Mac.
+        #expect(hubAgain(made, [hubBuild()], except: ["100.64.0.9"]) == nil)
+        #expect(hubAgain(made, [hubBuild()], except: ["100.64.0.12"]) == .install(address: "100.64.0.9"))
+    }
+
+    /// **A build that stopped before this Mac saw the server on its network has only its name**, and a later try can
+    /// take the same name: a new server gets a name that no device has. So it counts only when the private network's
+    /// own list had its server at the build's end (a rule of the network kept it from this Mac), one device alone
+    /// carries the name now, and no other build of this Mac has that name.
+    @Test func aHubsServerThatThisMacNeverSawJoinIsTakenOnlyByANameThatIsItsAlone() {
+        let made = server("worker-1", madeFor: "hub"), kept = hubBuild(joined: nil, onNetwork: true)
+        let seen = [device("worker-1", address: "100.64.0.7")], later = Date(timeIntervalSince1970: 1_763_301_000)
+        #expect(kept.hub == nil && kept.outcome == .stopped && kept.onNetwork)
+        #expect(hubAgain(made, [kept], devices: seen) == .install(address: "100.64.0.7"))
+        #expect(hubAgain(made, [kept], devices: [device("worker-1-1", address: "100.64.0.7", host: "worker-1")])
+                == .install(address: "100.64.0.7"))
+        // The network's own list never had the server: a device of that name proves nothing.
+        #expect(hubAgain(made, [hubBuild(joined: nil)], devices: seen) == nil)
+        // No device, two devices that carry the name, and an address that no install goes to.
+        #expect(hubAgain(made, [kept], devices: []) == nil)
+        #expect(hubAgain(made, [kept], devices: seen + [device("worker-1-1", address: "100.64.0.12", host: "worker-1")]) == nil)
+        #expect(hubAgain(made, [kept], devices: seen, except: ["100.64.0.7"]) == nil)
+        // The next try took the same name: the one device of the name is that try's server, which its own row offers,
+        // and never this one's.
+        let next = hubBuild(id: "2", joined: "100.64.0.7", began: later)
+        #expect(hubAgain(made, [kept, next], devices: seen) == nil)
+        #expect(hubAgain(CloudExisting(id: "2", name: "worker-1", ipv4: "203.0.113.21", type: "cx23", memoryMB: 4096,
+                                       system: "ubuntu", version: "24.04", place: "Nuremberg", running: true,
+                                       project: nil, madeFor: "hub"), [kept, next], devices: seen)
+                == .install(address: "100.64.0.7"))
+        // Another build of that name counts whatever it was for and whatever it left: at another provider, for agents,
+        // and a try that its provider refused, whose own fault answer can have made the server all the same.
+        var refused = BuildRecord(provider: .hetzner, use: .hub, hub: nil, name: "worker-1", at: later)
+        refused.callEnded(with: CancellationError())
+        refused.end()
+        #expect(refused.atProvider == .nothing)
+        for other in [hubBuild(id: "3", provider: .digitalOcean, joined: nil, began: later),
+                      hubBuild(id: "3", use: .agent, joined: nil, began: later), refused] {
+            #expect(hubAgain(made, [kept, other], devices: seen) == nil, "\(other.provider) \(other.use) \(other.atProvider)")
+        }
+    }
+
+    /// **The first run's list uses the rule** (the Mac app's own target has no tests, so its source is read, as
+    /// `InstallStartTests` reads it, with each run of spaces and line ends as one space). Each line here is a way in
+    /// which a later edit of that page could bring the second paid server back with nothing that fails to compile:
+    /// the list gets the servers that can be taken again (the argument has a default of none); its press asks the
+    /// rule before its check of the row, which a server that the app made never passes; that install goes to the
+    /// address on the private network; and "Make the server" goes to the page's task, which reads the network
+    /// before it makes a server (`makeHub`, `makeServer`). **With no reading, the press makes nothing** (the owner's
+    /// yes of 18 November 2026): only an answer that says what the network is now is a reading, so a Tailscale that
+    /// is stopped or signed out is none. A server is made at two places only: at once on a list with no such record,
+    /// whatever the list's choice was before, and at the end, after the return of a press whose list has a row
+    /// chosen, after the refusal, and after the line of a server of an earlier try that cannot be taken (the owner's
+    /// yes of the same day: that press rented a second server while the first still cost money).
+    @Test func theFirstRunsListOffersTheHubsServerThatThisMacMade() throws {
+        let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: app.appendingPathComponent("Sources/Founderizer/FirstRunView.swift"), encoding: .utf8)
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        #expect(source.contains("CloudChoice(cloud: cloud, job: .hub, fleet: [], reuse:"))
+        #expect(source.contains("reuseWords: Self.madeForHub, makeNew: makeHub, use: useExisting)"))
+        let press = try #require(source.range(of: "private func useExisting(_ server: CloudExisting) {"))
+        let next = try #require(source.range(of: "private func startInstall(", range: press.upperBound..<source.endIndex))
+        let body = source[press.upperBound..<next.lowerBound]
+        let rule = try #require(body.range(of: "= hubAgain(server)"))
+        let check = try #require(body.range(of: "server.unfit(for: .hub"))
+        #expect(rule.lowerBound < check.lowerBound)
+        #expect(body.contains(#"startInstall(InstallTarget(host: onNetwork, user: "root", port: 22, identityFile: AppSSHKey.path()))"#))
+        // "Make the server": the press is counted, the page's task takes it, and that task reads before it makes.
+        #expect(source.contains("makeAsked += 1") && source.contains("await makeServer()"))
+        let make = try #require(source.range(of: "private func makeServer() async {"))
+        let rest = source[make.upperBound...]
+        let task = rest[..<(rest.range(of: " private func ")?.lowerBound ?? rest.endIndex)]
+        let atOnce = try #require(task.range(of: "guard made else { return cloud.makeNew { work.hubBuilt = true; startInstall($0) } }"))
+        let reads = try #require(task.range(of: "let live = await readNetwork()", range: atOnce.upperBound..<task.endIndex))
+        let chooses = try #require(task.range(of: "cloud.chosen = first.id", range: reads.upperBound..<task.endIndex))
+        let chosen = try #require(task.range(of: "if cloud.chosen != nil {", range: chooses.upperBound..<task.endIndex))
+        let refuses = try #require(task.range(of: "guard live else { return cloud.stop(Self.offNetwork) }",
+                                              range: chosen.upperBound..<task.endIndex))
+        #expect(task[chosen.upperBound..<refuses.lowerBound].hasSuffix("return } "))
+        // A server of an earlier try that cannot be taken: the press asks the rule (`EarlierServerLines`) with the
+        // line that it found over itself, read before the press takes its own lines away, and says the rule's line in
+        // place of the server. The page gives the rule each such server with whether its row can be taken, and the
+        // owner's next choice and a reading take away only what the rule says.
+        let says = try #require(task.range(of: "if let line = earlierLines.says(over: said) { return cloud.stop(line) }",
+                                           range: refuses.upperBound..<task.endIndex))
+        #expect(task.range(of: "cloud.makeNew { work.hubBuilt = true; startInstall($0) }",
+                           range: says.upperBound..<task.endIndex) != nil)
+        let said = try #require(task.range(of: "let said = cloud.failure"))
+        #expect(said.upperBound < (task.range(of: "cloud.stop(nil)")?.lowerBound ?? task.startIndex))
+        // The press after that line rents a server, and the press after one that chose a row starts an install: the
+        // second click of a double click and the repeats of a held key are no press, on either.
+        #expect(source.contains("if let event = NSApp.currentEvent, event.type == .keyDown, event.isARepeat, "
+                                + "ProcessInfo.processInfo.systemUptime - event.timestamp < NSEvent.doubleClickInterval { return true } "
+                                + "return SecondClick.isNow }"))
+        #expect(source.contains("private func makeHub() { if !asksNetwork, !pressRepeats { makeAsked += 1 } }"))
+        #expect(body.hasPrefix(" guard !pressRepeats else { return } "))
+        #expect(source.contains("EarlierServerLines(made.map { (Self.stillCosts($0.name, at: provider), hubAgain($0) != nil) })"))
+        #expect(source.contains("|| earlierLines.has(cloud.failure) { cloud.stop(nil) }"))
+        #expect(source.contains("|| earlierLines.stale(cloud.failure) { cloud.stop(nil) }"))
+        #expect(task.components(separatedBy: "cloud.makeNew").count == 3)
+        // Only a reading of this press chooses a row, and the press that chose one says so over the press.
+        #expect(task.contains("if live, cloud.chosen == nil, !suggestedHub, let first = "))
+        #expect(task[chosen.upperBound..<refuses.lowerBound].contains("cloud.stop(Self.tookRow)"))
+        #expect(source.contains("let devices = FleetOnTailscale.live(in: answer), !Task.isCancelled else { return false }"))
+    }
+
+    /// **A press on "Make the server" says that a server of an earlier try still costs money before a press rents a
+    /// new one** (the owner's yes of 18 November 2026, "A: say it at the press"). The line is of the first such server
+    /// whose row cannot be taken. Only a press over that same line makes the server: with no line, with a line that
+    /// went and with another line over it, the press says the line, and the press after it makes the server. A
+    /// reading of the network takes the line away only when a press would say it no more.
+    @Test func thePressSaysThatAnEarlierServerStillCostsMoneyBeforeItRentsANewOne() {
+        let lines = EarlierServerLines([("a costs", true), ("b costs", false), ("c costs", false)])
+        #expect(lines.now == "b costs" && lines.lines == ["a costs", "b costs", "c costs"])
+        #expect(lines.says(over: nil) == "b costs")
+        #expect(lines.says(over: "b costs") == nil)
+        #expect(lines.says(over: "c costs") == "b costs" && lines.says(over: "The provider's own line.") == "b costs")
+        // Each such server's row can be taken, or the list has none: the press makes the server at once.
+        #expect(EarlierServerLines([("a costs", true)]).says(over: nil) == nil)
+        #expect(EarlierServerLines([]).says(over: nil) == nil && EarlierServerLines([]).lines.isEmpty)
+        #expect(lines.has("c costs") && !lines.has("The provider's own line.") && !lines.has(nil))
+        #expect(!lines.stale("b costs") && lines.stale("a costs") && lines.stale("c costs"))
+        #expect(!lines.stale("The provider's own line.") && !lines.stale(nil))
+    }
+
     @Test func theNewServerSaysWhatItIsWhereAndWhatItCosts() {
         let offer = CloudOffer(provider: .hetzner, type: "cx23", location: "nbg1", cores: 2, memoryGB: 4, diskGB: 40,
                                monthlyPrice: Decimal(string: "5.49")!, currency: "EUR")

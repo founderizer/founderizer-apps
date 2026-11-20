@@ -8,7 +8,8 @@ import SwiftUI
 /// of 17 November 2026 to Capabilities): Runs on, Capabilities, Behaviour, Tasks, People and Can use — the manager has
 /// Runs on, Behaviour and People. They were twelve sections that took the chat's place, six of which held nothing for
 /// most agents. **Runs on** is the page that was Settings (its server, its AI provider with its model and its reasoning,
-/// its account and its usage, and the one "…"), which is no longer a second "Settings" beside the app's own.
+/// its account and its usage, and a "…" with Rename…, Deactivate and Delete… where the agent has them), which is no
+/// longer a second "Settings" beside the app's own.
 /// **Capabilities** is what the agent may use on its server: a switch for each box that its AI and its server can have,
 /// with one line of what it allows (`AgentCapabilitiesPart`). **Behaviour** is its rules, with its duties under
 /// "Responsible for", its schedules and its memory. **Tasks** is the task board of the main sidebar with this agent
@@ -185,7 +186,7 @@ struct AgentPage: View {
         let tasks = store.state?.tasks.filter { $0.owner == agent && !$0.isTerminal } ?? []
         let presence = store.state?.agents.first { $0.name == agent }?.presence(
             isFresh: store.isFresh, serverTime: store.state?.time ?? 0, openTasks: tasks, holds: store.state?.holds ?? [],
-            waits: store.state?.ownerWaits(of: tasks) ?? [:]) ?? .unknown
+            waits: store.state?.ownerWaits(of: tasks) ?? [:], request: store.state?.ownKeyRequest(of: agent)) ?? .unknown
         return ZStack(alignment: .topLeading) {
             if !store.chatShowsDetail(agent) {
                 Button { open(.agent(agent)) } label: {
@@ -285,11 +286,17 @@ struct AgentCanUsePart: View {
     }
 }
 
-/// **One menu for an agent** (the owner's yes of 28 October 2026 to D-5): the same items on the right-click of its row
-/// in the sidebar and behind the "…" of its Runs on — Pin to top · Mark as unread · Rename… · Deactivate · Agent
-/// details · Server, in three groups. Rename was four clicks deep, behind the details' "…", and the right-click had the
-/// other four: two menus to remember. **Delete… ends it, in a group of its own** (the owner's yes of 7 November 2026 to
-/// the mockup), then a confirmation over the window (`AgentDeleteCard`).
+/// **The agent's menu is the right-click of its row in the sidebar** (the owner's yes of 28 October 2026 to D-5): Pin to
+/// top · Mark as unread · Rename… · Deactivate · Agent details · Server, in three groups. Rename was four clicks deep,
+/// behind the details' "…", and the right-click had the other four. **Delete… ends it, in a group of its own** (the
+/// owner's yes of 7 November 2026 to the mockup), then a confirmation over the window (`AgentDeleteCard`).
+///
+/// **The "…" of its Runs on has only Rename…, Deactivate and Delete…** (`pageItems`; the owner's "Yes, build both" of 17
+/// November 2026 to "remove Pin to top, Mark as unread, Agent details and Server from the '…'; they stay on the
+/// right-click of the agent's row in the sidebar"). It had the same items as the right-click, and four of them did
+/// nothing there or went somewhere else: Pin to top and Mark as unread act on the row in the sidebar ("what does pin to
+/// top do?? … unread what??"), Agent details opened the page that the "…" stands on, and Server opened the server's page
+/// of Settings, which the card's Server row opens. The Fleet Manager has none of the three, so its Runs on has no "…".
 enum AgentMenu {
     enum Action: Hashable { case pin, markRead, markUnread, rename, deactivate, details, server, delete }
 
@@ -305,25 +312,37 @@ enum AgentMenu {
         var enabled = true
     }
 
-    /// The items for one agent, in the menu's order. Rename and Deactivate only where the hub takes them, and never for
-    /// the manager, which keeps its name and its activity; Deactivate only for an active agent.
+    /// The items of the right-click of its row, in the menu's order. Rename and Deactivate only where the hub takes them,
+    /// and never for the manager, which keeps its name and its activity; Deactivate only for an active agent.
     ///
     /// **Only the items that can act** (T-05, fix round 2): Mark as unread for an agent with no reply, and Rename… and
     /// Deactivate while the hub cannot take a write, were grey in the right-click and did nothing in Runs on's "…".
     @MainActor static func items(_ agent: String, store: FleetStore) -> [Item] {
-        all(agent, store: store).filter(\.enabled)
+        all(agent, store: store, row: true).filter(\.enabled)
     }
 
-    @MainActor private static func all(_ agent: String, store: FleetStore) -> [Item] {
+    /// The items of the "…" of its Runs on: Rename…, Deactivate and Delete…, the ones that this agent has (the manager has
+    /// none), each `enabled` while it can act now, that is while the hub can take a write. Not filtered: the page has a
+    /// "…" for an agent that has one of them also while none can act, and shows in it only the ones that can.
+    @MainActor static func pageItems(_ agent: String, store: FleetStore) -> [Item] {
+        all(agent, store: store, row: false)
+    }
+
+    /// `row`: the right-click of its row, with the items that act on that row (Pin to top, Mark as read or unread) and
+    /// open a page (Agent details, Server); else the "…" of its Runs on, without them.
+    @MainActor private static func all(_ agent: String, store: FleetStore, row: Bool) -> [Item] {
         let features = store.state?.ui_features ?? []
         let state = store.state?.agents.first { $0.name == agent }
-        let pinned = store.pinned.contains(agent)
-        var items = [Item(action: .pin, title: pinned ? String(l10n: "Unpin") : String(l10n: "Pin to top"), symbol: pinned ? "pin.slash" : "pin", group: 0)]
-        if store.hasNewReply(from: agent) {
-            items.append(Item(action: .markRead, title: String(l10n: "Mark as read"), symbol: "envelope.open", group: 0))
-        } else {
-            items.append(Item(action: .markUnread, title: String(l10n: "Mark as unread"), symbol: "envelope.badge", group: 0,
-                              enabled: store.hasReply(from: agent)))
+        var items: [Item] = []
+        if row {
+            let pinned = store.pinned.contains(agent)
+            items.append(Item(action: .pin, title: pinned ? String(l10n: "Unpin") : String(l10n: "Pin to top"), symbol: pinned ? "pin.slash" : "pin", group: 0))
+            if store.hasNewReply(from: agent) {
+                items.append(Item(action: .markRead, title: String(l10n: "Mark as read"), symbol: "envelope.open", group: 0))
+            } else {
+                items.append(Item(action: .markUnread, title: String(l10n: "Mark as unread"), symbol: "envelope.badge", group: 0,
+                                  enabled: store.hasReply(from: agent)))
+            }
         }
         if features.contains(AgentRename.feature) && state?.role != "manager" {
             items.append(Item(action: .rename, title: String(l10n: "Rename…"), symbol: "pencil", group: 1, enabled: store.canWrite))
@@ -331,9 +350,11 @@ enum AgentMenu {
         if state?.active == true && state?.role != "manager" {
             items.append(Item(action: .deactivate, title: String(l10n: "Deactivate"), symbol: "pause.circle", group: 1, enabled: store.canWrite))
         }
-        items.append(Item(action: .details, title: String(l10n: "Agent details"), symbol: AgentTab.settings.symbol, group: 2))
-        if features.contains(Servers.feature) || features.contains("machines") {
-            items.append(Item(action: .server, title: String(l10n: "Server"), symbol: "server.rack", group: 2))
+        if row {
+            items.append(Item(action: .details, title: String(l10n: "Agent details"), symbol: AgentTab.settings.symbol, group: 2))
+            if features.contains(Servers.feature) || features.contains("machines") {
+                items.append(Item(action: .server, title: String(l10n: "Server"), symbol: "server.rack", group: 2))
+            }
         }
         if AgentRemoval.offered(role: state?.role, features: features) {
             items.append(Item(action: .delete, title: deleteTitle, symbol: "trash", group: 3, enabled: store.canWrite))

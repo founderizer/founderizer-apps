@@ -74,9 +74,6 @@ public enum AppPlace: Hashable, Sendable {
     case addAgent(AddAgentStep?)
     /// "Your Tailscale key" of Turn on for the connected apps.
     case connectKey
-    /// A later change of the fleet's shape, from the slider of Settings › Servers: a wizard that fills the window,
-    /// and that makes servers and moves agents. Its own pages have no name yet.
-    case shapeChange
     /// The first run, on its page (nil when the page is not known).
     case firstRun(FirstRunPage?)
     /// The app has a hub's address, that hub answered this Mac before, and no reading is there now.
@@ -121,7 +118,6 @@ public enum AppPlace: Hashable, Sendable {
         case .addServer(let page): return "add_server" + (page.map { "." + $0.rawValue } ?? "")
         case .addAgent(let step): return "add_agent" + (step.map { "." + $0.rawValue } ?? "")
         case .connectKey: return "connect_key"
-        case .shapeChange: return "shape_change"
         case .firstRun(let page): return "first_run" + (page.map { "." + $0.rawValue } ?? "")
         case .waiting: return "waiting"
         case .none: return "none"
@@ -137,7 +133,7 @@ public enum AppPlace: Hashable, Sendable {
         places += SettingsPage.allCases.map(AppPlace.settings) + AppGroup.allCases.map(AppPlace.app)
         places += [.addServer(nil)] + AddServerPage.allCases.map { .addServer($0) }
         places += [.addAgent(nil)] + AddAgentStep.allCases.map { .addAgent($0) }
-        places += [.connectKey, .shapeChange, .firstRun(nil)] + FirstRunPage.allCases.map { .firstRun($0) }
+        places += [.connectKey, .firstRun(nil)] + FirstRunPage.allCases.map { .firstRun($0) }
         places += [.waiting, .none, .someAgent, .someServer, .someTask]
         return places.map(\.name)
     }
@@ -179,7 +175,6 @@ public enum AppPlace: Hashable, Sendable {
         case ("tasks", 0): self = .tasks
         case ("agents", 0): self = .agents
         case ("connect_key", 0): self = .connectKey
-        case ("shape_change", 0): self = .shapeChange
         case ("waiting", 0): self = .waiting
         case ("none", 0): self = .none
         case ("agent", 0): self = .someAgent

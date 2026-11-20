@@ -197,6 +197,9 @@ final class FleetCloudModel {
     /// one wizard, the list under a server of "Your fleet"): `offer` is the first until the owner chooses another one
     /// (`choose`), and a stop that reads them again gives the first again.
     private(set) var choices: [CloudOffer] = []
+    /// **The build stopped because the provider's account has no room for another server** (`CloudError.full`; slice
+    /// 3): no type of this provider helps, so the first run offers another provider whose token this Mac holds.
+    private(set) var accountFull = false
     /// The row that the owner chose in that list (`CloudOffer.kind`: Hetzner's type, another provider's size): a read
     /// after a stop ("taken") gives its next free place, when it has one, in place of the cheapest.
     private var wanted: String?
@@ -234,8 +237,6 @@ final class FleetCloudModel {
     private var taken: Set<String> = []
     private var work: Task<Void, Never>?
 
-    /// How long a new server has to join the private network after it was made, and how often it is looked for.
-    static let joinWithin = 300.0, lookEvery = 5.0
     /// **A list that could not be read is read again by itself**, a minute apart, at most this many times: a
     /// provider's free servers come and go by the minute (Hetzner, 5 November 2026: none free at 15:52, free again at
     /// 16:00), and the page has no press for it (AGENTS.md: what can run by itself runs under the hood).
@@ -261,7 +262,7 @@ final class FleetCloudModel {
         guard work == nil, !token.isEmpty else { return }
         listing += 1
         failure = nil; stopped = nil; self.provider = provider; self.use = use; anotherProject = false; self.lists = lists
-        wanted = nil
+        wanted = nil; accountFull = false
         offer = nil; choices = []; existing = []; chosen = nil; taken = []; stage = .choosing
         work = Task { [weak self] in
             guard let self else { return }
@@ -286,7 +287,7 @@ final class FleetCloudModel {
         guard work == nil else { return }
         listing += 1
         failure = nil; stopped = nil; self.provider = provider; self.use = use; tokenTaken = true; self.lists = lists
-        wanted = nil
+        wanted = nil; accountFull = false
         offer = nil; choices = []; existing = []; chosen = nil; taken = []; stage = .choosing
         work = Task { [weak self] in
             guard let self else { return }
@@ -379,7 +380,7 @@ final class FleetCloudModel {
     }
 
     /// **Why the press made nothing**, over the press of the choice, which stays (Add server asks the hub before a
-    /// server is made); nil takes the line away at the next press.
+    /// server is made, and the first run reads this Mac's network before one); nil takes the line away.
     func stop(_ why: String?) {
         guard work == nil, stage == .choosing else { return }
         failure = why
@@ -401,7 +402,9 @@ final class FleetCloudModel {
 
     /// **The server, made with nothing typed**: a name no device of the network has, this Mac's own SSH key, a join key
     /// for that one server from the fleet's own Tailscale key, and the provider's firewall with no way in. Then the
-    /// server joins the private network by itself, and the install goes on over it.
+    /// server joins the private network by itself, and the install goes on over it. The step waits for the server until
+    /// its key ends, one hour (`CloudServers.joinKeyLife`): a first boot that meets the server's first updates waits for
+    /// them, about nine minutes.
     ///
     /// **The build keeps its own record from the moment the provider is asked** (`BuildRecord`, written here at each
     /// of its moments and not read from this model later: `cancel` and the next try forget a stop): a server that was
@@ -417,9 +420,10 @@ final class FleetCloudModel {
         var stoppedBy: Error?
         func keep() { if let kept { BuildRecords.shared.write(kept) } }
         do {
-            let name = FleetOnTailscale.freeName(in: await MacNetwork.status() ?? "{}")
+            let name = FleetOnTailscale.freeName(in: await MacNetwork.status() ?? "{}",
+                                                 also: BuildRecord.namesInUse(BuildRecords.shared.all()))
             let publicKey = try await AppSSHKey.make()
-            let authKey = try await TailscaleFleetKey().mintAuthKey(hostname: name)
+            let authKey = try await CloudServers.joinKey(for: name)
             // Before the call: a call that fails can leave the server at its provider (`CloudError.leftBehind`).
             made?(name, nil)
             kept = BuildRecord(provider: provider, use: use, hub: hub?.absoluteString, name: name)
@@ -431,31 +435,37 @@ final class FleetCloudModel {
             keep()
             stage = .joining
             reached = .joining
-            let until = Date().addingTimeInterval(Self.joinWithin)
-            while Date() < until, !Task.isCancelled {
-                if let status = await MacNetwork.status(),
-                   let device = FleetOnTailscale.devices(in: status).first(where: { $0.name == name && $0.online }) {
-                    // **A first run's own server is kept for the hub that it becomes** ("Start again" deletes a
-                    // server only by this Mac's own record of it for its hub): no hub exists yet, and its address
-                    // is known now, the server's own on the private network at the hub's port, which is what the
-                    // claim then gives the app (`StartAgain.hubAddress`).
-                    let future = hub == nil && use == .hub ? StartAgain.hubAddress(onNetwork: device.address) : nil
-                    if let future { MadeServers.note(name, id: server.id, hub: future) }
-                    kept?.joined(hub: future?.absoluteString)
-                    keep()
-                    install(InstallTarget(host: device.address, user: "root", port: 22, identityFile: AppSSHKey.path()))
-                    stage = .token
-                    return
-                }
-                try await Task.sleep(for: .seconds(Self.lookEvery))
+            let joinEnd = try await CloudServers.joined(name, since: Date(), status: { await MacNetwork.status() },
+                                                        listed: { try? await TailscaleFleetKey().joined(hostname: name,
+                                                                                                        since: started) })
+            try Task.checkCancellation()            // Back on the way back to this actor: no install, no line
+            if case .online(let address) = joinEnd {
+                // **A first run's own server is kept for the hub that it becomes** ("Start again" deletes a
+                // server only by this Mac's own record of it for its hub): no hub exists yet, and its address
+                // is known now, the server's own on the private network at the hub's port, which is what the
+                // claim then gives the app (`StartAgain.hubAddress`).
+                let future = hub == nil && use == .hub ? StartAgain.hubAddress(onNetwork: address) : nil
+                if let future { MadeServers.note(name, id: server.id, hub: future) }
+                kept?.joined(hub: future?.absoluteString)
+                keep()
+                install(InstallTarget(host: address, user: "root", port: 22, identityFile: AppSSHKey.path()))
+                stage = .token
+                return
             }
             // The server is at its provider, and this Mac's Tailscale never showed it online. The tailnet's own list
-            // says whether it joined. Only when it did, and this Mac's Tailscale runs in that tailnet and shows no
-            // such device, is it the policy that keeps the server from this Mac (`FleetReach.keeps`), and the line
+            // says whether it joined: the wait read it from five minutes on (`listed`), and after a wait that ran to its
+            // end it is read once more here. Only when it did, and this Mac's Tailscale runs in that tailnet and shows
+            // no such device, is it the policy that keeps the server from this Mac (`FleetReach.keeps`), and the line
             // names that. The list is read first, and this Mac's Tailscale after it: a server that joined between
             // the two reads is then in both.
-            if let device = try? await TailscaleFleetKey().joined(hostname: name, since: started) {
+            var listed: JoinedDevice?
+            if case .listed(let device) = joinEnd { listed = device } else {
+                listed = try? await TailscaleFleetKey().joined(hostname: name, since: started)
+                try Task.checkCancellation()
+            }
+            if let device = listed {
                 let status = await MacNetwork.status() ?? ""
+                try Task.checkCancellation()
                 failure = FleetReach.keeps(device, from: status) ? FleetReach.hidden(name, hub: use == .hub)
                     : FleetReach.unseen(name)
                 // The private network's own list has the server, and this Mac did not see it.
@@ -465,15 +475,20 @@ final class FleetCloudModel {
                 stage = .token
                 return
             }
-            failure = String(l10n: "\(name) did not join your network within five minutes. Open it in \(provider.name)'s console.")
+            failure = CloudServers.notJoined(name, at: provider)
         } catch {
-            failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            // Back ended the build (`cancel`), which set the step back already: what the end threw is no failure.
+            if !Task.isCancelled { failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
             // What the call for the server left at the provider, when it is the call that failed.
             kept?.callEnded(with: error)
             stoppedBy = error
+            if !Task.isCancelled, case CloudError.full = error { accountFull = true }
         }
-        // No join that this Mac saw: the build stopped, or its page ended it. Nothing is kept of a try that stopped
-        // before the call for its server began.
+        // **Back ended this build** (`cancel`, which set the page back already): the record says so, and nothing of
+        // the page changes, which can hold a new try by now (`stopped` stays nil, as its failure line does).
+        if Task.isCancelled { kept?.end(cancelled: true); keep(); return }
+        // No join that this Mac saw: the build stopped. Nothing is kept of a try that stopped before the call for its
+        // server began.
         kept?.end(cancelled: Task.isCancelled)
         keep()
         stopped = reached
@@ -498,7 +513,7 @@ final class FleetCloudModel {
     /// Ends a build or a choice, and forgets a paste that was never sent.
     func cancel() {
         listing += 1
-        work?.cancel(); work = nil; failure = nil; stopped = nil; stage = .token; provider = nil; tokenText = ""
+        work?.cancel(); work = nil; failure = nil; stopped = nil; stage = .token; provider = nil; tokenText = ""; accountFull = false
         offer = nil; choices = []; existing = []; chosen = nil; anotherProject = false; tokenTaken = false; taken = []
     }
 }
@@ -724,8 +739,13 @@ struct CloudChoice: View {
     /// (`CloudExisting.unfit`). The first run's list has no fleet yet, and none.
     var known: FleetKnown?
     /// **A server that the fleet holds already and can take again** (`CloudExisting.reuse`): its row keeps its words and
-    /// can be chosen. The first run's list of the fleet's own VPS has none.
+    /// can be chosen. In the first run's list of the fleet's own VPS it is the hub's server that this Mac made, whose
+    /// install can run again (`CloudExisting.hubAgain`).
     var reuse: (CloudExisting) -> CloudReuse? = { _ in nil }
+    /// **The words of a row that `reuse` makes usable, in place of the row's own**, or nil to keep them. The first
+    /// run's list says "Made for your hub" there (the owner's yes of 18 November 2026 to those words on that row): the
+    /// row can be chosen, and "Used by Founderizer" stays the words of a grey row.
+    var reuseWords: String?
     let makeNew: () -> Void
     let use: (CloudExisting) -> Void
 
@@ -771,8 +791,10 @@ struct CloudChoice: View {
         FormSection {
             ForEach(cloud.existing) { server in
                 let why = server.unfit(for: job, fleet: fleet, known: known)
-                row(server.name, detail: [server.summary, why].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "),
-                    chosen: cloud.chosen == server.id, usable: why == nil || reuse(server) != nil) { cloud.chosen = server.id }
+                let again = reuse(server) != nil
+                let words = again ? reuseWords ?? why : why
+                row(server.name, detail: [server.summary, words].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "),
+                    chosen: cloud.chosen == server.id, usable: why == nil || again) { cloud.chosen = server.id }
             }
             row(String(l10n: "New server"), detail: offer.row, chosen: cloud.chosen == nil, usable: true) { cloud.chosen = nil }
         }
@@ -834,10 +856,18 @@ struct FirstFleetChoice: View {
         }
     }
 
-    /// One server's capsule (`ServerBoxChoice`): its provider's five cheapest types that fit, the cheapest first, with the
-    /// one that the press makes checked, then each other provider. nil while its offer is read.
     private func choice(_ model: FleetCloudModel, title: String,
                         elsewhere: @escaping (CloudProvider) -> Void) -> ServerBoxChoice? {
+        ServerBoxChoice.of(model, title: title, held: held, elsewhere: elsewhere)
+    }
+}
+
+extension ServerBoxChoice {
+    /// One server's capsule: its provider's five cheapest types that fit, the cheapest first, with the one that the
+    /// press makes checked, then each other provider (`held`: the providers whose token this Mac holds). nil while its
+    /// offer is read.
+    @MainActor static func of(_ model: FleetCloudModel, title: String, held: Set<CloudProvider>,
+                              elsewhere: @escaping (CloudProvider) -> Void) -> ServerBoxChoice? {
         guard let offer = model.offer, let provider = model.provider else { return nil }
         // The type that the press makes is always a row: one dearer than the fifth takes the fifth's place.
         var shown = Array(model.choices.prefix(ServerBoxChoice.types))

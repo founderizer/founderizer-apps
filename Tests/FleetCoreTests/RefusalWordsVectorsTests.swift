@@ -16,27 +16,11 @@ struct RefusalWordsVectorsTests {
     /// hub's code is already in the vectors (COORDINATION.md rule 8), the app shows the hub's English for it, as for any
     /// code that it does not know, and the code is named here so that the test that holds every other code to a case
     /// stays green meanwhile. A code in this list that has a case is a fault: the case takes it out of the list.
-    /// Waiting now: `time_passed` (rules that send, UI-API.md 1.184), and the seven of Google's Connect and Disconnect
-    /// (UI-API.md 1.185): `google_file_mode`, `google_file_unreadable`, `google_no_client`, `google_no_secret`,
-    /// `connect_stale`, `google_refused` and `google_revoked_during`; and the twelve of the MCP form (UI-API.md 1.187):
-    /// `package_unknown`, `package_unread`, `package_registry_away`, `package_record_large`, `package_no_record`,
-    /// `package_no_version`, `package_too_new`, `package_too_new_older`, `package_none_old`, `mcp_registry_away`,
-    /// `mcp_registry_no_list` and `mcp_no_endpoints`; and `server_name_kept`, a server named door (UI-API.md 1.188); and
-    /// the two of the sealed Google file (UI-API.md 1.202): `google_file_key` and `google_file_lost`.
-    private static let waiting: Set<String> = [
-        "time_passed",
-        "google_file_mode", "google_file_unreadable", "google_no_client", "google_no_secret", "connect_stale",
-        "google_refused", "google_revoked_during",
-        // the lane "Any MCP server: install and sign-in" (UI-API.md 1.187): the form shows the hub's English until the
-        // owner's yes to their words
-        "package_unknown", "package_unread", "package_registry_away", "package_record_large", "package_no_record",
-        "package_no_version", "package_too_new", "package_too_new_older", "package_none_old", "mcp_registry_away",
-        "mcp_registry_no_list", "mcp_no_endpoints",
-        "server_name_kept",
-        // the sealed Google file (UI-API.md 1.202): a key that the hub cannot read now, and a file that its key no
-        // longer opens
-        "google_file_key", "google_file_lost",
-    ]
+    /// Waiting now: none. The 29 that waited (`time_passed`, the seven of Google's Connect and Disconnect, the twelve of
+    /// the MCP form, `server_name_kept`, the two of the sealed Google file and the six of Telegram) have their cases and
+    /// their Spanish since the owner's "Yes, all 29" of 19 November 2026, so the test below holds each of them to the
+    /// hub's vector and to the catalog. A new code of the hub is named here until his yes to the Spanish of its slice.
+    private static let waiting: Set<String> = []
 
     /// The codes that have a case: every code of the hub's table that is not waiting.
     private static func known(_ table: RefusalVectors.Table) -> [String] {
@@ -186,7 +170,7 @@ struct RefusalWordsVectorsTests {
     /// **Each line of the Mac app that decides by a refusal, under the Spanish table**: the words that the owner reads are
     /// Spanish, the old phrase is not in them, and the line still decides, by the code. An older hub (no code) is read by its
     /// English as before.
-    @Test func theEightLinesThatDecideStillDecideInSpanish() throws {
+    @Test func theSevenLinesThatDecideStillDecideInSpanish() throws {
         let table = try RefusalVectors.load()
         // The line, the codes that it meets, and what it decides by.
         let lines: [(String, [String], RefusalMeaning)] = [
@@ -196,9 +180,6 @@ struct RefusalWordsVectorsTests {
             ("AgentSetupWizard.place", ["team_changed", "team_changed_lines"], .teamChanged),
             ("AgentSetupView.rename", ["team_changed", "team_changed_lines"], .teamChanged),
             ("AddAgentView.add", ["team_changed", "team_changed_lines"], .teamChanged),
-            ("ShapeChangeRun.move", ["agent_mid_turn"], .agentMidTurn),
-            ("ShapeChangeRun.move", ["agent_open_signin"], .agentOpenSignIn),
-            ("ShapeChangeRun.move", ["team_changed", "team_changed_lines"], .teamChanged),
             ("SecretEntryView.answer", ["request_answered"], .requestAnswered),
         ]
         try SpanishTable.run {

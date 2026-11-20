@@ -146,12 +146,13 @@ public enum StartAgain {
     // MARK: - The device of one build
 
     /// How long before a build's start its device can have been made (a clock that is off), and how long after the
-    /// provider's answer a server can take to come up on the private network.
-    public static let deviceSlack: TimeInterval = 300, deviceWindow: TimeInterval = 1800
+    /// provider's answer a server can take to come up on the private network: as long as its join key lives
+    /// (`CloudServers.joinKeyLife`, one hour since 11 November 2026; it was thirty minutes), with the same slack.
+    public static let deviceSlack: TimeInterval = 300, deviceWindow = TimeInterval(CloudServers.joinKeyLife) + deviceSlack
 
     /// **The one device of the private network that this build made**, or nil: its `hostname` is the build's name,
     /// it has the fleet's tag, it is authorized and the tailnet's own, and it was made between the build's start less
-    /// five minutes and thirty minutes after the provider's answer (after the start, for a record with no answer's
+    /// five minutes and `deviceWindow` after the provider's answer (after the start, for a record with no answer's
     /// time). That is the rule of `TailscaleFleetKey.joined` with an upper limit, because a later build can take the
     /// same name. Two devices that both fit prove nothing: none is taken. **A device that fits the times of another
     /// build of that name too** (`rivals`: a build of another hub, or of none) **proves nothing either**: it can be
@@ -786,8 +787,9 @@ public enum StartAgain {
     /// Always: the kept address when it is this hub's, the hub in the list of hubs that answered, the servers made for
     /// it and its ended installs, the agents that wait for a server and the servers that they joined, the pinned
     /// agents, the kept checks and install targets of its machines, the chat's kept marks, the marks of the owner's
-    /// access, of the hardening, of the memory limit and of the system packages on its servers (`ServerHardening`,
-    /// `ServerMemory`, `ServerLibraries`), the mark of its TCP step, the page that the app left on it, a turn
+    /// access, of the hardening, of the memory limit, of the system packages and of the restart on its servers
+    /// (`ServerHardening`, `ServerMemory`, `ServerLibraries`, `ServerRestart`), the mark of its TCP step, the page that
+    /// the app left on it, a turn
     /// of connected apps that a quit cut off, and what the door's sync keeps of it (the keys that a server refused, the
     /// refusals, the hosts and the holdings that the hub recorded).
     ///
@@ -815,7 +817,7 @@ public enum StartAgain {
         }
         var tables: [(key: String, prefix: String)] = [
             ("serversJoinedFor", bar), ("hubTCPDone", bar), ("ownerAccessInPlace", space), ("serverHardening", space),
-            ("serverMemoryLimit", space), (ServerLibraries.keptKey, space)]
+            ("serverMemoryLimit", space), (ServerLibraries.keptKey, space), (ServerRestart.keptKey, space)]
         if hubServerDeleted { tables.append(("centralVaultPins", bar)) }
         for table in tables {
             guard let all = defaults.dictionary(forKey: table.key),

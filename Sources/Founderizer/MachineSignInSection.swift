@@ -27,6 +27,10 @@ struct MachineSignInSection: View {
     var title: String? = String(l10n: "Sign-in")
     /// The page said already that this machine is not signed in, so this card says only what is new.
     var alreadySaid = false
+    /// The provider that this card signs in when it is not the server's own choice: Codex of the screen tasks of an
+    /// agent on another provider, on the face of a Mac's page (`ScreenSignIn`; the owner's "Yes, both rows" of 19
+    /// November 2026). nil: the server's own choice, as before.
+    var provider: String? = nil
     @State private var code = ""
     @State private var working = false
     /// The hub's own words after it refused to start a sign-in. It stays until the next attempt.
@@ -35,10 +39,12 @@ struct MachineSignInSection: View {
     @State private var opened = false
     @FocusState private var typing: Bool
 
-    private var login: MachineLogin? { reading?.login }
-    private var runtime: String? { reading?.signInRuntime }
+    /// The server's sign-in of this row's provider (`MachineStatus.ownLogin` for the server's own choice): one of
+    /// another provider of the server is not this row's.
+    private var login: MachineLogin? { runtime.flatMap { reading?.login(of: $0) } }
+    private var runtime: String? { provider ?? reading?.signInRuntime }
     /// One line, or none: a sign-in that failed goes stale against the machine's own reading of it.
-    private var line: SignInLine? { reading?.signInLine(working: working, alreadySaid: alreadySaid) }
+    private var line: SignInLine? { reading?.signInLine(working: working, alreadySaid: alreadySaid, of: provider) }
 
     var body: some View {
         if store.state?.ui_features?.contains(MachineLogin.feature) == true, let runtime {
@@ -92,12 +98,13 @@ struct MachineSignInSection: View {
             FormRow(card ? providerName(runtime) : String(l10n: "Sign-in"),
                     detail: line?.warn == false ? line?.says : nil,
                     warning: line?.warn == true ? line?.says : nil) {
-                Button(button) { store.destination = .signIn(agent) }
+                // The page of a named provider signs that one in; with none it signs in the server's own choice.
+                Button(button) { store.destination = .signIn(agent, provider) }
                     .buttonStyle(FleetOutlineButtonStyle())
                     .disabled(!store.canWrite || !fresh || reading?.stale == true)
                     .help(String(l10n: "Opens the sign-in: you authenticate on \(providerName(runtime))'s own page, in your own browser, and nothing of your login is stored by Founderizer."))
-                    .accessibilityIdentifier("sign-in-\(agent)")
-            }.accessibilityIdentifier("sign-in-row-\(agent)")
+                    .accessibilityIdentifier("sign-in-\(agent)\(mark)")
+            }.accessibilityIdentifier("sign-in-row-\(agent)\(mark)")
         }
     }
 
@@ -105,8 +112,10 @@ struct MachineSignInSection: View {
     private var button: String {
         if login?.isOpen == true { return String(l10n: "Open") }
         if login?.isFailure == true { return String(l10n: "Try again") }
-        return reading?.needsSignIn == true ? String(l10n: "Sign in") : String(l10n: "Sign in again")
+        return runtime.map { reading?.signedOut($0) == true } == true ? String(l10n: "Sign in") : String(l10n: "Sign in again")
     }
+    /// The end of this card's identifiers: an agent can have the card of its own provider and that of a named one.
+    private var mark: String { provider.map { "-\($0)" } ?? "" }
 
     /// **What the hub said when it would not start a sign-in**, in its own words, once. The refused request leaves
     /// the outbox with it, so the window's request line does not repeat the warning.

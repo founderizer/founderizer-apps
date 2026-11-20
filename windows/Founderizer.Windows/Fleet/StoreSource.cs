@@ -93,6 +93,8 @@ public sealed class StoreSource : IFleetSource
 
     public void Press(long need, int choice) => store.Press(need, choice);
 
+    public void Reply(long need, string words) => store.Reply(need, words);
+
     public Task<string?> ControlAsync(long task, TaskControl action) => store.ControlAsync(task, action);
 
     public Task<string?> GuideAsync(long task, string text) => store.GuideAsync(task, text);

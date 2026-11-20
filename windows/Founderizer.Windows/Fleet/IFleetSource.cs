@@ -47,6 +47,10 @@ public interface IFleetSource : IAsyncDisposable
     /// <summary>A press on one of a request's options.</summary>
     void Press(long need, int choice);
 
+    /// <summary>A press on one of the app's quick replies of a request with no options: its words are his answer, sent at
+    /// once through the outbox, or when the store can write.</summary>
+    void Reply(long need, string words);
+
     /// <summary>Pause, Stop or Resume of a task.</summary>
     Task<string?> ControlAsync(long task, TaskControl action);
 

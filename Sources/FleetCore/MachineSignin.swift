@@ -134,14 +134,25 @@ extension MachineStatus {
     /// True when this machine's runtime says it is not signed in, so the owner has something to do.
     public var needsSignIn: Bool {
         guard let name = signInRuntime else { return false }
-        let reading = runtimes?.byName[name] ?? (runtime.name == name ? runtime : nil)
-        return reading?.signed_in == false
+        return signedOut(name)
     }
+
+    /// **The sign-in of the provider that this machine would be signed in to** (`signInRuntime`), or nil. A sign-in
+    /// of another provider of the machine is not its own: Codex of the screen tasks of an agent on Claude Code, which
+    /// the error row of a task's thread opens (`RuntimeErrorLine`; 18 November 2026). Its link and its code stood under
+    /// the name "Claude Code" on the agent's rows and on the face of its server's page. Its own page shows it
+    /// (`SignInWizard`, which reads `login`). `signInRuntime` is the provider that the machine has loaded: while a
+    /// change of the agent's provider is under way, a sign-in of the new provider is not its own until the machine
+    /// loads that provider, and the agent's setup page, which reads `login`, shows it meanwhile.
+    public var ownLogin: MachineLogin? { signInRuntime.flatMap(login(of:)) }
+
+    /// The sign-in that runs or ran last on this machine, when it is of this provider; else nil.
+    public func login(of provider: String) -> MachineLogin? { login.flatMap { $0.runtime == provider ? $0 : nil } }
 
     /// This machine waits for the owner's own sign-in: its runtime says it is not signed in, or a sign-in is
     /// going on now. It is what puts the sign-in on the face of a server's page and takes it off again — one that
     /// has started stays there until it ends, whatever the machine's last reading said.
-    public var waitsForSignIn: Bool { needsSignIn || login?.isOpen == true }
+    public var waitsForSignIn: Bool { needsSignIn || ownLogin?.isOpen == true }
 
     /// What the Sign-in row says, in one line and never two.
     ///
@@ -155,11 +166,16 @@ extension MachineStatus {
     /// `alreadySaid`: the page has said already that this machine is not signed in. A server's page says it in
     /// its own state row — "Waiting for your sign-in" — so the card under it says only what that row does not:
     /// the attempt that is going on, or the one that failed, and nothing at all while there is no attempt.
-    public func signInLine(working: Bool, alreadySaid: Bool = false) -> SignInLine? {
+    ///
+    /// `provider`: the row of a provider that is not the machine's own choice, which is Codex of the screen tasks of an
+    /// agent on another provider (`ScreenSignIn`): the same line, from that provider's reading and its sign-in.
+    public func signInLine(working: Bool, alreadySaid: Bool = false, of provider: String? = nil) -> SignInLine? {
         if working { return SignInLine(says: String(l10n: "Working…"), warn: false) }
-        if let login, login.isOpen { return SignInLine(says: login.summary, warn: false) }
-        guard needsSignIn else { return nil }
-        if let login, login.isFailure { return SignInLine(says: login.summary, warn: true) }
+        guard let name = provider ?? signInRuntime else { return nil }
+        let attempt = login(of: name)
+        if let attempt, attempt.isOpen { return SignInLine(says: attempt.summary, warn: false) }
+        guard signedOut(name) else { return nil }
+        if let attempt, attempt.isFailure { return SignInLine(says: attempt.summary, warn: true) }
         return alreadySaid ? nil : SignInLine(says: String(l10n: "Not signed in on this server."), warn: false)
     }
 }

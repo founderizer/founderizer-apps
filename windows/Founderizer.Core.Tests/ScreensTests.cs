@@ -206,6 +206,57 @@ public sealed class ScreensTests
                                                 Screens.Board(failed, ActivityPeriod.Week, null, Now, Utc).Lanes[2].Ended!.RestWords));
     }
 
+    /// <summary>An unknown outcome asks the owner only when the check is the owner's, as on the Mac (FleetCore's
+    /// TaskOutcome.waitsOnOwner; the owner, 19 November 2026, of an orange check on a task whose new session had not
+    /// started: "who needs to check?"): a hold holds the task, it has ended, or its agent is a worker or a lead with no
+    /// Shell box. While it runs or waits for its next session, that session checks it first: no Needs-you row or count,
+    /// no place before the owner's checks in Waiting, no orange line, and the task's usage limit line stays.</summary>
+    [TestMethod]
+    public void AnUnknownOutcomeAsksTheOwnerOnlyWhenNoSessionOfItsAgentChecksItFirst()
+    {
+        static JsonObject Unknown(long id, long task) => new()
+        {
+            ["id"] = id, ["task"] = task, ["attempt"] = 1, ["title"] = "Send the note", ["kind"] = "send", ["state"] = "unknown",
+        };
+        static void Boxes(JsonObject x, string name, params string[] can) =>
+            x["agents"]!.AsArray().Single(a => a!["name"]!.GetValue<string>() == name)!["can"] = new JsonArray(can.Select(c => (JsonNode?)c).ToArray());
+        var snapshot = SampleFleet.Snapshot();
+        foreach (var name in new[] { "wren", "theo", "pax" }) Boxes(snapshot, name, "shell", "web");
+        Boxes(snapshot, "orla", "web");                                                     // its Shell box is off
+        snapshot["tasks"]!.AsArray().Add(SampleFleet.Head(14, "Ask which page to change", "theo", "input-required", SampleFleet.Now - 100));
+        snapshot["holds"] = new JsonArray(new JsonObject { ["id"] = 1, ["task"] = 11, ["kind"] = "pause", ["state"] = "stopped", ["attempt"] = 1 });
+        snapshot["outcomes"] = new JsonArray(Unknown(1, 11), Unknown(2, 12), Unknown(3, 13), Unknown(4, 14), Unknown(5, 22));
+        var s = SampleFleet.State(SampleFleet.Decode(snapshot), Now);
+        // The owner's: 11 (held), 13 (Shell off) and 22 (ended), under the open requests. Theo's next session checks 12 and 14.
+        var needs = Screens.Needs(s, null, null, Now, Utc);
+        CollectionAssert.AreEqual(new[] { "need-2", "need-1", "task-22", "task-13", "task-11" }, needs.Cards.Select(c => c.Key).ToArray());
+        Assert.AreEqual((5, 5), (needs.OpenCount, Screens.Pane(s, Page.Tasks, Now, Utc).NeedsCount));
+        Assert.IsTrue(needs.Cards.Where(c => c.IsTask).All(c => c.OwnerLine == "Outcome not known: check it"));
+        var lanes = Screens.Board(s, ActivityPeriod.Week, null, Now, Utc).Lanes;
+        CollectionAssert.AreEqual(new long[] { 12 }, lanes[0].Cards.Select(c => c.Id).ToArray(), "a running task stays in work");
+        CollectionAssert.AreEqual(new long[] { 11, 13, 22, 14 }, lanes[1].Cards.Select(c => c.Id).ToArray(), "the owner's checks first");
+        CollectionAssert.AreEqual(new[] { "Outcome not known: check it", "Outcome not known: check it", "Outcome not known: check it", null },
+                                  lanes[1].Cards.Select(c => c.OwnerLine).ToArray());
+        Assert.IsFalse(TaskOutcome.ShellOff("manager", []), "a manager's sessions always record what they find");
+        // The task page's usage limit line gives way only to the owner's check (the Mac's limitHolding).
+        snapshot["agents"]!.AsArray().Single(a => a!["name"]!.GetValue<string>() == "theo")!["limit"] =
+            new JsonObject { ["since"] = SampleFleet.Now - 60, ["until"] = SampleFleet.Now + 3600, ["reset_known"] = true };
+        var page = new TaskPageState
+        {
+            Task = new FleetTask(12, "Fix the checkout error on iPhone", "", "done", "none", null, "theo", "manager", "working",
+                                 SampleFleet.Now - 900, 1, 0, 0, 0),
+            Outcomes = ValueList.Of(new[] { new TaskOutcome(2, 12, 1, "Send the note", "send", "unknown") }),
+        };
+        StoreState Limited()
+        {
+            var state = SampleFleet.State(SampleFleet.Decode(snapshot), Now);
+            return state with { TaskPages = state.TaskPages.SetItem(12, page) };
+        }
+        Assert.AreEqual("Developer is at its usage limit until 16:12.", Screens.Task(Limited(), 12, Now, Utc)!.LimitWords);
+        Boxes(snapshot, "theo", "web");
+        Assert.IsNull(Screens.Task(Limited(), 12, Now, Utc)!.LimitWords, "a Shell-off agent's check is the owner's, and comes first");
+    }
+
     [TestMethod]
     public void ATasksPageHasItsControlsWhileItIsOpenAndItsFacts()
     {

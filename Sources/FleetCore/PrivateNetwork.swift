@@ -17,7 +17,8 @@ import Foundation
 ///   - a tagged machine is what a server should be, and Tailscale turns key expiry off for it, so a fleet does not
 ///     fall off the network six months later;
 ///   - the key is single-use, pre-authorized, **not** ephemeral (ephemeral minutes are metered on the free plan)
-///     and lives fifteen minutes, which is all an install needs.
+///     and lives fifteen minutes, which is all an install needs; a bare Mac's two hours (`macKeyLifeSeconds`), and a
+///     cloud server's first boot one hour (`CloudServers.joinKeyLife`).
 ///
 /// The credential is a credential: it is kept in this Mac's own keychain, it never goes to the hub, it stands in no
 /// argument and no file, and it is in every install's redaction list. Tailscale lets a client secret be used as an
@@ -35,6 +36,21 @@ public enum PrivateNetwork {
     public static let keyLifeSeconds = 900
     /// The same for a bare Mac, whose installer first installs what Tailscale needs, in minutes that nobody can name.
     public static let macKeyLifeSeconds = 7200
+
+    /// **The join key of one machine that an install puts on the private network**, for `life` seconds: from the
+    /// fleet's own key when this Mac holds it (the onboarding of 4 November 2026: made once from one pasted access
+    /// token, its keys are tagged and pre-approved, so no server waits for a press and none expires), else from the
+    /// credential of before, for a fleet that has only it; nil when this Mac holds neither (the machine is on the
+    /// network already, or it signs in by Tailscale's own link). The fleet key makes keys for `tag` alone, so `tags`
+    /// reach only the credential's key. Until 11 November 2026 a key from the fleet key lived fifteen minutes whatever
+    /// the install asked, a bare Mac's too.
+    public static func joinKey(for machine: String, life: Int = PrivateNetwork.keyLifeSeconds,
+                               tags: [String] = [PrivateNetwork.tag], fleetKey: TailscaleFleetKey = TailscaleFleetKey(),
+                               credential: NetworkCredential?, client: NetworkClient = NetworkClient()) async throws -> String? {
+        if fleetKey.isHeld { return try await fleetKey.mintAuthKey(hostname: machine, life: life) }
+        guard let credential else { return nil }
+        return try await client.key(for: machine, with: credential, life: life, tags: tags)
+    }
 }
 
 /// The one credential the customer pastes: the client id and the client secret of an OAuth client of their own
@@ -203,8 +219,8 @@ public struct NetworkClient: Sendable {
         return true
     }
 
-    /// One key for one machine: single-use, tagged, pre-authorized, not ephemeral, and worthless in fifteen
-    /// minutes. The machine's name goes in the description, so the owner reads in Tailscale what each key was for.
+    /// One key for one machine: single-use, tagged, pre-authorized, not ephemeral, and worthless after `life` seconds,
+    /// fifteen minutes unless the caller says otherwise. The machine's name goes in the description, so the owner reads in Tailscale what each key was for.
     /// `tags` are the ones of the hub's join line for a server that joins a fleet (`NetworkSignIn.tags`), so a key and
     /// a sign-in link give it the same tags; a tag this app would not write itself is never sent.
     public func key(for machine: String, with credential: NetworkCredential,

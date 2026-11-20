@@ -110,8 +110,6 @@ final class InstallerModel {
     /// Readings with Claude Code signed in and no browser, before the page says so: an extension on another account
     /// never answers, and nothing else would tell the owner.
     private static let browserWaits = 70
-    private static let noAnswer = "This Mac's Chrome did not open the test page. Check that Claude's extension is logged in "
-        + "here, with the account made for this Mac."
     private static let noScreen = "Computer Use cannot see this Mac's screen yet."
     /// The calls on arrival at Computer Use while OpenAI's window has not come.
     private static let windowCalls = 3
@@ -466,12 +464,15 @@ final class InstallerModel {
                 let desktop = await model.readDesktop()
                 let signedIn = await model.claudeCodeSignedIn()
                 guard !Task.isCancelled else { return }
-                if desktop?.extension == true, !signedIn { model.signInClaudeCode() }
+                // After the one restart of Chrome that the page's arrival makes for a hidden extension too (openChrome),
+                // so that its tab stays: also when that restart has not run yet, because its reading failed.
+                let restarting = model.opening || desktop?.hidden == true && model.arrivalRestarts && !model.chromeStarted
+                if desktop?.extensionReady == true, !restarting, !signedIn { model.signInClaudeCode() }
                 if signedIn { model.toExtension = true }
                 if signedIn, desktop?.browser != true {
                     await model.bringExtensionSignIn()
                     unanswered += 1
-                    if unanswered >= Self.browserWaits { return model.stop(Self.noAnswer) }
+                    if unanswered >= Self.browserWaits { return model.stop(MacDesktop.noAnswer(desktop)) }
                 }
                 if signedIn, desktop?.browser == true {
                     // A later opening pays for no model of its own: Chrome was closed, and it answers again.
@@ -480,7 +481,7 @@ final class InstallerModel {
                     guard !Task.isCancelled else { return }
                     if passed { return model.advance() }
                     model.tries += 1
-                    if model.tries >= 3 { return model.stop(Self.noAnswer) }
+                    if model.tries >= 3 { return model.stop(MacDesktop.noAnswer(desktop)) }
                 }
                 try? await Task.sleep(for: .seconds(signedIn ? 1 : 3))
             }
@@ -535,7 +536,8 @@ final class InstallerModel {
         if needs.locked == true { pages.append(.lockScreen) }           // macOS gives no other reading of this setting
         if needs.browser == true {
             let desktop = await readDesktop(), signedIn = await claudeCodeSignedIn()
-            if !signedIn || desktop?.extension != true || desktop?.browser != true { pages.append(.claude) }
+            // A Chrome that answers Claude Code has the extension on, or one that macOS hides from this reading.
+            if !signedIn || desktop?.browser != true { pages.append(.claude) }
         }
         if FileManager.default.fileExists(atPath: Self.vault.path), !appleEventsAllowed() { pages.append(.appleEvents) }
         if needs.chatgpt == true || adding.contains(.chatGPT) {
@@ -585,23 +587,36 @@ final class InstallerModel {
             defer { opening = false }
             let desktop = await readDesktop()
             guard page == .claude else { return }
-            // Null: no profile has the extension yet, which also holds while Chrome fetches it after its start.
-            if let desktop, desktop.extension == nil, !chromeStarted {
+            // Null: no profile has the extension yet, which also holds while Chrome fetches it after its start. One that
+            // macOS hides (`hidden`) restarts Chrome only where the page's arrival opens it (a first sitting, Add
+            // Claude), before Claude Code's sign-in: in a later opening that sign-in can run already, an agent works in
+            // that Chrome, and the Mac's service opens it again at once, without the tabs that a restart brings back
+            // (server.py keep_chrome).
+            if let desktop, desktop.extension == nil, !chromeStarted, desktop.hidden != true || arrivalRestarts {
                 chromeStarted = true
                 return await restartChrome()
             }
             var tabs: [String] = []
-            if let desktop, desktop.extension != true {
+            if let desktop, desktop.extension != true, desktop.hidden != true {
                 tabs.append(desktop.extension == false ? Self.extensionPage : Self.extensionStore)
-            } else if toExtension {
-                tabs.append(Self.extensionLogin)
             } else {
-                if desktop?.browser != true, let address = await extensionSignIn() { tabs.append(address) }
-                if signingIn, let address = try? String(contentsOf: Self.signInAddress, encoding: .utf8) { tabs.append(address) }
+                // Hidden: no reading says whether it is on, and a prompt that went leaves it off. Chrome's own page of
+                // it shows that, with its switch.
+                if desktop?.hidden == true { tabs.append(Self.extensionPage) }
+                if toExtension {
+                    tabs.append(Self.extensionLogin)
+                } else {
+                    if desktop?.browser != true, let address = await extensionSignIn() { tabs.append(address) }
+                    if signingIn, let address = try? String(contentsOf: Self.signInAddress, encoding: .utf8) { tabs.append(address) }
+                }
             }
             _ = try? await LocalShell.run("/usr/bin/open", ["-a", Self.chromeApp] + tabs)
         }
     }
+
+    /// The Claude page's arrival opens Chrome (a first sitting, Add Claude), and only there does an extension that macOS
+    /// hides restart it (openChrome).
+    private var arrivalRestarts: Bool { missing == nil || adding.contains(.claude) }
 
     private func restartChrome() async {
         let chrome = InstallerModel.quoted(Self.chromeApp)
@@ -629,15 +644,10 @@ final class InstallerModel {
         return address
     }
 
-    private struct Desktop: Decodable {
-        let `extension`: Bool?
-        let browser: Bool?
-    }
-
     /// This Mac's own reading (`server.py desktop`), which the fleet's status report sends too.
-    private func readDesktop() async -> Desktop? {
+    private func readDesktop() async -> MacDesktop? {
         let said = try? await LocalShell.sh("python3 \"$HOME/fleet-server/server.py\" desktop", timeout: 60)
-        return (said?.output).flatMap { try? JSONDecoder().decode(Desktop.self, from: Data($0.utf8)) }
+        return (said?.output).flatMap(MacDesktop.read)
     }
 
     /// The runtime in the same Chrome: a new Mac's default browser is Safari, where nothing is signed in.
@@ -747,6 +757,9 @@ final class InstallerModel {
         }
     }
 
+    /// **Known and left** (19 November 2026): `login status` reads the sign-in that this Mac keeps, so one that the
+    /// provider ended reads as signed in here, and the installer shows no fault for it. Its repair needs no hands at
+    /// this Mac: the page of this Mac in the owner's app has the sign-in of Codex (`ScreenSignIn` in FleetCore).
     private func chatGPTSignedIn(_ codex: String) async -> Bool {
         MacSittingRead.chatGPTSignedIn((try? await LocalShell.run(codex, ["login", "status"], timeout: 20))?.output ?? "")
     }

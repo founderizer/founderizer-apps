@@ -3,7 +3,8 @@ import FleetCore
 import SwiftUI
 
 /// One agent's Channels (CHAT-APPS.md 17 and 18, owner feature `chat_apps`): where the owner and the people can message
-/// it. Two cards, WhatsApp and Discord, each with the agent's own account (`ChannelCard`). **A channel that is not
+/// it. Three cards, WhatsApp, Discord and Telegram (on a hub that serves it, CHAT-APPS.md 19), each with the agent's
+/// own account (`ChannelCard`). **A channel that is not
 /// connected is its mark, its name and Connect** (the owner's "Yes, build it" of 14 November 2026 to the mock of the
 /// whole experience): Connect opens the app's steps in place of the cards (`ChannelSetup`: `WhatsAppSetupPage`,
 /// `DiscordBotPage`, then the steps that both share, `ChannelFollowSteps`). A connected card has the number or the
@@ -76,7 +77,12 @@ struct ChannelsPage: View {
                                   close: { steps = nil })
             case .discord(let adding):
                 DiscordBotPage(store: store, agent: agent, adding: adding, bot: snapshot?.channel("discord", of: agent),
-                               follows: peopleOffered, addBot: addBot, refresh: { await read() }, close: { steps = nil })
+                               follows: peopleOffered, addBot: { try await addBot("discord") }, refresh: { await read() },
+                               close: { steps = nil })
+            case .telegram(let adding):
+                TelegramBotPage(store: store, agent: agent, adding: adding, bot: snapshot?.channel("telegram", of: agent),
+                                follows: peopleOffered, addBot: { try await addBot("telegram") }, refresh: { await read() },
+                                close: { steps = nil })
             case .me(let app):
                 ChannelFollowSteps(store: store, app: app, agent: agent, flow: false, refresh: { await read() },
                                    close: { steps = nil })
@@ -113,7 +119,7 @@ struct ChannelsPage: View {
     @ViewBuilder private var cards: some View {
         status
         if snapshot != nil {
-            ForEach(ChatApps.apps, id: \.self) { card($0) }
+            ForEach(ChatApps.shown(features: store.state?.ui_features), id: \.self) { card($0) }
         } else if saidError != nil || store.connectionError != nil {
             // While the hub does not answer nothing is read: the failed row, never "Reading…". **Not while the
             // window's notice says the outage** (`FleetStore.hubNoticeShows`; fix round 3, item 33: it is said once).
@@ -239,9 +245,9 @@ struct ChannelsPage: View {
     private func perform(_ action: ChannelCard.Action, _ card: ChannelCard) {
         refused[card.app] = nil
         switch action {
-        case .connect: steps = card.app == "whatsapp" ? .whatsApp : .discord(adding: true)
+        case .connect: steps = card.app == "whatsapp" ? .whatsApp : card.app == "telegram" ? .telegram(adding: true) : .discord(adding: true)
         case .linkAgain: steps = .whatsApp
-        case .fixToken: steps = .discord(adding: false)
+        case .fixToken: steps = card.app == "telegram" ? .telegram(adding: false) : .discord(adding: false)
         case .turnOn: if let id = card.account?.id { Task { await turnOn(id, app: card.app) } }
         }
     }
@@ -251,7 +257,8 @@ struct ChannelsPage: View {
         let whatsApp = card.app == "whatsapp"
         let options: [FleetOption<ChannelCard.MenuItem>] = items.map { item in
             switch item {
-            case .linkMe: FleetOption(item, whatsApp ? String(l10n: "Link my phone") : String(l10n: "Link my Discord"),
+            case .linkMe: FleetOption(item, whatsApp ? String(l10n: "Link my phone")
+                                        : card.app == "telegram" ? String(l10n: "Link my Telegram") : String(l10n: "Link my Discord"),
                                       mark: .symbol(whatsApp ? "iphone" : "person.crop.circle.badge.checkmark"))
             case .invite: FleetOption(item, "Invite to server", mark: .symbol("person.badge.plus"))
             case .changeToken: FleetOption(item, "Change token", mark: .symbol("key"))
@@ -265,7 +272,7 @@ struct ChannelsPage: View {
             switch item {
             case .linkMe: steps = .me(app: card.app)
             case .invite: if let url = card.account?.inviteURL { NSWorkspace.shared.open(url) }
-            case .changeToken: steps = .discord(adding: false)
+            case .changeToken: steps = card.app == "telegram" ? .telegram(adding: false) : .discord(adding: false)
             case .unlink: if let account = card.account { Task { await unlink(account) } }
             case .remove: if let account = card.account { Task { await remove(account.id, app: account.app) } }
             }
@@ -307,13 +314,14 @@ struct ChannelsPage: View {
         return id
     }
 
-    /// The Discord page's Save, for an agent without a bot: the account `discord-<agent>` first.
-    private func addBot() async throws -> String {
+    /// The Discord or Telegram page's Save, for an agent without a bot: the account `discord-<agent>` (or
+    /// `telegram-<agent>`) first.
+    private func addBot(_ app: String) async throws -> String {
         guard let current = snapshot else { throw HubError.invalidResponse }
-        if let bot = current.channel("discord", of: agent) { return bot.id }
+        if let bot = current.channel(app, of: agent) { return bot.id }
         guard let id = try await write({ current in
-            guard current.channel("discord", of: agent) == nil else { return nil }
-            let choice = ChatApps.agentAccount(app: "discord", agent: agent, taken: Set(current.accounts.map(\.id)))
+            guard current.channel(app, of: agent) == nil else { return nil }
+            let choice = ChatApps.agentAccount(app: app, agent: agent, taken: Set(current.accounts.map(\.id)))
             return (choice.id, choice.account)
         }) else { throw HubError.invalidResponse }
         await read()

@@ -108,6 +108,43 @@ struct MacSittingTests {
         #expect(!MacSittingRead.appleEventsAllowed(Data("not json".utf8)))
     }
 
+    /// `server.py desktop` on a Mac whose Chrome folder macOS 27 hides: `extension` is null whatever Chrome has, so
+    /// Claude Code's sign-in must start all the same (it never did), and the orange line names the account that the
+    /// extension needs (owner API 1.238), as on any Mac whose reading has one. A reading of an older `server.py`, or
+    /// one with an account of another shape, still reads.
+    @Test func theClaudePageReadsAHiddenExtensionAndNamesTheAccount() {
+        let line = { (more: String) in
+            "{\"locked\": false, \"setup\": false, \"chrome\": true, \"extension\": null, \(more), \"chatgpt\": false, "
+                + "\"chatgpt_app\": true}\n"
+        }
+        let signedOut = MacDesktop.read(line("\"browser\": null, \"claude_account\": null, \"bridge\": null, \"hidden\": true"))
+        #expect(signedOut?.extensionReady == true)
+        let hidden = MacDesktop.read(line("\"browser\": false, \"claude_account\": {\"email\": \"ana@example.com\", "
+            + "\"org\": \"Example Org\"}, \"bridge\": true, \"hidden\": true"))
+        #expect(hidden?.browser == false)
+        #expect(MacDesktop.noAnswer(hidden) == "This Mac's Chrome did not open the test page. Check that Claude's "
+            + "extension is logged in here as ana@example.com, organization Example Org. If Chrome has no Claude "
+            + "extension, add it from the Chrome Web Store first.")
+        let inc = MacDesktop.read("{\"extension\": true, \"browser\": false, \"claude_account\": "
+            + "{\"email\": \"ana@example.com\", \"org\": \"Example Inc.\"}}")
+        #expect(MacDesktop.noAnswer(inc).hasSuffix("logged in here as ana@example.com, organization Example Inc."))
+        let on = MacDesktop.read("{\"extension\": true, \"browser\": false, \"hidden\": false, \"claude_account\": "
+            + "{\"email\": \"ana@example.com\", \"org\": null}}")
+        #expect(on?.extensionReady == true)
+        #expect(MacDesktop.noAnswer(on) == "This Mac's Chrome did not open the test page. Check that Claude's extension "
+            + "is logged in here as ana@example.com.")
+        let none = MacDesktop.read(line("\"browser\": null, \"claude_account\": null, \"bridge\": null, \"hidden\": false"))
+        #expect(none?.extensionReady == false)
+        let older = MacDesktop.read("{\"extension\": true, \"browser\": false}")
+        #expect(older?.extensionReady == true)
+        #expect(MacDesktop.noAnswer(older) == "This Mac's Chrome did not open the test page. Check that Claude's "
+            + "extension is logged in here, with the account made for this Mac.")
+        #expect(MacDesktop.noAnswer(nil) == MacDesktop.noAnswer(older))
+        let odd = MacDesktop.read("{\"extension\": false, \"browser\": null, \"claude_account\": \"ana@example.com\"}")
+        #expect(odd?.extension == false && odd?.claude_account == nil)
+        #expect(MacDesktop.read("Traceback (most recent call last):") == nil)
+    }
+
     @Test func theRootStepsEndIsReadForThisRunAlone() {
         #expect(MacSittingRead.status("ab12 0\n".trimmingCharacters(in: .newlines), run: "ab12") == 0)
         #expect(MacSittingRead.status("ab12 1", run: "ab12") == 1)

@@ -122,10 +122,13 @@ final class OwnerGuideTests {
         #expect(!text.contains("\t") && !text.contains("\u{2028}") && !text.contains("\u{A0}"))
         // The name is saved once the hub answers and before the manager signs in: before the hub nothing can take it,
         // and the manager's first session reads it at its start.
-        let up = text.range(of: "**\"Your fleet is up\"**")
+        let up = text.range(of: "**\"Connecting to your hub\"**")
         let save = text.range(of: "~/.founderizer/cli write save_settings")
         let signIn = text.range(of: "**\"Sign in to Codex\"**")
         #expect(up != nil && save != nil && signIn != nil)
+        // That page goes on by itself within seconds, so the save waits for the hub's answer and not for a page.
+        #expect(text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            .contains("save the owner's name as soon as \"hub\" is \"answers\" in `setup_state`"))
         if let up, let save, let signIn {
             #expect(up.upperBound < save.lowerBound && save.upperBound < signIn.lowerBound)
         }
@@ -136,7 +139,7 @@ final class OwnerGuideTests {
         #expect(text.contains("and a line break as \\n."))
     }
 
-    /// **A Discord bot's token moves from the clipboard, never through the chat** (the secrets plan, step C): the guide
+    /// **A Discord or Telegram bot's token moves from the clipboard, never through the chat** (the secrets plan, step C): the guide
     /// names `save_bot_token` with its verb and `from` clipboard, and still forbids a token in the chat. A bot's token
     /// is one of two kinds that the agent can move (the other, a new login or API key, has its own test below), and
     /// every other secret still goes into the app's own field.
@@ -158,12 +161,16 @@ final class OwnerGuideTests {
         // **Two kinds, and no more**: the rule names both tools, and no sentence says any more that a bot's token is
         // the one secret that the agent can move.
         #expect(guide.contains("The owner types or pastes each one into the Founderizer app's own field. Two kinds you "
-                               + "can move without seeing them: a Discord bot's token, with `save_bot_token`, and a new "
-                               + "login or a new API key of the fleet, with `save_secret`. There the app or its program "
-                               + "reads the value and you do not (see \"A Discord bot's token\" and \"A new login or a "
-                               + "new API key\" below)."))
-        #expect(guide.contains("A Discord bot's token is one of the two kinds of secret that you can move, and you "
-                               + "never see it."))
+                               + "can move without seeing them: a Discord or Telegram bot's token, with `save_bot_token`, "
+                               + "and a new login or a new API key of the fleet, with `save_secret`. There the app or its "
+                               + "program reads the value and you do not (see \"A Discord or Telegram bot's token\" and "
+                               + "\"A new login or a new API key\" below)."))
+        #expect(guide.contains("A Discord or Telegram bot's token is one of the two kinds of secret that you can move, "
+                               + "and you never see it."))
+        // a Telegram bot's account and where the owner copies its token (save_bot_token takes both apps)
+        #expect(guide.contains("for a Telegram bot, the id is \"telegram-<agent>\" and the app is \"telegram\".")
+                && guide.contains("Ask the owner to copy the bot's token (in Discord's Developer Portal, or from "
+                                  + "Telegram's BotFather) and to say when it is copied."))
         #expect(!guide.contains("One kind you can move") && !guide.contains("the one secret that you can move"))
         #expect(guide.contains("You never ask for, see, type, read or repeat a secret, in any form"))
         // The page that lists the chat accounts is a page of the table, and the account's object is given whole.
@@ -176,7 +183,7 @@ final class OwnerGuideTests {
                                + "the owner's hand."))
         #expect(!guide.contains("Every other secret (a provider's token, a login, an API key)"))
         // The steps stand with the fleet that runs, after the setup's pages.
-        let steps = (text as NSString).range(of: "## A Discord bot's token").location
+        let steps = (text as NSString).range(of: "## A Discord or Telegram bot's token").location
         #expect(steps != NSNotFound && steps > (text as NSString).range(of: "## A fleet that runs").location)
     }
 
@@ -191,7 +198,7 @@ final class OwnerGuideTests {
         // The section stands after the bot token's, and before the one for a hub that does not answer.
         let start = try #require(guide.range(of: "## A new login or a new API key"))
         let end = try #require(guide.range(of: "## When the hub does not answer, or a setup stopped"))
-        #expect(try #require(guide.range(of: "## A Discord bot's token")).upperBound < start.lowerBound
+        #expect(try #require(guide.range(of: "## A Discord or Telegram bot's token")).upperBound < start.lowerBound
                 && start.upperBound < end.lowerBound)
         let section = String(guide[start.upperBound..<end.lowerBound])
         #expect(OwnerTools.verb(of: SaveSecret.tool) == .write)
@@ -215,7 +222,7 @@ final class OwnerGuideTests {
                      "The app reads the clipboard itself, last and one time, and clears it after the save when "
                         + "nothing else changed it. Never read the clipboard yourself, also after a refusal.",
                      "When macOS asks whether Founderizer may access the pasteboard, the owner presses Allow Paste, "
-                        + "for this one step only: what \"A Discord bot's token\" says of that question holds here "
+                        + "for this one step only: what \"A Discord or Telegram bot's token\" says of that question holds here "
                         + "too.",
                      "- A file. When the owner keeps the value in a file, use `\"from\": \"file\"` with `\"path\"` "
                         + "and the file that the owner names. The program reads the file. You never open it.",
@@ -630,11 +637,14 @@ final class OwnerGuideTests {
         // the "reference" and the give with `grant_secret`.
         #expect(guide.contains("6. When \"state\" is \"done\", the secret is in the vault. The answer has its "
                                + "\"reference\""))
-        // A fleet that runs: the general rule for a Needs-you item sends the agent to this section for a secret.
-        #expect(guide.contains("A Needs-you item is a question of the fleet to the owner. Read it to the owner, and "
-                               + "answer it with `answer_needs_you` only in the owner's own words or with the "
-                               + "option that the owner chose. A request for a secret has its own tools: see \"An "
-                               + "agent's request for a secret\"."))
+        // A fleet that runs: the general rule for a Needs-you item, its files, and the way to this section for a
+        // secret. One typed constant: the same parts joined inside the macro take the type checker too long.
+        let needsYou: String = "A Needs-you item is a question of the fleet to the owner. Read it to the owner, and "
+            + "answer it with `answer_needs_you` only in the owner's own words or with the option that the owner "
+            + "chose. Files that the owner gives for the answer go up first with `attach_file`, and their ids, at "
+            + "most four, then go in \"attachments\", with the owner's words or alone; a choice carries no file. A "
+            + "request for a secret has its own tools: see \"An agent's request for a secret\"."
+        #expect(guide.contains(needsYou))
         // The door's card: what its two signed answers let through, that the app signs them, and that the agent
         // presses one only when the owner chose it.
         for rule in ["These two need the signature of the owner's key, so `answer_needs_you` with \"choice\" 0 or 1 "
@@ -668,7 +678,7 @@ final class OwnerGuideTests {
         // The guide's lines break where they are long: a title counts with any white space between its words.
         let guide = OwnerGuide.text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         let titles = ["Name your manager", "Your fleet's servers", "Continue", "A VPS for your fleet", "Connect Tailscale", "Waiting for Tailscale", "Your Tailscale key",
-                      "Building your fleet", "Your VPS", "Your fleet is up", "Your hub is installed", "Make the server",
+                      "Building your fleet", "Your VPS", "Connecting to your hub", "Your hub is installed", "Make the server",
                       "Your fleet", "Make 2 servers", "Another provider", "Install", "Try again", "Other VPS", "Add server", "Add agent", "Servers", "Settings",
                       "Your own team of AI agents", "Set it up yourself", "Back", "Best price", "Simple to use",
                       "Many regions", "Formerly Linode", "Any server by SSH"]
@@ -682,14 +692,27 @@ final class OwnerGuideTests {
         #expect(keys.contains("Use this server") && guide.contains("\"Use this server\""))
         // The row's own words for a server that Founderizer made and that this fleet does not hold (`CloudChoice.swift`).
         #expect(keys.contains("Not in this fleet") && guide.contains("\"Not in this fleet\""))
+        // The first run's list for the hub's server that this Mac made: its row's words, and the two lines over its
+        // press, which the owner reads to the agent (`FirstRunView.makeServer`).
+        for words in ["Made for your hub", "You already have this server. Nothing new was made.",
+                      "This Mac is not on your private network. Open Tailscale, then press again."] {
+            #expect(keys.contains(words) && guide.contains("\"\(words)\""), "\(words)")
+        }
+        // The third line over that press names a server and its provider: the guide has dots in their places.
+        #expect(keys.contains("%@ is still at %@ and still costs money. Press again to make a new server.")
+                && guide.contains("\"... is still at ... and still costs money. Press again to make a new server.\""))
     }
 
     /// **The manager's AI provider comes right after "Name your manager"** (the lane "One wizard and the build page",
     /// 16 November 2026): the guide names the page by the app's title, gives the choice by its key of `setup_state`, and
-    /// the page is in neither the list of places to look at nor the list of presses: the owner chooses there.
+    /// the page is in neither the list of places to look at nor the list of presses: the owner chooses there. **"Help
+    /// improve Founderizer" comes before the name** (18 November 2026), and its choice is the owner's alone too.
     @Test func theGuideLeadsThroughTheManagersAIProviderAfterItsName() throws {
         let guide = OwnerGuide.text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let reports = try #require(guide.range(of: "**\"Help improve Founderizer\"**"))
         let name = try #require(guide.range(of: "**\"Name your manager\"**"))
+        #expect(reports.upperBound < name.lowerBound)
+        #expect(guide.contains("so you press nothing on this page and do not choose for them. Say what the page's line"))
         let ai = try #require(guide.range(of: "**\"Manager's AI provider\"**"))
         let servers = try #require(guide.range(of: "**\"Your fleet's servers\"**"))
         #expect(name.upperBound < ai.lowerBound && ai.upperBound < servers.lowerBound)
@@ -708,12 +731,13 @@ final class OwnerGuideTests {
         let building = try #require(guide.range(of: "**\"Building your fleet\"**"))
         #expect(token.upperBound < fleet.lowerBound && fleet.upperBound < building.lowerBound)
         for rule in ["Say each price, and say what the press rents: \"Make the server\" rents the one server; \"Make 2 "
-                        + "servers\" rents the hub's server and the manager's own server, which the manager's setup then "
-                        + "installs by itself.",
+                        + "servers\" rents the hub's server and the manager's own server, which joins the fleet while the "
+                        + "hub installs.",
                      "When the provider's account has servers already, the page is **\"Your hub's server at ...\"** in "
                         + "its place",
                      "With two servers, or one for each agent, the server that \"Make 2 servers\" made for the manager "
-                        + "installs by itself, and the setup shows its install."] {
+                        + "joined the fleet on \"Building your fleet\" already, or installs by itself now when it "
+                        + "could not: the setup gives it to the manager and shows that."] {
             #expect(guide.contains(rule), "the guide lost: \(rule)")
         }
     }
@@ -788,7 +812,7 @@ final class OwnerGuideTests {
         // A page with a field for a secret or with a code is a place of the app, and it is not on the guide's list.
         for never in ["first_run.tailscale_key", "first_run.token", "first_run.other_vps", "first_run.installing",
                       "first_run.address", "first_run.machine", "settings.secrets", "settings.servers", "needs",
-                      "connect_key", "shape_change", "add_server.key", "add_server.token", "add_server.vps"] {
+                      "connect_key", "add_server.key", "add_server.token", "add_server.vps"] {
             #expect(AppPlace(name: never)?.name == never, "no place of the app: \(never)")
             #expect(!listed.contains(never), "\(never)")
         }
@@ -806,7 +830,7 @@ final class OwnerGuideTests {
     @Test func theGuideShowsAPageByTheToolsOwnListsAndRules() throws {
         let whole = OwnerGuide.text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         let start = try #require(whole.range(of: "## Show the owner a page of the app"))
-        let end = try #require(whole.range(of: "## A Discord bot's token"))
+        let end = try #require(whole.range(of: "## A Discord or Telegram bot's token"))
         #expect(try #require(whole.range(of: "## A fleet that runs")).upperBound < start.lowerBound
                 && start.upperBound < end.lowerBound)
         let section = String(whole[start.upperBound..<end.lowerBound])
@@ -947,7 +971,7 @@ final class OwnerGuideTests {
         #expect(!whole.contains("`seen` the page that"))
         // No place that the tool never opens is offered as one that it opens.
         for never in ["agent.<name>.runs_on", "settings.servers", "settings.backup", "add_server", "add_agent",
-                      "shape_change", "connect_key", "server.<name>", "app.<app>", "agent.<name>.rule"] {
+                      "connect_key", "server.<name>", "app.<app>", "agent.<name>.rule"] {
             #expect(try !quoted(from: "`setup_show` opens these places and no other:", to: "For every other page")
                 .contains(never), "\(never)")
             #expect(!SetupShow.targetForms.contains(never))
@@ -1044,8 +1068,10 @@ final class OwnerGuideTests {
                      "- \"stopped_at\" \"joining\": \"The server was made at your provider. It did not join your "
                         + "network, or this Mac does not see it yet.\"",
                      "A row is offered only when the server is online on this Mac's network",
-                     "- For \"first_run_build\": there is no hub yet, and the first run's list cannot take that "
-                        + "server again.",
+                     "- For \"first_run_build\": there is no hub yet. The first run's list of the provider's "
+                        + "servers takes that server again only when its row can be chosen",
+                     "Never ask for a press on \"Make the server\" as a test: when no row can be taken, that press rents "
+                        + "a new server.",
                      "Add server's is not null once Add server opened in this run of the app",
                      "A build's facts stay until a new try on that page, or until the app quits.",
                      "is of an earlier try: say so to the owner",
@@ -1192,7 +1218,7 @@ final class OwnerGuideTests {
         let whole = OwnerGuide.text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         #expect(whole.components(separatedBy: "go to \"When the hub does not answer, or a setup stopped\"").count == 5)
         let runs = whole.components(separatedBy: "## A fleet that runs").last?
-            .components(separatedBy: "## A Discord bot's token").first ?? ""
+            .components(separatedBy: "## A Discord or Telegram bot's token").first ?? ""
         #expect(runs.contains("When \"place\" is \"first_run\", \"first_run.welcome\" or \"first_run.paste\" while "
                               + "the hub answers, the app's first page stands in front of a setup that is not finished: "
                               + "go to \"When the hub does not answer, or a setup stopped\""))
@@ -1222,8 +1248,9 @@ final class OwnerGuideTests {
                      "or \"builds\" counts one",
                      "For \"stopped\", \"interrupted\" and \"cancelled\": when this app made that server at a provider, "
                         + "it still exists and the provider bills it. The owner makes NO new server for it.",
-                     "For \"kind\" \"hub\" while \"hub\" is \"none\", the first run has no page for that install now, "
-                        + "and the warning above for a second server holds.",
+                     "For \"kind\" \"hub\" while \"hub\" is \"none\", the first run has no page of that install now. "
+                        + "Its server is taken again in the first run's list of the provider's servers",
+                     "While that row is grey, the warning above for a second server holds.",
                      "That hub's server can still stand at its provider and be billed, and \"builds\" does not count "
                         + "it, because it joined.",
                      "While \"unjoined\" is above 0 and the owner did not look, the owner makes NO new server.",
@@ -1250,19 +1277,20 @@ final class OwnerGuideTests {
                         + "the owner what the app shows now instead.",
                      // An old fleet can come back by itself, and the agent gives the app the time for it.
                      "The app looks for that hub by itself, every few seconds, while the first run shows one of "
-                        + "three pages: \"Your own team of AI agents\", \"Name your manager\" and \"A VPS for your "
-                        + "fleet\". It connects to a hub that takes this Mac as its owner.",
+                        + "four pages: \"Your own team of AI agents\", \"Help improve Founderizer\", \"Name your "
+                        + "manager\" and \"A VPS for your fleet\". It connects to a hub that takes this Mac as its owner.",
                      "That needs Tailscale on this Mac, on and signed in to the account that the hub's server is on.",
-                     "So ask the owner to stay on one of those three pages for a minute and to press nothing there, "
+                     "So ask the owner to stay on one of those four pages for a minute and to press nothing there, "
                         + "and wait with `setup_state` and \"after\": when \"hub\" is \"answers\", the old fleet came "
-                        + "back. The page is then \"Checking your fleet\" or \"Your fleet is up\", or the first run no "
-                        + "longer shows and the window shows the fleet's own pages.",
-                     "On \"Your fleet is up\" the page asks the owner to choose between \"Restore copy\" and \"New "
-                        + "fleet\": that choice is the owner's. \"New fleet\" goes on with this hub, and rents nothing.",
+                        + "back. The page is then \"Checking your fleet\", or the first run no longer shows and the "
+                        + "window shows the fleet's own pages.",
                      "When \"hub\" does not become \"answers\" within a minute, the hub's server is off or gone, it is on another "
                         + "account of Tailscale, it no longer takes this Mac, or another hub of that network answered "
                         + "first: the owner looks at Tailscale and in the provider's console.",
-                     "a first run that goes on makes a new hub on a new server. When the owner wants the old fleet "
+                     "a first run that goes on makes a new hub on a new server, unless its list of the provider's servers "
+                        + "takes the old hub's server again (\"first_run_build\" above): the install then runs on that server "
+                        + "once more, which starts that hub's services and its agents again, and the app connects to that hub "
+                        + "when it serves this Mac. When the owner wants the old fleet "
                         + "and it does not come back, name support@founderizer.com.",
                      "Tell the owner to wait some minutes before \"Try again\", which is the owner's press",
                      "You never read a key.",

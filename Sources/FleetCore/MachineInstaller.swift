@@ -521,30 +521,49 @@ extension InstallTarget {
                              run: ShellRunner = Shell.local) async -> InstallTarget {
         let typed = address.trimmingCharacters(in: .whitespaces)
         let host = typed.lastIndex(of: "@").map { String(typed[typed.index(after: $0)...]) } ?? typed
+        guard let read = await SSHOptions.configured(for: host, aliases: !typed.contains("@"), ssh: ssh, home: home,
+                                                     run: run) else {
+            return named(typed, options: nil, localUser: NSUserName(), home: home) { _ in false }
+        }
+        return named(typed, options: read.mine, general: read.general, localUser: NSUserName(), home: home) {
+            FileManager.default.fileExists(atPath: $0)
+        }
+    }
+}
+
+extension SSHOptions {
+    /// **What this Mac's SSH configuration gives for one host, read through its own `ssh -G`**, which connects to
+    /// nothing. It is the one read under `InstallTarget.named(_:ssh:home:run:)` and under the door's round
+    /// (`DoorAccess.configured`), so the two have one rule.
+    ///
+    /// `mine`: the options for the host. With `aliases`, a host that no `Host` block names takes the alias that gives it
+    /// as its `HostName`: an alias with user root first, else the first that the files give, and never an alias
+    /// through another host (`proxied`). `alias` then says so: `ssh` itself does not use an alias's options for a
+    /// connection to the host. `general`: the options for a name that no block names, which are the ones that the
+    /// configuration gives every host. nil for a name that `ssh` would read as one of its own options: it never
+    /// reaches `ssh`. `home` is the folder whose `.ssh/config` is read.
+    public static func configured(for host: String, aliases: Bool, ssh: String = "/usr/bin/ssh",
+                                  home: String = NSHomeDirectory(), run: ShellRunner = Shell.local) async
+        -> (mine: SSHOptions?, general: SSHOptions?, alias: Bool)? {
         func options(_ name: String) async -> SSHOptions? {
             guard let answer = try? await run(ssh, ["-G", name], nil, 20), answer.ok else { return nil }
             return SSHOptions.read(answer.output)
         }
         // A name `ssh` would read as one of its own options never reaches it.
-        guard host.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", options: .regularExpression) != nil else {
-            return named(typed, options: nil, localUser: NSUserName(), home: home) { _ in false }
-        }
-        var mine = await options(host)
+        guard host.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$", options: .regularExpression) != nil else { return nil }
+        let mine = await options(host)
         let general = await options("founderizer-\(UUID().uuidString.lowercased()).invalid")
-        if !typed.contains("@"), let found = mine, let general, found.hostname.lowercased() == host.lowercased(),
-           found.user == general.user, found.port == general.port, found.identityFiles == general.identityFiles,
-           !found.proxied {
-            var aliases: [SSHOptions] = []
-            for name in SSHConfig.aliases(of: host, config: URL(fileURLWithPath: home + "/.ssh/config"), home: home) {
-                if let alias = await options(name), alias.hostname.lowercased() == host.lowercased(), !alias.proxied {
-                    aliases.append(alias)
-                }
+        guard aliases, let found = mine, let general, found.hostname.lowercased() == host.lowercased(),
+              found.user == general.user, found.port == general.port, found.identityFiles == general.identityFiles,
+              !found.proxied else { return (mine, general, false) }
+        var given: [SSHOptions] = []
+        for name in SSHConfig.aliases(of: host, config: URL(fileURLWithPath: home + "/.ssh/config"), home: home) {
+            if let alias = await options(name), alias.hostname.lowercased() == host.lowercased(), !alias.proxied {
+                given.append(alias)
             }
-            mine = aliases.first { $0.user == "root" } ?? aliases.first ?? mine
         }
-        return named(typed, options: mine, general: general, localUser: NSUserName(), home: home) {
-            FileManager.default.fileExists(atPath: $0)
-        }
+        guard let alias = given.first(where: { $0.user == "root" }) ?? given.first else { return (mine, general, false) }
+        return (alias, general, true)
     }
 }
 #endif

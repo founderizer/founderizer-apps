@@ -3,7 +3,7 @@ import Foundation
 /// **The guide that the owner's own agent follows to set up a fleet** (`founderizer-cli guide`), and the sign that the
 /// app takes from it. The prompt of the first run's welcome page sends the agent to the guide's page on the website;
 /// that page tells it to run `founderizer-cli guide`, which prints this text and tells the running app that an agent
-/// started the guide, so that the app goes on to the first page of its setup, "Name your manager", and comes to the
+/// started the guide, so that the app goes on to the first page of its setup, "Help improve Founderizer", and comes to the
 /// front (the owner's "Yes" of 14 November 2026). The guide needs no hub: it is read before a fleet exists.
 public enum OwnerGuide {
     /// The guide's words, for the agent and not for the owner: who the agent is here, the rules that hold for the whole
@@ -26,10 +26,11 @@ public enum OwnerGuide {
         2. Never ask for a password, a token, an API key or a sign-in code, and never read one from a file, a page or the
            clipboard: no `pbpaste`, and no `cat` of a file that holds one. You never see, type, read or repeat one
            yourself. The owner types or pastes each one into the Founderizer app's own field. Two kinds you can move
-           without seeing them: a Discord bot's token, with `save_bot_token`, and a new login or a new API key of the
-           fleet, with `save_secret`. There the app or its program reads the value and you do not (see "A Discord
-           bot's token" and "A new login or a new API key" below). If the owner sends a secret in the chat, do not
-           use it and do not repeat it: say that it now stands in this chat's records and is best replaced.
+           without seeing them: a Discord or Telegram bot's token, with `save_bot_token`, and a new login or a new API
+           key of the fleet, with `save_secret`. There the app or its program reads the value and you do not (see "A
+           Discord or Telegram bot's token" and "A new login or a new API key" below). If the owner sends a secret in
+           the chat, do not use it and do not repeat it: say that it now stands in this chat's records and is best
+           replaced.
         3. The app does the work: it rents the server, builds it, installs the fleet and connects it. You explain, you
            answer questions, and when the fleet runs you manage it with the tools below. Do not install anything on a
            server yourself, and do not edit the fleet's files.
@@ -199,7 +200,12 @@ public enum OwnerGuide {
           presses "Set it up yourself", and you lead them through the pages that follow.
         - **"Paste this in ..."**. This is the page that gave the owner your prompt. The owner presses "Back" and then
           "Set it up yourself".
-        - **"Name your manager"**. This is the first page of the setup. The manager is the fleet's first agent: it
+        - **"Help improve Founderizer"**. This is the first page of the setup. The owner chooses whether the app sends
+          error reports to Founderizer: error codes, versions and counts, never their work, names or keys. "Send error
+          reports" or "Don't send" is the owner's own choice, and a press on a card opens the next page, so you press
+          nothing on this page and do not choose for them. Say what the page's line says when they ask. They can
+          change it later in Settings, under Help.
+        - **"Name your manager"**. This is the page after it. The manager is the fleet's first agent: it
           leads the team and is the owner's main assistant. The owner types the name that they want for it, or keeps
           the name that the page suggests, and presses "Continue". The name is the owner's choice: do not choose it
           for them.
@@ -232,31 +238,38 @@ public enum OwnerGuide {
           the token at the provider and pastes it into the app's field. You never see it.
         - **"Your fleet"**. The page shows the fleet as "Your fleet's servers" drew it, with the size and the price for a
           month under each server that the press makes. Say each price, and say what the press rents: "Make the server"
-          rents the one server; "Make 2 servers" rents the hub's server and the manager's own server, which the
-          manager's setup then installs by itself. Under each server, its provider, type and price open a list: that
-          provider's five cheapest types that fit, each with its price, and under "Another provider" the other
-          providers. The owner may choose a larger type or another provider for each server there; say the price of
-          what they chose. Another provider whose token this Mac does not hold shows its token page first ("Your ...
-          token"), and then "Your fleet" again. When the provider's account has servers already, the page is **"Your
+          rents the one server; "Make 2 servers" rents the hub's server and the manager's own server, which joins the
+          fleet while the hub installs. Under each server, its provider, type and price open a list: that provider's
+          five cheapest types that fit, each with its price, and under "Another provider" the other providers. The owner
+          may choose a larger type or another provider for each server there; say the price of what they chose. Another
+          provider whose token this Mac does not hold shows its token page first ("Your ... token"), and then "Your
+          fleet" again. When the provider's account has servers already, the page is **"Your
           hub's server at ..."** in its place: it lists them and a new server with its price, and the owner can take one
-          of them for the hub. Say the new server's price, and say that the press on "Make the server" rents it.
-        - **"Building your fleet"**. The app makes the server, joins it to the private network and installs the fleet. It
-          takes some minutes, and there is nothing to do. Use that time: ask the owner what the fleet is for, in their
-          own words (the business, the work that they want the agents to do, and how they will know that it goes well).
-          You give it to the manager when the setup is done. If the build stops, the page says why in its own words: ask
-          the owner to read them to you. "Try again" is the owner's press.
+          of them for the hub. Say the new server's price, and say that the press on "Make the server" rents it. Where
+          the page chooses a row of that list in its place (a hub's server that this Mac made, see "first_run_build"
+          below), the press says "Use this server" and rents nothing.
+        - **"Building your fleet"**. The app makes the server, joins it to the private network and installs the fleet,
+          or installs it on the server that the owner chose. It takes some minutes, and there is nothing to do. Use
+          that time: ask the owner what the fleet is for, in their own words (the business, the work that they want the
+          agents to do, and how they will know that it goes well). You give it to the manager when the setup is done.
+          If the build stops, the page says why in its own words: ask the owner to read them to you. "Try again" is the
+          owner's press. When the provider refuses the manager's own server (an account with no room for another one, a
+          size that is not free), the page says why under that server, with its provider, type and price to choose again
+          and a press "Make ...'s server", which is the owner's; the first run waits for it.
         - **"Your VPS"**, then **"Checking ..."**, then maybe **"Password for ..."**. This is the way of "Other VPS". The
           owner gives the server's address. The app checks the server. A password, when the page asks for one, is used one
           time to put this Mac's key on the server, and it is not kept. Then the owner presses "Install".
-        - **"Your fleet is up"** or **"Your hub is installed"**. The hub runs: it is the part that holds the fleet's records
-          and gives the agents their work. Save the owner's name now, before the manager signs in, so that the
-          manager's first session has it:
+        - **"Connecting to your hub"**, or **"Your hub is installed"** when a check did not pass. The hub runs: it is the
+          part that holds the fleet's records and gives the agents their work. The page goes on by itself within
+          seconds, so save the owner's name as soon as "hub" is "answers" in `setup_state`, before the manager signs
+          in, so that the manager's first session has it:
           `~/.founderizer/cli write save_settings '{"settings": {"owner.name": "<the name>"}}'`. The hub gives that
           name to the manager and to the agents, so that they address the owner by it. A name has at most 40 letters,
           spaces and . ' -: when the hub refuses one, say its words to the owner and ask again. With no such save, the
           app takes the first name of this Mac's account.
         - Then the manager's own setup shows. With two servers, or one for each agent, the server that "Make 2 servers"
-          made for the manager installs by itself, and the setup shows its install. When there is no such server, its
+          made for the manager joined the fleet on "Building your fleet" already, or installs by itself now when it could
+          not: the setup gives it to the manager and shows that. When there is no such server, its
           first page is "Manager's server" (with the manager's own name, when it has another one): the manager gets a
           server of its own, as the hub got its server, and its install follows. With one server it runs on the hub's
           server already.
@@ -321,8 +334,10 @@ public enum OwnerGuide {
         its pages, and do not speak of a stop.
 
         A Needs-you item is a question of the fleet to the owner. Read it to the owner, and answer it with
-        `answer_needs_you` only in the owner's own words or with the option that the owner chose. A request for a
-        secret has its own tools: see "An agent's request for a secret".
+        `answer_needs_you` only in the owner's own words or with the option that the owner chose. Files that the
+        owner gives for the answer go up first with `attach_file`, and their ids, at most four, then go in
+        "attachments", with the owner's words or alone; a choice carries no file. A request for a secret has its own
+        tools: see "An agent's request for a secret".
 
         The door's card (an item with "door_call") asks the owner to let an agent's call through the door. Its first
         option, the yes, lets that one call through; on the card "Run one root script on <server>?" it is "Run it
@@ -423,17 +438,19 @@ public enum OwnerGuide {
         and control of the screen" hold as they are: you look only at a place of its list, while "over" is
         "nothing" and "in_front" is true, and you press only the controls of its list.
 
-        ## A Discord bot's token
+        ## A Discord or Telegram bot's token
 
-        A Discord bot's token is one of the two kinds of secret that you can move, and you never see it. The steps:
+        A Discord or Telegram bot's token is one of the two kinds of secret that you can move, and you never see it.
+        The steps:
 
-        1. The fleet must have the bot's Discord chat account. `~/.founderizer/cli call fleet_read '{"page": "chat_apps"}'`
+        1. The fleet must have the bot's chat account. `~/.founderizer/cli call fleet_read '{"page": "chat_apps"}'`
            lists the chat accounts. When it is not there, make it:
            `~/.founderizer/cli write save_chat_account '{"id": "discord-<agent>", "account": {"app": "discord", "label": "<a name for the bot>", "agents": ["<agent>"], "unknown": "ignore", "enabled": true}}'`,
-           with the name of the agent that the bot talks for. The owner makes the bot itself at Discord, in its
-           Developer Portal.
-        2. Ask the owner to copy the bot's token in Discord's Developer Portal and to say when it is copied. Tell them
-           never to paste it into this chat.
+           with the name of the agent that the bot talks for; for a Telegram bot, the id is "telegram-<agent>" and the
+           app is "telegram". The owner makes the bot itself: at Discord, in its Developer Portal, or in Telegram,
+           with BotFather.
+        2. Ask the owner to copy the bot's token (in Discord's Developer Portal, or from Telegram's BotFather) and to
+           say when it is copied. Tell them never to paste it into this chat.
         3. When the owner says that it is copied, run
            `~/.founderizer/cli write save_bot_token '{"account": "<id>", "from": "clipboard"}'` with the account's id.
            The app reads the clipboard itself, and clears it after the save when nothing else changed it. Never read
@@ -474,7 +491,7 @@ public enum OwnerGuide {
              The app reads the clipboard itself, last and one time, and clears it after the save when nothing else
              changed it. Never read the clipboard yourself, also after a refusal. When macOS asks whether
              Founderizer may access the pasteboard, the owner presses Allow Paste, for this one step only: what "A
-             Discord bot's token" says of that question holds here too.
+             Discord or Telegram bot's token" says of that question holds here too.
            - A file. When the owner keeps the value in a file, use `"from": "file"` with `"path"` and the file that
              the owner names. The program reads the file. You never open it.
            - A program's pipe. `"from": "stdin"` goes only with `~/.founderizer/cli write`, and only for the output
@@ -696,8 +713,11 @@ public enum OwnerGuide {
           for example). The page's words say which: ask the owner to read them to you. Only when they say that the
           provider did not accept the token does the owner make a new token at the provider and paste it in the app's
           field. You never see it.
-        - "stopped_at" "choosing": the app could not read the provider's list, or the press made nothing because the
-          hub did not answer. Nothing was made by this press. A server of an earlier try can still exist. When the
+        - "stopped_at" "choosing": the app could not read the provider's list, or the press made nothing. On Add
+          server, the hub did not answer. In a first run, the page chose the row of a hub's server that this Mac made,
+          or this Mac is not on its private network, or a server that this Mac made for a hub is in the list and
+          cannot be taken: the lines for "first_run_build" under "joining" below give the page's words for each.
+          Nothing was made by this press. A server of an earlier try can still exist. When the
           page shows its line and no list, the list could not be read: while "stage" is "choosing", the page reads it
           again by itself, a minute apart, and shows the next free server when one comes, and the owner presses
           nothing and pastes no token; with "stage" "token" after it, the page stopped looking, and the owner goes
@@ -716,9 +736,36 @@ public enum OwnerGuide {
           - For "add_server_build": when the hub answers again, the list on Add server can offer that server. A row
             is offered only when the server is online on this Mac's network, and only a row that can be chosen takes
             it again. That is the way out below.
-          - For "first_run_build": there is no hub yet, and the first run's list cannot take that server again. The
-            owner looks in the provider's console first and tells you what is there. When the app cannot take the
-            server again, name support@founderizer.com.
+          - For "first_run_build": there is no hub yet. The first run's list of the provider's servers takes that
+            server again only when its row can be chosen: the row with that server's name says "Made for your
+            hub". That row is only in the list of the provider that the server is at: the list of another provider
+            does not have it. It needs the server online on this Mac's network, and this Mac's own record that it
+            made it. The page chooses that row some seconds after the list shows, or at the first press on "Make
+            the server", which then makes nothing: the line over the press says "You already have this server.
+            Nothing new was made.", the next press says "Use this server", and it runs the hub's install on that
+            server again. The page chooses that row one time only for a list. When the row says "Made for your
+            hub" and is not the chosen one, the owner chooses it first, and presses only when the press says "Use
+            this server": do not ask for a press on "Make the server" there, because it rents a new server. While
+            this Mac is not on its private network, the app cannot see that server. With the row of that hub's
+            server in the list that shows, the press on "Make the server" then makes nothing, and the line over
+            it says "This Mac is not on your private network. Open Tailscale, then press again." In the list of
+            another provider or of another project, and on "Your fleet", that press rents a server also then.
+            The owner opens Tailscale on this Mac and connects it. Do not ask for the second press at once: after
+            some seconds the owner reads that row to you, and the rule above for a row that says "Made for your
+            hub" holds. While that row does not say "Made for your hub" with Tailscale connected, the first press
+            on "Make the server" makes nothing, and the line over it says, with the name of the server that it
+            means and its provider's name in place of the dots, "... is still at ... and still costs money. Press
+            again to make a new server." The press after that line rents a new server. The app deletes no server
+            on this page: the earlier server stays at the provider, which bills it, until the owner deletes it
+            there. The page does not read the provider's list again by itself, so the line can name a server that
+            the owner deleted a moment before. That line is said again after the owner chose another row, and
+            after another line stood in its place. With one of these three lines over the press, "stopped_at" is
+            "choosing". Never ask for a press on "Make the server" as a test: when no row can be taken, that
+            press rents a new server. While the row says "Used by
+            Founderizer" and stays grey after some seconds, ask first whether Tailscale is on and connected on
+            this Mac: the row can be grey because it is not. With Tailscale connected and the row still grey, the
+            app cannot take that server again: the owner looks in the provider's console first and tells you what
+            is there, and you name support@founderizer.com.
         - The way out: the list of the owner's servers on that page can be read only after the hub answered again. It
           holds the servers that the owner's token shows at the provider, also servers of other work. The owner
           chooses, with "Use this server", the row with the name
@@ -727,7 +774,8 @@ public enum OwnerGuide {
           you. Grey does not mean unused: the hub's own server is grey there too.
           A row that says "Not in this fleet" is not free either: it can be a working server of another fleet.
         - "stage" "making" or "joining" with a "seconds_in_stage" that grows: the build runs. Wait with "after". A new
-          server has five minutes to join.
+          server has up to an hour to join: most join in about 90 seconds, and one whose first boot meets the
+          server's first updates joins after about ten minutes.
 
         This app's own install of a server is "install". It is null when the app has no install to tell of, and it is
         never an install that another Mac ran. "kind" says what it installs: "hub", "server" or "mac". It can be of
@@ -867,20 +915,21 @@ public enum OwnerGuide {
           connected to no hub now. That hub's server can still stand at its provider and be billed, and "builds"
           does not count it, because it joined. Say this to the owner before any step of "The setup", with how
           long ago it was. The app looks for that hub by itself, every few seconds, while the first run shows one
-          of three pages: "Your own team of AI agents", "Name your manager" and "A VPS for your fleet". It connects
+          of four pages: "Your own team of AI agents", "Help improve Founderizer", "Name your manager" and "A VPS
+          for your fleet". It connects
           to a hub that takes this Mac as its owner. That needs Tailscale on this Mac, on and signed in to the
-          account that the hub's server is on. So ask the owner to stay on one of those three pages for a minute
+          account that the hub's server is on. So ask the owner to stay on one of those four pages for a minute
           and to press nothing there, and wait with `setup_state` and "after": when "hub" is "answers", the old
-          fleet came back. The page is then "Checking your fleet" or "Your fleet is up", or the first run no
-          longer shows and the window shows the fleet's own pages. On "Your fleet is up" the page asks the owner
-          to choose between "Restore copy" and "New fleet": that choice is the owner's. "New fleet" goes on with
-          this hub, and rents nothing. When "hub" does not become "answers" within a minute, the hub's server is
+          fleet came back. The page is then "Checking your fleet", or the first run no longer shows and the
+          window shows the fleet's own pages. When "hub" does not become "answers" within a minute, the hub's server is
           off or gone, it is on another account of Tailscale, it no longer takes this Mac, or another hub of that
           network answered first: the owner looks at Tailscale and in the provider's console. The app
           does not look for a hub that the owner left with "Start again" in the manager's setup: the owner
           connects to that one themselves. The owner decides whether a new fleet is what they want; a first run
-          that goes on makes a new hub on a new server. When the owner wants the old fleet and it does not come
-          back, name support@founderizer.com.
+          that goes on makes a new hub on a new server, unless its list of the provider's servers takes the old
+          hub's server again ("first_run_build" above): the install then runs on that server once more, which
+          starts that hub's services and its agents again, and the app connects to that hub when it serves this
+          Mac. When the owner wants the old fleet and it does not come back, name support@founderizer.com.
         - "outcome" "stopped": "The last install stopped at <step>." Say the step and the cause by the lines of
           "install" above, for "step", "stop", "cause" and "waits_for_network". No page shows that install now, so
           no page shows a "Try again" or an "Install again" for it. From those lines say only the step and the
@@ -895,8 +944,9 @@ public enum OwnerGuide {
         - For "stopped", "interrupted" and "cancelled": when this app made that server at a provider, it still
           exists and the provider bills it. The owner makes NO new server for it. For "kind" "join" of a server
           at the owner's provider, the way out above is how the owner takes that server again. For "kind" "hub"
-          while "hub" is "none", the first run has no page for that install now, and the warning above for a
-          second server holds.
+          while "hub" is "none", the first run has no page of that install now. Its server is taken again in the
+          first run's list of the provider's servers, as the lines of "first_run_build" above say: only by a row
+          that can be chosen. While that row is grey, the warning above for a second server holds.
 
         "builds" counts the servers that this app asked a provider for and that this Mac never saw join, from the
         app's own records on this Mac: the newest 40, of every run of the app and of every fleet. It gives numbers
@@ -971,7 +1021,7 @@ public enum OwnerGuide {
         """#
 
     /// The name of the distributed notification that says an agent started the guide. It has no content, and any
-    /// process of the user can send it, so the app's only answer to it is to go to "Name your manager" and come to the front,
+    /// process of the user can send it, so the app's only answer to it is to go to "Help improve Founderizer" and come to the front,
     /// and only while its first run shows the welcome page or the page after it (`WelcomeRules.guideTakesTheApp`).
     public static let started = "com.founderizer.app.guide-started"
 

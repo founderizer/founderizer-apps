@@ -198,37 +198,91 @@ final class ServerHardeningModel {
             if libraries.settled, !keptLibraries.settled {
                 Self.keep(libraries, for: librariesRecord, key: ServerLibraries.keptKey)
             }
-            // The server's memory reserve and limit (`ServerMemory`), with a record and a count of its own: a server
-            // whose SSH and npm were settled long ago still gets this.
-            guard store.hub == hub else { return }
-            let limitName = Self.memoryLimitMark + name, keptLimit = Self.memory(name, key: Self.keptLimitKey)
-            var limit = keptLimit, limitTries = unreached[limitName]
-            let limitTurn = await ServerHardening.turn(
-                ServerMemory.reading(of: server, join: list.join, at: list.time), memory: &limit,
-                unreached: &limitTries, seenBefore: seen.contains(limitName), now: Date().timeIntervalSince1970,
-                started: ServerMemory.started, outcome: { ServerMemory.outcome($0) },
-                settledLine: "its memory limit is in order",
-                connection: { try await OwnerAccessModel.connection(to: server, hub: hub, records: records) },
-                run: { target in
-                    try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(
-                        target: target, program: ServerMemory.program()), timeout: 120).output
-                })
-            unreached[limitName] = limitTries
-            if limitTurn.seen { seenNow.insert(limitName) }
-            for line in limitTurn.lines {
-                Self.log.notice("\(server.name, privacy: .public): memory: \(line, privacy: .public)")
+            // The server's own programs after SSH, npm and the system packages (`parts`), each with a record and a
+            // count of its own: a server whose SSH and npm were settled long ago still gets them.
+            for part in Self.parts {
+                guard store.hub == hub else { return }
+                let partName = part.mark + name, keptPart = Self.memory(name, key: part.key)
+                var record = keptPart, partTries = unreached[partName]
+                let program = part.program
+                let partTurn = await ServerHardening.turn(
+                    part.reading(server, list.join, list.time), memory: &record, unreached: &partTries,
+                    seenBefore: seen.contains(partName), now: Date().timeIntervalSince1970,
+                    started: part.started, outcome: part.outcome, settledLine: part.settled,
+                    connection: { try await OwnerAccessModel.connection(to: server, hub: hub, records: records) },
+                    run: { target in
+                        try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(
+                            target: target, program: program), timeout: 120).output
+                    })
+                unreached[partName] = partTries
+                if partTurn.seen { seenNow.insert(partName) }
+                for line in partTurn.lines {
+                    Self.log.notice("\(server.name, privacy: .public): \(part.log, privacy: .public): \(line, privacy: .public)")
+                }
+                if record != keptPart { Self.keep(record, for: name, key: part.key) }
             }
-            if limit != keptLimit { Self.keep(limit, for: name, key: Self.keptLimitKey) }
+            // The agents' browser parts (`ServerBrowser`), with a record and a count of its own, and only from a whole
+            // state of the hub: its agents and their tasks say what the parts are for and when the step may run.
+            guard store.hub == hub, let state = store.state else { return }
+            let browserName = Self.browserMark + name, keptBrowser = Self.browserMemory(name)
+            var browser = keptBrowser, browserTries = unreached[browserName]
+            let work = ServerBrowser.work(for: server, agents: state.agents, tasks: state.tasks, join: list.join,
+                                          at: list.time)
+            let seenKey = work?.digest.map { browserName + " " + $0 }
+            let browserTurn = await ServerBrowser.turn(
+                work, memory: &browser, unreached: &browserTries, seenBefore: seenKey.map(seen.contains) ?? false,
+                now: Date().timeIntervalSince1970,
+                connection: { try await OwnerAccessModel.connection(to: server, hub: hub, records: records) },
+                run: { target, program in
+                    try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(
+                        target: target, program: program), timeout: 120).output
+                })
+            unreached[browserName] = browserTries
+            if browserTurn.seen, let seenKey { seenNow.insert(seenKey) }
+            for line in browserTurn.lines {
+                Self.log.notice("\(server.name, privacy: .public): browser: \(line, privacy: .public)")
+            }
+            if browser != keptBrowser { Self.keepBrowser(browser, for: name) }
         }
         seen = seenNow
     }
 
-    /// What this model keeps of a server's memory limit, beside what it keeps of its SSH and npm: the same shape under
-    /// a key of its own, and in `seen` and `unreached` the server's name after this mark.
-    private static let keptLimitKey = "serverMemoryLimit"
-    private static let memoryLimitMark = "memory-limit "
     /// The mark of the system packages' turn (`ServerLibraries`) in `seen`, `unreached` and `librariesRuns`.
     private static let librariesMark = "libraries "
+
+    /// One program of the server's own beside its SSH and npm: what this model keeps of a server for it, the same shape
+    /// as for SSH and npm under a key of its own (`key`), and in `seen` and `unreached` the server's name after `mark`.
+    private struct Part: Sendable {
+        let key: String, mark: String, log: String, started: String, settled: String, program: String
+        let reading: @Sendable (ServerEntry, JoinState?, Double) -> ServerHardening.Reading
+        let outcome: @Sendable (String) -> ServerHardening.Outcome
+    }
+
+    /// The memory reserve and limit (`ServerMemory`, with the key and the mark of the version before this list), and the
+    /// restart of a server that stops (`ServerRestart`).
+    private static let parts = [
+        Part(key: "serverMemoryLimit", mark: "memory-limit ", log: "memory", started: ServerMemory.started,
+             settled: "its memory limit is in order", program: ServerMemory.program(),
+             reading: { ServerMemory.reading(of: $0, join: $1, at: $2) }, outcome: { ServerMemory.outcome($0) }),
+        Part(key: ServerRestart.keptKey, mark: "restart ", log: "restart", started: ServerRestart.started,
+             settled: "its restart settings are in order", program: ServerRestart.program(),
+             reading: { ServerRestart.reading(of: $0, join: $1, at: $2) }, outcome: { ServerRestart.outcome($0) }),
+    ]
+
+    /// What this model keeps of a server's browser parts (`ServerBrowser.Memory`) under a key of its own, and in
+    /// `seen` and `unreached` the server's name after this mark.
+    private static let keptBrowserKey = "serverBrowser"
+    private static let browserMark = "browser "
+
+    static func browserMemory(_ name: String, defaults: UserDefaults = .standard) -> ServerBrowser.Memory {
+        ServerBrowser.Memory.kept((defaults.dictionary(forKey: keptBrowserKey) as? [String: Data])?[name])
+    }
+
+    static func keepBrowser(_ memory: ServerBrowser.Memory, for name: String, defaults: UserDefaults = .standard) {
+        var all = (defaults.dictionary(forKey: keptBrowserKey) as? [String: Data]) ?? [:]
+        all[name] = try? JSONEncoder().encode(memory)
+        defaults.set(all, forKey: keptBrowserKey)
+    }
 
     /// What this Mac kept of one server, by the hub's address, the server's name and its private address: a new server
     /// with the name of an earlier one has another address, and starts with nothing kept.

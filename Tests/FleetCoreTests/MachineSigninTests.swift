@@ -123,6 +123,50 @@ struct MachineSigninTests {
         #expect(reading.signInRuntime == "claude")
         #expect(reading.needsSignIn, "a machine that reports itself signed out is where the owner has work")
     }
+
+    /// A sign-in of another provider of the server (Codex of the screen tasks of an agent on Claude Code) is not the
+    /// server's own: the Sign-in row of its own provider says nothing of it, also not its failure, and the server's
+    /// page does not wait for it. Fails when the row "Claude Code" shows the link and the code of a Codex sign-in, or
+    /// says in orange that a Codex sign-in failed.
+    ///
+    /// The card of that other provider on the page of a Mac (`ScreenSignIn`) has the same line from that provider's
+    /// own reading and sign-in (`of:`). Fails when that card says nothing of a Codex that is signed out, or shows the
+    /// failure of a sign-in of the server's own provider.
+    @Test func aSignInOfAnotherProviderIsNotTheServersOwn() throws {
+        func reading(_ runtime: String, state: String = "starting", signedIn: Bool = true, codexOut: Bool = false) throws -> MachineStatus {
+            try JSONDecoder().decode(MachineStatus.self, from: Data("""
+            {"agent": "solo", "machine": "box", "role": "worker", "address": "100.64.0.9", "access": null,
+             "revision": null, "update": {"state": null, "detail": null, "requested_at": null, "finished_at": null},
+             "check": null, "security": {}, "runtime": {"name": "claude", "version": "2.1.287", "signed_in": \(signedIn)},
+             "os": {"name": null, "kernel": null}, "reported_at": 1, "stale": false, "features": [],
+             "models": null, "screen_models": null, "settings": null, "settings_pending": null, "verify": null,
+             "runtimes": \(codexOut ? "{\"codex\": {\"version\": null, \"signed_in\": false}}" : "null"),
+             "login": {"id": 3, "runtime": "\(runtime)", "state": "\(state)", "detail": "The provider refused the code.",
+                       "started_at": 1, "updated_at": 2, "url": null, "shows_code": null, "wants_code": false}}
+            """.utf8))
+        }
+        let other = try reading("codex"), own = try reading("claude")
+        #expect(other.login?.isOpen == true && other.ownLogin == nil)
+        #expect(!other.waitsForSignIn)
+        #expect(other.signInLine(working: false) == nil)
+        #expect(own.ownLogin?.id == 3 && own.waitsForSignIn)
+        #expect(own.signInLine(working: false)?.says == own.login?.summary)
+        // The own provider is signed out, and a sign-in failed: only one of the own provider is this row's failure.
+        let otherFailed = try reading("codex", state: "failed", signedIn: false)
+        let ownFailed = try reading("claude", state: "failed", signedIn: false)
+        #expect(otherFailed.signInLine(working: false) == SignInLine(says: "Not signed in on this server.", warn: false))
+        #expect(ownFailed.signInLine(working: false) == SignInLine(says: "The provider refused the code.", warn: true))
+        // The card of the named provider: its sign-in that runs, its failure while its reading says signed out, the
+        // plain line with no attempt of it, and nothing while its reading does not say signed out.
+        #expect(other.login(of: "codex")?.id == 3 && other.login(of: "claude") == nil)
+        #expect(other.signInLine(working: false, of: "codex")?.says == other.login?.summary)
+        let codexFailed = try reading("codex", state: "failed", codexOut: true)
+        #expect(codexFailed.signInLine(working: false, of: "codex") == SignInLine(says: "The provider refused the code.", warn: true))
+        let claudeFailed = try reading("claude", state: "failed", codexOut: true)
+        #expect(claudeFailed.signInLine(working: false, of: "codex") == SignInLine(says: "Not signed in on this server.", warn: false))
+        #expect(claudeFailed.signInLine(working: false, alreadySaid: true, of: "codex") == nil)
+        #expect(otherFailed.signInLine(working: false, of: "codex") == nil)
+    }
 }
 
 // MARK: using a different account of the same provider

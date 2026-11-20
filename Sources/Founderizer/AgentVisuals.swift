@@ -92,8 +92,13 @@ extension FleetAgent {
     /// 2026, of two orange dots: "these orange badges are confusing", then "on hover on the side and also on the right
     /// hand side panel"): "Waits for you: <his request's title>", before a task that waits for an agent's answer. The
     /// dot said "Waiting for Lead" while the question had gone up to a card of his in Needs you.
+    ///
+    /// **Its own key request says so too** (`request`, `HubState.ownKeyRequest(of:)`; the owner's "Yes" of 19 November
+    /// 2026): a key that it asked him for, which no task waits on, makes its dot orange with "Waits for you: <the
+    /// request>", after its tasks' waits and before a wait for an agent's answer. The Agents page's orange hand counted
+    /// it while the dot did not.
     func presence(isFresh: Bool, serverTime: Double, openTasks: [FleetTask], holds: [TaskHold], waits: [Int: OwnerWait],
-                  problem: AgentAttention? = nil, thinking: Bool = false) -> AgentPresence {
+                  request: OwnerNeed?, problem: AgentAttention? = nil, thinking: Bool = false) -> AgentPresence {
         if active == false { return .setup }
         if !helperIsRecent(serverTime: serverTime) { return .offline }
         if let problem { return .attention(problem.short) }
@@ -105,6 +110,7 @@ extension FleetAgent {
         let marks = mine.map { $0.mark(holds: holds) }
         if thinking || marks.contains(where: \.inWork) { return isFresh ? .working : .workingAtLastRead }
         if let wait = mine.lazy.compactMap({ waits[$0.id] }).first { return .attention(wait.statusWords) }
+        if let request { return .attention(OwnerWait.request(id: request.id, title: request.title).statusWords) }
         if let waiting = marks.first(where: \.attention) { return .attention(waiting.words) }
         return .online
     }
@@ -160,7 +166,14 @@ struct AllowanceMeter: View {
     var stale = false
     /// Its length; nil takes the width it is given, as in the panel of an agent's chat, whose width the owner sets.
     var width: CGFloat? = 44
+    /// **One agent's own part of the use, in points of the window** (`AccountShares`; the owner's yes of 19 November
+    /// 2026 to the picture of the Agents page): that part has the full fill, and the use of the account's other agents
+    /// the same colour at `others`, so the bar keeps its one length and its one colour scale. Nil: one fill.
+    var own: Double? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The fill of the other agents' part of a shared account's use.
+    static let others = 0.35
 
     /// The fill of a share that is neither near nor at its limit: a soft white, lighter than an old reading's gray
     /// (6.6:1 on the track, the old gray 4.1:1).
@@ -181,11 +194,25 @@ struct AllowanceMeter: View {
                 // 0.3 s** (`FleetMotion.bar`; the owner's yes of 17 November 2026): it jumped there. Only a new
                 // reading moves it: a bar that draws first, or whose room changes, stands at its length at once.
                 GeometryReader { track in
-                    Capsule().fill(color).frame(width: share > 0 ? max(2, track.size.width * share) : 0, height: 4)
-                        .animation(reduceMotion ? nil : FleetMotion.bar, value: share)
+                    let mine = own.map { min(share, max(0, $0) / 100) }
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(mine == nil ? color : color.opacity(Self.others))
+                            .frame(width: share > 0 ? max(2, track.size.width * share) : 0, height: 4)
+                        if let mine {
+                            Capsule().fill(color).frame(width: mine > 0 ? max(2, track.size.width * mine) : 0, height: 4)
+                        }
+                    }
+                    .animation(reduceMotion ? nil : FleetMotion.bar, value: share)
+                    .animation(reduceMotion ? nil : FleetMotion.bar, value: mine)
                 }
             }
-            .accessibilityLabel("\(used.formatted(.number.precision(.fractionLength(0...1)))) percent used")
+            .accessibilityLabel(label)
+    }
+
+    private var label: String {
+        let used = used.formatted(.number.precision(.fractionLength(0...1)))
+        guard let own else { return String(l10n: "\(used) percent used") }
+        return String(l10n: "\(used) percent used, \(own.formatted(.number.precision(.fractionLength(0...1)))) by this agent")
     }
 }
 

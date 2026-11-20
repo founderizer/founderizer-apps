@@ -8,6 +8,7 @@ names, and prints one JSON line: the hub's address as the VM reaches it, and the
 Then it waits for words in the file "commands" in its folder (one each line), and logs each change it makes, with the
 time, to "changes.log" there:
     need    a new open Needs-you item from the manager: the pane's count goes up
+    quick   a new open item with no options of its own: "Done", "Not now" and "Tell me more" send at once
     ticks   a new open item whose three options combine (multi): he ticks some and sends them with "Send N"
     line    a new reply from the agent "vps": its row's line and time change
     marks   a reply from "vps" with the inline marks of Markdown: bold, italic, inline code and a link
@@ -231,6 +232,13 @@ while True:
                          "Press one.", hub.now(), json.dumps(["Friday", "Monday"])))
                 hub.changed("state")
                 note("need")
+            elif word == "quick":
+                # A request with no options of its own: the app's three quick replies, which send at once.
+                hub.ins("INSERT INTO needs(title,why,todo,raised,by,options) VALUES(?,?,?,?,'manager',?)",
+                        (f"Is the example deploy done? ({count})", "A change for the Windows app's proof.",
+                         "Say when it is done.", hub.now(), None))
+                hub.changed("state")
+                note("quick")
             elif word == "ticks":
                 # A request whose options combine (multi): he ticks any of them and sends them with "Send N".
                 hub.ins("INSERT INTO needs(title,why,todo,raised,by,options,multi) VALUES(?,?,?,?,'manager',?,1)",

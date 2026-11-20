@@ -57,7 +57,8 @@ renamed or removed without a word to the screens lane.
   fill and opacity, dashed in setup, and whether it moves now), the outline and the inner mark as SVG path data in a
   square of 100 (`GlyphPaths.Outline(kind)`, `GlyphPaths.Core(kind)`), and its motion (`GlyphLook.Moves()`).
 - **The writes**: `SetDraft` and `SendMessageAsync(agent)`; `SetAnswerDraft` and `AnswerAsync(need)`; `Press(need,
-  option)` (never refused: it waits while the store cannot write); `TickAsync(need, options)`; `ControlAsync(task, action)`; `GuideAsync(task, text)`; `RetryAsync()`; `DiscardRefused()`;
+  option)` (never refused: it waits while the store cannot write); `Reply(need, words)` (a quick reply: its words are
+  the answer with the box's files, sent at once by `AnswerAsync`'s path, or as `Press` waits); `TickAsync(need, options)`; `ControlAsync(task, action)`; `GuideAsync(task, text)`; `RetryAsync()`; `DiscardRefused()`;
   `AddFileAsync(composer, name, bytes)`, `UploadAsync(composer, requestId)` (a file that did not go goes again) and
   `RemoveFile(composer, requestId)` (composers `agent:<name>` and `need:<id>`); `FileAsync(file)`; `EnrollAsync(code)`;
   `ConnectAsync(address)`; `ForgetKey()`; `ReadDeviceAsync()`; `Unlock()`; `FindHubAsync()`. A write that returns

@@ -238,15 +238,18 @@ struct ChatAsksTests {
     @Test func aRowOfParkedWorkSaysUntilWhen() throws {
         let state = try hub([task(1, "working", ask: "a", works: false, parked: Self.now + 7200),
                              task(2, "working", ask: "b", works: true, doing: "Runs", parked: Self.now + 7200),
-                             task(3, "working", ask: "c", works: false)],
+                             task(3, "working", ask: "c", works: false),
+                             task(4, "input-required", ask: "d", parked: Self.now + 7200)],
                             messages: [message("a", at: Self.now - 3000), message("b", at: Self.now - 2000),
-                                       message("c", at: Self.now - 1000)])
+                                       message("c", at: Self.now - 1000), message("d", at: Self.now - 500)])
         #expect(try row(state, "a").until == Self.now + 7200)
         // Parked work is no work now, also while a turn of it runs (the board's rule of 13 November 2026); work in
         // progress with no park has no time.
         #expect(try row(state, "b").until == Self.now + 7200)
         #expect(try !row(state, "b").moves)
         #expect(try row(state, "c").until == nil)
+        // Parked work that also asked a question says that wait, as its card on the board does (`parkedOnly`).
+        #expect(try row(state, "d").until == nil)
     }
 
     @Test func aWaitThatDoesNotNeedHimIsMutedAndSaysWhatItWaitsFor() throws {

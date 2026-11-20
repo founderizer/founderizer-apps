@@ -19,6 +19,9 @@ struct MessageText: View, Equatable {
     /// The block of a hand step's command that has Run (owner feature `need_run`): the code block whose text is its
     /// command, and no other, shows Run (`NeedRunTarget`).
     var run: NeedRunTarget? = nil
+    /// **The names that a request's words link** (`CardNames`; the lane "Give on a card"): an agent, a repository, a
+    /// server and a page of the app, where a card draws the words. Nil everywhere else: a chat's words stay as written.
+    var names: CardNames? = nil
     /// **Each block of the text, and each cell of a table, is a row of this selection** (a long file in the knowledge
     /// reader): only the row under the pointer and the row whose words he pressed last can be selected, as only two
     /// rows of a chat can (`ChatSelection`), and a block or a cell longer than `keepsFields` can always be selected.
@@ -87,6 +90,9 @@ struct MessageText: View, Equatable {
         return result
     }
 
+    /// A block's words with the names of `names` as links, or as they are.
+    private func linked(_ words: AttributedString) -> AttributedString { names?.link(words) ?? words }
+
     var body: some View {
         let blocks = blocks, lines = chat ? ChatStyle.lineSpacing : 5
         // owner feature need_run: the first block of the command has Run, and no second one
@@ -96,9 +102,9 @@ struct MessageText: View, Equatable {
                 Group {
                 switch block.kind {
                 case .paragraph:
-                    Text(block.formatted).lineSpacing(lines).selectableWords()
+                    Text(linked(block.formatted)).lineSpacing(lines).selectableWords()
                 case .heading:
-                    Text(block.formatted)
+                    Text(linked(block.formatted))
                         .font(step ? Font.system(size: SetupMetrics.text, weight: .semibold) : chat ? ChatStyle.heading : FormMetrics.title)
                         .selectableWords()
                         .padding(.top, chat ? 0 : 3)
@@ -107,12 +113,12 @@ struct MessageText: View, Equatable {
                     // after it, for each level.
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         Text(block.marker).selectableWords().frame(minWidth: 12, alignment: .trailing)
-                        Text(block.formatted).lineSpacing(lines).selectableWords()
+                        Text(linked(block.formatted)).lineSpacing(lines).selectableWords()
                     }.padding(.leading, 3 + CGFloat(block.level) * 21)
                 case .quote:
                     HStack(spacing: 10) {
                         Rectangle().fill(FleetStyle.muted.opacity(0.4)).frame(width: 2)
-                        Text(block.formatted).foregroundStyle(FleetStyle.muted).lineSpacing(lines).selectableWords()
+                        Text(linked(block.formatted)).foregroundStyle(FleetStyle.muted).lineSpacing(lines).selectableWords()
                     }
                 case .code: CodeBlock(text: block.text, font: chat ? ChatStyle.code : step && !script ? Self.stepCode : FormMetrics.code,
                                       spacing: chat ? 5 : 4, fill: card ? FleetStyle.canvas : FleetStyle.surface,
@@ -362,6 +368,10 @@ struct OwnerBubble: View {
     /// What stands at the bubble's leading side, 8 points from it and centred on its last line, taking no height of
     /// its own: a message's hover footer (`SentMessageView`).
     var beside: AnyView?
+    /// **Somebody else's words**, at the column's left in the bubble's outline and not in its fill, as the other side
+    /// of a chat that he only reads stands (`ReadBubble`): the filled bubble is always his own words. A task that an
+    /// agent asked for opens with that agent's request so (`TaskRequest`).
+    var theirs = false
     @State private var expanded = false
     private var canCollapse: Bool { text.count > 420 || text.filter { $0 == "\n" }.count > 5 }
     /// A long message at rest: the height of its first six lines, the last of them fading into the bubble.
@@ -369,7 +379,7 @@ struct OwnerBubble: View {
 
     var body: some View {
         let folded = canCollapse && !expanded
-        BubbleLayout {
+        BubbleLayout(trailing: !theirs) {
         VStack(alignment: .leading, spacing: 9) {
             // **His words are drawn from their Markdown, as an agent's are** (3 November 2026: "chat messages dont
             // have any format... it is so plain"): his numbered list, his paragraphs and his bold read as the reply
@@ -393,7 +403,10 @@ struct OwnerBubble: View {
                     .padding(.vertical, -IconMetrics.reach)
             }
         }.padding(.horizontal, 16).padding(.vertical, 12)
-            .background(ChatStyle.bubble, in: RoundedRectangle(cornerRadius: ChatStyle.bubbleRadius))
+            .background {
+                let shape = RoundedRectangle(cornerRadius: ChatStyle.bubbleRadius)
+                if theirs { shape.strokeBorder(FleetStyle.hairline(0.16), lineWidth: 1) } else { shape.fill(ChatStyle.bubble) }
+            }
             .overlay(alignment: .bottomLeading) {
                 if let origin {
                     ChatAppMark(app: origin.app, size: 18, help: String(l10n: "Sent from \(ChatApps.title(origin.app))")).offset(x: -7, y: 5)

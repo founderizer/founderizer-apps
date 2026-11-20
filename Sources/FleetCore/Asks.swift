@@ -56,36 +56,6 @@ public struct Ask: Identifiable, Sendable {
     public var isOver: Bool { column == .done }
 }
 
-/// **One card of the board for all agents**: a task that no message of his began, as before, or one thing that he
-/// asked for, with its tasks behind it.
-public enum BoardItem: Identifiable, Sendable {
-    case task(FleetTask)
-    case ask(Ask)
-
-    public var id: String {
-        switch self {
-        case .task(let task): "task \(task.id)"
-        case .ask(let ask): "ask \(ask.id)"
-        }
-    }
-
-    /// When it moved last.
-    public var activityTime: Double {
-        switch self {
-        case .task(let task): task.activityTime
-        case .ask(let ask): ask.activityTime
-        }
-    }
-
-    /// The task of a card of one task, and the newest task of an ask: the order's last word, as the board's is.
-    var order: Int {
-        switch self {
-        case .task(let task): task.id
-        case .ask(let ask): ask.tasks.first?.id ?? 0
-        }
-    }
-}
-
 extension HubState {
     /// **The things that he asked for**, the newest first. A task with an `ask` whose message this reading does not
     /// hold still makes one, under its oldest task's title and agent, so that no work of his is left out.
@@ -99,85 +69,20 @@ extension HubState {
         let columns = taskColumns, waits = ownerWaits
         let requests = Dictionary(needs.filter(\.isOpen).compactMap { need in need.ask.map { ($0, need) } }) { first, _ in first }
         return members.map { id, unsorted in
-            let tasks = unsorted.sorted { ($0.activityTime, $0.id) > ($1.activityTime, $1.id) }
-            let oldest = unsorted.min { $0.id < $1.id } ?? tasks[0]
+            // Where it stands, with the rules that a job's card has too (`JobStanding`).
+            let standing = JobStanding(unsorted, columns: columns, waits: waits, request: requests[id])
+            let oldest = unsorted.min { $0.id < $1.id } ?? unsorted[0]
             let message = asked[id]
-            let open = tasks.filter { columns[$0.id] != .done }
-            let waitTask = tasks.first { waits[$0.id] != nil }
-            let wait = waitTask.flatMap { waits[$0.id] } ?? requests[id].map { OwnerWait.request(id: $0.id, title: $0.title) }
-            let working = open.first { columns[$0.id] == .inProgress }
-            let column: ActivityColumn = wait != nil ? .waiting : working != nil ? .inProgress : open.isEmpty ? .done : .waiting
-            // The tasks that have its last word (`Ask.failed`). Each task belongs to its top task: the task of the
-            // ask that it is, in the end, a subtask of.
-            let byID = Dictionary(tasks.map { ($0.id, $0) }) { first, _ in first }
-            var top: [Int: Int] = [:]
-            for task in tasks {
-                var above = task, steps = 0
-                while steps < tasks.count, let parent = above.parent.flatMap({ byID[$0] }) {
-                    above = parent
-                    steps += 1
-                }
-                top[task.id] = above.id
-            }
-            // Put right: a task that nobody canceled, under another top task, follows a task under this one. A
-            // canceled task put nothing right itself, so the task that follows it puts right what it followed too.
-            var putRight: Set<Int> = []
-            for task in tasks where task.state != "canceled" {
-                var earlier = task.follows.flatMap { byID[$0] }, steps = 0
-                while let followed = earlier, steps < tasks.count {
-                    if let under = top[followed.id], under != top[task.id] { putRight.insert(under) }
-                    earlier = followed.state == "canceled" ? followed.follows.flatMap { byID[$0] } : nil
-                    steps += 1
-                }
-            }
-            let ends = column == .done
-                ? tasks.filter { top[$0.id] == $0.id && $0.state != "canceled" && !putRight.contains($0.id) } : []
-            let said = tasks.map { max($0.activityTime, $0.delivered ?? 0, $0.checked_at ?? 0) }.max()
             return Ask(id: id, title: message?.asked ?? oldest.title, agent: message?.chatRecipient ?? oldest.owner,
-                       created: message?.created ?? oldest.created, tasks: tasks, open: open, column: column, wait: wait,
-                       waitTask: waitTask, working: working, until: open.compactMap(\.parked_until).min(),
-                       failed: ends.first(where: \.endedBadly),
-                       unchecked: ends.contains { $0.state == "completed" && $0.accepted == nil },
-                       canceled: column == .done && ends.isEmpty,
-                       endedAt: said ?? message?.created ?? oldest.created)
+                       created: message?.created ?? oldest.created, tasks: standing.tasks, open: standing.open,
+                       column: standing.column, wait: standing.wait, waitTask: standing.waitTask,
+                       working: standing.working, until: standing.until, failed: standing.failed,
+                       unchecked: standing.unchecked, canceled: standing.canceled,
+                       endedAt: standing.said ?? message?.created ?? oldest.created)
         }.sorted { ($0.created, $0.id) > ($1.created, $1.id) }
     }
-
-    /// **The Tasks board, with one card for each thing that he asked for** (his "Both places" of 15 November 2026 to its
-    /// picture). A task of an ask is on no card of its own: it is behind the card of its ask, which stands in the column
-    /// of the ask. Every other task is a card as before. The order is the board's: the one that moved last first, and in
-    /// Waiting what waits for him before the rest. **An ask that is open shows whatever the period**: it is work that he
-    /// asked for and that is not done. An ask that ended shows when one task of it is in the period.
-    ///
-    /// **`agent`: the board of one agent** (his "Yes, build it" of 17 November 2026 to the picture of Tasks with the
-    /// Fleet Manager chosen, which View all of the card Asked opens): the things that he asked that agent for, whoever
-    /// does their tasks, and that agent's other tasks, its work on what he asked another agent too. The Fleet Manager
-    /// owns no task of its own, so its board showed nothing. nil: every agent's.
-    public func board(period: ActivityPeriod, agent: String? = nil, calendar: Calendar = .current) -> [ActivityColumn: [BoardItem]] {
-        let start = period.start(now: Date(timeIntervalSince1970: time), calendar: calendar)?.timeIntervalSince1970 ?? -.infinity
-        let waits = ownerWaits, column = taskColumns
-        var columns: [ActivityColumn: [BoardItem]] = [:]
-        var waiting: Set<String> = []
-        // The asks of this board: their tasks are behind their cards, also when their period leaves the card out.
-        var carded: Set<String> = []
-        for ask in asks where agent == nil || ask.agent == agent {
-            carded.insert(ask.id)
-            guard !ask.isOver || ask.tasks.contains(where: { $0.activityTime >= start }) else { continue }
-            columns[ask.column, default: []].append(.ask(ask))
-            if ask.wait != nil { waiting.insert(BoardItem.ask(ask).id) }
-        }
-        for task in tasks where (agent == nil || task.owner == agent) && !carded.contains(task.ask ?? "")
-            && (task.activityTime >= start || waits[task.id] != nil) {
-            columns[column[task.id] ?? .waiting, default: []].append(.task(task))
-            if waits[task.id] != nil { waiting.insert(BoardItem.task(task).id) }
-        }
-        var sorted = columns.mapValues { $0.sorted { ($0.activityTime, $0.order) > ($1.activityTime, $1.order) } }
-        if let lane = sorted[.waiting] {
-            sorted[.waiting] = lane.filter { waiting.contains($0.id) } + lane.filter { !waiting.contains($0.id) }
-        }
-        return sorted
-    }
 }
+
 
 /// **The card Asked of an agent's chat panel, as it shows** (his "Both places" of 15 November 2026 to its picture):
 /// the things that he asked that agent for, the newest first, one row each **while the row has news** — it waits for
@@ -185,7 +90,7 @@ extension HubState {
 /// waits, as a row of its own too** (`waits`; the owner, 17 November 2026, of the row "2 waiting", which opened the
 /// whole Tasks board: "if it's only 3 elements you could have shown them there directly!"), **while they are three or
 /// fewer**; more are one row with their number, which opens them in place (`ownRows`). An ask that ended and that he
-/// has seen is on the Tasks page, with everything that ended.
+/// has seen is on the Tasks page, as a card of Done with its result.
 /// **A result shows when its requester has checked it**, and until then the card says nothing of the ask: a "Done"
 /// that a refused result takes back is worse than none. An ask that somebody canceled has no row. **A result shows
 /// again when a later task of the ask ends**: what he has seen of an agent's asks is a time (`after`), and an ask

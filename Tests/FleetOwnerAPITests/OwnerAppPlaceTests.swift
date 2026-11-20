@@ -10,7 +10,7 @@ struct OwnerAppPlaceTests {
     static let every: [AppPlace] = {
         var places: [AppPlace] = [.needs, .tasks, .agents, .task(0), .task(42), .agent("nova"), .agentRule("nova"),
                                   .agentSetup("nova", nil), .agentSettingUp("nova"), .agentSignIn("nova", nil),
-                                  .server("fleet-1"), .addServer(nil), .addAgent(nil), .connectKey, .shapeChange,
+                                  .server("fleet-1"), .addServer(nil), .addAgent(nil), .connectKey,
                                   .firstRun(nil),
                                   .waiting, .none, .someAgent, .someServer, .someTask]
         places += AppPlace.AgentPart.allCases.map { .agentPart("nova", $0) }
@@ -66,7 +66,7 @@ struct OwnerAppPlaceTests {
     @Test func noNameCarriesFreeText() throws {
         let alphabet = try NSRegularExpression(pattern: "^[a-z0-9_.-]+$")
         let words = Set(["needs", "tasks", "agents", "task", "agent", "rule", "setup", "setting_up", "sign_in", "settings",
-                         "app", "server", "add_server", "add_agent", "connect_key", "shape_change", "first_run", "waiting",
+                         "app", "server", "add_server", "add_agent", "connect_key", "first_run", "waiting",
                          "none"]
             + AppPlace.AgentPart.allCases.map(\.rawValue) + AppPlace.SetupPage.allCases.map(\.rawValue)
             + AppPlace.SignInPage.allCases.map(\.rawValue) + AppPlace.SettingsPage.allCases.map(\.rawValue)

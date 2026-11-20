@@ -73,11 +73,10 @@ public struct ChatAskRow: Identifiable, Sendable, Equatable {
                 }
                 until = nil
             } else {
-                // It waits: why, in the board's words (`ActivityBoard.why`) — until when its agent parked it, else the
-                // agents whose subtasks it waits for, else its task's state word.
-                let held = (state?.holds ?? []).contains { $0.task == open.id && $0.state != "released" }
-                let limited = state?.agents.first { $0.name == open.owner }?.limit != nil
-                until = held || limited ? nil : open.parked_until
+                // It waits: why, in the board's words (`ActivityBoard.why`) — until when its agent parked it, when
+                // nothing else holds it (`parkedOnly`), else the agents whose subtasks it waits for, else its task's
+                // state word.
+                until = open.parkedUntil(in: state)
                 if let agents = state?.subtaskWaits[open.id], mark.words == TaskWords.working {
                     line = HubState.subtaskWords(agents)
                 } else {

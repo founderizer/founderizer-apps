@@ -100,6 +100,56 @@ extension CloudExisting {
         return .install(address: device.address)
     }
 
+    /// **The hub's install can run again on this server, in a first run's list of the fleet's own VPS**, or nil when
+    /// its row stays as it is (the owner's report of 14 November 2026, of which `reuse` closed the half of a server
+    /// for agents: a hub's server that this Mac made, and whose install stopped, stood grey in that list, so the one
+    /// press left made a second paid server). Only from what this Mac kept and sees now:
+    ///
+    ///   - **This Mac made it for a hub**: a record of its own build names it by the provider's own id, at this
+    ///     provider (`BuildRecord`; the newest one). The provider's label alone is never enough: it names no Mac and
+    ///     no fleet.
+    ///   - **Its provider says that it runs.**
+    ///   - **It is online on this Mac's network now**, as a device that carries the name of that build. For a build
+    ///     that this Mac saw join, the device has the address of that join (`BuildRecord.hub`). A build that stopped
+    ///     before has only its name, which a later try can take too (a new server gets a name that no device has, and
+    ///     a server that is not on the network yet has left its name free). So such a build counts only when the
+    ///     private network's own list had its server at the build's end (`BuildRecord.onNetwork`: a rule of the
+    ///     network kept it from this Mac), exactly one device carries the name now, and no other build of this Mac has
+    ///     that name, whatever that build left at its provider.
+    ///   - **Its address is none of `except`**: the hub that the app is connected to, a hub that "Start again" left
+    ///     alive (`StartAgain.LeftHubs`), and a hub that answered there and refused this Mac when the page asked it.
+    ///
+    /// The install goes to that address, as root with this Mac's own key, as the build's own end sends it: a server
+    /// that the app made has no way in at its public address. **A second run of the hub's installer destroys
+    /// nothing** (`hub.sh`: "every step checks first, nothing is destroyed"): each step runs again and checks first,
+    /// so an install that stopped goes on. On a hub that has its owner the installer makes no code and leaves the
+    /// team as it is, and it starts the hub's services and the agents of that server again. When that hub serves
+    /// this Mac, the install's wait for the code ends and the plan goes on with no code
+    /// (`InstallStep.Action.waitForClaim`).
+    /// **The second run gets the choices that the first run's pages have now** (the manager's name, the step of the
+    /// fleet's servers, the AI program). A hub that has its owner keeps the manager's name and the step of its claim.
+    /// One fault of the installer stands there: a run without the word for one server for all, on a hub whose claim
+    /// wrote that word, skips the installer's two steps of it (`hub_word` in hub.sh, the installer's lane's).
+    public func hubAgain(at provider: CloudProvider, builds: [BuildRecord], devices: [FleetOnTailscale.Device],
+                         except: Set<String> = []) -> CloudReuse? {
+        guard running, CloudServers.isID(id),
+              let build = builds.filter({ $0.use == .hub && $0.provider == provider && $0.serverID == id })
+                  .max(by: { ($0.began, $0.id.uuidString) < ($1.began, $1.id.uuidString) }) else { return nil }
+        let name = build.name.lowercased()
+        guard !name.isEmpty else { return nil }
+        let carriers = devices.filter { $0.online && ($0.name == name || $0.host == name) }
+        let device: FleetOnTailscale.Device?
+        if let joined = build.hub {
+            guard let address = URL(string: joined)?.host else { return nil }
+            device = carriers.first { $0.address == address }
+        } else {
+            let alone = !builds.contains { $0.id != build.id && $0.name.lowercased() == name }
+            device = build.onNetwork && alone && carriers.count == 1 ? carriers[0] : nil
+        }
+        guard let device, !except.contains(device.address) else { return nil }
+        return .install(address: device.address)
+    }
+
     /// Its row's detail: the type at Hetzner, the memory, the system, and the project at DigitalOcean
     /// ("CX23 · 4 GB · Ubuntu 24.04").
     public var summary: String {
@@ -234,12 +284,42 @@ public enum InstallEnds {
     }
 }
 
-/// What "Use this server" does with a server that the fleet holds already (`CloudExisting.reuse`).
+/// What "Use this server" does with a server that the fleet holds already (`CloudExisting.reuse`), and with the
+/// hub's server that this Mac made in a first run's list (`CloudExisting.hubAgain`, which gives `install` only).
 public enum CloudReuse: Equatable, Sendable {
     /// The agent that waits for its first server takes this one, by its name in the fleet.
     case place(server: String)
     /// Its install runs again, at this address on the private network.
     case install(address: String)
+}
+
+/// **The line that the first run's list says over its press for a server of an earlier try** (the owner's yes of 18
+/// November 2026, "A: say it at the press": a server that this Mac made for a hub, and whose row cannot be taken,
+/// still costs money, and a press on "Make the server" rented a second one). The rule only: the page gives the
+/// words of each line (`FirstRunView.makeServer`), and takes the second click of a double click for no press.
+public struct EarlierServerLines: Equatable, Sendable {
+    /// One line for each listed server that this Mac's own record names as a hub's server that it made, in the
+    /// list's order: by these the page knows such a line over its press.
+    public let lines: [String]
+    /// The line that a press says: of the first such server whose row cannot be taken. Nil when each can be.
+    public let now: String?
+
+    public init(_ servers: [(line: String, taken: Bool)]) {
+        lines = servers.map(\.line)
+        now = servers.first { !$0.taken }?.line
+    }
+
+    /// A line over the press is one of these.
+    public func has(_ line: String?) -> Bool { line.map { lines.contains($0) } ?? false }
+
+    /// **What a press says in place of a new server**, or nil when it makes one. `shown` is the line over the press
+    /// at the press. The press makes the server only over the line that it would say: with no line, with a line that
+    /// went, and with another line over it, the press says the line.
+    public func says(over shown: String?) -> String? { shown == now ? nil : now }
+
+    /// A reading of the network takes such a line away when a press would say it no more: that server's row can be
+    /// taken now. The line that a press would say stays, through each reading.
+    public func stale(_ shown: String?) -> Bool { has(shown) && shown != now }
 }
 
 extension CloudOffer {

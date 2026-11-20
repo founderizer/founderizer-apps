@@ -171,10 +171,13 @@ struct TaskPage: View {
         }
     }
 
-    /// What stops this task now: a hold that is not released, or an action whose outcome nobody knows.
+    /// What stops this task now: a hold that is not released, or an action whose outcome nobody knows and that its
+    /// agent does not check first (`TaskOutcome.waitsOnOwner`).
     @ViewBuilder private func stopped(_ page: MobileTaskPage) -> some View {
         let holds = page.holds.filter { $0.state != "released" }
-        let outcomes = page.outcomes.filter { $0.state == "unknown" }
+        let outcomes = page.outcomes.filter {
+            $0.waitsOnOwner(holds: page.holds, taskEnded: page.task.isTerminal, shellOff: store.shellOff(page.task.owner))
+        }
         if !holds.isEmpty || !outcomes.isEmpty {
             Section {
                 ForEach(holds) { hold in
