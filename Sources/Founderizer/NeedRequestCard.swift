@@ -509,6 +509,14 @@ struct NeedAnswerGiven: View {
 /// answered, and says his answer** (`ChatRequestPlaces.Answered.atItsAnswer`; the owner, 19 November 2026: "maybe we
 /// sohuld show a row/card with the reply there?", and "A: the card" to its picture): what he wrote stands on it whole,
 /// with its files under it, and is no bubble of its own.
+///
+/// **A key request goes to its title and a mark when he saves** (`KeySaveLook`; the owner, 20 November 2026: "no text
+/// needed, just a nice animation of loading and then a nice and smooth check"): from his press of Save, once the checks
+/// that end with a line of their own are passed, the card is its title and a ring that turns at its end, the ring
+/// becomes a check that draws itself, and the folded card of a request
+/// that a saved key answered is that title and that check, with no words. The hub's words of the answer stand in the
+/// whole card, a click away. A step that failed, or one that left words for him (a grant whose agent cannot use the
+/// key yet, a request that had its answer already), opens the card again with the form's rows.
 struct NeedRequestCard: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
@@ -522,9 +530,13 @@ struct NeedRequestCard: View {
     /// His answer as the outbox saved it, kept from the frame it went until the reading says the request is answered
     /// (`WordsOnTheirWay`): the store lets the request go with its receipt, a round trip before that reading.
     @State private var sent: PendingRequest?
+    /// **His key save on this card**, as its form tells it (`KeySaveCard`): the card stands as its title and the ring,
+    /// then the check, and folds once the check has drawn itself.
+    @State private var keySave = KeySaveCard()
     /// The width of a form page's cards, where the card stands on one; in a chat, nil, and the card takes the column's.
     @Environment(\.formMeasure) private var measure
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// **His answer on its way: the card folds in the frame he sends it, with his words** (fix round 3, item 11), as it
     /// folds once the reading says it is answered. It folded only with that reading, a round trip after the hub's
@@ -560,6 +572,7 @@ struct NeedRequestCard: View {
     /// What he answered, in the folded card's second line: his words or the option he pressed.
     private var answerWords: String {
         if let ran = ranAnswer { return ran.spoken }        // a press of Run, in this Mac's words (VoiceOver too)
+        if need.answeredWithKey { return String(l10n: "Saved") }     // the word behind the check of a saved key
         let answer = (onItsWay?.text ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return answer.isEmpty ? String(l10n: "Answered") : answer
     }
@@ -568,8 +581,10 @@ struct NeedRequestCard: View {
 
     var body: some View {
         Group {
-            // a run that goes on keeps the card open, with its Stop, also when the item closed meanwhile
-            if (!need.isOpen || onItsWay != nil) && !expanded && store.needRuns[need.id]?.busy != true {
+            // a run that goes on keeps the card open, with its Stop, also when the item closed meanwhile; a key save
+            // keeps it until its check has drawn itself, or with its failed step (`KeySaveCard.folds`)
+            if keySave.folds(answered: (!need.isOpen || onItsWay != nil) && store.needRuns[need.id]?.busy != true,
+                             expanded: expanded) {
                 // **The files of his answer stand under it on the folded card**, as they stood under his message: the
                 // card is his answer in the chat, and a file is pressed by itself, outside the card's own press.
                 let files = store.answerFiles(of: need)
@@ -591,8 +606,12 @@ struct NeedRequestCard: View {
                 // **A card's content 16 points in, folded and whole** (margins row 19), as the rows of every form card:
                 // the request's title stood 2 points left of the form rows' titles on the same page.
                 VStack(alignment: .leading, spacing: 0) {
-                    if let ask { ChatAskHead(store: store, row: ask) }
-                    whole.padding(FormMetrics.rowInset)
+                    if let ask, !keyCollapsed { ChatAskHead(store: store, row: ask) }
+                    // **Nothing of the card's parts draws past its edge**: a key card closes over its form when his
+                    // save starts and opens over it again (`KeySaveCard`), and what leaves or comes in that motion
+                    // stays inside the card as it moves. The clip is here and not on the card: the folded card's
+                    // button and the ask's head reach the card's edge, and their focus rings draw past it.
+                    whole.padding(FormMetrics.rowInset).clipShape(RoundedRectangle(cornerRadius: FormMetrics.radius))
                 }
             }
         }
@@ -626,6 +645,13 @@ struct NeedRequestCard: View {
         .onChange(of: need.isOpen) { _, open in
             if !open, sent == nil { expanded = false }
         }
+        // The check of his key save draws itself and goes quiet; then the folded card, with that check at rest, may
+        // take the card's place.
+        .task(id: keySave.look) {
+            guard keySave.look == .saved else { return }
+            do { try await Task.sleep(for: KeySaveMark.settles) } catch { return }
+            keySave.settle()
+        }
         // owner feature need_run: Run and its line read the store, and a command for a Mac of the fleet needs the
         // machines' readings for its Run to stand
         .environment(store)
@@ -647,27 +673,83 @@ struct NeedRequestCard: View {
 
     /// The two lines of an answered request: its title, medium (`titleFont`), and what he answered, 12 points muted:
     /// the option that he pressed with a check, on one line, and words that he wrote with none, whole: the card is
-    /// where the chat says them.
-    private var folded: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(heading).font(titleFont).foregroundStyle(FleetStyle.text).lineLimit(1)
-            if let ran = ranAnswer {
-                // a press of Run: its mark says how the command ended, "Ran on <Mac>" where it ran
-                HStack(spacing: 5) {
-                    Image(systemName: ran.symbol).font(IconMetrics.symbol(10, weight: .semibold)).accessibilityHidden(true)
-                    Text(ran.words).lineLimit(1)
-                }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-            } else {
-                HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    if !inWords { Image(systemName: "checkmark").font(IconMetrics.symbol(10, weight: .semibold)) }
-                    Text(answerWords).lineLimit(inWords ? nil : 1).multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+    /// where the chat says them. **A request that a saved key answered is one line**: its title and the check at its
+    /// end, where the check of his save drew itself (`keyHead`).
+    @ViewBuilder private var folded: some View {
+        if need.answeredWithKey {
+            keyHead(saved: true, draws: false)
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(heading).font(titleFont).foregroundStyle(FleetStyle.text).lineLimit(1)
+                if let ran = ranAnswer {
+                    // a press of Run: its mark says how the command ended, "Ran on <Mac>" where it ran
+                    HStack(spacing: 5) {
+                        Image(systemName: ran.symbol).font(IconMetrics.symbol(10, weight: .semibold)).accessibilityHidden(true)
+                        Text(ran.words).lineLimit(1)
+                    }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        if !inWords { Image(systemName: "checkmark").font(IconMetrics.symbol(10, weight: .semibold)) }
+                        Text(answerWords).lineLimit(inWords ? nil : 1).multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                }
             }
         }
     }
 
+    /// **A key request's card while his save runs, and folded once a saved key answered it**: its title and the mark at
+    /// its end (`KeySaveMark`), with no words. The two stand alike to the point, so the folded card takes the place of
+    /// the card whose check has drawn itself with no change on the screen.
+    private func keyHead(saved: Bool, draws: Bool) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(heading).font(titleFont).foregroundStyle(FleetStyle.text).lineLimit(1)
+            Spacer(minLength: 8)
+            KeySaveMark(saved: saved, draws: draws)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The card is its title and the mark of his key save (`KeySaveCard.collapsed`).
+    private var keyCollapsed: Bool { keySave.collapsed(expanded: expanded) }
+
+    /// The form's look of his key save: the card goes to its title and the mark, or opens again, in one short motion,
+    /// with the form under it (`KeptAway`). A save that starts closes Show all too, so the card has nothing open under
+    /// the ring. VoiceOver says the check's word, because the Save that had its focus went with the form.
+    private func took(_ look: KeySaveLook?) {
+        var next = keySave
+        guard next.take(look) else { return }
+        withAnimation(reduceMotion ? nil : FleetMotion.keySave) {
+            if look == .goes { expanded = false }
+            keySave = next
+        }
+        if look == .saved { AccessibilityNotification.Announcement(String(l10n: "Saved")).post() }
+    }
+
+    /// The whole card: over its answer, its parts, or its title and the mark while his key save runs. **The answer
+    /// stands in one place whatever the card draws over it**: a key's form finishes its save while the card is its
+    /// title and the mark, and stays with a step that failed after the request had its answer (`KeySaveCard`).
     private var whole: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if keyCollapsed { keyHead(saved: keySave.look == .saved, draws: true) } else { parts }
+            if need.asksForSecret ? keySave.showsForm(open: need.isOpen) : need.isOpen {
+                Group {
+                    if need.asksForSecret {
+                        SecretRequestForm(store: store, need: need, onLook: { took($0) }) {
+                            withAnimation(reduceMotion ? nil : FleetMotion.keySave) { keySave.end() }
+                        }
+                    } else {
+                        NeedAnswerBox(store: store, need: need)
+                    }
+                }
+                .padding(.top, keyCollapsed ? 0 : 10)
+                .modifier(KeptAway(away: keyCollapsed))
+            }
+        }
+    }
+
+    /// The whole card's parts over its answer.
+    private var parts: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Button { withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() } } label: {
@@ -749,13 +831,25 @@ struct NeedRequestCard: View {
             AgentNamed(agent: need.by) {
                 Text("From \(need.by.agentLabel) · \(messageTime(need.raised))")
             }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-            if need.isOpen {
-                if need.asksForSecret { SecretRequestForm(store: store, need: need) }
-                else { NeedAnswerBox(store: store, need: need) }
-            }
         }
     }
 
+}
+
+/// A view that stays in its card for the work that it finishes, while the card does not show it: no height, nothing
+/// drawn, no click, no key and nothing for VoiceOver (a key's form under the ring of its save, `NeedRequestCard`). Its
+/// height and its fade move with the card's own change, and the card's clip keeps it inside the card meanwhile.
+private struct KeptAway: ViewModifier {
+    let away: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .frame(height: away ? 0 : nil, alignment: .top)
+            .opacity(away ? 0 : 1)
+            .allowsHitTesting(!away)
+            .disabled(away)
+            .accessibilityHidden(away)
+    }
 }
 
 private extension View {

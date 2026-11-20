@@ -9,10 +9,14 @@ import SwiftUI
 struct SecretRequestForm: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
+    /// The request's card in a chat draws his save (`KeySaveLook`); nil on Needs you, where the form draws it.
+    var onLook: ((KeySaveLook?) -> Void)? = nil
+    /// The form's end: Done after a step that failed or left words for him, a decline, his words.
+    var onDone: () -> Void = {}
 
     var body: some View {
         if SecretEntryView.isOffered(by: store) {
-            SecretEntryView(store: store, preset: SecretPreset(need: need), compact: true) { _ in }
+            SecretEntryView(store: store, preset: SecretPreset(need: need), compact: true, onLook: onLook) { _ in onDone() }
                 .id("\(store.hub)/\(store.state?.db ?? "")/secret-\(need.id)")
         } else {
             Text("Update the hub to answer this request here. It takes no answer in words.")

@@ -27,6 +27,9 @@ enum FleetMotion {
     static let cardIn = 0.15, cardOut = 0.12, cardGrows = Animation.easeOut(duration: 0.18)
     /// A menu's window: its fade in and out.
     static let menuIn = 0.1, menuOut = 0.08
+    /// A key request's card in a chat, to its title and the ring of his save and back, and the ring to its check
+    /// (`KeySaveMark`; the owner, 20 November 2026: "much smoother and simple").
+    static let keySave = Animation.easeOut(duration: 0.22)
 
     /// The system's Reduce Motion, for the windows that AppKit moves (a view reads its own environment).
     @MainActor static var reduced: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }

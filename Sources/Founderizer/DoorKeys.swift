@@ -59,8 +59,9 @@ enum DoorKeys {
 
     /// **A GitHub App's key to the door, at its own place in the catalog** (`GitHubAppKey.place`): the entry that holds
     /// this very key, when there is one, and else a new entry under a name that no key of the catalog has. So the
-    /// successor of an App's key stands beside the old key, whose entry stays after GitHub refuses that key, and a
-    /// save that is tried again makes no second entry. Gives the secret's reference. reference: as for `put`.
+    /// successor of an App's key stands beside the old key until the hub takes that one out of the catalog and the
+    /// door, after GitHub refuses it (`hub.py` `door_key_retire`), and a save that is tried again makes no second
+    /// entry. Gives the secret's reference. reference: as for `put`.
     static func putGitHubApp(_ pem: String, owner: String, store: FleetStore, reference: String? = nil) async throws -> String {
         guard let database = store.state?.db else { throw Stop(String(l10n: "No current status of this hub. Nothing was sent.")) }
         let hub = store.hub, value = GitHubAppKey.vaultValue(pem)

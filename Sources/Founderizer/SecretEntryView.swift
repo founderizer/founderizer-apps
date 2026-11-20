@@ -123,6 +123,9 @@ struct SecretEntryView: View {
     private let compact: Bool
     /// The reference of the saved secret, or nil when the owner closed the form without one.
     let onDone: (String?) -> Void
+    /// **A request's card in a chat draws his save** (`KeySaveLook`): a ring while it runs, then a check, and the card
+    /// keeps the form's parts out of sight meanwhile. Nil where no card draws it (Needs you, Add secret, a key page).
+    private let onLook: ((KeySaveLook?) -> Void)?
 
     /// The hub features of Add secret and its grants. Show the Add button only with them.
     static let feature = "secrets"
@@ -182,6 +185,9 @@ struct SecretEntryView: View {
     /// The last problem or the next step, in orange.
     @State private var message: String?
     @State private var busy = false
+    /// His save, or his answer with a key of the list, passed the checks that end with a line of their own and has not
+    /// ended (`KeySaveLook.of`).
+    @State private var saving = false
     /// The owner saw that the catalog has this name (the orange line of `SameName`) and pressed Save again.
     @State private var sameName: String?
     /// One secret of the catalog that fits the request: an earlier save can answer it.
@@ -241,9 +247,9 @@ struct SecretEntryView: View {
     private let again: (() -> Void)?
 
     init(store: FleetStore, preset: SecretPreset = SecretPreset(), compact: Bool = false, note: String? = nil,
-         again: (() -> Void)? = nil, onDone: @escaping (String?) -> Void) {
+         again: (() -> Void)? = nil, onLook: ((KeySaveLook?) -> Void)? = nil, onDone: @escaping (String?) -> Void) {
         self.store = store; self.preset = preset; self.compact = compact; self.onDone = onDone
-        self.note = note; self.again = again
+        self.note = note; self.again = again; self.onLook = onLook
         _hub = State(initialValue: store.hub); _database = State(initialValue: store.state?.db)
         // The form shows at once and waits for the central vault's key before Save; a hub without it shows the row.
         _phase = State(initialValue: store.state?.ui_features?.contains(CentralVault.feature) == true ? .form : .noVault)
@@ -320,6 +326,19 @@ struct SecretEntryView: View {
         isRequest && access[DoorAccess.holder] != nil ? [SecretProgress.Grant(agent: DoorAccess.holder, grant: .use)] : []
     }
 
+    /// **What the request's card in a chat draws for this form** (`KeySaveLook`), only where a card draws it. The form
+    /// draws all its parts as before: while the card shows the ring or the check, the card keeps them out of sight
+    /// (`KeptAway`), so one change of the card moves the whole card, closed and open again.
+    private var cardLook: KeySaveLook? {
+        guard onLook != nil, compact, isRequest, !onStep else { return nil }
+        if case .saved(let progress) = phase {
+            // a grant whose agent cannot use the key yet, or an answer that the request had already: rows, never a check
+            let warned = progress.given.contains(where: \.warning) || progress.answerNote != nil
+            return KeySaveLook.of(done: progress.isDone, warned: warned, busy: busy, saving: saving)
+        }
+        return KeySaveLook.of(done: nil, busy: busy, saving: saving)
+    }
+
     var body: some View {
         VStack(alignment: onStep ? .center : .leading, spacing: 14) {
             switch phase {
@@ -357,7 +376,10 @@ struct SecretEntryView: View {
         .frame(maxWidth: FormMetrics.formWidth, alignment: onStep ? .center : .leading)
         .task { await start() }
         .task(id: preset.need) { await readFits() }
-        .onDisappear { clear() }
+        // A form that goes ends what its card drew for it: a save that ran on is the reading's to show.
+        .onDisappear { clear(); onLook?(nil) }
+        // Each change of the look, and the look of the moment the form comes: nil, for its fields.
+        .onChange(of: cardLook, initial: true) { _, look in onLook?(look) }
     }
 
     @ViewBuilder private var actions: some View {
@@ -820,7 +842,7 @@ struct SecretEntryView: View {
         guard let context else { message = String(l10n: "No current status of this hub. Nothing was sent."); return }
         guard let central else { phase = .noVault; return }
         busy = true
-        defer { busy = false }
+        defer { busy = false; saving = false }
         let title = login.title, kind = login.kind, variable = login.variable
         var grants = chosen
         // The key of the list whose value this save replaces: the one API key with this variable name.
@@ -859,6 +881,9 @@ struct SecretEntryView: View {
                 message = String(l10n: "The list has \(LoginSecret.maxCatalog) secrets and takes no more. Nothing was sent."); return
             }
         } catch { message = String(l10n: "The hub did not answer for this save. Nothing was sent. \(text(error))"); return }
+        // **The ring from here** (`KeySaveLook`): a line of its own above (a key of the same name, a full list, no
+        // answer) ends the save with the form open, and a ring for that one round trip only made the card jump.
+        saving = true
         await saveCentral(to: central, context: context, title: title, kind: kind, variable: variable, grants: grants,
                           replacing: replacing)
     }
@@ -910,7 +935,7 @@ struct SecretEntryView: View {
     private func answerWith(_ reference: String, entry: TeamLogin) async {
         guard !busy else { return }
         busy = true         // the rows do not change while the levels are read again
-        defer { busy = false }
+        defer { busy = false; saving = false }
         let kind: LoginSecret.Kind = entry.isAPIKey ? .apiKey : .login
         // While the rows show the levels of now of this very key (after a Save that found the name), the answer is
         // what the rows say against those levels, as for the Save that replaces: a row that he set to no access takes
@@ -939,6 +964,7 @@ struct SecretEntryView: View {
         let goes = showsNote && need?.secret?.noteGoes(to: entry) == true
         if goes, holdsKey(noteWords) { message = Self.keyInNote; return }
         let noted = goes ? noteWords : nil
+        saving = true       // the ring, past the line of a note that looks like a key
         clear()
         let progress = SecretProgress(login: reference, title: entry.name, kind: kind, grants: grants, need: preset.need, note: noted,
                                       tell: nil)
