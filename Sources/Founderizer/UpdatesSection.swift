@@ -215,7 +215,11 @@ struct FleetDetailsToggle: View {
             .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
             .padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
         }
-        .buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).padding(.horizontal, 2)
+        .buttonStyle(.plain)
+        // the hand under the pointer, as a link shows it (the owner, 20 November 2026: "links should show like the hand
+        // cursor, like in Needs You"), over all that a click reaches: before the padding that gives the reach back
+        .pointerStyle(.link)
+        .padding(.vertical, -IconMetrics.reach).padding(.horizontal, 2)
         .accessibilityIdentifier(identifier)
         .accessibilityValue(open ? "Expanded" : "Collapsed")
     }

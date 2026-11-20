@@ -703,7 +703,7 @@ struct NeedRequestCard: View {
                 // card is his answer in the chat, and a file is pressed by itself, outside the card's own press.
                 let files = store.answerFiles(of: need)
                 VStack(alignment: .leading, spacing: 0) {
-                    Button { withAnimation(.easeInOut(duration: 0.12)) { expanded = true } } label: {
+                    Button { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.12)) { expanded = true } } label: {
                         folded.padding(FormMetrics.rowInset).padding(.bottom, files.isEmpty ? 0 : 8 - FormMetrics.rowInset)
                             .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                     }.buttonStyle(.plain)
@@ -866,7 +866,7 @@ struct NeedRequestCard: View {
     private var parts: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Button { withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() } } label: {
+                Button { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.12)) { expanded.toggle() } } label: {
                     HStack(alignment: .firstTextBaseline) {
                         Text(heading).font(titleFont).multilineTextAlignment(.leading)
                         Spacer(minLength: 8)
@@ -915,7 +915,7 @@ struct NeedRequestCard: View {
             if hasMore {
                 HStack(spacing: 10) {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.12)) { expanded.toggle() }
                     } label: {
                         HStack(spacing: 3) {
                             // the door's card shows its script there, as the owner approved it ("Yes, as shown")
@@ -930,6 +930,10 @@ struct NeedRequestCard: View {
                         // click reaches: before the padding that gives the reach back to the layout
                         .pointerStyle(.link)
                         .padding(.vertical, -IconMetrics.reach).font(FormMetrics.detail).foregroundStyle(FleetStyle.link)
+                        // whether what it opens is open, as Needs you's link says it (`NeedStep.moreLink`)
+                        .accessibilityValue(expanded ? String(localized: "Open (a state)", defaultValue: "Open",
+                                                              bundle: Localized.bundle, locale: Localized.digits)
+                                            : String(l10n: "Closed"))
                         .accessibilityIdentifier("need-more-\(need.id)")
                     Spacer(minLength: 8)
                 }

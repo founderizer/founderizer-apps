@@ -238,7 +238,8 @@ private struct SidebarFill: View {
 struct ChatRow<Mark: View, Trailing: View>: View {
     /// The glyph's size, and the room its column takes.
     static var glyph: CGFloat { GlyphSize.list }
-    private let title: String
+    /// The agent of the chat, whose name and role are the row's first line (`AgentNameLine`).
+    private let agent: String
     private let preview: String?
     private let selected: Bool
     /// The name in semibold: a new reply in the agent's chat.
@@ -266,10 +267,10 @@ struct ChatRow<Mark: View, Trailing: View>: View {
     @State private var hovered = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(_ title: String, preview: String?, selected: Bool, emphasized: Bool, working: Bool = false, needsYou: Bool = false,
+    init(agent: String, preview: String?, selected: Bool, emphasized: Bool, working: Bool = false, needsYou: Bool = false,
          keyMark: Bool = false, time: String? = nil, action: @escaping () -> Void, @ViewBuilder mark: () -> Mark,
          @ViewBuilder trailing: () -> Trailing) {
-        self.title = title; self.preview = preview; self.selected = selected; self.emphasized = emphasized
+        self.agent = agent; self.preview = preview; self.selected = selected; self.emphasized = emphasized
         self.working = working; self.needsYou = needsYou; self.keyMark = keyMark; self.time = preview == nil ? nil : time
         self.action = action; self.mark = mark(); self.trailing = trailing()
     }
@@ -282,7 +283,7 @@ struct ChatRow<Mark: View, Trailing: View>: View {
                 mark.frame(width: Self.glyph, height: Self.glyph)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(title).fontWeight(emphasized ? .semibold : .regular).lineLimit(1)
+                        AgentNameLine(agent: agent, emphasized: emphasized)
                         if let time {
                             Spacer(minLength: 0)
                             Text(time).font(FormMetrics.detail).monospacedDigit().foregroundStyle(FleetStyle.muted)
@@ -310,6 +311,31 @@ struct ChatRow<Mark: View, Trailing: View>: View {
             .contentShape(Rectangle())
         }.buttonStyle(.plain).onHover { hovered = $0 }
             .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// **An agent's name and role on one line** (the owner, 20 November 2026, of the sidebar's agent rows: "on the first
+/// row we can show the name, a middle dot (·) and the role name in a muted style maybe?", and of the agent's card on its
+/// chat's panel: "make the agent card the same size as the row on the left, so it is consistent"): its name, a middle
+/// dot and its role in muted, "Nova · Customer Support". One word where a second would say it again, as `AgentNames.under`
+/// decides: an agent with no role is its name, and a role that says the name already stands alone ("Fleet Manager").
+/// The line ends with its role when it is too long. VoiceOver reads the name and the role with a pause, not the dot.
+struct AgentNameLine: View {
+    let agent: String
+    /// The name in semibold: a new reply in the agent's chat (`ChatRow`).
+    var emphasized = false
+
+    var body: some View {
+        let names = AgentNames.shared
+        let label = names.label(agent)
+        if let name = names.under(agent) {
+            (Text(verbatim: name).fontWeight(emphasized ? .semibold : .regular)
+                + Text(verbatim: " · \(label)").foregroundStyle(FleetStyle.muted))
+                .lineLimit(1)
+                .accessibilityLabel(Text(verbatim: "\(name), \(label)"))
+        } else {
+            Text(verbatim: label).fontWeight(emphasized ? .semibold : .regular).lineLimit(1)
+        }
     }
 }
 

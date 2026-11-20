@@ -260,6 +260,9 @@ struct ActivityBoard: View {
                 .padding(.horizontal, EndedRow.inset).frame(minHeight: EndedRow.height).contentShape(Rectangle())
             }
             .buttonStyle(FleetRowButtonStyle())
+            // the hand under the pointer, as a link shows it (as the more link of a Needs-you card does), over all that
+            // a click reaches
+            .pointerStyle(.link)
             .accessibilityValue(showsRest ? String(localized: "Open (a state)", defaultValue: "Open", bundle: Localized.bundle,
                                                             locale: Localized.digits) : String(l10n: "Closed")).accessibilityIdentifier("activity-ended-more")
             if showsRest {
@@ -291,6 +294,7 @@ struct ActivityBoard: View {
                 .padding(.horizontal, EndedRow.inset).frame(minHeight: EndedRow.height).contentShape(Rectangle())
             }
             .buttonStyle(FleetRowButtonStyle())
+            .pointerStyle(.link)                    // the hand, as on "more" in Done
             .accessibilityValue(showsLater ? String(localized: "Open (a state)", defaultValue: "Open", bundle: Localized.bundle,
                                                              locale: Localized.digits) : String(l10n: "Closed")).accessibilityIdentifier("activity-later")
             if showsLater {

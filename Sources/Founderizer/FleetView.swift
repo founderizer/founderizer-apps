@@ -646,7 +646,7 @@ struct FleetView: View {
         // When its chat's last message is from, or its waiting card, as a chat app writes it at the row's end (`ChatList.time`).
         let time = (request.map { ChatList.requestTime($0, last: last) } ?? ChatList.lastTime(last))
             .map { ChatList.time($0, now: store.state?.time ?? Date().timeIntervalSince1970) }
-        return ChatRow(agent.name.agentLabel, preview: action ?? preview, selected: selected, emphasized: reply,
+        return ChatRow(agent: agent.name, preview: action ?? preview, selected: selected, emphasized: reply,
                        // Its line and its glyph move only by an answer of this wake (`marksMove`).
                        working: presence == .working && store.marksMove, needsYou: action == nil && request != nil,
                        keyMark: action == nil && savedKey, time: time) {
