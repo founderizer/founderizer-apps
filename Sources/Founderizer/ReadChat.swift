@@ -26,6 +26,8 @@ struct ReadChatMessage {
     let created: Double?
     /// What stands under the bubble and always shows: how a reply was delivered, or that a person's message waits.
     var under: AnyView? = nil
+    /// Files stand under it (`under`): a message of files and no words has no bubble over them (CHAT-APPS.md 8.1).
+    var files = false
 }
 
 /// One line in the middle of the chat, between its bubbles, in the look of its time stamps: what the agent asked the
@@ -182,29 +184,46 @@ struct ReadBubble: View {
 
     var body: some View {
         VStack(alignment: message.ours ? .trailing : .leading, spacing: 4) {
-            BubbleLayout(trailing: message.ours) {
-                words
-                    .padding(.horizontal, 16).padding(.vertical, 12)
-                    .background {
-                        // The agent of the page in the fill of the owner's own bubble, the other side in its outline.
-                        let shape = RoundedRectangle(cornerRadius: ChatStyle.bubbleRadius)
-                        if message.ours { shape.fill(ChatStyle.bubble) } else { shape.strokeBorder(FleetStyle.hairline(0.16), lineWidth: 1) }
-                    }
-                    .overlay(alignment: message.ours ? .bottomLeading : .bottomTrailing) {
-                        footer.fixedSize()
-                            .alignmentGuide(.leading) { $0[.trailing] + 8 }
-                            .alignmentGuide(.trailing) { $0[.leading] - 8 }
-                            // Its middle on the middle of the last line: the bubble's 12 points under it, then half a line.
-                            .alignmentGuide(.bottom) { $0[VerticalAlignment.center] + 12 + ChatStyle.line / 2 }
-                    }
-            }
+            // a message of files and no words (a person's picture alone, CHAT-APPS.md 8.1) is its files, with no empty
+            // bubble over them and its time on hover, as the owner's own message in his chat is; a message with no
+            // words and no file (one whose file did not come) keeps its bubble, so that it and its time still show
+            let filesAlone = message.text.isEmpty && message.files
+            if !filesAlone { bubble }
             if let under = message.under {
                 under.frame(maxWidth: .infinity, alignment: message.ours ? .trailing : .leading)
+            }
+            if filesAlone {
+                // the time under the files on hover, at their side: the files take the column's whole width, so a
+                // time beside them, as beside a bubble, would stand at the column's other edge
+                time.font(ChatStyle.detail).foregroundStyle(FleetStyle.muted).frame(height: 20)
+                    .opacity(hovered ? 1 : 0).accessibilityHidden(!hovered)
             }
         }
         .contentShape(Rectangle()).onHover { hovered = $0; if !$0 { copied = false } }
         .contextMenu {
-            Button("Copy message", systemImage: "square.on.square") { copyMessage(message.text) }.labelStyle(.titleAndIcon)
+            if !message.text.isEmpty {      // never a copy of no words, which would empty the clipboard
+                Button("Copy message", systemImage: "square.on.square") { copyMessage(message.text) }
+                    .labelStyle(.titleAndIcon)
+            }
+        }
+    }
+
+    private var bubble: some View {
+        BubbleLayout(trailing: message.ours) {
+            words
+                .padding(.horizontal, 16).padding(.vertical, 12)
+                .background {
+                    // The agent of the page in the fill of the owner's own bubble, the other side in its outline.
+                    let shape = RoundedRectangle(cornerRadius: ChatStyle.bubbleRadius)
+                    if message.ours { shape.fill(ChatStyle.bubble) } else { shape.strokeBorder(FleetStyle.hairline(0.16), lineWidth: 1) }
+                }
+                .overlay(alignment: message.ours ? .bottomLeading : .bottomTrailing) {
+                    footer.fixedSize()
+                        .alignmentGuide(.leading) { $0[.trailing] + 8 }
+                        .alignmentGuide(.trailing) { $0[.leading] - 8 }
+                        // Its middle on the middle of the last line: the bubble's 12 points under it, then half a line.
+                        .alignmentGuide(.bottom) { $0[VerticalAlignment.center] + 12 + ChatStyle.line / 2 }
+                }
         }
     }
 
@@ -221,8 +240,10 @@ struct ReadBubble: View {
     private var footer: some View {
         HStack(spacing: 10) {
             if message.ours { time }
-            MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: String(l10n: "Copy message")) {
-                copyMessage(message.text); copied = true
+            if !message.text.isEmpty {      // never a copy of no words, which would empty the clipboard
+                MessageAction(symbol: copied ? "checkmark" : "square.on.square", label: String(l10n: "Copy message")) {
+                    copyMessage(message.text); copied = true
+                }
             }
             if !message.ours { time }
         }

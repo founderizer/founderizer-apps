@@ -330,7 +330,7 @@ struct MessageFilesView: View {
                         guard let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
                         else { throw CocoaError(.fileNoSuchFile) }
                         let place = try MessageAttachment.save(data, named: name, in: downloads)
-                        ChatFileCopy.markDownloaded(place)
+                        try ChatFileCopy.marked(place)
                         return place
                     }
                 }.value
@@ -365,8 +365,19 @@ enum ChatFileCopy {
                                                 attributes: [.posixPermissions: 0o700])
         let copy = place.appendingPathComponent(MessageAttachment.diskName(file.name), isDirectory: false)
         try data.write(to: copy, options: [.atomic])
-        markDownloaded(copy)
+        try marked(copy)
         return copy
+    }
+
+    /// The mark of a download on this file, checked: a file with no mark is removed and never given out. Since a chat
+    /// app's file of any type comes (CHAT-APPS.md 8.1), a stranger's `.terminal` or `.fileloc` with no mark would open
+    /// with no question of Gatekeeper's.
+    nonisolated static func marked(_ place: URL) throws {
+        markDownloaded(place)
+        guard getxattr(place.path, "com.apple.quarantine", nil, 0, 0, 0) > 0 else {
+            try? FileManager.default.removeItem(at: place)
+            throw CocoaError(.fileWriteUnknown)
+        }
     }
 
     /// A copy for one drag, in a new folder of its own: Finder copies it after the drop, and no open and no later drag

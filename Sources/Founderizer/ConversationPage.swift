@@ -104,9 +104,7 @@ struct ConversationPage: View {
             case "person":
                 .message(ReadChatMessage(id: item.id, ours: false, who: .person(item.said(person: person, agent: agent)),
                                          text: item.text, markdown: false, created: item.created,
-                                         under: item.read_at == nil
-                                            ? AnyView(Text("Not read yet").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted))
-                                            : nil))
+                                         under: personUnder(item), files: !(item.attachments ?? []).isEmpty))
             case "agent":
                 .message(ReadChatMessage(id: item.id, ours: true, who: .agent(agent), text: item.text, markdown: false,
                                          created: item.created, under: agentUnder(item)))
@@ -115,6 +113,18 @@ struct ConversationPage: View {
                                    who: item.said(person: person, agent: agent), state: item.actionState, text: item.text))
             }
         }
+    }
+
+    /// Under a person's words: the files that came with them (CHAT-APPS.md 8.1; the owner's "Yes, show them" of 20
+    /// November 2026), drawn at the left as the agent's files are drawn at the right, and that the agent has not read
+    /// the message yet.
+    private func personUnder(_ item: ConversationItem) -> AnyView? {
+        let files = item.attachments ?? [], unread = item.read_at == nil
+        guard !files.isEmpty || unread else { return nil }
+        return AnyView(VStack(alignment: .leading, spacing: 8) {
+            if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .leading, keeps: false) }
+            if unread { Text("Not read yet").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted) }
+        })
     }
 
     /// Under the agent's words: the files that it sent with them (CHAT-APPS.md 20; the owner's "Yes, build it" of 15

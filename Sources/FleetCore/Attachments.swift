@@ -84,7 +84,13 @@ public struct MessageAttachment: Decodable, Identifiable, Sendable, Equatable {
     public static let shownPictureBytes = 3_750_000
     public static let shownPictureSide = 8000
 
-    public var isImage: Bool { mime.hasPrefix("image/") }
+    /// **The pictures that the apps draw from their bytes**: the four types whose first bytes the hub checks
+    /// (`hub.py` `ATTACH_PICTURES`). A chat app's file of any other picture type (a TIFF, a DNG, a HEIC; CHAT-APPS.md
+    /// 8.1, since 20 November 2026) is a file row, which the preview window opens in its own process at a click: no
+    /// decoder in the app's own process ever reads a stranger's bytes of a type that nobody checked.
+    public static let drawnPictureTypes: Set<String> = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+
+    public var isImage: Bool { Self.drawnPictureTypes.contains(mime) }
 
     /// The four types whose own words can become one of the owner's knowledge files in one press (`POST
     /// /ui/knowledge` `{attachment}`, UI-API.md 1.30), because knowledge is text that `search_knowledge` reads.
@@ -117,8 +123,24 @@ public struct MessageAttachment: Decodable, Identifiable, Sendable, Equatable {
         let lead = cleaned.prefix { $0 == "." || $0 == "-" }.count
         if lead > 0 { cleaned = "_" + cleaned.dropFirst(lead) }
         cleaned = String(cleaned.prefix(80))
-        let ext = "." + (types[mime] ?? agentTypes[mime] ?? "bin")
+        // a type of no table: a chat app's file (CHAT-APPS.md 8.1) keeps its own extension, which the preview window
+        // reads to open it
+        guard let known = types[mime] ?? agentTypes[mime] else { return cleaned.isEmpty ? "file" : cleaned }
+        let ext = "." + known
         return cleaned.lowercased().hasSuffix(ext) ? cleaned : (cleaned.isEmpty ? "file" : cleaned) + ext
+    }
+
+    /// Whether `mime` is a type as the hub keeps one: `type/subtype` in lower case, each part 1 to 127 of the letters,
+    /// digits and `!#$&^_.+-` that a type token may hold, which is all that the hub lets through (`hub.py`
+    /// `MIME_TOKEN`). Since chat apps' files of any type come (CHAT-APPS.md 8.1), any such type is a file that the
+    /// apps open and save.
+    public static func isTypeToken(_ mime: String) -> Bool {
+        let parts = mime.split(separator: "/", omittingEmptySubsequences: false)
+        let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789!#$&^_.+-")
+        return parts.count == 2 && parts.allSatisfy { part in
+            (1...127).contains(part.count) && part.allSatisfy { allowed.contains($0) } &&
+                part.first.map { $0.isLetter || $0.isNumber } == true
+        }
     }
 
     public static func digest(_ data: Data) -> String {
@@ -127,7 +149,7 @@ public struct MessageAttachment: Decodable, Identifiable, Sendable, Equatable {
 
     /// What the hub said about this file is a file that an app may ask for.
     public func validate() throws {
-        guard id > 0, !name.isEmpty, name.utf8.count <= 200, (Self.types[mime] ?? Self.agentTypes[mime]) != nil,
+        guard id > 0, !name.isEmpty, name.utf8.count <= 200, Self.isTypeToken(mime),
               size > 0, size <= Self.sizeLimit, sha256.count == 64,
               sha256.allSatisfy({ $0.isHexDigit && ($0.isNumber || $0.isLowercase) }), created > 0,
               kept.map({ $0.at > 0 && $0.knowledge?.isEmpty != true }) != false

@@ -41,6 +41,24 @@ import Testing
         #expect(MessageAttachment.mime(forName: "a") == nil)
     }
 
+    /// CHAT-APPS.md 8.1: a chat app's file of any type comes, and the apps open and save it with its own extension;
+    /// only the four picture types whose first bytes the hub checks are drawn from their bytes, so no decoder of the
+    /// app's own process reads a stranger's TIFF, DNG or HEIC bytes.
+    @Test func aChatAppsFileOfAnyTypeOpensAndOnlyCheckedPicturesAreDrawn() throws {
+        for (mime, name, drawn) in [("video/mp4", "clip.mp4", false), ("image/heic", "IMG_0001.heic", false),
+                                    ("image/tiff", "scan.tiff", false), ("application/octet-stream", ".env", false),
+                                    ("image/png", "shot.png", true), ("image/jpeg", "photo.jpg", true)] {
+            let file = try self.file(["mime": mime, "name": name])
+            try file.validate()
+            #expect(file.isImage == drawn, "\(mime)")
+        }
+        #expect(MessageAttachment.safeName("clip.mp4", mime: "video/mp4") == "clip.mp4")
+        #expect(MessageAttachment.safeName("", mime: "video/mp4") == "file")
+        for bad in ["text/plain\r\nX-A: 1", "Image/PNG", "text/", "/png", "a/b/c", ""] {
+            #expect(throws: AttachmentError.self) { try self.file(["mime": bad, "name": "x"]).validate() }
+        }
+    }
+
     /// CHAT-APPS.md 20: an agent's message can carry a spreadsheet, a Word file or a presentation, and the apps read
     /// and open them. The owner sends them himself only to a hub with `office_files` (UI-API.md 1.251; his "Yes, fix
     /// both" of 20 November 2026): a hub before it answers 415, so the plus, a drop and Cmd+V refuse them there with
@@ -66,7 +84,8 @@ import Testing
         #expect(MessageAttachment.typeWords(office: true).contains("Word"))
         #expect(!MessageAttachment.typeWords(office: false).contains("Word"))
         #expect(!MessageAttachment.sendable("application/x-msdownload", office: true))
-        #expect(throws: AttachmentError.self) { try self.file(["mime": "application/x-msdownload"]).validate() }
+        // a chat app's file of any type opens (CHAT-APPS.md 8.1), while the owner's own send still refuses it
+        try self.file(["mime": "application/x-msdownload"]).validate()
     }
 
     /// A report and a conversation line carry the files of the agent's words; a hub from before them sends none.
@@ -129,7 +148,7 @@ import Testing
         try item.validate()
         #expect(item.matches(bytes))
         #expect(!item.matches(bytes + Data([0])))
-        #expect(throws: (any Error).self) { try self.file(["mime": "application/x-sh"]).validate() }
+        #expect(throws: (any Error).self) { try self.file(["mime": "Application/X-SH"]).validate() }   // no type token
         #expect(throws: (any Error).self) { try self.file(["size": 26 * 1024 * 1024]).validate() }
         #expect(throws: (any Error).self) { try self.file(["sha256": String(repeating: "A", count: 64)]).validate() }
     }
