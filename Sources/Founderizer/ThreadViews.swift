@@ -933,6 +933,8 @@ struct TaskResult: View {
                         Text(expanded ? "Show less" : "Show more").padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
                     }
                     .font(ChatStyle.detail).foregroundStyle(FleetStyle.muted).buttonStyle(.plain)
+                    // the hand over all that a click reaches, as a long message's Show more
+                    .pointerStyle(.link)
                     .padding(.vertical, -IconMetrics.reach)
                 }
             }

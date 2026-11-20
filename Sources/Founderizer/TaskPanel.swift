@@ -102,43 +102,41 @@ struct TaskPanel: View {
 
     // MARK: the first card
 
-    /// **The agent that does the task, as the head of its chat panel**: its glyph at the `hero` step, moving while it
-    /// works, its role and its name under it, and the chevron of a row that opens a page: its chat, where he talks to it.
+    /// **The agent that does the task, as the head of its chat panel**: at the size of its row in the sidebar (the
+    /// owner, 20 November 2026: "make the agent card the same size as the row on the left, so it is consistent"), its
+    /// glyph at the list's size, moving while it works, its name and role on one line (`AgentNameLine`), and the chevron
+    /// of a row that opens a page: its chat, where he talks to it.
     /// Why the requester gave the task to this agent is its hover. An agent that the hub no longer lists keeps its words
     /// alone, and opens nothing: its chat would take a message for nobody.
     @ViewBuilder private var agentRow: some View {
         if let agent = state?.agents.first(where: { $0.name == task.owner }) {
             Button { store.destination = .agent(task.owner) } label: {
                 HStack(spacing: 0) {
-                    HStack(spacing: FormMetrics.markGap) {
-                        AgentAvatar(name: agent.name, presence: presence(agent), size: GlyphSize.hero, moves: store.marksMove)
+                    // the name in the column of the words of the marked rows under it, as in the sidebar's row
+                    HStack(spacing: FormMetrics.markColumn + FormMetrics.markGap - GlyphSize.list) {
+                        AgentAvatar(name: agent.name, presence: presence(agent), size: GlyphSize.list, moves: store.marksMove)
                         agentNames
                     }
                     Spacer(minLength: 12)
                     chevron
                 }
-                .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 11)
+                .padding(.horizontal, FormMetrics.rowInset).frame(height: 50)
             }
             .buttonStyle(FleetRowButtonStyle())
             .help(task.why ?? "")
-            .accessibilityLabel([task.owner.agentLabel, AgentNames.shared.under(task.owner)].compactMap { $0 }.joined(separator: ", "))
+            .accessibilityLabel([AgentNames.shared.under(task.owner), task.owner.agentLabel].compactMap { $0 }.joined(separator: ", "))
             .accessibilityHint(String(l10n: "Opens its chat"))
             .accessibilityIdentifier("task-agent")
         } else {
             HStack(spacing: 0) { agentNames; Spacer(minLength: 12) }
-                .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 11).frame(minHeight: FormMetrics.row)
+                .padding(.horizontal, FormMetrics.rowInset).frame(height: 50)
                 .help(task.why ?? "")
         }
     }
 
-    /// The agent's role, and its name under it where the role does not say it.
+    /// The agent's name and role on one line, as its row in the sidebar: one word where the role says the name.
     private var agentNames: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(task.owner.agentLabel).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(1)
-            if let name = AgentNames.shared.under(task.owner) {
-                Text(name).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
-            }
-        }
+        AgentNameLine(agent: task.owner).font(FormMetrics.text).foregroundStyle(FleetStyle.text)
     }
 
     /// The agent's status as its chat panel works it out, so its glyph moves here as it moves there.

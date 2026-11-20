@@ -3,7 +3,8 @@ import SwiftUI
 
 /// The right sidebar of an agent's chat: the basics of its status, in the cards of the app's forms (the owner,
 /// 27 October 2026, of four drawn proposals: "something like #2, do not add that orange clock!"). The first card is
-/// the agent with its name under its role and its status on its avatar, and the whole card opens Agent details. Under
+/// the agent, its name and role on one line at the size of its sidebar row, with its status on its avatar, and the
+/// whole card opens Agent details. Under
 /// it, each with its name over its card: its usage limits (Usage: the used share of each window of its account, from
 /// the newest reading of that account) and what it runs on (Runs on: the account under its provider's own icon, which
 /// opens the agent's Runs on, and the machine, which opens its server). One size of mark and two sizes of text run
@@ -139,27 +140,22 @@ struct AgentStatusPanel: View {
     /// **The agent and its status, and the way into its details.** The whole card is the button, with the chevron
     /// of a row that opens a page of its own; it took the place of an Agent details capsule under the name.
     ///
-    /// **Its name under its role** (the owner, 3 November 2026: "the subtitle I mentioned below the agent name too";
-    /// and 10 November 2026: the role, team.json `title`, is an agent's main label). The status is then the dot on its
-    /// avatar, as on every other row of the app, with its words on hover; an agent with no role keeps its status words
-    /// there.
+    /// **Its name and role on one line, at the size of its row in the sidebar** (the owner, 20 November 2026: "make
+    /// the agent card the same size as the row on the left, so it is consistent"): the glyph at the list's size, the
+    /// shared `AgentNameLine` ("Nova · Customer Support") in the row's text, 50 points high, as `ChatRow`. The status
+    /// is the dot on its avatar, as on every other row of the app, with its words on hover; an agent with no role keeps
+    /// its status words under its name.
     private func agentRow(_ agent: FleetAgent, presence: AgentPresence) -> some View {
         let words = store.isFresh ? presence.label : AgentPresence.unknown.label
         return Button(action: openDetails) {
             HStack(spacing: 0) {
-                // The head's avatar is the `hero` step, 48 points (the lead's call on T-04 against B-BRAND-4: a panel's
-                // or a profile's avatar is 44–64, Grok Bot's panel about 55), so the name stands after it, a mark's gap
-                // away, and not in the column of the rows' words under it.
-                HStack(spacing: FormMetrics.markGap) {
+                // The name begins in the column of the words of the marked rows under it, as in the sidebar's row.
+                HStack(spacing: FormMetrics.markColumn + FormMetrics.markGap - GlyphSize.list) {
                     // The avatar keeps the look of the last reading while it is old (`presence`); the words say it is old.
-                    AgentAvatar(name: agent.name, presence: presence, size: GlyphSize.hero, moves: store.marksMove)
+                    AgentAvatar(name: agent.name, presence: presence, size: GlyphSize.list, moves: store.marksMove)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(agent.name.agentLabel).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(1)
-                        // **Its name under its role** (the owner, 10 November 2026); no line where the role says the name
-                        // already ("Fleet Manager"), and an agent with no role keeps its status words there.
-                        if let name = AgentNames.shared.under(agent.name) {
-                            Text(name).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
-                        } else if AgentNames.shared.roles[agent.name] == nil {
+                        AgentNameLine(agent: agent.name).font(FormMetrics.text).foregroundStyle(FleetStyle.text)
+                        if AgentNames.shared.roles[agent.name] == nil {
                             Text(words).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
                         }
                     }
@@ -167,12 +163,12 @@ struct AgentStatusPanel: View {
                 Spacer(minLength: 12)
                 chevron
             }
-            .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 11)
+            .padding(.horizontal, FormMetrics.rowInset).frame(height: 50)
         }
         .buttonStyle(FleetRowButtonStyle())
         // "Last reading" says the state is old; when it was read is on hover, as every old reading of the panel.
         .help(store.isFresh ? "\(words) · Agent details" : "Last reading \(fleetDate(time)) · Agent details")
-        .accessibilityLabel([agent.name.agentLabel, AgentNames.shared.under(agent.name), words].compactMap { $0 }
+        .accessibilityLabel([AgentNames.shared.under(agent.name), agent.name.agentLabel, words].compactMap { $0 }
             .joined(separator: ", "))
         .accessibilityHint("Opens Agent details")
         .accessibilityIdentifier("agent-details")

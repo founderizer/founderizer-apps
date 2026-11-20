@@ -28,8 +28,12 @@ struct MessageText: View, Equatable {
     /// Nil: each block takes the selection of the view around it.
     var selection: ChatSelection? = nil
     /// **Where a fold cuts the words**, from their top: a long message at rest (`OwnerBubble`) or a long result
-    /// (`TaskResult`) draws its words whole under a frame of this height, hidden under the cut. A link there has no press
-    /// (`linkPresses`), so neither the hand nor a press stands in the room under the fold, where the next rows are.
+    /// (`TaskResult`) draws its words whole under a frame of this height, hidden under the cut. A link under the cut has
+    /// no press (`linkPresses`), so neither the hand nor a press stands in the room under the fold, where the next rows
+    /// are. **Folded words cannot be selected** (`FoldedWords`): the selection field lies over the whole text, so its
+    /// I-beam stood under the fold too, over Show more and the rows below; Show more opens them, selectable as before.
+    /// Their links keep their presses above the cut, as words with no field do. A folded text takes no `selection`: its
+    /// blocks would set their own selection inside `FoldedWords`, and their fields would come back under the fold.
     var fold: CGFloat? = nil
     /// **A block or a cell of more than this many bytes (UTF-8) keeps its fields** in a text with a selection (a
     /// block's Markdown, a cell's words): making or dropping the field of a block took about 4 ms for each 1,000
@@ -100,6 +104,9 @@ struct MessageText: View, Equatable {
         return result
     }
 
+    /// The words stand under a fold now (`fold`).
+    private var folded: Bool { fold != nil }
+
     /// A block's words with the names of `names` as links, an agent and a server as a badge (`CardBadgeText`), or as
     /// they are. The size is the words' own: a step's, the chat's (`ChatStyle.font`) or a form's (`FleetStyle.body`).
     /// Each link of the words is a piece of its own, which `linkPresses` gives the hand (`LinkRun`).
@@ -116,24 +123,24 @@ struct MessageText: View, Equatable {
                 Group {
                 switch block.kind {
                 case .paragraph:
-                    linked(block.formatted).lineSpacing(lines).selectableWords().linkPresses(block.links, fold: fold)
+                    linked(block.formatted).lineSpacing(lines).selectableWords().linkPresses(block.links, fold: fold, always: folded)
                 case .heading:
                     linked(block.formatted)
                         .font(step ? Font.system(size: SetupMetrics.text, weight: .semibold) : chat ? ChatStyle.heading : FormMetrics.title)
-                        .selectableWords().linkPresses(block.links, fold: fold)
+                        .selectableWords().linkPresses(block.links, fold: fold, always: folded)
                         .padding(.top, chat ? 0 : 3)
                 case .item:
                     // An item under another starts its mark where that item's words start: the mark's 12 and the 9
                     // after it, for each level.
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         Text(block.marker).selectableWords().frame(minWidth: 12, alignment: .trailing)
-                        linked(block.formatted).lineSpacing(lines).selectableWords().linkPresses(block.links, fold: fold)
+                        linked(block.formatted).lineSpacing(lines).selectableWords().linkPresses(block.links, fold: fold, always: folded)
                     }.padding(.leading, 3 + CGFloat(block.level) * 21)
                 case .quote:
                     HStack(spacing: 10) {
                         Rectangle().fill(FleetStyle.muted.opacity(0.4)).frame(width: 2)
                         linked(block.formatted).foregroundStyle(FleetStyle.muted).lineSpacing(lines).selectableWords()
-                            .linkPresses(block.links, fold: fold)
+                            .linkPresses(block.links, fold: fold, always: folded)
                     }
                 case .code: CodeBlock(text: block.text, font: chat ? ChatStyle.code : step && !script ? Self.stepCode : FormMetrics.code,
                                       spacing: chat ? 5 : 4, fill: card ? FleetStyle.canvas : FleetStyle.surface,
@@ -147,7 +154,7 @@ struct MessageText: View, Equatable {
                                     // a cell's links have their press; its names stay words, as they were
                                     CardBadgeText.text(cell, names: nil, size: FleetStyle.bodySize)
                                         .fontWeight(line == 0 ? .medium : .regular).lineSpacing(3)
-                                        .selectableWords().linkPresses(block.links && LinkRun.has(cell), fold: fold)
+                                        .selectableWords().linkPresses(block.links && LinkRun.has(cell), fold: fold, always: folded)
                                         // A table can be long: each of its cells is a row of the selection.
                                         .modifier(BlockWords(selection: selection.flatMap {
                                             String(cell.characters).utf8.count > Self.keepsFields ? nil : $0
@@ -166,6 +173,7 @@ struct MessageText: View, Equatable {
                                         : selection, row: "block-\(index)"))
             }
         }
+        .modifier(FoldedWords(folded: folded))
         // the fold of a long message is measured from here (`fold`)
         .coordinateSpace(.named(LinkPresses.space))
         .modifier(TextPointer(selection: selection))
@@ -193,6 +201,14 @@ extension View {
     /// message, a thread's step, a conversation he reads, a knowledge file) takes it so, in place of
     /// `.textSelection(.enabled)`.
     func selectableWords() -> some View { modifier(SelectableWords()) }
+}
+
+/// The words of a folded text cannot be selected (`MessageText.fold`); else as the view around them says.
+private struct FoldedWords: ViewModifier {
+    let folded: Bool
+    @Environment(\.messageWordsSelectable) private var selectable
+
+    func body(content: Content) -> some View { content.environment(\.messageWordsSelectable, selectable && !folded) }
 }
 
 /// A text's selection where `messageWordsSelectable` says so. The modifier reads the value itself, so a message whose
@@ -423,6 +439,9 @@ struct OwnerBubble: View {
                     Text(expanded ? "Show less" : "Show more").padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
                 }
                     .font(ChatStyle.detail).foregroundStyle(FleetStyle.muted).buttonStyle(.plain)
+                    // the hand under the pointer, as a link shows it, over all that a click reaches: before the padding
+                    // that gives the reach back to the layout
+                    .pointerStyle(.link)
                     .padding(.vertical, -IconMetrics.reach)
             }
         }.padding(.horizontal, 16).padding(.vertical, 12)

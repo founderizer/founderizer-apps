@@ -322,4 +322,57 @@ public enum AppUpdateFailure: LocalizedError, Equatable, Sendable {
     }
 }
 
+/// **The start of the new build after an install** (`AppAutoUpdate.relaunch`). Until 20 November 2026 the app opened
+/// the new build as a second instance while it still ran, and quit after. The new instance took the old one as its
+/// parent, so LaunchServices kept the old entry ("exited-with-subordinates"), and the Dock showed two Founderizer
+/// icons: the pinned one on the old entry, with no window, and a second one with the window (seen after 0.1.384). Now
+/// the app starts a waiter and quits. The waiter waits until the app's process is gone, then opens the new build with
+/// `/usr/bin/open`, behind the app in front (`-g`) when the new build does not come to the front. A quit that the app
+/// refuses leaves the waiter waiting: the new build starts when the app ends.
+public enum AppRelaunch {
+    /// The program that opens the new build, as Finder opens an application.
+    public static let opener = "/usr/bin/open"
+
+    /// Starts the waiter of the process `pid`, which then opens `bundle`: in front, or behind (`-g`) when `front` is
+    /// false. The waiter is a session of its own (`POSIX_SPAWN_SETSID`), with /dev/null and no other descriptor of
+    /// this process, every signal at its default and none blocked: nothing that ends the app ends it, and it holds no
+    /// pipe or socket of the app's. Its pid, or nil when it did not start; then nothing opens the new build, and the
+    /// caller does it another way. `opener` is a test's own.
+    public static func start(waitingFor pid: Int32, bundle: URL, front: Bool,
+                             opener: String = AppRelaunch.opener) -> pid_t? {
+        var actions: posix_spawn_file_actions_t?
+        var attributes: posix_spawnattr_t?
+        guard posix_spawn_file_actions_init(&actions) == 0 else { return nil }
+        defer { posix_spawn_file_actions_destroy(&actions) }
+        guard posix_spawnattr_init(&attributes) == 0 else { return nil }
+        defer { posix_spawnattr_destroy(&attributes) }
+        for descriptor in [STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO] {
+            let mode = descriptor == STDIN_FILENO ? O_RDONLY : O_WRONLY
+            guard posix_spawn_file_actions_addopen(&actions, descriptor, "/dev/null", mode, 0) == 0 else { return nil }
+        }
+        var defaults = sigset_t(), unblocked = sigset_t()
+        sigfillset(&defaults); sigemptyset(&unblocked)
+        guard posix_spawnattr_setsigdefault(&attributes, &defaults) == 0,
+              posix_spawnattr_setsigmask(&attributes, &unblocked) == 0,
+              posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSID | POSIX_SPAWN_CLOEXEC_DEFAULT
+                                                           | POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK)) == 0
+        else { return nil }
+        var argv = (["/bin/sh", "-c", script, "founderizer-relaunch", String(pid), opener] + (front ? [] : ["-g"])
+                    + [bundle.path]).map { strdup($0) } + [nil]
+        defer { argv.forEach { free($0) } }
+        var waiter: pid_t = 0
+        return posix_spawn(&waiter, "/bin/sh", &actions, &attributes, &argv, environ) == 0 ? waiter : nil
+    }
+
+    /// The waiter: it asks every fifth of a second whether the app's process is there. When the process is gone, it
+    /// waits one more second, in which LaunchServices lets go of the app's entry: else `open` could bring that entry
+    /// forward and start nothing. Then it opens the new build.
+    static let script = """
+        pid=$1; opener=$2; shift 2
+        while /bin/kill -0 "$pid" 2>/dev/null; do /bin/sleep 0.2; done
+        /bin/sleep 1
+        exec "$opener" "$@"
+        """
+}
+
 #endif

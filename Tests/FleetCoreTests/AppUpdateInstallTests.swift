@@ -294,6 +294,65 @@ struct AppUpdateInstallTests {
         #expect(AppUpdateFailure.translocated.errorDescription?.contains("Applications folder") == true)
     }
 
+    /// After an install the new build starts only once the old app's process is gone: opened while the old one still
+    /// ran, it was a subordinate of the old one's entry, and the Dock showed two Founderizer icons (0.1.384, 20
+    /// November 2026). The waiter is a session of its own that holds no descriptor of the app's, so nothing that ends
+    /// the app ends it. It opens the new build behind the app in front (`-g`) when the new build does not come to the
+    /// front, and a path with a space is one argument.
+    @Test func theNewBuildStartsOnlyAfterTheOldProcessIsGone() throws {
+        let work = try folder()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let opened = work.appendingPathComponent("opened")
+        let opener = work.appendingPathComponent("opener")
+        try "#!/bin/sh\nprintf '%s|' \"$@\" > \"$0.part\" && /bin/mv \"$0.part\" \"\(opened.path)\"\n"
+            .write(to: opener, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: opener.path)
+        let bundle = work.appendingPathComponent("New Founderizer.app")
+        for front in [true, false] {
+            try? FileManager.default.removeItem(at: opened)
+            let old = Process()                     // the old app: a process that lives until it is stopped
+            old.executableURL = URL(fileURLWithPath: "/bin/sleep")
+            old.arguments = ["60"]
+            try old.run()
+            defer { if old.isRunning { old.terminate() } }
+            let planted = open("/dev/null", O_RDONLY)  // a descriptor of the app's that is not closed at exec
+            #expect(planted > 2)
+            defer { close(planted) }
+            let waiter = try #require(AppRelaunch.start(waitingFor: old.processIdentifier, bundle: bundle, front: front,
+                                                        opener: opener.path))
+            #expect(getsid(waiter) == waiter, "the waiter is no session of its own")
+            // Its descriptors, as lsof lists them: /dev/null for 0, 1 and 2, and none of this process's.
+            let listing = Process(), listed = Pipe()
+            listing.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+            listing.arguments = ["-a", "-p", String(waiter), "-d", "0-4095", "-F", "f"]
+            listing.standardOutput = listed
+            listing.standardError = FileHandle.nullDevice
+            try listing.run()
+            let descriptors = String(decoding: listed.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                .split(separator: "\n").filter { $0.hasPrefix("f") }.map { String($0.dropFirst()) }
+            listing.waitUntilExit()
+            #expect(descriptors == ["0", "1", "2"], "the waiter holds a descriptor of the app's: \(descriptors)")
+            Thread.sleep(forTimeInterval: 2)        // a waiter that does not wait for the process opens in this time
+            #expect(!FileManager.default.fileExists(atPath: opened.path) && old.isRunning,
+                    "the new build opened beside the old one")
+            let gone = Date()                       // before the end of the process: a measured gap is never shorter
+            old.terminate()
+            old.waitUntilExit()
+            var waited = 0
+            while !FileManager.default.fileExists(atPath: opened.path) && waited < 100 {
+                Thread.sleep(forTimeInterval: 0.1)
+                waited += 1
+            }
+            // A second after the process is gone, in which LaunchServices lets go of its entry: never sooner.
+            let after = Date().timeIntervalSince(gone)
+            #expect(after >= 0.9, "the new build opened \(after) s after the old process was gone")
+            if !FileManager.default.fileExists(atPath: opened.path) { kill(waiter, SIGKILL) }
+            _ = waitpid(waiter, nil, 0)             // the waiter is this test's child: no process stays behind
+            #expect(try String(contentsOf: opened, encoding: .utf8) == (front ? "" : "-g|") + bundle.path + "|")
+        }
+        #expect(AppRelaunch.opener == "/usr/bin/open")
+    }
+
     /// The steps the screen was told about, kept where a `@Sendable` report may write them.
     private final class Steps: @unchecked Sendable {
         private let lock = NSLock()

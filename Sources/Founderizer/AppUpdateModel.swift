@@ -253,12 +253,20 @@ final class AppAutoUpdate {
     /// Start the new build and leave. `front`: the new build comes to the front, as after his press. **An install of
     /// its own, while he is away, starts it behind the app he works in** (the review of the owner's "Build ideas 1–5" of
     /// 16 November 2026): it came to the front, so the keys that he typed there went to its chat's box, which takes them.
+    /// **The new build starts only after this process is gone** (`AppRelaunch`): opened while this one still ran, it
+    /// was a second instance under this one's entry, and the Dock showed two icons (20 November 2026).
     static func relaunch(_ bundle: URL, front: Bool = true) {
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.createsNewApplicationInstance = true
-        configuration.activates = front
-        NSWorkspace.shared.openApplication(at: bundle, configuration: configuration) { _, _ in
-            Task { @MainActor in NSApplication.shared.terminate(nil) }
+        guard AppRelaunch.start(waitingFor: ProcessInfo.processInfo.processIdentifier, bundle: bundle,
+                                front: front) != nil else {
+            // No waiter started: the way of before, which starts the new build at once (two Dock icons).
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.createsNewApplicationInstance = true
+            configuration.activates = front
+            NSWorkspace.shared.openApplication(at: bundle, configuration: configuration) { _, _ in
+                Task { @MainActor in NSApplication.shared.terminate(nil) }
+            }
+            return
         }
+        NSApplication.shared.terminate(nil)
     }
 }
