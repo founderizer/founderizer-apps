@@ -766,6 +766,7 @@ final class SetupChannel {
         case .servers: .servers
         case .backup: .backup
         case .status: .status
+        case .stats: .stats
         case .secrets: .secrets
         case .knowledge: .knowledge
         case .apps: .apps

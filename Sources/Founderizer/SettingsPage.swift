@@ -18,7 +18,7 @@ import SwiftUI
 /// Report a problem and Help improve Founderizer): the two ways to tell Founderizer about a problem, side by side. The
 /// switch of error reports was a group of General until then.
 enum SettingsTab: String, CaseIterable, Hashable {
-    case general, servers, backup, status, secrets, knowledge, apps, people, team, help
+    case general, servers, backup, status, stats, secrets, knowledge, apps, people, team, help
 
     /// A section by its name, also by the names of the pages that became parts of a section: `mcps` is Apps,
     /// `updates` and `subscription`, which are gone, General, and `devices` Servers.
@@ -42,6 +42,7 @@ enum SettingsTab: String, CaseIterable, Hashable {
         case .people: String(l10n: "People")
         case .team: String(l10n: "Reporting lines")
         case .status: String(l10n: "System status")
+        case .stats: String(l10n: "Stats")
         case .help: String(l10n: "Help")
         }
     }
@@ -59,6 +60,7 @@ enum SettingsTab: String, CaseIterable, Hashable {
         case .people: "person.crop.circle"
         case .team: "arrow.triangle.branch"
         case .status: "waveform.path.ecg"
+        case .stats: "chart.bar.xaxis"
         case .help: "lifepreserver"
         }
     }
@@ -82,6 +84,7 @@ enum SettingsTab: String, CaseIterable, Hashable {
                 || features.contains(MCP.feature)
             case .people: features.contains(People.feature)
             case .team: features.contains("reporting_lines")
+            case .stats: features.contains(TokenSeries.feature)       // UI-API.md 1.260
             }
         }
     }
@@ -156,6 +159,7 @@ struct SettingsPage: View {
                     case .people: PeoplePage(store: store)
                     case .team: TeamEditor(store: store)
                     case .status: HealthView(store: store)
+                    case .stats: StatsPage(store: store)
                     case .help: FleetPage("Help") { help }
                     }
                 }

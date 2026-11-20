@@ -122,7 +122,7 @@ struct OwnerAppPlaceTests {
                     "add_server", "add_agent"])
         let all = AppPlace.places(hasReading: true, settings: AppPlace.SettingsPage.allCases,
                                   apps: AppPlace.AppGroup.allCases, canAdd: true)
-        #expect(all.count == 3 + 10 + 4 + 2)      // ten sections of Settings since Help came (16 November 2026)
+        #expect(all.count == 3 + 11 + 4 + 2)      // eleven sections of Settings since Stats came (20 November 2026)
         // A hub that cannot add a server or an agent (no feature servers) offers neither, and its list has neither.
         #expect(AppPlace.places(hasReading: true, settings: [.general], apps: [], canAdd: false).map(\.name)
                 == ["needs", "tasks", "agents", "settings.general"])

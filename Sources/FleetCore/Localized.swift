@@ -13,7 +13,9 @@ public enum Localized {
     @TaskLocal public static var bundle: Bundle = .main
 
     /// A whole number keeps its plain digits in every language, as the English text had them before the lookups:
-    /// with the current locale, 1234 came out as "1.234" on a Mac with the region Spain. Public for a key of its own
+    /// with the current locale, 1234 came out as "1.234" on a Mac with the region Spain. The one exception is a short
+    /// count of tokens (`TokenFormat.tokens`), in the language's own form: a B of English reads as a billón in Spanish,
+    /// which writes 4470 M. Public for a key of its own
     /// (`String(localized: "Off (a server)", defaultValue: "Off", bundle: Localized.bundle, locale: Localized.digits)`).
     public static let digits = Locale(identifier: "en_US_POSIX")
 }

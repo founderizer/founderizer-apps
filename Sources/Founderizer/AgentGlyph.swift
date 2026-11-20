@@ -163,6 +163,14 @@ struct AgentTint {
         ink = tint.ink
     }
 
+    /// The colour of a look that no agent of the team has: a model's in Settings › Stats, where the models of one chart
+    /// take the looks of a team of their own (`GlyphLook.team`), so they differ as a team's agents do.
+    @MainActor init(look: GlyphLook) {
+        let tint = Self.tint(of: look)
+        fill = tint.fill
+        ink = tint.ink
+    }
+
     @MainActor private static var tints: [Int: (fill: Color, ink: Color)] = [:]
 
     /// The middle of a look's gradient and its ink, by white's contrast on it (WCAG 2), once for each hue.

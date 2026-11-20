@@ -511,6 +511,20 @@ public final class HubClient: Sendable {
         return shares
     }
 
+    /// **The tokens from the start of the date `from` of the fleet's time zone, by day, agent and model** (`GET
+    /// /ui/costs` with `by`, owner feature `costs_by`, UI-API.md 1.260), for Settings › Stats. The hub adds them up
+    /// from its 15-minute slots in a moment of its own, with no lock held, so a read of 90 days holds no writer back.
+    public func tokenSeries(hub: URL, database: String, from: String) async throws -> TokenSeries {
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/costs"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database), .init(name: "from", value: from),
+                            .init(name: "by", value: TokenSeries.parts.joined(separator: ","))]
+        let (data, _) = try await boundedArtifactRead(URLRequest(url: parts.url!), limit: 16_777_216)
+        guard let series = try JSONDecoder().decode(TokenSeries.self, from: data).checked(database: database) else {
+            throw HubError.invalidResponse
+        }
+        return series
+    }
+
     /// **The hub's record of its own server** (`GET /ui/vault`, its `hub`: the machine's name, its address and the
     /// fleet's `access` entry for it), or nil from a hub that names none. The key of this Mac needs it for a hub's
     /// server that runs no agent, which `machines` does not name (`OwnerKeyPlan.record`). It reads these two fields of

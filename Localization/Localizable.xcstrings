@@ -1794,6 +1794,16 @@
         }
       }
     },
+    "%@ tokens, %@ calls" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ tokens, %2$@ llamadas"
+          }
+        }
+      }
+    },
     "%@ took it back from %@" : {
       "localizations" : {
         "es" : {
@@ -2359,6 +2369,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld núcleos"
+          }
+        }
+      }
+    },
+    "%lld days" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld días"
           }
         }
       }
@@ -5265,6 +5285,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "CPU"
+          }
+        }
+      }
+    },
+    "Cache read" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lectura de caché"
+          }
+        }
+      }
+    },
+    "Cache write" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escritura de caché"
+          }
+        }
+      }
+    },
+    "Calls" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Llamadas"
           }
         }
       }
@@ -9799,6 +9849,16 @@
         }
       }
     },
+    "Group by" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agrupar por"
+          }
+        }
+      }
+    },
     "Guidance carries at most %lld files" : {
       "localizations" : {
         "es" : {
@@ -10335,6 +10395,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "En tu equipo"
+          }
+        }
+      }
+    },
+    "Input" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entrada"
           }
         }
       }
@@ -11809,6 +11879,16 @@
         }
       }
     },
+    "List price" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Precio de lista"
+          }
+        }
+      }
+    },
     "Live desktop" : {
       "localizations" : {
         "es" : {
@@ -12285,6 +12365,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Modelo usado"
+          }
+        }
+      }
+    },
+    "Models" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelos"
           }
         }
       }
@@ -13039,6 +13129,26 @@
         }
       }
     },
+    "No list prices" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay precios de lista"
+          }
+        }
+      }
+    },
+    "No longer in the team" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya no están en el equipo"
+          }
+        }
+      }
+    },
     "No matches" : {
       "localizations" : {
         "es" : {
@@ -13355,6 +13465,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sin token"
+          }
+        }
+      }
+    },
+    "No tokens" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay tokens"
           }
         }
       }
@@ -14849,6 +14969,16 @@
         }
       }
     },
+    "Other" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otros"
+          }
+        }
+      }
+    },
     "Other VPS" : {
       "localizations" : {
         "es" : {
@@ -15345,6 +15475,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Personas"
+          }
+        }
+      }
+    },
+    "Per day" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Por día"
           }
         }
       }
@@ -16025,6 +16165,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Leyendo la tarea…"
+          }
+        }
+      }
+    },
+    "Reading the tokens…" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leyendo los tokens…"
           }
         }
       }
@@ -19185,6 +19335,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Iniciando…"
+          }
+        }
+      }
+    },
+    "Stats" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estadísticas"
           }
         }
       }
@@ -23209,6 +23369,16 @@
         }
       }
     },
+    "The tokens could not be read." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudieron leer los tokens."
+          }
+        }
+      }
+    },
     "The trust in %@'s vault ends soon" : {
       "localizations" : {
         "es" : {
@@ -25285,6 +25455,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Versión desconocida"
+          }
+        }
+      }
+    },
+    "Unknown model" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelo desconocido"
           }
         }
       }

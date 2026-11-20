@@ -138,6 +138,8 @@ extension SetupShow {
     /// - `settings.backup` (`BackupSettings`): not decided. Its row "Where" looks for iCloud Drive on the disk when
     ///   it draws (`FleetCopyKeeper.iCloudDrive`, `shownFolderName`), a folder that macOS guards, and the code alone
     ///   does not say that macOS never asks there.
+    /// - `settings.stats` (`StatsPage`, 20 November 2026): not decided. Its page came after the read of 15 November
+    ///   2026; it reads the hub alone.
     ///
     /// **Never on the list** (the plan's rule 4): Add server, Add agent, a later change of the fleet's shape, the
     /// Tailscale key of Turn on, one server's page, one app's page, an agent's rule editor, and each place of an
