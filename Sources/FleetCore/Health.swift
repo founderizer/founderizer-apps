@@ -115,6 +115,9 @@ extension FleetHealth.Warning {
         switch kind {
         case "backup_missing", "backup_old": return .saveCopy
         case "machine_behind", "machine_failed": return agent.map { .update(agent: $0) } ?? .tellUs
+        // A release that did not start on a server: its helpers refuse the same release again at once, so Update
+        // cannot help, and nothing on his screen settles it. It is the product's fault, as a refused schema step is.
+        case "machine_refused": return .tellUs
         // A session that is not running: its helper starts it again by itself, so no button of the owner's starts
         // it, and the report carries what the hub knows of why (`ManagerSession`, the owner's choice of 16 November
         // 2026). The manager's other warnings are put right on its page.
@@ -139,6 +142,8 @@ extension FleetHealth.Warning {
         case "machine_stale": return who.isEmpty ? String(l10n: "A server sent no status") : String(l10n: "\(who) sent no status")
         case "machine_behind": return who.isEmpty ? String(l10n: "A server is behind") : String(l10n: "\(who) is behind")
         case "machine_failed": return who.isEmpty ? String(l10n: "An update failed") : String(l10n: "The update of \(who) failed")
+        // The hub's line names the server and both releases (UI-API.md 1.261), so the title says only what happened.
+        case "machine_refused": return String(l10n: "A release did not start")
         case "manager_down": return who.isEmpty ? String(l10n: "The manager session is not running") : String(l10n: "\(who)'s session is not running")
         case _ where kind.hasPrefix("manager_"): return String(l10n: "The manager needs you")
         // His words for the kinds that fell to the hub's own name in Title Case ("Timers Stalled", fix round 2, T-37).
@@ -249,7 +254,8 @@ extension FleetHealth {
                      acts: [.updateFleet(agents)])
     }
 
-    /// An agent's machine runs an older version than the hub, or its update failed: the block of `updateFleet`.
+    /// An agent's machine runs an older version than the hub, or its update failed: the block of `updateFleet`. A release
+    /// that did not start on its server (`machine_refused`) is not one: Update fleet cannot help it.
     public static func isUpdate(_ kind: String) -> Bool { kind == "machine_behind" || kind == "machine_failed" }
 
     /// A warning about an agent's server: its helper is silent, or its machine is stale.

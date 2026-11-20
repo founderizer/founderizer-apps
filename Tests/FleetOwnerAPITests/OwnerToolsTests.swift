@@ -173,10 +173,10 @@ final class OwnerReadTests {
         let tools = Fixture.tools(hub, home: home)
         _ = try tools.json("search_history", ["agent": .string("worker-1"), "query": .string("a b"), "limit": .int(3),
                                               "other": .string("x")])
-        _ = try tools.json("see_costs", ["from": .string("2026-11-01"), "minimum": .int(3)])
+        _ = try tools.json("see_costs", ["from": .string("2026-11-01"), "minimum": .int(3), "by": .string("day")])
         let reads = hub.seen.filter { $0.path != "/ui/state" }.map { "\($0.path)?\($0.query ?? "")" }
         #expect(reads == ["/ui/history?db=g1&agent=worker-1&query=a+b&limit=3",
-                          "/ui/costs?db=g1&from=2026-11-01&minimum=3"])
+                          "/ui/costs?db=g1&from=2026-11-01&minimum=3&by=day"])
     }
 
     @Test func theOverviewIsTheStateWithItsThreePages() throws {

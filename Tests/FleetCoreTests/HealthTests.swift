@@ -70,6 +70,9 @@ import Testing
     #expect(warning("backup_old").act == .saveCopy)
     #expect(warning("machine_behind", agent: "vps").act == .update(agent: "vps"))
     #expect(warning("machine_failed", agent: "vps").act == .update(agent: "vps"))
+    // A release that did not start on a server: Update cannot help, and nothing on his side settles it.
+    #expect(warning("machine_refused", agent: "vps").act == .tellUs)
+    #expect(warning("machine_refused").act == .tellUs)
     #expect(warning("machine_stale", agent: "vps").act == .openMachine("vps"))
     #expect(warning("helper_offline", agent: "vps").act == .openMachine("vps"))
     #expect(warning("disk_low", agent: "manager").act == .openMachine("manager"))
@@ -229,13 +232,15 @@ import Testing
 /// Case ("Timers Stalled"; fix round 2, T-37), in seven words at most.
 @Test func everyWarningKindHasATitleInHisWords() {
     for kind in ["allowance_spent", "timers_stalled", "vault_behind", "tasks_stuck", "circles_stuck", "reports_undecided",
-                 "vault_pin_ends", "vault_pin_ended"] {
+                 "vault_pin_ends", "vault_pin_ended", "machine_refused"] {
         let title = FleetHealth.Warning(kind: kind, detail: "x", agent: "mini").title
         #expect(title != kind.replacingOccurrences(of: "_", with: " ").capitalized)
         #expect(title.split(separator: " ").count <= 7)
     }
     #expect(FleetHealth.Warning(kind: "allowance_spent", detail: "x", agent: "nova").title == "Nova reached its usage limit")
     #expect(FleetHealth.Warning(kind: "timers_stalled", detail: "x").title == "The hub's timers stopped")
+    // The hub's line names the server and both releases: the title says only what happened.
+    #expect(FleetHealth.Warning(kind: "machine_refused", detail: "x", agent: "ana").title == "A release did not start")
     // Package 4 of the vault's gates (C5): the owner's trust in a server's vault, in the Secrets page's own word.
     #expect(FleetHealth.Warning(kind: "vault_pin_ends", detail: "x", agent: "mini").title == "The trust in Mini's vault ends soon")
     #expect(FleetHealth.Warning(kind: "vault_pin_ends", detail: "x").title == "The trust in a server's vault ends soon")
@@ -336,8 +341,16 @@ import Testing
         .init(kind: "machine_failed", detail: "It still runs the version it had.", agent: "leo"),
         .init(kind: "machine_behind", detail: "It runs an older version than the hub.", agent: "web-lead"),
         .init(kind: "machine_behind", detail: "No agent named.", agent: nil),
+        .init(kind: "machine_refused", detail: "box-1 keeps release 2026.11.676, because release 2026.11.677 did not "
+              + "start there. It takes the next release that starts there by itself.", agent: "ana"),
     ])
-    #expect(blocks.map(\.title) == ["3 agents run an older version", "Your copy is old", "A server is behind"])
+    #expect(blocks.map(\.title) == ["3 agents run an older version", "Your copy is old", "A server is behind",
+                                    "A release did not start"])
+    // A release that did not start is not an update to press: its agent is not in the table of Update fleet.
+    #expect(!FleetHealth.isUpdate("machine_refused"))
+    let refused = blocks.first { $0.first.kind == "machine_refused" }
+    #expect(refused?.acts == [.tellUs] && refused?.updates.isEmpty == true)
+    #expect(refused?.detail.hasPrefix("box-1 keeps release 2026.11.676") == true)
     #expect(blocks[0].updates == ["manager", "leo", "web-lead"])
     #expect(blocks[0].acts == [.updateFleet(["manager", "leo", "web-lead"])])
     #expect(blocks[0].acts.first?.label == "Update fleet")

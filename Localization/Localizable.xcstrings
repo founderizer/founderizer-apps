@@ -3509,6 +3509,16 @@
         }
       }
     },
+    "A release did not start" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una versión no se inició"
+          }
+        }
+      }
+    },
     "A remote server" : {
       "localizations" : {
         "es" : {

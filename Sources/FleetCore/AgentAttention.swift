@@ -15,7 +15,8 @@ public enum AgentAttention: Hashable, Sendable {
         guard machine.isCurrent(at: serverTime) else { return [.staleReading] }
         var items: [AgentAttention] = []
         if machine.runtime.signed_in == false { items.append(.signIn) }
-        if machine.update.state == "failed" { items.append(.updateFailed) }
+        // A release that did not start on its server is no failed update: Update cannot help (`machine_refused`).
+        if machine.update.state == "failed" && !machine.refusedRelease { items.append(.updateFailed) }
         if let check = machine.check, ["failed", "offline"].contains(check.state) { items.append(.checkFailed) }
         if machine.security.reboot_required == true { items.append(.restart) }
         return items

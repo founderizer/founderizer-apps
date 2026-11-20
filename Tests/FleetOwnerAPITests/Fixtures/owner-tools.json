@@ -3,7 +3,8 @@
   "from",
   "to",
   "agent",
-  "minimum"
+  "minimum",
+  "by"
  ],
  "HISTORY_WORDS": [
   "agent",
@@ -353,11 +354,14 @@
    "annotations": {
     "readOnlyHint": true
    },
-   "description": "What the work of every agent cost from to to (dates or dates and times in the fleet's time zone; the last 30 days by default), against the period of the same length before it: list dollars at the runtime facts' prices, the four kinds of tokens, calls and cache share, for each kind of work the results without rework and the cost of each, each check's quiet runs against its wakes, each account's windows with each agent's points of the main one and what is left, and the model changes. agent narrows it to one agent; minimum is the results a kind needs in each period to be compared (3).",
+   "description": "What the work of every agent cost from to to (dates or dates and times in the fleet's time zone; the last 30 days by default), against the period of the same length before it: list dollars at the runtime facts' prices, the four kinds of tokens, calls and cache share, for each kind of work the results without rework and the cost of each, each check's quiet runs against its wakes, each account's windows with each agent's points of the main one and what is left, and the model changes. agent narrows it to one agent; minimum is the results a kind needs in each period to be compared (3). by gives only the tokens of the period, from 15-minute slots: the four kinds, calls and list dollars by one or more of day, agent, model, kind and machine, with commas (for example day,model).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "agent": {
+      "type": "string"
+     },
+     "by": {
       "type": "string"
      },
      "from": {
@@ -3275,5 +3279,5 @@
    "name": "take_backup"
   }
  ],
- "version": "91dcd954fd0fce7224a2bdebc452a965e0e2dbdcd95edf342b6c741a2b63e116"
+ "version": "c38c3d546c34f4ac80951d4addc3ed2fbc3bbc5d97d7f0952d7a91408e17a80c"
 }

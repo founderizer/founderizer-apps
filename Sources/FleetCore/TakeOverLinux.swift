@@ -124,9 +124,11 @@ extension ScreenSharingConnection {
     /// for one), and a user of its own, `takeover-<agent>` (`vnc://takeover-<agent>:<password>@127.0.0.1:<port>`; no
     /// account of the fleet has that name, unlike `fleet-<agent>`), so that Screen Sharing should take no sign-in that
     /// it keeps for 127.0.0.1, which can be another Mac's and which a server of the agent's own on that port could ask
-    /// for (x11vnc reads no user; not yet measured: the take-over's live check measures it). A Mac's own screen opens at
-    /// `screenSharingAddress`, as the machine's own user. nil for a way that names no agent, or a password that is not
-    /// of the shape that the hub gives.
+    /// for (x11vnc reads no user; measured on 19 and 20 November 2026 on one Mac: Screen Sharing used only this
+    /// address's password, and its user where the server asks for one, never the kept sign-in, also with a server that
+    /// took Apple's older sign-in after Screen Sharing's warning or refused the first sign-in; the hub's SECURITY.md
+    /// says what was not measured). A Mac's own screen opens at `screenSharingAddress`, as the machine's own user. nil
+    /// for a way that names no agent, or a password that is not of the shape that the hub gives.
     public func viewerAddress(localPort: Int, password: String) -> URL? {
         guard isValid, let agent, (1024...65535).contains(localPort), TakeOverScreen.passwordShape(password) else {
             return nil

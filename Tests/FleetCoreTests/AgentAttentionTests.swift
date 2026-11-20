@@ -11,10 +11,12 @@ private func agent(_ extra: [String: Any] = [:]) throws -> FleetAgent {
 }
 
 private func machine(reported: Double = now - 30, runtime: [String: Any] = ["signed_in": true], update: [String: Any] = [:],
-                     security: [String: Any] = [:], check: [String: Any]? = nil) throws -> MachineStatus {
+                     security: [String: Any] = [:], check: [String: Any]? = nil,
+                     startCheck: [String: Any]? = nil) throws -> MachineStatus {
     var fields: [String: Any] = ["agent": "vps", "machine": "vps", "role": "worker", "update": update, "runtime": runtime,
                                  "security": security, "os": [:], "reported_at": reported]
     if let check { fields["check"] = check }
+    if let startCheck { fields["start_check"] = startCheck }
     return try JSONDecoder().decode(MachineStatus.self, from: JSONSerialization.data(withJSONObject: fields))
 }
 
@@ -33,6 +35,16 @@ struct AgentAttentionTests {
         let reading = try machine(runtime: ["signed_in": false], update: ["state": "failed", "detail": "git pull failed"],
                                   security: ["reboot_required": true, "vault": ["mode": "broker", "isolated": false]], check: check)
         #expect(AgentAttention.items(for: try agent(), serverTime: now, isFresh: true, machine: reading) == [.signIn, .updateFailed, .checkFailed, .restart])
+        // A release that did not start on its server is no failed update: Update cannot help (`machine_refused`). Only a
+        // refusal as new as the update's request is why it failed; an older one keeps "Update failed".
+        for (at, items) in [(now - 40, [AgentAttention.signIn, .checkFailed, .restart]),
+                            (now - 90, [.signIn, .updateFailed, .checkFailed, .restart])] {
+            let refused = try machine(runtime: ["signed_in": false],
+                                      update: ["state": "failed", "detail": "Release 2026.11.677 did not start", "requested_at": now - 60],
+                                      security: ["reboot_required": true], check: check,
+                                      startCheck: ["result": "refused", "release": "2026.11.677", "keeps": "2026.11.676", "at": at])
+            #expect(AgentAttention.items(for: try agent(), serverTime: now, isFresh: true, machine: refused) == items)
+        }
         let healthy = try machine(security: ["vault": ["mode": "file", "isolated": false]])   // administrator access kept on purpose
         #expect(AgentAttention.items(for: try agent(), serverTime: now, isFresh: true, machine: healthy).isEmpty)
     }

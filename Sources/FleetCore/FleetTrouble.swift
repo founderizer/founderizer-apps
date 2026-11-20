@@ -251,7 +251,9 @@ extension FleetTrouble {
                                               manyFix: String(l10n: "Sign each one in from its own page. It is your own step, with the provider's own page: no agent of yours may take it."),
                                               ownerOnly: true))
             }
-            if machine.update.state == "failed" {
+            // A release that did not start on its server is said by the hub's warning of that server
+            // (`machine_refused`), a row above: no row here says that Update tries again, which cannot help it.
+            if machine.update.state == "failed" && !machine.refusedRelease {
                 trouble.append(MachineTrouble(slug: "update", machine: machine.agent, server: machine.machine,
                                               one: String(l10n: "The update of \(machine.agent.agentLabel) failed"),
                                               many: String(l10n: "servers failed their update"),
