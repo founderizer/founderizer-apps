@@ -19,10 +19,17 @@ struct ProviderIcon: View {
 
     init(runtime: String, size: CGFloat = 22) { self.runtime = runtime; self.size = size }
     init(provider: ModelProvider, size: CGFloat = 22) { runtime = provider.runtime; self.size = size; self.provider = provider }
-    /// The agent's own AI: its account's provider when it has one, else its runtime's.
-    init(runtime: String, provider: ModelProvider?, size: CGFloat = 22) { self.runtime = runtime; self.size = size; self.provider = provider }
+    /// The words of the mark on hover and for VoiceOver, where a page names a model's maker and not its program
+    /// (Settings › Stats: "Anthropic" for a Claude model, which another program can run too); nil for the provider's or
+    /// the program's name.
+    var label: String?
 
-    private var name: String { provider?.label ?? providerName(runtime) }
+    /// The agent's own AI: its account's provider when it has one, else its runtime's.
+    init(runtime: String, provider: ModelProvider?, size: CGFloat = 22, label: String? = nil) {
+        self.runtime = runtime; self.size = size; self.provider = provider; self.label = label
+    }
+
+    private var name: String { label ?? provider?.label ?? providerName(runtime) }
 
     var body: some View {
         Group {

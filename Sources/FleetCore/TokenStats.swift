@@ -187,6 +187,41 @@ public struct TokenStats: Sendable, Equatable {
         return (series, days.map { Column(day: $0, costs: costs[$0] ?? [], totals: totals[$0] ?? Totals()) })
     }
 
+    /// **Each group's list dollars of each day of the period** (`Group.id` → one sum for each of `days`), for the small
+    /// columns of its row; a group with no priced token on any day has none.
+    public func dayCosts(_ split: Split) -> [String: [Double]] {
+        let at = Dictionary(uniqueKeysWithValues: days.enumerated().map { ($1, $0) })
+        var out: [String: [Double]] = [:]
+        for row in rows {
+            guard let day = at[row.day], let cost = row.cost, cost > 0 else { continue }
+            out[key(of: row, split).map { "=" + $0 } ?? "gone", default: [Double](repeating: 0, count: days.count)][day]
+                += cost
+        }
+        return out
+    }
+
+    /// **The provider of a model by its name, for its logo** (`ProviderIcon`, as the Agents page names an agent's AI):
+    /// the seller that the name starts with (`openrouter/`, `opencode-go/`, `ollama-cloud/`), else the maker that the
+    /// name says (Claude, the GPT and o models of OpenAI, Grok, Gemini); the owner's own model for `own/`; nil for a
+    /// name that says none, which the generic mark stands for. `name` is the maker's or the seller's own name, which
+    /// the mark says on hover: never the program's (a Claude model can run in another program than Claude Code), and
+    /// nil for the owner's own model, whose words the page has.
+    public static func provider(of model: String) -> (runtime: String, provider: ModelProvider?, name: String?)? {
+        let name = model.lowercased()
+        if name.hasPrefix("own/") { return (ModelProvider.own.runtime, .own, nil) }
+        for seller in ModelProvider.sellers where name.hasPrefix(seller.rawValue + "/") {
+            return (seller.runtime, seller, seller.label)
+        }
+        let last = name.split(separator: "/").last.map(String.init) ?? name
+        if last.contains("claude") { return ("claude", nil, "Anthropic") }
+        if last.hasPrefix("gpt") || last.contains("codex") || ["o1", "o3", "o4"].contains(where: { last == $0 || last.hasPrefix($0 + "-") }) {
+            return ("codex", nil, "OpenAI")
+        }
+        if last.hasPrefix("grok") { return (ModelProvider.grok.runtime, .grok, "xAI") }
+        if last.contains("gemini") { return (ModelProvider.gemini.runtime, .gemini, "Google") }
+        return nil
+    }
+
     private func key(of row: TokenSeries.Row, _ split: Split) -> String? {
         switch split {
         case .agents: row.deleted == nil && team.contains(row.agent) ? row.agent : nil
@@ -214,11 +249,13 @@ public struct TokenStats: Sendable, Equatable {
     }
 }
 
-/// **The numbers of Settings › Stats**: a count and the list dollars in plain digits, as every page writes a number
-/// (`Localized.digits`), and a short count of tokens in the form of the app's own language (`Localized.bundle`), the
-/// one exception to plain digits: with English digits alone, the page in Spanish wrote 4.47B, which a Spanish reader
-/// takes for a billón (a million million). In Spanish a short count is "737 mil" or "4470 M". Never in the form of the
-/// Mac's region, which wrote $2.545 for two thousand dollars on a page in English.
+/// **The numbers of Settings › Stats, in the form of the app's own language** (`Localized.bundle`), the one exception to
+/// the plain digits of `Localized.digits`: each count and each dollar sum with the language's thousands separator (the
+/// owner, 20 November 2026: "use thousands separators", 57,007 and $2,586 in English), and a short count with the
+/// language's own words, as with English digits alone the page in Spanish wrote 4.47B, which a Spanish reader takes for
+/// a billón (a million million): in Spanish a short count is "737 mil" or "4470 M". A count of four digits has its
+/// separator too, as a sheet writes it (Spanish 4.470), so it lines up under 57.007 in a column. Never in the form of the
+/// Mac's region, which wrote $2.545 for two thousand dollars in English.
 public enum TokenFormat {
     /// The locale of the language of the app's words now, as `AgentPrompt.language(of:)` reads it: the app's first
     /// language for this user, or the language of a test's table of one language.
@@ -229,17 +266,28 @@ public enum TokenFormat {
         count.formatted(.number.notation(.compactName).precision(.significantDigits(1...3)).locale(locale))
     }
 
-    /// A whole number in plain digits: 57007.
-    public static func count(_ value: Int) -> String {
-        value.formatted(.number.grouping(.never).locale(Localized.digits))
+    /// A whole number with the language's thousands separator: 57,007 in English, 4.470 and 57.007 in Spanish.
+    public static func count(_ value: Int, in locale: Locale = language) -> String {
+        marks(value.formatted(.number.locale(sheet)), of: locale)
     }
 
-    /// List dollars in plain digits: whole dollars from $100 on, cents under it, $0 for nothing (a model of the owner's
-    /// own); a dash where nothing has a price.
-    public static func money(_ value: Double?) -> String {
+    /// List dollars with the language's thousands separator: whole dollars from $100 on and cents under it, for a card
+    /// and a scale; with `cents` always the cents, for a table's column, whose sums then line up at their decimal mark
+    /// as a sheet's do. $0 for nothing (a model of the owner's own); a dash where nothing has a price.
+    public static func money(_ value: Double?, cents: Bool = false, in locale: Locale = language) -> String {
         guard let value else { return "—" }
-        let whole = value == 0 || (value * 100).rounded() >= 10_000
-        return "$" + value.formatted(.number.precision(.fractionLength(whole ? 0 : 2)).grouping(.never)
-            .locale(Localized.digits))
+        let whole = !cents && (value == 0 || (value * 100).rounded() >= 10_000)
+        return "$" + marks(value.formatted(.number.precision(.fractionLength(whole ? 0 : 2)).locale(sheet)), of: locale)
+    }
+
+    /// **The form that groups every number of four digits or more, as a sheet does** (en_US), whose marks `marks` then
+    /// makes the language's own: Spanish itself groups only five digits or more (CLDR's minimum grouping digits), so
+    /// its 4470 had no separator, and in a right-aligned column its thousands digit stood under the "." of 57.007.
+    private static let sheet = Locale(identifier: "en_US")
+
+    /// `english`'s group and decimal marks as `locale` writes them, each mark at once, so "," and "." never swap twice.
+    private static func marks(_ english: String, of locale: Locale) -> String {
+        let group = locale.groupingSeparator ?? ",", decimal = locale.decimalSeparator ?? "."
+        return english.map { $0 == "," ? group : $0 == "." ? decimal : String($0) }.joined()
     }
 }

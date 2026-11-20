@@ -68,6 +68,10 @@ struct TokenStatsTests {
         #expect(columns[1].costs == [6, 5, 4, 3, 2, 1])
         #expect(columns[2].costs == [0, 0, 0, 0, 0, 13.5])         // a's other model and the two agents that left
         #expect(columns[2].totals.input == 50 + 70 + 900 + 40 + 30)
+        // each row's own small columns: its list dollars of each day, none for a group with no priced token
+        let rowDays = stats.dayCosts(.agents)
+        #expect(rowDays["=f"] == [0, 6, 0] && rowDays["=a"] == [0, 1, 0.5] && rowDays["gone"] == [0, 0, 13])
+        #expect(rowDays["=local"] == nil && rowDays["=nopr"] == nil)
 
         let models = stats.groups(.models)
         #expect(models.map(\.key) == ["claude-opus-5-5", "", "gpt-6.2-sol", "own/qwen3:32b", "mystery-1"])
@@ -98,22 +102,48 @@ struct TokenStatsTests {
                 .chart(.agents).series.last == .others)
     }
 
-    /// **A short count of tokens in the form of the app's language, and every other number in plain digits**, as
-    /// every page writes one (`Localized.digits`), never in the form of the Mac's region: English says B, and Spanish
-    /// says "mil" and "M", never B (a billón is a million million).
-    @Test func theShortCountsFollowTheLanguageAndTheOtherNumbersArePlainDigits() throws {
+    /// **The page's numbers in the form of the app's language, with its thousands separator** (the owner, 20 November
+    /// 2026: "use thousands separators"), never in the form of the Mac's region: English groups with a comma and says
+    /// B; Spanish groups with a point, also four digits as a sheet does (its own form groups only five), so a column
+    /// lines up digit under digit, and says "mil" and "M", never B (a billón is a million million). A table's dollars
+    /// always have their cents, so a column lines up at its decimal mark.
+    @Test func theNumbersAreWrittenInTheFormOfTheLanguage() throws {
         let english = Locale(identifier: "en"), spanish = Locale(identifier: "es")
         #expect(TokenFormat.tokens(4_469_636_540, in: english) == "4.47B")
         #expect(TokenFormat.tokens(737_212, in: english) == "737K")
         #expect(!TokenFormat.tokens(4_469_636_540, in: spanish).contains("B"))
         #expect(TokenFormat.tokens(737_212, in: spanish) == "737\u{A0}mil")        // a no-break space, as Spanish writes it
+        #expect(TokenFormat.count(57_007, in: english) == "57,007")
+        #expect(TokenFormat.count(4_469_636_540, in: english) == "4,469,636,540")
+        #expect(TokenFormat.money(2_544.97, in: english) == "$2,545" && TokenFormat.money(9.04, in: english) == "$9.04")
+        #expect(TokenFormat.money(2_544.97, cents: true, in: english) == "$2,544.97")
+        #expect(TokenFormat.money(0, cents: true, in: english) == "$0.00" && TokenFormat.money(0, in: english) == "$0")
+        #expect(TokenFormat.money(nil, in: english) == "—" && TokenFormat.money(nil, cents: true, in: english) == "—")
+        #expect(TokenFormat.count(57_007, in: spanish) == "57.007" && TokenFormat.count(4_470, in: spanish) == "4.470")
+        #expect(TokenFormat.count(999, in: spanish) == "999" && TokenFormat.count(4_469_636_540, in: spanish) == "4.469.636.540")
+        #expect(TokenFormat.money(12_544.5, cents: true, in: spanish) == "$12.544,50")
+        #expect(TokenFormat.money(2_544.97, cents: true, in: spanish) == "$2.544,97" && TokenFormat.money(9.04, in: spanish) == "$9,04")
         // the page's own language, with no locale given: the Spanish of the app's words
-        #expect(try SpanishTable.run { TokenFormat.tokens(737_212) } == "737\u{A0}mil")
-        #expect(TokenFormat.count(57_007) == "57007")
-        #expect(TokenFormat.money(2_544.97) == "$2545" && TokenFormat.money(12_345.6) == "$12346")
-        #expect(TokenFormat.money(9.04) == "$9.04")
-        #expect(TokenFormat.money(0) == "$0" && TokenFormat.money(nil) == "—")
-        #expect(try SpanishTable.run { [TokenFormat.count(57_007), TokenFormat.money(9.04)] } == ["57007", "$9.04"])
+        #expect(try SpanishTable.run { [TokenFormat.tokens(737_212), TokenFormat.count(57_007)] }
+                == ["737\u{A0}mil", "57.007"])
+    }
+
+    /// **Each model's row and legend show the logo of its provider**: the seller that its name starts with, else the
+    /// maker that its name says; the owner's own model server for own/; the generic mark for a name that says none.
+    @Test func aModelsLogoIsItsProviders() {
+        func of(_ model: String) -> String? {
+            TokenStats.provider(of: model).map { $0.provider?.rawValue ?? $0.runtime }
+        }
+        #expect(of("claude-opus-5-5") == "claude" && of("anthropic/claude-haiku-5-5") == "claude")
+        #expect(of("gpt-6.2-sol") == "codex" && of("o3-mini") == "codex" && of("gpt-5.3-codex") == "codex")
+        #expect(of("grok-4.3") == "xai" && of("google/gemini-3.1-pro") == "google")
+        #expect(of("openrouter/anthropic/claude-opus-5-5") == "openrouter" && of("ollama-cloud/qwen3.8") == "ollama-cloud")
+        #expect(of("own/qwen3:32b") == "own" && of("own/claude-local") == "own")
+        #expect(of("qwen3.8-max") == nil && of("") == nil && of("ollama") == nil)
+        // on hover the maker's or the seller's own name, never the program's ("Claude Code" also ran other models)
+        #expect(TokenStats.provider(of: "claude-opus-5-5")?.name == "Anthropic"
+                && TokenStats.provider(of: "gpt-6.2-sol")?.name == "OpenAI")
+        #expect(TokenStats.provider(of: "openrouter/x")?.name == "OpenRouter" && TokenStats.provider(of: "own/x")?.name == nil)
     }
 
     /// **The period's days are dates of the fleet's own time zone**: 23:30 in UTC on 19 November is 20 November in

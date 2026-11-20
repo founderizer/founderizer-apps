@@ -15139,6 +15139,16 @@
         }
       }
     },
+    "Own model" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelo propio"
+          }
+        }
+      }
+    },
     "Owner" : {
       "localizations" : {
         "es" : {
@@ -25465,6 +25475,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Modelo desconocido"
+          }
+        }
+      }
+    },
+    "Unknown provider" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proveedor desconocido"
           }
         }
       }

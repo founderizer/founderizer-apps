@@ -33,8 +33,9 @@ The plan: `~/dev/founderizer-plans/app-localization-plan.md`.
 ## Rules
 
 - **The English stays the same, character for character.** A whole number keeps its plain digits, with one exception:
-  a short count of tokens on Settings › Stats (`TokenFormat.tokens`) is in the language's own form, because an English
-  B reads as a billón in Spanish, which writes 4470 M. A `Double` is made a `String` before it goes into
+  the numbers of Settings › Stats (`TokenFormat`) are in the language's own form, with its thousands separator (the
+  owner, 20 November 2026: "use thousands separators") and with its own words for a short count, because an English B
+  reads as a billón in Spanish, which writes 4470 M. A `Double` is made a `String` before it goes into
   `String(l10n:)`; the check refuses a key with `%f`.
 - **A `String` shown with `Text(value)` is shown as it is.** So a word that the code keeps in a `String` must come from
   `String(l10n:)` where it is made.

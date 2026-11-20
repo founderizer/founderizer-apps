@@ -344,8 +344,8 @@ struct AgentsPage: View {
     /// little wider than its 13 points.
     private static let nowWidth: CGFloat = max(2 * (AgentsStrip.mark + 2 + 3 + figures("99")) + 8,
                                                (String(l10n: "Now") as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width.rounded(.up))
-    /// 14 days: one small column a day.
-    private static let dayWidth: CGFloat = 3, dayGap: CGFloat = 1.5, daysHeight: CGFloat = 20
+    /// 14 days: one small column a day. Settings › Stats draws its rows' days with the same measures (`StatsPage`).
+    static let dayWidth: CGFloat = 3, dayGap: CGFloat = 1.5, daysHeight: CGFloat = 20
     private static let daysWidth: CGFloat = max(CGFloat(FleetWork.days) * dayWidth + CGFloat(FleetWork.days - 1) * dayGap,
                                                 (String(l10n: "14 days") as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width.rounded(.up))
     private static func figures(_ text: String) -> CGFloat {

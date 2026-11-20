@@ -8,8 +8,8 @@ import SwiftUI
 /// last 7, 30 or 90 days, from the hub's 15-minute slots (`GET /ui/costs` with `by`, UI-API.md 1.260). One card of the
 /// period's totals; the list dollars of each day as a column, its agents' or its models' parts stacked (the five of the
 /// most, then all the others in gray), as the Agents page draws its days (`AgentsStrip`); and each agent's or model's
-/// own totals in a table. A model of the owner's own server or machine is `own/<model>`, and costs nothing. On a
-/// subscription a list price is a weight of the work, not money spent.
+/// own totals in a table whose rows the Agents page's are the model of (`table`). A model of the owner's own server or
+/// machine is `own/<model>`, and costs nothing. On a subscription a list price is a weight of the work, not money spent.
 struct StatsPage: View {
     @Bindable var store: FleetStore
     @State private var period = 30
@@ -42,9 +42,11 @@ struct StatsPage: View {
                 if stats.totals.tokens == 0 {
                     FormSection { FormEmpty(String(l10n: "No tokens"), symbol: "chart.bar.xaxis") }
                 } else {
-                    totals(stats.totals)
+                    // a new period draws at once, as another list of Tasks stands at once; only a new reading of the
+                    // same period rolls its numbers (UI-PATTERNS, "Short motions")
+                    totals(stats.totals).id(period)
                     chart(stats)
-                    table(stats)
+                    table(stats).id(period)
                 }
             } else if let failure {
                 // said once, over the page, while the window's notice says that the hub does not answer
@@ -79,7 +81,9 @@ struct StatsPage: View {
     private func tile(_ name: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(name).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
+            // a new reading rolls to its digits, as each number of a reading on the Agents page does
             Text(verbatim: value).font(FormMetrics.pageTitle).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                .rolls(words: value)
                 .foregroundStyle(fresh ? FleetStyle.text : FleetStyle.muted)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -152,7 +156,14 @@ struct StatsPage: View {
         HStack(spacing: 14) {
             ForEach(series.indices, id: \.self) { at in
                 HStack(spacing: 5) {
-                    RoundedRectangle(cornerRadius: 2).fill(colors[at]).frame(width: 9, height: 9)
+                    // an agent's own glyph, whose colour its part of the columns has; a model's colour, then the logo of
+                    // its provider; the others' gray
+                    if split == .agents, case .group(let key?) = series[at] {
+                        AgentGlyph(name: key, size: Self.legendMark, dot: false)
+                    } else {
+                        RoundedRectangle(cornerRadius: 2).fill(colors[at]).frame(width: 9, height: 9)
+                        if split == .models, case .group(let key?) = series[at] { modelMark(key, size: Self.legendMark) }
+                    }
                     Text(verbatim: name(series[at])).lineLimit(1)
                 }
             }
@@ -191,36 +202,104 @@ struct StatsPage: View {
         return lines.joined(separator: "\n")
     }
 
-    /// Each agent's or model's own totals, the most list dollars first.
+    /// **Each agent's or model's own totals, the most list dollars first, as the Agents page draws its rows** (the owner,
+    /// 20 November 2026: "the same effects you did on the Agents tab", "more logos"): the agent's glyph with its role over
+    /// its name, or the logo of the model's provider; the row's list dollars of each day of the period as small columns
+    /// in its own colour, on the one scale of every row, so two rows compare by their height; then each number whole,
+    /// with the language's thousands separator, and the dollars with their cents, right-aligned, so the numbers of a
+    /// column line up digit under digit as a sheet's do ("column units should be properly aligned ... like in excel").
+    /// A new reading rolls each number to its digits.
     private func table(_ stats: TokenStats) -> some View {
-        FormSection(split == .agents ? String(l10n: "Agents") : String(l10n: "Models")) {
+        let groups = stats.groups(split)
+        let days = stats.dayCosts(split)
+        let most = days.values.lazy.flatMap { $0 }.max() ?? 0
+        let looks = modelLooks(stats.models)
+        // one row height for the table: two lines for every row once an agent has its name under its role
+        let height = split == .agents && groups.contains { $0.key.flatMap { AgentNames.shared.under($0) } != nil }
+            ? FormMetrics.twoLineRow : FormMetrics.row
+        return FormSection(split == .agents ? String(l10n: "Agents") : String(l10n: "Models")) {
             Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 0) {
                 GridRow {
                     Color.clear.frame(height: 1).gridColumnAlignment(.leading)
+                    if most > 0 { Text(verbatim: String(l10n: "Per day")).gridColumnAlignment(.leading) }
                     ForEach(Self.columns, id: \.self) { Text($0) }
                 }
                 .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                 .padding(.bottom, 6)
-                ForEach(stats.groups(split)) { group in
+                ForEach(groups) { group in
                     Divider().overlay(FleetStyle.line).gridCellUnsizedAxes(.horizontal)
                     GridRow {
-                        Text(verbatim: name(.group(group.key))).lineLimit(1).truncationMode(.middle)
-                            .foregroundStyle(group.key == nil ? FleetStyle.muted : FleetStyle.text)
-                            .gridColumnAlignment(.leading)
-                        Text(verbatim: TokenFormat.tokens(group.totals.input))
-                        Text(verbatim: TokenFormat.tokens(group.totals.cacheRead))
-                        Text(verbatim: TokenFormat.tokens(group.totals.cacheWrite))
-                        Text(verbatim: TokenFormat.tokens(group.totals.output))
-                        Text(verbatim: TokenFormat.count(group.totals.calls))
-                        Text(verbatim: TokenFormat.money(group.totals.cost))
+                        rowName(group.key).frame(minHeight: height)
+                        if most > 0 { strip(days[group.id] ?? [], most: most, tint: tint(of: group.key, looks: looks)) }
+                        cell(TokenFormat.count(group.totals.input))
+                        cell(TokenFormat.count(group.totals.cacheRead))
+                        cell(TokenFormat.count(group.totals.cacheWrite))
+                        cell(TokenFormat.count(group.totals.output))
+                        cell(TokenFormat.count(group.totals.calls))
+                        cell(TokenFormat.money(group.totals.cost, cents: true))
                     }
                     .font(FormMetrics.text).monospacedDigit()
                     .foregroundStyle(fresh ? FleetStyle.text : FleetStyle.muted)
-                    .padding(.vertical, 7)
                 }
             }
-            .padding(FormMetrics.rowInset)
+            .padding(.horizontal, FormMetrics.rowInset).padding(.top, FormMetrics.rowInset).padding(.bottom, 4)
         }
+    }
+
+    /// A row's name: an agent's glyph and its role over its own name, as the Agents page has them, or the logo of the
+    /// model's provider and the model's name; the agents no longer in the team with no mark, under their gray name.
+    private func rowName(_ key: String?) -> some View {
+        HStack(spacing: 0) {
+            RowMark {
+                if split == .models {
+                    modelMark(key ?? "", size: GlyphSize.row)
+                } else if let key {
+                    AgentGlyph(name: key, size: GlyphSize.row)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: name(.group(key))).lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(key == nil ? FleetStyle.muted : FleetStyle.text)
+                if split == .agents, let key, let under = AgentNames.shared.under(key) {
+                    Text(verbatim: under).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                        .lineLimit(1).truncationMode(.tail)
+                }
+            }
+        }
+        .gridColumnAlignment(.leading)
+    }
+
+    /// The logo of a model's provider (`TokenStats.provider(of:)`), as the Agents page shows an agent's AI, with the
+    /// maker's or the seller's own name on hover, never the program's.
+    private func modelMark(_ model: String, size: CGFloat) -> some View {
+        let source = TokenStats.provider(of: model)
+        let words = source?.name ?? (source?.provider == .own ? String(l10n: "Own model")
+                                     : model.isEmpty ? String(l10n: "Unknown model") : String(l10n: "Unknown provider"))
+        return ProviderIcon(runtime: source?.runtime ?? "", provider: source?.provider, size: size, label: words)
+    }
+
+    /// One number of the table, which rolls to its digits when a new reading changes it.
+    private func cell(_ words: String) -> some View {
+        Text(verbatim: words).lineLimit(1).rolls(words: words)
+    }
+
+    /// **A row's list dollars of each day of the period**, as the Agents page draws an agent's done tasks of each day:
+    /// small columns in its colour on the one scale of every row, a day with none at no height, and the strip as wide in
+    /// each period, so the table keeps its columns from one period to another.
+    private func strip(_ costs: [Double], most: Double, tint: Color) -> some View {
+        let count = max(costs.count, 1)
+        // a third of the Agents page's gap between columns where 90 days stand in the strip of 30
+        let gap = count > 31 ? AgentsPage.dayGap / 3 : AgentsPage.dayGap
+        let width = max(gap, (Self.stripWidth - gap * CGFloat(count - 1)) / CGFloat(count))
+        return HStack(alignment: .bottom, spacing: gap) {
+            ForEach(costs.indices, id: \.self) { day in
+                RoundedRectangle(cornerRadius: min(1, width / 2)).fill(tint)
+                    .frame(width: width, height: costs[day] <= 0 ? 0 : max(2, AgentsPage.daysHeight * CGFloat(costs[day] / most)))
+            }
+        }
+        .frame(width: Self.stripWidth, height: AgentsPage.daysHeight, alignment: .bottomLeading)
+        .gridColumnAlignment(.leading)
+        .accessibilityHidden(true)
     }
 
     // MARK: names, tints and numbers
@@ -238,16 +317,27 @@ struct StatsPage: View {
     /// glyphs' nine hues** (`GlyphLook.team`), so that two models differ as two agents do, with no second palette; the
     /// agents no longer in the team and the others in gray.
     private func tints(_ series: [TokenStats.Series], models names: [String]) -> [Color] {
-        // every model of the reading, the same names in each period, so that a model keeps its colour in each of them
-        let models = split == .models ? GlyphLook.team(names.map { "model " + $0 }) : [:]
+        let looks = modelLooks(names)
         return series.map { part in
             switch part {
-            case .others, .group(nil): FleetStyle.muted
-            case .group(let key?):
-                split == .agents ? AgentTint(agent: key, team: team).fill
-                    : AgentTint(look: models["model " + key] ?? GlyphLook(name: "model " + key)).fill
+            case .others: FleetStyle.muted
+            case .group(let key): tint(of: key, looks: looks)
             }
         }
+    }
+
+    /// The models' looks as a team of their own, of every model of the reading, the same names in each period, so that
+    /// a model keeps its colour in each of them (`TokenStats.models`).
+    private func modelLooks(_ names: [String]) -> [String: GlyphLook] {
+        split == .models ? GlyphLook.team(names.map { "model " + $0 }) : [:]
+    }
+
+    /// The colour of one group, in the chart and in its row: an agent's own, a model's of the team of models, gray for
+    /// the agents no longer in the team.
+    private func tint(of key: String?, looks: [String: GlyphLook]) -> Color {
+        guard let key else { return FleetStyle.muted }
+        return split == .agents ? AgentTint(agent: key, team: team).fill
+            : AgentTint(look: looks["model " + key] ?? GlyphLook(name: "model " + key)).fill
     }
 
     private static let columns = [String(l10n: "Input"), String(l10n: "Cache read"), String(l10n: "Cache write"),
@@ -300,7 +390,12 @@ struct StatsPage: View {
     }
 
     private static let gap: CGFloat = 8
+    /// A row's strip of days: as wide as 30 of the Agents page's day columns (`AgentsPage.dayWidth`, `dayGap`), in each
+    /// period, and as high as them.
+    private static let stripWidth = 30 * AgentsPage.dayWidth + 29 * AgentsPage.dayGap
+    /// The legend's glyph or logo: the size of the Agents strip's marks beside their words.
+    private static let legendMark = AgentsStrip.mark
     private static let chartHeight: CGFloat = 140
-    /// The scale's column: "$99.99" and "$10000" fit in it.
+    /// The scale's column: "$99.99" and "$10,000" fit in it.
     private static let scaleWidth: CGFloat = 56
 }
