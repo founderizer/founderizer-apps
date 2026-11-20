@@ -8,7 +8,8 @@ public struct OwnerTable: Sendable {
     public enum Kind: String, Sendable {
         /// The fields go to one command route as they are.
         case plain
-        /// The same, with the SHA-256 of `team.json` from `GET /ui/team`.
+        /// The same, with the SHA-256 of `team.json`: the client's own when it gives one, which a field of `whole`
+        /// needs, else from `GET /ui/team`.
         case withBase = "with_base"
         /// The same, with the revision of the goal, duty or rule that its own page gives.
         case withRevision = "with_revision"
@@ -42,6 +43,9 @@ public struct OwnerTable: Sendable {
         public let requestIDFromArguments: Bool
         /// The name in the hub's `ui_features` that this tool needs, or nil.
         public let feature: String?
+        /// For `with_base`: the fields that replace a whole value that is always there (`owner_mcp.py`'s `whole`),
+        /// which go only with the `base_sha256` of the client's own read. A table from before them has none.
+        public var whole: [String] = []
 
         /// The first sentence of its words, for one line of `founderizer-cli tools`.
         public var firstSentence: String {
@@ -84,7 +88,7 @@ public struct OwnerTable: Sendable {
             return Tool(name: tool.name, description: tool.description, inputSchema: tool.inputSchema,
                         annotations: tool.annotations, kind: .later, route: tool.route, fields: tool.fields,
                         what: tool.what, revisionPage: tool.revisionPage,
-                        requestIDFromArguments: tool.requestIDFromArguments, feature: tool.feature)
+                        requestIDFromArguments: tool.requestIDFromArguments, feature: tool.feature, whole: tool.whole)
         }, instructions: instructions, protocolVersion: protocolVersion, supported: supported, pages: pages,
            pageQuery: pageQuery, pageWords: pageWords, pageInPath: pageInPath, historyWords: historyWords,
            costsWords: costsWords, mediaTypes: mediaTypes, version: version)
@@ -121,6 +125,7 @@ public struct OwnerTable: Sendable {
             // version: refused at the call, and the rest of the table still works.
             let kind = Kind(rawValue: said) ?? .later
             var route = "", fields: [String] = [], what = "", page: String?, fromArguments = true, feature: String?
+            var whole: [String] = []
             if kind.built {
                 guard let found = item["route"]?.string, let names = item["fields"]?.array,
                       let said = item["what"]?.string else { throw broken }
@@ -131,10 +136,13 @@ public struct OwnerTable: Sendable {
                 if kind == .withRevision, page == nil { throw broken }
                 if case .bool(let given)? = item["request_id_from_args"] { fromArguments = given }
                 feature = item["feature"]?.string
+                if let names = item["whole"]?.array {
+                    whole = try names.map { guard let text = $0.string else { throw broken }; return text }
+                }
             }
             tools.append(Tool(name: name, description: description, inputSchema: schema, annotations: annotations,
                               kind: kind, route: route, fields: fields, what: what, revisionPage: page,
-                              requestIDFromArguments: fromArguments, feature: feature))
+                              requestIDFromArguments: fromArguments, feature: feature, whole: whole))
         }
         guard let pageMap = root["PAGES"]?.object, let instructions = root["instructions"]?.string,
               let version = root["version"]?.string, let protocolVersion = root["protocol"]?.string else { throw broken }

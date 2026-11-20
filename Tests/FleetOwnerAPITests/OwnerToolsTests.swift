@@ -233,9 +233,11 @@ final class OwnerRefusalTests {
         let hub = StandInHub(features: Fixture.everyFeature)
         hub.answer = { $0.method == "POST" ? (409, .object(["error": .string("team.json changed"), "sha256": .string("sha-2")])) : nil }
         let tools = Fixture.tools(hub, home: home)
+        // The words say to make the change again from a new read, never to send it again as it was (OwnerHub.moved).
         #expect(tools.refused("remove_machine", ["server": .string("server-1")])
-                == "The hub refused the removal of this server: team.json changed. Another change reached team.json "
-                + "meanwhile. Read the fleet again and send this command again.")
+                == "The hub refused the removal of this server: team.json changed. Another change came after the read "
+                + "that this command was made from: read it again, make the change again from what is there now, and "
+                + "send that.")
     }
 
     @Test func aFieldOrARouteThatTheHubDoesNotKnowSaysTheHubCanBeOlder() throws {

@@ -191,30 +191,13 @@ private struct CardBadges: ViewModifier {
         }
     }
 
-    /// The press of one badge: the link of its name opens, with the hand under the pointer. The words keep their link
-    /// for the keyboard and VoiceOver, so this press is hidden from both.
+    /// The press of one badge: the link of its name opens, with the hand under the pointer (`BadgePress`). The words
+    /// keep their link for the keyboard and VoiceOver, so this press is hidden from both.
     private func press(_ part: CardBadge.Part) -> some View {
-        Button { if let url = part.target.url { openURL(url) } } label: {
-            Color.clear.contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        BadgePress(open: { if let url = part.target.url { openURL(url) } }, hover: { inside in
+            if inside { hovered = part.badge } else if hovered == part.badge { hovered = nil }
+        })
         .frame(width: part.frame.width, height: part.frame.height)
-        // **The hand under the pointer.** The selectable words lay an AppKit field over the text whose cursor rect gives
-        // the I-beam on the whole text, badges included, and AppKit sets it only where the pointer crosses that
-        // rect's edge: each move over the badge sets the hand again, and its end lets AppKit set the cursor of the
-        // place again (the I-beam on the words, the arrow beside them).
-        .pointerStyle(.link)
-        .onContinuousHover { phase in
-            switch phase {
-            case .active:
-                if hovered != part.badge { hovered = part.badge }
-                NSCursor.pointingHand.set()
-            case .ended:
-                if hovered == part.badge { hovered = nil }
-                NSApp.keyWindow?.resetCursorRects()
-            }
-        }
-        .focusable(false)
         .accessibilityHidden(true)
         // last: a modifier after it takes the whole text, and the press of the last badge then took every press on it
         .position(x: part.frame.midX, y: part.frame.midY)
@@ -256,6 +239,57 @@ private struct CardBadges: ViewModifier {
         case .github: GitHubMark(size: side).foregroundStyle(FleetStyle.link)
         case .service(let service): ServiceMark(service: service, size: side)
         case .glyph, .symbol: EmptyView()
+        }
+    }
+}
+
+/// **A badge's press is an AppKit view, so the hand comes with the pointer** (the owner, 20 November 2026: "while
+/// hovering a badge, the typing cursor blinks briefly before showing the hand"). The selectable words lay an AppKit
+/// field over the text whose cursor rect gives the I-beam on the whole text, badges included, and AppKit sets it in the
+/// event that crosses the field's edge; a SwiftUI hover sets the hand only at the next drawing, so the I-beam showed
+/// first. This view lies over the field, so AppKit sends it the cursor's events of its own place, and it sets the hand in
+/// those same events: where the pointer comes in, where it moves, and where the cursor is asked for.
+private struct BadgePress: NSViewRepresentable {
+    let open: () -> Void
+    let hover: (Bool) -> Void
+
+    func makeNSView(context: Context) -> PressView { PressView() }
+
+    func updateNSView(_ view: PressView, context: Context) {
+        view.open = open
+        view.hover = hover
+    }
+
+    final class PressView: NSView {
+        var open: () -> Void = {}
+        var hover: (Bool) -> Void = { _ in }
+        /// A press that began here, which a release here opens.
+        private var pressed = false
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            for area in trackingAreas { removeTrackingArea(area) }
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.cursorUpdate, .mouseEnteredAndExited, .mouseMoved,
+                                                                  .activeInKeyWindow, .inVisibleRect], owner: self))
+        }
+
+        override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+        override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
+        override func mouseEntered(with event: NSEvent) {
+            NSCursor.pointingHand.set()
+            hover(true)
+        }
+        override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
+        override func mouseExited(with event: NSEvent) { hover(false) }
+        /// A press in a window that is not in front opens the badge too, as the link under it did.
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        /// A press on a badge never moves the window, whose content runs to its top edge.
+        override var mouseDownCanMoveWindow: Bool { false }
+        override func mouseDown(with event: NSEvent) { pressed = true }
+        /// A double click opens it once.
+        override func mouseUp(with event: NSEvent) {
+            defer { pressed = false }
+            if pressed, event.clickCount <= 1, bounds.contains(convert(event.locationInWindow, from: nil)) { open() }
         }
     }
 }

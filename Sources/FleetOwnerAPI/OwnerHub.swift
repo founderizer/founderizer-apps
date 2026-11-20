@@ -383,6 +383,9 @@ public enum CommandLock {
 /// One instance serves one process, one call at a time: it holds the generation and the hub's features between
 /// calls, as the Python server does.
 public final class OwnerHub: @unchecked Sendable {
+    /// `owner_mcp.py`'s MOVED: the words after a 409 whose base moved, in the same words.
+    static let moved = "Another change came after the read that this command was made from: read it again, make the "
+        + "change again from what is there now, and send that."
     /// Where the hub is, as `http://<address>:<port>` with no "/" at the end.
     public private(set) var base: String
     let transport: HubTransport
@@ -599,16 +602,23 @@ public final class OwnerHub: @unchecked Sendable {
         return answer
     }
 
+    /// The agent's own `request_id` of a command, checked as `owner_mcp.py`'s `command` checks it before any request:
+    /// nil when it gives none (Python's truth), else the id, or the refusal of one that is not a UUID.
+    static func requestID(_ given: JSONValue?) throws -> String? {
+        guard let given, given.truthy else { return nil }
+        let rid = given.pythonText
+        guard let parsed = UUID(uuidString: rid), parsed.uuidString.lowercased() == rid.lowercased() else {
+            throw OwnerRefusal("request_id must be a UUID, or absent so that this server makes one.")
+        }
+        return rid
+    }
+
     /// One owner command route: the envelope of `hub.py` `ui_command` (`request_id`, `db`), and its answer as the hub
     /// gave it. `requestID`: the agent's own, when it sends the same command again after a lost answer; else this
     /// makes one. The lock is held for the one request, never for the read of the generation.
     public func command(_ route: String, _ body: [String: JSONValue], _ what: String,
                         requestID: JSONValue? = nil) throws -> JSONValue? {
-        let rid: String
-        if let given = requestID, given.truthy { rid = given.pythonText } else { rid = UUID().uuidString.lowercased() }
-        guard let parsed = UUID(uuidString: rid), parsed.uuidString.lowercased() == rid.lowercased() else {
-            throw OwnerRefusal("request_id must be a UUID, or absent so that this server makes one.")
-        }
+        let rid = try Self.requestID(requestID) ?? UUID().uuidString.lowercased()
         func once() throws -> HubAnswer {
             let db = try generation()
             var envelope = body
@@ -623,8 +633,8 @@ public final class OwnerHub: @unchecked Sendable {
         }
         guard answer.status == 200 else {
             if answer.status == 409, let sha = answer.data?["sha256"], sha.truthy {
-                throw OwnerRefusal("The hub refused \(what): \(answer.error ?? "None"). Another change reached "
-                                   + "team.json meanwhile. Read the fleet again and send this command again.")
+                // The base moved: what the command replaces is made again from a new read (`owner_mcp.py`'s MOVED).
+                throw OwnerRefusal("The hub refused \(what): \(answer.error ?? "None"). \(Self.moved)")
             }
             throw refusal(answer, what)
         }

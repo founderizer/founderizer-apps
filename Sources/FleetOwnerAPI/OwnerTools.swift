@@ -96,7 +96,8 @@ public final class OwnerTools: @unchecked Sendable {
         return OwnerTable.Tool(name: tool.name, description: tool.description + " " + AnswerDoor.description,
                                inputSchema: tool.inputSchema, annotations: tool.annotations, kind: tool.kind,
                                route: tool.route, fields: tool.fields, what: tool.what, revisionPage: tool.revisionPage,
-                               requestIDFromArguments: tool.requestIDFromArguments, feature: tool.feature)
+                               requestIDFromArguments: tool.requestIDFromArguments, feature: tool.feature,
+                               whole: tool.whole)
     }
 
     /// The tools that `tools/list` gives: each one that the table builds, the thirteen written here, the two setup
@@ -352,8 +353,16 @@ public final class OwnerTools: @unchecked Sendable {
             let path = try Self.route(tool.route, args)
             return try hub.command(path, body, tool.what, requestID: tool.requestIDFromArguments ? args["request_id"] : nil)
         case .withBase:
+            // A field of `whole` replaces a whole value that the client made from its own read of the team, so it
+            // goes only with that read's base: a base read here would hold a change made after that read
+            // (`owner_mcp.py`'s `with_base`). A base of null is no base. `beforeAnyRequest` refuses the same first.
             var body = Self.body(tool, args)
-            body["base_sha256"] = try hub.teamSHA256()
+            if let given = Self.clientBase(args) {
+                body["base_sha256"] = given
+            } else {
+                if let replaced = Self.wholeWithNoBase(tool, args) { throw OwnerRefusal(Self.teamBaseNeeded(replaced)) }
+                body["base_sha256"] = try hub.teamSHA256()
+            }
             let path = try Self.route(tool.route, args)
             return try hub.command(path, body, tool.what, requestID: args["request_id"])
         case .withRevision:
@@ -378,13 +387,25 @@ public final class OwnerTools: @unchecked Sendable {
 
     /// **What `owner_mcp.py` refuses before any request**, refused here before the read of the hub's features too, so
     /// that the two programs make the same requests (the parity check found it on 14 November 2026): a `plain` tool's
-    /// route (a part that the arguments do not give, or "." or ".."), and the id of a `with_revision` tool, which its
-    /// page needs before the read of its revision.
+    /// route (a part that the arguments do not give, or "." or "..") and then its request id that is not a UUID; a
+    /// `with_base` tool's whole value with no base of the client's, and with the client's base its route and request
+    /// id (the reviews of 20 November 2026); and the id of a `with_revision` tool, which its page needs before the
+    /// read of its revision.
     static func beforeAnyRequest(_ tool: OwnerTable.Tool, _ args: [String: JSONValue]) throws {
         if tool.name == "answer_needs_you" { try filesWithAChoice(args) }
         switch tool.kind {
         case .plain:
             _ = try route(tool.route, args)
+            if tool.requestIDFromArguments { _ = try OwnerHub.requestID(args["request_id"]) }
+        case .withBase:
+            // `owner_mcp.py`'s `with_base` makes no request before its route and its request id when the client gives
+            // the base, and none at all for a whole value with no base. With neither, it reads the team first.
+            if clientBase(args) != nil {
+                _ = try route(tool.route, args)
+                _ = try OwnerHub.requestID(args["request_id"])
+            } else if let replaced = wholeWithNoBase(tool, args) {
+                throw OwnerRefusal(teamBaseNeeded(replaced))
+            }
         case .withRevision:
             if try wholeNumber(args, "id") < 1 {
                 throw OwnerRefusal("the page \(tool.revisionPage ?? "") is about one thing: give its id.")
@@ -408,6 +429,32 @@ public final class OwnerTools: @unchecked Sendable {
             throw OwnerRefusal(filesWithAChoiceWords)
         }
     }
+
+    /// The client's own `base_sha256` of a `with_base` command, or nil when it gave none or null (Python's None).
+    static func clientBase(_ args: [String: JSONValue]) -> JSONValue? {
+        guard let given = args["base_sha256"], !given.isNull else { return nil }
+        return given
+    }
+
+    /// The fields of `whole` that this call gives (not null) with no base of the client's, or nil for none.
+    static func wholeWithNoBase(_ tool: OwnerTable.Tool, _ args: [String: JSONValue]) -> [String]? {
+        guard clientBase(args) == nil else { return nil }
+        let replaced = tool.whole.filter { name in args[name].map { !$0.isNull } ?? false }
+        return replaced.isEmpty ? nil : replaced
+    }
+
+    /// `owner_mcp.py`'s `team_base_needed`: the refusal of a command that replaces a whole value with no
+    /// `base_sha256` of the client's own read, in the same words.
+    static func teamBaseNeeded(_ replaced: [String]) -> String {
+        "base_sha256 is needed with \(replaced.joined(separator: ", ")): send the sha256 of the "
+            + "fleet_read(page=\"team\") that you made the change from. Then a change of team.json made since that "
+            + "read is refused, and not lost."
+    }
+
+    /// `owner_mcp.py`'s PROFILE_BASE_NEEDED: the refusal of `save_profile` with no `base_sha256`, in the same words.
+    static let profileBaseNeeded = "base_sha256 is needed: send this agent's sha256 from the "
+        + "fleet_read(page=\"profiles\") that you made the sections from, or null for an agent with no profile yet. "
+        + "Then a change made since that read is refused, and not lost."
 
     /// The fields of a tool that the arguments give, as they are; a null is left out.
     static func body(_ tool: OwnerTable.Tool, _ args: [String: JSONValue]) -> [String: JSONValue] {

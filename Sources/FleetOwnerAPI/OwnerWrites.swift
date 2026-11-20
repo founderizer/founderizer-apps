@@ -69,19 +69,22 @@ extension OwnerTools {
 
     // ------------------------------------------------------------ the profile
 
-    /// `save_profile`: one agent's profile, with the digest of the profile that it is built on from `GET /ui/profiles`,
-    /// read immediately before the command.
+    /// `save_profile`: one agent's profile, with the digest of the profile that the client made its sections from, in
+    /// its own `fleet_read(page="profiles")` (`base_sha256`, null for an agent with no profile yet), as
+    /// `owner_mcp.py`'s `with_profile_base`: the sections replace the whole profile, and a digest read here would hold
+    /// a change made after the client's read. The read of `GET /ui/profiles` here only finds the agent.
     func saveProfile(_ args: [String: JSONValue], on hub: OwnerHub) throws -> JSONValue? {
         let agent = PyText.strip(Self.text(args["agent"]))
         guard !agent.isEmpty else { throw OwnerRefusal("agent must be the name of the agent whose profile this is.") }
         try Self.onePart("agent", agent)
+        guard let base = args["base_sha256"] else { throw OwnerRefusal(Self.profileBaseNeeded) }
         let page = try hub.get("/ui/profiles", "the profiles").data
         let profiles = (page?["profiles"]).flatMap { $0.truthy ? $0.array : nil } ?? []
-        guard let found = profiles.first(where: { PyText.same($0["agent"]?.string, agent) }) else {
+        guard profiles.contains(where: { PyText.same($0["agent"]?.string, agent) }) else {
             throw OwnerRefusal("There is no agent \(agent). Read fleet_read(page=\"profiles\") for the ones there are.")
         }
         return try hub.command("/ui/profiles/\(OwnerHub.quote(agent, safe: ""))",
-                               ["sections": args["sections"] ?? .null, "base_sha256": found["sha256"] ?? .null],
+                               ["sections": args["sections"] ?? .null, "base_sha256": base],
                                "the profile of \(agent)", requestID: args["request_id"])
     }
 
@@ -122,7 +125,10 @@ extension OwnerTools {
             return try hub.command("/ui/secrets/grant", ["login": .string(what), "agent": agent, "grant": level],
                                    whatFor, requestID: args["request_id"])
         }
-        let lines = try Self.teamLines(try hub.get("/ui/team", "a read of the team").data)
+        // The map and the base come from this one read (`owner_mcp.py`'s grant_access), so a grant made after it is
+        // the hub's 409 and not lost.
+        let page = try hub.get("/ui/team", "a read of the team").data
+        let lines = try Self.teamLines(page)
         func moved(_ map: [String: JSONValue]) -> [String: JSONValue] {
             var map = map
             map[name] = nil
@@ -136,7 +142,7 @@ extension OwnerTools {
                 if let found = repos.first(where: { PyText.same($0.key, what) }) { access[agentName] = found.value }
             }
             return try teamCommand("/ui/team/repos", ["repo": .string(what), "access": .object(moved(access))],
-                                   whatFor, args, on: hub)
+                                   whatFor, args, page: page, on: hub)
         }
         if PyText.same(kind, "tool") {
             var names: [String: JSONValue] = [:]
@@ -146,7 +152,7 @@ extension OwnerTools {
             }
             let agents = moved(names).keys.sorted(by: JSONValue.pythonOrder).map(JSONValue.string)
             return try teamCommand("/ui/team/tools", ["tool": .string(what), "agents": .array(agents)], whatFor, args,
-                                   on: hub)
+                                   page: page, on: hub)
         }
         var access: [String: JSONValue] = [:]
         for (agentName, line) in lines {
@@ -158,7 +164,8 @@ extension OwnerTools {
             }
         }
         return try teamCommand("/ui/team/google", ["account": .string(what), "service": .string(kind),
-                                                   "access": .object(moved(access))], whatFor, args, on: hub)
+                                                   "access": .object(moved(access))], whatFor, args, page: page,
+                               on: hub)
     }
 
     /// `owner_mcp.py`'s FOLDER_KIND.
@@ -386,12 +393,13 @@ extension OwnerTools {
         return copies.contains(where: { PyText.same($0, reference) })                                      // 5, else 6
     }
 
-    /// `_team_command`: one command that moves `team.json`, with the SHA-256 of the file that it is built on, read
-    /// again immediately before it.
+    /// `_team_command`: one command that moves `team.json`, with the SHA-256 of the file that it is built on: that of
+    /// `page`, the read of the team that the command's map was made from. A second read would hold a grant that came
+    /// after that read, and the map, which does not hold it, would go over it.
     func teamCommand(_ route: String, _ body: [String: JSONValue], _ what: String, _ args: [String: JSONValue],
-                     on hub: OwnerHub) throws -> JSONValue? {
+                     page: JSONValue?, on hub: OwnerHub) throws -> JSONValue? {
         var body = body
-        body["base_sha256"] = try hub.teamSHA256()
+        body["base_sha256"] = try OwnerHub.teamSHA256(of: page)
         return try hub.command(route, body, what, requestID: args["request_id"])
     }
 

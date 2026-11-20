@@ -633,7 +633,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/servers/{server}/agents",
-   "what": "the new agent"
+   "what": "the new agent",
+   "whole": []
   },
   {
    "annotations": {
@@ -663,7 +664,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/servers/{server}/remove",
-   "what": "the removal of this server"
+   "what": "the removal of this server",
+   "whole": []
   },
   {
    "annotations": {
@@ -704,7 +706,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/servers/{server}/key-swap",
-   "what": "the owner's wish for the key swap of this server"
+   "what": "the owner's wish for the key swap of this server",
+   "whole": []
   },
   {
    "annotations": {
@@ -740,7 +743,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/agents/{agent}",
-   "what": "the activation of this agent"
+   "what": "the activation of this agent",
+   "whole": []
   },
   {
    "annotations": {
@@ -776,7 +780,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/agents/{agent}/rename",
-   "what": "the new name of this agent"
+   "what": "the new name of this agent",
+   "whole": []
   },
   {
    "annotations": {
@@ -820,7 +825,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/agents/{agent}/move",
-   "what": "the server this agent moves to"
+   "what": "the server this agent moves to",
+   "whole": []
   },
   {
    "annotations": {
@@ -850,13 +856,14 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/agents/{agent}/remove",
-   "what": "the deletion of this agent"
+   "what": "the deletion of this agent",
+   "whole": []
   },
   {
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "One agent's model, effort, capabilities, title, expertise, account, screen model or host list. A null model or effort follows the fleet's default_model of its runtime (save_settings), else the runtime's own. Each of vault, runtime and vault_create is a command of its own, and has a tool of its own here: vault_access, switch_runtime and login_creation.",
+   "description": "One agent's model, effort, capabilities, title, expertise, account, screen model or host list. can, expertise, screen and web_hosts each replace a whole value: with one of them, send base_sha256 from your fleet_read(page=\"team\"). A null model or effort follows the fleet's default_model of its runtime (save_settings), else the runtime's own. Each of vault, runtime and vault_create is a command of its own, and has a tool of its own here: vault_access, switch_runtime and login_creation.",
    "feature": null,
    "fields": [
     "model",
@@ -878,6 +885,10 @@
       ]
      },
      "agent": {
+      "type": "string"
+     },
+     "base_sha256": {
+      "description": "The sha256 of the fleet_read(page=\"team\") that you made this change from. A field that replaces a whole value needs it: a change of team.json since that read is then refused, and not lost.",
       "type": "string"
      },
      "can": {
@@ -961,7 +972,13 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/agents/{agent}",
-   "what": "these agent settings"
+   "what": "these agent settings",
+   "whole": [
+    "can",
+    "expertise",
+    "screen",
+    "web_hosts"
+   ]
   },
   {
    "annotations": {
@@ -1001,7 +1018,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/agents/{agent}",
-   "what": "this agent's runtime"
+   "what": "this agent's runtime",
+   "whole": []
   },
   {
    "annotations": {
@@ -1041,7 +1059,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/agents/{agent}",
-   "what": "this agent's vault access"
+   "what": "this agent's vault access",
+   "whole": []
   },
   {
    "annotations": {
@@ -1077,7 +1096,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/agents/{agent}",
-   "what": "whether this agent may make logins"
+   "what": "whether this agent may make logins",
+   "whole": []
   },
   {
    "annotations": {
@@ -1117,7 +1137,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/machines/{agent}/signin",
-   "what": "the sign-in"
+   "what": "the sign-in",
+   "whole": []
   },
   {
    "annotations": {
@@ -1153,7 +1174,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/machines/{agent}/signin/code",
-   "what": "the sign-in code"
+   "what": "the sign-in code",
+   "whole": []
   },
   {
    "annotations": {
@@ -1183,7 +1205,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/machines/{agent}/check",
-   "what": "the machine check"
+   "what": "the machine check",
+   "whole": []
   },
   {
    "annotations": {
@@ -1213,7 +1236,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/machines/{agent}/update",
-   "what": "the update"
+   "what": "the update",
+   "whole": []
   },
   {
    "annotations": {
@@ -1305,7 +1329,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/mcp/check",
-   "what": "the check of this MCP server"
+   "what": "the check of this MCP server",
+   "whole": []
   },
   {
    "annotations": {
@@ -1364,7 +1389,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/google/disconnect",
-   "what": "the disconnection of this Google account"
+   "what": "the disconnection of this Google account",
+   "whole": []
   },
   {
    "annotations": {
@@ -1396,7 +1422,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/mcp/disconnect",
-   "what": "the disconnection of this MCP server"
+   "what": "the disconnection of this MCP server",
+   "whole": []
   },
   {
    "annotations": {
@@ -1417,6 +1444,10 @@
        "null"
       ]
      },
+     "base_sha256": {
+      "description": "Only when you change one that is there: the sha256 of a fleet_read(page=\"team\") that you made before the read that you made the change from, or that is that read. A change of team.json since then is refused, and not lost. A new one needs none.",
+      "type": "string"
+     },
      "id": {
       "type": "string"
      },
@@ -1436,7 +1467,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/chat-apps",
-   "what": "this chat app account"
+   "what": "this chat app account",
+   "whole": []
   },
   {
    "annotations": {
@@ -1479,6 +1511,10 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "base_sha256": {
+      "description": "Only when you change one that is there: the sha256 of a fleet_read(page=\"team\") that you made before the read that you made the change from, or that is that read. A change of team.json since then is refused, and not lost. A new one needs none.",
+      "type": "string"
+     },
      "delete": {
       "type": "boolean"
      },
@@ -1555,7 +1591,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/mcp",
-   "what": "this MCP server"
+   "what": "this MCP server",
+   "whole": []
   },
   {
    "annotations": {
@@ -1666,13 +1703,14 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/resources/take",
-   "what": "the end of this hold"
+   "what": "the end of this hold",
+   "whole": []
   },
   {
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "The whole shape of the team at once: for each agent its role (manager, lead or worker) and who it reports to. Send every agent, because this replaces the lines; read fleet_read(page=\"team\") first.",
+   "description": "The whole shape of the team at once: for each agent its role (manager, lead or worker) and who it reports to. Send every agent, because this replaces the lines: read fleet_read(page=\"team\") first, and send its sha256 as base_sha256.",
    "feature": "reporting_lines",
    "fields": [
     "lines"
@@ -1680,6 +1718,10 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "base_sha256": {
+      "description": "The sha256 of the fleet_read(page=\"team\") that you made this change from. A field that replaces a whole value needs it: a change of team.json since that read is then refused, and not lost.",
+      "type": "string"
+     },
      "lines": {
       "description": "One {agent, role, reports_to} for each agent of the fleet. reports_to is null for the manager.",
       "items": {
@@ -1718,7 +1760,8 @@
      }
     },
     "required": [
-     "lines"
+     "lines",
+     "base_sha256"
     ],
     "type": "object"
    },
@@ -1727,18 +1770,28 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/lines",
-   "what": "the reporting lines"
+   "what": "the reporting lines",
+   "whole": [
+    "lines"
+   ]
   },
   {
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Write one agent's profile \u2014 the owner's own words about it, which the agent cannot change. Send every section, because this replaces the profile: read fleet_read(page=\"profiles\") first and change the sections you mean. Each section is {key, title, text}, and the title must be one the key allows.",
+   "description": "Write one agent's profile \u2014 the owner's own words about it, which the agent cannot change. Send every section, because this replaces the profile: read fleet_read(page=\"profiles\") first, change the sections you mean, and send that agent's sha256 there as base_sha256. Each section is {key, title, text}, and the title must be one the key allows.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "agent": {
       "type": "string"
+     },
+     "base_sha256": {
+      "description": "This agent's sha256 in the fleet_read(page=\"profiles\") that you made the sections from, or null for an agent with no profile yet: a profile that changed since that read is then refused, and not lost.",
+      "type": [
+       "string",
+       "null"
+      ]
      },
      "request_id": {
       "description": "A UUID. Give the same one again only to send a command once more after an answer was lost; otherwise leave it out.",
@@ -1771,7 +1824,8 @@
     },
     "required": [
      "agent",
-     "sections"
+     "sections",
+     "base_sha256"
     ],
     "type": "object"
    },
@@ -1802,6 +1856,10 @@
      },
      "address": {
       "description": "Only for server: http:// or https://, a host, and a port and a path if it has them. Plain http only on the loopback or a Tailscale address.",
+      "type": "string"
+     },
+     "base_sha256": {
+      "description": "Only when you change one that is there: the sha256 of a fleet_read(page=\"team\") that you made before the read that you made the change from, or that is that read. A change of team.json since then is refused, and not lost. A new one needs none.",
       "type": "string"
      },
      "delete": {
@@ -1843,7 +1901,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/accounts",
-   "what": "this runtime account"
+   "what": "this runtime account",
+   "whole": []
   },
   {
    "annotations": {
@@ -1861,6 +1920,10 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "base_sha256": {
+      "description": "Only when you change one that is there: the sha256 of a fleet_read(page=\"team\") that you made before the read that you made the change from, or that is that read. A change of team.json since then is refused, and not lost. A new one needs none.",
+      "type": "string"
+     },
      "delete": {
       "type": "boolean"
      },
@@ -1891,7 +1954,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/logins",
-   "what": "this login's title"
+   "what": "this login's title",
+   "whole": []
   },
   {
    "annotations": {
@@ -1909,6 +1973,10 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "base_sha256": {
+      "description": "Only when you change one that is there: the sha256 of a fleet_read(page=\"team\") that you made before the read that you made the change from, or that is that read. A change of team.json since then is refused, and not lost. A new one needs none.",
+      "type": "string"
+     },
      "delete": {
       "type": "boolean"
      },
@@ -1939,7 +2007,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/access",
-   "what": "how the fleet reaches this machine"
+   "what": "how the fleet reaches this machine",
+   "whole": []
   },
   {
    "annotations": {
@@ -1993,7 +2062,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/knowledge",
-   "what": "this knowledge file"
+   "what": "this knowledge file",
+   "whole": []
   },
   {
    "annotations": {
@@ -2030,7 +2100,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/skills/remove",
-   "what": "the removal of this skill"
+   "what": "the removal of this skill",
+   "whole": []
   },
   {
    "annotations": {
@@ -2114,7 +2185,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/people",
-   "what": "this person"
+   "what": "this person",
+   "whole": []
   },
   {
    "annotations": {
@@ -2169,7 +2241,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/roles",
-   "what": "this role"
+   "what": "this role",
+   "whole": []
   },
   {
    "annotations": {
@@ -2207,7 +2280,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/settings",
-   "what": "these settings"
+   "what": "these settings",
+   "whole": []
   },
   {
    "annotations": {
@@ -2255,7 +2329,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/people/{person}/handles",
-   "what": "this person's handle"
+   "what": "this person's handle",
+   "whole": []
   },
   {
    "annotations": {
@@ -2296,7 +2371,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/people/handles",
-   "what": "this owner handle"
+   "what": "this owner handle",
+   "whole": []
   },
   {
    "annotations": {
@@ -2340,7 +2416,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/people/codes",
-   "what": "a link code"
+   "what": "a link code",
+   "whole": []
   },
   {
    "annotations": {
@@ -2380,7 +2457,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/conversations/{conversation}",
-   "what": "this conversation"
+   "what": "this conversation",
+   "whole": []
   },
   {
    "annotations": {
@@ -2412,7 +2490,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/chat-apps/pause",
-   "what": "Pause all"
+   "what": "Pause all",
+   "whole": []
   },
   {
    "annotations": {
@@ -2450,7 +2529,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/chat-apps/{account}/{action}",
-   "what": "this link"
+   "what": "this link",
+   "whole": []
   },
   {
    "annotations": {
@@ -2480,7 +2560,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/outbound/{outbound}/again",
-   "what": "this message again"
+   "what": "this message again",
+   "whole": []
   },
   {
    "annotations": {
@@ -2525,7 +2606,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/servers/{server}/prepare",
-   "what": "the prepared runtime"
+   "what": "the prepared runtime",
+   "whole": []
   },
   {
    "annotations": {
@@ -2555,7 +2637,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/machines/{agent}/manager",
-   "what": "the manager start"
+   "what": "the manager start",
+   "whole": []
   },
   {
    "annotations": {
@@ -2594,7 +2677,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/agents/{agent}/key",
-   "what": "this agent's key"
+   "what": "this agent's key",
+   "whole": []
   },
   {
    "annotations": {
@@ -2612,6 +2696,10 @@
     "additionalProperties": false,
     "properties": {
      "address": {
+      "type": "string"
+     },
+     "base_sha256": {
+      "description": "Only when you change one that is there: the sha256 of a fleet_read(page=\"team\") that you made before the read that you made the change from, or that is that read. A change of team.json since then is refused, and not lost. A new one needs none.",
       "type": "string"
      },
      "delete": {
@@ -2638,7 +2726,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/owner/devices",
-   "what": "this owner device"
+   "what": "this owner device",
+   "whole": []
   },
   {
    "annotations": {
@@ -2668,7 +2757,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/owner/devices/{device}/code",
-   "what": "an enrollment code"
+   "what": "an enrollment code",
+   "whole": []
   },
   {
    "annotations": {
@@ -2704,7 +2794,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/attachments/{attachment}/keep",
-   "what": "keeping this file"
+   "what": "keeping this file",
+   "whole": []
   },
   {
    "annotations": {
@@ -2764,7 +2855,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/team/reload",
-   "what": "the reload of team.json"
+   "what": "the reload of team.json",
+   "whole": []
   },
   {
    "annotations": {
@@ -2912,7 +3004,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/tasks/{task}/control",
-   "what": "this task control"
+   "what": "this task control",
+   "whole": []
   },
   {
    "annotations": {
@@ -2955,7 +3048,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/tasks/{task}/steer",
-   "what": "the steering"
+   "what": "the steering",
+   "whole": []
   },
   {
    "annotations": {
@@ -3002,7 +3096,8 @@
    "request_id_from_args": true,
    "revision_page": "goal",
    "route": "/ui/goals/{id}/state",
-   "what": "this goal change"
+   "what": "this goal change",
+   "whole": []
   },
   {
    "annotations": {
@@ -3048,7 +3143,8 @@
    "request_id_from_args": true,
    "revision_page": "responsibility",
    "route": "/ui/responsibilities/{id}/state",
-   "what": "this duty change"
+   "what": "this duty change",
+   "whole": []
   },
   {
    "annotations": {
@@ -3083,7 +3179,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/standing/{id}/end",
-   "what": "the end of this standing item"
+   "what": "the end of this standing item",
+   "whole": []
   },
   {
    "annotations": {
@@ -3126,7 +3223,8 @@
    "request_id_from_args": true,
    "revision_page": "trigger",
    "route": "/ui/triggers/{id}/state",
-   "what": "this wake-up rule change"
+   "what": "this wake-up rule change",
+   "whole": []
   },
   {
    "annotations": {
@@ -3170,7 +3268,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/outcomes/{outcome}",
-   "what": "this outcome"
+   "what": "this outcome",
+   "whole": []
   },
   {
    "annotations": {
@@ -3195,7 +3294,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/releases/check",
-   "what": "the release check"
+   "what": "the release check",
+   "whole": []
   },
   {
    "annotations": {
@@ -3220,7 +3320,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/releases/update",
-   "what": "the update"
+   "what": "the update",
+   "whole": []
   },
   {
    "annotations": {
@@ -3252,7 +3353,8 @@
    "request_id_from_args": true,
    "revision_page": null,
    "route": "/ui/releases/auto",
-   "what": "the automatic-update setting"
+   "what": "the automatic-update setting",
+   "whole": []
   },
   {
    "annotations": {
@@ -3279,5 +3381,5 @@
    "name": "take_backup"
   }
  ],
- "version": "c38c3d546c34f4ac80951d4addc3ed2fbc3bbc5d97d7f0952d7a91408e17a80c"
+ "version": "7075276cf374f71e30fa90227b3189a2099f5144c540d46303304fc4a686527d"
 }

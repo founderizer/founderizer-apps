@@ -299,7 +299,8 @@ public enum OwnerGuide {
           server, so rule 4 holds.
         - `add_agent` puts the new agent on a server, and the owner can also do it in the app with Add agent.
           `save_profile` writes what an agent is responsible for and what it asks first; read the profiles first, because
-          it replaces the whole profile. `grant_access` gives an agent something that the fleet already holds. On a
+          it replaces the whole profile, and send that agent's `sha256` from the read as `base_sha256`.
+          `grant_access` gives an agent something that the fleet already holds. On a
           fleet with a central vault, it refuses a give of a secret when the hub's reading of the vault shows that
           the value would reach no server: the secret is not in the grantable pool, the owner signed no grant of it
           for an agent on that agent's server, and that server's vault holds no copy of it. Give such a secret

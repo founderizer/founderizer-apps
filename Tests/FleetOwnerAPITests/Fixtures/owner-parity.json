@@ -790,19 +790,13 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/agents/agent-1\"}"
     }
    ],
    "arguments": {
     "account": "account-1",
     "agent": "agent-1",
+    "base_sha256": "base_sha256-1",
     "can": [
      "shell"
     ],
@@ -851,27 +845,9 @@
      }
     },
     {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
-      ]
-     }
-    },
-    {
      "body": {
       "account": "account-1",
-      "base_sha256": "team-sha-1",
+      "base_sha256": "base_sha256-1",
       "can": [
        "shell"
       ],
@@ -1870,13 +1846,6 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/chat-apps\"}"
     }
    ],
@@ -1884,6 +1853,7 @@
     "account": {
      "key": "value"
     },
+    "base_sha256": "base_sha256-1",
     "id": "id-1"
    },
    "name": "save_chat_account: every field",
@@ -1917,29 +1887,11 @@
      }
     },
     {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
-      ]
-     }
-    },
-    {
      "body": {
       "account": {
        "key": "value"
       },
-      "base_sha256": "team-sha-1",
+      "base_sha256": "base_sha256-1",
       "db": "g1",
       "id": "id-1",
       "request_id": "<rid1>"
@@ -1984,17 +1936,11 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/mcp\"}"
     }
    ],
    "arguments": {
+    "base_sha256": "base_sha256-1",
     "delete": true,
     "name": "name-1",
     "server": {
@@ -2047,26 +1993,8 @@
      }
     },
     {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
-      ]
-     }
-    },
-    {
      "body": {
-      "base_sha256": "team-sha-1",
+      "base_sha256": "base_sha256-1",
       "db": "g1",
       "delete": true,
       "name": "name-1",
@@ -2214,17 +2142,11 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/lines\"}"
     }
    ],
    "arguments": {
+    "base_sha256": "base_sha256-1",
     "lines": [
      {
       "agent": "agent-1",
@@ -2264,26 +2186,8 @@
      }
     },
     {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
-      ]
-     }
-    },
-    {
      "body": {
-      "base_sha256": "team-sha-1",
+      "base_sha256": "base_sha256-1",
       "db": "g1",
       "lines": [
        {
@@ -2334,19 +2238,13 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/accounts\"}"
     }
    ],
    "arguments": {
     "account": "account-1",
     "address": "address-1",
+    "base_sha256": "base_sha256-1",
     "delete": true,
     "kind": "key",
     "login": "login-1",
@@ -2385,28 +2283,10 @@
      }
     },
     {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
-      ]
-     }
-    },
-    {
      "body": {
       "account": "account-1",
       "address": "address-1",
-      "base_sha256": "team-sha-1",
+      "base_sha256": "base_sha256-1",
       "db": "g1",
       "delete": true,
       "kind": "key",
@@ -2456,17 +2336,11 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/logins\"}"
     }
    ],
    "arguments": {
+    "base_sha256": "base_sha256-1",
     "delete": true,
     "form": "form-1",
     "login": "login-1",
@@ -2504,26 +2378,8 @@
      }
     },
     {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
-      ]
-     }
-    },
-    {
      "body": {
-      "base_sha256": "team-sha-1",
+      "base_sha256": "base_sha256-1",
       "db": "g1",
       "delete": true,
       "form": "form-1",
@@ -2572,17 +2428,11 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/access\"}"
     }
    ],
    "arguments": {
+    "base_sha256": "base_sha256-1",
     "delete": true,
     "machine": "machine-1",
     "screen_sharing": true,
@@ -2620,26 +2470,8 @@
      }
     },
     {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
-      ]
-     }
-    },
-    {
      "body": {
-      "base_sha256": "team-sha-1",
+      "base_sha256": "base_sha256-1",
       "db": "g1",
       "delete": true,
       "machine": "machine-1",
@@ -4010,18 +3842,12 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/owner/devices\"}"
     }
    ],
    "arguments": {
     "address": "address-1",
+    "base_sha256": "base_sha256-1",
     "delete": true,
     "device": "device-1",
     "label": "label-1"
@@ -4057,27 +3883,9 @@
      }
     },
     {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
-      ]
-     }
-    },
-    {
      "body": {
       "address": "address-1",
-      "base_sha256": "team-sha-1",
+      "base_sha256": "base_sha256-1",
       "db": "g1",
       "delete": true,
       "device": "device-1",
@@ -5646,6 +5454,504 @@
     "links": {}
    },
    "tool": "activate_agent"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "agent": "worker-1",
+    "can": [
+     "web"
+    ],
+    "model": "m"
+   },
+   "name": "with_base: a whole value with no base",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "base_sha256 is needed with can: send the sha256 of the fleet_read(page=\"team\") that you made the change from. Then a change of team.json made since that read is refused, and not lost."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "agent_settings"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "agent": "worker-1",
+    "base_sha256": null,
+    "expertise": [
+     "sales"
+    ],
+    "screen": {
+     "effort": null,
+     "model": null
+    }
+   },
+   "name": "with_base: two whole values with a base of null",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "base_sha256 is needed with expertise, screen: send the sha256 of the fleet_read(page=\"team\") that you made the change from. Then a change of team.json made since that read is refused, and not lost."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "agent_settings"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"route\": \"/ui/team/agents/worker-1\"}"
+    }
+   ],
+   "arguments": {
+    "agent": "worker-1",
+    "base_sha256": null,
+    "model": "m"
+   },
+   "name": "with_base: no whole value and a base of null",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "ok": true,
+     "route": "/ui/team/agents/worker-1"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/team",
+     "query": {
+      "db": [
+       "g1"
+      ]
+     }
+    },
+    {
+     "body": {
+      "base_sha256": "team-sha-1",
+      "db": "g1",
+      "model": "m",
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/team/agents/worker-1",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "agent_settings"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"route\": \"/ui/team/lines\"}"
+    }
+   ],
+   "arguments": {
+    "base_sha256": "team-sha-0",
+    "lines": [
+     {
+      "agent": "manager",
+      "reports_to": null,
+      "role": "manager"
+     }
+    ]
+   },
+   "name": "with_base: the whole lines with the client's base",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "ok": true,
+     "route": "/ui/team/lines"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "base_sha256": "team-sha-0",
+      "db": "g1",
+      "lines": [
+       {
+        "agent": "manager",
+        "reports_to": null,
+        "role": "manager"
+       }
+      ],
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/team/lines",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "set_reporting_lines"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "lines": [
+     {
+      "agent": "manager",
+      "reports_to": null,
+      "role": "manager"
+     }
+    ]
+   },
+   "name": "with_base: the whole lines with no base, on a tool with a feature",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "base_sha256 is needed with lines: send the sha256 of the fleet_read(page=\"team\") that you made the change from. Then a change of team.json made since that read is refused, and not lost."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "set_reporting_lines"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "base_sha256": "team-sha-0",
+    "name": "new-name"
+   },
+   "name": "with_base: the client's base and a part that the arguments do not give",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "rename_agent could not be sent: 'agent'"
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "rename_agent"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "agent": "..",
+    "base_sha256": "team-sha-0",
+    "name": "new-name"
+   },
+   "name": "with_base: the client's base and a part that is two dots",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "agent cannot be \"..\": a part of a route is never \".\" or \"..\"."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "rename_agent"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"route\": \"/ui/team/mcp\"}"
+    }
+   ],
+   "arguments": {
+    "name": "crm",
+    "server": {
+     "title": "CRM"
+    }
+   },
+   "name": "with_base: a new record with no base",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "ok": true,
+     "route": "/ui/team/mcp"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/team",
+     "query": {
+      "db": [
+       "g1"
+      ]
+     }
+    },
+    {
+     "body": {
+      "base_sha256": "team-sha-1",
+      "db": "g1",
+      "name": "crm",
+      "request_id": "<rid1>",
+      "server": {
+       "title": "CRM"
+      }
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/team/mcp",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_mcp_server"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "request_id": "not-one"
+   },
+   "name": "plain: a request id that is no UUID, on a tool with a feature",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "request_id must be a UUID, or absent so that this server makes one."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "check_releases"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "agent": "worker-1",
+    "base_sha256": "team-sha-0",
+    "name": "new-name",
+    "request_id": "not-one"
+   },
+   "name": "with_base: the client's base and a request id that is no UUID",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "request_id must be a UUID, or absent so that this server makes one."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "rename_agent"
   },
   {
    "after": {
@@ -7399,7 +7705,7 @@
    "name": "send_message: team.json moved",
    "older_hub": 0,
    "outcome": {
-    "refusal": "The hub refused the message: team.json changed. Another change reached team.json meanwhile. Read the fleet again and send this command again."
+    "refusal": "The hub refused the message: team.json changed. Another change came after the read that this command was made from: read it again, make the change again from what is there now, and send that."
    },
    "requests": [
     {
@@ -8614,6 +8920,7 @@
    ],
    "arguments": {
     "agent": "worker-1",
+    "base_sha256": "profile-sha-0",
     "sections": [
      {
       "key": "responsible",
@@ -8672,7 +8979,7 @@
     },
     {
      "body": {
-      "base_sha256": "profile-sha-1",
+      "base_sha256": "profile-sha-0",
       "db": "g1",
       "request_id": "<rid1>",
       "sections": [
@@ -8735,6 +9042,7 @@
    ],
    "arguments": {
     "agent": " ops lead ",
+    "base_sha256": "profile-sha-0",
     "sections": [
      {
       "key": "responsible",
@@ -8793,7 +9101,7 @@
     },
     {
      "body": {
-      "base_sha256": "profile-sha-2",
+      "base_sha256": "profile-sha-0",
       "db": "g1",
       "request_id": "<rid1>",
       "sections": [
@@ -8847,6 +9155,7 @@
    ],
    "arguments": {
     "agent": "ghost",
+    "base_sha256": "profile-sha-0",
     "sections": [
      {
       "key": "responsible",
@@ -8915,6 +9224,7 @@
    },
    "answers": [],
    "arguments": {
+    "base_sha256": "profile-sha-0",
     "sections": [
      {
       "key": "responsible",
@@ -8968,6 +9278,35 @@
   {
    "after": {
     "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "agent": "worker-1",
+    "sections": [
+     {
+      "key": "responsible",
+      "text": "The site.",
+      "title": "Responsible for"
+     }
+    ]
+   },
+   "name": "save_profile: no base",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "base_sha256 is needed: send this agent's sha256 from the fleet_read(page=\"profiles\") that you made the sections from, or null for an agent with no profile yet. Then a change made since that read is refused, and not lost."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_profile"
+  },
+  {
+   "after": {
+    "files": {},
     "folders": [
      "<home>/.founderizer"
     ]
@@ -8985,7 +9324,122 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
+     "text": "{\"profiles\": [{\"agent\": \"worker-1\", \"sha256\": \"profile-sha-1\", \"sections\": []}, {\"agent\": \"ops lead\", \"sha256\": \"profile-sha-2\", \"sections\": []}]}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"route\": \"/ui/profiles/worker-1\"}"
+    }
+   ],
+   "arguments": {
+    "agent": "worker-1",
+    "base_sha256": null,
+    "sections": [
+     {
+      "key": "responsible",
+      "text": "The site.",
+      "title": "Responsible for"
+     }
+    ]
+   },
+   "name": "save_profile: a base of null",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "ok": true,
+     "route": "/ui/profiles/worker-1"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/profiles",
+     "query": {
+      "db": [
+       "g1"
+      ]
+     }
+    },
+    {
+     "body": {
+      "base_sha256": null,
+      "db": "g1",
+      "request_id": "<rid1>",
+      "sections": [
+       {
+        "key": "responsible",
+        "text": "The site.",
+        "title": "Responsible for"
+       }
+      ]
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/profiles/worker-1",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_profile"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
     },
     {
      "headers": {
@@ -9034,24 +9488,6 @@
       ],
       "tasks": [
        "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
       ]
      }
     },
@@ -9131,13 +9567,6 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/repos\"}"
     }
    ],
@@ -9173,24 +9602,6 @@
       ],
       "tasks": [
        "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
       ]
      }
     },
@@ -9269,13 +9680,6 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/repos\"}"
     }
    ],
@@ -9311,24 +9715,6 @@
       ],
       "tasks": [
        "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
       ]
      }
     },
@@ -9407,13 +9793,6 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/tools\"}"
     }
    ],
@@ -9449,24 +9828,6 @@
       ],
       "tasks": [
        "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
       ]
      }
     },
@@ -9547,13 +9908,6 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/tools\"}"
     }
    ],
@@ -9589,24 +9943,6 @@
       ],
       "tasks": [
        "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
       ]
      }
     },
@@ -9882,13 +10218,6 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/google\"}"
     }
    ],
@@ -9924,24 +10253,6 @@
       ],
       "tasks": [
        "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
       ]
      }
     },
@@ -10022,13 +10333,6 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/google\"}"
     }
    ],
@@ -10064,24 +10368,6 @@
       ],
       "tasks": [
        "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
       ]
      }
     },
@@ -10162,13 +10448,6 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/google\"}"
     }
    ],
@@ -10204,24 +10483,6 @@
       ],
       "tasks": [
        "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
       ]
      }
     },
@@ -10394,13 +10655,6 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/repos\"}"
     }
    ],
@@ -10437,24 +10691,6 @@
       ],
       "tasks": [
        "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
       ]
      }
     },
@@ -34891,13 +35127,6 @@
       "Content-Type": "application/json"
      },
      "status": 200,
-     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
      "text": "{\"ok\": true, \"route\": \"/ui/team/repos\"}"
     }
    ],
@@ -34933,24 +35162,6 @@
       ],
       "tasks": [
        "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/team",
-     "query": {
-      "db": [
-       "g1"
       ]
      }
     },
@@ -35034,6 +35245,7 @@
    ],
    "arguments": {
     "agent": "\u3000ops lead\u0085",
+    "base_sha256": "profile-sha-0",
     "sections": [
      {
       "key": "responsible",
@@ -35092,7 +35304,7 @@
     },
     {
      "body": {
-      "base_sha256": "profile-sha-2",
+      "base_sha256": "profile-sha-0",
       "db": "g1",
       "request_id": "<rid1>",
       "sections": [
