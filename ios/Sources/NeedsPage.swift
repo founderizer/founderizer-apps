@@ -424,14 +424,20 @@ extension MobileStore {
     /// His answer to `need` that the hub's request carries now, or that the hub took and the reading does not have
     /// yet. A press that waits for the hub is no answer yet: its item says "Sending…". **An answer that did not go is
     /// none either** (review of 11 November 2026): its item says "Not sent" with Try again, which he must be able to
-    /// press, so only a request of this hub and generation that goes now, or that no error stopped, counts.
+    /// press, so only a request of this hub and generation that goes now counts (`goes`).
     func givenAnswer(to need: Int) -> GivenAnswer? {
-        let going = pending.flatMap { request in
-            request.needID == need && request.refusal == nil && request.hub == hub && request.database == snapshot?.db
-                && (sending || sendError == nil) ? request : nil
-        }
+        let going = pending.flatMap { Self.goes($0, to: need, of: hub, database: snapshot?.db, sending: sending) ? $0 : nil }
         guard let request = going ?? answersTaken[need]?.request else { return nil }
         return request.choice.map(GivenAnswer.option) ?? .words(request.text)
+    }
+
+    /// **A waiting request is his answer on its way only while a send carries it.** One that waits with no send is
+    /// none: an error stopped it, or the app started with it in the Outbox, and the app sends a kept request only at
+    /// his Try again. The rule counted every request that no error had stopped, and after a start no error is
+    /// recorded: the item on Needs you counted as answered and took no touch, while its line said "Not sent" with Try
+    /// again (found on 20 November 2026 by the review of the key card's Needs clarification).
+    static func goes(_ request: PendingRequest, to need: Int, of hub: URL, database: String?, sending: Bool) -> Bool {
+        sending && request.needID == need && request.refusal == nil && request.hub == hub && request.database == database
     }
 }
 
@@ -886,15 +892,19 @@ struct NeedClarify: View {
         let typed = taken.flatMap { $0.request.choice == nil ? $0.request.text : nil }
         // The field's words are the store's (`MobileStore.clarifyDrafts`): no copy here outlives what the store empties.
         let draft = store.clarifyDraft(for: need.id)
-        let shown = Binding(get: { sent ?? typed ?? store.clarifyDraft(for: need.id) }, set: { text in
-            // Nothing changes the words that went, while the item folds.
-            guard sent == nil, store.answersTaken[need.id] == nil else { return }
+        // His words that wait in the Outbox with no send (a send that failed, also before the app's last start): the
+        // field shows them, because the line under the card says "Not sent" and Try again sends those words.
+        let kept = store.clarifyKept(for: need.id)
+        let shown = Binding(get: { sent ?? typed ?? store.clarifyKept(for: need.id) ?? store.clarifyDraft(for: need.id) }, set: { text in
+            // Nothing changes the words that went, while the item folds, or the words that wait for Try again.
+            guard sent == nil, store.answersTaken[need.id] == nil, store.clarifyKept(for: need.id) == nil else { return }
             changed(text)
         })
         let trimmed = shown.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let canSend = sent == nil && taken == nil && store.canWrite && !trimmed.isEmpty && NeedSecret.length(trimmed) <= Self.most
+        let canSend = sent == nil && taken == nil && kept == nil && store.canWrite && !trimmed.isEmpty
+            && NeedSecret.length(trimmed) <= Self.most
         VStack(alignment: .leading, spacing: 8) {
-            if stands || !draft.isEmpty || sent != nil || taken != nil {
+            if stands || !draft.isEmpty || sent != nil || taken != nil || kept != nil {
                 // Over the field: under it, the keyboard stands on the line (the look check of 20 November 2026).
                 if looksLikeKey {
                     ComposerNote(words: String(l10n: "That looks like a key. Never send a key in a message."), isWarning: true)
@@ -910,6 +920,9 @@ struct NeedClarify: View {
                     .padding(.vertical, 14)
                     .padding(.leading, 15)
                     .padding(.trailing, 6)
+                    // The words that wait for Try again take no cursor: a field that took one showed what he typed,
+                    // and none of it would go.
+                    .allowsHitTesting(kept == nil)
                     .accessibilityIdentifier("clarify-\(need.id)")
                     SendButton(enabled: canSend, label: String(l10n: "Send message"), side: 36) {
                         // Words that look like a key stay here, with the line that says why, and nothing is saved.
@@ -926,7 +939,7 @@ struct NeedClarify: View {
                 .padding(.leading, 3).padding(.trailing, 7)
                 .background {
                     Self.capsule.fill(Brand.bubble)
-                        .onTapGesture { focused = true }
+                        .onTapGesture { if kept == nil { focused = true } }
                 }
                 .onAppear {
                     stands = true

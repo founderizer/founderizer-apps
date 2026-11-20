@@ -132,8 +132,47 @@ public enum GitHubAppKey {
     /// The variable name of one owner's App key in the catalog: GITHUB_APP_, the owner in capitals, and _KEY, at most
     /// 60 characters. The hub takes an API key's name only when it ends as a key's name does (`lifecycle.key_env`:
     /// _KEY, _TOKEN, _SECRET, _PASSWORD or _PAT); without the ending, the move of the hub's App key to the door was
-    /// refused at each round on 6 November 2026.
-    public static func variable(owner: String) -> String {
-        "GITHUB_APP_" + String(owner.uppercased().map { $0.isLetter || $0.isNumber ? $0 : "_" }).prefix(45) + "_KEY"
+    /// refused at each round on 6 November 2026. number: 1 for the plain name, and from 2 the name of a key that the
+    /// catalog holds beside another one of that owner, with the number before the ending (GITHUB_APP_ACME_2_KEY).
+    public static func variable(owner: String, number: Int = 1) -> String {
+        let ending = number > 1 ? "_\(number)_KEY" : "_KEY"
+        return "GITHUB_APP_" + String(owner.uppercased().map { $0.isLetter || $0.isNumber ? $0 : "_" }).prefix(49 - ending.count)
+            + ending
+    }
+
+    /// **Where a key of one owner's App goes in the hub's catalog.**
+    ///
+    /// The catalog takes no second API key of one variable name (`hub.py` `save_secret`, since 13 November 2026). A
+    /// new key of an App whose key the catalog has is no replace of that entry's value: while GitHub takes both keys,
+    /// the door holds both, under two references, and that is how the hub proves that the new key makes tokens and,
+    /// later, that GitHub refuses the old one (`door_renew`). Until 20 November 2026 each key of an owner had the one
+    /// plain name, so the hub refused the successor's entry, and no fleet with a door could renew its App key; a save
+    /// that had failed after its hub step met the same refusal at the next try.
+    public enum Place: Equatable, Sendable {
+        /// An entry of the catalog is this very key: the entry of an earlier try, or the same file a second time. The
+        /// save goes to that entry again, and each of its steps is the same step a second time.
+        case held(reference: String, variable: String)
+        /// No entry is this key: a new entry, under the first name of the owner's that no key of the catalog has.
+        case new(variable: String)
+    }
+
+    /// The place of a key of this owner's App. kept: the reference under which an earlier try of this same key
+    /// registered it (`DoorKeyReference`); the catalog's entry of that reference is the key's own. same: whether the
+    /// catalog's entry of a reference holds this key's value, as the hub says (`GET /ui/secrets/same`), or nil when
+    /// the hub cannot tell; it is asked only for the keys of this owner's names. A question that fails is no answer:
+    /// its error ends the search, because "not this key" from a call that failed gave the same key a second entry.
+    public static func place(owner: String, catalog: [String: TeamLogin], kept: String? = nil,
+                             same: @Sendable (String) async throws -> Bool?) async rethrows -> Place {
+        if let kept, let own = catalog[kept], own.isAPIKey { return .held(reference: kept, variable: own.name) }
+        let keys = catalog.filter { $0.value.isAPIKey }
+        var free: String?
+        // One name more than the catalog has keys: the first name that no key has is among them.
+        for number in 1...(keys.count + 1) {
+            let name = variable(owner: owner, number: number)
+            let holders = keys.filter { $0.value.name == name }.keys.sorted()
+            if holders.isEmpty { free = free ?? name }
+            for reference in holders where try await same(reference) == true { return .held(reference: reference, variable: name) }
+        }
+        return .new(variable: free ?? variable(owner: owner, number: keys.count + 2))
     }
 }

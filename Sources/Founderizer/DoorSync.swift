@@ -454,7 +454,7 @@ final class DoorSyncModel {
     /// Plan 13, item 4 (the coordinator, 6 November 2026: move the key that the hub holds, with no new key and no file
     /// choice): the hub's own GitHub App key goes to the door, and then the hub gets every GitHub token from the door.
     /// One step a round. First the key: read over this Mac's own SSH to the hub machine, proved with GitHub, given to
-    /// the door as the GitHub App rows' Save gives one (`DoorKeys.put`, with the owner's grant that this Mac signs), and
+    /// the door as the GitHub App rows' Save gives one (`DoorKeys.putGitHubApp`, with the owner's grant that this Mac signs), and
     /// named in the door's file for each account that the App is installed on. The key is in memory for this call only.
     /// Then, once the door holds its sealed copy, the hub's two secrets, which the door makes and the hub keeps only
     /// when the door mints for every owner: the hub then removes its own copy. Gives the door's file with the key in it,
@@ -484,10 +484,9 @@ final class DoorSyncModel {
             do {
                 let found = try await GitHubAppKey.app(appID: app.app_id, pem: pem)
                 let owners = try await GitHubAppKey.installations(appID: app.app_id, pem: pem)
-                let login = try await DoorKeys.put(GitHubAppKey.vaultValue(pem),
-                                                   variable: GitHubAppKey.variable(owner: found.owner.login), store: store,
-                                                   reference: DoorKeyReference.take(hub: hub, database: database,
-                                                                                    app: app.app_id))
+                let login = try await DoorKeys.putGitHubApp(pem, owner: found.owner.login, store: store,
+                                                            reference: DoorKeyReference.take(hub: hub, database: database,
+                                                                                             app: app.app_id))
                 var file = current
                 for owner in owners.isEmpty ? [found.owner.login] : owners {
                     file = DoorAccess.withGitHubApp(file, owner: owner, login: login, appID: app.app_id)
@@ -524,16 +523,41 @@ final class DoorSyncModel {
         guard let devices = await Self.tailnet(), let door = DoorAccess.door(in: devices), let address = door.address else {
             return String(l10n: "This Mac's Tailscale shows no door.")
         }
-        guard let read = await ssh(door, address: address, DoorAccess.readProgram), let current = DoorAccess.file(read.output) else {
+        guard let read = await ssh(door, address: address, DoorAccess.readProgram), var current = DoorAccess.file(read.output) else {
             return String(l10n: "The door's access file could not be read over SSH.")
         }
+        // The successor of a key that works: the file names it only once the door holds its copy, so that the door
+        // makes tokens with the old key until then. The copy comes at the door's next minute, so this asks up to 36
+        // times, 5 seconds apart; a door that does not answer ends it at once. A save after that goes to the same
+        // entry again (`GitHubAppKey.place`).
+        if DoorAccess.namesOtherKey(current, appID: appID, login: login) {
+            let notYet = String(l10n: "The door did not get the App. Try again.")
+            guard let program = DoorAccess.heldProgram(login: login) else { return notYet }
+            var holds = false
+            for attempt in 1...36 {
+                guard let answer = await ssh(door, address: address, program) else { return notYet }
+                holds = answer.output.contains("held=yes")
+                if holds { break }
+                if attempt < 36 { try? await Task.sleep(nanoseconds: 5_000_000_000) }
+            }
+            guard holds else { return notYet }
+            // A round can write the file while this waits: the write starts from the file of now, not from the read
+            // of before the wait, which would put back what that round took out.
+            guard let again = await ssh(door, address: address, DoorAccess.readProgram), let now = DoorAccess.file(again.output) else {
+                return String(l10n: "The door's access file could not be read over SSH.")
+            }
+            current = now
+        }
         let file = DoorAccess.canonical(DoorAccess.withGitHubApp(current, owner: owner, login: login, appID: appID))
+        // Counted before the write: a round that read the file before then sees the count at its own write and does
+        // not write its plan over this file, which named the old key again while the owner read that the door had
+        // the new one.
+        outsideWrites += 1
         guard let written = await ssh(door, address: address, DoorAccess.writeProgram, stdin: file), written.ok else {
             return String(l10n: "The door did not take its new access file.")
         }
         lastRound = nil
         held = nil      // this write began from a file that a round may have written after its read (API 1.234)
-        outsideWrites += 1
         return nil
     }
 

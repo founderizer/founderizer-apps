@@ -839,6 +839,13 @@ public enum DoorAccess {
         }.sorted { $0.owner < $1.owner }
     }
 
+    /// True when the door's file names another key of this App: a key that works. It stays the App's key in the file
+    /// until the door holds the new one, because the door makes no token with a key that it does not hold yet, and
+    /// its copy comes at its next minute (`door.py` `fetch_sealed`).
+    public static func namesOtherKey(_ access: [String: Any], appID: String, login: String) -> Bool {
+        gitHubApps(access).contains { $0.appID == appID && $0.login.lowercased() != login.lowercased() }
+    }
+
     static func sha256Hex(_ text: String) -> String {
         SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }

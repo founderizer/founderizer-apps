@@ -339,6 +339,13 @@ struct DoorAccessTests {
                                               appID: "42")
         #expect(DoorAccess.gitHubApps(access).map(\.owner) == ["One-Org"])
         #expect(DoorAccess.gitHubApps(access).first?.appID == "42")
+        // The successor of an App's key waits for the door's copy, because the file names a key of that App that
+        // works; the same key again, another App and a first key do not wait.
+        let next = "bws://00000006-0000-4000-8000-000000000000"
+        #expect(DoorAccess.namesOtherKey(access, appID: "42", login: next))
+        #expect(!DoorAccess.namesOtherKey(access, appID: "42", login: "bws://00000005-0000-4000-8000-000000000000"))
+        #expect(!DoorAccess.namesOtherKey(access, appID: "43", login: next))
+        #expect(!DoorAccess.namesOtherKey(Self.access, appID: "42", login: next))
         let held = DoorAccess.heldProgram(login: "bws://00000005-0000-4000-8000-000000000000")
         #expect(held?.hasPrefix("test -s /var/lib/fleet-door/secrets/") == true && held?.contains("held=yes") == true)
         #expect(DoorAccess.heldProgram(login: "bws://x; rm -rf /") == nil)

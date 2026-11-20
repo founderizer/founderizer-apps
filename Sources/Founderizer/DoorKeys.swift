@@ -56,4 +56,38 @@ enum DoorKeys {
                                             agent: DoorAccess.holder, grant: .use)
         return reference
     }
+
+    /// **A GitHub App's key to the door, at its own place in the catalog** (`GitHubAppKey.place`): the entry that holds
+    /// this very key, when there is one, and else a new entry under a name that no key of the catalog has. So the
+    /// successor of an App's key stands beside the old key, whose entry stays after GitHub refuses that key, and a
+    /// save that is tried again makes no second entry. Gives the secret's reference. reference: as for `put`.
+    static func putGitHubApp(_ pem: String, owner: String, store: FleetStore, reference: String? = nil) async throws -> String {
+        guard let database = store.state?.db else { throw Stop(String(l10n: "No current status of this hub. Nothing was sent.")) }
+        let hub = store.hub, value = GitHubAppKey.vaultValue(pem)
+        // The hub's answer always has the list, also an empty one: a read with none is no reading of it, and a save
+        // that took it for an empty list asked for the plain name again.
+        guard let catalog = try? await HubClient().team(hub: hub, database: database).logins else {
+            throw Stop(String(l10n: "No current status of this hub. Nothing was sent."))
+        }
+        var secret = LoginSecret()
+        secret.kind = .apiKey
+        secret.env = GitHubAppKey.variable(owner: owner)
+        secret.password = value
+        if let problem = secret.problem { throw Stop(problem) }
+        let item = try secret.value()
+        // A hub from before the comparison (owner feature secret_compare) cannot tell; a hub that has it and does not
+        // answer stops the save, so that no call that failed stands for "not this key".
+        let compares = store.state?.ui_features?.contains("secret_compare") == true
+        let place = try await GitHubAppKey.place(owner: owner, catalog: catalog, kept: reference) { held in
+            guard compares else { return nil }
+            // The fingerprints of this key with the salts of that entry: the hub says whether they are the entry's own.
+            let prints = try SecretFingerprint.of(item, salts: try await HubClient().secretSalts(hub: hub, database: database, login: held))
+            guard SecretFingerprint.areValid(prints) else { return nil }
+            return try await HubClient().secretSame(hub: hub, database: database, login: held, fingerprints: prints)
+        }
+        switch place {
+        case .held(let held, let variable): return try await put(value, variable: variable, store: store, reference: held)
+        case .new(let variable): return try await put(value, variable: variable, store: store, reference: reference)
+        }
+    }
 }

@@ -171,8 +171,7 @@ struct GitHubAppSection: View {
         if await DoorKeys.hasDoor(store) {
             do {
                 let app = try await GitHubAppKey.app(appID: GitHubAppForm.appID(appID) ?? appID, pem: key)
-                let reference = try await DoorKeys.put(GitHubAppKey.vaultValue(key),
-                                                       variable: GitHubAppKey.variable(owner: app.owner.login), store: store)
+                let reference = try await DoorKeys.putGitHubApp(key, owner: app.owner.login, store: store)
                 if let problem = await store.doorModel().addGitHubApp(owner: app.owner.login, login: reference, appID: String(app.id)) {
                     note = (problem, true)
                     return

@@ -1562,6 +1562,24 @@ final class MobileStore {
     /// Outbox can be used. One request at a time, as on the Mac.
     var canWrite: Bool { answersWrites && !sending && pending == nil && storageError == nil }
 
+    /// This item's own request, of this hub and generation, waits in the Outbox and no send carries it: an error
+    /// stopped its send, the hub refused it, or the app started with it. Its item says "Not sent", and only his Try
+    /// again, or his Discard of a refused one, moves it.
+    func waitsUnsent(for need: Int) -> Bool {
+        guard let pending, !sending else { return false }
+        return pending.needID == need && pending.hub == hub && pending.database == snapshot?.db
+    }
+
+    /// **His words about a key request that wait in the Outbox**, of this hub and generation, with no refusal: the
+    /// card's field shows them and takes no change, because Try again sends those words and no others. The words that
+    /// stand in the field are kept in memory only (`clarifyDrafts`), so after a start of the app the kept request is
+    /// the one place that has them, and a field that showed the link alone let him write other words that never went.
+    func clarifyKept(for need: Int) -> String? {
+        guard let pending, pending.clarifies, pending.needID == need, pending.refusal == nil, pending.hub == hub,
+              pending.database == snapshot?.db else { return nil }
+        return pending.text
+    }
+
     /// The waiting request may be sent again, with its own number. A refused one may not: its refusal is definitive.
     var canRetry: Bool {
         guard let pending else { return false }
@@ -1902,14 +1920,25 @@ final class MobileStore {
     /// answer, for the hub to answer again, for the write before it — and goes then, while its item says "Sending…".
     /// Nothing goes on a reading the hub has not confirmed: the press goes only through `send`, which asks `canWrite`,
     /// and only while the item is still open on the same hub and generation; else it is dropped, and nothing went.
+    /// **One exception: a press on an item whose own request waits unsent is dropped** (`waitsUnsent`), at the press
+    /// or when that request's send stops. The item says "Not sent" with Try again, and only that moves its request: the
+    /// press waited behind it with no end, and the item said "Sending…" in place of that line (two reviews of 20
+    /// November 2026). A press on any other item waits as before, also behind a request that waits unsent: it goes
+    /// when he sends that one again, or when a read finds that the hub has it.
     func press(needID: Int, choice: Int) {
         guard canWrite else {
+            guard !waitsUnsent(for: needID) else {
+                // the newest press wins: an older press of this item that still waits goes with it
+                waitingPresses[needID] = nil
+                return
+            }
             waitingPresses[needID] = choice
             guard pressWaits[needID] == nil else { return }
             let hub = hub, database = snapshot?.db
             pressWaits[needID] = Task { [weak self] in
                 while let store = self, !Task.isCancelled {
                     guard store.hub == hub, store.snapshot?.db == database, store.storageError == nil,
+                          !store.waitsUnsent(for: needID),
                           store.openNeeds.contains(where: { $0.id == needID }), let choice = store.waitingPresses[needID]
                     else { break }
                     if store.canWrite {

@@ -495,3 +495,24 @@ struct ClarifyDraftTests {
         #expect(MobileStore().clarifyDraft(for: 8).isEmpty)        // a new launch has none
     }
 }
+
+/// What depends on it: the item of a request on Needs you takes no touch while his answer to it is on its way, and
+/// the agent's chat shows that answer as his message. A request that waits with no send must be neither: its line
+/// says "Not sent" with Try again, which he must be able to press. The bug that this holds: after a start of the app
+/// with a request in the Outbox, the item counted as answered, and Try again on Needs you took no touch.
+@Suite("An answer that waits in the Outbox")
+struct WaitingAnswerTests {
+    @MainActor @Test("is on its way only while a send carries it, to its own request of this hub and generation")
+    func goes() throws {
+        let hub = try MobileClient.address("http://127.0.0.1:9")
+        let request = PendingRequest(hub: hub, database: "gen-1", client: "local", needID: 7, text: "Refund it")
+        #expect(MobileStore.goes(request, to: 7, of: hub, database: "gen-1", sending: true))
+        // kept from before the start, or stopped by an error: nothing sends it, so the item is his to press
+        #expect(!MobileStore.goes(request, to: 7, of: hub, database: "gen-1", sending: false))
+        #expect(!MobileStore.goes(request, to: 8, of: hub, database: "gen-1", sending: true))
+        #expect(!MobileStore.goes(request, to: 7, of: hub, database: "gen-2", sending: true))
+        #expect(!MobileStore.goes(request, to: 7, of: hub, database: nil, sending: true))
+        let other = try MobileClient.address("http://127.0.0.1:10")
+        #expect(!MobileStore.goes(request, to: 7, of: other, database: "gen-1", sending: true))
+    }
+}

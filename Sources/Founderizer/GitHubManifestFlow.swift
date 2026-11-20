@@ -13,7 +13,7 @@ import os
 /// GitHub's own page that makes a private App there with its permissions filled in (`GitHubManifest`). GitHub returns
 /// to this Mac's loopback page with a one-time code, this Mac trades it for the App and its key, and the browser goes
 /// on to GitHub's page that installs the App, where he chooses the account's repositories. The key goes to the door as
-/// the GitHub App rows' Save gives one (`DoorKeys.put`, with the grant that this Mac signs), the door's file names it
+/// the GitHub App rows' Save gives one (`DoorKeys.putGitHubApp`, with the grant that this Mac signs), the door's file names it
 /// for that account, and the hub gets the App's ID. Nothing of Founderizer's shows, and the key is in memory only.
 @MainActor
 enum GitHubManifestFlow {
@@ -88,8 +88,7 @@ enum GitHubManifestFlow {
         let made = DoorKeyReference.make()      // one for the three tries: a failed try leaves no second catalog entry
         guard let reference = await tries({ () async throws -> String in
             _ = try await GitHubAppKey.app(appID: appID, pem: app.pem)
-            return try await DoorKeys.put(GitHubAppKey.vaultValue(app.pem), variable: GitHubAppKey.variable(owner: owner),
-                                          store: store, reference: made)
+            return try await DoorKeys.putGitHubApp(app.pem, owner: owner, store: store, reference: made)
         }) else {
             log.error("The new GitHub App \(appID, privacy: .public) of \(owner, privacy: .public) did not go to the door.")
             return
