@@ -73,4 +73,45 @@ struct KeySaveTests {
         #expect(!(try key(["kind": "login", "clarified": 2.5]).answeredWithKey))
         #expect(!(try key(["kind": "api_key"]).answeredWithKey))
     }
+
+    @Test("The sidebar's line for his answer with a saved key is the check; a task that moved after it and other answers keep their words, and a request that waits for him comes first")
+    func theRowsLineAfterASavedKey() throws {
+        func need(_ secret: [String: Any]?) throws -> OwnerNeed {
+            var json: [String: Any] = ["id": 4, "by": "vps", "title": "Synthetic", "why": "", "todo": "", "raised": 1,
+                                       "answer": "Synthetic", "answered": 8]
+            if let secret { json["kind"] = "secret"; json["secret"] = secret }
+            return try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: json))
+        }
+        func answer(to id: Int) throws -> ChatEntry {
+            .message(try JSONDecoder().decode(OwnerMessage.self, from: JSONSerialization.data(withJSONObject: [
+                "request_id": "r", "recipient": "vps", "kind": "answer", "need_id": id, "event_id": 1, "created": 9.0,
+                "client": "test", "text": "Saved the API key EXAMPLE_KEY in the vault, as bws://11111111-2222-4333-8444-555555555555.",
+            ])))
+        }
+        func task(moved: Double) throws -> FleetTask {
+            let json = "{\"id\": 1, \"title\": \"The shop page\", \"details\": \"\", \"done_when\": \"\", \"needs\": \"\", "
+                + "\"goal\": \"\", \"owner\": \"vps\", \"requester\": \"manager\", \"state\": \"working\", "
+                + "\"created\": 1, \"last_activity\": \(moved), \"attempt\": 1, \"restarts\": 0, \"nudge_level\": 0, \"stop_sent\": 0}"
+            return try JSONDecoder().decode(FleetTask.self, from: Data(json.utf8))
+        }
+        let saved = try need(["kind": "api_key", "saved": "bws://11111111-2222-4333-8444-555555555555"])
+        #expect(ChatList.savedKey("vps", last: try answer(to: 4), tasks: [], needs: [saved]))
+        // a task that moved after his answer is the line, and says what the agent does now
+        #expect(!ChatList.savedKey("vps", last: try answer(to: 4), tasks: [try task(moved: 50)], needs: [saved]))
+        #expect(ChatList.savedKey("vps", last: try answer(to: 4), tasks: [try task(moved: 5)], needs: [saved]))
+        // a declined key request, an answer to another request and a request that the reading does not hold keep words
+        #expect(!ChatList.savedKey("vps", last: try answer(to: 4), tasks: [], needs: [try need(["kind": "api_key"])]))
+        #expect(!ChatList.savedKey("vps", last: try answer(to: 4), tasks: [], needs: [try need(nil)]))
+        #expect(!ChatList.savedKey("vps", last: try answer(to: 5), tasks: [], needs: [saved]))
+        // **one order for both rows**: a request that waits for him, newer than the answer, is the line, in its words
+        let waiting = try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: [
+            "id": 7, "by": "vps", "title": "Enter the API key OTHER_KEY for api.example.com", "why": "", "todo": "", "raised": 20,
+            "answer": NSNull(), "answered": NSNull(), "kind": "secret", "secret": ["kind": "api_key"],
+        ]))
+        let both = ChatList.line("vps", entries: [try answer(to: 4)], whole: true, needs: [saved, waiting], tasks: [])
+        #expect(both?.request?.id == 7 && both?.isSavedKey == false && both?.words == waiting.title)
+        let alone = ChatList.line("vps", entries: [try answer(to: 4)], whole: true, needs: [saved], tasks: [])
+        #expect(alone?.request == nil && alone?.isSavedKey == true)
+        #expect(ChatList.line("vps", entries: [], whole: true, needs: [saved], tasks: []) == nil)
+    }
 }

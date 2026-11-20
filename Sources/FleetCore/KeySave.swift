@@ -88,3 +88,47 @@ extension OwnerNeed {
         asksForSecret && !isOpen && secret?.saved != nil && secret?.clarified != true
     }
 }
+
+extension ChatList {
+    /// **His answer with a saved key is the check of its card on the agent's row, with no words** (the owner, 20
+    /// November 2026: "Yes, both" to the sidebar's line and Needs you without words after a saved key): true when the
+    /// row's line would say his last message (`preview`), and that message is the answer of a request that a saved
+    /// key answered. The hub writes that answer as his message, in long words that are the agent's.
+    public static func savedKey(_ agent: String, last: ChatEntry?, tasks: [FleetTask], needs: [OwnerNeed]) -> Bool {
+        guard case .message(let message)? = last, message.kind == "answer", let id = message.need_id,
+              needs.first(where: { $0.id == id })?.answeredWithKey == true else { return false }
+        // a task of the agent that moved after his answer is the line instead, and says what it does now (`preview`)
+        return preview(agent, last: last, tasks: tasks) == preview(agent, last: last, tasks: [])
+    }
+}
+
+extension ChatList {
+    /// **The line of an agent's row, in the sidebar and in the search, in its one order**: a request that waits for him
+    /// and is the newest thing in its chat (its title, in orange: `waitingRequest`), else his answer with a saved key
+    /// (the card's check, with no words: `savedKey`), else the newest thing it did in words (`preview`). Both rows ask
+    /// this one rule, so a saved key's check never stands in the place of a request that waits for him.
+    public enum Line {
+        case waiting(OwnerNeed), savedKey, words(String)
+
+        /// The request that waits for him, where it is the line.
+        public var request: OwnerNeed? { if case .waiting(let need) = self { need } else { nil } }
+        /// The line is the check of a saved key's card.
+        public var isSavedKey: Bool { if case .savedKey = self { true } else { false } }
+        /// What the line says: the request's title, the check's word for VoiceOver, or its words.
+        public var words: String {
+            switch self {
+            case .waiting(let need): need.title
+            case .savedKey: String(l10n: "Saved")
+            case .words(let words): words
+            }
+        }
+    }
+
+    /// The line of `agent`'s row (`Line`). `entries`: the newest entries of its chat, oldest first; `whole`: they are its
+    /// whole chat. Nil before the first message, and the row then shows the name alone.
+    public static func line(_ agent: String, entries: [ChatEntry], whole: Bool, needs: [OwnerNeed], tasks: [FleetTask]) -> Line? {
+        if let request = waitingRequest(agent, entries: entries, whole: whole, needs: needs) { return .waiting(request) }
+        if savedKey(agent, last: entries.last, tasks: tasks, needs: needs) { return .savedKey }
+        return preview(agent, last: entries.last, tasks: tasks).map(Line.words)
+    }
+}

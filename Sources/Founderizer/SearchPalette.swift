@@ -165,16 +165,19 @@ struct SearchPalette: View {
     /// An agent: its glyph, its name, and the newest thing it did, as its row in the sidebar says it.
     private func agentRow(_ agent: FleetAgent, highlighted: Bool) -> some View {
         let entries = store.chatTimeline.entries(for: agent.name, limit: ChatList.rowReads)
-        // A request that waits for him and is the newest thing in its chat, in orange, as on its sidebar row.
-        let request = ChatList.waitingRequest(agent.name, entries: entries, whole: entries.count >= store.chatTimeline.count(for: agent.name),
-                                              needs: store.state?.needs ?? [])
-        let preview = request?.title ?? ChatList.preview(agent.name, last: entries.last, tasks: store.state?.tasks ?? [])
+        // The line of its sidebar row, in the same one order (`ChatList.line`): a request that waits for him in orange,
+        // the check of a saved key's card, or its words.
+        let line = ChatList.line(agent.name, entries: entries, whole: entries.count >= store.chatTimeline.count(for: agent.name),
+                                 needs: store.state?.needs ?? [], tasks: store.state?.tasks ?? [])
+        let request = line?.request, savedKey = line?.isSavedKey == true, preview = line?.words
         return SearchRow(highlighted: highlighted, height: 48) { open(.agent(agent)) } content: {
             // The `row` step, 22 pt, with its dot (D-8; fix round 2: a search avatar is 18–24, and this was 28).
             RowMark { AgentGlyph(name: agent.name, size: GlyphSize.row, ground: highlighted ? FleetStyle.bubble : FleetStyle.canvas) }
             VStack(alignment: .leading, spacing: 2) {
                 Text(agent.name.agentLabel).font(FormMetrics.title).lineLimit(1)
-                if let preview {
+                if let preview, savedKey {
+                    KeyMarkLine(word: preview)
+                } else if let preview {
                     Text(preview).font(FormMetrics.detail).foregroundStyle(request == nil ? FleetStyle.muted : Color.orange).lineLimit(1)
                 }
             }

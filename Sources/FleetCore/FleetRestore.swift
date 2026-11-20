@@ -282,7 +282,7 @@ public struct FleetHolds: Sendable, Equatable {
 
     public init(_ state: HubState) {
         self.init(agents: state.agents.count, tasks: state.taskCount, goals: state.goals?.count ?? 0,
-                  needs: state.needs.count, reports: state.reports.count)
+                  needs: state.needCount, reports: state.reportCount)
     }
 
     /// What putting a copy over this hub would take away, in his words.

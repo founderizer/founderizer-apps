@@ -866,6 +866,31 @@ struct MobileAskTests {
         try JSONDecoder().decode(MobileChatItem.self, from: Data(json.utf8))
     }
 
+    /// The bug that this catches (hub 1.258, `ended_asks`): the phone reads the ended heads of a chat from a time after
+    /// a line that it shows, and the row of what he asked for under that line goes; or it reads them at every refresh;
+    /// or it never reads them again after their mark moved.
+    @Test("the ended heads of a chat are read from its oldest line, and again only for a new mark or an older line")
+    func endedReadOfAChat() throws {
+        let lines = [try item(#"{"kind": "report", "ts": 20, "id": 5, "text": "Done."}"#),
+                     try item(#"{"kind": "message", "ts": 12.5, "id": "ABC-1", "text": "Do it", "client": "x"}"#)]
+        let read = MobileStore.endedRead([:], chat: "studio", lines: lines, mark: "m1", scoped: true)
+        #expect(read?.place == "studio" && read?.from == 12.5)
+        #expect(MobileStore.endedRead([:], chat: "studio", lines: nil, mark: "m1", scoped: true) == nil, "no line yet")
+        let held = ["studio": MobileStore.EndedAsks(mark: "m1", from: 12.5, heads: [], names: [:])]
+        #expect(MobileStore.endedRead(held, chat: "studio", lines: lines, mark: "m1", scoped: true) == nil)
+        #expect(MobileStore.endedRead(held, chat: "studio", lines: Array(lines.prefix(1)), mark: "m1", scoped: true) == nil,
+                "a later oldest line is covered")
+        #expect(MobileStore.endedRead(held, chat: "studio", lines: lines, mark: "m2", scoped: true)?.from == 12.5)
+        let older = lines + [try item(#"{"kind": "message", "ts": 3, "id": "ABC-0", "text": "First", "client": "x"}"#)]
+        #expect(MobileStore.endedRead(held, chat: "studio", lines: older, mark: "m1", scoped: true)?.from == 3)
+        #expect(MobileStore.endedRead(held, chat: "vps", lines: lines, mark: "m1", scoped: true)?.place == "vps")
+        // A hub before it: every head, once for each mark.
+        let whole = MobileStore.endedRead(held, chat: "studio", lines: lines, mark: "m1", scoped: false)
+        #expect(whole?.place == "" && whole?.from == nil)
+        let wholeHeld = ["": MobileStore.EndedAsks(mark: "m1", from: nil, heads: [], names: [:])]
+        #expect(MobileStore.endedRead(wholeHeld, chat: "studio", lines: lines, mark: "m1", scoped: false) == nil)
+    }
+
     private func head(_ fields: [String: Any]) throws -> MobileTaskHead {
         var row: [String: Any] = ["id": 7, "title": "Read the clock", "state": "working", "owner": "vps",
                                   "requester": "manager", "goal": "", "needs": "none", "attempt": 1, "created": 10.0,

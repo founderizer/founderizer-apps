@@ -123,8 +123,9 @@ struct SecretEntryView: View {
     private let compact: Bool
     /// The reference of the saved secret, or nil when the owner closed the form without one.
     let onDone: (String?) -> Void
-    /// **A request's card in a chat draws his save** (`KeySaveLook`): a ring while it runs, then a check, and the card
-    /// keeps the form's parts out of sight meanwhile. Nil where no card draws it (Needs you, Add secret, a key page).
+    /// **A request's card in a chat, and the request at hand on Needs you, draw his save** (`KeySaveLook`): a ring while
+    /// it runs, then a check, and they keep the form's parts out of sight meanwhile. Nil where nothing draws it (Add
+    /// secret, a key page).
     private let onLook: ((KeySaveLook?) -> Void)?
 
     /// The hub features of Add secret and its grants. Show the Add button only with them.
@@ -326,11 +327,11 @@ struct SecretEntryView: View {
         isRequest && access[DoorAccess.holder] != nil ? [SecretProgress.Grant(agent: DoorAccess.holder, grant: .use)] : []
     }
 
-    /// **What the request's card in a chat draws for this form** (`KeySaveLook`), only where a card draws it. The form
-    /// draws all its parts as before: while the card shows the ring or the check, the card keeps them out of sight
-    /// (`KeptAway`), so one change of the card moves the whole card, closed and open again.
+    /// **What the request's card in a chat, or the request at hand on Needs you, draws for this form** (`KeySaveLook`),
+    /// only where one draws it. The form draws all its parts as before: while its place shows the ring or the check, it
+    /// keeps them out of sight (`KeptAway`), so one change of that place moves it all, closed and open again.
     private var cardLook: KeySaveLook? {
-        guard onLook != nil, compact, isRequest, !onStep else { return nil }
+        guard onLook != nil, compact, isRequest else { return nil }
         if case .saved(let progress) = phase {
             // a grant whose agent cannot use the key yet, or an answer that the request had already: rows, never a check
             let warned = progress.given.contains(where: \.warning) || progress.answerNote != nil

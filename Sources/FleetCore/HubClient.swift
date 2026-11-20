@@ -293,10 +293,12 @@ public final class HubClient: Sendable {
     /// **It asks for the window of the tasks** (owner API 1.254, `tasks=window`): the tasks that have not ended and
     /// the ended ones of the newest ids, so the answer does not grow with the fleet's history. Its `older_tasks`
     /// says where the other ended tasks are (`olderList`, `olderBlock`). A hub from before that change reads no
-    /// such word and gives every task, with no `older_tasks`.
+    /// such word and gives every task, with no `older_tasks`. **And for the window of the rest** (owner API 1.258,
+    /// `rest=window`): the items that are open and the items, reports and messages of the newest keys, with
+    /// `older_rows` (`olderRows`, `olderRowsBlock`); a hub from before that gives every row, with no `older_rows`.
     public func stateReading(at hub: URL, present: Bool = false) async throws -> (state: HubState, data: Data) {
         var parts = URLComponents(url: hub.appendingPathComponent("ui/state"), resolvingAgainstBaseURL: false)!
-        parts.queryItems = [.init(name: "tasks", value: "window")]
+        parts.queryItems = [.init(name: "tasks", value: "window"), .init(name: "rest", value: "window")]
         var request = URLRequest(url: parts.url!)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if present { request.setValue(OwnerPresence.value, forHTTPHeaderField: OwnerPresence.header) }
@@ -323,6 +325,32 @@ public final class HubClient: Sendable {
     private func olderRequest(_ hub: URL, database: String, from: Int?) -> URLRequest {
         var parts = URLComponents(url: hub.appendingPathComponent("ui/tasks/older"), resolvingAgainstBaseURL: false)!
         parts.queryItems = [.init(name: "db", value: database)] + (from.map { [.init(name: "from", value: String($0))] } ?? [])
+        var request = URLRequest(url: parts.url!)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        return request
+    }
+
+    /// `GET /ui/older` (owner API 1.258): the blocks of one list of the items, reports and messages that a window read
+    /// of the state leaves out, each with its mark.
+    public func olderRows(at hub: URL, database: String, list: OlderRowsList) async throws -> OlderRowsIndex {
+        let index = try OlderRowsIndex.decode(await perform(olderRowsRequest(hub, database: database, list: list, from: nil)))
+        guard index.db == database, index.list == list.rawValue else { throw HubError.invalidResponse }
+        return index
+    }
+
+    /// One of those blocks, by its first key, and the bytes it was read from, which the Mac keeps on its disk.
+    public func olderRowsBlock(at hub: URL, database: String, list: OlderRowsList,
+                               from: Int) async throws -> (block: OlderRowsBlock, data: Data) {
+        let data = try await perform(olderRowsRequest(hub, database: database, list: list, from: from))
+        let block = try OlderRowsBlock.decode(data)
+        guard block.db == database, block.kind == list, block.from == from else { throw HubError.invalidResponse }
+        return (block, data)
+    }
+
+    private func olderRowsRequest(_ hub: URL, database: String, list: OlderRowsList, from: Int?) -> URLRequest {
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/older"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database), .init(name: "list", value: list.rawValue)]
+            + (from.map { [.init(name: "from", value: String($0))] } ?? [])
         var request = URLRequest(url: parts.url!)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         return request

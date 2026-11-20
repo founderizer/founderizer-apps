@@ -518,7 +518,9 @@ public final class OwnerTools: @unchecked Sendable {
 
     /// `fleet_overview`: what is my fleet doing, from the routes that the app's own screens read.
     func overview(_ args: [String: JSONValue], on hub: OwnerHub) throws -> JSONValue? {
-        let state = try hub.get("/ui/state", "a read of the fleet", query: [("tasks", .string("window"))]).data ?? .null
+        // the windows of the tasks (owner API 1.254) and of the rest (1.258), as `owner_mcp.py` overview reads them
+        let state = try hub.get("/ui/state", "a read of the fleet",
+                                query: [("tasks", .string("window")), ("rest", .string("window"))]).data ?? .null
         func list(_ key: String) -> [JSONValue] { state[key]?.array ?? [] }
         func pick(_ item: JSONValue, _ keys: [String]) -> JSONValue {
             .object(Dictionary(uniqueKeysWithValues: keys.map { ($0, item[$0] ?? .null) }))

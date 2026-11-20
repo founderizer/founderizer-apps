@@ -881,12 +881,14 @@ public enum StartAgain {
     }
 
     /// **The kept readings of this hub** in the app's own folder: `state-`, `health-`, `releases-` and `app-update-`
-    /// with the hub's host and port, as `FleetStore` names them, and the folder of its blocks of older tasks
-    /// (`olderFolder`). Files of another hub, and every other file, stay.
+    /// with the hub's host and port, as `FleetStore` names them, the folder of its blocks of older tasks
+    /// (`olderFolder`), and the folders of its blocks of older rows (`olderRowsFolder`). Files of another hub, and every
+    /// other file, stay.
     public static func readingFiles(of hub: URL, in folder: URL) -> [URL] {
         let address = readingAddress(of: hub)
         return ["state", "health", "releases", "app-update"].map { folder.appendingPathComponent("\($0)-\(address).json") }
             + [olderFolder(of: hub, in: folder)]
+            + OlderRowsList.allCases.map { olderRowsFolder(of: hub, list: $0.rawValue, in: folder) }
     }
 
     /// The hub's host and port as a part of a file's name, as `FleetStore` names its kept readings.
@@ -899,6 +901,13 @@ public enum StartAgain {
     /// one file for each block, by the block's first task id.
     public static func olderFolder(of hub: URL, in folder: URL) -> URL {
         folder.appendingPathComponent("older-\(readingAddress(of: hub))", isDirectory: true)
+    }
+
+    /// **The folder of this hub's blocks of one list of older rows** (`OlderRows`; owner API 1.258): `needs`, `reports`
+    /// or `messages`, one file for each block, by the block's first key. Its first word is no other kept file's, so no
+    /// hub's address makes it the folder of another hub's tasks (`older-<address>`).
+    public static func olderRowsFolder(of hub: URL, list: String, in folder: URL) -> URL {
+        folder.appendingPathComponent("rows-\(list)-\(readingAddress(of: hub))", isDirectory: true)
     }
 }
 #endif

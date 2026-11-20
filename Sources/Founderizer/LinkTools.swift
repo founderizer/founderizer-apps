@@ -414,15 +414,17 @@ enum LinkTools {
             },
             // As `grantDesk`'s: a store that moved is nil.
             signs: { place in features(of: store(), at: place).map { $0.contains(GrantSigning.feature) } },
-            // One read of the hub's state, whole (it has no query for one database), and the tool's own read of its
-            // bytes for the item of this id and the place's database. A read that failed is thrown as it is. The
-            // state can be large, so the parse runs off the main actor.
+            // One read of the hub's state, and the tool's own read of its bytes for the item of this id and the place's
+            // database. An item that has its answer can be older than the window of the rest (owner API 1.258): then
+            // the bytes of its one block, which holds it under `needs` with the state's `db`. A read that failed is
+            // thrown as it is. The state can be large, so the parse runs off the main actor.
             request: { place, need in
                 let reading = try await lists.stateReading(at: place.hub)
                 let data = reading.data, database = place.database
-                return await Task.detached {
-                    AnswerSecret.request(in: data, need: need, database: database)
-                }.value
+                let read = await Task.detached { AnswerSecret.request(in: data, need: need, database: database) }.value
+                guard read == .none, let from = reading.state.older_rows?.needs?.block(of: need) else { return read }
+                let block = try await lists.olderRowsBlock(at: place.hub, database: database, list: .needs, from: from).data
+                return await Task.detached { AnswerSecret.request(in: block, need: need, database: database) }.value
             },
             // The list's read of `grantDesk`, with each secret's title. A read that failed is thrown as it is, and
             // a page with no catalog too.
@@ -625,12 +627,17 @@ enum LinkTools {
                 return Place(hub: store.hub, database: database, client: store.installation)
             },
             database: { $0.database },
-            // One read of the hub's state, whole, as the store reads it, and the item of this id, as its cards read
-            // it. A read that failed, and bytes that are no state, are thrown as they are.
+            // One read of the hub's state, and the item of this id, as its cards read it; an item that has its answer
+            // can be older than the window of the rest (owner API 1.258): then from its one block. A read that failed,
+            // and bytes that are no state, are thrown as they are.
             item: { place, need in
                 let state = try await lists.stateReading(at: place.hub).state
                 guard state.db == place.database else { return .otherGeneration }
-                guard let found = state.needs.first(where: { $0.id == need }) else { return .none }
+                if let found = state.needs.first(where: { $0.id == need }) { return .found(found, card(found)) }
+                guard let from = state.older_rows?.needs?.block(of: need),
+                      let found = try await lists.olderRowsBlock(at: place.hub, database: place.database, list: .needs,
+                                                                 from: from).block.needs?.first(where: { $0.id == need })
+                else { return .none }
                 return .found(found, card(found))
             },
             sign: { place, need, press in await signDoor(need, press, place: place, store: store()) },

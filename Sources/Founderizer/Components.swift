@@ -250,6 +250,10 @@ struct ChatRow<Mark: View, Trailing: View>: View {
     /// **The line is a request that waits for him, in orange** (`ChatList.waitingRequest`; the owner's "Yes, build it"
     /// of 14 November 2026): orange is what waits for him (D-8), and here it is words, as on the Tasks board.
     private let needsYou: Bool
+    /// **The line is the check of a saved key's card, with no words** (`ChatList.savedKey`; the owner, 20 November
+    /// 2026: "Yes, both" to the sidebar's line and Needs you without words after a saved key): `preview` is then the
+    /// check's word, for VoiceOver.
+    private let keyMark: Bool
     /// **When the chat's last message is from, at the end of the name's line**, as a chat app writes it
     /// (`ChatList.lastTime`, `ChatList.time`; the owner, 13 November 2026: "maybe I would like this relative time
     /// label on the side menu too"): muted, in the line's own size. The row's marks (a setup that runs, the unread
@@ -263,10 +267,10 @@ struct ChatRow<Mark: View, Trailing: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(_ title: String, preview: String?, selected: Bool, emphasized: Bool, working: Bool = false, needsYou: Bool = false,
-         time: String? = nil, action: @escaping () -> Void, @ViewBuilder mark: () -> Mark,
+         keyMark: Bool = false, time: String? = nil, action: @escaping () -> Void, @ViewBuilder mark: () -> Mark,
          @ViewBuilder trailing: () -> Trailing) {
         self.title = title; self.preview = preview; self.selected = selected; self.emphasized = emphasized
-        self.working = working; self.needsYou = needsYou; self.time = preview == nil ? nil : time
+        self.working = working; self.needsYou = needsYou; self.keyMark = keyMark; self.time = preview == nil ? nil : time
         self.action = action; self.mark = mark(); self.trailing = trailing()
     }
 
@@ -781,7 +785,17 @@ extension ChatRow {
     /// moves nor changes its height when its agent's work starts or ends.
     ///
     /// **A request that waits for him is its title in orange** (`needsYou`), whole: it has no count of tasks.
+    ///
+    /// **A saved key's answer is the check of its card** (`keyMark`), in the line's size and colour, still.
     @ViewBuilder func previewLine(_ preview: String) -> some View {
+        if keyMark {
+            KeyMarkLine(word: preview)
+        } else {
+            wordsLine(preview)
+        }
+    }
+
+    @ViewBuilder private func wordsLine(_ preview: String) -> some View {
         let parts: (text: String, count: String?) = needsYou ? (preview, nil) : Self.splitCount(preview)
         let still = HStack(spacing: 0) {
             Text(parts.text).lineLimit(1).truncationMode(.tail)
@@ -801,5 +815,18 @@ extension ChatRow {
     static func splitCount(_ preview: String) -> (text: String, count: String?) {
         guard let range = preview.range(of: #" · \+\d+$"#, options: .regularExpression) else { return (preview, nil) }
         return (String(preview[..<range.lowerBound]), String(preview[range]))
+    }
+}
+
+/// **The line of an agent's row, or of its row in the search, for his answer with a saved key** (`ChatList.savedKey`):
+/// the check of its card, in the line's size and colour, with its word for VoiceOver. The line keeps the height of a
+/// line of words, so the row does not move.
+struct KeyMarkLine: View {
+    /// The check's word ("Saved"), which VoiceOver says.
+    let word: String
+
+    var body: some View {
+        Text(Image(systemName: "checkmark.circle")).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+            .accessibilityLabel(word)
     }
 }

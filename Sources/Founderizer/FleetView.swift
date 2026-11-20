@@ -634,10 +634,11 @@ struct FleetView: View {
                      presence.label, store.isFresh ? nil : String(l10n: "Last reading")].compactMap { $0 }
         let entries = store.chatTimeline.entries(for: agent.name, limit: ChatList.rowReads)
         let last = entries.last
-        // **A request that waits for him and is the newest thing in its chat is the line, in orange** (`ChatList.waitingRequest`).
-        let request = ChatList.waitingRequest(agent.name, entries: entries, whole: entries.count >= store.chatTimeline.count(for: agent.name),
-                                              needs: store.state?.needs ?? [])
-        let preview = request?.title ?? ChatList.preview(agent.name, last: last, tasks: store.state?.tasks ?? [])
+        // **The line, in its one order** (`ChatList.line`): a request that waits for him and is the newest thing in its
+        // chat, in orange; else his answer with a saved key, the check of its card with no words; else its words.
+        let line = ChatList.line(agent.name, entries: entries, whole: entries.count >= store.chatTimeline.count(for: agent.name),
+                                 needs: store.state?.needs ?? [], tasks: store.state?.tasks ?? [])
+        let request = line?.request, savedKey = line?.isSavedKey == true, preview = line?.words
         // **While the agent works, its line says what it does now** (`AgentActivity.actionNow`, hub 1.148; the owner, 13
         // November 2026, to the picture of this line: "Yes, build it"): the agent's own words for its command, or the
         // hub's plain words for a tool, in place of the task's title. It moves as every line of an agent at work.
@@ -648,7 +649,7 @@ struct FleetView: View {
         return ChatRow(agent.name.agentLabel, preview: action ?? preview, selected: selected, emphasized: reply,
                        // Its line and its glyph move only by an answer of this wake (`marksMove`).
                        working: presence == .working && store.marksMove, needsYou: action == nil && request != nil,
-                       time: time) {
+                       keyMark: action == nil && savedKey, time: time) {
             openAgent(agent.name, .chat)
         } mark: {
             // **Its status dot stands on its glyph's lower right corner, as everywhere else** (the owner's yes of 28

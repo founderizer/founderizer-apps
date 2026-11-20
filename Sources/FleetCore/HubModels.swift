@@ -17,10 +17,12 @@ public struct HubState: Decodable, Sendable {
     /// FleetCore sets.
     public internal(set) var tasks: [FleetTask]
     public internal(set) var notes: [ProgressNote]
-    public let needs: [OwnerNeed]
+    /// The Needs-you items, the messages and the reports: the hub's own rows of one read, or those rows with the blocks
+    /// of older rows that this Mac holds (`OlderRows.join`, owner API 1.258), which only FleetCore sets.
+    public internal(set) var needs: [OwnerNeed]
     public internal(set) var permissions: [FleetPermission]
-    public let messages: [OwnerMessage]
-    public let reports: [ManagerReport]
+    public internal(set) var messages: [OwnerMessage]
+    public internal(set) var reports: [ManagerReport]
     public internal(set) var steers: [TaskSteer]?
     public internal(set) var holds: [TaskHold]?
     public internal(set) var outcomes: [TaskOutcome]?
@@ -28,8 +30,16 @@ public struct HubState: Decodable, Sendable {
     /// asked for the window of the tasks. nil: every task is in `tasks`: the hub is older, its marks are not in
     /// place, or this is a reading that `OlderTasks.join` made whole.
     public internal(set) var older_tasks: OlderTasksHead?
+    /// **Where the items, reports and messages are that this read leaves out** (owner API 1.258, `OlderRowsHeads`), in a
+    /// read that asked for that window. nil: every row is in the lists: the hub is older, its marks are not in place,
+    /// or this is a reading that `OlderRows.join` made whole.
+    public internal(set) var older_rows: OlderRowsHeads?
     /// Every task of the fleet, by this read: its own, and the ones that it leaves out.
     public var taskCount: Int { tasks.count + (older_tasks?.tasks ?? 0) }
+    /// Every Needs-you item and every report of the fleet, by this read: its own, and the ones that it leaves out
+    /// (owner API 1.258).
+    public var needCount: Int { needs.count + (older_rows?.needs?.rows ?? 0) }
+    public var reportCount: Int { reports.count + (older_rows?.reports?.rows ?? 0) }
     /// Owner feature `chat_apps`: Pause all, and the accounts that are not connected or not linked.
     public let chat_apps: ChatAppsSummary?
     /// Owner feature `live_changes`: the hub's change count at the moment of this snapshot, `<boot>.<state>.<activity>`,
@@ -54,6 +64,7 @@ public struct HubState: Decodable, Sendable {
               state.goals?.allSatisfy(\.isValid) != false,
               state.steers?.allSatisfy(\.isValid) != false,
               state.older_tasks?.isValid != false,
+              state.older_rows?.isValid != false,
               Set(state.steers?.map(\.id) ?? []).count == (state.steers?.count ?? 0),
               Set(state.goals?.map(\.id) ?? []).count == (state.goals?.count ?? 0),
               Set(state.agents.map(\.id)).count == state.agents.count,

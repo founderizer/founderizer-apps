@@ -836,22 +836,6 @@ struct NeedRequestCard: View {
 
 }
 
-/// A view that stays in its card for the work that it finishes, while the card does not show it: no height, nothing
-/// drawn, no click, no key and nothing for VoiceOver (a key's form under the ring of its save, `NeedRequestCard`). Its
-/// height and its fade move with the card's own change, and the card's clip keeps it inside the card meanwhile.
-private struct KeptAway: ViewModifier {
-    let away: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .frame(height: away ? 0 : nil, alignment: .top)
-            .opacity(away ? 0 : 1)
-            .allowsHitTesting(!away)
-            .disabled(away)
-            .accessibilityHidden(away)
-    }
-}
-
 private extension View {
     /// Tells where this view stands under the top of the space `name`, while `on`: the answer box on a step.
     @ViewBuilder func stands(in name: String, on: Bool, top: @escaping (CGFloat) -> Void) -> some View {

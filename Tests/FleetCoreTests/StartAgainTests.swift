@@ -822,11 +822,14 @@ struct StartAgainTests {
         #expect(defaults.dictionary(forKey: "chatRepliesSeen") != nil)
     }
 
-    @Test func theKeptReadingsOfAHubAreItsFourFilesAndItsBlocksOfOlderTasks() {
+    /// The bug that this catches: Forget this fleet leaves the blocks of a hub's older tasks or rows (owner API 1.254,
+    /// 1.258) on the disk, where a later connect to another fleet of the same address would read them.
+    @Test func theKeptReadingsOfAHubAreItsFourFilesAndItsBlocksOfOlderTasksAndRows() {
         let folder = URL(fileURLWithPath: "/tmp/example/Founderizer")
         #expect(StartAgain.readingFiles(of: hub, in: folder).map(\.lastPathComponent) == [
             "state-100.64.0.1-8765.json", "health-100.64.0.1-8765.json", "releases-100.64.0.1-8765.json", "app-update-100.64.0.1-8765.json",
-            "older-100.64.0.1-8765"])
+            "older-100.64.0.1-8765", "rows-needs-100.64.0.1-8765", "rows-reports-100.64.0.1-8765",
+            "rows-messages-100.64.0.1-8765"])
         #expect(Set(StartAgain.readingFiles(of: hub, in: folder)).isDisjoint(with: StartAgain.readingFiles(of: other, in: folder)))
     }
 

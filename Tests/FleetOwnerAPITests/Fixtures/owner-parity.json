@@ -5816,6 +5816,9 @@
      "method": "GET",
      "path": "/ui/state",
      "query": {
+      "rest": [
+       "window"
+      ],
       "tasks": [
        "window"
       ]
@@ -6073,6 +6076,9 @@
      "method": "GET",
      "path": "/ui/state",
      "query": {
+      "rest": [
+       "window"
+      ],
       "tasks": [
        "window"
       ]
@@ -36120,6 +36126,9 @@
      "method": "GET",
      "path": "/ui/state",
      "query": {
+      "rest": [
+       "window"
+      ],
       "tasks": [
        "window"
       ]

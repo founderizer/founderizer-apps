@@ -70,13 +70,25 @@ final class MobileStore {
             readAskTasks()
         }
     }
-    /// **The heads of every ended task** (`GET /ui/mobile/ended`), read while a chat is open, and again only when their
-    /// mark changes (`endedMark`): what he asked for in a chat stays there when its work ends, and the main read holds
-    /// the last 20 that ended.
-    /// Only the ended heads that carry an ask are kept, with the names of their asks.
-    @ObservationIgnored private var endedHeads: [MobileTaskHead] = []
-    @ObservationIgnored private var endedNames: [String: String] = [:]
-    @ObservationIgnored private var endedMark: String?
+    /// **The ended heads of what he asked for in a chat** (`GET /ui/mobile/ended`), read while a chat is open, and again
+    /// only when their mark changes: what he asked for in a chat stays there when its work ends, and the main read holds
+    /// the last 20 that ended. Only the heads that carry an ask are kept, with the names of their asks. A hub with
+    /// `ended_asks` (1.258) gives the heads of one chat's asks from a time on: the phone reads them for the chat that is
+    /// open, from the oldest line that it holds of it, and keeps them by chat, so the read grows with what the phone
+    /// holds and not with the fleet's history (on the first fleet, on 20 November 2026, every head was 840 KB, of which
+    /// the phone kept 90 KB). A hub before that gives every head, kept under "".
+    struct EndedAsks: Sendable {
+        let mark: String
+        /// The time from which the read covers the chat's messages; nil for a read of every head.
+        let from: Double?
+        let heads: [MobileTaskHead]
+        let names: [String: String]
+    }
+    @ObservationIgnored private var endedAsks: [String: EndedAsks] = [:]
+    private var endedHeads: [MobileTaskHead] { endedAsks.keys.sorted().flatMap { endedAsks[$0]!.heads } }
+    private var endedNames: [String: String] {
+        endedAsks.values.reduce(into: [:]) { names, read in names.merge(read.names) { first, _ in first } }
+    }
     /// When a read of the ended heads last failed: the next one waits a minute.
     @ObservationIgnored private var endedFailed: Date?
 
@@ -94,22 +106,40 @@ final class MobileStore {
     /// of them: only a chat draws them. **It is never the reading's fault**: a read that fails says nothing, keeps what
     /// the phone had, and is tried again a minute later, so a slow or large answer never makes the hub look away.
     private func readEnded(hub requested: URL, database: String) async {
-        guard openChat != nil, features.contains("asks"), features.contains("mobile_ended"),
-              let mark = snapshot?.ended_mark, mark != endedMark,
-              endedFailed.map({ Date().timeIntervalSince($0) > 60 }) ?? true
+        guard let chat = openChat, features.contains("asks"), features.contains("mobile_ended"),
+              let mark = snapshot?.ended_mark, endedFailed.map({ Date().timeIntervalSince($0) > 60 }) ?? true
         else { return }
+        let scoped = features.contains("ended_asks")
+        guard let read = Self.endedRead(endedAsks, chat: chat, lines: chatItems[chat], mark: mark, scoped: scoped)
+        else { return }
+        let (place, from) = read
         do {
-            let page = try await client.ended(at: requested, key: key, database: database)
+            let page = try await client.ended(at: requested, key: key, database: database, chat: scoped ? chat : nil,
+                                              from: from ?? 0)
             guard requested == hub, snapshot?.db == database else { return }
-            endedHeads = page.tasks.filter { ($0.ask ?? "").isEmpty == false }
-            endedNames = page.asked ?? [:]
-            endedMark = page.mark
+            if scoped { endedAsks[""] = nil }           // the read of every head of a hub before its update
+            endedAsks[place] = EndedAsks(mark: page.mark, from: from,
+                                         heads: page.tasks.filter { ($0.ask ?? "").isEmpty == false }, names: page.asked ?? [:])
             endedFailed = nil
             readAskTasks()
         } catch {
             endedFailed = Date()
         }
     }
+
+    /// **Which read of the ended heads the open chat needs**, or nil for none. A hub with `ended_asks` (`scoped`): the
+    /// heads of that chat's asks from the oldest line that the phone holds of it, read again when their mark moved or
+    /// when the chat holds an older line than the read covered; with no line of the chat yet, none, because no row
+    /// stands under a line. A hub before it: every head, once for each mark, under "".
+    static func endedRead(_ held: [String: EndedAsks], chat: String, lines: [MobileChatItem]?, mark: String,
+                          scoped: Bool) -> (place: String, from: Double?)? {
+        let from = scoped ? lines?.map(\.ts).min() : nil
+        if scoped && from == nil { return nil }
+        let place = scoped ? chat : ""
+        if let read = held[place], read.mark == mark, (read.from ?? -.infinity) <= (from ?? -.infinity) { return nil }
+        return (place, from)
+    }
+
     /// The open and the recent task heads as FleetCore's tasks, when one of them carries an ask, else none.
     @ObservationIgnored private var askTasks: [FleetTask] = []
     /// The asks that those heads name, by request_id in lower case.
@@ -1014,9 +1044,7 @@ final class MobileStore {
     private func forgetGeneration(keepSnapshot: Bool = false) {
         clarifyDrafts = [:]         // the words about a key request belong to the request of that generation
         // The ended heads belong to the generation they were read in.
-        endedHeads = []
-        endedNames = [:]
-        endedMark = nil
+        endedAsks = [:]
         endedFailed = nil
         if !keepSnapshot { snapshot = nil; snapshotAt = nil }
         stopWatching()

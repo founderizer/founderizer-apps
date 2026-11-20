@@ -292,10 +292,13 @@ final class MobileClient: Sendable {
     }
 
     /// `GET /ui/mobile/ended` (hub 1.166): the head of every ended task. What he asked for in a chat stays in it when
-    /// its work ends (`ChatAskRow`), and the main read holds only the last 20 that ended.
-    func ended(at hub: URL, key: String?, database: String) async throws -> MobileEndedPage {
-        let (data, _) = try await perform(Self.request("ui/mobile/ended", hub: hub, key: key,
-                                                       query: [URLQueryItem(name: "db", value: database)]))
+    /// its work ends (`ChatAskRow`), and the main read holds only the last 20 that ended. With `chat` (hub 1.258,
+    /// `ended_asks`): only the ended heads of what he asked for in that chat, in its messages from `from` on, so the
+    /// answer grows with what the phone holds and not with the fleet's history.
+    func ended(at hub: URL, key: String?, database: String, chat: String? = nil, from: Double = 0) async throws -> MobileEndedPage {
+        var query = [URLQueryItem(name: "db", value: database)]
+        if let chat { query += [URLQueryItem(name: "chat", value: chat), URLQueryItem(name: "from", value: String(from))] }
+        let (data, _) = try await perform(Self.request("ui/mobile/ended", hub: hub, key: key, query: query))
         guard data.count <= 8_000_000 else { throw MobileError.invalidResponse }
         let page = try JSONDecoder().decode(MobileEndedPage.self, from: data)
         guard page.db == database else { throw MobileError.invalidResponse }

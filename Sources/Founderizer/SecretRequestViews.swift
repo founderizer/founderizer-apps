@@ -9,7 +9,8 @@ import SwiftUI
 struct SecretRequestForm: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
-    /// The request's card in a chat draws his save (`KeySaveLook`); nil on Needs you, where the form draws it.
+    /// A request's card in a chat, or the request at hand on Needs you, draws his save (`KeySaveLook`); nil where the
+    /// form draws it.
     var onLook: ((KeySaveLook?) -> Void)? = nil
     /// The form's end: Done after a step that failed or left words for him, a decline, his words.
     var onDone: () -> Void = {}

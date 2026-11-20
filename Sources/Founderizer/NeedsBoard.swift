@@ -62,6 +62,10 @@ struct NeedsBoard: View {
     @State private var leaves = false
     /// The count of the answers that began to settle, so that a later answer's clock ends only its own.
     @State private var holds = 0
+    /// **Each key request's save on this page** (`KeySaveCard`; the owner, 20 November 2026: "Yes, both" to Needs you
+    /// without words after a saved key): while it runs and while its check draws, its request stays in the lane and at
+    /// hand (`held`), as an answer that settles does; a step that failed keeps it there with the form's rows.
+    @State private var keySaves: [Int: KeySaveCard] = [:]
     /// The requests that his answer here sent away: none of them is one that "ended in another way" (`settle`), also
     /// when the reading has its answer before its moment ends.
     @State private var his: Set<Int> = []
@@ -84,7 +88,7 @@ struct NeedsBoard: View {
         let now = state?.time ?? Date().timeIntervalSince1970
         let onWay = Dictionary(needs.compactMap { need in onItsWay(need).map { (need.id, $0) } }) { first, _ in first }
         // A request whose answer settles is still in the lane, at hand, until its moment ends (`hold`).
-        let lane = NeedsLane(needs, sent: Set(onWay.keys), held: settling, now: now)
+        let lane = NeedsLane(needs, sent: Set(onWay.keys), held: settling.union(keySaves.filter(\.value.holds).keys), now: now)
         let open = lane.open.map(\.id)
         // The request at hand, by the one rule of this pass and of what `settle` writes back (`NeedsLane.atHand`).
         let hand = NeedsLane.atHand(chosen: store.selectedNeed, order: order, open: open)
@@ -148,7 +152,7 @@ struct NeedsBoard: View {
         // page kept by a number is theirs.
         .onChange(of: "\(store.hub.absoluteString) \(state?.db ?? "")") { _, _ in
             sent = [:]; confirmed = [:]; memory = [:]; order = []; endedAtHand = nil; writes = false
-            settling = []; took = []; his = []; leaves = false
+            settling = []; took = []; his = []; leaves = false; keySaves = [:]
         }
         // The choice is the page's while it shows. The next visit starts at the lane's first request, unless
         // something chose one for it; a choice of an earlier visit would count as such a choice.
@@ -192,7 +196,8 @@ struct NeedsBoard: View {
     /// - **The request at hand ended in another way** (the manager took it back or replaced it, or he answered it on
     ///   his phone): **it stays at hand, with its answer**, and nothing comes into its place under his pointer and his
     ///   keys. He goes on with a click on a card or with Down. A request for a key is the one exception: its own form
-    ///   answers it here, with no saved request to tell it by, so the next request comes.
+    ///   answers it here, with no saved request to tell it by, so the next request comes. Its save here holds it at
+    ///   hand while the ring turns and its check draws (`keySaves`), and then it leaves as an answer that settles does.
     private func settle(_ lane: [Int], needs: [OwnerNeed]) {
         let chosen = store.selectedNeed
         let next = NeedsLane.atHand(chosen: chosen, order: order, open: lane)
@@ -249,9 +254,39 @@ struct NeedsBoard: View {
         }
     }
 
-    /// His answer to `need` is on its way, or the reading has it.
+    /// **The form of a key request at hand told its look** (`KeySaveLook`): the place of its answers goes to the ring and
+    /// opens again in one short motion. Once every step is done the check draws itself, the request settles as an answer
+    /// does (`hold`: the agent's glyph jumps and the hand goes out), and it leaves once the check is at rest.
+    private func tookKey(_ look: KeySaveLook?, need: Int) {
+        var card = keySaves[need] ?? KeySaveCard()
+        guard card.take(look) else { return }
+        withAnimation(reduceMotion ? nil : FleetMotion.keySave) { keySaves[need] = card }
+        guard look == .saved else { return }
+        // VoiceOver's focus was on Save, which went with the form: it hears the check's word
+        AccessibilityNotification.Announcement(String(l10n: "Saved")).post()
+        hold(need)
+        Task { @MainActor in
+            try? await Task.sleep(for: Self.keyAtRest)
+            keySaves[need]?.settle()
+        }
+    }
+
+    /// **The key save rests once its check is at rest** (`KeySaveMark.settles`, 0.67 s) **and the moment of an answer
+    /// that settles has ended** (`hold`, 0.78 s): the request leaves with the check that drew itself, and never shows
+    /// the same check a second time in that moment.
+    private static let keyAtRest: Duration = .milliseconds(800)
+
+    /// The form's end: Done after a step that failed or left words for him (the request is as it was, and leaves once
+    /// it has its answer); a decline and his words end no save.
+    private func endKey(_ need: Int) {
+        withAnimation(reduceMotion ? nil : FleetMotion.keySave) { keySaves[need]?.end() }
+    }
+
+    /// His answer to `need` is on its way, or the reading has it, or his key save here has it: a save is `.saved` only
+    /// once the hub took the request's answer, also while the reading that brings it is still on its way.
     private func went(_ need: Int) -> Bool {
         sent[need] != nil || confirmed[need] != nil || store.state?.needs.first { $0.id == need }?.isOpen == false
+            || keySaves[need]?.look == .saved
     }
 
     /// **The page's keys** (`PageKeys`: while no field has the cursor and no menu is open): Up and Down move through
@@ -383,7 +418,8 @@ struct NeedsBoard: View {
                              memory: Binding(get: { memory[need.id] ?? StepMemory() }, set: { memory[need.id] = $0 }),
                              keys: stepKeys, takesCursor: writes,
                              settles: settling.contains(need.id) && (onItsWay != nil || !need.isOpen),
-                             took: took.contains(need.id)) { typed in
+                             took: took.contains(need.id), keySave: keySaves[need.id] ?? KeySaveCard(),
+                             keyLook: { tookKey($0, need: need.id) }, keyDone: { endKey(need.id) }) { typed in
                         writes = typed
                         hold(need.id)
                     }
@@ -579,6 +615,13 @@ private struct NeedStep: View {
     var settles = false
     /// The agent took that answer: its glyph makes its one jump, and the hand is out.
     var took = false
+    /// **His key save at hand** (`KeySaveCard`, which the page keeps): the place of the answers is the ring, then the check
+    /// that draws itself, and the page keeps the request at hand while the save holds it (`NeedsBoard.keySaves`).
+    var keySave = KeySaveCard()
+    /// The form's look of that save, for the page.
+    var keyLook: ((KeySaveLook?) -> Void)? = nil
+    /// The form's end: Done after a step that failed or left words for him; a decline and his words end no save.
+    var keyDone: () -> Void = {}
     /// An answer went: true when it went from the field.
     let answered: (Bool) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -745,7 +788,8 @@ private struct NeedStep: View {
     /// What he answers with; for a request that ended, what he answered.
     private var answers: some View {
         VStack(spacing: 18) {
-            if ended {
+            // the form, also once the request ended, while his key save holds it (`KeySaveCard.showsForm`)
+            if !keySave.showsForm(open: !ended) {
                 NeedAnswered(store: store, need: need, words: NeedRunAnswer.of(need, onItsWay: onItsWay)?.words ?? onItsWay?.text,
                              inWords: onItsWay?.answersInWords ?? need.answeredInWords, draws: settles,
                              symbol: NeedRunAnswer.of(need, onItsWay: onItsWay)?.symbol ?? "checkmark")
@@ -753,8 +797,17 @@ private struct NeedStep: View {
                     .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: answerTop)), removal: .opacity))
             } else {
                 Group {
-                    if need.asksForSecret { SecretRequestForm(store: store, need: need) }
-                    else {
+                    if need.asksForSecret {
+                        // **A key's save is a ring in the place of the answers, then a check that draws itself**, with
+                        // no words, as on its card in a chat (`KeySaveMark`); the form stays under it for its work.
+                        VStack(spacing: 0) {
+                            if keyCollapsed {
+                                KeySaveMark(saved: keySave.look == .saved, draws: true, point: KeySaveMark.step, weight: .light)
+                            }
+                            SecretRequestForm(store: store, need: need, onLook: keyLook) { keyDone() }
+                                .modifier(KeptAway(away: keyCollapsed))
+                        }
+                    } else {
                         NeedAnswerBox(store: store, need: need, keys: keys, takesCursor: takesCursor) { typed, top in
                             answerTop = top
                             answered(typed)
@@ -769,13 +822,18 @@ private struct NeedStep: View {
         // Only the answer that settles moves: a request that ended in another way changes in one step, as before.
         .animation(settles ? .easeOut(duration: 0.22) : nil, value: ended)
     }
+
+    /// The place of the answers is the ring or the check of his key save (`KeySaveCard.collapsed`).
+    private var keyCollapsed: Bool { keySave.collapsed(expanded: false) }
 }
 
 /// What he answered, under a request that ended: the option he pressed with a check, or his words, whole, as the folded
 /// card of an answered request says it on one line (`NeedRequestCard`); and the files that went with them. **Words that
 /// he wrote have no check** (the owner, 14 November 2026: "when I typed a custom answer instead of choosign one of the
 /// suggested ones, do not show the CHECK animation because it is misleading"): they can ask something back or say no,
-/// and a check said yes to the request.
+/// and a check said yes to the request. **A request that a saved key answered shows its check alone** (the owner, 20
+/// November 2026: "Yes, both" to Needs you without words after a saved key): the check of the save at rest, where its
+/// ring and its drawn check stood (`KeySaveMark`); the hub's words of that answer are the agent's.
 private struct NeedAnswered: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
@@ -799,6 +857,16 @@ private struct NeedAnswered: View {
     }
 
     var body: some View {
+        if need.answeredWithKey {
+            KeySaveMark(saved: true, point: KeySaveMark.step, weight: .light).frame(maxWidth: .infinity)
+                .accessibilityIdentifier("need-answered-\(need.id)")
+        } else {
+            answerRow
+        }
+    }
+
+    /// His answer on its row: the check before an option that he pressed, and his words.
+    @ViewBuilder private var answerRow: some View {
         let answer = (words ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {

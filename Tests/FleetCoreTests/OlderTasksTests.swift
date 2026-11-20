@@ -338,7 +338,7 @@ struct OlderTasksTests {
             "older_tasks": ["before": 400, "block": 100, "mark": "400.9", "tasks": 380]]), as: UTF8.self)
         let hub = try OneAnswer(status: "200 OK") { _ in answer }
         let read = try await HubClient().stateReading(at: URL(string: "http://127.0.0.1:\(hub.port)")!)
-        #expect(hub.received.starts(with: Data("GET /ui/state?tasks=window HTTP/1.1\r\n".utf8)))
+        #expect(hub.received.starts(with: Data("GET /ui/state?tasks=window&rest=window HTTP/1.1\r\n".utf8)))
         #expect(read.state.older_tasks == OlderTasksHead(before: 400, block: 100, mark: "400.9", tasks: 380))
 
         let block = String(decoding: try JSONSerialization.data(withJSONObject: [

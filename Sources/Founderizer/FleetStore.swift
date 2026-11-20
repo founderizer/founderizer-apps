@@ -1455,6 +1455,18 @@ final class FleetStore {
     @ObservationIgnored private var olderWrite: Task<Void, Never>?
     private static let olderLog = Logger(subsystem: "com.founderizer.app", category: "older-tasks")
 
+    // MARK: The items, reports and messages that a read of the state leaves out (`OlderRows`; owner API 1.258)
+
+    /// The blocks of older Needs-you items, reports and messages that this Mac holds for this hub, which each reading
+    /// joins after the blocks of older tasks (`joined`), so the pages draw every row, as they did. Their read runs as
+    /// the tasks' does, and their files go after the same writes (`afterOlderWrites`).
+    @ObservationIgnored private var olderRows = OlderRows()
+    @ObservationIgnored private var olderRowsRead: Task<Void, Never>?
+    @ObservationIgnored private var olderRowsReads = 0
+    /// The hub generation whose read of the lists of older rows failed (not one block's answer): a new generation's
+    /// marks of seen replies then wait no longer for every report (`markRepliesSeen`).
+    @ObservationIgnored private var rowsReadFailed: String?
+
     // MARK: The last reading, kept between launches
 
     /// Where the last reading of each hub address waits for the next launch.
@@ -1610,7 +1622,19 @@ final class FleetStore {
     private func showOlder() {
         olderShown = .now
         guard let window = lastWindow, let shown = state, shown.db == window.db else { return }
-        state = older.join(window, shown: shown)
+        let fresh = joined(window, shown: shown)
+        state = fresh
+        // The chats draw from the timeline, and a new generation's marks of seen replies wait for every report
+        // (`markRepliesSeen`): both follow the blocks as they come, and not only the next read of the state.
+        var timeline = chatTimeline
+        if timeline.update(messages: fresh.messages, reports: fresh.reports) { chatTimeline = timeline }
+        markRepliesSeen()
+    }
+
+    /// The reading that the pages draw for a window read: joined with the blocks of older tasks, and then with the
+    /// blocks of older items, reports and messages, which touch none of the tasks' lists.
+    private func joined(_ window: HubState, shown: HubState?) -> HubState {
+        olderRows.join(older.join(window, shown: shown), shown: shown)
     }
 
     /// Another hub, or no fleet: no block of the hub of before is joined to a reading again, and a read of its
@@ -1620,6 +1644,9 @@ final class FleetStore {
         olderRead?.cancel(); olderRead = nil
         olderReads += 1
         older = OlderTasks(); lastWindow = nil
+        olderRowsRead?.cancel(); olderRowsRead = nil
+        olderRowsReads += 1
+        olderRows = OlderRows(); rowsReadFailed = nil
     }
 
     private func blockFile(_ from: Int, hub: URL) -> URL {
@@ -1667,6 +1694,102 @@ final class FleetStore {
             return KeptFile.bytes(of: folder.appendingPathComponent(name), atMost: KeptFile.largestRecord)
                 .flatMap { try? OlderBlock.decode($0) }
         }
+    }
+
+    // MARK: The blocks of older rows
+
+    /// **Reads the blocks of older items, reports and messages that this Mac does not hold as the hub has them now**,
+    /// as `readOlder` reads the tasks': one read at a time, for each list whose mark is not the one that its held
+    /// blocks are current at, its list first, then each block whose mark differs, the newest first.
+    private func readOlderRows() {
+        guard olderRowsRead == nil, let window = lastWindow, !olderRows.behind(window).isEmpty else { return }
+        let hub = hub, database = window.db
+        olderRowsReads += 1
+        let number = olderRowsReads
+        olderRowsRead = Task { [weak self] in
+            await self?.readOlderRowBlocks(number, hub: hub, database: database)
+            if self?.olderRowsReads == number { self?.olderRowsRead = nil }
+        }
+    }
+
+    /// The read of `readOlderRows`, by the rules of `readOlderBlocks`: a block whose answer cannot be read does not stop
+    /// the others, and every other failure ends this read, which the next read of the state starts again.
+    private func readOlderRowBlocks(_ number: Int, hub: URL, database: String) async {
+        func mine() -> Bool { number == olderRowsReads && hub == self.hub && lastWindow?.db == database }
+        lists: for list in lastWindow.map(olderRows.behind) ?? [] {
+            do {
+                let index = try await client.olderRows(at: hub, database: database, list: list)
+                guard mine() else { return }
+                for entry in olderRows.wanted(index) {
+                    do {
+                        let (block, data) = try await client.olderRowsBlock(at: hub, database: database, list: list,
+                                                                            from: entry.from)
+                        guard mine() else { return }
+                        olderRows.take(block, size: index.block)
+                        keepRowBlock(data, list: list, from: entry.from, hub: hub)
+                    } catch where OlderTasks.blockFailed(error) {
+                        guard mine() else { return }
+                        olderRows.fail(entry, of: list)
+                        // The kind of the fault and no word of the hub's answer: the log can go into a report.
+                        let fault = if case HubError.refusal(let refusal) = error { "status \(refusal.status)" } else { "an answer that this app cannot read" }
+                        Self.olderLog.error("the block of older \(list.rawValue, privacy: .public) from \(entry.from, privacy: .public) could not be read: \(fault, privacy: .public)")
+                    }
+                    if ContinuousClock.now - olderShown > .seconds(1) {
+                        await readingsRest()
+                        guard mine() else { return }
+                        showOlder()
+                    }
+                }
+                olderRows.finish(index)
+                tidyRowBlocks(list, keeping: Set(index.blocks.map(\.from)), hub: hub)
+            } catch {
+                if mine() { rowsReadFailed = database }
+                break lists     // the pages keep what they show, and the next read of the state asks again
+            }
+        }
+        await readingsRest()
+        if mine() { showOlder() }
+    }
+
+    private func rowBlockFile(_ list: OlderRowsList, _ from: Int, hub: URL) -> URL {
+        StartAgain.olderRowsFolder(of: hub, list: list.rawValue, in: readingsFolder).appendingPathComponent("\(from).json")
+    }
+
+    /// **A block of older rows stays on this Mac** beside the last reading, as the hub sent it (`keepBlock`).
+    private func keepRowBlock(_ data: Data, list: OlderRowsList, from: Int, hub: URL) {
+        let file = rowBlockFile(list, from, hub: hub)
+        afterOlderWrites {
+            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true,
+                                                     attributes: [.posixPermissions: 0o700])
+            try? data.write(to: file, options: [.atomic])
+        }
+    }
+
+    /// The files of the blocks of a list that the hub's list does not name leave the disk (`tidyBlocks`).
+    private func tidyRowBlocks(_ list: OlderRowsList, keeping named: Set<Int>, hub: URL) {
+        let folder = StartAgain.olderRowsFolder(of: hub, list: list.rawValue, in: readingsFolder)
+        afterOlderWrites {
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] {
+                guard name.hasSuffix(".json"), let from = Int(name.dropLast(5)), !named.contains(from) else { continue }
+                try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+            }
+        }
+    }
+
+    /// The blocks of older rows that this Mac kept for this hub, of the three lists, each read as a kept reading is
+    /// (`KeptFile`): a file that is no block of its folder's list is none.
+    private func keptRowBlocks() -> [OlderRowsBlock] {
+        var kept: [OlderRowsBlock] = []
+        for list in OlderRowsList.allCases {
+            let folder = StartAgain.olderRowsFolder(of: hub, list: list.rawValue, in: readingsFolder)
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] {
+                guard name.hasSuffix(".json"), Int(name.dropLast(5)) != nil,
+                      let data = KeptFile.bytes(of: folder.appendingPathComponent(name), atMost: KeptFile.largestRecord),
+                      let block = try? OlderRowsBlock.decode(data), block.kind == list else { continue }
+                kept.append(block)
+            }
+        }
+        return kept
     }
 
     init() {
@@ -1729,10 +1852,13 @@ final class FleetStore {
         if let data = KeptFile.bytes(of: lastReadingFile, atMost: KeptFile.largestReading), let kept = try? HubState.decode(data) {
             // With the blocks of older tasks that this Mac kept beside it (`keepBlock`): the first frame has every task.
             if kept.older_tasks?.isValid == true { older = OlderTasks(kept: keptBlocks(), db: kept.db) }
+            if kept.older_rows?.isValid == true { olderRows = OlderRows(kept: keptRowBlocks(), db: kept.db) }
             lastWindow = kept
-            state = older.join(kept, shown: nil)
+            let shown = joined(kept, shown: nil)
+            state = shown
             var timeline = ChatTimeline()
-            if timeline.update(messages: kept.messages, reports: kept.reports) { chatTimeline = timeline }
+            // The joined reading's lines: the window's and those of the blocks of older rows that this Mac kept.
+            if timeline.update(messages: shown.messages, reports: shown.reports) { chatTimeline = timeline }
             keptHealth = KeptReading(KeptFile.bytes(of: keptFile("health"), atMost: KeptFile.largestReading)
                 .flatMap { FleetHealth.kept($0, database: kept.db) })
             keptReleases = KeptReading(KeptFile.bytes(of: keptFile("releases"), atMost: KeptFile.largestReading)
@@ -2087,7 +2213,10 @@ final class FleetStore {
             if window.older_tasks?.isValid == true, older.db != window.db {
                 older = OlderTasks(kept: keptBlocks(), db: window.db)
             }
-            let fresh = older.join(window, shown: state)
+            if window.older_rows?.isValid == true, olderRows.db != window.db {
+                olderRows = OlderRows(kept: keptRowBlocks(), db: window.db)
+            }
+            let fresh = joined(window, shown: state)
             lastWindow = window
             if let state, state.db != fresh.db { childThreadRequest = nil; cancelEdit(); endProviderSetups(); lastReceipt = nil }
             var timeline = chatTimeline
@@ -2116,6 +2245,7 @@ final class FleetStore {
             if readsFail { readsFail = false }
             keepReading(data)
             readOlder()
+            readOlderRows()
             claimFromLink.tryNow(store: self)
             if !hubAnsweredBefore {
                 hubAnsweredBefore = true
@@ -2536,9 +2666,10 @@ final class FleetStore {
         return refusal.status == 409 ? .conflict(refusal.words) : .refused(refusal.words)
     }
 
-    /// A reply came in this agent's chat after the owner last had that chat open.
+    /// A reply came in this agent's chat after the owner last had that chat open: by the marks of this reading's hub
+    /// generation, and none while that generation has no marks yet (`markRepliesSeen`).
     func hasNewReply(from agent: String) -> Bool {
-        guard let state else { return false }
+        guard let state, seenContext == "\(hub.absoluteString)\n\(state.db)" else { return false }
         return Self.newestReply(agent, in: state) > (seenReplies[agent] ?? 0)
     }
 
@@ -2557,6 +2688,7 @@ final class FleetStore {
     func markRead(_ agent: String) {
         guard let state else { return }
         markRepliesSeen()
+        guard seenContext == "\(hub.absoluteString)\n\(state.db)" else { return }   // its marks wait (markRepliesSeen)
         if keptUnread == agent { keptUnread = nil }
         var seen = seenReplies
         seen[agent] = Self.newestReply(agent, in: state)
@@ -2567,6 +2699,7 @@ final class FleetStore {
     func markUnread(_ agent: String) {
         guard let state, Self.newestReply(agent, in: state) > 0 else { return }
         markRepliesSeen()
+        guard seenContext == "\(hub.absoluteString)\n\(state.db)" else { return }   // its marks wait (markRepliesSeen)
         if case .agent(let open) = destination, open == agent { keptUnread = agent }
         var seen = seenReplies
         seen[agent] = Self.newestReply(agent, in: state) - 1
@@ -2584,10 +2717,15 @@ final class FleetStore {
     }
 
     /// The open chat's replies are seen. A new hub generation takes the replies that it has as seen, so that only later
-    /// replies are new.
+    /// replies are new: **once its reading holds every report** (owner API 1.258). Before the blocks of older reports
+    /// came, an agent whose newest reply is in one of them would take an older reply as seen, and its chat would show
+    /// that reply as new when the block comes (a restore, a first connect). Until then no chat shows a new reply. A read
+    /// of the lists of older rows that failed ends the wait: then the marks take the reading as it is.
     private func markRepliesSeen() {
         guard let state else { return }
         let context = "\(hub.absoluteString)\n\(state.db)"
+        if seenContext != context, let window = lastWindow, window.db == state.db, rowsReadFailed != state.db,
+           olderRows.behind(window).contains(.reports) { return }
         var seen = seenContext == context ? seenReplies : [:]
         if seenContext != context { for agent in state.agents { seen[agent.name] = Self.newestReply(agent.name, in: state) } }
         if case .agent(let name) = destination, name != keptUnread, shown.countsAsRead(name) {
