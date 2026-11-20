@@ -64,15 +64,19 @@ struct AttachmentButton: View {
             picked = []
             Task { await takePhotos(items) }
         }
-        .fileImporter(isPresented: $pickingFiles, allowedContentTypes: Self.fileTypes,
+        .fileImporter(isPresented: $pickingFiles, allowedContentTypes: Self.fileTypes(office: store.supportsOfficeFiles),
                       allowsMultipleSelection: true) { result in
             Task { await takeFiles(result) }
         }
     }
 
-    /// The types that the hub takes, as the Files picker names them.
-    private static let fileTypes: [UTType] = [.png, .jpeg, .gif, .webP, .pdf, .zip, .plainText, .commaSeparatedText,
-                                              .json, UTType(filenameExtension: "md") ?? .plainText]
+    /// The types that the hub takes, as the Files picker names them: Word, Excel and PowerPoint too for a hub with the
+    /// feature `office_files` (`MessageAttachment.sendable`).
+    private static let types: [UTType] = [.png, .jpeg, .gif, .webP, .pdf, .zip, .plainText, .commaSeparatedText,
+                                          .json, UTType(filenameExtension: "md") ?? .plainText]
+    private static let officeTypes: [UTType] =
+        MessageAttachment.agentTypes.values.sorted().compactMap { UTType(filenameExtension: $0) }
+    private static func fileTypes(office: Bool) -> [UTType] { office ? types + officeTypes : types }
 
     /// A picture from the library. An iPhone photo is HEIC and a photo is large, so the bytes become a JPEG of a size
     /// that travels well; a PNG (a screenshot) goes as it is.
@@ -105,8 +109,8 @@ struct AttachmentButton: View {
         for url in urls.prefix(room) {
             let opened = url.startAccessingSecurityScopedResource()
             defer { if opened { url.stopAccessingSecurityScopedResource() } }
-            guard let mime = MessageAttachment.mime(forName: url.lastPathComponent) else {
-                store.fileFailed(AttachmentError.type.errorDescription)
+            guard let mime = MessageAttachment.mime(forName: url.lastPathComponent, office: store.supportsOfficeFiles) else {
+                store.fileFailed(MessageAttachment.typeWords(office: store.supportsOfficeFiles))
                 continue
             }
             guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {

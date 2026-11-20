@@ -1530,6 +1530,8 @@ final class MobileStore {
     var supportsDirectChat: Bool { features.contains("direct_chat") }
     /// This hub takes files with a message (owner feature `attachments`).
     var supportsAttachments: Bool { features.contains("attachments") }
+    /// This hub takes Word, Excel and PowerPoint files from the owner too (owner feature `office_files`, UI-API.md 1.251).
+    var supportsOfficeFiles: Bool { features.contains("office_files") }
     var supportsCorrections: Bool { features.contains("corrections") }
     /// **His correction on its way changes his message where it stands** (owner feature `edit_in_place`; review A2):
     /// the hub will change that message itself, so its bubble shows the new words, and no second bubble comes. Only
@@ -1617,7 +1619,10 @@ final class MobileStore {
             fileFailed(String(l10n: "A message carries at most \(MessageAttachment.perMessage) files."))
             return
         }
-        guard MessageAttachment.types[mime] != nil else { fileFailed(AttachmentError.type.errorDescription); return }
+        guard MessageAttachment.sendable(mime, office: supportsOfficeFiles) else {
+            fileFailed(MessageAttachment.typeWords(office: supportsOfficeFiles))
+            return
+        }
         guard !data.isEmpty, data.count <= MessageAttachment.sizeLimit else {
             fileFailed(AttachmentError.tooLarge.errorDescription)
             return

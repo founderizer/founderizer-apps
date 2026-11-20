@@ -74,9 +74,11 @@ public enum GuidanceFiles: Equatable, Sendable {
     /// program that is not here gets no picture, so this list going stale only makes a box take fewer files.
     public static let pictureRuntimes: Set<String> = ["claude", "codex"]
 
+    /// Whether a box of this kind takes a file of this type. `.any` takes Word, Excel and PowerPoint too: the store
+    /// stages them only for a hub that takes them (`MessageAttachment.sendable`), and a session with a shell opens them.
     public func takes(_ mime: String) -> Bool {
         switch self {
-        case .any: MessageAttachment.types[mime] != nil
+        case .any: MessageAttachment.sendable(mime, office: true)
         case .shown: MessageAttachment.opensWithoutShell(mime)
         case .texts: MessageAttachment.isText(mime)
         }

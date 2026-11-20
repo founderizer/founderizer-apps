@@ -778,6 +778,8 @@ final class FleetStore {
     static let uploadStaysFor: Double = 45 * 60
 
     var supportsAttachments: Bool { state?.ui_features?.contains("attachments") == true }
+    /// The hub takes Word, Excel and PowerPoint files from the owner too (owner feature `office_files`, UI-API.md 1.251).
+    var supportsOfficeFiles: Bool { state?.ui_features?.contains("office_files") == true }
     /// The composer of one chat, or of one open request of Needs you.
     static func stageKey(agent: String) -> String { "agent:\(agent)" }
     static func stageKey(need: Int) -> String { "need:\(need)" }
@@ -826,6 +828,10 @@ final class FleetStore {
     /// small enough (`imageForSending`).
     func refusedFileWords(_ composer: String) -> String? {
         let taken = filesTaken(by: composer), files = stagedFiles(for: composer)
+        // a Word, Excel or PowerPoint file that waits while its hub no longer takes them (`office_files` went away)
+        if files.contains(where: { !MessageAttachment.sendable($0.mime, office: supportsOfficeFiles) }) {
+            return MessageAttachment.typeWords(office: supportsOfficeFiles)
+        }
         if files.contains(where: { !taken.takes($0.mime) }) { return refusedKindWords(composer) }
         if taken == .shown, files.contains(where: { $0.mime.hasPrefix("image/") && $0.size > MessageAttachment.shownPictureBytes }) {
             return largePictureWords
@@ -853,7 +859,10 @@ final class FleetStore {
             fileErrors[composer] = atMostFiles(composer)
             return
         }
-        guard MessageAttachment.types[mime] != nil else { fileErrors[composer] = AttachmentError.type.errorDescription; return }
+        guard MessageAttachment.sendable(mime, office: supportsOfficeFiles) else {
+            fileErrors[composer] = MessageAttachment.typeWords(office: supportsOfficeFiles)
+            return
+        }
         // A dropped or pasted file takes the same rule as the plus's own list.
         guard filesTaken(by: composer).takes(mime) else {
             fileErrors[composer] = refusedKindWords(composer)
@@ -885,8 +894,8 @@ final class FleetStore {
 
     /// One file from a place on this Mac: a picture becomes the bytes that travel well, another file goes as it is.
     func stage(contentsOf url: URL, for composer: String) async {
-        guard let mime = MessageAttachment.mime(forName: url.lastPathComponent) else {
-            fileErrors[composer] = AttachmentError.type.errorDescription
+        guard let mime = MessageAttachment.mime(forName: url.lastPathComponent, office: supportsOfficeFiles) else {
+            fileErrors[composer] = MessageAttachment.typeWords(office: supportsOfficeFiles)
             return
         }
         let opened = url.startAccessingSecurityScopedResource()

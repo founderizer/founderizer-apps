@@ -27,6 +27,9 @@ struct AttachFilesButton: View {
         switch taken {
         case .texts: return String(l10n: "Send a text file with this guidance")
         case .shown: return String(l10n: "Send a picture or a text file with this guidance")
+        case .any where store.supportsOfficeFiles:
+            return guidance ? String(l10n: "Send a picture, a PDF, an Office file, a ZIP or a text file with this guidance")
+                            : String(l10n: "Send a picture, a PDF, an Office file, a ZIP or a text file with this message")
         case .any: return guidance ? String(l10n: "Send a picture, a PDF, a ZIP or a text file with this guidance")
                                    : String(l10n: "Send a picture, a PDF, a ZIP or a text file with this message")
         }
@@ -38,7 +41,7 @@ struct AttachFilesButton: View {
         .disabled(room == 0 || store.storageError != nil)
         .accessibilityLabel("Attach a file")
         .accessibilityIdentifier("attach-file")
-        .fileImporter(isPresented: $picking, allowedContentTypes: Self.types(taken),
+        .fileImporter(isPresented: $picking, allowedContentTypes: Self.types(taken, office: store.supportsOfficeFiles),
                       allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else {
                 if case .failure(let error) = result { store.setFileError(error.localizedDescription, for: composer) }
@@ -53,10 +56,12 @@ struct AttachFilesButton: View {
     /// The types that the hub takes, as the open panel names them.
     static let types: [UTType] = [.png, .jpeg, .gif, .webP, .pdf, .zip, .plainText, .commaSeparatedText, .json,
                                   UTType(filenameExtension: "md") ?? .plainText]
+    /// Word, Excel and PowerPoint, for a hub with the feature `office_files` (`MessageAttachment.sendable`).
+    static let officeTypes: [UTType] = MessageAttachment.agentTypes.values.sorted().compactMap { UTType(filenameExtension: $0) }
     /// The types of the open panel for the files that a composer takes (`GuidanceFiles`).
-    static func types(_ taken: GuidanceFiles) -> [UTType] {
+    static func types(_ taken: GuidanceFiles, office: Bool = false) -> [UTType] {
         switch taken {
-        case .any: types
+        case .any: office ? types + officeTypes : types
         case .shown: types.filter { $0 != .pdf && $0 != .zip }
         case .texts: types.filter { ![.png, .jpeg, .gif, .webP, .pdf, .zip].contains($0) }
         }

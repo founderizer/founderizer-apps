@@ -313,7 +313,8 @@ public final class HubClient: Sendable {
     /// number makes it idempotent, so a send that is repeated is one file on the hub and never a second one.
     public func upload(_ data: Data, name: String, mime: String, requestID: UUID, client: String, hub: URL,
                        database: String) async throws -> MessageAttachment {
-        guard MessageAttachment.types[mime] != nil else { throw AttachmentError.type }
+        // the store offers Word, Excel and PowerPoint only to a hub with `office_files` (FleetStore.stage)
+        guard MessageAttachment.sendable(mime, office: true) else { throw AttachmentError.type }
         guard !data.isEmpty, data.count <= MessageAttachment.sizeLimit else { throw AttachmentError.tooLarge }
         var parts = URLComponents(url: hub.appendingPathComponent("ui/attachments"), resolvingAgainstBaseURL: false)!
         parts.queryItems = [.init(name: "db", value: database)]

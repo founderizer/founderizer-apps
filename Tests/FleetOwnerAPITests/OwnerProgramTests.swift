@@ -310,7 +310,7 @@ final class OwnerWriteTests {
     /// The media types come from the table's own facts (`owner_mcp.py` MEDIA_TYPES), by the ending in lower case.
     @Test func theMediaTypesAreTheTablesOwn() {
         let types = Fixture.table.mediaTypes
-        #expect(types.count >= 10 && Set(types.values).count == 10)
+        #expect(types.count >= 13 && Set(types.values).count == 13)        // the hub's ten, and Word, Excel, PowerPoint
         for (ending, type) in types {
             #expect(MediaType.guess("a.\(ending)", types) == type, "\(ending)")
             #expect(MediaType.guess("a.\(ending.uppercased())", types) == type, "\(ending)")

@@ -691,7 +691,7 @@ enum PyText {
 }
 
 /// **The media type of a file that the agent attaches with no `mime`**, by its ending in lower case, from the table
-/// (`owner_mcp.py` MEDIA_TYPES, which `--dump-tools` carries): the hub's own ten types and their other endings. Every
+/// (`owner_mcp.py` MEDIA_TYPES, which `--dump-tools` carries): the hub's own types and their other endings. Every
 /// other file is `application/octet-stream`. The program keeps no table of its own.
 public enum MediaType {
     public static func guess(_ name: String, _ types: [String: String]) -> String {

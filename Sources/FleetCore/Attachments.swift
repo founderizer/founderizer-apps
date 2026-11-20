@@ -47,11 +47,24 @@ public struct MessageAttachment: Decodable, Identifiable, Sendable, Equatable {
                                "text/markdown": "md", "text/csv": "csv", "application/json": "json"]
     public static let sizeLimit = 25 * 1024 * 1024
     public static let perMessage = 4
-    /// The types that an agent's message can carry besides `types` (CHAT-APPS.md 20): an app reads and opens them, and
-    /// the owner sends none of them himself, so the plus and the hub's own upload do not take them.
+    /// The types that an agent's message can carry besides `types` (CHAT-APPS.md 20): an app reads and opens them.
+    /// The owner sends them himself only to a hub with the feature `office_files` (`sendable`).
     public static let agentTypes = ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
                                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
                                     "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx"]
+
+    /// **Whether the owner can send a file of this type** to a hub: `types`, and with the hub's owner feature
+    /// `office_files` (UI-API.md 1.251; the owner, 20 November 2026: "Yes, fix both") also Word, Excel and PowerPoint
+    /// (`agentTypes`), which a hub before it refuses.
+    public static func sendable(_ mime: String, office: Bool) -> Bool {
+        types[mime] != nil || (office && agentTypes[mime] != nil)
+    }
+
+    /// The words of a file whose type the hub does not take, by what this hub takes (`sendable`).
+    public static func typeWords(office: Bool) -> String {
+        office ? String(l10n: "This hub takes images, PDF, ZIP, Word, Excel, PowerPoint, text, Markdown, CSV and JSON.")
+               : AttachmentError.type.errorDescription ?? ""
+    }
 
     /// **A file that a session with no shell can open**: a picture or a text, which the hub gives in the tool's answer
     /// itself (`t_read_attachment`). A session of an agent whose Shell box is off opens no other file of the owner's
@@ -87,12 +100,13 @@ public struct MessageAttachment: Decodable, Identifiable, Sendable, Equatable {
     /// Whether `POST /ui/knowledge` `{attachment}` would take this file. The hub answers 415 for every other type.
     public var canBecomeKnowledge: Bool { Self.knowledgeTypes.contains(mime) }
 
-    /// The type that the hub takes for this file name, or nil when it takes none.
-    public static func mime(forName name: String) -> String? {
+    /// The type that the hub takes for this file name, or nil when it takes none. office: the hub has the feature
+    /// `office_files` (`sendable`).
+    public static func mime(forName name: String, office: Bool = false) -> String? {
         let ext = (name as NSString).pathExtension.lowercased()
         if ext == "jpeg" { return "image/jpeg" }
         if ext == "markdown" { return "text/markdown" }
-        return types.first { $0.value == ext }?.key
+        return types.first { $0.value == ext }?.key ?? (office ? agentTypes.first { $0.value == ext }?.key : nil)
     }
 
     /// A name that travels in a header and in a `Content-Disposition`: ASCII letters, digits, . _ - and spaces,
@@ -103,7 +117,7 @@ public struct MessageAttachment: Decodable, Identifiable, Sendable, Equatable {
         let lead = cleaned.prefix { $0 == "." || $0 == "-" }.count
         if lead > 0 { cleaned = "_" + cleaned.dropFirst(lead) }
         cleaned = String(cleaned.prefix(80))
-        let ext = "." + (types[mime] ?? "bin")
+        let ext = "." + (types[mime] ?? agentTypes[mime] ?? "bin")
         return cleaned.lowercased().hasSuffix(ext) ? cleaned : (cleaned.isEmpty ? "file" : cleaned) + ext
     }
 

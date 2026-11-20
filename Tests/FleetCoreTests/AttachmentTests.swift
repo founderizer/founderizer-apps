@@ -41,9 +41,11 @@ import Testing
         #expect(MessageAttachment.mime(forName: "a") == nil)
     }
 
-    /// CHAT-APPS.md 20: an agent's message can carry a spreadsheet, a Word file or a presentation. The apps read and
-    /// open them; the owner's own plus, his drop and the hub's upload of his files take none of them.
-    @Test func anAgentsOfficeFileIsReadButNeverSentByTheOwner() throws {
+    /// CHAT-APPS.md 20: an agent's message can carry a spreadsheet, a Word file or a presentation, and the apps read
+    /// and open them. The owner sends them himself only to a hub with `office_files` (UI-API.md 1.251; his "Yes, fix
+    /// both" of 20 November 2026): a hub before it answers 415, so the plus, a drop and Cmd+V refuse them there with
+    /// the words of what that hub takes.
+    @Test func anOfficeFileGoesOnlyToAHubThatTakesIt() throws {
         let sheet = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         let slides = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         let word = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -52,9 +54,18 @@ import Testing
             try file.validate()
             #expect(file.symbol == symbol)
             #expect(!file.isImage)
-            #expect(MessageAttachment.types[mime] == nil)
+            #expect(!MessageAttachment.sendable(mime, office: false) && MessageAttachment.sendable(mime, office: true))
+            #expect(!MessageAttachment.opensWithoutShell(mime) && GuidanceFiles.any.takes(mime))
         }
         #expect(MessageAttachment.mime(forName: "Prices.xlsx") == nil)
+        #expect(MessageAttachment.mime(forName: "Prices.XLSX", office: true) == sheet)
+        #expect(MessageAttachment.mime(forName: "Plan.docx", office: true) == word)
+        #expect(MessageAttachment.mime(forName: "Deck.pptx", office: true) == slides)
+        #expect(MessageAttachment.mime(forName: "a.heic", office: true) == nil)
+        #expect(MessageAttachment.safeName("Contract v2", mime: word) == "Contract v2.docx")    // the hub's own name
+        #expect(MessageAttachment.typeWords(office: true).contains("Word"))
+        #expect(!MessageAttachment.typeWords(office: false).contains("Word"))
+        #expect(!MessageAttachment.sendable("application/x-msdownload", office: true))
         #expect(throws: AttachmentError.self) { try self.file(["mime": "application/x-msdownload"]).validate() }
     }
 

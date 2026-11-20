@@ -17768,6 +17768,26 @@
         }
       }
     },
+    "Send a picture, a PDF, an Office file, a ZIP or a text file with this guidance" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envía una imagen, un PDF, un archivo de Office, un ZIP o un archivo de texto con estas indicaciones"
+          }
+        }
+      }
+    },
+    "Send a picture, a PDF, an Office file, a ZIP or a text file with this message" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envía una imagen, un PDF, un archivo de Office, un ZIP o un archivo de texto con este mensaje"
+          }
+        }
+      }
+    },
     "Send a text file with this guidance" : {
       "localizations" : {
         "es" : {
@@ -24344,6 +24364,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este hub aún no ofrece ninguna app."
+          }
+        }
+      }
+    },
+    "This hub takes images, PDF, ZIP, Word, Excel, PowerPoint, text, Markdown, CSV and JSON." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este hub acepta imágenes, PDF, ZIP, Word, Excel, PowerPoint, texto, Markdown, CSV y JSON."
           }
         }
       }

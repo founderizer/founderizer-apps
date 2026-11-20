@@ -413,7 +413,8 @@ final class MobileClient: Sendable {
     /// went, or the phone does not take it.
     func upload(_ data: Data, name: String, mime: String, requestID: UUID, client: String, hub: URL, key: String?,
                 database: String) async throws -> MessageAttachment {
-        guard MessageAttachment.types[mime] != nil else { throw AttachmentError.type }
+        // the store offers Word, Excel and PowerPoint only to a hub with `office_files` (MobileStore.stage)
+        guard MessageAttachment.sendable(mime, office: true) else { throw AttachmentError.type }
         guard !data.isEmpty, data.count <= MessageAttachment.sizeLimit else { throw AttachmentError.tooLarge }
         var request = Self.request("ui/attachments", hub: hub, key: key,
                                    query: [URLQueryItem(name: "db", value: database)], method: "POST")

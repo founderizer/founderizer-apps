@@ -18,6 +18,7 @@
  ],
  "MEDIA_TYPES": {
   "csv": "text/csv",
+  "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "gif": "image/gif",
   "jpe": "image/jpeg",
   "jpeg": "image/jpeg",
@@ -27,8 +28,10 @@
   "md": "text/markdown",
   "pdf": "application/pdf",
   "png": "image/png",
+  "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "txt": "text/plain",
   "webp": "image/webp",
+  "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "zip": "application/zip"
  },
  "PAGES": {
@@ -3264,5 +3267,5 @@
    "name": "take_backup"
   }
  ],
- "version": "a6f7c1c4caf549947b1b448a3928e79aa6b8d9bf2f01d595120ef6ccdfa04003"
+ "version": "3d504b54556966e45e179f6fb8ae87fff0bd717f1f95939c9ee31f0114e86d30"
 }
