@@ -397,6 +397,8 @@ struct NeedCard: View {
             RowLine()
             if need.asksForSecret {
                 NeedSecretNote(need: need)
+                // Needs clarification, under the line about the Mac, for a hub that takes his words from a phone
+                if store.supportsClarify { NeedClarify(store: store, need: need, sent: answerGiven?.words) }
             } else {
                 if !need.phoneRows.isEmpty {
                     NeedOptions(store: store, need: need, given: answerGiven)
@@ -840,6 +842,118 @@ struct NeedSecretNote: View {
     }
 }
 
+/// **Needs clarification on the phone's card of a request for a key or a login** (the owner's "Yes, build it" of 20
+/// November 2026 to its picture; on the Mac's card since 19 November 2026: "There should be a way to Reply or comment
+/// to the card, to give more context or clarify something", "I prefer Needs clarification", "and THEN show the text
+/// input"): under the line about the Mac, the link, and after a tap the field in its place, "Message to" and the agent
+/// that asked, with Send. The phone saves no secret, so the card has no other answer. His message closes the request
+/// and goes to the agent that asked, which asks again; it is saved and sent as an answer is (`MobileStore.clarify`),
+/// so a failure sends the same request again and never a second one.
+///
+/// **Words that look like a key do not go** (`KeyInText`), and one line over the field says so: a key typed here
+/// would go out as words, into the agent's conversation. The field's words are the store's, in memory only
+/// (`MobileStore.clarifyDrafts`): nothing writes them to a file, and the store empties them when the hub refuses
+/// registered login text, so no copy of them stays on the screen.
+struct NeedClarify: View {
+    let store: MobileStore
+    let need: OwnerNeed
+    /// His words went: they stay in the field until the item folds, and Send goes, as in an answer's box.
+    var sent: String? = nil
+    /// The field stands on this card: he tapped the link, or words that stand in the store opened it (they open it on
+    /// each card of the request). It stays until the card goes: a field that went back to the link at the last
+    /// deleted character took the keyboard from under the cursor (review round 2).
+    @State private var stands = false
+    /// The field takes the cursor once it stands: set in the tap that makes the field, the cursor could stay where it
+    /// was (the chat's own composer), as the Mac's card found.
+    @State private var takesCursor = false
+    /// The send found words that look like a key: the line over the field, until he changes them.
+    @State private var looksLikeKey = false
+    @FocusState private var focused: Bool
+    /// One line of the field, so Send stands on its centre at every text size.
+    @ScaledMetric(relativeTo: .body) private var line: CGFloat = 22
+    /// Where the words of the line over the link begin (`MarkedLine`: its mark's column and its gap); at the
+    /// accessibility sizes that line's mark stands over its words, so the link begins at the card's edge too.
+    @ScaledMetric(relativeTo: .title3) private var markWidth: CGFloat = 22
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private static let capsule = RoundedRectangle(cornerRadius: 25, style: .continuous)
+    /// The hub's most for those words, counted as the hub counts (`NeedSecret.length`). The field takes more, as an
+    /// answer's box does: Send stops then, and the line under the card says the most (`NeedFooter`).
+    private static let most = NeedSecret.clarifyMost
+
+    var body: some View {
+        let taken = store.answersTaken[need.id]
+        let typed = taken.flatMap { $0.request.choice == nil ? $0.request.text : nil }
+        // The field's words are the store's (`MobileStore.clarifyDrafts`): no copy here outlives what the store empties.
+        let draft = store.clarifyDraft(for: need.id)
+        let shown = Binding(get: { sent ?? typed ?? store.clarifyDraft(for: need.id) }, set: { text in
+            // Nothing changes the words that went, while the item folds.
+            guard sent == nil, store.answersTaken[need.id] == nil else { return }
+            changed(text)
+        })
+        let trimmed = shown.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canSend = sent == nil && taken == nil && store.canWrite && !trimmed.isEmpty && NeedSecret.length(trimmed) <= Self.most
+        VStack(alignment: .leading, spacing: 8) {
+            if stands || !draft.isEmpty || sent != nil || taken != nil {
+                // Over the field: under it, the keyboard stands on the line (the look check of 20 November 2026).
+                if looksLikeKey {
+                    ComposerNote(words: String(l10n: "That looks like a key. Never send a key in a message."), isWarning: true)
+                        .accessibilityIdentifier("clarify-key-\(need.id)")
+                }
+                HStack(alignment: .bottom, spacing: 0) {
+                    TextField(text: shown, prompt: Text("Message to \(agentName(need.by))").foregroundStyle(Brand.placeholder), axis: .vertical) {
+                        Text("Message to \(agentName(need.by))")
+                    }
+                    .lineLimit(1...6)
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .padding(.vertical, 14)
+                    .padding(.leading, 15)
+                    .padding(.trailing, 6)
+                    .accessibilityIdentifier("clarify-\(need.id)")
+                    SendButton(enabled: canSend, label: String(l10n: "Send message"), side: 36) {
+                        // Words that look like a key stay here, with the line that says why, and nothing is saved.
+                        if KeyInText.contains(trimmed) { looksLikeKey = true; return }
+                        // The keyboard goes with the message, before the item folds, as with an answer.
+                        focused = false
+                        await store.clarify(needID: need.id, words: trimmed)
+                    }
+                    .accessibilityIdentifier("send-clarify-\(need.id)")
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .frame(height: line + 28)
+                }
+                // The words begin where the words of an answer's box with no plus begin, and Send has its room.
+                .padding(.leading, 3).padding(.trailing, 7)
+                .background {
+                    Self.capsule.fill(Brand.bubble)
+                        .onTapGesture { focused = true }
+                }
+                .onAppear {
+                    stands = true
+                    if takesCursor { focused = true; takesCursor = false }
+                }
+            } else {
+                // The link, in the column of the words of the line over it, with a row's height for the finger.
+                TextAction(title: String(l10n: "Needs clarification"), font: .callout) { stands = true; takesCursor = true }
+                    .foregroundStyle(Brand.accent)
+                    .padding(.leading, typeSize.isAccessibilitySize ? 0 : markWidth + 12)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("clarify-link-\(need.id)")
+            }
+        }
+        // The hub refused registered login text: the store emptied the words, and the line about a key goes with them.
+        .onChange(of: store.secretRefusals) { _, _ in looksLikeKey = false }
+    }
+
+    /// The field's words changed: the line about a key goes once they hold none, and the store keeps them, in memory
+    /// only. Nothing cuts them here: a cut that changed nothing in the store left the field with words that the store
+    /// did not have, and Send sent the shorter ones (review round 2).
+    private func changed(_ text: String) {
+        if looksLikeKey, !KeyInText.contains(text) { looksLikeKey = false }
+        store.setClarifyDraft(text, for: need.id)
+    }
+}
+
 /// **Give, and a team card's yes, are pressed in Founderizer on a Mac or a PC, and the door card's Full access on the
 /// Mac** (the lane "Give on the iPhone"; the owner's "Line to the Mac" of 19 November 2026 to the phone's picture of an
 /// item that carries its grant, and his "Yes, add it" of the same day for the door's card): the hub takes them only
@@ -883,9 +997,18 @@ struct NeedFooter: View {
 
     var body: some View {
         let composer = MobileStore.stageKey(need: need.id)
-        let trimmed = store.answerDraft(for: need.id).trimmingCharacters(in: .whitespacesAndNewlines)
+        // (a key request's words are the words about it, where its card takes them, counted as the hub counts them
+        // against their own most)
+        let trimmed = (need.asksForSecret ? store.clarifyDraft(for: need.id) : store.answerDraft(for: need.id))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let count = need.asksForSecret ? NeedSecret.length(trimmed) : trimmed.count
+        let most = need.asksForSecret ? NeedSecret.clarifyMost : MobileStore.textLimit
         let taken = store.answersTaken[need.id] != nil
-        if need.asksForSecret {
+        // A request for a key takes no answer here but his words about it (`NeedClarify`), and only from a hub that
+        // takes them from a phone. Then the lines of an answer stand under it too: a send, one that did not go, and
+        // why nothing can go now (a file that cannot be saved, another request on its way). A card whose Send went
+        // dead with no line was the fault of the first build.
+        if need.asksForSecret && !store.supportsClarify {
             EmptyView()
         } else if taken || sends {
             // **This answer on its way is one line, from the press to the fold** (polish pass: the receipt's jump): a
@@ -897,7 +1020,7 @@ struct NeedFooter: View {
                 .accessibilityIdentifier("waiting-answer")
         } else if let pending = store.pending, pending.needID == need.id {
             stoppedLine(pending)
-        } else if let note = note(count: trimmed.count, files: store.filesAreWaiting(for: composer)) {
+        } else if let note = note(count: count, most: most, files: store.filesAreWaiting(for: composer)) {
             ComposerNote(words: note.words, isWarning: note.isWarning,
                          detail: store.storageError != nil ? store.storageErrorDetail
                              : store.fileError != nil ? store.fileErrorDetail : nil)
@@ -940,7 +1063,7 @@ struct NeedFooter: View {
     }
 
     /// At most one line under an answer: how near the hub's limit it is, or why nothing can go now.
-    private func note(count: Int, files waiting: Bool) -> (words: String, isWarning: Bool)? {
+    private func note(count: Int, most: Int, files waiting: Bool) -> (words: String, isWarning: Bool)? {
         if let words = store.storageError { return (words, true) }
         if let words = store.fileError { return (words, true) }
         if waiting {
@@ -948,11 +1071,11 @@ struct NeedFooter: View {
                     store.uploading.isEmpty)
         }
         // The Mac's words over the limit, and one number format near it, as the chat's composer says them.
-        if count > MobileStore.textLimit {
-            return (String(l10n: "Use no more than \(MobileStore.textLimit.formatted()) characters."), true)
+        if count > most {
+            return (String(l10n: "Use no more than \(most.formatted()) characters."), true)
         }
-        if count > MobileStore.textLimit - 500 {
-            return (String(l10n: "\(count.formatted()) of \(MobileStore.textLimit.formatted()) characters"), false)
+        if count > most - 500 {
+            return (String(l10n: "\(count.formatted()) of \(most.formatted()) characters"), false)
         }
         // No line while the hub does not answer: the line over the page says it once (D-2).
         return nil

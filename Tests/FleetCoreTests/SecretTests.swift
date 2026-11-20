@@ -567,6 +567,37 @@ struct SecretTests {
         #expect(try JSONDecoder().decode(TeamLogin.self, from: Data(#"{"title":"T","protected":false}"#.utf8)).note == nil)
     }
 
+    /// The phone saves his words about a key request before it sends them, as it saves an answer (API 1.252): the saved
+    /// request goes to the request's own route with `clarify` alone, it reads back as it was saved, and a request that
+    /// a version before it saved is no clarification. Words that went to the answer's route would come back refused
+    /// (the hub takes no answer in words for a key request), after he typed them.
+    @Test func hisWordsAboutAKeyRequestAreSavedAndSentToTheRequestsOwnRoute() throws {
+        let hub = try #require(URL(string: "http://127.0.0.9:8765"))
+        let words = PendingRequest(hub: hub, database: "d", client: "c", needID: 7, clarifies: true, text: "Which account?")
+        #expect(words.route == "ui/needs/7/secret" && words.clarifies && words.answersInWords)
+        let body = try #require(JSONSerialization.jsonObject(with: words.body()) as? [String: String])
+        #expect(body == ["request_id": words.requestID.uuidString.lowercased(), "db": "d", "clarify": "Which account?"])
+        let back = try JSONDecoder().decode(PendingRequest.self, from: JSONEncoder().encode(words))
+        let (sentAgain, sentFirst) = (try back.body(), try words.body())
+        #expect(back.clarifies && back.route == words.route && sentAgain == sentFirst)
+        // an answer keeps its route and its field; an option's press and a message are no words about a request
+        let answer = PendingRequest(hub: hub, database: "d", client: "c", needID: 7, text: "Done")
+        #expect(answer.route == "ui/needs/7" && !answer.clarifies)
+        let answered = try #require(JSONSerialization.jsonObject(with: answer.body()) as? [String: String])
+        #expect(answered == ["request_id": answer.requestID.uuidString.lowercased(), "db": "d", "answer": "Done"])
+        #expect(!PendingRequest(hub: hub, database: "d", client: "c", needID: 7, choice: 0, clarifies: true, text: "Yes").clarifies)
+        #expect(!PendingRequest(hub: hub, database: "d", client: "c", clarifies: true, text: "Hello").clarifies)
+        // a request with a file, a statement or a replaced message is no clarification: that route takes none of them
+        #expect(!PendingRequest(hub: hub, database: "d", client: "c", needID: 7, attachments: [3], clarifies: true, text: "x").clarifies)
+        #expect(!PendingRequest(hub: hub, database: "d", client: "c", needID: 7, approval: ("s", "g"), clarifies: true, text: "x").clarifies)
+        #expect(!PendingRequest(hub: hub, database: "d", client: "c", needID: 7, replacesRequestID: "r", clarifies: true, text: "x").clarifies)
+        // a request that a version before 1.252 saved has no such field
+        var old = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(words)) as? [String: Any])
+        old["clarifies"] = nil
+        let read = try JSONDecoder().decode(PendingRequest.self, from: JSONSerialization.data(withJSONObject: old))
+        #expect(!read.clarifies && read.route == "ui/needs/7")
+    }
+
     @Test func saltsReceiptsAndTheCatalogAreChecked() throws {
         func salts(_ fields: [String: String]) throws -> SecretSalts { try JSONDecoder().decode(SecretSalts.self, from: JSONSerialization.data(withJSONObject: fields)) }
         let good = try salts(["login": reference, "password": String(repeating: "1", count: 32), "totp": String(repeating: "2", count: 32)])

@@ -473,3 +473,25 @@ struct MobileRefusalTests {
         }
     }
 }
+
+/// **The words about a key request that stand in the phone's field** (`MobileStore.clarifyDrafts`, Needs
+/// clarification): the store holds them in memory for each card of the request, and nothing writes them to the app's
+/// settings, where the drafts of an answer are. A key that stayed in a file on the phone, after he pasted it into that
+/// field by mistake, is the bug that this holds.
+@Suite("The words about a key request", .serialized)
+struct ClarifyDraftTests {
+    @MainActor @Test("stay in memory only: no setting of the app holds them, and a new launch has none")
+    func drafts() {
+        let store = MobileStore()
+        let words = "Which of the three accounts? sk-ant-api03-EXAMPLEEXAMPLEEXAMPLEEXAMPLE"
+        store.setClarifyDraft(words, for: 7)
+        #expect(store.clarifyDraft(for: 7) == words)
+        // no setting of the app holds the words, under any name
+        let kept = UserDefaults.standard.dictionaryRepresentation().map { "\($0.key) \($0.value)" }.joined(separator: "\n")
+        #expect(!kept.contains("Which of the three accounts") && !kept.contains("EXAMPLEEXAMPLE"))
+        store.setClarifyDraft("", for: 7)
+        #expect(store.clarifyDraft(for: 7).isEmpty)
+        store.setClarifyDraft(words, for: 8)
+        #expect(MobileStore().clarifyDraft(for: 8).isEmpty)        // a new launch has none
+    }
+}

@@ -1876,22 +1876,22 @@
         }
       }
     },
-    "%@ · delete your download after this" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ · borra tu descarga después de esto"
-          }
-        }
-      }
-    },
     "%@ · done: %lld" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ · hechas: %2$lld"
+          }
+        }
+      }
+    },
+    "%@ · keep the file until the key is saved, then delete it" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · conserva el archivo hasta que la clave esté guardada y después bórralo"
           }
         }
       }
@@ -3018,12 +3018,12 @@
         }
       }
     },
-    "3. Generate a private key" : {
+    "3. New private key" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "3. Genera una clave privada"
+            "value" : "3. Nueva clave privada"
           }
         }
       }
@@ -6888,6 +6888,16 @@
         }
       }
     },
+    "Credentials → Key pairs → New key. GitHub downloads one .pem file." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Credentials → Key pairs → New key. GitHub descarga un archivo .pem."
+          }
+        }
+      }
+    },
     "Current" : {
       "localizations" : {
         "es" : {
@@ -9354,16 +9364,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "GitHub no aceptó esta clave para ese App ID (%lld)."
-          }
-        }
-      }
-    },
-    "GitHub downloads one .pem file." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "GitHub descarga un archivo .pem."
           }
         }
       }

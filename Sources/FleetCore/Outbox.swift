@@ -27,6 +27,11 @@ public struct PendingRequest: Codable, Equatable, Sendable {
     /// its exit status and the end of its output. The hub writes the answer itself, so `text` holds its words
     /// (`NeedRun.answerWords`) and is not sent. nil on every other request.
     public let ran: NeedRunResult?
+    /// **His words about a request for a key or a login** (Needs clarification, owner feature `secret_clarify`, API
+    /// 1.252 from a phone): `text` goes as `clarify` to the request's own route, `ui/needs/<id>/secret`, in place of
+    /// an answer in words, which the hub refuses for such a request. False on every other request, and on one that a
+    /// version before it saved.
+    public let clarifies: Bool
     public fileprivate(set) var text: String
     public let createdAt: Date
     public let client: String
@@ -42,8 +47,13 @@ public struct PendingRequest: Codable, Equatable, Sendable {
     /// for one that an older version refused (its words are in `refusal`).
     public var hubRefusal: HubRefusal?
 
-    public init(hub: URL, database: String, client: String, needID: Int? = nil, choice: Int? = nil, choices: [Int]? = nil, recipient: String? = nil, replacesRequestID: String? = nil, command: OwnerCommand? = nil, attachments: [Int] = [], approval: (statement: String, signature: String)? = nil, ran: NeedRunResult? = nil, text: String) {
+    public init(hub: URL, database: String, client: String, needID: Int? = nil, choice: Int? = nil, choices: [Int]? = nil, recipient: String? = nil, replacesRequestID: String? = nil, command: OwnerCommand? = nil, attachments: [Int] = [], approval: (statement: String, signature: String)? = nil, ran: NeedRunResult? = nil, clarifies: Bool = false, text: String) {
         requestID = UUID()
+        // Only the words of a request's answer: no option, no ticked options, no run and no command are words about
+        // it. Nor a request with files, a statement or a message that it replaces: the route of those words takes
+        // none of them, so its receipt would name none, and the request would wait in the Outbox with no way out.
+        self.clarifies = clarifies && needID != nil && choice == nil && choices == nil && ran == nil && command == nil
+            && attachments.isEmpty && approval == nil && replacesRequestID == nil
         self.attachments = attachments
         statement = needID == nil ? nil : approval?.statement
         signature = needID == nil ? nil : approval?.signature
@@ -78,6 +88,8 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         signature = try saved.decodeIfPresent(String.self, forKey: .signature)
         // A request that a version before Run saved carries no run.
         ran = try saved.decodeIfPresent(NeedRunResult.self, forKey: .ran)
+        // A request that a version before Needs clarification saved is none.
+        clarifies = try saved.decodeIfPresent(Bool.self, forKey: .clarifies) ?? false
         text = try saved.decode(String.self, forKey: .text)
         createdAt = try saved.decode(Date.self, forKey: .createdAt)
         client = try saved.decode(String.self, forKey: .client)
@@ -108,7 +120,9 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         refusedByHub.map { HubError.refusal($0).localizedDescription } ?? refusal
     }
 
-    public var route: String { command?.route ?? needID.map { "ui/needs/\($0)" } ?? "ui/messages" }
+    public var route: String {
+        command?.route ?? needID.map { clarifies ? "ui/needs/\($0)/secret" : "ui/needs/\($0)" } ?? "ui/messages"
+    }
 
     /// **Its name in the window's request line**: its item's own title (`OwnerCommand.label(in:schedules:)`) only from a
     /// reading of the hub and the generation it belongs to. A write left from another hub, or from this hub before it was
@@ -134,6 +148,11 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         if let choice, needID != nil { fields["choice"] = choice }
         else if let choices, needID != nil { fields["choices"] = choices }
         else if let ran, needID != nil { fields["ran"] = ["status": ran.status, "output": ran.output] }
+        else if clarifies, needID != nil {
+            // his words about a key request, alone: that route takes no file, no statement and no other field
+            fields["clarify"] = text
+            return try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])
+        }
         else { fields[needID == nil ? "text" : "answer"] = text }
         if let recipient { fields["recipient"] = recipient }
         if let replacesRequestID { fields["replaces_request_id"] = replacesRequestID }

@@ -80,7 +80,7 @@ struct GitHubAppSection: View {
                             .onAppear { if renewing, appID.isEmpty, let id = app?.app_id { appID = id } }
                     }
                     FormRow("Private key", symbol: "key",
-                            detail: keyPath.map { String(l10n: "\(($0 as NSString).lastPathComponent) · delete your download after this") }) {
+                            detail: keyPath.map { String(l10n: "\(($0 as NSString).lastPathComponent) · keep the file until the key is saved, then delete it") }) {
                         HStack(spacing: 8) {
                             if busy { ProgressView().controlSize(.small) }
                             Button(keyPath == nil ? "Choose file" : "Change") { choose() }
@@ -137,7 +137,8 @@ struct GitHubAppSection: View {
         }
         FormRow("2. Its permissions", symbol: "2.circle",
                 detail: String(l10n: "Webhook off. Contents and Pull requests: read and write. Metadata: read."))
-        FormRow("3. Generate a private key", symbol: "3.circle", detail: String(l10n: "GitHub downloads one .pem file."))
+        FormRow("3. New private key", symbol: "3.circle",
+                detail: String(l10n: "Credentials → Key pairs → New key. GitHub downloads one .pem file."))
         FormRow("4. Install it", symbol: "4.circle", detail: String(l10n: "On your account, on the repositories you choose."))
         FormRow("5. Here", symbol: "5.circle", detail: String(l10n: "The App ID and that file, below."))
     }

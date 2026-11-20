@@ -801,6 +801,9 @@ final class MobileStore {
         // The chats kept from the last launch belong to the generation they were read in.
         if (snapshot?.db ?? keptDatabase) != answer.snapshot.db { forgetGeneration(keepSnapshot: true) }
         snapshot = answer.snapshot
+        // The words about a key request that is no longer open go: nothing shows them again.
+        let open = Set(answer.snapshot.needs.map(\.id))
+        if clarifyDrafts.keys.contains(where: { !open.contains($0) }) { clarifyDrafts = clarifyDrafts.filter { open.contains($0.key) } }
         keptDatabase = answer.snapshot.db
         snapshotAt = Date()
         etag = answer.etag
@@ -1009,6 +1012,7 @@ final class MobileStore {
     /// Everything that belonged to one hub generation goes: its pages, its cursors and its tag. The waiting request
     /// stays, because it names its own hub and generation and Settings says so.
     private func forgetGeneration(keepSnapshot: Bool = false) {
+        clarifyDrafts = [:]         // the words about a key request belong to the request of that generation
         // The ended heads belong to the generation they were read in.
         endedHeads = []
         endedNames = [:]
@@ -1532,6 +1536,10 @@ final class MobileStore {
     var supportsAttachments: Bool { features.contains("attachments") }
     /// This hub takes Word, Excel and PowerPoint files from the owner too (owner feature `office_files`, UI-API.md 1.251).
     var supportsOfficeFiles: Bool { features.contains("office_files") }
+    /// **This hub takes his words about a key request from a phone** (owner feature `secret_clarify_phone`, API 1.252;
+    /// the owner's "Yes, build it" of 20 November 2026 to the picture of the phone's card): the card of a request for a
+    /// key or a login draws its link Needs clarification only then. A hub before it refuses those words from a phone.
+    var supportsClarify: Bool { features.contains("secret_clarify_phone") }
     var supportsCorrections: Bool { features.contains("corrections") }
     /// **His correction on its way changes his message where it stands** (owner feature `edit_in_place`; review A2):
     /// the hub will change that message itself, so its bubble shows the new words, and no second bubble comes. Only
@@ -1569,6 +1577,31 @@ final class MobileStore {
         guard drafts[name] ?? "" != text else { return }
         if text.isEmpty { drafts[name] = nil } else { drafts[name] = text }
         if !sample { UserDefaults.standard.set(drafts, forKey: "agentDrafts") }
+    }
+
+    /// **The words about a key request that stand in its field, in memory only.** They are the field's own words: the
+    /// card on Needs you and the card in the agent's chat read and write the same ones, and the store empties them, so
+    /// no view keeps a copy that a refusal for registered login text would leave on the screen. The drafts of an answer
+    /// are kept across a restart (`answers`, in the app's settings file); these are never written to a file, because a
+    /// key that he pasted into that field by mistake must not stay on the phone's disk. They go when they are sent,
+    /// when the hub refuses registered login text, with the generation, and at each read for a request that is no
+    /// longer open (`readSnapshot`).
+    private(set) var clarifyDrafts: [Int: String] = [:]
+    func clarifyDraft(for need: Int) -> String { clarifyDrafts[need] ?? "" }
+    func setClarifyDraft(_ text: String, for need: Int) {
+        let kept = text.isEmpty ? nil : text
+        if clarifyDrafts[need] != kept { clarifyDrafts[need] = kept }
+    }
+
+    /// **Needs clarification**: his words about a request for a key or a login go to the agent that asked, saved and
+    /// sent as an answer is (`write`). The hub closes the request with them. Words that look like a key never go, and
+    /// never reach the saved request: the card holds them back first and says why, and this refuses them too, as it
+    /// refuses words over the hub's most.
+    func clarify(needID: Int, words: String) async {
+        guard let need = snapshot?.needs.first(where: { $0.id == needID }), need.asksForSecret, supportsClarify,
+              !KeyInText.contains(words), NeedSecret.length(words.trimmingCharacters(in: .whitespacesAndNewlines)) <= NeedSecret.clarifyMost
+        else { return }
+        await write(words, needID: needID, recipient: need.by, clarifies: true)
     }
 
     func answerDraft(for need: Int) -> String { answers[String(need)] ?? "" }
@@ -1939,7 +1972,7 @@ final class MobileStore {
     /// new number for a request that already exists (MOBILE-APP.md 5.4 and 10).
     private func write(_ value: String, needID: Int? = nil, recipient: String, replaces: String? = nil,
                        files: [Int] = [], choice: Int? = nil,
-                       approval: (statement: String, signature: String)? = nil) async {
+                       approval: (statement: String, signature: String)? = nil, clarifies: Bool = false) async {
         guard canWrite, let snapshot else { return }
         guard needID != nil || canChat(with: recipient) else { return }
         guard files.isEmpty || supportsAttachments else { return }
@@ -1949,7 +1982,8 @@ final class MobileStore {
         if let needID, !openNeeds.contains(where: { $0.id == needID }) { return }
         let request = PendingRequest(hub: hub, database: snapshot.db, client: installation, needID: needID,
                                      choice: choice, recipient: needID == nil && supportsDirectChat ? recipient : nil,
-                                     replacesRequestID: replaces, attachments: files, approval: approval, text: text)
+                                     replacesRequestID: replaces, attachments: files, approval: approval,
+                                     clarifies: clarifies, text: text)
         if let needID { answersTaken[needID] = nil }
         do {
             try outbox.save(request)
@@ -2017,6 +2051,7 @@ final class MobileStore {
                 secretRefusals += 1
                 drafts = [:]
                 answers = [:]
+                clarifyDrafts = [:]
                 UserDefaults.standard.set(drafts, forKey: "agentDrafts")
                 UserDefaults.standard.set(answers, forKey: "answerDrafts")
                 cancelCorrection()
@@ -2056,6 +2091,7 @@ final class MobileStore {
             if answerDraft(for: needID).trimmingCharacters(in: .whitespacesAndNewlines) == request.text {
                 setAnswerDraft("", for: needID)
             }
+            if request.clarifies { clarifyDrafts[needID] = nil }
             let sentFiles = stagedFiles(for: Self.stageKey(need: needID)).filter {
                 $0.attachmentID.map(request.attachments.contains) == true
             }
