@@ -171,6 +171,15 @@ struct SignInWizard: View {
     /// **What it costs, said before it happens and nowhere else.** A provider starts no second sign-in while one
     /// is live, so another account means signing this one out, and that stops the agent until he is back in.
     private var cost: String {
+        // A sign-out stops every agent of that sign-in, not only this one (`sign_in_shared`).
+        let others = (machine?.sign_in_shared?[runtime] ?? []).filter { $0 != agent }
+        if !others.isEmpty {
+            let names = ([agent] + others).map(\.agentLabel).formatted(.list(type: .and))
+            if let server = machine?.machine {
+                return String(l10n: "\(providerName(runtime)) signs out on \(server). \(names) stop working until you have signed in with the other account.")
+            }
+            return String(l10n: "\(providerName(runtime)) signs out on its server. \(names) stop working until you have signed in with the other account.")
+        }
         if let server = machine?.machine {
             return String(l10n: "\(providerName(runtime)) signs out on \(server). \(agent.agentLabel) stops working until you have signed in with the other account.")
         }

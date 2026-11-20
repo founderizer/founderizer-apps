@@ -12,15 +12,24 @@ public struct HubState: Decodable, Sendable {
     public private(set) var knowledge: [KnowledgeEntry]?
     public let secrets: [SecretReference]?
     public let agents: [FleetAgent]
-    public let tasks: [FleetTask]
-    public let notes: [ProgressNote]
+    /// The tasks, and with them their notes, permissions, guidance, holds and outcomes: the hub's own rows of one
+    /// read, or those rows with the blocks of older tasks that this Mac holds (`OlderTasks.join`), which only
+    /// FleetCore sets.
+    public internal(set) var tasks: [FleetTask]
+    public internal(set) var notes: [ProgressNote]
     public let needs: [OwnerNeed]
-    public let permissions: [FleetPermission]
+    public internal(set) var permissions: [FleetPermission]
     public let messages: [OwnerMessage]
     public let reports: [ManagerReport]
-    public let steers: [TaskSteer]?
-    public let holds: [TaskHold]?
-    public let outcomes: [TaskOutcome]?
+    public internal(set) var steers: [TaskSteer]?
+    public internal(set) var holds: [TaskHold]?
+    public internal(set) var outcomes: [TaskOutcome]?
+    /// **Where the ended tasks are that this read leaves out** (owner API 1.254, `OlderTasksHead`), in a read that
+    /// asked for the window of the tasks. nil: every task is in `tasks`: the hub is older, its marks are not in
+    /// place, or this is a reading that `OlderTasks.join` made whole.
+    public internal(set) var older_tasks: OlderTasksHead?
+    /// Every task of the fleet, by this read: its own, and the ones that it leaves out.
+    public var taskCount: Int { tasks.count + (older_tasks?.tasks ?? 0) }
     /// Owner feature `chat_apps`: Pause all, and the accounts that are not connected or not linked.
     public let chat_apps: ChatAppsSummary?
     /// Owner feature `live_changes`: the hub's change count at the moment of this snapshot, `<boot>.<state>.<activity>`,
@@ -44,6 +53,7 @@ public struct HubState: Decodable, Sendable {
               state.time.isFinite,
               state.goals?.allSatisfy(\.isValid) != false,
               state.steers?.allSatisfy(\.isValid) != false,
+              state.older_tasks?.isValid != false,
               Set(state.steers?.map(\.id) ?? []).count == (state.steers?.count ?? 0),
               Set(state.goals?.map(\.id) ?? []).count == (state.goals?.count ?? 0),
               Set(state.agents.map(\.id)).count == state.agents.count,

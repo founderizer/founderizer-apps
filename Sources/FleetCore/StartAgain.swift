@@ -881,11 +881,24 @@ public enum StartAgain {
     }
 
     /// **The kept readings of this hub** in the app's own folder: `state-`, `health-`, `releases-` and `app-update-`
-    /// with the hub's host and port, as `FleetStore` names them. Files of another hub, and every other file, stay.
+    /// with the hub's host and port, as `FleetStore` names them, and the folder of its blocks of older tasks
+    /// (`olderFolder`). Files of another hub, and every other file, stay.
     public static func readingFiles(of hub: URL, in folder: URL) -> [URL] {
-        let address = [hub.host ?? "hub", hub.port.map(String.init)].compactMap { $0 }.joined(separator: "-")
-            .replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression)
+        let address = readingAddress(of: hub)
         return ["state", "health", "releases", "app-update"].map { folder.appendingPathComponent("\($0)-\(address).json") }
+            + [olderFolder(of: hub, in: folder)]
+    }
+
+    /// The hub's host and port as a part of a file's name, as `FleetStore` names its kept readings.
+    public static func readingAddress(of hub: URL) -> String {
+        [hub.host ?? "hub", hub.port.map(String.init)].compactMap { $0 }.joined(separator: "-")
+            .replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression)
+    }
+
+    /// **The folder of this hub's blocks of older tasks** (`OlderTasks`; owner API 1.254) in the app's own folder:
+    /// one file for each block, by the block's first task id.
+    public static func olderFolder(of hub: URL, in folder: URL) -> URL {
+        folder.appendingPathComponent("older-\(readingAddress(of: hub))", isDirectory: true)
     }
 }
 #endif

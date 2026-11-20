@@ -281,7 +281,7 @@ public struct FleetHolds: Sendable, Equatable {
     }
 
     public init(_ state: HubState) {
-        self.init(agents: state.agents.count, tasks: state.tasks.count, goals: state.goals?.count ?? 0,
+        self.init(agents: state.agents.count, tasks: state.taskCount, goals: state.goals?.count ?? 0,
                   needs: state.needs.count, reports: state.reports.count)
     }
 

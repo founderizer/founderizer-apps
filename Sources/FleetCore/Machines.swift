@@ -39,6 +39,9 @@ public struct MachineStatus: Decodable, Identifiable, Sendable {
     /// `machine_signin`: the sign-in the owner is driving for this machine, or nil. The link and the code it shows
     /// are there only while it waits, because the hub keeps them nowhere.
     public let login: MachineLogin?
+    /// For each runtime, the other agents that a sign-out of it on this machine stops too: the agents of one OS user
+    /// keep one sign-in of each provider. Empty where its sign-in is its own; nil from a hub before 20 November 2026.
+    public let sign_in_shared: [String: [String]]?
     /// The CPU and memory of this agent's own sessions, as its helper read them, or nil from a helper before the
     /// load readings (4 November 2026).
     public let use: AgentUse?

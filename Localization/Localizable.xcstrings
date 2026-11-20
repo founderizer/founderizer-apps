@@ -1644,12 +1644,32 @@
         }
       }
     },
+    "%@ signs out on %@. %@ stop working until you have signed in with the other account." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cierra la sesión en %@. %@ dejan de trabajar hasta que inicies sesión con la otra cuenta."
+          }
+        }
+      }
+    },
     "%@ signs out on %@. %@ stops working until you have signed in with the other account." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ cierra la sesión en %@. %@ deja de trabajar hasta que inicies sesión con la otra cuenta."
+          }
+        }
+      }
+    },
+    "%@ signs out on its server. %@ stop working until you have signed in with the other account." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cierra la sesión en su servidor. %@ dejan de trabajar hasta que inicies sesión con la otra cuenta."
           }
         }
       }

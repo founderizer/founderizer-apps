@@ -184,6 +184,11 @@ public struct Transfer: Sendable, Equatable {
     /// that is no file keeps `call`.
     public static let state = Transfer(limit: 64 * 1024 * 1024, file: false)
     static let stateRoute = "/ui/state"
+    /// The read of the state that the program makes for itself (the generation, the features, `fleet_overview`),
+    /// `owner_mcp.py` STATE_READ: with the window of the tasks (owner API 1.254), so that it does not grow with the
+    /// fleet's history. A hub from before 1.254 reads no such word and gives the whole answer. `fleet_read` with the
+    /// page `state` stays the whole snapshot.
+    static let stateRead = stateRoute + "?tasks=window"
     /// `hub.py` ATTACH_MAX: the largest file that the owner attaches.
     public static let attachment = Transfer(limit: 25 * 1024 * 1024, file: true)
     /// `hub.py` BACKUP_MAX: the largest copy that the hub serves.
@@ -525,11 +530,11 @@ public final class OwnerHub: @unchecked Sendable {
         return generationValue!
     }
 
-    /// **One read of the hub's state, whole**: the read that `generation` makes, which keeps the generation and the
+    /// **One read of the hub's state** (with the window of its tasks, `Transfer.stateRead`): the read that `generation` makes, which keeps the generation and the
     /// features of its answer, and gives that answer too. `answer_needs_you` reads an item of it before a choice of 0
     /// or 1 (`AnswerDoor.press`), so that the command after it, if one goes, makes no second read.
     func state() throws -> JSONValue {
-        let answer = try call("GET", "/ui/state")
+        let answer = try call("GET", Transfer.stateRead)
         guard answer.status == 200, let db = answer.data?["db"], db.truthy else {
             throw refusal(answer, "a read of the fleet")
         }

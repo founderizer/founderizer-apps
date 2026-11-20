@@ -44,6 +44,12 @@ class FaultHarnessTests(unittest.TestCase):
         self.assertEqual(status, 200)
         return result
 
+    def test_the_state_is_served_with_the_word_that_the_mac_app_asks_with(self):
+        """The Mac app reads the state as `/ui/state?tasks=window` (owner API 1.254). A stand-in that compares the
+        whole path with `/ui/state` gives that read a 404, and each app check on this hub then has no reading."""
+        status, state = self.request("GET", "/ui/state?tasks=window")
+        self.assertEqual((status, state["schema_version"], state["tasks"]), (200, 1, []))
+
     def test_accept_then_drop_response_next_get_has_exact_receipt(self):
         goal = self.goal()
         self.drop(goal)

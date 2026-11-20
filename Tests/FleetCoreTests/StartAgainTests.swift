@@ -822,10 +822,11 @@ struct StartAgainTests {
         #expect(defaults.dictionary(forKey: "chatRepliesSeen") != nil)
     }
 
-    @Test func theKeptReadingsOfAHubAreItsFourFiles() {
+    @Test func theKeptReadingsOfAHubAreItsFourFilesAndItsBlocksOfOlderTasks() {
         let folder = URL(fileURLWithPath: "/tmp/example/Founderizer")
         #expect(StartAgain.readingFiles(of: hub, in: folder).map(\.lastPathComponent) == [
-            "state-100.64.0.1-8765.json", "health-100.64.0.1-8765.json", "releases-100.64.0.1-8765.json", "app-update-100.64.0.1-8765.json"])
+            "state-100.64.0.1-8765.json", "health-100.64.0.1-8765.json", "releases-100.64.0.1-8765.json", "app-update-100.64.0.1-8765.json",
+            "older-100.64.0.1-8765"])
         #expect(Set(StartAgain.readingFiles(of: hub, in: folder)).isDisjoint(with: StartAgain.readingFiles(of: other, in: folder)))
     }
 

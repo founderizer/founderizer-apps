@@ -3,6 +3,7 @@ import FleetCore
 import FleetOwnerAPI
 import Foundation
 import Observation
+import OSLog
 
 struct TaskChild: Identifiable, Equatable {
     let id: RuntimeToolKey
@@ -1437,6 +1438,23 @@ final class FleetStore {
     /// The observer of `HubWrites`: a write of this Mac got its answer.
     @ObservationIgnored private var writes: NSObjectProtocol?
 
+    // MARK: The ended tasks that a read of the state leaves out (`OlderTasks`; owner API 1.254)
+
+    /// The blocks of older tasks that this Mac holds for this hub: each reading is its window read joined with them
+    /// (`OlderTasks.join`), so the pages draw every task, as they did when the hub sent every task in each read.
+    @ObservationIgnored private var older = OlderTasks()
+    /// The newest window read as the hub gave it, which a block that comes later is joined to.
+    @ObservationIgnored private var lastWindow: HubState?
+    /// The one read of the blocks that runs now, with its number: a read that `forgetOlder` ended takes no block
+    /// and clears no handle of a later read. And when a block that a read took last came to the pages.
+    @ObservationIgnored private var olderRead: Task<Void, Never>?
+    @ObservationIgnored private var olderReads = 0
+    @ObservationIgnored private var olderShown = ContinuousClock.now
+    /// The newest write or removal of a block's file, each after the one before it: a later answer of a block is
+    /// never under an earlier one on the disk, and `forgetFleet` removes the folder again after the last of them.
+    @ObservationIgnored private var olderWrite: Task<Void, Never>?
+    private static let olderLog = Logger(subsystem: "com.founderizer.app", category: "older-tasks")
+
     // MARK: The last reading, kept between launches
 
     /// Where the last reading of each hub address waits for the next launch.
@@ -1530,6 +1548,127 @@ final class FleetStore {
         if now { write() } else { lastWrite = Task.detached(priority: .utility, operation: write) }
     }
 
+    // MARK: The blocks of older tasks
+
+    /// **Reads the blocks of older tasks that this Mac does not hold as the hub has them now**, one read at a time,
+    /// away from the reads of the state: the list first, then each block whose mark differs, the newest first. It
+    /// runs after a read of the state whose mark is not the one that the held blocks are current at: at the first
+    /// read of a launch, when a task ended below the window, and when the window moved up a block.
+    private func readOlder() {
+        guard olderRead == nil, let window = lastWindow, older.isBehind(window) else { return }
+        let hub = hub, database = window.db
+        olderReads += 1
+        let number = olderReads
+        olderRead = Task { [weak self] in
+            await self?.readOlderBlocks(number, hub: hub, database: database)
+            if self?.olderReads == number { self?.olderRead = nil }
+        }
+    }
+
+    /// **A block whose answer cannot be read does not stop the others** (`OlderTasks.blockFailed`): it is counted
+    /// (`OlderTasks.fail`), written to the log, and asked for again at the next reads, three times in all at its
+    /// mark; then the read rests while the state's mark stands, with one more try at each new mark, and the pages
+    /// keep what they showed of its tasks. Every other failure ends this read (the hub did not answer, the
+    /// generation moved, the window came down over the block), and the next read of the state starts it again.
+    ///
+    /// The blocks come to the pages as a reading does: when a scroll rests (`readingsRest`), about once a second
+    /// while many blocks come, and at the end.
+    private func readOlderBlocks(_ number: Int, hub: URL, database: String) async {
+        func mine() -> Bool { number == olderReads && hub == self.hub && lastWindow?.db == database }
+        do {
+            let list = try await client.olderList(at: hub, database: database)
+            guard mine() else { return }
+            for entry in older.wanted(list) {
+                do {
+                    let (block, data) = try await client.olderBlock(at: hub, database: database, from: entry.from)
+                    guard mine() else { return }
+                    older.take(block)
+                    keepBlock(data, from: entry.from, hub: hub)
+                } catch where OlderTasks.blockFailed(error) {
+                    guard mine() else { return }
+                    older.fail(entry)
+                    // The kind of the fault and no word of the hub's answer: the log can go into a report.
+                    let fault = if case HubError.refusal(let refusal) = error { "status \(refusal.status)" } else { "an answer that this app cannot read" }
+                    Self.olderLog.error("the block of older tasks from \(entry.from, privacy: .public) could not be read: \(fault, privacy: .public)")
+                }
+                if ContinuousClock.now - olderShown > .seconds(1) {
+                    await readingsRest()
+                    guard mine() else { return }
+                    showOlder()
+                }
+            }
+            older.finish(list)
+            tidyBlocks(keeping: Set(list.blocks.map(\.from)), hub: hub)
+        } catch {
+            // Nothing to say: the pages keep what they show, and the next read of the state asks again.
+        }
+        await readingsRest()
+        if mine() { showOlder() }
+    }
+
+    /// The pages draw the newest window read with the blocks as they are now.
+    private func showOlder() {
+        olderShown = .now
+        guard let window = lastWindow, let shown = state, shown.db == window.db else { return }
+        state = older.join(window, shown: shown)
+    }
+
+    /// Another hub, or no fleet: no block of the hub of before is joined to a reading again, and a read of its
+    /// blocks that is on its way takes none. Its files stay for the next connect to it (`readState` reads them
+    /// then), and `forgetFleet` removes them.
+    private func forgetOlder() {
+        olderRead?.cancel(); olderRead = nil
+        olderReads += 1
+        older = OlderTasks(); lastWindow = nil
+    }
+
+    private func blockFile(_ from: Int, hub: URL) -> URL {
+        StartAgain.olderFolder(of: hub, in: readingsFolder).appendingPathComponent("\(from).json")
+    }
+
+    /// One step on the disk for the blocks, after the step before it, away from the window's work.
+    private func afterOlderWrites(_ step: @escaping @Sendable () -> Void) {
+        let before = olderWrite
+        olderWrite = Task.detached(priority: .utility) {
+            await before?.value
+            step()
+        }
+    }
+
+    /// **A block of older tasks stays on this Mac** beside the last reading, as the hub sent it, so that a launch
+    /// reads from the hub only the blocks that changed since.
+    private func keepBlock(_ data: Data, from: Int, hub: URL) {
+        let file = blockFile(from, hub: hub)
+        afterOlderWrites {
+            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true,
+                                                     attributes: [.posixPermissions: 0o700])
+            try? data.write(to: file, options: [.atomic])
+        }
+    }
+
+    /// The files of the blocks that the hub's list does not name leave the disk: the window came down over them, or
+    /// they are of a generation of before.
+    private func tidyBlocks(keeping named: Set<Int>, hub: URL) {
+        let folder = StartAgain.olderFolder(of: hub, in: readingsFolder)
+        afterOlderWrites {
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] {
+                guard name.hasSuffix(".json"), let from = Int(name.dropLast(5)), !named.contains(from) else { continue }
+                try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+            }
+        }
+    }
+
+    /// The blocks that this Mac kept for this hub, each read as a kept reading is (`KeptFile`): a file that is no
+    /// block is none.
+    private func keptBlocks() -> [OlderBlock] {
+        let folder = StartAgain.olderFolder(of: hub, in: readingsFolder)
+        return ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).compactMap { name in
+            guard name.hasSuffix(".json"), Int(name.dropLast(5)) != nil else { return nil }
+            return KeptFile.bytes(of: folder.appendingPathComponent(name), atMost: KeptFile.largestRecord)
+                .flatMap { try? OlderBlock.decode($0) }
+        }
+    }
+
     init() {
         // **A launch's `-hubAddress` that is no hub address stops the app** (review B9, fix round 2): it fell back to his
         // own hub without a word, so a test copy with a typo in it read his real fleet, and could write to it.
@@ -1588,7 +1727,10 @@ final class FleetStore {
         // these reads hold the window's first frame. What is not read is no kept reading: the window waits for the
         // hub's first answer, as on a Mac that kept none.
         if let data = KeptFile.bytes(of: lastReadingFile, atMost: KeptFile.largestReading), let kept = try? HubState.decode(data) {
-            state = kept
+            // With the blocks of older tasks that this Mac kept beside it (`keepBlock`): the first frame has every task.
+            if kept.older_tasks?.isValid == true { older = OlderTasks(kept: keptBlocks(), db: kept.db) }
+            lastWindow = kept
+            state = older.join(kept, shown: nil)
             var timeline = ChatTimeline()
             if timeline.update(messages: kept.messages, reports: kept.reports) { chatTimeline = timeline }
             keptHealth = KeptReading(KeptFile.bytes(of: keptFile("health"), atMost: KeptFile.largestReading)
@@ -1810,7 +1952,7 @@ final class FleetStore {
         do {
             let next = try HubClient.address(addressText)
             guard !sending else { return }
-            if next != hub { childThreadRequest = nil; cancelEdit(); endProviderSetups(); state = nil; chatTimeline = ChatTimeline(); lastSuccess = nil; answeredUptime = nil; lastAnswer = nil; lastReceipt = nil; stopWatching(); stateToken = nil }
+            if next != hub { childThreadRequest = nil; cancelEdit(); endProviderSetups(); state = nil; chatTimeline = ChatTimeline(); lastSuccess = nil; answeredUptime = nil; lastAnswer = nil; lastReceipt = nil; stopWatching(); stateToken = nil; forgetOlder() }
             // Another hub is not the fleet that this start of the app opened on (`welcomeCovers`).
             if next != hub { welcomePassed = true }
             hub = next
@@ -1843,6 +1985,7 @@ final class FleetStore {
         childThreadRequest = nil; cancelEdit(); endProviderSetups(); stopWatching()
         state = nil; chatTimeline = ChatTimeline(); lastSuccess = nil; answeredUptime = nil; lastAnswer = nil; lastReceipt = nil
         stateToken = nil
+        forgetOlder()
         unwrittenReading = nil; unwrittenKept = [:]
         keptHealth = KeptReading(); keptReleases = KeptReading()
         let bar = "\(address)|"
@@ -1869,10 +2012,11 @@ final class FleetStore {
         // In the app's own folder: the kept readings of this hub, and its records of installs and builds.
         let readings = StartAgain.readingFiles(of: old, in: readingsFolder)
         for file in readings { try? FileManager.default.removeItem(at: file) }
-        // A write of a reading that is on its way lands after this line: its files go once it ended.
-        if let late = lastWrite {
+        // A write of a reading or of a block that is on its way lands after this line: its files go once it ended.
+        let late = [lastWrite, olderWrite].compactMap { $0 }
+        if !late.isEmpty {
             Task.detached(priority: .utility) {
-                await late.value
+                for write in late { await write.value }
                 for file in readings { try? FileManager.default.removeItem(at: file) }
             }
         }
@@ -1930,7 +2074,7 @@ final class FleetStore {
             if !firstReadEnded { firstReadEnded = true }
         }
         do {
-            let (fresh, data) = try await client.stateReading(at: requestedHub, present: OwnerPresenceProbe.now())
+            let (window, data) = try await client.stateReading(at: requestedHub, present: OwnerPresenceProbe.now())
             guard requestedHub == hub else { return }
             // The hub answered, so this read is not slow, whatever waits now (`readPatience`), and the reading's age
             // counts from this answer (`lastSuccess`, `sinceAnswer`). A read that is slow already comes in at once.
@@ -1938,6 +2082,13 @@ final class FleetStore {
             held.cancel()
             if !readHeld { await readingsRest() }
             guard requestedHub == hub else { return }
+            // The window of the tasks, joined with the blocks of older tasks that this Mac holds (`OlderTasks`): at
+            // the first read of a fleet in this start (a connect, a launch that kept no reading), the ones on its disk.
+            if window.older_tasks?.isValid == true, older.db != window.db {
+                older = OlderTasks(kept: keptBlocks(), db: window.db)
+            }
+            let fresh = older.join(window, shown: state)
+            lastWindow = window
             if let state, state.db != fresh.db { childThreadRequest = nil; cancelEdit(); endProviderSetups(); lastReceipt = nil }
             var timeline = chatTimeline
             if timeline.update(messages: fresh.messages, reports: fresh.reports) { chatTimeline = timeline }
@@ -1964,6 +2115,7 @@ final class FleetStore {
             failedReads = 0
             if readsFail { readsFail = false }
             keepReading(data)
+            readOlder()
             claimFromLink.tryNow(store: self)
             if !hubAnsweredBefore {
                 hubAnsweredBefore = true

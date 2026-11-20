@@ -518,7 +518,7 @@ public final class OwnerTools: @unchecked Sendable {
 
     /// `fleet_overview`: what is my fleet doing, from the routes that the app's own screens read.
     func overview(_ args: [String: JSONValue], on hub: OwnerHub) throws -> JSONValue? {
-        let state = try hub.get("/ui/state", "a read of the fleet").data ?? .null
+        let state = try hub.get("/ui/state", "a read of the fleet", query: [("tasks", .string("window"))]).data ?? .null
         func list(_ key: String) -> [JSONValue] { state[key]?.array ?? [] }
         func pick(_ item: JSONValue, _ keys: [String]) -> JSONValue {
             .object(Dictionary(uniqueKeysWithValues: keys.map { ($0, item[$0] ?? .null) }))
@@ -536,7 +536,11 @@ public final class OwnerTools: @unchecked Sendable {
         found["open_tasks"] = .array(tasks.filter(isOpen).map {
             pick($0, ["id", "title", "owner", "requester", "state", "waiting_on", "last_activity"])
         })
-        found["finished_tasks"] = .int(Int64(tasks.filter { !isOpen($0) }.count))
+        // the ended tasks of the answer, and the older ones that it leaves out (owner API 1.254; 0 from a hub before it)
+        // `owner_mcp.py` OLDER_MOST: a number below 0 or above it is no count, and adds nothing
+        let older: Int64
+        if case .int(let count)? = state["older_tasks"]?["tasks"], (0...1_000_000_000).contains(count) { older = count } else { older = 0 }
+        found["finished_tasks"] = .int(Int64(tasks.filter { !isOpen($0) }.count) + older)
         found["needs_you"] = .array(list("needs").filter { !($0["answered"]?.truthy ?? false) })
         found["goals"] = .array(list("goals").map { pick($0, ["id", "title", "state", "next_step", "wake_at", "marker"]) })
         found["duties"] = .array(list("responsibilities").map {

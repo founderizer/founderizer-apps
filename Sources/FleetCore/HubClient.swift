@@ -289,12 +289,43 @@ public final class HubClient: Sendable {
     /// The state and the bytes it was read from, so the Mac can keep its last reading on disk and draw it at the
     /// next launch, before the hub answers. `present`: the owner is at the Mac app now (`OwnerPresence`), so the read
     /// says so, and the hub holds his phone's Needs-you pings while such reads come.
+    ///
+    /// **It asks for the window of the tasks** (owner API 1.254, `tasks=window`): the tasks that have not ended and
+    /// the ended ones of the newest ids, so the answer does not grow with the fleet's history. Its `older_tasks`
+    /// says where the other ended tasks are (`olderList`, `olderBlock`). A hub from before that change reads no
+    /// such word and gives every task, with no `older_tasks`.
     public func stateReading(at hub: URL, present: Bool = false) async throws -> (state: HubState, data: Data) {
-        var request = URLRequest(url: hub.appendingPathComponent("ui/state"))
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/state"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "tasks", value: "window")]
+        var request = URLRequest(url: parts.url!)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if present { request.setValue(OwnerPresence.value, forHTTPHeaderField: OwnerPresence.header) }
         let data = try await perform(request)
         return (try HubState.decode(data), data)
+    }
+
+    /// `GET /ui/tasks/older` (owner API 1.254): the blocks of the ended tasks that a window read of the state
+    /// leaves out, each with its mark.
+    public func olderList(at hub: URL, database: String) async throws -> OlderList {
+        let list = try OlderList.decode(await perform(olderRequest(hub, database: database, from: nil)))
+        guard list.db == database else { throw HubError.invalidResponse }
+        return list
+    }
+
+    /// One of those blocks, by its first task id, and the bytes it was read from, which the Mac keeps on its disk.
+    public func olderBlock(at hub: URL, database: String, from: Int) async throws -> (block: OlderBlock, data: Data) {
+        let data = try await perform(olderRequest(hub, database: database, from: from))
+        let block = try OlderBlock.decode(data)
+        guard block.db == database, block.from == from else { throw HubError.invalidResponse }
+        return (block, data)
+    }
+
+    private func olderRequest(_ hub: URL, database: String, from: Int?) -> URLRequest {
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/tasks/older"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database)] + (from.map { [.init(name: "from", value: String($0))] } ?? [])
+        var request = URLRequest(url: parts.url!)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        return request
     }
 
     public func send(_ pending: PendingRequest) async throws -> SendReceipt {

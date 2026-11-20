@@ -186,7 +186,8 @@ class FaultHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.allowed():
             return
-        if self.path == "/ui/state":
+        # The app reads the state with a word for the window of its tasks (owner API 1.254): the path decides.
+        if self.path.split("?", 1)[0] == "/ui/state":
             self.json_response(200, self.server.state.snapshot())
         elif self.path == "/test/summary":
             self.json_response(200, self.server.state.summary())
