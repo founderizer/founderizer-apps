@@ -8,6 +8,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -25,6 +26,28 @@ public sealed record HubClientOptions
     public TimeSpan KnowledgeTimeout { get; init; } = TimeSpan.FromSeconds(90);
     /// <summary>Opening the connection (the Mac: 10 seconds without a byte).</summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(10);
+}
+
+/// <summary>Who calls the owner's API, and where (windows-app-plan-v2.md, section 6): the hub, the key of this PC's role
+/// for it, the generation that the PC holds, and the client's label of each write. <see cref="OwnerStore.Call"/> gives it.
+/// Its text (<see cref="ToString"/>) never holds the key, so a line that names a call writes no key.</summary>
+public sealed record OwnerCall(Uri Hub, string? Key, string Database, string Client)
+{
+    public override string ToString() =>
+        $"OwnerCall {{ Hub = {Hub}, Key = {(Key is null ? "none" : "(held)")}, Database = {Database}, Client = {Client} }}";
+}
+
+/// <summary>What the hub keeps of the owner's computer (owner API 1.273, owner_computer): its kind ("mac" or "windows"),
+/// the label of its words ("Mac" or "PC"), and the names of what its app can do, in the order of the hub's table.</summary>
+public sealed record OwnerComputer(string Kind, string Label, IReadOnlyList<string> Can);
+
+/// <summary>What an owner read or write gave: its answer, or that the hub's generation changed (a 409 whose code is
+/// hub_changed or hub_changed_sending), which a caller meets by reading the fleet again
+/// (<see cref="OwnerStore.RefreshAsync"/>) before it asks once more.</summary>
+public sealed record OwnerAnswer<T>(T? Value) where T : class
+{
+    public bool IsGenerationChanged => Value is null;
+    public static OwnerAnswer<T> GenerationChanged { get; } = new((T?)null);
 }
 
 /// <summary>What GET /ui/mobile gave: the snapshot, its ETag, and the bytes as the hub sent them, for the next start.</summary>
@@ -309,6 +332,185 @@ public sealed partial class HubClient : IDisposable
         return HubDecode.Enrollment(answer.Body);
     }
 
+    // ---------------------------------------------------------------- the claim of a new hub
+
+    /// <summary>How long the claim may take (the Mac's sendClaim: 30 seconds).</summary>
+    public static readonly TimeSpan ClaimTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>POST /claim to the claim's listener of a new hub (hubsetup.py ClaimHandler): the code as text, and the
+    /// SHA-256 of the key of the owner's computer in <see cref="OwnerPcKey.ClaimHeader"/> when there is one. The
+    /// listener answers in plain text, so its status, its <see cref="OwnerPcKey.ClaimKept"/> header and its first 300
+    /// bytes come back as they are. <see cref="OwnerPcKey.ClaimAsync"/> checks the address before it calls this.</summary>
+    public async Task<ClaimAnswer> ClaimAsync(Uri claim, string code, string? keySha256, CancellationToken cancel = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, claim);
+        request.Content = new ByteArrayContent(Encoding.UTF8.GetBytes(code.Trim()));
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+        if (keySha256 is not null) request.Headers.TryAddWithoutValidation(OwnerPcKey.ClaimHeader, keySha256);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        deadline.CancelAfter(ClaimTimeout);
+        try
+        {
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+            var body = await ReadAsync(response.Content, 65_536, deadline.Token) ?? [];
+            var said = Encoding.UTF8.GetString(body, 0, Math.Min(body.Length, 300)).Trim();
+            var kept = response.Headers.TryGetValues(OwnerPcKey.ClaimKept, out var values) && values.Any(v => v.Trim() == "kept");
+            return new ClaimAnswer((int)response.StatusCode, kept, said);
+        }
+        catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
+        {
+            throw HubException.NoAnswer();
+        }
+        catch (HttpRequestException e)
+        {
+            throw HubException.NoAnswer(e);
+        }
+        catch (IOException e)
+        {
+            throw HubException.NoAnswer(e);
+        }
+    }
+
+    // ---------------------------------------------------------------- the owner's calls
+
+    /// <summary>The largest answer of an owner read, unless its family gives its own.</summary>
+    public const int OwnerReadLimit = 16 * 1024 * 1024;
+
+    /// <summary>A read of the owner's API (windows-app-plan-v2.md, section 6): GET <paramref name="route"/> with the
+    /// generation that the PC holds as <c>db</c> before the other values of <paramref name="query"/>, and the key of
+    /// <paramref name="call"/>. The answer is decoded with <paramref name="type"/>, from the family's own JSON context.
+    /// A changed generation (<see cref="HubException.IsGenerationChanged"/>) is its own result; any other refusal, a
+    /// 409 of another kind among them, is a <see cref="HubException"/> with the hub's words, as every read of step 1
+    /// (the Mac's HubError.conflict: a 409 is also a stale base, a request number used again, or an action that the
+    /// state does not allow now).</summary>
+    public async Task<OwnerAnswer<T>> OwnerGetAsync<T>(OwnerCall call, string route, JsonTypeInfo<T> type,
+                                                       IReadOnlyList<(string Name, string Value)>? query = null,
+                                                       int limit = OwnerReadLimit, CancellationToken cancel = default)
+        where T : class
+    {
+        var read = "GET /" + OwnerRoute(route);
+        using var request = Request(HttpMethod.Get, call.Hub, route, call.Key, [("db", call.Database), .. query ?? Array.Empty<(string Name, string Value)>()]);
+        Answer answer;
+        try
+        {
+            answer = await SendAsync(request, limit, options.RequestTimeout, cancel);
+        }
+        catch (HubException e) when (e.IsGenerationChanged)
+        {
+            return OwnerAnswer<T>.GenerationChanged;
+        }
+        return new OwnerAnswer<T>(Decoded(answer.Body, type, read));
+    }
+
+    /// <summary>A write of the owner's API, in the Mac's envelope (HubClient.ownerCommand): POST
+    /// <paramref name="route"/> with the fields of <paramref name="body"/> and beside them <c>request_id</c> (a new one,
+    /// or <paramref name="requestId"/>, in small letters) and <c>db</c>, the keys in order, and the client's label in
+    /// X-Fleet-Client. An answer that names a request or a client must name these, and one that says <c>"ok": false</c>
+    /// is no answer. A changed generation (<see cref="HubException.IsGenerationChanged"/>) is its own result; any other
+    /// refusal, a 409 of another kind among them, is a <see cref="HubException"/> with the hub's words.</summary>
+    public async Task<OwnerAnswer<TAnswer>> OwnerPostAsync<TBody, TAnswer>(OwnerCall call, string route, TBody body,
+                                                                           JsonTypeInfo<TBody> bodyType,
+                                                                           JsonTypeInfo<TAnswer> answerType,
+                                                                           Guid? requestId = null,
+                                                                           CancellationToken cancel = default)
+        where TAnswer : class
+    {
+        var write = "POST /" + OwnerRoute(route);
+        var id = (requestId ?? Guid.NewGuid()).ToString("D");
+        using var request = Request(HttpMethod.Post, call.Hub, route, call.Key, []);
+        request.Headers.TryAddWithoutValidation("X-Fleet-Client", call.Client);
+        request.Content = new ByteArrayContent(Envelope(JsonSerializer.SerializeToUtf8Bytes(body, bodyType), id, call.Database));
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        Answer answer;
+        try
+        {
+            answer = await SendAsync(request, HubDecode.ReceiptLimit, options.RequestTimeout, cancel);
+        }
+        catch (HubException e) when (e.IsGenerationChanged)
+        {
+            return OwnerAnswer<TAnswer>.GenerationChanged;
+        }
+        try
+        {
+            using var document = JsonDocument.Parse(answer.Body);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                root.TryGetProperty("request_id", out var named) && !(named.ValueKind == JsonValueKind.String &&
+                                                                       string.Equals(named.GetString(), id, StringComparison.OrdinalIgnoreCase)) ||
+                root.TryGetProperty("client", out var client) && !(client.ValueKind == JsonValueKind.String && client.GetString() == call.Client) ||
+                root.TryGetProperty("ok", out var ok) && ok.ValueKind != JsonValueKind.True)
+                throw HubException.InvalidResponse(write, "the answer is not the receipt of this request");
+        }
+        catch (JsonException e)
+        {
+            throw HubException.InvalidResponse(write, e.Message, e);
+        }
+        return new OwnerAnswer<TAnswer>(Decoded(answer.Body, answerType, write));
+    }
+
+    /// <summary>POST /ui/owner/computer (owner API 1.273, owner_computer): this computer's kind and the names of what its
+    /// app can do, as exactly <c>{"can": [...], "kind": "..."}</c>: the hub refuses any other field, so this write has no
+    /// <c>request_id</c> and no <c>db</c> (it is not in the records). Gives what the hub keeps now.</summary>
+    public async Task<OwnerComputer> ComputerAsync(OwnerCall call, string kind, IReadOnlyList<string> can,
+                                                   CancellationToken cancel = default)
+    {
+        using var request = Request(HttpMethod.Post, call.Hub, "ui/owner/computer", call.Key, []);
+        request.Headers.TryAddWithoutValidation("X-Fleet-Client", call.Client);
+        using var stream = new MemoryStream();
+        using (var json = new Utf8JsonWriter(stream))
+        {
+            json.WriteStartObject();
+            json.WriteStartArray("can");
+            foreach (var name in can) json.WriteStringValue(name);
+            json.WriteEndArray();
+            json.WriteString("kind", kind);
+            json.WriteEndObject();
+        }
+        request.Content = new ByteArrayContent(stream.ToArray());
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        var answer = await SendAsync(request, HubDecode.ReceiptLimit, options.RequestTimeout, cancel);
+        var held = Decoded(answer.Body, CoreJson.Default.ComputerAnswer, "POST /ui/owner/computer").OwnerComputer;
+        return new OwnerComputer(held.Kind, held.Label, held.Can);
+    }
+
+    /// <summary>A route of the owner's API as a family names it: under ui/, with no query, no "..", no "//".</summary>
+    private static string OwnerRoute(string route) =>
+        route.StartsWith("ui/", StringComparison.Ordinal) && !route.Contains("..") && !route.Contains("//") &&
+        route.All(c => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '/' or '_' or '-' or '.')
+            ? route
+            : throw new ArgumentException("not a route of the owner's API", nameof(route));
+
+    /// <summary>The body of an owner write: the family's fields with request_id and db, the keys in ordinal order.</summary>
+    private static byte[] Envelope(byte[] fields, string requestId, string database)
+    {
+        using var document = JsonDocument.Parse(fields);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new ArgumentException("the body of an owner write is a JSON object");
+        var all = new SortedDictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var field in document.RootElement.EnumerateObject())
+        {
+            if (field.Name is "request_id" or "db") throw new ArgumentException($"the envelope gives {field.Name}");
+            all[field.Name] = field.Value;
+        }
+        using var stream = new MemoryStream();
+        using (var json = new Utf8JsonWriter(stream))
+        {
+            json.WriteStartObject();
+            var added = new SortedDictionary<string, string>(StringComparer.Ordinal) { ["db"] = database, ["request_id"] = requestId };
+            foreach (var name in all.Keys.Concat(added.Keys).Order(StringComparer.Ordinal))
+            {
+                if (added.TryGetValue(name, out var text)) json.WriteString(name, text);
+                else
+                {
+                    json.WritePropertyName(name);
+                    all[name].WriteTo(json);
+                }
+            }
+            json.WriteEndObject();
+        }
+        return stream.ToArray();
+    }
+
     // ---------------------------------------------------------------- the writes
 
     /// <summary>One message or one answer (POST /ui/messages, POST /ui/needs/&lt;id&gt;), with its own request number,
@@ -430,9 +632,9 @@ public sealed partial class HubClient : IDisposable
             var body = await ReadAsync(response.Content, status == 200 ? limit : 65_536, deadline.Token);
             if (status != 200)
             {
-                var (error, auth) = HubDecode.Refusal(body ?? []);
+                var (error, auth, code) = HubDecode.Refusal(body ?? []);
                 var words = error ?? "The hub gave no reason.";
-                throw HubException.Refusal(status, auth, words.Length > 500 ? words[..500] : words);
+                throw HubException.Refusal(status, auth, words.Length > 500 ? words[..500] : words, code);
             }
             if (body is null)
                 throw HubException.InvalidResponse($"{request.Method} {request.RequestUri?.AbsolutePath}",

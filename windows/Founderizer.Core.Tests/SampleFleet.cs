@@ -145,7 +145,11 @@ internal sealed class FakeHub : IDisposable
     /// <summary>While it is set, the status and the body of each read of a file.</summary>
     public (int Status, string Body)? RefuseArtifact;
 
-    public FakeHub() => Server = new LoopbackHub(Answer);
+    /// <summary>While it is set, it sees each request first: a hub's rule (its key, its claim) that answers a request
+    /// itself with what it gives, or lets it through with null.</summary>
+    public Func<Seen, byte[]?>? Gate;
+
+    public FakeHub() => Server = new LoopbackHub(seen => Gate?.Invoke(seen) ?? Answer(seen));
 
     public Uri Address => Server.Address;
     public string Db => Snapshot["db"]!.GetValue<string>();

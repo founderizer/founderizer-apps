@@ -341,14 +341,49 @@ public enum VaultBrowser {
         return read
     }
 
-    /// One harmless script in the active tab of Chrome's front window, and what its answer says.
+    /// **One harmless script in the active tab of each Chrome window, and what the answers say** (Area Setup's reviews,
+    /// 20 November 2026): the menu item Allow JavaScript from Apple Events belongs to a profile, and a sign-in runs in a
+    /// tab of any window of any profile. On the Mac Studio "Default" had the tick and the agent's "Profile 1" had none,
+    /// so a check of the front window alone said ok while each sign-in failed. One window whose profile has no tick
+    /// answers 12 at once: `javascript_off`, also for a profile that the agents never use (tick it there too, or close
+    /// its window). A window that has no tab to run in (a picture in picture) counts for nothing while another passes.
+    /// A tab that gives no answer in 10 seconds (crashed or discarded) ends the round at once with -1712: each such window
+    /// would hold the vault's main thread for 10 seconds more.
+    static let probeSource = """
+        tell application id "com.google.Chrome"
+            set passed to 0
+            set other to 0
+            repeat with w in windows
+                try
+                    execute active tab of w javascript "1"
+                    set passed to passed + 1
+                on error number n
+                    if n is 12 then return 12
+                    if n is -1712 then return -1712
+                    set other to n
+                end try
+            end repeat
+            if passed > 0 then return 0
+            if other is not 0 then return other
+            return -1728
+        end tell
+        """
+
+    /// The word of `probeSource`'s number: 0 when each window passed, 12 for a profile with no tick, -1728 or -1719 for
+    /// no window that could run it, any other number an error of Chrome or of macOS.
+    static func probeCause(_ number: Int) -> (cause: String, number: Int?) {
+        switch number {
+        case 0: return ("ok", nil)
+        case 12: return ("javascript_off", nil)
+        case -1728, -1719: return ("no_window", nil)
+        default: return ("error", number)
+        }
+    }
+
     private static func chromeProbe() async -> (cause: String, number: Int?) {
         do {
-            _ = try await onMainThread { () -> Bool in
-                _ = try run("tell application id \"com.google.Chrome\" to execute active tab of front window javascript \"1\"")
-                return true
-            }
-            return ("ok", nil)
+            let number = try await onMainThread { () -> Int in Int(try run(probeSource).int32Value) }
+            return probeCause(number)
         } catch let chrome as VaultChromeError {
             return [-1728, -1719].contains(chrome.number) ? ("no_window", nil) : ("error", chrome.number)
         } catch {

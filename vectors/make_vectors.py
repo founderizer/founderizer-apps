@@ -13,6 +13,11 @@ Tests/FleetCoreTests/WordsVectorsTests.swift). The maker runs those two tests wi
 temporary folder (`swift test`, so a first build takes minutes), and writes or compares what they wrote. Without that
 variable, each of the two tests holds the committed file equal to what the Swift code gives.
 
+Each further file has its own maker in `makers/` (windows-app-plan-v2.md, 5.6): one module for each piece, which the
+piece adds beside the others, so that two pieces never edit one list here. A maker gives `SWIFT`, the files that a Swift
+writer test makes, by name, and `python(hub, vault, releases, autopublish)`, the files that Python makes with the hub's
+own code; each is optional, and a file name has one maker.
+
 Each vector is made with the code that checks it on the hub's side: the canonical text with `vault.canonical`, the
 owner's signature with the P-256 arithmetic and the strict DER reading of `vault.py` (`owner_signed`), the release
 manifests with the Ed25519 of `releases.py` and the line formats of `releases.signed_text` and `autopublish.app_text`,
@@ -31,6 +36,7 @@ in the private repository and not in the public copy of the apps, which carries 
 
 import argparse
 import base64
+import importlib.util
 import hashlib
 import hmac
 import json
@@ -43,6 +49,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 MADE_BY = "app/vectors/make_vectors.py"
+MAKERS = os.path.join(HERE, "makers")
 
 
 def hub_code():
@@ -450,6 +457,39 @@ def refusal_codes():
 
 # ---------------------------------------------------------------- the files
 
+def vector_makers():
+    """The makers of `makers/`, in the order of their file names: each `*.py` there that does not start with "_"."""
+    found = []
+    for name in sorted(os.listdir(MAKERS)) if os.path.isdir(MAKERS) else []:
+        if not name.endswith(".py") or name.startswith(("_", ".")):
+            continue
+        spec = importlib.util.spec_from_file_location("vector_maker_" + name[:-3], os.path.join(MAKERS, name))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        found.append(module)
+    return found
+
+
+def join_vector_files(made, more, maker):
+    """`made` with the files of one maker: a file name that two makers give stops the run."""
+    for name in sorted(more):
+        if name in made:
+            raise SystemExit(f"{name} has two makers: {maker} and one before it")
+        made[name] = more[name]
+    return made
+
+
+def maker_files():
+    """The files that the makers of `makers/` make with Python, as `files` writes them."""
+    hub, vault, releases, autopublish = hub_code()
+    made = {}
+    for maker in vector_makers():
+        if hasattr(maker, "python"):
+            join_vector_files(made, maker.python(hub, vault, releases, autopublish), maker.__file__)
+    return {name: (json.dumps(value, indent=2, ensure_ascii=True) + "\n").encode("ascii")
+            for name, value in made.items()}
+
+
 def files():
     hub, vault, releases, autopublish = hub_code()
     made = {"canonical-json.json": canonical_cases(vault),
@@ -465,22 +505,31 @@ def files():
 SWIFT_FILES = {"agent-marks.json": "MarkVectorsTests", "swift-words.json": "WordsVectorsTests"}
 
 
+def swift_writers():
+    """Each file that a Swift writer test makes, with that test: these two, and the `SWIFT` of each maker."""
+    writers = dict(SWIFT_FILES)
+    for maker in vector_makers():
+        join_vector_files(writers, getattr(maker, "SWIFT", {}), maker.__file__)
+    return writers
+
+
 def swift_files():
     """The files that the Swift writer tests make, by name: one run of `swift test` on the app's package."""
+    writers = swift_writers()
     out = tempfile.mkdtemp(prefix="founderizer-vectors-")
     try:
         done = subprocess.run(["swift", "test", "--package-path", os.path.dirname(HERE), "--filter",
-                               "|".join(sorted(SWIFT_FILES.values()))],
+                               "|".join(sorted(set(writers.values())))],
                               env=dict(os.environ, FOUNDERIZER_VECTORS_OUT=out), capture_output=True, text=True,
                               timeout=3600)
         made = {}
-        for name in SWIFT_FILES:
+        for name in writers:
             path = os.path.join(out, name)
             if os.path.isfile(path):
                 made[name] = open(path, "rb").read()
-        if done.returncode != 0 or len(made) != len(SWIFT_FILES):
+        if done.returncode != 0 or len(made) != len(writers):
             tail = "\n".join((done.stdout + done.stderr).splitlines()[-30:])
-            raise SystemExit(f"the Swift writers did not write {sorted(set(SWIFT_FILES) - set(made))}:\n{tail}")
+            raise SystemExit(f"the Swift writers did not write {sorted(set(writers) - set(made))}:\n{tail}")
         return made
     finally:
         shutil.rmtree(out, ignore_errors=True)
@@ -492,9 +541,10 @@ def main():
     ap.add_argument("--into", default=HERE, help="the folder to write into (default: beside this script)")
     ap.add_argument("--no-swift", action="store_true", help="only the files that Python makes, not the Swift ones")
     args = ap.parse_args()
-    made = files()
+    made = join_vector_files(files(), maker_files(), "a maker of makers/")
+    join_vector_files(dict(made), swift_writers(), "a Swift writer")
     if args.no_swift:
-        print("not made: " + ", ".join(sorted(SWIFT_FILES)) + " (--no-swift)")
+        print("not made: " + ", ".join(sorted(swift_writers())) + " (--no-swift)")
     else:
         made.update(swift_files())
     if args.check:

@@ -5,8 +5,9 @@ using System.Linq;
 
 namespace Founderizer.Core;
 
-/// <summary>The pages of step 1 (windows-app-pictures.md).</summary>
-public enum PageKind { AddThisPc, Settings, Needs, Tasks, Task, Chat }
+/// <summary>The pages of step 1 (windows-app-pictures.md), and the welcome page of the first run (windows-app-plan-v2.md,
+/// 5.1; its picture is set 8).</summary>
+public enum PageKind { AddThisPc, Settings, Needs, Tasks, Task, Chat, Welcome }
 
 /// <summary>Where the window is: a page, with its agent or its task.</summary>
 public sealed record Page(PageKind Kind, string? Agent = null, long? Task = null)
@@ -15,6 +16,7 @@ public sealed record Page(PageKind Kind, string? Agent = null, long? Task = null
     public static readonly Page Tasks = new(PageKind.Tasks);
     public static readonly Page Settings = new(PageKind.Settings);
     public static readonly Page AddThisPc = new(PageKind.AddThisPc);
+    public static readonly Page Welcome = new(PageKind.Welcome);
     public static Page Chat(string agent) => new(PageKind.Chat, agent);
     public static Page OfTask(long id) => new(PageKind.Task, Task: id);
 }
@@ -43,11 +45,16 @@ public static partial class Screens
 {
     // ---------------------------------------------------------------- the frame
 
-    /// <summary>The page that the window opens on (FleetStore.home): Add this PC on a PC with no hub or no key; Needs
-    /// you while a request is open; else the chat of the first agent whose role is "manager".</summary>
+    /// <summary>The page that the window opens on (FleetStore.home; windows-app-plan-v2.md, 5.1). A PC with no hub: in a
+    /// window that has the welcome page (<see cref="StoreState.HasWelcome"/>), the welcome page once the PC's search
+    /// found no Tailscale or no hub on it, else Add this PC, so a hub that the search finds opens Add this PC. A device
+    /// with no key: Add this PC. Then Needs you while a request is open; else the chat of the first agent whose role is
+    /// "manager". The owner's computer of a hub never opens on Add this PC: with no key it is known by its address.</summary>
     public static Page FirstPage(StoreState s)
     {
-        if (s.HasNoHub || (s.Key == KeyState.None && s.Fleet is null)) return Page.AddThisPc;
+        if (s.HasNoHub)
+            return s.HasWelcome && s.Search is HubSearch.NoNetwork or HubSearch.NoHub ? Page.Welcome : Page.AddThisPc;
+        if (s.Role == HubRole.Device && s.Key == KeyState.None && s.Fleet is null) return Page.AddThisPc;
         if (s.Fleet is { } fleet && fleet.Needs.Any(n => n.IsOpen)) return Page.Needs;
         return Page.Chat(ManagerName(s));
     }

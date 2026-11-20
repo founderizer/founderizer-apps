@@ -56,6 +56,21 @@ struct VaultSigninCausesTests {
         #expect(words.count == 8)
     }
 
+    /// The Mac's reading looks at every Chrome window, not only the front one: a profile with no tick in any window is
+    /// `javascript_off` (on the Mac Studio the front window's profile had the tick and the agent's had none), and `ok`
+    /// needs each window that can run the script to pass. A check of the front window alone fails the first line.
+    @Test func theChromeReadingAsksEachWindowAndAnyProfileWithNoTickIsOff() {
+        #expect(VaultBrowser.probeSource.contains("repeat with w in windows"))
+        #expect(VaultBrowser.probeSource.contains("execute active tab of w"))
+        #expect(!VaultBrowser.probeSource.contains("front window"))
+        #expect(VaultBrowser.probeSource.contains("if n is -1712 then return -1712"))     // no 10 seconds for each dead tab
+        #expect(VaultBrowser.probeCause(0) == ("ok", nil))
+        #expect(VaultBrowser.probeCause(12) == ("javascript_off", nil))
+        #expect(VaultBrowser.probeCause(-1728) == ("no_window", nil) && VaultBrowser.probeCause(-1719) == ("no_window", nil))
+        let other = VaultBrowser.probeCause(-1712)
+        #expect(other.cause == "error" && other.number == -1712)
+    }
+
     /// The tab's id and the page's words come back together, also for an id of 2^30 or more: the looks after the fill go
     /// only to the tab that took it. A bug that reads the id as text, or the answer of another shape as a tab, fails here.
     @Test func theTabAnswerIsItsIdAndItsWords() {

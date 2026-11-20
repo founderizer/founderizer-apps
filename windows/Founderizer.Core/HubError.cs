@@ -31,16 +31,23 @@ public sealed class HubException : Exception
     public string? HubWords { get; }
     /// <summary>The read whose decoder refused the answer, for an <see cref="HubErrorKind.InvalidResponse"/>.</summary>
     public string? Read { get; }
+    /// <summary>The hub's `code` of a refusal (refusal_words.py), else null: what the refusal is, where the status alone
+    /// does not say (a 409 is a changed generation only with "hub_changed" or "hub_changed_sending").</summary>
+    public string? Code { get; }
 
     private HubException(HubErrorKind kind, string message, int status = 0, string? auth = null, string? words = null,
-                         string? read = null, Exception? inner = null) : base(message, inner)
+                         string? read = null, Exception? inner = null, string? code = null) : base(message, inner)
     {
         Kind = kind;
         Status = status;
         Auth = auth;
         HubWords = words;
         Read = read;
+        Code = code;
     }
+
+    /// <summary>The hub's generation changed since the PC read it (a 409 whose code says so): read the fleet again.</summary>
+    public bool IsGenerationChanged => Kind == HubErrorKind.Refusal && Status == 409 && Code is "hub_changed" or "hub_changed_sending";
 
     public static HubException InvalidAddress() =>
         new(HubErrorKind.InvalidAddress, "Enter an HTTP or HTTPS hub address without a path or login.");
@@ -50,9 +57,9 @@ public sealed class HubException : Exception
         new(HubErrorKind.InvalidResponse, "The hub's answer does not match the phone's API.", read: read,
             words: why, inner: inner);
 
-    public static HubException Refusal(int status, string? auth, string message) =>
+    public static HubException Refusal(int status, string? auth, string message, string? code = null) =>
         new(HubErrorKind.Refusal, auth is null ? "The hub refused it: " + Sentence(message) : AuthWords(auth),
-            status, auth, message);
+            status, auth, message, code: code);
 
     public static HubException NoPhoneRoutes() =>
         new(HubErrorKind.NoPhoneRoutes, "This hub does not have the phone's routes yet. The Mac app still works with it.");

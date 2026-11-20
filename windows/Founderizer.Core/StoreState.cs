@@ -121,6 +121,28 @@ public sealed record StoreSettings
     public ScreenContext? Context { get; init; }
     /// <summary>For the tests: what asks one device whether it answers as a hub; null is its GET /health.</summary>
     internal Func<Uri, System.Threading.CancellationToken, System.Threading.Tasks.Task<bool>>? AnswersHealth { get; init; }
+    /// <summary>The box of this PC's secrets at rest (<see cref="FileSecretBox"/> in the app's own folder), which holds the
+    /// key of the owner's computer for each hub that this PC owns. Null: this PC can be no owner's computer.</summary>
+    public ISecretBox? Box { get; init; }
+    /// <summary>What this build of the owner's app can do, as the hub's names of <c>owner_computer.can</c> (the plan's
+    /// rule 17): the window gives the names of the pages that it has. The hub asks the owner of a PC only for these.</summary>
+    public IReadOnlyList<string> Can { get; init; } = [];
+    /// <summary>The window has the welcome page of the first run (piece U1): a PC with no Tailscale, or with no hub on
+    /// it, opens there (<see cref="Screens.FirstPage"/>). Without it such a PC opens on Add this PC, as in step 1.</summary>
+    public bool Welcome { get; init; }
+}
+
+/// <summary>What this PC is to a hub (the plan's rule 9: one role for each hub), kept with the hub's address: a device
+/// of an owner who has a Mac, with its device key, or the owner's own computer, with the key of the owner's computer.</summary>
+public enum HubRole { Device, Owner }
+
+/// <summary>The hub's address as the store keeps it (hub.json), with this PC's role there: "owner", or none for a device,
+/// so a kept hub of step 1, which has no role in its file, reads as a device.</summary>
+internal sealed record KeptHub(string? Hub, string? Role = null)
+{
+    public const string OwnerRole = "owner";
+    public static KeptHub Of(Uri hub, HubRole role) => new(hub.ToString(), role == HubRole.Owner ? OwnerRole : null);
+    public HubRole RoleThere() => Role == OwnerRole ? HubRole.Owner : HubRole.Device;
 }
 
 /// <summary>Where this device's key stands (the iPhone's keyState): none, locked (it needs the owner before it opens),
@@ -240,6 +262,11 @@ public sealed record StoreState
     public long Version { get; init; }
     /// <summary>The hub's address, or null on a PC that has none yet (no read, no words of an outage).</summary>
     public Uri? Hub { get; init; }
+    /// <summary>What this PC is to that hub: a device (step 1), or the owner's computer, whose every call carries the
+    /// key of the owner's computer in place of the device key.</summary>
+    public HubRole Role { get; init; }
+    /// <summary>The window has the welcome page of the first run (<see cref="StoreSettings.Welcome"/>).</summary>
+    public bool HasWelcome { get; init; }
     public bool HasNoHub => Hub is null;
     /// <summary>The address error of the last Connect, in the owner's words.</summary>
     public string? AddressError { get; init; }

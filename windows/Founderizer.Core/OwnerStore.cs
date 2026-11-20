@@ -60,6 +60,11 @@ public sealed class OwnerStore : IAsyncDisposable
     /// <summary>The words of each quick reply that waits for the store (<see cref="Reply"/>).</summary>
     private readonly Dictionary<long, string> replyWaits = new();
     private string? key;
+    /// <summary>The key in hand is the owner's computer key that waits for its hub's answer (a claim whose answer was
+    /// lost): the first read that the hub takes with it makes it the key.</summary>
+    private bool keyWaits;
+    /// <summary>The hub, generation and key that this PC last told what it is (POST /ui/owner/computer).</summary>
+    private (Uri Hub, string Database, string? Key)? saidComputer;
     private string? etag;
     private string? keptDatabase;
     /// <summary>The blocks of ended heads that the store holds for its hub (owner API 1.270), which each window read of
@@ -221,13 +226,28 @@ public sealed class OwnerStore : IAsyncDisposable
         return LiveChanges.UntilRead(lastReadUptime, clock.Uptime, every);
     }
 
-    /// <summary>Opens the key: in hand, none, or it did not open (the key store's words).</summary>
+    /// <summary>Opens the key of this PC's role at its hub: in hand, none, or it did not open (the key store's words). A
+    /// device has its device key; the owner's computer has the key of the owner's computer for that hub, from the
+    /// secret box, or while it has none the key that waits for the hub's answer to its claim.</summary>
     public void Unlock()
     {
         if (key is not null) return;
         try
         {
-            key = settings.Keys.Read();
+            var s = State;
+            if (s.Role == HubRole.Owner)
+            {
+                var box = settings.Box;
+                var kept = box is null || s.Hub is null ? null : OwnerPcKey.Read(box, s.Hub);
+                var waits = kept is null && box is not null && s.Hub is not null ? OwnerPcKey.Waiting(box, s.Hub) : null;
+                key = kept ?? waits;
+                keyWaits = waits is not null;
+            }
+            else
+            {
+                key = settings.Keys.Read();
+                keyWaits = false;
+            }
             Update(x => x with { Key = key is null ? KeyState.None : KeyState.InHand, KeyDetail = null });
         }
         catch (Exception e) when (e is not OutOfMemoryException)
@@ -283,6 +303,8 @@ public sealed class OwnerStore : IAsyncDisposable
                 }
                 await Holding(requested, () => ReadSnapshotAsync(requested));
                 if (State.Hub != requested || State.Fleet?.Db is not { } database) return;
+                KeyTaken(requested);
+                await SayComputerIfDueAsync(requested, database);
                 Follow();
                 if (!behind) await ReadEndedAsync(requested, database);
                 if (early != database && !behind)
@@ -304,6 +326,11 @@ public sealed class OwnerStore : IAsyncDisposable
                 if (e is { Kind: HubErrorKind.Refusal, Status: 409 })
                 {
                     ForgetGeneration(keepSnapshot: false);
+                    _ = RefreshAsync();
+                    return;
+                }
+                if (OtherOwnerKey(e, requested))
+                {
                     _ = RefreshAsync();
                     return;
                 }
@@ -1643,6 +1670,13 @@ public sealed class OwnerStore : IAsyncDisposable
                 return "This PC could not keep its key. Make a new code.";
             }
             key = enrollment.Key;
+            keyWaits = false;
+            if (State.Role != HubRole.Device)
+            {
+                // The hub took this PC as one of its devices: that is its role there now (one role for each hub).
+                Keep("hub.json", JsonSerializer.SerializeToUtf8Bytes(KeptHub.Of(hub, HubRole.Device), CoreJson.Default.KeptHub));
+                Update(x => x with { Role = HubRole.Device });
+            }
             Update(x => x with { Key = KeyState.InHand, AuthProblem = null, ReadError = null });
             await RefreshAsync();
             await ReadDeviceAsync();
@@ -1673,18 +1707,224 @@ public sealed class OwnerStore : IAsyncDisposable
             return e.Message;
         }
         Update(x => x with { AddressError = null, Search = search });
-        if (next != State.Hub)
+        // One role for each hub: the address that the PC has keeps its role, and another address is the owner's
+        // computer's when the box holds a key of the owner's computer for it, else a device's.
+        var role = next == State.Hub ? State.Role : OwnsKeyFor(next) ? HubRole.Owner : HubRole.Device;
+        if (next != State.Hub || State.Role != role)
         {
-            Keep("hub.json", JsonSerializer.SerializeToUtf8Bytes(new KeptHub(next.ToString()), CoreJson.Default.KeptHub));
-            Use(next);
+            Keep("hub.json", JsonSerializer.SerializeToUtf8Bytes(KeptHub.Of(next, role), CoreJson.Default.KeptHub));
+            Use(next, role);
+            if (role == HubRole.Owner) Unlock();
         }
         await RefreshAsync();
         return null;
     }
 
-    private void Use(Uri next)
+    /// <summary>The box holds a key of the owner's computer for <paramref name="hub"/>, or a value there that does not
+    /// open (then the key's state says so, and no device key goes to a hub that this PC owns).</summary>
+    private bool OwnsKeyFor(Uri hub)
     {
-        Update(x => x with { Hub = next });
+        if (settings.Box is not { } box || OwnerPcKey.Name(hub) is null) return false;
+        try { return OwnerPcKey.Read(box, hub) is not null; }
+        catch (Exception e) when (e is not OutOfMemoryException) { return true; }
+    }
+
+    /// <summary>**This PC is the owner's computer of the hub at <paramref name="hub"/>** (windows-app-plan-v2.md, 5.1 and
+    /// 5.2), after its claim: the hub's address is kept with the role "owner", and every call to it carries the key of
+    /// the owner's computer from the secret box, the device reads too. The address is a number, as the claim gives it
+    /// (<see cref="OwnerPcKey.Name"/>), so the key never follows a lookup. Then the hub is read.</summary>
+    public async Task ConnectOwnerAsync(Uri hub)
+    {
+        if (settings.Box is null) throw new InvalidOperationException("the store has no secret box, so this PC is no owner's computer");
+        var next = HubClient.Address(hub.ToString());
+        if (OwnerPcKey.Name(next) is null) throw new ArgumentException("the hub of the owner's computer is written as its number", nameof(hub));
+        Update(x => x with { AddressError = null, Search = HubSearch.None });
+        Keep("hub.json", JsonSerializer.SerializeToUtf8Bytes(KeptHub.Of(next, HubRole.Owner), CoreJson.Default.KeptHub));
+        if (next != State.Hub || State.Role != HubRole.Owner) Use(next, HubRole.Owner);
+        else ForgetOwnerKeyInHand();
+        Unlock();
+        await RefreshAsync();
+    }
+
+    /// <summary>**The claim of a new hub from this PC** (<see cref="OwnerPcKey.ClaimAsync"/>): the code to the address
+    /// that the installer printed, with the SHA-256 of this PC's new key; when the hub took it, this PC is the owner's
+    /// computer of that hub (<see cref="ConnectOwnerAsync"/>). Null when it did; else the owner's words, and the PC keeps
+    /// what it had.</summary>
+    public async Task<string?> ClaimAsync(Uri claim, string code, CancellationToken cancel = default)
+    {
+        var box = settings.Box ?? throw new InvalidOperationException("the store has no secret box, so this PC is no owner's computer");
+        if (await OwnerPcKey.ClaimAsync(client, box, claim, code, cancel) is { } words) return words;
+        await ConnectOwnerAsync(new Uri(claim.GetLeftPart(UriPartial.Authority) + "/"));
+        return null;
+    }
+
+    /// <summary>The owner's computer key in hand goes, so that the next <see cref="Unlock"/> reads the box again: after a
+    /// claim, a new key, or another hub.</summary>
+    private void ForgetOwnerKeyInHand()
+    {
+        key = null;
+        keyWaits = false;
+        waitsRefused = null;
+        saidComputer = null;
+        Update(x => x with { Key = KeyState.Locked, KeyDetail = null });
+    }
+
+    /// <summary>The key that waited for the hub's answer to its claim went with a read, and the hub took that read: the
+    /// hub holds its SHA-256, so it is this PC's key now (the Mac's <c>took</c>). A key that another claim put there
+    /// since stays where it is. A box value that does not open changes nothing here: the key stays as it is in hand.</summary>
+    private void KeyTaken(Uri hub)
+    {
+        if (!keyWaits || State.Role != HubRole.Owner || settings.Box is not { } box || key is not { } carried) return;
+        try
+        {
+            if (OwnerPcKey.Waiting(box, hub) != carried) return;
+            OwnerPcKey.Promote(box, hub, carried);
+            if (OwnerPcKey.Read(box, hub) != carried) return;
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            return;
+        }
+        keyWaits = false;
+        waitsRefused = null;
+        saidComputer = null;
+    }
+
+    /// <summary>How long a key that waits and that the hub refused goes no more (the Mac's <c>waitsRetry</c>): a hub can
+    /// take a registration after it answered the first call with that key.</summary>
+    public static readonly TimeSpan WaitsRetry = TimeSpan.FromSeconds(30);
+    /// <summary>The key that waits and that the hub refused, with the uptime of that refusal.</summary>
+    private (string Key, double At)? waitsRefused;
+
+    /// <summary>**The Mac's rule of two keys** (OwnerMacKey.signing and took): the hub refused the key of the owner's
+    /// computer, and a key waits beside it, so the hub can hold the key that waits (a second claim whose answer was
+    /// lost). Then the key that waits goes with the next read, and a read that the hub takes with it makes it the key
+    /// (<see cref="KeyTaken"/>). When the hub refuses that one too, the kept key goes again, and the one that waits only
+    /// after <see cref="WaitsRetry"/>. True when the next read carries the key that waits.</summary>
+    private bool OtherOwnerKey(HubException e, Uri hub)
+    {
+        if (State.Role != HubRole.Owner || settings.Box is not { } box || e.Auth is not (OwnerPcKey.Required or OwnerPcKey.Mismatch))
+            return false;
+        string? kept, waits;
+        try
+        {
+            kept = OwnerPcKey.Read(box, hub);
+            waits = OwnerPcKey.Waiting(box, hub);
+        }
+        catch (Exception x) when (x is not OutOfMemoryException)
+        {
+            return false;
+        }
+        if (keyWaits)
+        {
+            if (key is { } carried) waitsRefused = (carried, clock.Uptime);
+            if (kept is not null && kept != key)
+            {
+                key = kept;
+                keyWaits = false;
+            }
+            return false;
+        }
+        if (waits is null || waits == key) return false;
+        if (waitsRefused is { } refused && refused.Key == waits && clock.Uptime - refused.At < WaitsRetry.TotalSeconds) return false;
+        key = waits;
+        keyWaits = true;
+        return true;
+    }
+
+    // ---------------------------------------------------------------- the owner's computer
+
+    /// <summary>The kind of this computer as POST /ui/owner/computer names it (owner API, feature owner_computer).</summary>
+    public const string ComputerFeature = "owner_computer";
+
+    /// <summary>Who calls the owner's API now: the hub, the key of the owner's computer, the generation of the reading and
+    /// this app's label. Null while this PC is not the owner's computer of a hub, or has no reading of it yet.</summary>
+    public OwnerCall? Call()
+    {
+        var s = State;
+        return s.Role == HubRole.Owner && s.Hub is { } hub && s.Fleet?.Db is { } database
+            ? new OwnerCall(hub, key, database, settings.ClientLabel)
+            : null;
+    }
+
+    /// <summary>An owner read of a page family (<see cref="HubClient.OwnerGetAsync"/>) as the owner's computer. A changed
+    /// generation reads the fleet again, and the answer says so.</summary>
+    public async Task<OwnerAnswer<T>> OwnerGetAsync<T>(string route, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type,
+                                                       IReadOnlyList<(string Name, string Value)>? query = null,
+                                                       int limit = HubClient.OwnerReadLimit, CancellationToken cancel = default)
+        where T : class
+    {
+        var call = Call() ?? throw new InvalidOperationException("this PC is not the owner's computer of a hub that it read");
+        return Regenerated(await client.OwnerGetAsync(call, route, type, query, limit, cancel));
+    }
+
+    /// <summary>An owner write of a page family (<see cref="HubClient.OwnerPostAsync"/>) as the owner's computer, with
+    /// this app's label. A changed generation reads the fleet again, and the answer says so.</summary>
+    public async Task<OwnerAnswer<TAnswer>> OwnerPostAsync<TBody, TAnswer>(string route, TBody body,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TBody> bodyType,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TAnswer> answerType, Guid? requestId = null,
+        CancellationToken cancel = default)
+        where TAnswer : class
+    {
+        var call = Call() ?? throw new InvalidOperationException("this PC is not the owner's computer of a hub that it read");
+        return Regenerated(await client.OwnerPostAsync(call, route, body, bodyType, answerType, requestId, cancel));
+    }
+
+    private OwnerAnswer<T> Regenerated<T>(OwnerAnswer<T> answer) where T : class
+    {
+        if (answer.IsGenerationChanged) _ = RefreshAsync();
+        return answer;
+    }
+
+    /// <summary>**This PC tells its hub what it is and what it can do** (POST /ui/owner/computer, owner API 1.273, the
+    /// plan's H1 and rule 17): exactly <c>{"can": [...], "kind": "windows"}</c>, with the names of
+    /// <see cref="StoreSettings.Can"/>. The hub then asks the owner of a PC only for what this build has. The store sends
+    /// it by itself after a claim, after a new key, at each start and when the hub's generation changes, to a hub that
+    /// offers the feature. True when the hub keeps this computer as a PC now.
+    ///
+    /// **One try for each hub, generation and key, but for no answer.** An answer of the hub, a refusal among them,
+    /// ends the tries until the next start, a new key or a new generation: a hub that refuses the body refuses it again,
+    /// and a try at each read would be one refused call every 10 seconds, for ever. No answer, or a fault of the hub
+    /// (5xx), is tried again at the next read.</summary>
+    public async Task<bool> SayComputerAsync(CancellationToken cancel = default)
+    {
+        if (Call() is not { } call || !State.Offers(ComputerFeature)) return false;
+        var place = (call.Hub, call.Database, call.Key);
+        try
+        {
+            var can = settings.Can.Distinct().Order(StringComparer.Ordinal).ToList();
+            var held = await client.ComputerAsync(call, HubClient.DeviceKind, can, cancel);
+            saidComputer = place;
+            return held.Kind == HubClient.DeviceKind;
+        }
+        catch (HubException e) when (e.Kind == HubErrorKind.InvalidResponse || e is { Kind: HubErrorKind.Refusal, Status: < 500 })
+        {
+            saidComputer = place;
+            return false;
+        }
+        catch (HubException)
+        {
+            return false;
+        }
+    }
+
+    private async Task SayComputerIfDueAsync(Uri hub, string database)
+    {
+        if (State.Role != HubRole.Owner || saidComputer == (hub, database, key)) return;
+        await SayComputerAsync();
+    }
+
+    private void Use(Uri next, HubRole role)
+    {
+        var before = State;
+        Update(x => x with { Hub = next, Role = role });
+        // The key of the owner's computer belongs to one hub, and a device's key to this PC: a change of either role
+        // or, as the owner's computer, of the hub, reads the key of the new place.
+        if (before.Role != role || role == HubRole.Owner)
+        {
+            ForgetOwnerKeyInHand();
+            if (State.Front || role == HubRole.Device) Unlock();
+        }
         ForgetGeneration(keepSnapshot: false);
         lastRequestTook = 0;
         Remove("snapshot.json");
@@ -1695,10 +1935,12 @@ public sealed class OwnerStore : IAsyncDisposable
         });
     }
 
-    /// <summary>Takes the key off this PC. The hub keeps its record until the owner removes the device on the Mac, so a
-    /// new enrollment needs a new code. Null when it went; else the owner's words.</summary>
+    /// <summary>Takes the device key off this PC. The hub keeps its record until the owner removes the device on the Mac,
+    /// so a new enrollment needs a new code. Null when it went; else the owner's words. As the owner's computer of its hub,
+    /// the PC takes nothing off and gives null: without its key the owner's computer cannot reach its own hub.</summary>
     public string? ForgetKey()
     {
+        if (State.Role == HubRole.Owner) return null;
         try
         {
             settings.Keys.Remove();
@@ -1733,13 +1975,20 @@ public sealed class OwnerStore : IAsyncDisposable
 
     private void Load()
     {
-        var hub = Read("hub.json", CoreJson.Default.KeptHub)?.Hub;
+        var keptHub = Read("hub.json", CoreJson.Default.KeptHub);
+        var hub = keptHub?.Hub;
         Uri? address = null;
         if (hub is not null)
         {
             try { address = HubClient.Address(hub); } catch (HubException) { }
         }
-        var initial = new StoreState { Hub = address, Key = settings.Keys.Has ? KeyState.Locked : KeyState.None };
+        var role = address is not null && keptHub is not null ? keptHub.RoleThere() : HubRole.Device;
+        var initial = new StoreState
+        {
+            Hub = address, Role = role, HasWelcome = settings.Welcome,
+            Key = role == HubRole.Owner ? (settings.Box is null ? KeyState.None : KeyState.Locked)
+                : settings.Keys.Has ? KeyState.Locked : KeyState.None,
+        };
         if (Read("staged.json", CoreJson.Default.KeptStaged) is { } staged)
             initial = initial with
             {
@@ -1983,8 +2232,10 @@ internal sealed record KeptSeen(string? Context, Dictionary<string, double> Seen
 /// <summary>The drafts: one for each agent, and one for each open request.</summary>
 internal sealed record KeptDrafts(Dictionary<string, string> Agents, Dictionary<string, string> Answers);
 
-/// <summary>The hub's address.</summary>
-internal sealed record KeptHub(string? Hub);
+/// <summary>The answer of POST /ui/owner/computer (owner API 1.273): what the hub keeps now, and whether it changed.</summary>
+internal sealed record ComputerAnswer(HeldComputer OwnerComputer, bool Changed);
+
+internal sealed record HeldComputer(string Kind, string Label, List<string> Can);
 
 /// <summary>The files that the owner picked, by composer; their bytes are in the folder `staged`, by request id.</summary>
 internal sealed record KeptLedger(Dictionary<string, long> Seen, Dictionary<string, string>? Warnings);

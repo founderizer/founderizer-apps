@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The owner's pages of the PC as the owner's computer (windows-app-plan-v2.md, section 6): one folder for each page
+       family, the vault and the keys, with no Windows call. It names Founderizer.Core alone, so no code here calls SSH:
+       a page's action that goes over SSH is in Founderizer.Setup. Each family keeps its own JsonSerializerContext in
+       its own folder. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Founderizer.Owner</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Founderizer.Core/Founderizer.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Founderizer.Owner.Tests" />
+  </ItemGroup>
+</Project>

@@ -13,7 +13,8 @@ seven pictures that the owner approved (`windows-app-pictures.md` in the plans f
 | Folder | What | Builds on |
 | --- | --- | --- |
 | `Founderizer.Core/` | the logic: the hub client, the models and decoders of the device routes, the live changes, the outbox, the canonical statement and the crypto. `net10.0`, no Windows call, trimming and Native AOT compatible, JSON only by source generation | any OS |
-| `Founderizer.Core.Tests/` | MSTest: unit tests, the vectors of `../vectors`, and the decode twin (`HubDecodeTwin`) | any OS |
+| `Founderizer.Core.Tests/` | MSTest: unit tests, the vectors of `../vectors`, and the decode twin (`HubDecodeTwin`, and `OwnerDecodeTwin` as the owner's computer) | any OS |
+| `Founderizer.Owner/`, `Founderizer.Setup/` | step 2 (`windows-app-plan-v2.md`, section 6): the owner's pages, and the first run with what the owner's computer sets up; each with its tests in `Founderizer.Owner.Tests/` and `Founderizer.Setup.Tests/` | any OS |
 | `Founderizer.SelfCheck/` | a small program that runs the vectors, published with Native AOT: the proof that the library and BouncyCastle work with no JIT | any OS |
 | `PARITY.md`, `parity.py` | each feature name of the hub and its state on Windows, and the script that prints each name with no line | |
 | `../vectors/` | the shared test vectors and `make_vectors.py`, which makes them with the hub's own code | |
@@ -265,6 +266,43 @@ renamed or removed without a word to the screens lane.
   (`attachments`), the chat of an agent other than the manager (`direct_chat`).
 - `Directory.Build.props` no longer sets `InvariantGlobalization` (the self-check sets it for itself), so the screens
   write dates and times in the user's culture.
+- **The owner's computer (step 2, piece L0, the seams; `windows-app-plan-v2.md`, sections 5.1, 5.2 and 6)**: the PC is a
+  device of a hub (step 1) or that hub's owner's computer, one role for each hub. `state.Role` (`HubRole`: `Device`,
+  `Owner`) is kept with the hub's address; a kept hub of step 1 reads as `Device`.
+  - **The settings**: `Box`, the secret box (`new FileSecretBox(folder, protection)` under
+    `%LOCALAPPDATA%\Founderizer\keys`, with an `IKeyProtection` whose purpose text is not the device key's; null: this
+    PC can be no owner's computer); `Can`, the hub's names of what this build can do (`run`, `takeover`, `door`, and a
+    page family's name: `agents`, `servers`, `secrets`, `apps`, `people`, `channels`, `knowledge`, `backup`,
+    `devices`), which the window composes from the families that it has; `Welcome`, true once the window has the
+    welcome page of the first run (piece U1).
+  - **The first page**: with `Welcome`, a PC with no hub opens on the welcome page (`PageKind.Welcome`) once its search
+    found no Tailscale or no hub on it (`HubSearch.NoNetwork`, `NoHub`), and on Add this PC while it looks, so a hub
+    that the search finds opens Add this PC; without `Welcome`, as in step 1. The owner's computer of a hub never opens
+    on Add this PC.
+  - **The claim**: `ClaimAsync(claim, code)` sends the installer's code to `http://<address>:8765/claim` (only an
+    address of 100.64.0.0/10) with the SHA-256 of this PC's new key (`OwnerPcKey`), and then is the owner's computer of
+    that hub (`ConnectOwnerAsync(hub)`). Null when the hub took it; else the owner's words (the listener's own, or the
+    Mac's). An answer that was lost loses no key: a claim made again sends the same key, and the first read that the
+    hub takes with it makes it the key; and when the hub refuses the kept key while a key waits beside it (a second
+    claim whose answer was lost), the next read carries the one that waits (the Mac's rule of two keys; a refused one
+    that waits goes again after 30 seconds). `ConnectOwnerAsync(hub)` alone takes a hub that this PC owns already (the
+    address is its number). Connect (`ConnectAsync`) keeps the role of the address that the PC has, and takes another
+    address as the owner's computer when the box holds a key of the owner's computer for it, else as a device.
+  - **The key on every call**: as the owner's computer, every call carries the key of the owner's computer for that
+    hub, the device reads too; as a device, the device key. As the owner's computer, `ForgetKey()` takes nothing off.
+    A box value that does not open stops no claim and no read: a claim makes a new key in its place.
+  - **An owner page's calls**: a family's client calls `store.OwnerGetAsync(route, type)` and
+    `store.OwnerPostAsync(route, body, bodyType, answerType)` with the `JsonTypeInfo` of its own JSON context. They go
+    through `HubClient.OwnerGetAsync` and `OwnerPostAsync` with `store.Call()` (`OwnerCall`: the hub, the key, the
+    generation, the client's label; its text holds no key): `db` on a read; `request_id`, `db` and `X-Fleet-Client` on
+    a write, in the Mac's envelope. An `OwnerAnswer<T>` is its `Value`, or `IsGenerationChanged`, a 409 whose `code` is
+    `hub_changed` or `hub_changed_sending`: the store then reads the fleet again by itself. Any other refusal, another
+    409 among them (a stale base, a request number used again, an action that the state does not allow), is a
+    `HubException` with the hub's words and its `Code`.
+  - **What the PC says it is**: to a hub that offers `owner_computer` (owner API 1.273), the store sends
+    `POST /ui/owner/computer` with exactly `{"can": [...], "kind": "windows"}` by itself after a claim, a new key, a
+    start and a new generation (`SayComputerAsync`, true when the hub keeps a PC). An answer, a refusal among them, ends
+    the tries until the next of those; no answer, or a fault of the hub, is tried again at the next read.
 
 ```csharp
 var store = new OwnerStore(new StoreSettings { Folder = folder, Keys = keys, ClientLabel = label });

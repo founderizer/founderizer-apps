@@ -155,6 +155,10 @@ public sealed class TailnetTests
             Assert.AreEqual(search, s.Search, status);
             Assert.IsTrue(s.HasNoHub);
             Assert.AreEqual(PageKind.AddThisPc, Screens.FirstPage(s).Kind);
+            // A window with the welcome page of the first run (windows-app-plan-v2.md, 5.1) opens there, and on Add
+            // this PC while its search looks, so that a hub that it finds opens Add this PC.
+            Assert.AreEqual(PageKind.Welcome, Screens.FirstPage(s with { HasWelcome = true }).Kind);
+            Assert.AreEqual(PageKind.AddThisPc, Screens.FirstPage(s with { HasWelcome = true, Search = HubSearch.Looking }).Kind);
             Assert.IsNull(s.UnavailableWords(DateTimeOffset.UtcNow), "a PC with no hub has no line about one");
         }
         Assert.IsFalse(File.Exists(Path.Combine(folder, "hub.json")));

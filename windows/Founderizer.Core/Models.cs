@@ -536,4 +536,4 @@ public sealed record MessageAttachment(long Id, string Name, string Mime, long S
 public sealed record AttachmentKept(double At, string? Knowledge = null);
 
 /// <summary>The body of a refusal: `{"error": ..., "auth": ...}`.</summary>
-internal sealed record RefusalBody(string? Error = null, string? Auth = null);
+internal sealed record RefusalBody(string? Error = null, string? Auth = null, string? Code = null);

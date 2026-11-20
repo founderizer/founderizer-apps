@@ -34,6 +34,7 @@ namespace Founderizer.Core;
 [JsonSerializable(typeof(KeptSeen))]
 [JsonSerializable(typeof(KeptDrafts))]
 [JsonSerializable(typeof(KeptHub))]
+[JsonSerializable(typeof(ComputerAnswer))]
 [JsonSerializable(typeof(KeptStaged))]
 [JsonSerializable(typeof(KeptLedger))]
 [JsonSerializable(typeof(TaskEventPage))]

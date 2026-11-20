@@ -128,15 +128,15 @@ public static class HubDecode
     internal static MobileChatItem Keyed(MobileChatItem item) => item with { Key = ItemKey(item.RawId, "a kept chat") };
 
     /// <summary>The hub's `{"error", "auth"}` of a refusal, or nulls when the body does not read as one.</summary>
-    internal static (string? Error, string? Auth) Refusal(ReadOnlySpan<byte> data)
+    internal static (string? Error, string? Auth, string? Code) Refusal(ReadOnlySpan<byte> data)
     {
-        if (data.Length > 65_536) return (null, null);
+        if (data.Length > 65_536) return (null, null, null);
         try
         {
             var body = JsonSerializer.Deserialize(data, CoreJson.Default.RefusalBody);
-            return (body?.Error, body?.Auth);
+            return (body?.Error, body?.Auth, body?.Code);
         }
-        catch (JsonException) { return (null, null); }
+        catch (JsonException) { return (null, null, null); }
     }
 
     private static T Parse<T>(ReadOnlySpan<byte> data, int limit, JsonTypeInfo<T> type, string read) where T : class
