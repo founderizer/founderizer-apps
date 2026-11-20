@@ -1557,11 +1557,14 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Give one agent a resource the fleet already holds, or end that hold with level null: repo:<owner/name> read|write|deploy (deploy also runs its workflows), secret:bws://<uuid> use|read, drive:<email> read|write|write_shared, gmail:<email> read|write|send, tool:<name> use. The grant is the authorization: the agent then does what that access allows, and the hub records who gave what to whom. A repository that the hub's GitHub App does not reach comes back with unreached: the GitHub page where the owner adds it to the App. On a fleet with a central vault, the vault sends a secret's value to an agent's server only when the owner signed the secret into the grantable pool, or signed a grant of it in the app for an agent on that server: a give that the hub's reading of the vault shows as neither, for a server whose vault holds no copy of it, is refused and nothing is sent: on the Mac where the Founderizer app runs, grant_secret of its program (~/.founderizer/cli) gives that secret with the owner's signature, as the owner does in the app, on Secrets. A give that the reading cannot judge is sent, and an end of a hold (level null) always goes. A server (server:<name> read|fix|patch) is not given here, because the owner's app also puts the host's parts in place: it gives each server that carries a business's Tailscale tag to that business's DevOps agent (or the manager while it has none), and each Linux server of the fleet itself at patch (its fixed root forms only) to one agent, which the manager can name with door_fleet.",
+   "description": "Give one agent a resource the fleet already holds, or end that hold with level null: repo:<owner/name> read|write|deploy (deploy also runs its workflows), secret:bws://<uuid> use|read, drive:<email> read|write|write_shared, gmail:<email> read|write|send, tool:<name> use. With folder (the link or the ID of one folder of that Drive), drive:<email> gives that folder and everything under it alone, and the agent's whole Drive stays as it is. The grant is the authorization: the agent then does what that access allows, and the hub records who gave what to whom. A repository that the hub's GitHub App does not reach comes back with unreached: the GitHub page where the owner adds it to the App. On a fleet with a central vault, the vault sends a secret's value to an agent's server only when the owner signed the secret into the grantable pool, or signed a grant of it in the app for an agent on that server: a give that the hub's reading of the vault shows as neither, for a server whose vault holds no copy of it, is refused and nothing is sent: on the Mac where the Founderizer app runs, grant_secret of its program (~/.founderizer/cli) gives that secret with the owner's signature, as the owner does in the app, on Secrets. A give that the reading cannot judge is sent, and an end of a hold (level null) always goes. A server (server:<name> read|fix|patch) is not given here, because the owner's app also puts the host's parts in place: it gives each server that carries a business's Tailscale tag to that business's DevOps agent (or the manager while it has none), and each Linux server of the fleet itself at patch (its fixed root forms only) to one agent, which the manager can name with door_fleet.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "agent": {
+      "type": "string"
+     },
+     "folder": {
       "type": "string"
      },
      "level": {
@@ -3272,5 +3275,5 @@
    "name": "take_backup"
   }
  ],
- "version": "1469faaa4d063e92f5385bfcea8e62c467405545c7d2884c3222a8250387f6f0"
+ "version": "91dcd954fd0fce7224a2bdebc452a965e0e2dbdcd95edf342b6c741a2b63e116"
 }

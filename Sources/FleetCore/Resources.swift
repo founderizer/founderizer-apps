@@ -88,6 +88,49 @@ public struct ResourceHolder: Decodable, Identifiable, Equatable, Sendable {
     public init(agent: String, level: String) { self.agent = agent; self.level = level }
 }
 
+/// **One folder of a Drive account that agents hold** (owner API 1.255, `drive_folders`; the owner's "Yes, as drawn" of
+/// 20 November 2026): the folder and everything under it, for the agents in `holders`. `name` and `shared` are
+/// Google's, for the owner's page alone, and nil until the hub has read them; `gone`: the account could not open it at
+/// the last reading. A folder that no agent holds is not in the list.
+public struct DriveFolder: Decodable, Identifiable, Equatable, Sendable {
+    public let id: String
+    public let link: String
+    public let name: String?
+    public let shared: Bool?
+    public let gone: Bool
+    public let holders: [ResourceHolder]
+    public let history: [ResourceGrantRecord]
+
+    public init(id: String, link: String, name: String?, shared: Bool?, gone: Bool = false,
+                holders: [ResourceHolder] = [], history: [ResourceGrantRecord] = []) {
+        self.id = id; self.link = link; self.name = name; self.shared = shared; self.gone = gone
+        self.holders = holders; self.history = history
+    }
+
+    /// **A folder's ID in a link of it, or the ID itself** (`hub.py` `google_folder_id`: `…/folders/<id>`,
+    /// `…/drives/<id>`, `?id=<id>`; 10 to 200 characters of `A-Z a-z 0-9 _ -`), or nil for any other text.
+    public static func id(in text: String) -> String? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let id = /[A-Za-z0-9_-]{10,200}/
+        if text.wholeMatch(of: id.matchingSemantics(.unicodeScalar)) != nil { return text }
+        let link = /(?:\/folders\/|\/drives\/|[?&]id=)([A-Za-z0-9_-]{10,200})/
+        return text.count <= 2000 ? text.firstMatch(of: link.matchingSemantics(.unicodeScalar)).map { String($0.output.1) } : nil
+    }
+
+    /// What its row and its card call it: Google's name, else its link.
+    public var title: String { (name?.isEmpty == false ? name : nil) ?? link }
+
+    /// The access map of this folder after one agent's change, for `saveAccess` with the folder, which takes the
+    /// whole map: every other agent keeps what it holds.
+    public func access(giving agent: String, level: GoogleLevel?) -> [String: GoogleLevel] {
+        var access = Dictionary(uniqueKeysWithValues: holders.compactMap { holder in
+            holder.agent == agent ? nil : GoogleLevel(rawValue: holder.level).map { (holder.agent, $0) }
+        })
+        access[agent] = level
+        return access
+    }
+}
+
 /// One thing that the owner already brought into the fleet: a secret, a GitHub repository, a Google service or an MCP
 /// server. `id` is `<kind>:<what>`. It carries no value and no token: a secret is its reference and its name.
 public struct FleetResource: Decodable, Identifiable, Equatable, Sendable {
@@ -111,6 +154,8 @@ public struct FleetResource: Decodable, Identifiable, Equatable, Sendable {
     public let holders: [ResourceHolder]
     /// The newest changes of who holds it, newest first.
     public let history: [ResourceGrantRecord]
+    /// A Drive account's folders that agents hold (owner API 1.255); nil for every other kind and from an older hub.
+    public let folders: [DriveFolder]?
 
     public struct Policy: Decodable, Equatable, Sendable {
         public let max: String
@@ -120,10 +165,35 @@ public struct FleetResource: Decodable, Identifiable, Equatable, Sendable {
 
     public init(id: String, kind: String, what: String, title: String, needs: String, levels: [String],
                 uses: [String], credential: String, connected: Bool, grant: Policy?, holders: [ResourceHolder],
-                history: [ResourceGrantRecord] = []) {
+                history: [ResourceGrantRecord] = [], folders: [DriveFolder]? = nil) {
         self.id = id; self.kind = kind; self.what = what; self.title = title; self.needs = needs; self.levels = levels
         self.uses = uses; self.credential = credential; self.connected = connected; self.grant = grant
-        self.holders = holders; self.history = history
+        self.holders = holders; self.history = history; self.folders = folders
+    }
+
+    /// **The id of a folder's row and card in the app** (`<account's resource id>#<folder id>`): the app's alone,
+    /// never sent to the hub, whose resource ids are in lower case while a Drive folder's id keeps its case.
+    public func folderKey(_ folder: String) -> String { "\(id)#\(folder)" }
+
+    /// The account's resource id and the folder id of a folder's key (`folderKey`), or nil for any other id.
+    public static func folderParts(_ key: String) -> (resource: String, folder: String)? {
+        let parts = key.split(separator: "#", maxSplits: 1).map(String.init)
+        return parts.count == 2 && parts[0].hasPrefix("drive:") && !parts[1].isEmpty ? (parts[0], parts[1]) : nil
+    }
+
+    /// True when this agent holds this resource, or one of its folders.
+    public func reaches(_ agent: String) -> Bool {
+        holders.contains { $0.agent == agent } || (folders ?? []).contains { $0.holders.contains { $0.agent == agent } }
+    }
+
+    /// **The levels that one agent can get on one folder of this Drive account** (the design's section 2): only those
+    /// higher than the agent's level of the whole Drive, which already gives the rest; and on a shared folder Read and
+    /// Write shared, since every file in it is shared and Write would give nothing there.
+    public func folderLevels(for agent: String, shared: Bool) -> [GoogleLevel] {
+        let all = GoogleService.drive.levels
+        let whole = holders.first { $0.agent == agent }.flatMap { GoogleLevel(rawValue: $0.level) }
+        let above = whole.flatMap { all.firstIndex(of: $0) }.map { all.suffix(from: $0 + 1) }.map(Array.init) ?? all
+        return shared ? above.filter { $0 != .write } : above
     }
 
     /// The owner's standing for this resource.

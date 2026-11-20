@@ -111,6 +111,9 @@ extension OwnerTools {
         guard case .string(let name) = agent, !name.isEmpty else {
             throw OwnerRefusal("agent must be the name of the agent that holds this resource.")
         }
+        if let folder = args["folder"], !folder.isNull {
+            return try grantFolder(what, kind: kind, agent: name, level: level, folder: folder, args, on: hub)
+        }
         let whatFor = "the grant of \(resource.pythonText) to \(name)"
         if PyText.same(kind, "secret") {
             if !level.isNull, try !secretReaches(what, name, level, on: hub) {
@@ -157,6 +160,44 @@ extension OwnerTools {
         return try teamCommand("/ui/team/google", ["account": .string(what), "service": .string(kind),
                                                    "access": .object(moved(access))], whatFor, args, on: hub)
     }
+
+    /// `owner_mcp.py`'s FOLDER_KIND.
+    static let folderKind = "folder goes with drive:<email> only: the link or the ID of one folder of that Drive."
+
+    /// `owner_mcp.py` `grant_folder`: one agent's hold of one folder of a Drive account (owner API 1.255,
+    /// `drive_folders`), by its link or its ID, which the hub reads with the account. The folder's other agents come
+    /// from `GET /ui/resources` first, so only the named agent moves; a folder that no agent holds yet has none.
+    func grantFolder(_ what: String, kind: String, agent name: String, level: JSONValue, folder given: JSONValue,
+                     _ args: [String: JSONValue], on hub: OwnerHub) throws -> JSONValue? {
+        guard PyText.same(kind, "drive"), case .string(let raw) = given, !PyText.strip(raw).isEmpty else {
+            throw OwnerRefusal(Self.folderKind)
+        }
+        let folder = PyText.strip(raw)
+        let found = folder.firstMatch(of: Self.folderIn.matchingSemantics(.unicodeScalar)).map { String($0.output.1) }
+        let folderID = found ?? folder, account = PyText.asciiLower("drive:" + what)
+        let page = try hub.get("/ui/resources", "a read of the resources").data
+        var held: [String: JSONValue] = [:]
+        for item in page?["resources"]?.array ?? [] {
+            guard let map = item.object, PyText.asciiLower(Self.text(map["id"])) == account else { continue }
+            for entry in map["folders"]?.array ?? [] {
+                guard let folderMap = entry.object, case .string(let id)? = folderMap["id"], id == folderID else { continue }
+                held = [:]
+                for holder in folderMap["holders"]?.array ?? [] {
+                    if let holderMap = holder.object { held[Self.text(holderMap["agent"])] = holderMap["level"] ?? .null }
+                }
+            }
+        }
+        held[name] = nil
+        if !level.isNull { held[name] = level }
+        // The base is the version of team.json that this page read, not of a second read (`owner_mcp.py`).
+        return try hub.command("/ui/team/google", ["account": .string(what), "service": .string("drive"),
+                                                   "folder": .string(folder), "access": .object(held),
+                                                   "base_sha256": page?["sha256"] ?? .null],
+                               "the grant of the Drive folder \(folder) to \(name)", requestID: args["request_id"])
+    }
+
+    /// `owner_mcp.py`'s DRIVE_FOLDER_IN (hub.py's): a folder's ID in a link of it.
+    nonisolated(unsafe) static let folderIn = /(?:\/folders\/|\/drives\/|[?&]id=)([A-Za-z0-9_-]{10,200})/
 
     /// `owner_mcp.py`'s TEAM_SHAPE: nothing is sent when the read of the team has another shape.
     static let teamShape = "The hub's answer to the read of the team does not have the shape that grant_access reads, "

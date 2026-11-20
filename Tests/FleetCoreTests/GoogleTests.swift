@@ -227,6 +227,11 @@ struct GoogleTests {
         #expect(GoogleCommand.finish(state: "", code: "").route == "ui/google/finish")
         #expect(GoogleCommand.disconnect(account: owner).route == "ui/google/disconnect")
         #expect(GoogleCommand.access(sha256: sha, account: owner, service: .drive, access: [:]).route == "ui/team/google")
+        // owner API 1.255: one folder of the account, by its link or its id, and only then a folder field
+        let folder = try sent(.access(sha256: sha, account: owner, service: .drive, access: ["dev": .write],
+                                      folder: "https://drive.google.com/drive/folders/Abc-Folder_01"))
+        #expect(Set(folder.keys) == ["request_id", "db", "base_sha256", "account", "service", "access", "folder"])
+        #expect(folder["folder"] as? String == "https://drive.google.com/drive/folders/Abc-Folder_01")
     }
 
     /// The one line under the wait for the browser (the owner's "Yes, as drawn" of 15 November 2026): only for
@@ -308,6 +313,86 @@ struct GoogleTests {
         #expect(list.cleanup(account: "Owner@Example.com") == list.cleanup(account: owner))
         #expect(list.cleanup(account: other) == [.access(.gmail)])
         #expect(list.cleanup(account: "nobody@example.com").isEmpty)    // nothing left: the account leaves the list
+    }
+
+    /// **A folder of a Drive account** (owner API 1.255, the owner's "Yes, as drawn" of 20 November 2026): it decodes
+    /// with its holders, its key keeps the case of Drive's id (the hub's resource ids are lower case), a folder holder
+    /// reaches the account's row, the card offers only levels that add something to an agent's whole Drive (and no
+    /// Write on a shared folder, where it gives nothing), and a Disconnect takes each folder away too. A hub from
+    /// before 1.255 gives no folders. Bugs it catches: a folder card that offers a level the hub drops, a lower-cased
+    /// folder id, an agent with folders only that has no row, a Disconnect that leaves folder grants behind.
+    @Test func aFolderOfADriveAccountGivesOnlyTheLevelsThatAddSomething() throws {
+        let json = """
+        {"id": "drive:\(owner)", "kind": "drive", "what": "\(owner)", "title": "\(owner)", "needs": "files",
+         "levels": ["read", "write", "write_shared"], "uses": [], "credential": "google", "connected": true,
+         "grant": null, "holders": [{"agent": "dev", "level": "read"}], "history": [],
+         "folders": [{"id": "Abc-Folder_01", "link": "https://drive.google.com/drive/folders/Abc-Folder_01",
+                      "name": "Support replies", "shared": false, "gone": false,
+                      "holders": [{"agent": "lead", "level": "write"}], "history": []}]}
+        """
+        let drive = try JSONDecoder().decode(FleetResource.self, from: Data(json.utf8))
+        let folder = try #require(drive.folders?.first)
+        #expect(folder.title == "Support replies" && folder.holders == [.init(agent: "lead", level: "write")])
+        let key = drive.folderKey(folder.id)
+        let parts = try #require(FleetResource.folderParts(key))
+        #expect(parts.resource == "drive:\(owner)" && parts.folder == "Abc-Folder_01")
+        #expect(FleetResource.folderParts("drive:\(owner)") == nil && FleetResource.folderParts("repo:a/b#x") == nil)
+        #expect(drive.reaches("lead") && drive.reaches("dev") && !drive.reaches("ops"))
+        #expect(drive.folderLevels(for: "dev", shared: false) == [.write, .writeShared])
+        #expect(drive.folderLevels(for: "dev", shared: true) == [.writeShared])
+        #expect(drive.folderLevels(for: "lead", shared: false) == [.read, .write, .writeShared])
+        #expect(drive.folderLevels(for: "lead", shared: true) == [.read, .writeShared])
+        #expect(folder.access(giving: "dev", level: .write) == ["lead": .write, "dev": .write])
+        #expect(folder.access(giving: "lead", level: nil) == [:])
+        let older = try JSONDecoder().decode(FleetResource.self, from: Data(json.replacingOccurrences(
+            of: #""folders": [{"#, with: #""_folders": [{"#).utf8))
+        #expect(older.folders == nil)
+        let list = ResourceList(db: "db", revision: nil, sha256: sha, audience: ResourceList.everyone, limit: 100, kinds: [],
+                                resources: [drive])
+        #expect(list.cleanup(account: owner) == [.access(.drive), .folder("Abc-Folder_01")])
+    }
+
+    /// **A Disconnect takes every folder away, and a 409 that is no newer version stops it** (the reviews of 20 November
+    /// 2026). Bugs it catches: an account with more folders than the rounds of the writes is left half cleared; a 409
+    /// of a folder that the hub cannot read is taken as a newer team.json and tried again until the rounds run out, so
+    /// the standing and Gmail are never cleared; `DriveFolder.id(in:)`, which Add folder uses to find a folder that agents
+    /// hold, reads an id that the hub would read otherwise.
+    @Test func theCleanUpTakesEveryFolderAndStopsAtA409ThatIsNoNewerVersion() async throws {
+        actor Folders {
+            var left: [String] = (1...10).map { "Folder-\($0)-000000" }
+            var writes = 0
+            let refuse: String?
+            init(refuse: String? = nil) { self.refuse = refuse }
+            func list() -> ResourceList {
+                let folders = left.map { DriveFolder(id: $0, link: "https://drive.google.com/drive/folders/\($0)", name: nil,
+                                                     shared: false, holders: [.init(agent: "dev", level: "read")]) }
+                let drive = FleetResource(id: "drive:\(owner)", kind: "drive", what: owner, title: owner, needs: "files",
+                                          levels: ["read", "write", "write_shared"], uses: [], credential: "google",
+                                          connected: false, grant: nil, holders: [], folders: folders)
+                return ResourceList(db: "db", revision: nil, sha256: sha, audience: ResourceList.everyone, limit: 100,
+                                    kinds: [], resources: [drive])
+            }
+            func write(_ item: GoogleCleanup) throws {
+                writes += 1
+                if let refuse { throw HubError.refusal(HubRefusal(status: 409, hubWords: "x", code: refuse)) }
+                if case .folder(let id) = item { left.removeAll { $0 == id } }
+            }
+        }
+        let all = Folders()
+        try await GoogleDisconnect.clear(account: owner, read: { await all.list() }, write: { item, _ in try await all.write(item) })
+        let (left, writes) = await (all.left, all.writes)
+        #expect(left.isEmpty && writes == 10)
+        let stuck = Folders(refuse: "drive_folder_account")
+        await #expect(throws: HubError.self) {
+            try await GoogleDisconnect.clear(account: owner, read: { await stuck.list() }, write: { item, _ in try await stuck.write(item) })
+        }
+        #expect(await stuck.writes == 1)
+        #expect(DriveFolder.id(in: " https://drive.google.com/drive/folders/Abc-Folder_01?usp=sharing ") == "Abc-Folder_01")
+        #expect(DriveFolder.id(in: "Abc-Folder_01") == "Abc-Folder_01")
+        #expect(DriveFolder.id(in: "https://drive.google.com/drive/u/0/folders/Abc-Folder_01") == "Abc-Folder_01")
+        #expect(DriveFolder.id(in: "https://drive.google.com/drive/drives/0AbcSharedDrive") == "0AbcSharedDrive")
+        #expect(DriveFolder.id(in: "https://drive.google.com/open?id=Abc-Folder_01") == "Abc-Folder_01")
+        #expect(DriveFolder.id(in: "https://example.com/x") == nil && DriveFolder.id(in: "root") == nil)
     }
 
     /// The clean-up after a Disconnect writes against each new reading, Gmail first, and ends with nothing left also

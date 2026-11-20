@@ -67,8 +67,17 @@ struct AccessSettings: View {
     @State private var opened: Set<String> = []
     /// The Google account whose Disconnect asks its one line now (`disconnectRow`), by its resource id.
     @State private var disconnecting: String?
+    /// **Add folder** (owner API 1.255; the owner's "Yes, as drawn" of 20 November 2026 to its three pictures): the
+    /// account card whose field shows now, by its resource id, and the link in the field.
+    @State private var addingFolder: String?
+    @State private var folderLink = ""
+    /// The folder that Add folder found, which no agent holds yet, by its key (`FleetResource.folderKey`): its card
+    /// stands on it until an agent gets it. Nothing of it is kept when the owner closes the card first.
+    @State private var addedFolder: (key: String, folder: DriveFolder)?
 
     private var offered: Bool { store.state?.ui_features?.contains(ResourceList.feature) == true }
+    /// A hub that takes a folder of a Drive account (owner API 1.255).
+    private var foldersOffered: Bool { store.state?.ui_features?.contains("drive_folders") == true }
     private var canChange: Bool { offered && store.writesNow && working == nil }
 
     /// The name of the fleet's resources, or of one agent's: the MCPs and Apps lists and the Secrets page draw it.
@@ -156,7 +165,13 @@ struct AccessSettings: View {
                 FormSection(kinds.count == 1 ? nil : group.kind.title, lazy: true) {
                     let items = shown(group.resources)
                     if items.isEmpty && agent == nil { FormEmpty(empty(group.kind), symbol: Self.symbol(group.kind.kind)) }
-                    ForEach(items) { row($0, kind: group.kind, reading: reading) }
+                    ForEach(items) { resource in
+                        // An agent that holds only folders of a Drive account has the folders' rows, not the account's.
+                        if agent.map({ name in resource.holders.contains { $0.agent == name } }) ?? true {
+                            row(resource, kind: group.kind, reading: reading)
+                        }
+                        ForEach(folders(of: resource)) { folderRow($0, of: resource) }
+                    }
                 }
             }
         }
@@ -168,14 +183,19 @@ struct AccessSettings: View {
     /// card; each row with its −; and under the card, the hub's words when the + of the heading (`AccessGive`) or a −
     /// was refused.
     @ViewBuilder private func agentList(_ reading: ResourceList, agent: String, kind: String) -> some View {
-        let held = reading.resources.filter { $0.kind == kind && $0.holders.contains { $0.agent == agent } }
+        let held = reading.resources.filter { $0.kind == kind && $0.reaches(agent) }
         let info = reading.kinds.first { $0.kind == kind }
         VStack(alignment: .leading, spacing: FleetSpace.inside) {
             FormSection(lazy: true) {
                 if held.isEmpty { FormEmpty(Self.emptyForAgent(kind), symbol: Self.symbol(kind)) }
                 if let info {
                     if kind == "repo" { repositoryRows(held, agent: agent, kind: info, reading: reading) }
-                    else { ForEach(held) { row($0, kind: info, reading: reading) } }
+                    else {
+                        ForEach(held) { resource in
+                            if resource.holders.contains(where: { $0.agent == agent }) { row(resource, kind: info, reading: reading) }
+                            ForEach(folders(of: resource)) { folderRow($0, of: resource) }
+                        }
+                    }
                 }
             }
             if let said: String = store.reading(Self.saidName(agent, kind: kind)) {
@@ -265,7 +285,14 @@ struct AccessSettings: View {
     /// One agent's list holds what that agent may use; the fleet's holds everything.
     private func shown(_ resources: [FleetResource]) -> [FleetResource] {
         guard let agent else { return resources }
-        return resources.filter { $0.holders.contains { $0.agent == agent } }
+        return resources.filter { $0.reaches(agent) }
+    }
+
+    /// The folders of a Drive account that this list shows under the account's row: every one that an agent holds on
+    /// the fleet's page, and this agent's own on its page.
+    private func folders(of resource: FleetResource) -> [DriveFolder] {
+        guard let agent else { return resource.folders ?? [] }
+        return (resource.folders ?? []).filter { $0.holders.contains { $0.agent == agent } }
     }
 
     /// One line for an empty list, the same on the fleet's page and on an agent's: "No <things> yet", as every empty
@@ -370,13 +397,80 @@ struct AccessSettings: View {
         }
     }
 
+    /// **A folder of a Drive account, in a row under the account's own, set in from it** (the owner's "Yes, as drawn"
+    /// of 20 November 2026), so the relation shows with no word: its name as Google gives it, and who holds it. A click
+    /// opens its card. The row stands while an agent holds the folder: the hub lists no other. A folder that the
+    /// account can no longer open keeps its row, with the warning mark and its link.
+    private func folderRow(_ folder: DriveFolder, of resource: FleetResource) -> some View {
+        let key = resource.folderKey(folder.id)
+        let unseen = String(l10n: "\(resource.what) cannot open this folder now")
+        return Button { note = nil; addingFolder = nil; shown = ShownResource(id: key) } label: {
+            HStack(spacing: 12) {
+                IconTile(symbol: Self.symbol("drive"))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(folder.gone ? folder.link : folder.title).font(FormMetrics.title).foregroundStyle(FleetStyle.text)
+                        .lineLimit(1).truncationMode(.middle)
+                    if let who = who(holders: folder.holders) {
+                        Text(who).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 12)
+                if folder.gone {
+                    Image(systemName: "exclamationmark.triangle.fill").font(IconMetrics.symbol(13)).foregroundStyle(.orange)
+                        .help(unseen).accessibilityHidden(true)
+                }
+                if agent == nil {
+                    Image(systemName: "info.circle").font(IconMetrics.symbol(14)).foregroundStyle(FleetStyle.muted).accessibilityHidden(true)
+                } else {
+                    Color.clear.frame(width: IconMetrics.side, height: IconMetrics.side)
+                }
+            }.padding(.leading, FormMetrics.rowInset + Self.folderInset).padding(.trailing, FormMetrics.rowInset)
+                .padding(.vertical, 10)
+        }
+        .buttonStyle(FleetRowButtonStyle())
+        .help("Show \(folder.title) and who may use it")
+        .accessibilityLabel(folder.gone ? "\(folder.link), \(unseen)" : folder.title)
+        .accessibilityHint("Shows its detail")
+        .accessibilityIdentifier("resource-folder-\(folder.id)")
+        .overlay(alignment: .trailing) {
+            if let agent { takeFolder(folder, of: resource, from: agent).padding(.trailing, FormMetrics.rowInset) }
+        }
+    }
+
+    /// How far a folder's row stands in from its account's: the width of the row's mark and its space.
+    static let folderInset: CGFloat = 42
+
+    /// The − of a folder's row on an agent's Can use: it takes the folder back from this agent alone.
+    @ViewBuilder private func takeFolder(_ folder: DriveFolder, of resource: FleetResource, from agent: String) -> some View {
+        let key = resource.folderKey(folder.id)
+        if working == "\(key) \(agent)" {
+            ProgressView().controlSize(.small).frame(width: IconMetrics.side, height: IconMetrics.side)
+        } else {
+            IconButton(symbol: "minus", words: String(l10n: "Take \(folder.title) back from \(agent.agentLabel)")) {
+                Task {
+                    guard let reading, let database = store.state?.db else { return }
+                    working = "\(key) \(agent)"
+                    defer { working = nil }
+                    let said = await Self.writeFolder(resource, folder: folder.id, access: folder.access(giving: agent, level: nil),
+                                                      sha256: reading.sha256, store: store, database: database)
+                    store.keep(said.refused, as: Self.saidName(agent, kind: resource.kind))
+                    await read()
+                }
+            }
+            .disabled(!canChange || !store.writesNow)
+            .accessibilityIdentifier("access-take-folder-\(folder.id)")
+        }
+    }
+
     /// Who has this item: the agents that hold it, or all of them. The level each one has is in the item's detail. **On an
     /// agent's own list, the other agents** (the owner, 13 November 2026: "review all other pages for the same
     /// issues!!"): this agent holds every item there, so its name on every row told nothing; an item of this agent
     /// alone has no line.
-    private func who(_ resource: FleetResource) -> String? {
+    private func who(_ resource: FleetResource) -> String? { who(holders: resource.holders) }
+
+    private func who(holders held: [ResourceHolder]) -> String? {
         let all = (store.state?.agents.map(\.name) ?? []).sorted()
-        let holders = resource.holders.map(\.agent).sorted()
+        let holders = held.map(\.agent).sorted()
         if holders.isEmpty { return String(l10n: "No agent") }
         if !all.isEmpty && Set(all) == Set(holders) { return String(l10n: "All agents") }
         let others = holders.filter { $0 != agent }
@@ -385,8 +479,17 @@ struct AccessSettings: View {
 
     // MARK: detail
 
+    /// The card of one resource, or of one folder of a Drive account (its key, `FleetResource.folderKey`).
+    @ViewBuilder private func detail(_ id: String) -> some View {
+        if let parts = FleetResource.folderParts(id) {
+            folderDetail(id, resource: reading?.resource(parts.resource), folderID: parts.folder)
+        } else {
+            resourceDetail(id)
+        }
+    }
+
     /// The detail of one resource: what it is, where its credential is, who may give it, and the agents that hold it.
-    private func detail(_ id: String) -> some View {
+    private func resourceDetail(_ id: String) -> some View {
         let resource = reading?.resource(id)
         return VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
@@ -405,6 +508,7 @@ struct AccessSettings: View {
             }
             if let resource, let reading, let kind = reading.kind(of: resource) {
                 agentsSection(resource, kind: kind, reading: reading)
+                if resource.kind == "drive", foldersOffered, resource.connected { addFolder(resource) }
                 standingSection(resource, kind: kind, reading: reading)
                 // No "Who holds it now" (D-5): each agent's level is the list above, where No access takes it back.
                 if !resource.history.isEmpty {
@@ -660,6 +764,9 @@ struct AccessSettings: View {
                     _ = try await ResourcesClient().saveStanding(hub: hub, database: database, client: client,
                                                                  sha256: sha256, resource: "\(service.rawValue):\(account)",
                                                                  standing: .ownerOnly)
+                case .folder(let folder):
+                    _ = try await GoogleClient().saveFolder(hub: hub, database: database, client: client, sha256: sha256,
+                                                            account: account, folder: folder, access: [:])
                 }
             }
         } catch let HubError.refusal(refusal) {
@@ -673,6 +780,203 @@ struct AccessSettings: View {
             if refused == nil, let open = shown?.id, Self.googleAccount(open) == account { shown = nil }
         }
         await read()
+    }
+
+    // MARK: Drive folders
+
+    /// **Add folder, in a Drive account's card, under its agents** (the owner's "Yes, as drawn" of 20 November 2026): a
+    /// link, and after the click the field for a folder's link in its place, with Add. The account is the card's, so
+    /// there is no account choice. The hub reads the folder with the account (`saveFolder` with no agent), and its card
+    /// opens in this one's place, to give it to agents.
+    @ViewBuilder private func addFolder(_ resource: FleetResource) -> some View {
+        if addingFolder == resource.id {
+            HStack(spacing: 8) {
+                TextField(text: $folderLink, prompt: Text(verbatim: "")) { Text("Paste the link of a Drive folder") }
+                    .fieldPlaceholder(String(l10n: "Paste the link of a Drive folder"), shows: folderLink.isEmpty).fleetField()
+                    .onSubmit { Task { await findFolder(resource) } }
+                    .accessibilityIdentifier("drive-folder-link")
+                if working == "\(resource.id) folder" {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Add") { Task { await findFolder(resource) } }.buttonStyle(FleetPrimaryButtonStyle())
+                        .disabled(!canChange || folderLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("drive-folder-add")
+                }
+            }
+        } else {
+            Button { folderLink = ""; note = nil; addingFolder = resource.id } label: {
+                Text("Add folder").padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).font(FormMetrics.detail)
+            .foregroundStyle(FleetStyle.muted).disabled(!canChange).accessibilityIdentifier("drive-folder-start")
+        }
+    }
+
+    /// The hub reads the folder of the field's link with the card's account, and its card opens.
+    private func findFolder(_ resource: FleetResource) async {
+        guard let reading, let database = store.state?.db else { return }
+        let link = folderLink.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !link.isEmpty, working == nil else { return }
+        // A folder that agents hold already opens its card: a write with no agent would take it from all of them.
+        if let id = DriveFolder.id(in: link), let held = resource.folders?.first(where: { $0.id == id }) {
+            addingFolder = nil
+            folderLink = ""
+            shown = ShownResource(id: resource.folderKey(held.id))
+            return
+        }
+        working = "\(resource.id) folder"
+        note = nil
+        defer { working = nil }
+        do {
+            let saved = try await GoogleClient().saveFolder(hub: store.hub, database: database, client: store.installation,
+                                                            sha256: reading.sha256, account: resource.what, folder: link,
+                                                            access: [:])
+            let key = resource.folderKey(saved.folder.id)
+            addingFolder = nil
+            folderLink = ""
+            addedFolder = (key, saved.folder)
+            shown = ShownResource(id: key)
+        } catch let HubError.refusal(refused) {
+            note = (resource.id, refused.words, true)
+        } catch {
+            note = (resource.id, String(l10n: "The hub did not take this change. Try again."), true)
+        }
+    }
+
+    /// **The card of one folder of a Drive account**: the account card's sections for this folder alone. Its title is
+    /// the folder's name, and the line under it the account's email. Each agent's control offers No access and the
+    /// levels that add something to its whole Drive (`FleetResource.folderLevels`). No standing and no Remove: a folder
+    /// goes when its last agent goes to No access.
+    private func folderDetail(_ key: String, resource: FleetResource?, folderID: String) -> some View {
+        let folder = resource?.folders?.first(where: { $0.id == folderID }) ?? (addedFolder?.key == key ? addedFolder?.folder : nil)
+        return VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                IconTile(symbol: Self.symbol("drive"))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(folder?.title ?? folderID).font(FormMetrics.title)
+                        .lineLimit(1).truncationMode(.middle).textSelection(.enabled).accessibilityAddTraits(.isHeader)
+                    Text(resource?.what ?? "").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                }
+                Spacer(minLength: 12)
+                Button("Done") { shown = nil; addedFolder = nil }.buttonStyle(FleetOutlineButtonStyle())
+                    .keyboardShortcut(.cancelAction).accessibilityIdentifier("resource-done")
+            }
+            if let resource, let folder, let kind = reading?.kind(of: resource) {
+                folderAgents(resource, folder: folder, key: key, kind: kind)
+                if !folder.history.isEmpty {
+                    FormSection("Who gave it") {
+                        ForEach(folder.history) { record in
+                            FormRow(record.words, symbol: record.level == nil ? "slash.circle" : "arrow.right.circle",
+                                    detail: fleetDate(record.ts)) { EmptyView() }
+                        }
+                    }
+                }
+            } else {
+                Text("This resource is no longer in the list.").font(FormMetrics.text).foregroundStyle(FleetStyle.muted)
+            }
+        }
+        .padding(22).frame(width: 560)
+        .font(FleetStyle.body).foregroundStyle(FleetStyle.text)
+    }
+
+    /// Which agents may use one folder, as the account card's "Which agents may use it" says it for the whole Drive.
+    @ViewBuilder private func folderAgents(_ resource: FleetResource, folder: DriveFolder, key: String,
+                                           kind: ResourceKind) -> some View {
+        // Workers and leads: the hub gives a folder to no other role, and a write that named one would be refused whole.
+        let agents = (store.state?.agents ?? []).filter { ["worker", "lead"].contains($0.role) }.map(\.name)
+        // A sharing that the hub has not read yet offers what a shared folder offers: Write could give nothing there.
+        let shared = folder.shared != false
+        FormSection("Which agents may use it", footer: Self.levelsFooter(kind)) {
+            if let top = GoogleService.drive.levels.filter({ shared ? $0 != .write : true }).last {
+                FormRow("All agents", symbol: "person.3",
+                        detail: String(l10n: "Gives every agent \(Self.levelName(top.rawValue, kind: resource.kind)).")) {
+                    if working == "\(key) all" { ProgressView().controlSize(.small) }
+                    else {
+                        Toggle("All agents", isOn: Binding(
+                            get: { !agents.isEmpty && Set(folder.holders.map(\.agent)) == Set(agents) },
+                            set: { on in Task { await giveFolderAll(resource, folder: folder, key: key, agents: agents,
+                                                                    level: on ? top : nil) } }))
+                            .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                            .disabled(!canChange).accessibilityIdentifier("folder-all-agents")
+                    }
+                }
+            }
+            if agents.isEmpty { FormEmpty("This fleet has no agent yet.", symbol: "person.slash") }
+            ForEach(agents, id: \.self) { agent in
+                let level = folder.holders.first { $0.agent == agent }?.level
+                let options = resource.folderLevels(for: agent, shared: shared)
+                FormRow(agent.agentLabel, mark: AgentGlyph(name: agent, size: GlyphSize.inline),
+                        detail: level.map { String(l10n: "Has it at \(Self.levelName($0, kind: resource.kind))") }) {
+                    if working == "\(key) \(agent)" { ProgressView().controlSize(.small) } else {
+                        FleetSelect("What \(agent.agentLabel) may do with \(folder.title)",
+                                    options: [FleetOption("", "No access")]
+                                        + options.map { FleetOption($0.rawValue, Self.levelName($0.rawValue, kind: resource.kind)) },
+                                    selection: level ?? "") { chosen in
+                            Task { await giveFolder(resource, folder: folder, key: key, to: agent,
+                                                    level: GoogleLevel(rawValue: chosen)) }
+                        } label: { FleetSelectLabel(title: level.map { Self.levelName($0, kind: resource.kind) } ?? String(l10n: "No access")) }
+                            .disabled(!canChange || (options.isEmpty && level == nil))
+                            .accessibilityIdentifier("folder-agent-\(agent)")
+                    }
+                }
+            }
+            if let note, note.resource == key {
+                FormRow(note.text, symbol: note.warning ? "exclamationmark.triangle" : "checkmark.circle") { EmptyView() }
+            }
+        }
+    }
+
+    /// One agent's level of one folder, or none.
+    private func giveFolder(_ resource: FleetResource, folder: DriveFolder, key: String, to agent: String,
+                            level: GoogleLevel?) async {
+        guard let reading, let database = store.state?.db else { return }
+        working = "\(key) \(agent)"
+        note = nil
+        defer { working = nil }
+        let said = await Self.writeFolder(resource, folder: folder.id, access: folder.access(giving: agent, level: level),
+                                          sha256: reading.sha256, store: store, database: database)
+        let done = level.map { String(l10n: "\(agent.agentLabel) has \(folder.title) at \($0.rawValue).") }
+            ?? String(l10n: "\(agent.agentLabel) no longer has \(folder.title).")
+        note = (key, said.refused ?? said.tookPlaceOf ?? done, said.refused != nil)
+        await read()
+    }
+
+    /// Every agent that can hold the folder at this level gets it, in one write; or none of them keeps it.
+    private func giveFolderAll(_ resource: FleetResource, folder: DriveFolder, key: String, agents: [String],
+                               level: GoogleLevel?) async {
+        guard let reading, let database = store.state?.db else { return }
+        working = "\(key) all"
+        note = nil
+        defer { working = nil }
+        var access: [String: GoogleLevel] = [:]
+        if let level {
+            for agent in agents where resource.folderLevels(for: agent, shared: folder.shared != false).contains(level) {
+                access[agent] = level
+            }
+        }
+        let said = await Self.writeFolder(resource, folder: folder.id, access: access, sha256: reading.sha256, store: store,
+                                          database: database)
+        if let words = said.refused ?? said.tookPlaceOf { note = (key, words, said.refused != nil) }
+        await read()
+    }
+
+    /// **The one write of one folder's agents** (`POST /ui/team/google` with the folder): the hub's words when it
+    /// refused, else the line for each agent whose Drive of another account the write took the place of, or nil.
+    static func writeFolder(_ resource: FleetResource, folder: String, access: [String: GoogleLevel], sha256: String,
+                            store: FleetStore, database: String) async -> (refused: String?, tookPlaceOf: String?) {
+        do {
+            let saved = try await GoogleClient().saveFolder(hub: store.hub, database: database, client: store.installation,
+                                                            sha256: sha256, account: resource.what, folder: folder,
+                                                            access: access)
+            let lines = saved.tookPlaceOf.sorted { $0.key < $1.key }.map { agent, account in
+                String(l10n: "\(agent.agentLabel) no longer has the Drive of \(account).")
+            }
+            return (nil, lines.isEmpty ? nil : lines.joined(separator: " "))
+        } catch let HubError.refusal(refused) {
+            return (refused.words, nil)
+        } catch {
+            return (String(l10n: "The hub did not take this change. Try again."), nil)
+        }
     }
 
     /// Who may give this item: the owner alone, or the fleet manager too, up to a level (`StandingRows`).

@@ -10207,6 +10207,145 @@
   {
    "after": {
     "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"manager_warning\": null, \"agents\": [{\"name\": \"manager\", \"role\": \"manager\", \"runtime\": \"claude\", \"active\": true, \"secret\": \"x\"}], \"tasks\": [{\"id\": 1, \"title\": \"Write the page\", \"state\": \"working\", \"owner\": \"worker-1\"}, {\"id\": 2, \"title\": \"Old\", \"state\": \"completed\"}], \"needs\": [{\"id\": 5, \"answered\": false}, {\"id\": 6, \"answered\": true}], \"goals\": [{\"id\": 3, \"title\": \"Launch\", \"state\": \"active\"}], \"responsibilities\": [{\"id\": 4, \"title\": \"Watch the site\", \"agent\": \"worker-1\"}], \"reports\": [1, 2, 3, 4, 5, 6, 7], \"older_tasks\": {\"before\": 100, \"block\": 100, \"mark\": \"100.3\", \"tasks\": 40}}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"sha256\": \"x\", \"resources\": [{\"id\": \"drive:ada@example.com\", \"kind\": \"drive\", \"folders\": [{\"id\": \"Abc-Folder_01\", \"holders\": [{\"agent\": \"worker-2\", \"level\": \"read\"}]}]}]}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"route\": \"/ui/team/google\"}"
+    }
+   ],
+   "arguments": {
+    "agent": "worker-1",
+    "folder": "https://drive.google.com/drive/folders/Abc-Folder_01?usp=sharing",
+    "level": "write",
+    "resource": "drive:Ada@example.com"
+   },
+   "name": "grant_access: a folder of a Drive account",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "ok": true,
+     "route": "/ui/team/google"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/resources",
+     "query": {
+      "db": [
+       "g1"
+      ]
+     }
+    },
+    {
+     "body": {
+      "access": {
+       "worker-1": "write",
+       "worker-2": "read"
+      },
+      "account": "Ada@example.com",
+      "base_sha256": "x",
+      "db": "g1",
+      "folder": "https://drive.google.com/drive/folders/Abc-Folder_01?usp=sharing",
+      "request_id": "<rid1>",
+      "service": "drive"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/team/google",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "grant_access"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "agent": "worker-1",
+    "folder": "Abc-Folder_01",
+    "level": "read",
+    "resource": "gmail:ada@example.com"
+   },
+   "name": "grant_access: a folder with another kind",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "folder goes with drive:<email> only: the link or the ID of one folder of that Drive."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "grant_access"
+  },
+  {
+   "after": {
+    "files": {},
     "folders": []
    },
    "answers": [

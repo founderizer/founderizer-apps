@@ -93,18 +93,29 @@ public enum GoogleDisconnect {
                              read: @Sendable () async throws -> ResourceList,
                              write: @Sendable (GoogleCleanup, _ sha256: String) async throws -> Void) async throws {
         var last: Error = HubError.invalidResponse
-        for _ in 0..<rounds {
+        var budget = rounds, round = 0
+        while round < budget {
+            round += 1
             let list = try await read()
+            if round == 1 { budget += list.cleanup(account: account).filter { if case .folder = $0 { true } else { false } }.count }
             guard let next = list.cleanup(account: account).first else { return }
             do {
                 try await write(next, list.sha256)
-            } catch let HubError.refusal(refusal) where refusal.status == 409 {
+            } catch let HubError.refusal(refusal) where refusal.status == 409 && refusal.code.map({ $0 == "team_changed" }) ?? true {
+                // A newer version of team.json: read it again. Another 409 (a folder that the hub cannot read) stops.
                 last = HubError.refusal(refusal)
             }
         }
         if try await read().cleanup(account: account).isEmpty { return }
         throw last
     }
+}
+
+/// The answer of `GoogleClient.saveFolder`: the folder as the account reads it (no holders: the next reading of the
+/// resources has them), and {agent: account} for each agent whose Drive of another account the write took the place of.
+public struct GoogleFolderSaved: Equatable, Sendable {
+    public let folder: DriveFolder
+    public let tookPlaceOf: [String: String]
 }
 
 /// What is left of one Google account in the fleet after the hub's Disconnect, one write at a time (the owner's "Yes,
@@ -114,6 +125,9 @@ public enum GoogleCleanup: Equatable, Sendable {
     case access(GoogleService)
     /// The fleet manager's standing for this service of the account: `POST /ui/resources` with no policy.
     case standing(GoogleService)
+    /// Every agent's level of one folder of the account's Drive (owner API 1.255): `POST /ui/team/google` with the folder
+    /// and an empty map.
+    case folder(String)
 }
 
 extension ResourceList {
@@ -124,7 +138,8 @@ extension ResourceList {
         let email = account.lowercased()
         return GoogleService.allCases.flatMap { service -> [GoogleCleanup] in
             guard let item = resource("\(service.rawValue):\(email)") else { return [] }
-            return (item.holders.isEmpty ? [] : [.access(service)]) + (item.grant == nil ? [] : [.standing(service)])
+            return (item.holders.isEmpty ? [] : [.access(service)]) + (item.folders ?? []).map { .folder($0.id) }
+                + (item.grant == nil ? [] : [.standing(service)])
         }
     }
 }
@@ -481,7 +496,8 @@ enum GoogleCommand {
     case connect(redirectURI: String, service: GoogleService, account: String?)
     case finish(state: String, code: String)
     case disconnect(account: String)
-    case access(sha256: String, account: String, service: GoogleService, access: [String: GoogleLevel])
+    case access(sha256: String, account: String, service: GoogleService, access: [String: GoogleLevel],
+                folder: String? = nil)
 
     var route: String {
         switch self {
@@ -500,8 +516,11 @@ enum GoogleCommand {
             return fields
         case .finish(let state, let code): return ["state": state, "code": code]
         case .disconnect(let account): return ["account": account]
-        case .access(let sha256, let account, let service, let access):
-            return ["base_sha256": sha256, "account": account, "service": service.rawValue, "access": access.mapValues(\.rawValue)]
+        case .access(let sha256, let account, let service, let access, let folder):
+            var fields: [String: Any] = ["base_sha256": sha256, "account": account, "service": service.rawValue,
+                                         "access": access.mapValues(\.rawValue)]
+            if let folder { fields["folder"] = folder }     // owner API 1.255: a link of a folder or its id
+            return fields
         }
     }
 }
@@ -572,6 +591,19 @@ public final class GoogleClient: Sendable {
                             hub: hub, database: database, client: client)
     }
 
+    /// **One folder of a Drive account for some agents** (owner API 1.255, `drive_folders`): `folder` is its link or its
+    /// id, and `access` the levels of that folder alone. The answer names the folder as the account reads it, and the
+    /// agents whose Drive of another account this write took the place of.
+    public func saveFolder(hub: URL, database: String, client: String, sha256: String, account: String, folder: String,
+                           access: [String: GoogleLevel]) async throws -> GoogleFolderSaved {
+        let receipt = try await write(.access(sha256: sha256, account: account, service: .drive, access: access,
+                                              folder: folder), hub: hub, database: database, client: client)
+        guard let id = receipt.folder else { throw HubError.invalidResponse }
+        return GoogleFolderSaved(folder: DriveFolder(id: id, link: "https://drive.google.com/drive/folders/\(id)",
+                                                     name: receipt.name, shared: receipt.shared),
+                                 tookPlaceOf: receipt.took_place_of ?? [:])
+    }
+
     static func body(_ command: GoogleCommand, requestID: String, database: String) throws -> Data {
         try IntegrationsClient.body(command.fields, requestID: requestID, database: database)
     }
@@ -588,6 +620,11 @@ public final class GoogleClient: Sendable {
         let connected: Bool?
         let replaced: Bool?
         let revoked: Bool?
+        /// POST /ui/team/google with a folder (owner API 1.255).
+        let folder: String?
+        let name: String?
+        let shared: Bool?
+        let took_place_of: [String: String]?
     }
 
     private func write(_ command: GoogleCommand, hub: URL, database: String, client: String) async throws -> Receipt {

@@ -384,6 +384,16 @@
         }
       }
     },
+    "%@ cannot open this folder now" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no puede abrir esta carpeta ahora"
+          }
+        }
+      }
+    },
     "%@ cannot switch." : {
       "localizations" : {
         "es" : {
@@ -1370,6 +1380,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ ya no tiene %@."
+          }
+        }
+      }
+    },
+    "%@ no longer has the Drive of %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ ya no tiene el Drive de %2$@."
           }
         }
       }
@@ -4005,6 +4025,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Añadir archivos a tu conocimiento"
+          }
+        }
+      }
+    },
+    "Add folder" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir carpeta"
           }
         }
       }
@@ -15079,6 +15109,16 @@
         }
       }
     },
+    "Paste the link of a Drive folder" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pega el enlace de una carpeta de Drive"
+          }
+        }
+      }
+    },
     "Paste the prompt into your agent, then try again." : {
       "localizations" : {
         "es" : {
@@ -18515,6 +18555,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mostrar %@ y quién puede concederlo"
+          }
+        }
+      }
+    },
+    "Show %@ and who may use it" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar %@ y quién puede usarla"
           }
         }
       }
