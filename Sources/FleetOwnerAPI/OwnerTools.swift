@@ -97,7 +97,7 @@ public final class OwnerTools: @unchecked Sendable {
                                inputSchema: tool.inputSchema, annotations: tool.annotations, kind: tool.kind,
                                route: tool.route, fields: tool.fields, what: tool.what, revisionPage: tool.revisionPage,
                                requestIDFromArguments: tool.requestIDFromArguments, feature: tool.feature,
-                               whole: tool.whole)
+                               whole: tool.whole, nulls: tool.nulls)
     }
 
     /// The tools that `tools/list` gives: each one that the table builds, the thirteen written here, the two setup
@@ -456,11 +456,12 @@ public final class OwnerTools: @unchecked Sendable {
         + "fleet_read(page=\"profiles\") that you made the sections from, or null for an agent with no profile yet. "
         + "Then a change made since that read is refused, and not lost."
 
-    /// The fields of a tool that the arguments give, as they are; a null is left out.
+    /// The fields of a tool that the arguments give, as they are (`owner_mcp.py`'s `sent`); a null is left out, but
+    /// for a field whose null is a value of the hub's (`tool.nulls`).
     static func body(_ tool: OwnerTable.Tool, _ args: [String: JSONValue]) -> [String: JSONValue] {
         var body: [String: JSONValue] = [:]
         for field in tool.fields {
-            if let value = args[field], !value.isNull { body[field] = value }
+            if let value = args[field], !value.isNull || tool.nulls.contains(field) { body[field] = value }
         }
         return body
     }

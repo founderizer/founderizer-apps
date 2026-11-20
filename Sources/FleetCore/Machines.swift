@@ -45,19 +45,13 @@ public struct MachineStatus: Decodable, Identifiable, Sendable {
     /// The CPU and memory of this agent's own sessions, as its helper read them, or nil from a helper before the
     /// load readings (4 November 2026).
     public let use: AgentUse?
-    /// Its helper's last start check of a release (UI-API.md 1.261), as the hub kept it, or nil: none, or a hub before
-    /// it. Only its word counts here: the hub's own line on the health page says the releases.
-    public let start_check: StartCheck?
-    public struct StartCheck: Decodable, Sendable { public let result: String?; public let at: Double? }
-    /// Its last update failed because a release did not start on its server: the hub says it once for the server
-    /// (`machine_refused`), and no screen calls it a failed update, whose Update cannot help. Only a record at least as
-    /// new as the update's request is why it failed, as the hub reads it (`hub.refused_update`): an older refusal and a
-    /// later failure of another kind (a fetch) keep "Update failed", where Update can help.
-    public var refusedRelease: Bool {
-        guard update.state == "failed", start_check?.result == "refused", let at = start_check?.at,
-              let requested = update.requested_at else { return false }
-        return at >= requested
-    }
+    /// The hub's one decision from its helper's last start check of a release (UI-API.md 1.263): the release that the
+    /// hub runs did not start on its server, and it runs other code. Nil from a hub before it.
+    public let release_refused: Bool?
+    /// A release did not start on its server: the hub says it once for the server (`machine_refused`), and no screen
+    /// calls it a failed update, whose Update cannot help. The hub decides, by release (`hub.start_refused`), whatever
+    /// the update's state and with no clock; this app has no rule of its own. False from a hub without the field.
+    public var refusedRelease: Bool { release_refused == true }
     public var id: String { agent }
     /// An entry that cannot be read is left out, and the rest of the reading stays.
     public struct Runtimes: Decodable, Sendable {

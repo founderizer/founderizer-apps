@@ -240,13 +240,13 @@ struct FleetTroubleTests {
         #expect(found.findings.first { $0.id == "vps/update" }?.says == "git refused the fetch")
         #expect(found.findings.first { $0.id == "vps/check" }?.says == "the helper did not answer")
         // A release that did not start on its server is the hub's warning of that server, with Report a problem: no
-        // row of the machine says that Update tries again. A refusal from before the update's request is not why it
-        // failed: its row stays.
-        for (at, row) in [(900.0, false), (800.0, true)] {
-            let refused = read(machines: [try machine("vps", over: [
+        // row of the machine says that Update tries again. The hub decides it (`release_refused`); where it says no, the
+        // row stays.
+        for (refused, row) in [(true, false), (false, true)] {
+            let found = read(machines: [try machine("vps", over: [
                 "update": ["state": "failed", "detail": "Release 2026.11.677 did not start on this server", "requested_at": 850.0],
-                "start_check": ["result": "refused", "release": "2026.11.677", "keeps": "2026.11.676", "at": at]])])
-            #expect(refused.findings.contains { $0.id == "vps/update" } == row)
+                "release_refused": refused])])
+            #expect(found.findings.contains { $0.id == "vps/update" } == row)
         }
     }
 

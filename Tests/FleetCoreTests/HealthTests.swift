@@ -293,16 +293,21 @@ import Testing
     #expect(hub.map(\.detail) == ["Since 14:53, nothing is restarted.", "The manager session is not running.",
                                   "The hub disk has 312 MiB free."])
     // A silent helper and its server's own warnings stay one block; its usage is a block of its own, and an older
-    // version is the block of every agent that runs one (4 November 2026).
+    // version is the block of every agent that runs one (4 November 2026). A release that did not start on its server
+    // is a block of its own too: in the server's block the silent helper took its title, and its Report a problem.
     let mini = FleetHealth.blocks([
         .init(kind: "helper_offline", detail: "Silent since 23:06.", agent: "mini"),
         .init(kind: "machine_stale", detail: "No status for ten minutes.", agent: "mini"),
+        .init(kind: "machine_refused", detail: "mini keeps release 2026.11.676, because release 2026.11.677 did not "
+              + "start there. It takes the next release that starts there by itself.", agent: "mini"),
         .init(kind: "machine_behind", detail: "It runs an old revision.", agent: "mini"),
         .init(kind: "allowance_pace", detail: "77% of its week is used.", agent: "mini"),
     ])
-    #expect(mini.map(\.title) == ["Mini is not answering", "Mini runs an older version", "Mini nears its usage limit"])
+    #expect(mini.map(\.title) == ["Mini is not answering", "A release did not start", "Mini runs an older version",
+                                  "Mini nears its usage limit"])
     #expect(mini[0].acts == [.openMachine("mini")])
-    #expect(mini[1].acts == [.updateFleet(["mini"])])
+    #expect(mini[1].acts == [.tellUs] && mini[1].detail.hasPrefix("mini keeps release 2026.11.676"))
+    #expect(mini[2].acts == [.updateFleet(["mini"])])
     // No block has two buttons with one label.
     for block in manager + hub + mini { #expect(Set(block.acts.map(\.label)).count == block.acts.count) }
 }

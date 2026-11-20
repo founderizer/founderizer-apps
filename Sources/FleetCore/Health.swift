@@ -258,8 +258,12 @@ extension FleetHealth {
     /// that did not start on its server (`machine_refused`) is not one: Update fleet cannot help it.
     public static func isUpdate(_ kind: String) -> Bool { kind == "machine_behind" || kind == "machine_failed" }
 
-    /// A warning about an agent's server: its helper is silent, or its machine is stale.
-    static func aboutServer(_ kind: String) -> Bool { kind == "helper_offline" || kind.hasPrefix("machine_") }
+    /// A warning about an agent's server: its helper is silent, or its machine is stale. A release that did not start on
+    /// its server (`machine_refused`) is a block of its own: in the server's block, a silent helper that came first
+    /// took its title and its button, and its Report a problem was gone.
+    static func aboutServer(_ kind: String) -> Bool {
+        kind == "helper_offline" || (kind.hasPrefix("machine_") && kind != "machine_refused")
+    }
 
     private static func once<Item: Equatable>(_ items: [Item]) -> [Item] {
         items.reduce(into: []) { if !$0.contains($1) { $0.append($1) } }

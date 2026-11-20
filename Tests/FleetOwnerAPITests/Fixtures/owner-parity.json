@@ -5909,6 +5909,600 @@
   {
    "after": {
     "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"route\": \"/ui/team/agents/worker-1\"}"
+    }
+   ],
+   "arguments": {
+    "account": null,
+    "agent": "worker-1",
+    "effort": null,
+    "model": null,
+    "title": null
+   },
+   "name": "nulls: an agent's model and title back to the default",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "ok": true,
+     "route": "/ui/team/agents/worker-1"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/team",
+     "query": {
+      "db": [
+       "g1"
+      ]
+     }
+    },
+    {
+     "body": {
+      "account": null,
+      "base_sha256": "team-sha-1",
+      "db": "g1",
+      "effort": null,
+      "model": null,
+      "request_id": "<rid1>",
+      "title": null
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/team/agents/worker-1",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "agent_settings"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"route\": \"/ui/team/chat-apps\"}"
+    }
+   ],
+   "arguments": {
+    "account": null,
+    "id": "discord-worker-1"
+   },
+   "name": "nulls: a chat app account removed",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "ok": true,
+     "route": "/ui/team/chat-apps"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/team",
+     "query": {
+      "db": [
+       "g1"
+      ]
+     }
+    },
+    {
+     "body": {
+      "account": null,
+      "base_sha256": "team-sha-1",
+      "db": "g1",
+      "id": "discord-worker-1",
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/team/chat-apps",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_chat_account"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"route\": \"/ui/roles\"}"
+    }
+   ],
+   "arguments": {
+    "daily": null,
+    "name": "supplier"
+   },
+   "name": "nulls: a role with no daily limit",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "ok": true,
+     "route": "/ui/roles"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "daily": null,
+      "db": "g1",
+      "name": "supplier",
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/roles",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_role"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"route\": \"/ui/people\"}"
+    }
+   ],
+   "arguments": {
+    "daily": null,
+    "id": 3,
+    "note": null
+   },
+   "name": "nulls: a person's own note and limit taken away",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "ok": true,
+     "route": "/ui/people"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "daily": null,
+      "db": "g1",
+      "id": 3,
+      "note": null,
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/people",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_person"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"sha256\": \"team-sha-1\", \"lines\": [{\"agent\": \"manager\", \"repos\": {}, \"tools\": [], \"google\": {}}, {\"agent\": \"worker-1\", \"repos\": {\"acme/web\": \"read\"}, \"tools\": [\"github\"], \"google\": {\"gmail\": {\"account\": \"ada@example.com\", \"level\": \"read\"}}}, {\"agent\": \"worker-2\", \"repos\": {\"acme/web\": \"write\", \"acme/api\": \"deploy\"}, \"tools\": [\"github\", \"linear\"], \"google\": {\"drive\": {\"account\": \"ada@example.com\", \"level\": \"write\"}}}]}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"route\": \"/ui/servers/server-1/agents\"}"
+    }
+   ],
+   "arguments": {
+    "agent": "scout",
+    "reports_to": null,
+    "role": "worker",
+    "runtime": "claude",
+    "server": "server-1"
+   },
+   "name": "nulls: an agent that reports to the manager",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "ok": true,
+     "route": "/ui/servers/server-1/agents"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/team",
+     "query": {
+      "db": [
+       "g1"
+      ]
+     }
+    },
+    {
+     "body": {
+      "agent": "scout",
+      "base_sha256": "team-sha-1",
+      "db": "g1",
+      "reports_to": null,
+      "request_id": "<rid1>",
+      "role": "worker",
+      "runtime": "claude"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/servers/server-1/agents",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "add_agent"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"route\": \"/ui/people\"}"
+    }
+   ],
+   "arguments": {
+    "blocked": null,
+    "id": 3,
+    "name": null
+   },
+   "name": "nulls: a null of a field that takes none is left out",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "ok": true,
+     "route": "/ui/people"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "db": "g1",
+      "id": 3,
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/people",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_person"
+  },
+  {
+   "after": {
+    "files": {},
     "folders": []
    },
    "answers": [],

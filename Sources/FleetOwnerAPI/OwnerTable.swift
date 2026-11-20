@@ -46,6 +46,10 @@ public struct OwnerTable: Sendable {
         /// For `with_base`: the fields that replace a whole value that is always there (`owner_mcp.py`'s `whole`),
         /// which go only with the `base_sha256` of the client's own read. A table from before them has none.
         public var whole: [String] = []
+        /// The fields whose null goes to the hub, because their schema takes null (`owner_mcp.py`'s `nulls`): an
+        /// agent's model that follows the default again, a chat app account removed. Every other null is left out.
+        /// A table from before them has none.
+        public var nulls: [String] = []
 
         /// The first sentence of its words, for one line of `founderizer-cli tools`.
         public var firstSentence: String {
@@ -88,7 +92,8 @@ public struct OwnerTable: Sendable {
             return Tool(name: tool.name, description: tool.description, inputSchema: tool.inputSchema,
                         annotations: tool.annotations, kind: .later, route: tool.route, fields: tool.fields,
                         what: tool.what, revisionPage: tool.revisionPage,
-                        requestIDFromArguments: tool.requestIDFromArguments, feature: tool.feature, whole: tool.whole)
+                        requestIDFromArguments: tool.requestIDFromArguments, feature: tool.feature, whole: tool.whole,
+                        nulls: tool.nulls)
         }, instructions: instructions, protocolVersion: protocolVersion, supported: supported, pages: pages,
            pageQuery: pageQuery, pageWords: pageWords, pageInPath: pageInPath, historyWords: historyWords,
            costsWords: costsWords, mediaTypes: mediaTypes, version: version)
@@ -125,7 +130,7 @@ public struct OwnerTable: Sendable {
             // version: refused at the call, and the rest of the table still works.
             let kind = Kind(rawValue: said) ?? .later
             var route = "", fields: [String] = [], what = "", page: String?, fromArguments = true, feature: String?
-            var whole: [String] = []
+            var whole: [String] = [], nulls: [String] = []
             if kind.built {
                 guard let found = item["route"]?.string, let names = item["fields"]?.array,
                       let said = item["what"]?.string else { throw broken }
@@ -139,10 +144,13 @@ public struct OwnerTable: Sendable {
                 if let names = item["whole"]?.array {
                     whole = try names.map { guard let text = $0.string else { throw broken }; return text }
                 }
+                if let names = item["nulls"]?.array {
+                    nulls = try names.map { guard let text = $0.string else { throw broken }; return text }
+                }
             }
             tools.append(Tool(name: name, description: description, inputSchema: schema, annotations: annotations,
                               kind: kind, route: route, fields: fields, what: what, revisionPage: page,
-                              requestIDFromArguments: fromArguments, feature: feature, whole: whole))
+                              requestIDFromArguments: fromArguments, feature: feature, whole: whole, nulls: nulls))
         }
         guard let pageMap = root["PAGES"]?.object, let instructions = root["instructions"]?.string,
               let version = root["version"]?.string, let protocolVersion = root["protocol"]?.string else { throw broken }
