@@ -132,8 +132,9 @@ extension EnvironmentValues {
     @Entry var glyphDots = true
 }
 
-/// The looks of the last team, so that each glyph does not find them again.
-@MainActor private enum GlyphTeams {
+/// The looks of the last team, so that each glyph does not find them again: also each badge of an agent in a
+/// request's words (`CardBadges`).
+@MainActor enum GlyphTeams {
     private static var names: [String] = []
     private static var looks: [String: GlyphLook] = [:]
 

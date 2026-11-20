@@ -43,6 +43,16 @@ public struct CardNames: Equatable, Sendable {
             }
         }
 
+        /// **An agent and a server are badges on a card** (the owner, 20 November 2026: "for servers, show a server/vps
+        /// or mac icon before its name, and enclose it in like a badge entirely", and "Same for agents"): a repository
+        /// and a page of the app stay links in the words.
+        public var isBadge: Bool {
+            switch self {
+            case .agent, .server: true
+            case .repository, .page: false
+            }
+        }
+
         private static func own(_ kind: String, _ value: String) -> URL? {
             guard let path = value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
             return URL(string: "\(scheme)://\(kind)/\(path)")
@@ -282,6 +292,32 @@ public struct CardNames: Equatable, Sendable {
             if let url = found.target.url { out[range].link = url }
         }
         return out
+    }
+
+    /// One piece of a request's words as a card draws them (`pieces(_:)`): words, or one name that it draws as a badge.
+    public struct Piece: Equatable, Sendable {
+        public let words: AttributedString
+        /// The agent or the server that the piece names, with its link on its words; nil for the words around them,
+        /// a repository's link and a page's among them.
+        public let badge: Target?
+    }
+
+    /// `text` with its names as links (`link(_:)`), in pieces: **each agent and server that it shows is a piece of its
+    /// own**, which a card draws as a badge with its icon (`Target.isBadge`). The pieces hold every character of the
+    /// linked text once, in its order.
+    public func pieces(_ text: AttributedString) -> [Piece] {
+        let linked = link(text)
+        var pieces: [Piece] = [], start = linked.startIndex
+        for (url, range) in linked.runs[\.link] {
+            guard let url, let target = Target(url: url), target.isBadge else { continue }
+            if start < range.lowerBound {
+                pieces.append(Piece(words: AttributedString(linked[start..<range.lowerBound]), badge: nil))
+            }
+            pieces.append(Piece(words: AttributedString(linked[range]), badge: target))
+            start = range.upperBound
+        }
+        if start < linked.endIndex { pieces.append(Piece(words: AttributedString(linked[start...]), badge: nil)) }
+        return pieces
     }
 
     /// The pages of the app that the words of Markdown `text` show, each once, in their order: a step on one page gets

@@ -17,7 +17,9 @@ enum FleetStyle {
     static let composer = Color(white: 0.205)
     /// The words of a page that set no font of their own: a row's 13 (`FormMetrics.text`; T-23: it was 12.5, a size of
     /// its own beside the rows' 13).
-    static let body = Font.system(size: 13, weight: .regular)
+    static let body = Font.system(size: bodySize, weight: .regular)
+    /// Its size, for what is measured in it (the room of a badge's icon, `CardBadgeText`).
+    static let bodySize: CGFloat = 13
     /// The one measure of a page's column. Every screen but the Tasks board keeps it, so the content does not move
     /// sideways when the owner goes from one page to the next; the board's lanes take the window's whole width.
     static let pageWidth: CGFloat = 1100
@@ -133,7 +135,9 @@ enum FleetSpace {
 /// line of the next, a lighter bubble with 16 pt corners, times in 12 pt, and activity rows in a light gray, 36.5 pt
 /// apart. Forms keep `FleetStyle.body`.
 enum ChatStyle {
-    static let font = Font.system(size: 14)
+    static let font = Font.system(size: size)
+    /// Its size, for what is measured in it (the room of a badge's icon, `CardBadgeText`).
+    static let size: CGFloat = 14
     static let lineSpacing: CGFloat = 6
     /// Between two blocks. SwiftUI puts the line spacing only between the lines of one text, so the space between two
     /// blocks also takes the space that the reference has above and below each line.

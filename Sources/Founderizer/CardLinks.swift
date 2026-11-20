@@ -28,6 +28,13 @@ extension FleetStore {
         return book
     }
 
+    /// The symbol of each server of the Servers page's last reading by its name, for its badge in a request's words: a
+    /// Mac or a server rack (`ServerEntry.symbol`).
+    var cardServerSymbols: [String: String] {
+        let servers: ServerList? = reading("servers.list")
+        return Dictionary((servers?.servers ?? []).map { ($0.name, $0.symbol) }, uniquingKeysWith: { first, _ in first })
+    }
+
     /// A press of a name in a request's words: an agent's page, a server's page or a page of the app, in this window.
     /// Any other link, a repository's page on GitHub among them, opens as a link does.
     func openCardLink(_ url: URL) -> OpenURLAction.Result {

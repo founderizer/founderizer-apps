@@ -610,6 +610,7 @@ struct NeedRequestCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         // a name in its words opens its page in this window (`FleetStore.openCardLink`)
         .environment(\.openURL, OpenURLAction { store.openCardLink($0) })
+        .environment(\.cardServerSymbols, store.cardServerSymbols)
         .onChange(of: store.pending?.requestID, initial: true) { _, _ in
             if let request = store.answerOnItsWay(to: need) {
                 // **A card that he opened (Details, Show all) folds too when his answer goes**: the fold is where
@@ -698,10 +699,11 @@ struct NeedRequestCard: View {
                     } else {
                         // **An older long card folds to three lines** (the owner, 9 November 2026: "MUCH better so they
                         // are shorter"): the start of its reason, until Show all opens the rest.
-                        Text(names.link(MessageBlock.inline(need.why.components(separatedBy: .newlines)
-                            .joined(separator: " "))))
+                        CardBadgeText.text(MessageBlock.inline(need.why.components(separatedBy: .newlines)
+                            .joined(separator: " ")), names: names, size: ChatStyle.size)
                             .font(ChatStyle.font).lineSpacing(ChatStyle.lineSpacing).tint(FleetStyle.link)
                             .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                            .cardBadges()
                     }
                     // owner feature need_run: the block of its command has Run (the owner's "Yes, as drawn")
                     if !task.isEmpty {

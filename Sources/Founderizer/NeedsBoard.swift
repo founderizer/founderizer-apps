@@ -649,6 +649,7 @@ private struct NeedStep: View {
         .frame(maxWidth: SetupMetrics.cardsWidth)
         // a name in its words opens its page in this window (`FleetStore.openCardLink`)
         .environment(\.openURL, OpenURLAction { store.openCardLink($0) })
+        .environment(\.cardServerSymbols, store.cardServerSymbols)
         // What stands under the title takes the step's one size (`stepText`): the options, the form, the buttons.
         .environment(\.stepText, SetupMetrics.text)
         .environment(\.fleetButtonText, SetupMetrics.text)
@@ -690,9 +691,11 @@ private struct NeedStep: View {
                 .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
         } else {
             // The start of a long reason, on three lines, until Show all.
-            Text(names.link(MessageBlock.inline(need.why.components(separatedBy: .newlines).joined(separator: " "))))
+            CardBadgeText.text(MessageBlock.inline(need.why.components(separatedBy: .newlines).joined(separator: " ")),
+                               names: names, size: SetupMetrics.text)
                 .font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text).lineSpacing(5).tint(FleetStyle.link)
                 .lineLimit(3).multilineTextAlignment(centred ? .center : .leading).fixedSize(horizontal: false, vertical: true)
+                .cardBadges()
                 .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
         }
     }

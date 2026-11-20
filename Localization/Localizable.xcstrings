@@ -1916,6 +1916,7 @@
         }
       }
     },
+    "%@%@" : {},
     "%@'s AI provider" : {
       "localizations" : {
         "es" : {

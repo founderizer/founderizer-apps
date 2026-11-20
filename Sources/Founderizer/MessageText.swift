@@ -90,8 +90,11 @@ struct MessageText: View, Equatable {
         return result
     }
 
-    /// A block's words with the names of `names` as links, or as they are.
-    private func linked(_ words: AttributedString) -> AttributedString { names?.link(words) ?? words }
+    /// A block's words with the names of `names` as links, an agent and a server as a badge (`CardBadgeText`), or as
+    /// they are. The size is the words' own: a step's, the chat's (`ChatStyle.font`) or a form's (`FleetStyle.body`).
+    private func linked(_ words: AttributedString) -> Text {
+        CardBadgeText.text(words, names: names, size: step ? SetupMetrics.text : chat ? ChatStyle.size : FleetStyle.bodySize)
+    }
 
     var body: some View {
         let blocks = blocks, lines = chat ? ChatStyle.lineSpacing : 5
@@ -102,9 +105,9 @@ struct MessageText: View, Equatable {
                 Group {
                 switch block.kind {
                 case .paragraph:
-                    Text(linked(block.formatted)).lineSpacing(lines).selectableWords()
+                    linked(block.formatted).lineSpacing(lines).selectableWords()
                 case .heading:
-                    Text(linked(block.formatted))
+                    linked(block.formatted)
                         .font(step ? Font.system(size: SetupMetrics.text, weight: .semibold) : chat ? ChatStyle.heading : FormMetrics.title)
                         .selectableWords()
                         .padding(.top, chat ? 0 : 3)
@@ -113,12 +116,12 @@ struct MessageText: View, Equatable {
                     // after it, for each level.
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         Text(block.marker).selectableWords().frame(minWidth: 12, alignment: .trailing)
-                        Text(linked(block.formatted)).lineSpacing(lines).selectableWords()
+                        linked(block.formatted).lineSpacing(lines).selectableWords()
                     }.padding(.leading, 3 + CGFloat(block.level) * 21)
                 case .quote:
                     HStack(spacing: 10) {
                         Rectangle().fill(FleetStyle.muted.opacity(0.4)).frame(width: 2)
-                        Text(linked(block.formatted)).foregroundStyle(FleetStyle.muted).lineSpacing(lines).selectableWords()
+                        linked(block.formatted).foregroundStyle(FleetStyle.muted).lineSpacing(lines).selectableWords()
                     }
                 case .code: CodeBlock(text: block.text, font: chat ? ChatStyle.code : step && !script ? Self.stepCode : FormMetrics.code,
                                       spacing: chat ? 5 : 4, fill: card ? FleetStyle.canvas : FleetStyle.surface,
@@ -149,6 +152,8 @@ struct MessageText: View, Equatable {
                                         : selection, row: "block-\(index)"))
             }
         }.modifier(TextPointer(selection: selection))
+        // an agent and a server in a card's words are badges, which a press opens (`CardBadges`)
+        .cardBadges(names != nil)
         .font(step ? SetupMetrics.textFont : chat ? ChatStyle.font : FleetStyle.body)
             // A link's words in the link colour, which reads 4.5:1 and more (fix round 2): the accent drew them 3.4:1.
             .tint(FleetStyle.link)
