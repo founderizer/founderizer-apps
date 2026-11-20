@@ -11,10 +11,11 @@ import SwiftUI
 // iPhone app both link, so one agent wears one face on his two screens. Everything below is this app's own: the
 // view, the layers and the motion, which a phone does not use.
 
-/// **The four sizes of an agent's glyph**, and every glyph of the app stands at one of them. The owner, 27 October
-/// 2026, of two dot sizes side by side: "why are they different?!?! they should all be like the smaller ones" — and
-/// the glyphs came in ten sizes, 14 to 48 points, most of them under 6 points apart, so two lists side by side drew
-/// one agent at two sizes that read as a mistake. Four steps, each a clear step from the next.
+/// **The sizes of an agent's glyph**, and every glyph of the app stands at one of them. The owner, 27 October 2026, of
+/// two dot sizes side by side: "why are they different?!?! they should all be like the smaller ones" — and the
+/// glyphs came in ten sizes, 14 to 48 points, most of them under 6 points apart, so two lists side by side drew one
+/// agent at two sizes that read as a mistake. Four steps, each a clear step from the next, and a fifth on the two
+/// pages where the glyph makes itself (`making`).
 enum GlyphSize {
     /// Beside a name in a line of words: a select, a server's agents, a Tasks card, Knowledge, a conversation, agent
     /// messages, Secrets, a request's "From".
@@ -27,6 +28,12 @@ enum GlyphSize {
     /// The mark over a setup step, the agents to choose from in Add person, and the head of an agent's status panel
     /// (the lead's call on T-04).
     static let hero: CGFloat = 48
+    /// **The glyph that makes itself on "Adding <agent>" and "Setting up <agent>"** (`AgentGlyph.making`; the owner,
+    /// 20 November 2026, of those pages: "while you're at it, maybe in these sscreens we can make the icon larger to be
+    /// more important"): twice a setup step's mark, and its whole motion with it. It is the size of those pages also
+    /// while it stands still: under Reduce Motion, or on the chat's "Setting up" of an agent that this Mac does not
+    /// add.
+    static let making: CGFloat = 96
 }
 
 struct AgentGlyph: View {
@@ -50,11 +57,21 @@ struct AgentGlyph: View {
     var ground: Color?
     /// It makes its one jump when this turns true: the agent took his answer to its request (`NeedsBoard.took`).
     var jumps = false
+    /// **The moving words of "Adding <agent>" or "Setting up <agent>" under it, while the glyph makes itself**
+    /// (`MakingGlyph`; the owner's "Yes, build it" of 20 November 2026): the sequence of its making from the agent's
+    /// one clock, and the light of those words over it. Nil everywhere else. It stands still under Reduce Motion.
+    var making: String?
+    /// False: it makes itself only for an agent that this Mac adds (`glyphAdding`), or to go on with a making of its
+    /// agent that shows as it comes (the chat's own "Setting up", which also shows while the session of an agent that
+    /// ran for weeks starts again: the owner's words were "when creating an agent or setitng it up for the first
+    /// time"). Else it stands still.
+    var begins = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.glyphTeam) private var team
     @Environment(\.glyphPresence) private var presences
     @Environment(\.onCard) private var onCard
     @Environment(\.glyphDots) private var dots
+    @Environment(\.glyphAdding) private var adding
     @State private var pops = 0
     /// The moving layers stay until their motion is back at rest, so work never ends with a snap.
     @State private var layered = false
@@ -70,9 +87,13 @@ struct AgentGlyph: View {
         let state = presence ?? presences[name]
         let moving = moves && Self.moves(state, reduceMotion: reduceMotion)
         Group {
+            if let making, !reduceMotion, begins || adding.contains(name) || GlyphMakingClock.showing(name) {
+                let absent = state == .offline || state == .unknown
+                MakingGlyph(name: name, kind: look.kind, light: absent ? Self.absentLight : look.light,
+                            deep: absent ? Self.absentDeep : look.deep, words: making, size: size)
             // Layers that the window server moves. A SwiftUI timeline made the window update its whole view tree for
             // each frame: about 30% of a processor core for two glyphs of 18 points.
-            if moving || layered {
+            } else if moving || layered {
                 MovingGlyph(look: look, moving: moving, eased: !reduceMotion) { layered = false }.allowsHitTesting(false)
             } else {
                 figure(look, state)
@@ -85,10 +106,14 @@ struct AgentGlyph: View {
                 SpringKeyframe(1, duration: 0.45, spring: .bouncy)
             }
         }
-        // The small jump is for the pointer only: work starts from the glyph at rest, without a jump of its own.
-        .onHover { inside in if inside && !reduceMotion { pops += 1 } }
+        // The small jump is for the pointer only: work starts from the glyph at rest, without a jump of its own. A
+        // glyph that makes itself has a jump of its own in its sequence.
+        .onHover { inside in if inside && !reduceMotion && making == nil { pops += 1 } }
         .onChange(of: jumps) { _, now in if now && !reduceMotion { pops += 1 } }
         .onChange(of: moving, initial: true) { _, now in if now { layered = true } }
+        // **The glyph at rest that begins to make itself starts its agent's making again** (his press on Add agent);
+        // a glyph that comes making goes on from the agent's clock.
+        .onChange(of: making != nil) { was, now in if !was && now { GlyphMakingClock.restart(name) } }
         .accessibilityHidden(true)
         // The one dot of the app, 6 points at every size of the glyph, its centre on the glyph's lower right corner; it
         // neither jumps nor moves with the glyph, and its words are its hover and its VoiceOver label (`StatusDot`).
@@ -98,6 +123,10 @@ struct AgentGlyph: View {
                     .offset(x: StatusDot.side / 2, y: StatusDot.side / 2)
             }
         }
+        // **A glyph that makes itself keeps the mock-up's room under it**: the step's gap grows with the glyph, 36 pt
+        // under the pages' 96 as 18 under the mock-up's 48, so its rings stop at the title, as he saw them. Also when
+        // it stands still, so the page does not move between the two.
+        .padding(.bottom, making == nil ? 0 : max(0, SetupMetrics.gap * (size / GlyphSize.hero - 1)))
     }
 
     /// The grey of an agent that is not there: offline (an old reading keeps its look, `FleetAgent.presence`), its two steps for the glyph's
@@ -130,6 +159,9 @@ extension EnvironmentValues {
     /// False where a glyph is the subject of what shows and no status: **a setup step's mark draws no dot** (the lead's
     /// call of 29 October 2026, fix round 2; `SetupStep`), as the agent being set up is the step's subject.
     @Entry var glyphDots = true
+    /// The agents that this Mac adds, until their chat opens (`FleetStore.isAdding`): the chat's own "Setting up" makes
+    /// their glyph (`AgentGlyph.begins`). The window gives it.
+    @Entry var glyphAdding: Set<String> = []
 }
 
 /// The looks of the last team, so that each glyph does not find them again: also each badge of an agent in a

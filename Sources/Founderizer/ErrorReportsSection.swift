@@ -105,7 +105,7 @@ struct ErrorReportsRows: View {
     let turn: (Bool) -> Void
 
     var body: some View {
-        FormSection("Error reports") {
+        FormSection("Anonymous usage data") {
             FormRow("Help improve Founderizer", symbol: "ladybug",
                     detail: String(l10n: "Sends error codes, versions and counts to Founderizer. Never your work, names or keys."),
                     link: FormLink(String(l10n: "Privacy"), url: ErrorReport.privacyPage), warning: warning) {

@@ -787,7 +787,8 @@ struct ChatSettingUp: View {
     var body: some View {
         SetupPage {
             SetupStep(title: String(l10n: "Setting up \(agent.agentLabel)"), waits: true) {
-                AgentGlyph(name: agent, size: SetupMetrics.mark)
+                AgentGlyph(name: agent, size: GlyphSize.making, making: String(l10n: "Setting up \(agent.agentLabel)"),
+                           begins: false)
             }
         }
         .accessibilityIdentifier("chat-setting-up")

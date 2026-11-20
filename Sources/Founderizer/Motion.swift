@@ -33,6 +33,43 @@ enum FleetMotion {
 
     /// The system's Reduce Motion, for the windows that AppKit moves (a view reads its own environment).
     @MainActor static var reduced: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// **The making of an agent's glyph on "Adding <agent>" and "Setting up <agent>"** (`MakingGlyph`; the owner's
+    /// "Yes, build it" of 20 November 2026 to the moving mock-up of `founderizer-plans/agent-icon-making-2026-11-20`,
+    /// whose script is the reference for every time): seconds from the start of the agent's one clock
+    /// (`GlyphMakingClock`), each part as its start and its length. Parts 1 to 5 play one time, in 11 s; part 6 goes on
+    /// until the chat opens, which can be at any moment.
+    enum Making {
+        /// Part 1: the sketch's frame of lines fades in; the point of light pops, with its halo; the dotted circle
+        /// opens and turns until the frame goes; the four hairlines, one after the other.
+        static let frame = (at: 0.0, takes: 0.2), point = (at: 0.15, takes: 0.45), halo = (at: 0.2, takes: 0.4)
+        static let circle = (at: 0.3, takes: 0.9), turns = (at: 0.3, takes: 8.6)
+        static let hairlines = (at: 0.5, takes: 0.7, apart: 0.06)
+        /// Part 2: the construction lines, one after the other inside this time (for the flower's six lobes, one each
+        /// 0.34 s, 0.5 s each), each with a dot that pops a moment before it; then the last line, and the halo swells
+        /// once.
+        static let lines = (from: 1.5, to: 3.7, overlap: 0.16), dot = (before: 0.05, takes: 0.35)
+        static let lastLine = (at: 3.55, takes: 0.6), swell = (at: 4.05, takes: 0.55)
+        /// Part 3: the point goes to the outline's start and draws the outline; each line goes once the point is 80%
+        /// through the part that it builds, and a spark pops at each joint as the point passes it.
+        static let toOutline = (at: 4.6, takes: 0.4), pen = (at: 5.0, takes: 3.0)
+        static let lineGoes = (through: 0.8, takes: 0.45), spark = (before: 0.05, takes: 0.55, last: 0.7)
+        /// The bright end of the drawn line, which fades in and out at the pen's ends.
+        static let bright = (at: 5.0, takes: 3.15)
+        /// Part 4: the point goes to the inner mark's place, the frame of lines goes, the colour grows, and the drawn
+        /// line fades into it.
+        static let back = (at: 8.0, takes: 0.4), frameGoes = (at: 8.0, takes: 0.7)
+        static let colour = (at: 8.35, takes: 0.9), drawn = (at: 5.0, takes: 4.8)
+        /// Part 5: the halo goes, the point becomes the inner mark, and the whole glyph jumps once while a ring and six
+        /// rays go out.
+        static let haloGoes = (at: 9.4, takes: 0.3), core = (at: 9.55, takes: 0.55)
+        static let jump = (at: 10.0, takes: 0.55), ring = (at: 10.0, takes: 1.0)
+        static let rays = (at: 10.0, takes: 0.65, apart: 0.02)
+        /// Part 6, until the chat opens: the light of the moving words passes over the glyph too, a short light goes
+        /// round its outline, and a soft ring goes out every 5.6 s.
+        static let light = (at: 10.9, takes: 0.4), comet = (at: 11.3, takes: 0.5, round: 4.2)
+        static let pulse = (at: 13.4, every: 5.6)
+    }
 }
 
 /// **A window's fade, in this app's own steps**: the alpha of a card's or a menu's window from where it stands to its

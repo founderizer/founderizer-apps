@@ -163,6 +163,49 @@ private func glyphStar(_ points: Int, center: CGPoint, outer: CGFloat, inner: CG
     return path
 }
 
+/// **The numbers that a kind's outline is built from**, in parts of the glyph's half side and from its centre (angles
+/// in degrees, -90 is the top). The outline (`GlyphOutline`) and the sketch of its making (`GlyphSketch`) both read
+/// them, so the lines that the sketch draws are the lines that the outline is built on.
+public enum GlyphFigure: Sendable, Equatable {
+    /// `points` points on a circle of `outer`; each side bends in to `inner` (`curved`) or has a corner there.
+    case star(points: Int, outer: CGFloat, inner: CGFloat, curved: Bool, turn: CGFloat)
+    /// `count` round lobes of radius `lobe` on a circle of `distance`, about a round middle of `middle`, as one area.
+    case lobes(count: Int, lobe: CGFloat, distance: CGFloat, middle: CGFloat, turn: CGFloat)
+    /// A regular polygon whose corners stand on a circle of `radius` and are round with `corner`; its centre stands
+    /// `lower` under the glyph's.
+    case polygon(sides: Int, radius: CGFloat, corner: CGFloat, turn: CGFloat, lower: CGFloat)
+    /// A square of half side `half` with continuous corners of `corner`.
+    case squircle(half: CGFloat, corner: CGFloat)
+    case circle(radius: CGFloat)
+    /// A disc with a round bite out of it, each a centre from the glyph's centre and a radius.
+    case moon(body: CGVector, radius: CGFloat, bite: CGVector, biteRadius: CGFloat)
+    /// A drop: its tip `tip` over the centre, its round bottom of `radius` about a point `bottom` under the centre,
+    /// and its two sides, which leave the tip toward `shoulder` (mirrored on the left) and reach the bottom from `side`
+    /// over it.
+    case drop(tip: CGFloat, bottom: CGFloat, radius: CGFloat, shoulder: CGVector, side: CGFloat)
+}
+
+extension GlyphKind {
+    /// The numbers of this kind's outline.
+    public var figure: GlyphFigure {
+        switch self {
+        case .sparkle: .star(points: 4, outer: 1, inner: 0.12, curved: true, turn: -90)
+        case .clover: .lobes(count: 4, lobe: 0.46, distance: 0.5, middle: 0.3, turn: -45)
+        case .flower: .lobes(count: 6, lobe: 0.36, distance: 0.6, middle: 0.55, turn: -90)
+        case .burst: .star(points: 8, outer: 1, inner: 0.7, curved: false, turn: -90)
+        case .squircle: .squircle(half: 0.88, corner: 0.54)
+        case .hexagon: .polygon(sides: 6, radius: 0.99, corner: 0.16, turn: -90, lower: 0)
+        case .diamond: .polygon(sides: 4, radius: 1, corner: 0.18, turn: -90, lower: 0)
+        case .triangle: .polygon(sides: 3, radius: 1.02, corner: 0.2, turn: -90, lower: 0.14)
+        case .circle: .circle(radius: 0.92)
+        case .moon:
+            .moon(body: CGVector(dx: -0.04, dy: 0.03), radius: 0.93, bite: CGVector(dx: 0.38, dy: -0.26),
+                  biteRadius: 0.72)
+        case .drop: .drop(tip: 0.98, bottom: 0.27, radius: 0.7, shoulder: CGVector(dx: 0.16, dy: -0.6), side: 0.5)
+        }
+    }
+}
+
 /// The outline of a glyph in a square.
 public struct GlyphOutline: Shape {
     public let kind: GlyphKind
@@ -170,31 +213,32 @@ public struct GlyphOutline: Shape {
 
     public func path(in rect: CGRect) -> Path {
         let c = CGPoint(x: rect.midX, y: rect.midY), r = min(rect.width, rect.height) / 2
-        switch kind {
-        case .sparkle: return glyphStar(4, center: c, outer: r, inner: r * 0.12, curved: true, turn: -90)
-        case .clover: return glyphLobes(4, center: c, lobe: r * 0.46, distance: r * 0.5, middle: r * 0.3, turn: -45)
-        case .flower: return glyphLobes(6, center: c, lobe: r * 0.36, distance: r * 0.6, middle: r * 0.55, turn: -90)
-        case .burst: return glyphStar(8, center: c, outer: r, inner: r * 0.7, curved: false, turn: -90)
-        case .squircle:
-            return RoundedRectangle(cornerRadius: r * 0.54, style: .continuous)
-                .path(in: rect.insetBy(dx: rect.width / 2 - r * 0.88, dy: rect.height / 2 - r * 0.88))
-        case .hexagon: return glyphPolygon(6, center: c, radius: r * 0.99, corner: r * 0.16, turn: -90)
-        case .diamond: return glyphPolygon(4, center: c, radius: r, corner: r * 0.18, turn: -90)
-        case .triangle:
-            return glyphPolygon(3, center: CGPoint(x: c.x, y: c.y + r * 0.14), radius: r * 1.02, corner: r * 0.2, turn: -90)
-        case .circle: return Path(ellipseIn: glyphCircle(c, r * 0.92))
-        case .moon:
-            return Path(ellipseIn: glyphCircle(CGPoint(x: c.x - r * 0.04, y: c.y + r * 0.03), r * 0.93))
-                .subtracting(Path(ellipseIn: glyphCircle(CGPoint(x: c.x + r * 0.38, y: c.y - r * 0.26), r * 0.72)))
-        case .drop:
-            let top = CGPoint(x: c.x, y: c.y - r * 0.98), o = CGPoint(x: c.x, y: c.y + r * 0.27), radius = r * 0.7
+        switch kind.figure {
+        case .star(let points, let outer, let inner, let curved, let turn):
+            return glyphStar(points, center: c, outer: r * outer, inner: r * inner, curved: curved, turn: turn)
+        case .lobes(let count, let lobe, let distance, let middle, let turn):
+            return glyphLobes(count, center: c, lobe: r * lobe, distance: r * distance, middle: r * middle, turn: turn)
+        case .squircle(let half, let corner):
+            return RoundedRectangle(cornerRadius: r * corner, style: .continuous)
+                .path(in: rect.insetBy(dx: rect.width / 2 - r * half, dy: rect.height / 2 - r * half))
+        case .polygon(let sides, let radius, let corner, let turn, let lower):
+            return glyphPolygon(sides, center: CGPoint(x: c.x, y: c.y + r * lower), radius: r * radius,
+                                corner: r * corner, turn: turn)
+        case .circle(let radius): return Path(ellipseIn: glyphCircle(c, r * radius))
+        case .moon(let body, let radius, let bite, let biteRadius):
+            return Path(ellipseIn: glyphCircle(CGPoint(x: c.x + r * body.dx, y: c.y + r * body.dy), r * radius))
+                .subtracting(Path(ellipseIn: glyphCircle(CGPoint(x: c.x + r * bite.dx, y: c.y + r * bite.dy),
+                                                         r * biteRadius)))
+        case .drop(let tip, let bottom, let radius, let shoulder, let side):
+            let top = CGPoint(x: c.x, y: c.y - r * tip), o = CGPoint(x: c.x, y: c.y + r * bottom), round = r * radius
             var path = Path()
             path.move(to: top)
-            path.addCurve(to: CGPoint(x: o.x + radius, y: o.y), control1: CGPoint(x: c.x + r * 0.16, y: c.y - r * 0.6),
-                          control2: CGPoint(x: o.x + radius, y: o.y - r * 0.5))
-            path.addArc(center: o, radius: radius, startAngle: .zero, endAngle: .degrees(180), clockwise: false)
-            path.addCurve(to: top, control1: CGPoint(x: o.x - radius, y: o.y - r * 0.5),
-                          control2: CGPoint(x: c.x - r * 0.16, y: c.y - r * 0.6))
+            path.addCurve(to: CGPoint(x: o.x + round, y: o.y),
+                          control1: CGPoint(x: c.x + r * shoulder.dx, y: c.y + r * shoulder.dy),
+                          control2: CGPoint(x: o.x + round, y: o.y - r * side))
+            path.addArc(center: o, radius: round, startAngle: .zero, endAngle: .degrees(180), clockwise: false)
+            path.addCurve(to: top, control1: CGPoint(x: o.x - round, y: o.y - r * side),
+                          control2: CGPoint(x: c.x - r * shoulder.dx, y: c.y + r * shoulder.dy))
             path.closeSubpath()
             return path
         }

@@ -264,7 +264,9 @@ struct AgentSetupWizard: View {
                 if !readingsCurrent {
                     if store.addedAgent == agent {
                         // **"Adding Juno", as Add agent said it, until the page can draw** (fix round 3, item 12).
-                        SetupStep(title: String(l10n: "Adding \(name)"), waits: true) { AgentGlyph(name: agent, size: SetupMetrics.mark) }
+                        SetupStep(title: String(l10n: "Adding \(name)"), waits: true) {
+                            AgentGlyph(name: agent, size: GlyphSize.making, making: String(l10n: "Adding \(name)"))
+                        }
                     } else {
                         // Nothing for a second: the page it opens on comes with the first readings.
                         Held(since: began) { settingUp }
@@ -332,7 +334,9 @@ struct AgentSetupWizard: View {
     /// loads, the machine check and the activation, and then the chat's own "Setting up" (`ChatSettingUp`), which
     /// looks the same, so the page does not change while the machine works.
     private var settingUp: some View {
-        SetupStep(title: String(l10n: "Setting up \(name)"), waits: true) { AgentGlyph(name: agent, size: SetupMetrics.mark) }
+        SetupStep(title: String(l10n: "Setting up \(name)"), waits: true) {
+            AgentGlyph(name: agent, size: GlyphSize.making, making: String(l10n: "Setting up \(name)"))
+        }
     }
 
     // MARK: its name and the fleet's servers
@@ -347,7 +351,7 @@ struct AgentSetupWizard: View {
             // No list of the hub's servers yet: the moving title, and after eight reads with none, why, under it.
             // The reads go on, and the page goes on by itself with the first list.
             SetupStep(title: String(l10n: "Setting up \(name)"), waits: true) {
-                AgentGlyph(name: agent, size: SetupMetrics.mark)
+                AgentGlyph(name: agent, size: GlyphSize.making, making: String(l10n: "Setting up \(name)"))
             } content: {
                 if unreadReads > Self.unreadReadsMost {
                     SetupWarning(String(l10n: "Founderizer cannot read \(name)'s server now."))

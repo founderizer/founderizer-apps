@@ -9,18 +9,23 @@ import SwiftUI
 /// one weight, and one line under them that says where to change it, with the privacy page. No card carries the check
 /// mark before the first answer on this Mac. A press on a card is the way on.
 struct FirstRunReportsPage: View {
-    /// The card with the check mark: true for "Send error reports", false for "Don't send", nil for none.
+    /// The card with the check mark: true for "Send anonymous usage data", false for "Don't send", nil for none.
     let marked: Bool?
     let choose: (Bool) -> Void
 
+    /// **The row of the two cards is wider than the setup's 540 pt, so that each card's words stand on one line**
+    /// (the owner, 20 November 2026: "not 'Error reports' say 'Annonymous usage data' / on the mac too", then his pick
+    /// "Widen, one line"): a card is 343 pt, and its words have 223 pt beside its symbol and its check, where "Send
+    /// anonymous usage data" takes 202 pt and "Enviar datos de uso anónimos" 209 pt at 15 pt medium.
+    static let rowWidth: CGFloat = 700
+
     var body: some View {
-        // The width of a row of cards, so that "Send error reports" stands on one line in English.
-        SetupStep(title: String(l10n: "Help improve Founderizer"), width: SetupMetrics.cardsWidth,
+        SetupStep(title: String(l10n: "Help improve Founderizer"), width: Self.rowWidth,
                   detail: String(l10n: "Sends error codes, versions and counts to Founderizer. Never your work, names or keys.")) {
             IconTile(symbol: "ladybug", size: SetupMetrics.mark).accessibilityHidden(true)
         } content: {
             HStack(alignment: .top, spacing: 14) {
-                card(String(l10n: "Send error reports"), symbol: "paperplane", send: true)
+                card(String(l10n: "Send anonymous usage data"), symbol: "paperplane", send: true)
                 card(String(l10n: "Don't send"), symbol: "xmark", send: false)
             }
             // Both cards at the height of the taller one, where a language wraps one of them.

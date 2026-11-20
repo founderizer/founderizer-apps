@@ -160,6 +160,7 @@ struct FleetView: View {
         // The glyphs of the agents come from the hub's list of agents, in its order.
         .environment(\.glyphTeam, store.state?.agents.map(\.name) ?? [])
         .environment(\.glyphPresence, glyphPresences)
+        .environment(\.glyphAdding, Set((store.state?.agents ?? []).map(\.name).filter(store.isAdding)))
         .ignoresSafeArea(.container, edges: .top)
         .onAppear { store.notifications.showWindow = { openWindow(id: "fleet") } }
         .onAppear { store.openReportWindow = { openWindow(id: FounderizerApp.reportWindow) } }

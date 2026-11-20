@@ -4669,6 +4669,16 @@
         }
       }
     },
+    "Anonymous usage data" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datos de uso anónimos"
+          }
+        }
+      }
+    },
     "Another agent" : {
       "localizations" : {
         "es" : {
@@ -7975,16 +7985,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Escribe el usuario con el que te conectas a ese servidor: root u otro usuario que pueda convertirse en root."
-          }
-        }
-      }
-    },
-    "Error reports" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Informes de errores"
           }
         }
       }
@@ -18089,6 +18089,16 @@
         }
       }
     },
+    "Send anonymous usage data" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviar datos de uso anónimos"
+          }
+        }
+      }
+    },
     "Send answer" : {
       "localizations" : {
         "es" : {
@@ -18105,16 +18115,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enviar la corrección"
-          }
-        }
-      }
-    },
-    "Send error reports" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enviar informes de errores"
           }
         }
       }

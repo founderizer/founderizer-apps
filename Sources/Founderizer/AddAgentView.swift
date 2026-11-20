@@ -359,7 +359,9 @@ struct AddAgentView: View {
         } step: {
             SetupStep(title: adding ? String(l10n: "Adding \(model.name)") : String(l10n: "Add agent"), waits: adding) {
                 // The glyph it will wear: its name, at the end of the hub's list.
-                AgentGlyph(name: model.key, size: SetupMetrics.mark).environment(\.glyphTeam, team + [model.key])
+                AgentGlyph(name: model.key, size: adding ? GlyphSize.making : SetupMetrics.mark,
+                           making: adding ? String(l10n: "Adding \(model.name)") : nil)
+                    .environment(\.glyphTeam, team + [model.key])
             } content: {
                 // **While it adds and hands over, the moving title alone** (fix round 3b): the server it took was busy
                 // with it, and "No free server." with a white Add server stood under "Adding Juno" for a frame.

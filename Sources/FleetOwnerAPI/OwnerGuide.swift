@@ -201,8 +201,8 @@ public enum OwnerGuide {
         - **"Paste this in ..."**. This is the page that gave the owner your prompt. The owner presses "Back" and then
           "Set it up yourself".
         - **"Help improve Founderizer"**. This is the first page of the setup. The owner chooses whether the app sends
-          error reports to Founderizer: error codes, versions and counts, never their work, names or keys. "Send error
-          reports" or "Don't send" is the owner's own choice, and a press on a card opens the next page, so you press
+          anonymous usage data to Founderizer: error codes, versions and counts, never their work, names or keys. "Send
+          anonymous usage data" or "Don't send" is the owner's own choice, and a press on a card opens the next page, so you press
           nothing on this page and do not choose for them. Say what the page's line says when they ask. They can
           change it later in Settings, under Help.
         - **"Name your manager"**. This is the page after it. The manager is the fleet's first agent: it
