@@ -46,6 +46,7 @@ enum RefusalWords {
         let megabytes = names["megabytes"]?.written, version = names["version"]?.written, day = names["day"]?.written
         let days = names["days"]?.written, newest = names["newest"]?.written, reason = names["reason"]?.written
         let most = names["most"]?.written
+        let account = names["account"]?.written         // a Drive folder's account (UI-API.md 1.255)
         switch code {
         case "hub_changed":
             return say("hub generation changed; refresh state")
@@ -157,6 +158,21 @@ enum RefusalWords {
             return say("Google refused: \(reason). Start Connect again.")
         case "google_revoked_during":
             return say("A Disconnect of this account came during this Connect, so nothing was connected. Start Connect again.")
+        // **A Drive folder of one account for some agents** (UI-API.md 1.255; the owner's "Yes, ship them" of 20 November
+        // 2026 to their Spanish).
+        case "drive_folder_link":
+            return say("That is not the link of a Drive folder.")
+        case "drive_folder_account":
+            guard let account else { return nil }
+            return say("\(account) is not connected for Google Drive now. Connect it again.")
+        case "drive_folder_unseen":
+            guard let account else { return nil }
+            return say("\(account) cannot open this folder. Share it with \(account), or connect the account that has it.")
+        case "drive_folder_file":
+            return say("That is the link of a file, not of a folder.")
+        case "drive_folder_google":
+            guard let reason else { return nil }
+            return say("Google did not answer about this folder: \(reason). Try again.")
         // **The MCP server form** (UI-API.md 1.187): a package at a registry, the MCP Registry, and a server's OAuth.
         case "package_unknown":
             guard let registry, let name else { return nil }

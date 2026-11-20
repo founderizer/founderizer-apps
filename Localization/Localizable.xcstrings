@@ -394,6 +394,16 @@
         }
       }
     },
+    "%@ cannot open this folder. Share it with %@, or connect the account that has it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no puede abrir esta carpeta. Compártela con %@ o conecta la cuenta que la tiene."
+          }
+        }
+      }
+    },
     "%@ cannot switch." : {
       "localizations" : {
         "es" : {
@@ -1100,6 +1110,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ no responde. Tu mensaje se guarda y le llegará cuando vuelva."
+          }
+        }
+      }
+    },
+    "%@ is not connected for Google Drive now. Connect it again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no está conectada a Google Drive ahora. Conéctala de nuevo."
           }
         }
       }
@@ -9695,6 +9715,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Subiendo…"
+          }
+        }
+      }
+    },
+    "Google did not answer about this folder: %@. Try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google no respondió sobre esta carpeta: %@. Inténtalo de nuevo."
           }
         }
       }
@@ -19905,6 +19935,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Eso no es la configuración de un servidor."
+          }
+        }
+      }
+    },
+    "That is not the link of a Drive folder." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ese no es el enlace de una carpeta de Drive."
+          }
+        }
+      }
+    },
+    "That is the link of a file, not of a folder." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ese es el enlace de un archivo, no de una carpeta."
           }
         }
       }

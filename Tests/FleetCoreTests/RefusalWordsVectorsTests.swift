@@ -16,15 +16,12 @@ struct RefusalWordsVectorsTests {
     /// hub's code is already in the vectors (COORDINATION.md rule 8), the app shows the hub's English for it, as for any
     /// code that it does not know, and the code is named here so that the test that holds every other code to a case
     /// stays green meanwhile. A code in this list that has a case is a fault: the case takes it out of the list.
-    /// Waiting now: five (below). The 29 that waited (`time_passed`, the seven of Google's Connect and Disconnect, the twelve of
+    /// Waiting now: none. The 29 that waited (`time_passed`, the seven of Google's Connect and Disconnect, the twelve of
     /// the MCP form, `server_name_kept`, the two of the sealed Google file and the six of Telegram) have their cases and
     /// their Spanish since the owner's "Yes, all 29" of 19 November 2026, so the test below holds each of them to the
     /// hub's vector and to the catalog. A new code of the hub is named here until his yes to the Spanish of its slice.
-    /// Waiting since 20 November 2026: the five of a Drive folder (the lane "Drive folders"), until his yes to their
-    /// Spanish.
-    private static let waiting: Set<String> = [
-        "drive_folder_link", "drive_folder_account", "drive_folder_unseen", "drive_folder_file", "drive_folder_google",
-    ]
+    /// The five of a Drive folder waited from 20 November 2026 until his "Yes, ship them" of the same day.
+    private static let waiting: Set<String> = []
 
     /// The codes that have a case: every code of the hub's table that is not waiting.
     private static func known(_ table: RefusalVectors.Table) -> [String] {
@@ -141,8 +138,12 @@ struct RefusalWordsVectorsTests {
                 for name in table.holes[code] ?? [] { key = key.replacingOccurrences(of: "{\(name)}", with: "%@") }
                 var spanish = try #require(catalog[key], "no Spanish for \(code): \(key)")
                 for name in table.holes[code] ?? [] {
-                    let at = try #require(spanish.range(of: "%@"), "\(code): the Spanish has no place for \(name)")
-                    spanish.replaceSubrange(at, with: "sample-\(name)")
+                    // A name can stand more than once in a sentence (drive_folder_unseen names its account twice).
+                    let uses = max(1, (table.codes[code] ?? "").components(separatedBy: "{\(name)}").count - 1)
+                    for _ in 0..<uses {
+                        let at = try #require(spanish.range(of: "%@"), "\(code): the Spanish has no place for \(name)")
+                        spanish.replaceSubrange(at, with: "sample-\(name)")
+                    }
                 }
                 #expect(!spanish.contains("%"), "\(code): \(spanish)")
                 #expect(refusal.words == spanish, "\(code)")
