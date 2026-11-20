@@ -184,11 +184,17 @@ public struct Transfer: Sendable, Equatable {
     /// that is no file keeps `call`.
     public static let state = Transfer(limit: 64 * 1024 * 1024, file: false)
     static let stateRoute = "/ui/state"
-    /// The read of the state that the program makes for itself (the generation, the features, `fleet_overview`),
-    /// `owner_mcp.py` STATE_READ: with the window of the tasks (owner API 1.254), so that it does not grow with the
+    /// The read of the state that the program makes for itself where it reads the state's lists (`fleet_overview`,
+    /// and the item before an answer with a choice: `state()`), `owner_mcp.py` STATE_READ: with the window of the
+    /// tasks (owner API 1.254), so that it does not grow with the
     /// fleet's history. A hub from before 1.254 reads no such word and gives the whole answer. `fleet_read` with the
     /// page `state` stays the whole snapshot.
     static let stateRead = stateRoute + "?tasks=window"
+    /// The read for the hub's generation and its features alone, `owner_mcp.py` STATE_HEAD (owner API 1.256): the head
+    /// of the state, which holds `db`, `ui_features` and no list, so a process of one call reads no task before that
+    /// call. A hub from before 1.256 does not know `head` and answers the state: with the window of `stateRead` from
+    /// 1.254 on, and whole before. Each of those answers holds both values too.
+    static let stateHead = stateRoute + "?head=1&tasks=window"
     /// `hub.py` ATTACH_MAX: the largest file that the owner attaches.
     public static let attachment = Transfer(limit: 25 * 1024 * 1024, file: true)
     /// `hub.py` BACKUP_MAX: the largest copy that the hub serves.
@@ -526,15 +532,22 @@ public final class OwnerHub: @unchecked Sendable {
     /// database answers 409 to the old one, and this reads it again once, as the app does on that refusal.
     @discardableResult
     public func generation(fresh: Bool = false) throws -> String {
-        if fresh || generationValue == nil { _ = try state() }
+        if fresh || generationValue == nil { _ = try read(Transfer.stateHead) }
         return generationValue!
     }
 
-    /// **One read of the hub's state** (with the window of its tasks, `Transfer.stateRead`): the read that `generation` makes, which keeps the generation and the
-    /// features of its answer, and gives that answer too. `answer_needs_you` reads an item of it before a choice of 0
-    /// or 1 (`AnswerDoor.press`), so that the command after it, if one goes, makes no second read.
+    /// **One read of the hub's state, with its lists** (the window of its tasks, `Transfer.stateRead`): it keeps the
+    /// generation and the features of its answer, as the read of `generation` does, and gives that answer too.
+    /// `answer_needs_you` reads an item of it before a choice of 0 or 1 (`AnswerDoor.press`), so that the command
+    /// after it, if one goes, makes no second read.
     func state() throws -> JSONValue {
-        let answer = try call("GET", Transfer.stateRead)
+        try read(Transfer.stateRead)
+    }
+
+    /// One read of the state by `path` (`stateHead` for the generation, `stateRead` for the lists): the generation and
+    /// the features of its answer are kept, whichever of the two it is.
+    private func read(_ path: String) throws -> JSONValue {
+        let answer = try call("GET", path)
         guard answer.status == 200, let db = answer.data?["db"], db.truthy else {
             throw refusal(answer, "a read of the fleet")
         }
@@ -550,7 +563,7 @@ public final class OwnerHub: @unchecked Sendable {
 
     /// The hub's features, read fresh when `fresh` or when none were read yet.
     func hubFeatures(fresh: Bool) throws -> [String] {
-        if fresh || features == nil { try generation(fresh: true) }     // one read of /ui/state gives both
+        if fresh || features == nil { try generation(fresh: true) }     // one read of the state's head gives both
         return features ?? []
     }
 
