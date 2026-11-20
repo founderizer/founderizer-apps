@@ -910,7 +910,7 @@ struct TaskResult: View {
                 .opacity(hovered ? 1 : 0).allowsHitTesting(hovered).accessibilityHidden(!hovered)
             }
             VStack(alignment: .leading, spacing: 9) {
-                MessageText(text: shown, chat: true).equatable()
+                MessageText(text: shown, chat: true, fold: folded ? Self.foldedHeight : nil).equatable()
                     .frame(maxHeight: folded ? Self.foldedHeight : nil, alignment: .top)
                     .mask {
                         VStack(spacing: 0) {

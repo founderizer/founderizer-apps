@@ -109,9 +109,7 @@ public final class OwnerMCP: @unchecked Sendable {
             })]))
         case "tools/call":
             let name = params["name"]?.pythonText ?? "None"
-            let (text, isError) = tools.call(name, params["arguments"])
-            return result(.object(["content": .array([.object(["type": .string("text"), "text": .string(text)])]),
-                                   "isError": .bool(isError)]))
+            return result(tools.callResult(name, params["arguments"]))
         default:
             if let key = Self.empty[method] { return result(.object([key: .array([])])) }
             return .object(["jsonrpc": .string("2.0"), "id": id,

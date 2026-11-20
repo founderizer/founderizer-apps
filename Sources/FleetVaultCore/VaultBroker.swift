@@ -52,9 +52,12 @@ public actor VaultBroker {
             if request.operation == .cancel { return cancel(data, uid: uid) }
             if request.operation == .chrome {
                 // One harmless script, in the setup of a Mac: macOS asks its question for this app now, with a person
-                // there, because a later sign-in has nobody to answer it.
-                let answered = await VaultBrowser.scriptable()
-                return try JSONSerialization.data(withJSONObject: ["ok": answered, "v": 2]) + Data([10])
+                // there, because a later sign-in has nobody to answer it. `quiet`: the Mac's reading, which shows no
+                // question. Either way the answer names what stops a sign-in now (`cause`; the spec, section D).
+                let read = await VaultBrowser.chromeCause(quiet: request.quiet)
+                var answer: [String: Any] = ["ok": read.cause == "ok", "v": 2, "cause": read.cause]
+                if let number = read.number { answer["number"] = number }       // an `error` with Chrome's or macOS's number
+                return try JSONSerialization.data(withJSONObject: answer) + Data([10])
             }
             // This request's caller is a local value: a request that overlaps at an await never sees it.
             let caller = Self.caller(for: request, configuration: configuration)
@@ -147,6 +150,10 @@ public actor VaultBroker {
                 return encoded + Data([10])
             }
             return try JSONSerialization.data(withJSONObject: response) + Data([10])
+        } catch let chrome as VaultChromeError {
+            // A number of Chrome or of macOS that has no case: the words and the number, never the error's message.
+            return try! JSONSerialization.data(withJSONObject: ["ok": false, "v": 2, "error": VaultFailure.chromeError.rawValue,
+                                                               "number": chrome.number]) + Data([10])
         } catch {
             let message = (error as? VaultFailure)?.rawValue ?? "The vault could not complete this job."
             return try! JSONSerialization.data(withJSONObject: ["ok": false, "v": 2, "error": message]) + Data([10])
@@ -256,7 +263,9 @@ public actor VaultBroker {
         var captured: String?
         if made.kind == .capture, await writer.record(requestID: made.requestID) == nil {
             guard made.readOrigin != nil, let selector = made.selector else { return refused(.hub) }
-            do { captured = try await read(made.source ?? made.url, selector) } catch { return refused((error as? VaultFailure) ?? .browser) }
+            do { captured = try await read(made.source ?? made.url, selector) } catch {
+                return refused((error as? VaultFailure) ?? (error is VaultChromeError ? .chromeError : .browser))
+            }
         }
         let record: VaultWriteRecord
         do {

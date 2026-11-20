@@ -2,6 +2,13 @@ import Foundation
 import CoreFoundation
 import CryptoKit
 
+/// **An AppleScript error that has no case of its own**: its number, and nothing else of the error (its message can
+/// hold the script, and so a password). A sign-in's answer gives it beside `VaultFailure.chromeError`'s words.
+public struct VaultChromeError: Error, Equatable, Sendable {
+    public let number: Int
+    public init(number: Int) { self.number = number }
+}
+
 public enum VaultFailure: String, Error, Sendable, CaseIterable {
     case request = "The vault request is not supported."
     case configuration = "The vault configuration is not valid or is not protected."
@@ -17,6 +24,25 @@ public enum VaultFailure: String, Error, Sendable, CaseIterable {
     case modelProvider = "This login is for a model provider's own site, and Fleet uses and makes none: the owner signs in to their own account in their own session."
     case handover = "The handover could not be opened or locked."
     case browser = "Chrome did not confirm the sign-in. Check the page and its permissions."
+    // **A sign-in names its cause** (`~/dev/founderizer-plans/vault-signin-causes-spec.md`, 20 November 2026): each try
+    // on the fleet's Mac Studio ended in the one sentence above, and nothing said that Chrome's "Allow JavaScript from
+    // Apple Events" had no tick. `browser` stays for a capture's own refusals. Of an AppleScript error only its number
+    // is read, never its message, which can hold the script and so the password (`VaultBrowser.failure`).
+    case vaultStarting = "This Mac's vault still starts. Ask again in a minute."
+    case chromeNotRunning = "Chrome does not run on this Mac. Open it, then ask again."
+    case chromeNotAsked = "macOS now asks on this Mac's screen if Fleet Vault may control Chrome. A person clicks Allow."
+    case chromeRefused = "macOS does not let Fleet Vault control Chrome. A person allows it: System Settings, Privacy & Security, Automation."
+    case chromeJavaScriptOff = "Chrome's menu item View, Developer, Allow JavaScript from Apple Events has no tick. A person ticks it."
+    // Another number of Chrome or of macOS (a timeout, -1712): a sign-in's answer adds the number (`VaultChromeError`).
+    case chromeError = "Chrome gave the vault no answer, or an unknown error."
+    case signinNoTab = "No Chrome tab shows the login's site. Open its sign-in page."
+    case signinNoForm = "The tab shows no sign-in field that a person can see. Open the sign-in page."
+    case signinWrongAction = "The sign-in form sends to another site. Nothing was typed."
+    case signinBadField = "The page's style can read the password field. Nothing was typed."
+    case signinMoved = "The form changed while the vault typed. The vault sent nothing."
+    case signinUnknown = "The vault typed the login and cannot tell if the site took it. Look at the tab."
+    case signinRefused = "The site asked for the password again. Look at the tab: the saved password can be wrong."
+    case signinCode = "The site asks for a code that the vault cannot give. A person gives it, or the owner saves the authenticator seed."
     case socket = "The vault connection could not start."
     case unscopedCopy = "This sealed copy does not say where it comes from, so it is not used in a project."
     case relabelledCopy = "This sealed copy was made for another handover, so it is not used."
@@ -110,6 +136,14 @@ public struct VaultRequest: Equatable, Sendable {
     public let caller: VaultCaller?
     /// Only for `cancel`: the task attempt whose requests end. A `cancel` names no job.
     let scope: VaultCallScope?
+    /// Only for `chrome`: the Mac's reading, with nobody there to answer macOS (`"quiet": true`): no question of macOS.
+    public let quiet: Bool
+
+    /// A JSON `true` and nothing else: a number 1 also reads as true in Swift (`as? Bool`).
+    static func isTrue(_ value: Any?) -> Bool {
+        guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { return false }
+        return number.boolValue
+    }
 
     public init(data: Data) throws {
         guard data.count <= 8192,
@@ -125,7 +159,8 @@ public struct VaultRequest: Equatable, Sendable {
         let callerFields: Set<String> = ["agent", "agent_key"], keys = Set(object.keys)
         let expected: Set<String>
         switch operation {
-        case .status, .read, .chrome: expected = ["v", "op"]
+        case .chrome: expected = keys.contains("quiet") ? ["v", "op", "quiet"] : ["v", "op"]
+        case .status, .read: expected = ["v", "op"]
         case .cancel: expected = ["v", "op", "db", "task", "attempt"]
         default: expected = ["v", "op", "job"]
         }
@@ -146,7 +181,9 @@ public struct VaultRequest: Equatable, Sendable {
                   let named = VaultCallScope(db: db, task: task, attempt: attempt, caller: caller) else { throw VaultFailure.request }
             scope = named
         }
-        self.operation = operation; self.job = job; self.caller = caller; self.scope = scope
+        // `quiet` is true or absent: a reading that asks with false is no request of the Mac's.
+        guard !keys.contains("quiet") || Self.isTrue(object["quiet"]) else { throw VaultFailure.request }
+        self.operation = operation; self.job = job; self.caller = caller; self.scope = scope; quiet = keys.contains("quiet")
     }
 
     static func integer(_ value: Any?) -> Int? {

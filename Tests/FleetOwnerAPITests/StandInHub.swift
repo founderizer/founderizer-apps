@@ -231,11 +231,11 @@ enum Fixture {
     /// The tools on `hub`, or on the address of the `setting`. Nothing here reads the app's real setting.
     static func tools(_ hub: StandInHub?, home: URL, setting: String?? = nil, ownBuild: Int? = nil,
                       started: @escaping @Sendable () -> Int? = { nil }, table: OwnerTable = Fixture.table,
-                      now: @escaping @Sendable () -> Date = { Date() }) -> OwnerTools {
+                      now: @escaping @Sendable () -> Date = { Date() }, relay: ProgramRelay? = nil) -> OwnerTools {
         let address: String? = setting ?? hub?.base
         let context = OwnerContext(hubSetting: { address }, transport: transport(), home: home,
                                    userAgent: "founderizer-cli/test", ownBuild: ownBuild, startedBuild: started,
-                                   clientLabel: { "founderizer-cli/1/test" }, now: now)
+                                   clientLabel: { "founderizer-cli/1/test" }, now: now, relay: relay)
         return OwnerTools(table: table, context: context)
     }
 

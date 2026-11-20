@@ -18,6 +18,14 @@ let ownBuild = bundle.flatMap(ProgramPlace.build(of:))
 // updated (`OwnerTools.call`).
 let started = ProgramPlace.startPath(argument: CommandLine.arguments.first ?? "",
                                      directory: FileManager.default.currentDirectoryPath, path: environment["PATH"])
+// After an update, the program behind that path takes each call, as a new session would start it (`ProgramRelay`),
+// when its running process meets the requirement that this program reads now, while its own file is still in place.
+let childRequirement = ProgramRelay.childRequirement()
+let relay = started.map { path in
+    ProgramRelay(path: path, build: { ProgramPlace.build(behind: path) }, launch: {
+        ProgramRelay.process(path: path, accepts: { ProgramRelay.meets($0, requirement: childRequirement) })
+    }, version: version)
+}
 
 /// The hub's address: read only, from the app's own setting (`hubAddress` of `com.founderizer.app`), at each call, so a
 /// fleet that the app sets up during a session counts at once. The program keeps no file with the address.
@@ -40,7 +48,7 @@ let status = OwnerCLI.run(
                           // The link to the running app of this program's own bundle, for the setup tools.
                           appLink: AppLink.mac(bundle: bundle),
                           // Read only by `write` with from stdin: in the MCP form it is the protocol.
-                          standardInput: .process),
+                          standardInput: .process, relay: relay),
     version: version,
     input: { readLine(strippingNewline: true) },
     output: { line in out.write(Data((line + "\n").utf8)) },

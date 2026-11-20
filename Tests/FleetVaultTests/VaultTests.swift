@@ -7,6 +7,9 @@ struct VaultTests {
     @Test func onlyFixedOperationsAndJobIDsAreAccepted() throws {
         #expect(try VaultRequest(data: Data(#"{"v":2,"op":"status"}"#.utf8)).job == nil)
         #expect(try VaultRequest(data: Data(#"{"v":2,"op":"chrome"}"#.utf8)).job == nil)
+        // The Mac's reading asks quietly (no question of macOS); only `chrome` takes `quiet`, and only as true.
+        #expect(try VaultRequest(data: Data(#"{"v":2,"op":"chrome","quiet":true}"#.utf8)).quiet)
+        #expect(try !VaultRequest(data: Data(#"{"v":2,"op":"chrome"}"#.utf8)).quiet)
         #expect(try VaultRequest(data: Data(#"{"v":2,"op":"signin","job":12}"#.utf8)).job == 12)
         #expect(try VaultRequest(data: Data(#"{"v":2,"op":"probe","job":12}"#.utf8)).operation == .probe)
         for input in [
@@ -19,6 +22,9 @@ struct VaultTests {
             #"{"v":2,"op":"handover","job":1,"recipient":"override"}"#,
             #"{"v":2,"op":"status","job":1}"#,
             #"{"v":2,"op":"chrome","job":1}"#,
+            #"{"v":2,"op":"chrome","quiet":false}"#,
+            #"{"v":2,"op":"chrome","quiet":1}"#,
+            #"{"v":2,"op":"status","quiet":true}"#,
             #"{"v":2,"op":"probe","job":1,"logins":["bws://override"]}"#,
             #"{"v":1,"op":"status"}"#
         ] { #expect(throws: VaultFailure.self) { try VaultRequest(data: Data(input.utf8)) } }
@@ -99,7 +105,7 @@ struct VaultTests {
     /// launch, which gives the main thread to AppleScript, waited for it. The worker's socket opens before that launch,
     /// so browser work can come first: it is refused at once, and it does not run when the main thread comes free.
     @Test func browserWorkBeforeTheLaunchEndsIsRefusedAtOnce() async {
-        await #expect(throws: VaultFailure.browser) {
+        await #expect(throws: VaultFailure.vaultStarting) {           // its own words: the vault still starts
             try await VaultBrowser.onMainThread { () -> Bool in
                 Issue.record("Browser work ran before the launch ended.")
                 return true

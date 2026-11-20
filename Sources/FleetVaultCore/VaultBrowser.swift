@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 import CryptoKit
 import Foundation
 import os
@@ -16,7 +17,7 @@ public enum VaultBrowser {
 
     /// The only way of the browser's work to the main thread: refused at once before the launch ended.
     static func onMainThread<T: Sendable>(_ work: @MainActor @Sendable () throws -> T) async throws -> T {
-        guard launch.withLock({ $0 }) else { throw VaultFailure.browser }
+        guard launch.withLock({ $0 }) else { throw VaultFailure.vaultStarting }
         return try await MainActor.run(body: work)
     }
 
@@ -296,7 +297,8 @@ public enum VaultBrowser {
     /// Reads the field in the one Chrome tab that shows `page`, the address that the hub confirmed. The tab need not be
     /// in front: an agent that works through a browser extension cannot bring it there.
     static func capture(page: String, selector: String) async throws -> String {
-        try await onMainThread { try captureOnMainThread(page: page, selector: selector) }
+        try chromeReady()
+        return try await onMainThread { try captureOnMainThread(page: page, selector: selector) }
     }
 
     @MainActor private static func captureOnMainThread(page: String, selector: String) throws -> String {
@@ -307,69 +309,246 @@ public enum VaultBrowser {
         return try captured(run(captureSource(tab: id, address: page, origin: VaultLogin.origin(of: url), selector: selector)).stringValue ?? "")
     }
 
-    /// Whether Chrome runs one harmless script for this app. No page is read, and the page in front does not matter.
-    static func scriptable() async -> Bool {
-        (try? await onMainThread { scriptableOnMainThread() }) ?? false
+    /// **What stops a sign-in in Chrome now, in one word** (the spec, section D): `ok`, `launching`, `not_running`,
+    /// `no_window`, `not_asked`, `refused`, `javascript_off` or `error`. Chrome runs one harmless script for this app; no
+    /// page is read, and the page in front does not matter. A Chrome that does not run is not started. `quiet` (the
+    /// Mac's reading, with nobody there) shows no question of macOS; without it (the installer, with a person there)
+    /// macOS asks now and waits for the answer, on a thread of its own.
+    static func chromeCause(quiet: Bool) async -> (cause: String, number: Int?) {
+        guard launch.withLock({ $0 }) else { return ("launching", nil) }
+        if NSRunningApplication.runningApplications(withBundleIdentifier: chromeID).isEmpty {
+            // The installer's check, with a person there, starts Chrome, as its script did: a person who quit Chrome
+            // after the tick would read the words of Automation, the wrong cause. The Mac's reading starts nothing.
+            guard !quiet, await startChrome() else { return ("not_running", nil) }
+        }
+        let allowed = quiet ? permission(ask: false) : await withCheckedContinuation { (asked: CheckedContinuation<OSStatus, Never>) in
+            Thread.detachNewThread { asked.resume(returning: permission(ask: true)) }
+        }
+        switch allowed {
+        case 0: break
+        case -1744: return ("not_asked", nil)
+        case -1743: return ("refused", nil)
+        case -600: return ("not_running", nil)
+        default: return ("error", Int(allowed))
+        }
+        // The installer's check, with a person there, waits up to 10 seconds while Chrome has no window yet (a slow
+        // start, the profile picker): it would read the words of Automation, the wrong cause.
+        var read = await chromeProbe()
+        for _ in 0..<10 where !quiet && read.cause == "no_window" {
+            try? await Task.sleep(for: .seconds(1))
+            read = await chromeProbe()
+        }
+        return read
     }
 
-    @MainActor private static func scriptableOnMainThread() -> Bool {
-        (try? run("tell application id \"com.google.Chrome\" to execute active tab of front window javascript \"1\"")) != nil
+    /// One harmless script in the active tab of Chrome's front window, and what its answer says.
+    private static func chromeProbe() async -> (cause: String, number: Int?) {
+        do {
+            _ = try await onMainThread { () -> Bool in
+                _ = try run("tell application id \"com.google.Chrome\" to execute active tab of front window javascript \"1\"")
+                return true
+            }
+            return ("ok", nil)
+        } catch let chrome as VaultChromeError {
+            return [-1728, -1719].contains(chrome.number) ? ("no_window", nil) : ("error", chrome.number)
+        } catch {
+            switch error as? VaultFailure {
+            case .chromeJavaScriptOff?: return ("javascript_off", nil)
+            case .chromeRefused?: return ("refused", nil)
+            case .chromeNotAsked?: return ("not_asked", nil)
+            case .chromeNotRunning?: return ("not_running", nil)
+            case .vaultStarting?: return ("launching", nil)
+            default: return ("error", nil)
+            }
+        }
     }
 
-    /// AppleScript inside the hardened process: no `osascript` child and no command line.
+    /// Chrome started for the installer's check, and running within 10 seconds, with a moment for its first window.
+    private static func startChrome() async -> Bool {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: chromeID) else { return false }
+        _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        for _ in 0..<20 where NSRunningApplication.runningApplications(withBundleIdentifier: chromeID).isEmpty {
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier: chromeID).isEmpty else { return false }
+        try? await Task.sleep(for: .seconds(2))
+        return true
+    }
+
+    /// AppleScript inside the hardened process: no `osascript` child and no command line. Chrome gets 10 seconds at
+    /// most for each script (`with timeout`, then -1712).
     @MainActor private static func run(_ source: String) throws -> NSAppleEventDescriptor {
         var error: NSDictionary?
-        guard let apple = NSAppleScript(source: source) else { throw VaultFailure.browser }
+        guard let apple = NSAppleScript(source: "with timeout of 10 seconds\n\(source)\nend timeout") else { throw VaultFailure.browser }
         let result = apple.executeAndReturnError(&error)
-        // AppleScript errors can include the source. Never log or return the error dictionary.
-        guard error == nil else { throw VaultFailure.browser }
+        // AppleScript errors can include the source. Never log or return the error dictionary: its number only.
+        if let error { throw failure(error) }
         return result
     }
 
-    static func tab(origin: String, script: String, expect: String, id: Int = 0) async throws -> Int {
-        try await onMainThread { try tabOnMainThread(origin: origin, script: script, expect: expect, id: id) }
+    /// **The cause of an AppleScript error, by its number only** (the spec, section A): never its message, which can
+    /// hold the script and so the password. Chrome's 12 is its `kJavaScriptUnsupported` (Chromium's
+    /// `chrome/browser/ui/cocoa/applescript/error_applescript.h`): the menu item Allow JavaScript from Apple Events has no
+    /// tick. -600: no such program runs; -1743: macOS refused this app control of Chrome; -1744: macOS has not asked yet.
+    static func failure(_ error: NSDictionary) -> Error {
+        guard let number = (error[NSAppleScript.errorNumber] as? NSNumber)?.intValue else { return VaultFailure.chromeError }
+        switch number {
+        case -600: return VaultFailure.chromeNotRunning
+        case -1743: return VaultFailure.chromeRefused
+        case -1744: return VaultFailure.chromeNotAsked
+        case 12: return VaultFailure.chromeJavaScriptOff
+        default: return VaultChromeError(number: number)
+        }
     }
 
-    @MainActor private static func tabOnMainThread(origin: String, script: String, expect: String, id: Int) throws -> Int {
+    static let chromeID = "com.google.Chrome"
+    /// A question of macOS that waits on the screen now (`chromeReady`).
+    private static let asking = OSAllocatedUnfairLock(initialState: false)
+    private static let log = Logger(subsystem: "com.founderizer.vault", category: "browser")
+
+    /// **Chrome runs, and this app may control it**, read before any script and off the main thread (the spec,
+    /// section A): a script's `tell application` starts a Chrome that does not run, and its first Apple Event makes
+    /// macOS ask its question, while the script waits with nobody there to answer it. Where macOS has not asked yet, it
+    /// asks now, once, on a thread of its own, and this job says so at once: a person at the Mac clicks Allow.
+    static func chromeReady() throws {
+        guard launch.withLock({ $0 }) else { throw VaultFailure.vaultStarting }
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier: chromeID).isEmpty else {
+            throw VaultFailure.chromeNotRunning
+        }
+        switch permission(ask: false) {
+        case 0: return
+        case -1744:
+            // The question waits on the screen for a person, and one is enough: each job meanwhile asks no other one.
+            if asking.withLock({ (on: inout Bool) -> Bool in defer { on = true }; return !on }) {
+                Thread.detachNewThread { _ = permission(ask: true); asking.withLock { $0 = false } }
+            }
+            throw VaultFailure.chromeNotAsked
+        case -1743: throw VaultFailure.chromeRefused
+        case -600: throw VaultFailure.chromeNotRunning
+        case let status: throw VaultChromeError(number: Int(status))
+        }
+    }
+
+    /// macOS's answer for this app's Apple Events to Chrome: 0, or a number of `failure`'s. `ask` false shows nothing.
+    static func permission(ask: Bool) -> OSStatus {
+        let target = NSAppleEventDescriptor(bundleIdentifier: chromeID)
+        return AEDeterminePermissionToAutomateTarget(target.aeDesc, AEEventClass(typeWildCard), AEEventID(typeWildCard), ask)
+    }
+
+    /// **The tab that a script ran in, and the page's answer** (the spec, section A). `id` 0 is any tab whose address
+    /// is on the login's origin, in any window, and at most three of them get the script. An answer other than
+    /// `wrong-origin`, `no-form` or `wrong-action` ends the search with that tab's id, so no second tab gets a password.
+    /// Without one the id is 0 and the answer is the last one, or `no-tab` where no tab of the origin got the script.
+    static func tab(origin: String, script: String, id: Int = 0) async throws -> (id: Int, answer: String) {
+        try await onMainThread { try tabOnMainThread(origin: origin, script: script, id: id) }
+    }
+
+    @MainActor private static func tabOnMainThread(origin: String, script: String, id: Int) throws -> (id: Int, answer: String) {
         func quote(_ value: String) -> String {
             "\"" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
         }
         // NSAppleScript stays inside the hardened process. No secret-bearing osascript child or command line.
         let source = """
         tell application id "com.google.Chrome"
+            set tried to 0
+            set lastSaid to "no-tab"
             repeat with w in windows
                 repeat with t in tabs of w
                     if \(id) is 0 or (id of t as integer) is \(id) then
-                        if (URL of t) starts with \(quote(origin + "/")) then
-                            if (execute t javascript \(quote(script))) is \(quote(expect)) then return id of t
+                        if tried < 3 and (URL of t) starts with \(quote(origin + "/")) then
+                            set tried to tried + 1
+                            set said to (execute t javascript \(quote(script)))
+                            if said is missing value then set said to ""
+                            set said to said as text
+                            if {"wrong-origin", "no-form", "wrong-action"} does not contain said then return {(id of t) as integer, said}
+                            set lastSaid to said
                         end if
                     end if
                 end repeat
             end repeat
-            return 0
+            return {0, lastSaid}
         end tell
         """
-        var error: NSDictionary?
-        guard let apple = NSAppleScript(source: source) else { throw VaultFailure.browser }
-        let result = apple.executeAndReturnError(&error)
-        // AppleScript errors can include the source. Never log or return the error dictionary.
-        guard error == nil else { throw VaultFailure.browser }
-        return Int(result.stringValue ?? "") ?? Int(result.int32Value)
+        return tabAnswer(try run(source))
     }
 
+    /// The `{id, answer}` of `tabOnMainThread`; an answer of another shape is no tab and no words.
+    static func tabAnswer(_ answer: NSAppleEventDescriptor) -> (id: Int, answer: String) {
+        guard answer.numberOfItems == 2, let id = answer.atIndex(1)?.int32Value, id >= 0,
+              let words = answer.atIndex(2)?.stringValue else { return (0, "") }
+        return (Int(id), words)
+    }
+
+    /// **A sign-in in the one tab that took the fill**, and each answer that ends it named by its cause (the spec,
+    /// sections A and C): true when it also gave the authenticator's code. Once the fill answered `filled`, the login
+    /// went: an end after it is the site's refusal, a code that the vault cannot give, or `signinUnknown`, never words
+    /// that ask for the sign-in page again, which would invite a second typing.
     static func signIn(_ login: VaultLogin) async throws -> Bool {
-        let id = try await tab(origin: login.origin, script: fillScript(login), expect: "filled")
-        guard id > 0 else { throw VaultFailure.browser }
+        try chromeReady()
+        // A seed that makes no code refuses the login before anything is typed, as the Linux broker's `totp_now` does.
+        if let seed = login.totp { _ = try totp(seed: seed, at: Date().timeIntervalSince1970) }
+        let fill = try await tab(origin: login.origin, script: fillScript(login))
+        guard fill.answer == "filled", fill.id > 0 else { throw fillFailure(fill.answer) }
+        do {
+            return try await afterFill(login, tab: fill.id)
+        } catch {
+            if let chrome = error as? VaultChromeError {
+                log.notice("sign-in: Chrome error \(chrome.number, privacy: .public) after the fill")
+            }
+            throw afterFillFailure(error)
+        }
+    }
+
+    /// The cause of an end after the fill, when the login went: the site's refusal and a code that the vault cannot give
+    /// stay; everything else (a Chrome error in a look, a stop) is unknown, never words that invite a second typing.
+    static func afterFillFailure(_ error: Error) -> VaultFailure {
+        switch error as? VaultFailure {
+        case .signinCode?: return .signinCode
+        case .signinRefused?: return .signinRefused
+        default: return .signinUnknown
+        }
+    }
+
+    /// The looks after the fill, in its tab only, and the authenticator's code where the site asks for one.
+    private static func afterFill(_ login: VaultLogin, tab id: Int) async throws -> Bool {
         try await Task.sleep(for: .seconds(3))
         let check = try checkScript(login.origin)
-        if try await tab(origin: login.origin, script: check, expect: "none", id: id) == id { return false }
-        guard let seed = login.totp,
-              try await tab(origin: login.origin, script: check, expect: "otp", id: id) == id else { throw VaultFailure.browser }
+        let after = try await tab(origin: login.origin, script: check, id: id)
+        if after.answer == "none" { return false }
+        guard after.answer == "otp" else { throw lookFailure(after.answer) }
+        guard let seed = login.totp else { throw VaultFailure.signinCode }
         let script = try otpScript(login.origin, code: totp(seed: seed, at: Date().timeIntervalSince1970))
-        guard try await tab(origin: login.origin, script: script, expect: "filled", id: id) == id else { throw VaultFailure.browser }
+        let code = try await tab(origin: login.origin, script: script, id: id)
+        guard code.answer == "filled" else { throw codeFailure(code.answer) }
         try await Task.sleep(for: .seconds(3))
-        guard try await tab(origin: login.origin, script: check, expect: "none", id: id) == id else { throw VaultFailure.browser }
+        let last = try await tab(origin: login.origin, script: check, id: id)
+        guard last.answer == "none" else { throw last.answer == "otp" ? VaultFailure.signinCode : lookFailure(last.answer) }
         return true
+    }
+
+    /// The cause of a fill's answer that is not `filled`. An answer that is no page's own (none at all, another word)
+    /// can come after the script typed: it is unknown, never Chrome's.
+    static func fillFailure(_ answer: String) -> VaultFailure {
+        switch answer {
+        case "no-tab", "wrong-origin": return .signinNoTab
+        case "no-form": return .signinNoForm
+        case "wrong-action": return .signinWrongAction
+        case "bad-field": return .signinBadField
+        case "moved": return .signinMoved
+        default: return .signinUnknown
+        }
+    }
+
+    /// The cause of a code's answer that is not `filled`, after the login went: a code page with no field that the
+    /// vault can fill wants a person's code; anything else is unknown.
+    static func codeFailure(_ answer: String) -> VaultFailure {
+        answer == "no-form" ? .signinCode : .signinUnknown
+    }
+
+    /// The cause of a look after a submit that is neither `none` (signed in) nor `otp` (a code page): the password field
+    /// came back, or the tab left the site, closed or still loads.
+    static func lookFailure(_ answer: String) -> VaultFailure {
+        answer == "form" ? .signinRefused : .signinUnknown
     }
 
     static func isWhitespace(_ scalar: Unicode.Scalar) -> Bool {

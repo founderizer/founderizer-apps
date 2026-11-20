@@ -1,0 +1,75 @@
+import AppKit
+import Foundation
+import Testing
+@testable import FleetVaultCore
+
+/// **A sign-in names its cause** (`~/dev/founderizer-plans/vault-signin-causes-spec.md`, 20 November 2026): each try of
+/// the Browser Agent on the fleet's Mac Studio ended in one sentence, "Chrome did not confirm the sign-in", while Chrome's
+/// menu item "Allow JavaScript from Apple Events" had no tick, and nothing said so.
+struct VaultSigninCausesTests {
+    /// Of an AppleScript error only its number is read: its message can hold the script, and so the password. A bug
+    /// that passes the message on, or reads a cause from it, fails here.
+    @Test func anAppleScriptErrorIsItsNumberOnly() {
+        let secret = "hunter2-not-a-real-password"
+        func error(_ number: Int?) -> NSDictionary {
+            var fields: [String: Any] = [NSAppleScript.errorMessage: "execute javascript \"set('\(secret)')\" failed",
+                                         NSAppleScript.errorBriefMessage: secret]
+            if let number { fields[NSAppleScript.errorNumber] = number }
+            return fields as NSDictionary
+        }
+        #expect(VaultBrowser.failure(error(12)) as? VaultFailure == .chromeJavaScriptOff)
+        #expect(VaultBrowser.failure(error(-1743)) as? VaultFailure == .chromeRefused)
+        #expect(VaultBrowser.failure(error(-1744)) as? VaultFailure == .chromeNotAsked)
+        #expect(VaultBrowser.failure(error(-600)) as? VaultFailure == .chromeNotRunning)
+        #expect(VaultBrowser.failure(error(-1712)) as? VaultChromeError == VaultChromeError(number: -1712))
+        #expect(VaultBrowser.failure(error(nil)) as? VaultFailure == .chromeError)
+        for number in [12, -1743, -1744, -600, -1712, nil] {
+            let said = String(describing: VaultBrowser.failure(error(number)))
+            #expect(!said.contains(secret), "\(said)")
+        }
+    }
+
+    /// Each answer of a page names its own cause; an answer that is no page's is Chrome's. A bug that folds two causes
+    /// into one sentence again, or calls a refused password unknown, fails here.
+    @Test func eachAnswerOfThePageNamesItsCause() {
+        let fills: [(String, VaultFailure)] = [("no-tab", .signinNoTab), ("wrong-origin", .signinNoTab),
+                                               ("no-form", .signinNoForm), ("wrong-action", .signinWrongAction),
+                                               ("bad-field", .signinBadField), ("moved", .signinMoved),
+                                               ("not-sent", .signinUnknown), ("", .signinUnknown),
+                                               ("something new", .signinUnknown)]
+        for (answer, failure) in fills { #expect(VaultBrowser.fillFailure(answer) == failure, "\(answer)") }
+        #expect(VaultBrowser.lookFailure("form") == .signinRefused)
+        // After the login went, a code page that the vault cannot fill wants a person; nothing asks for the page again.
+        #expect(VaultBrowser.codeFailure("no-form") == .signinCode)
+        for answer in ["no-tab", "wrong-origin", "bad-field", ""] { #expect(VaultBrowser.codeFailure(answer) == .signinUnknown, "\(answer)") }
+        // An end after the fill keeps only the site's refusal and a code; a Chrome error in a look, Chrome's own words and
+        // a stop are unknown: words that send the agent back to the sign-in page would invite a second typing.
+        #expect(VaultBrowser.afterFillFailure(VaultFailure.signinCode) == .signinCode)
+        #expect(VaultBrowser.afterFillFailure(VaultFailure.signinRefused) == .signinRefused)
+        for error: Error in [VaultChromeError(number: -1712), VaultFailure.chromeError, VaultFailure.signinNoTab,
+                             VaultFailure.signinNoForm, CancellationError()] {
+            #expect(VaultBrowser.afterFillFailure(error) == .signinUnknown, "\(error)")
+        }
+        for answer in ["no-tab", "loading", "wrong-origin"] { #expect(VaultBrowser.lookFailure(answer) == .signinUnknown, "\(answer)") }
+        // Each cause has words of its own.
+        let words = Set(fills.map(\.1.rawValue) + [VaultFailure.signinRefused.rawValue, VaultFailure.signinCode.rawValue])
+        #expect(words.count == 8)
+    }
+
+    /// The tab's id and the page's words come back together, also for an id of 2^30 or more: the looks after the fill go
+    /// only to the tab that took it. A bug that reads the id as text, or the answer of another shape as a tab, fails here.
+    @Test func theTabAnswerIsItsIdAndItsWords() {
+        func list(_ items: NSAppleEventDescriptor...) -> NSAppleEventDescriptor {
+            let answer = NSAppleEventDescriptor.list()
+            for (at, item) in items.enumerated() { answer.insert(item, at: at + 1) }
+            return answer
+        }
+        let big = Int32(1 << 30) + 7
+        let filled = VaultBrowser.tabAnswer(list(NSAppleEventDescriptor(int32: big), NSAppleEventDescriptor(string: "filled")))
+        #expect(filled.id == Int(big) && filled.answer == "filled")
+        let none = VaultBrowser.tabAnswer(list(NSAppleEventDescriptor(int32: 0), NSAppleEventDescriptor(string: "no-tab")))
+        #expect(none.id == 0 && none.answer == "no-tab")
+        let other = VaultBrowser.tabAnswer(NSAppleEventDescriptor(string: "filled"))
+        #expect(other.id == 0 && other.answer == "")
+    }
+}

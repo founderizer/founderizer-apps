@@ -18,16 +18,25 @@ enum CardBadgeText {
     /// The room after its name, in the words' size.
     static let end: CGFloat = 0.36
 
-    /// The words of `text` with each name that `names` finds as a badge, and the rest as it is. `size` is the size of
-    /// the words' font.
+    /// The words of `text` with each name that `names` finds as a badge, each link of its own a piece with its mark
+    /// (`LinkRun`, which `linkPresses` gives the hand), and the rest as it is. `size` is the size of the words' font. A
+    /// text with no name and no link is the one `Text` that it was.
     static func text(_ text: AttributedString, names: CardNames?, size: CGFloat) -> Text {
-        guard let names else { return Text(text) }
-        let pieces = names.pieces(text)
-        guard pieces.contains(where: { $0.badge != nil }) else { return Text(pieces.first?.words ?? text) }
-        var drawn: [Text] = [], index = 0
+        let pieces = names?.pieces(text) ?? []
+        guard pieces.contains(where: { $0.badge != nil }) || LinkRun.has(text) else { return Text(text) }
+        var drawn: [Text] = [], index = 0, links = 0
+        // Words that are no badge: each link among them is a piece of its own, with its mark.
+        func words(_ plain: AttributedString) {
+            for (url, range) in plain.runs[\.link] {
+                let run = Text(AttributedString(plain[range]))
+                guard let url else { drawn.append(run); continue }
+                drawn.append(run.customAttribute(LinkRun(index: links, url: url)))
+                links += 1
+            }
+        }
         for piece in pieces {
             guard let target = piece.badge else {
-                drawn.append(Text(piece.words))
+                words(piece.words)
                 continue
             }
             var room = AttributedString("\u{00A0}")
@@ -39,7 +48,9 @@ enum CardBadgeText {
             drawn.append(Text(name).customAttribute(CardBadge(index: index, icon: false, target: target)))
             index += 1
         }
-        return drawn.dropFirst().reduce(drawn[0]) { Text("\($0)\($1)") }
+        if pieces.isEmpty { words(text) }
+        guard let first = drawn.first else { return Text(text) }
+        return drawn.dropFirst().reduce(first) { Text("\($0)\($1)") }
     }
 }
 
@@ -147,8 +158,12 @@ enum CardBadgeIcon: Hashable {
 
 extension View {
     /// The badges of the names in the texts of this view (`CardBadgeText`), and a press on one that opens it, with the
-    /// hand under the pointer.
-    func cardBadges(_ on: Bool = true) -> some View { modifier(CardBadges(on: on)) }
+    /// hand under the pointer; and the press of each link of the texts (`linkPresses`), unless `links` is false: a
+    /// `MessageText` gives each of its blocks their own. A card's folded reason, which takes this, has no selection
+    /// field, so its links keep their presses as its badges do.
+    func cardBadges(_ on: Bool = true, links: Bool = true) -> some View {
+        modifier(CardBadges(on: on)).linkPresses(links, always: true)
+    }
 }
 
 private struct CardBadges: ViewModifier {
@@ -248,8 +263,9 @@ private struct CardBadges: ViewModifier {
 /// field over the text whose cursor rect gives the I-beam on the whole text, badges included, and AppKit sets it in the
 /// event that crosses the field's edge; a SwiftUI hover sets the hand only at the next drawing, so the I-beam showed
 /// first. This view lies over the field, so AppKit sends it the cursor's events of its own place, and it sets the hand in
-/// those same events: where the pointer comes in, where it moves, and where the cursor is asked for.
-private struct BadgePress: NSViewRepresentable {
+/// those same events: where the pointer comes in, where it moves, and where the cursor is asked for. A link's press is
+/// this view too (`LinkPresses`).
+struct BadgePress: NSViewRepresentable {
     let open: () -> Void
     let hover: (Bool) -> Void
 

@@ -27,6 +27,10 @@ struct MessageText: View, Equatable {
     /// rows of a chat can (`ChatSelection`), and a block or a cell longer than `keepsFields` can always be selected.
     /// Nil: each block takes the selection of the view around it.
     var selection: ChatSelection? = nil
+    /// **Where a fold cuts the words**, from their top: a long message at rest (`OwnerBubble`) or a long result
+    /// (`TaskResult`) draws its words whole under a frame of this height, hidden under the cut. A link there has no press
+    /// (`linkPresses`), so neither the hand nor a press stands in the room under the fold, where the next rows are.
+    var fold: CGFloat? = nil
     /// **A block or a cell of more than this many bytes (UTF-8) keeps its fields** in a text with a selection (a
     /// block's Markdown, a cell's words): making or dropping the field of a block took about 4 ms for each 1,000
     /// characters (266 to 295 ms for a block of 70,089, as a Word, RTF or PDF file comes in: its paragraphs end with
@@ -45,6 +49,8 @@ struct MessageText: View, Equatable {
         var formatted = AttributedString()
         /// The rows of a table, the header first.
         var cells: [[AttributedString]] = []
+        /// Its words, or a cell of its table, have a link (`LinkRun`).
+        var links = false
     }
 
     private final class Parsed: NSObject {
@@ -72,8 +78,12 @@ struct MessageText: View, Equatable {
             var drawn = Block(kind: block.kind, text: block.text, marker: block.marker, level: block.level)
             switch block.kind {
             case .code, .rule: break
-            case .table: drawn.cells = block.cells.map { $0.map { inline($0, code: code) } }
-            default: drawn.formatted = inline(block.text, code: code)
+            case .table:
+                drawn.cells = block.cells.map { $0.map { inline($0, code: code) } }
+                drawn.links = drawn.cells.contains { $0.contains(where: LinkRun.has) }
+            default:
+                drawn.formatted = inline(block.text, code: code)
+                drawn.links = LinkRun.has(drawn.formatted)
             }
             return drawn
         }
@@ -92,6 +102,7 @@ struct MessageText: View, Equatable {
 
     /// A block's words with the names of `names` as links, an agent and a server as a badge (`CardBadgeText`), or as
     /// they are. The size is the words' own: a step's, the chat's (`ChatStyle.font`) or a form's (`FleetStyle.body`).
+    /// Each link of the words is a piece of its own, which `linkPresses` gives the hand (`LinkRun`).
     private func linked(_ words: AttributedString) -> Text {
         CardBadgeText.text(words, names: names, size: step ? SetupMetrics.text : chat ? ChatStyle.size : FleetStyle.bodySize)
     }
@@ -105,23 +116,24 @@ struct MessageText: View, Equatable {
                 Group {
                 switch block.kind {
                 case .paragraph:
-                    linked(block.formatted).lineSpacing(lines).selectableWords()
+                    linked(block.formatted).lineSpacing(lines).selectableWords().linkPresses(block.links, fold: fold)
                 case .heading:
                     linked(block.formatted)
                         .font(step ? Font.system(size: SetupMetrics.text, weight: .semibold) : chat ? ChatStyle.heading : FormMetrics.title)
-                        .selectableWords()
+                        .selectableWords().linkPresses(block.links, fold: fold)
                         .padding(.top, chat ? 0 : 3)
                 case .item:
                     // An item under another starts its mark where that item's words start: the mark's 12 and the 9
                     // after it, for each level.
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         Text(block.marker).selectableWords().frame(minWidth: 12, alignment: .trailing)
-                        linked(block.formatted).lineSpacing(lines).selectableWords()
+                        linked(block.formatted).lineSpacing(lines).selectableWords().linkPresses(block.links, fold: fold)
                     }.padding(.leading, 3 + CGFloat(block.level) * 21)
                 case .quote:
                     HStack(spacing: 10) {
                         Rectangle().fill(FleetStyle.muted.opacity(0.4)).frame(width: 2)
                         linked(block.formatted).foregroundStyle(FleetStyle.muted).lineSpacing(lines).selectableWords()
+                            .linkPresses(block.links, fold: fold)
                     }
                 case .code: CodeBlock(text: block.text, font: chat ? ChatStyle.code : step && !script ? Self.stepCode : FormMetrics.code,
                                       spacing: chat ? 5 : 4, fill: card ? FleetStyle.canvas : FleetStyle.surface,
@@ -132,8 +144,10 @@ struct MessageText: View, Equatable {
                         ForEach(Array(block.cells.enumerated()), id: \.offset) { line, row in
                             GridRow {
                                 ForEach(Array(row.enumerated()), id: \.offset) { column, cell in
-                                    Text(cell).fontWeight(line == 0 ? .medium : .regular).lineSpacing(3)
-                                        .selectableWords()
+                                    // a cell's links have their press; its names stay words, as they were
+                                    CardBadgeText.text(cell, names: nil, size: FleetStyle.bodySize)
+                                        .fontWeight(line == 0 ? .medium : .regular).lineSpacing(3)
+                                        .selectableWords().linkPresses(block.links && LinkRun.has(cell), fold: fold)
                                         // A table can be long: each of its cells is a row of the selection.
                                         .modifier(BlockWords(selection: selection.flatMap {
                                             String(cell.characters).utf8.count > Self.keepsFields ? nil : $0
@@ -151,9 +165,13 @@ struct MessageText: View, Equatable {
                 .modifier(BlockWords(selection: block.kind == .table || block.text.utf8.count > Self.keepsFields ? nil
                                         : selection, row: "block-\(index)"))
             }
-        }.modifier(TextPointer(selection: selection))
-        // an agent and a server in a card's words are badges, which a press opens (`CardBadges`)
-        .cardBadges(names != nil)
+        }
+        // the fold of a long message is measured from here (`fold`)
+        .coordinateSpace(.named(LinkPresses.space))
+        .modifier(TextPointer(selection: selection))
+        // an agent and a server in a card's words are badges, which a press opens (`CardBadges`); each block lays the
+        // presses of its own links, where its words can be selected
+        .cardBadges(names != nil, links: false)
         .font(step ? SetupMetrics.textFont : chat ? ChatStyle.font : FleetStyle.body)
             // A link's words in the link colour, which reads 4.5:1 and more (fix round 2): the accent drew them 3.4:1.
             .tint(FleetStyle.link)
@@ -389,7 +407,7 @@ struct OwnerBubble: View {
             // **His words are drawn from their Markdown, as an agent's are** (3 November 2026: "chat messages dont
             // have any format... it is so plain"): his numbered list, his paragraphs and his bold read as the reply
             // under them reads, where the literal text ran them all together.
-            MessageText(text: text, chat: true).equatable()
+            MessageText(text: text, chat: true, fold: folded ? Self.foldedHeight : nil).equatable()
                 .frame(maxHeight: folded ? Self.foldedHeight : nil, alignment: .top)
                 .mask {
                     VStack(spacing: 0) {

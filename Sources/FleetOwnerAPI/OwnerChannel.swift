@@ -112,7 +112,8 @@ public enum OwnerChannel {
             guard message["v"] == .int(OwnerChannel.version) else {
                 return .failure(Refusal("This request is of another version of the link than the app's "
                                         + "(\(OwnerChannel.version)): founderizer-cli and the Founderizer app are of "
-                                        + "different versions. Start a new session after the app's update."))
+                                        + "different versions, so an update of the app is not complete yet. Call the "
+                                        + "tool again once the app has restarted for it."))
             }
             guard case .string(let set)? = message["set"], case .string(let tool)? = message["tool"] else {
                 return .failure(Refusal("The app could not read this request: it names no set or no tool."))
@@ -985,7 +986,8 @@ public enum ChannelClient {
     static let closedNoAnswer = "The Founderizer app closed the link with no answer. Call the tool again."
 
     static let unreadable = "The Founderizer app gave an answer that this program cannot read: the program and the "
-        + "app are of different versions. Start a new session after the app's update."
+        + "app are of different versions, so an update of the app is not complete yet. Call the tool again once the app "
+        + "has restarted for it."
     static let noAnswer = "The Founderizer app took this call and did not answer it within a minute: its window may be "
         + "busy. Ask the owner whether the app responds; then call the tool again."
 }

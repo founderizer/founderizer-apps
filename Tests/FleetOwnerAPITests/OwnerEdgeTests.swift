@@ -236,7 +236,7 @@ final class OwnerEdgeTests {
     private func refused(own: Int, start: String) -> Bool {
         let hub = StandInHub(features: Fixture.everyFeature)
         return Fixture.tools(hub, home: home, ownBuild: own, started: { ProgramPlace.build(behind: start) })
-            .refused("fleet_overview") == OwnerTools.updated
+            .refused("fleet_overview") == OwnerTools.updated("fleet_overview", path: nil, verb: nil)
     }
 
     @Test func theAppWasUpdatedOnlyWhenTheStartPathLeadsToAHigherBuild() throws {
