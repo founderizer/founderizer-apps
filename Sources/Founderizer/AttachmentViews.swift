@@ -208,9 +208,10 @@ struct KeepFileRow: View {
 /// picture at its size, with the window's own Open with Preview and Share; Esc closes it; the owner's yes of 18
 /// November 2026, which replaced the open in the Preview app outside Founderizer), from bytes whose SHA-256 the app
 /// checked. Under each of his own files, what the owner presses to keep it past the ninety days (`KeepFileRow`);
-/// **an agent's file has a save icon while the pointer is on it** (the same yes): at the end of a file's row, at the
-/// top right of a picture. It writes the file into Downloads, never over a file that is there, and "Saved to
-/// Downloads" shows under it. **An agent's file also drags out of the chat** (the same yes) to Finder, or to any other
+/// **an agent's file has a save icon** (the same yes): at the end of a file's row at rest, beside the eye that every
+/// file's row has (`FileRowLook`, the owner's "I need a download icon/button too!" of 20 November 2026), and at the top
+/// right of a picture while the pointer is on it. It writes the file into Downloads, never over a file that is there,
+/// and "Saved to Downloads" shows under it. **An agent's file also drags out of the chat** (the same yes) to Finder, or to any other
 /// app outside Founderizer, as the file itself (`ChatFileDrag`), and no place inside the app takes it.
 struct MessageFilesView: View {
     @Bindable var store: FleetStore
@@ -271,30 +272,13 @@ struct MessageFilesView: View {
             PictureTile(store: store, file: file, side: alignment,
                         save: saves && hovered == file.id ? { save(file) } : nil)
         } else {
-            HStack(spacing: 9) {
-                Image(systemName: file.symbol).font(IconMetrics.symbol(14)).foregroundStyle(FleetStyle.accent)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(file.name).font(ChatStyle.detail).foregroundStyle(FleetStyle.text)
-                        .lineLimit(1).truncationMode(.middle)
-                    // "Not loaded" as a picture's tile says it (fix round 3, item 4): orange while the hub answers.
-                    let unloaded = store.unloadedFiles.contains(file.id)
-                    Text(unloaded ? String(l10n: "Not loaded") : file.sizeWords).font(ChatStyle.detail)
-                        .foregroundStyle(unloaded && store.isFresh ? Color.orange : FleetStyle.muted)
-                }
-                // The icon's room is there while the pointer is away too, so the row keeps its width.
-                if saves {
-                    ZStack {
-                        if hovered == file.id {
-                            SaveFileIcon(file: file, side: IconMetrics.small) { save(file) }
-                        }
-                    }
-                    .frame(width: IconMetrics.small, height: IconMetrics.small)
-                }
-            }
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .background(FleetStyle.bubble, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
-            .frame(maxWidth: 280, alignment: .leading)
-            .task(id: store.isFresh) { if store.isFresh { await store.load(file) } }
+            // "Not loaded" as a picture's tile says it (fix round 3, item 4): orange while the hub answers.
+            let unloaded = store.unloadedFiles.contains(file.id)
+            FileRowLook(name: file.name, symbol: file.symbol, detail: unloaded ? String(l10n: "Not loaded") : file.sizeWords,
+                        late: unloaded && store.isFresh, hovered: hovered == file.id,
+                        open: { open(file) }, save: saves ? { save(file) } : nil, saveWords: String(l10n: "Save \(file.name) to Downloads"),
+                        openWords: String(l10n: "Open \(file.name) (\(file.sizeWords))"), saveID: "save-file-\(file.id)")
+                .task(id: store.isFresh) { if store.isFresh { await store.load(file) } }
         }
     }
 
@@ -517,16 +501,71 @@ private struct DragsOut: ViewModifier {
     }
 }
 
+/// **A file's row in a chat** (the owner, 20 November 2026, of the row under a message: "file does not breath", "no hint
+/// taht I can preview the file either", and to its picture "also the eye is fine but I need a download icon/button
+/// too!"): its kind's symbol in a tile, its name in the chat's size with its size under it, 12 points of room all round,
+/// up to 380 points wide so the name keeps its room beside the buttons; under the pointer the hand and a lighter fill,
+/// as a row that opens its detail. At its end, at rest, the eye, which opens the preview as a press on the row does,
+/// and for an agent's file the save to Downloads: the app's icon buttons, muted on their rest fill, their words on hover.
+struct FileRowLook: View {
+    let name: String
+    let symbol: String
+    /// The size, or "Not loaded".
+    let detail: String
+    /// The hub has not given the bytes yet: the detail in orange.
+    var late = false
+    var hovered = false
+    let open: () -> Void
+    /// The save to Downloads, for an agent's file only; nil for his own files and a guidance's.
+    var save: (() -> Void)? = nil
+    var saveWords = ""
+    var openWords = ""
+    /// The save icon's accessibility identifier.
+    var saveID = ""
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).font(IconMetrics.symbol(18)).foregroundStyle(FleetStyle.accent)
+                .frame(width: 36, height: 36)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name).font(ChatStyle.font).foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle)
+                Text(detail).font(ChatStyle.detail).foregroundStyle(late ? Color.orange : FleetStyle.muted)
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 4) {
+                // Hidden from VoiceOver: the row's own press opens the file, and its Save to Downloads action saves it.
+                IconButton(symbol: "eye", words: openWords, size: 12, side: IconMetrics.small, action: open)
+                    .accessibilityHidden(true)
+                if let save {
+                    SaveFileIcon(words: saveWords, side: IconMetrics.small, onPicture: false, action: save)
+                        .accessibilityIdentifier(saveID).accessibilityHidden(true)
+                }
+            }
+        }
+        .padding(12)
+        // a little lighter under the pointer, as a row that opens its detail (`FleetRowButtonStyle`)
+        .background(hovered ? Color(white: 0.23) : FleetStyle.bubble, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+        // the hand under the pointer, as a link shows it: a press on the row opens the file (a picture keeps the arrow)
+        .pointerStyle(.link)
+        .frame(maxWidth: 380, alignment: .leading)
+    }
+}
+
 /// The save icon of an agent's file (the owner's yes of 18 November 2026): the Mac's own mark for a download, in a
 /// round field of the page's surface, so it stands out on a picture of any colour.
 private struct SaveFileIcon: View {
-    let file: MessageAttachment
+    /// "Save <name> to Downloads".
+    let words: String
     var side: CGFloat = IconMetrics.side
+    /// Over a picture: the text's colour in a round field of the page's surface. In a file's row: as the app's icon
+    /// buttons, muted on their rest fill.
+    var onPicture = true
     let action: () -> Void
 
     var body: some View {
-        IconButton(symbol: "square.and.arrow.down", words: String(l10n: "Save \(file.name) to Downloads"), size: 12,
-                   side: side, tint: FleetStyle.text) {
+        IconButton(symbol: "square.and.arrow.down", words: words, size: 12,
+                   side: side, tint: onPicture ? FleetStyle.text : FleetStyle.muted) {
             // The second click of a double click is no second save: a save of bytes in memory ends before it comes.
             // Only the click asks; the accessibility action comes with no event of its own.
             if let event = NSApp.currentEvent, [.leftMouseDown, .leftMouseUp].contains(event.type), event.clickCount > 1 {
@@ -534,9 +573,8 @@ private struct SaveFileIcon: View {
             }
             action()
         }
-            .background(FleetStyle.surface, in: Circle())
-            .environment(\.onCard, true)
-            .accessibilityIdentifier("save-file-\(file.id)")
+            .background(onPicture ? FleetStyle.surface : .clear, in: Circle())
+            .environment(\.onCard, onPicture)
     }
 }
 
@@ -593,7 +631,10 @@ private struct PictureTile: View {
                     .clipShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                     .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                     .overlay(alignment: .topTrailing) {
-                        if let save { SaveFileIcon(file: file, action: save).padding(6) }
+                        if let save {
+                            SaveFileIcon(words: String(l10n: "Save \(file.name) to Downloads"), action: save)
+                                .accessibilityIdentifier("save-file-\(file.id)").padding(6)
+                        }
                     }
             } else {
                 plate(data: data, failed: failed)

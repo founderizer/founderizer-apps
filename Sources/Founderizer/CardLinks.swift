@@ -17,13 +17,18 @@ extension FleetStore {
         let agents = (state?.agents ?? []).map { (name: $0.name, role: $0.title) }
         let repos = (integrations?.repositories ?? []) + (state?.needs ?? []).flatMap { $0.give?.repos ?? [] }
         let names = servers?.servers.map(\.name) ?? []
+        // the owner's own knowledge files (`HubState.knowledge`), and on a hub that gives the app an internal one the
+        // agents' too, which the Knowledge page opens read-only (`HubState.internalKnowledge`)
+        let files = (state?.knowledge ?? []).map(\.path)
+            + (state?.readsInternalKnowledge == true ? (state?.internalKnowledge ?? []).map(\.path) : [])
         var hasher = Hasher()
         for agent in agents { hasher.combine(agent.name); hasher.combine(agent.role) }
         hasher.combine(repos)
         hasher.combine(names)
+        hasher.combine(files)
         let key = hasher.finalize()
         if let kept = cardBook, kept.key == key { return kept.book }
-        let book = CardNames(agents: agents, repositories: repos, servers: names)
+        let book = CardNames(agents: agents, repositories: repos, servers: names, knowledge: files)
         cardBook = (key, book)
         return book
     }
@@ -51,6 +56,12 @@ extension FleetStore {
         case .page(let page):
             guard let place = Self.cardPage(page) else { return .discarded }
             destination = place
+        case .knowledge(let path):
+            let internalFile = state?.readsInternalKnowledge == true
+                && state?.internalKnowledge?.contains(where: { $0.path == path }) == true
+            guard state?.knowledge?.contains(where: { $0.path == path }) == true || internalFile else { return .discarded }
+            knowledgeRead = path                // Settings › Knowledge opens it when it shows, as for the eye of a
+            destination = .settings(.knowledge) // file's card on an agent's Can use (`KnowledgePage.poll`)
         case .repository: return .systemAction
         }
         return .handled

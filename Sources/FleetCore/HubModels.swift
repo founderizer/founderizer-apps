@@ -10,6 +10,11 @@ public struct HubState: Decodable, Sendable {
     public let ui_features: [String]?
     /// The owner's knowledge files only. Internal files stay internal: no page and no picker shows them.
     public private(set) var knowledge: [KnowledgeEntry]?
+    /// The agents' internal knowledge files, which only a badge in a request's words opens, read-only, on a hub that
+    /// gives the app one (`readsInternalKnowledge`; the owner's "Yes, read-only" of 20 November 2026). No list shows them.
+    public private(set) var internalKnowledge: [KnowledgeEntry]?
+    /// The hub gives the app an internal knowledge file (feature `knowledge_internal_read`).
+    public var readsInternalKnowledge: Bool { ui_features?.contains("knowledge_internal_read") == true }
     public let secrets: [SecretReference]?
     public let agents: [FleetAgent]
     /// The tasks, and with them their notes, permissions, guidance, holds and outcomes: the hub's own rows of one
@@ -58,6 +63,7 @@ public struct HubState: Decodable, Sendable {
     public static func decode(_ data: Data) throws -> HubState {
         guard data.count <= 16_000_000 else { throw HubError.invalidResponse }
         var state = try JSONDecoder().decode(Self.self, from: data)
+        state.internalKnowledge = state.knowledge?.filter { !$0.isOwner }
         state.knowledge = state.knowledge?.filter(\.isOwner)
         guard state.schema_version == 1, !state.db.isEmpty,
               state.time.isFinite,

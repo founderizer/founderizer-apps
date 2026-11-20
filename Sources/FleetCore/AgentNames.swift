@@ -48,7 +48,8 @@ public final class AgentNames: Observable, Sendable {
         roles[name] ?? name.capitalized
     }
 
-    /// The small line under the role on the agent's chat panel and on the Agents page: its name with capitals. nil for
+    /// The name before the role in `AgentNameLine` (the sidebar's row and the first card of the agent's chat panel) and
+    /// the small line under the role on the Agents page: its name with capitals. nil for
     /// an agent with no role, whose name is its label already, and for a role that says the name already ("Fleet
     /// Manager" over "Manager").
     public static func under(_ name: String, roles: [String: String]) -> String? {

@@ -80,6 +80,11 @@ struct CardBadge: TextAttribute {
         }
     }
 
+    /// How far the badges' canvas reaches past the text on each side: a badge stands 6% of its line over the line and
+    /// under it, and its edge half a point more, so a badge of the first or the last line drew past a canvas of the
+    /// text's own size, which cut it flat (the owner, 20 November 2026: "badge cutting off at the bottom side").
+    static let bleed: CGFloat = 4
+
     /// The badges of the texts of a view, from their layouts.
     static func parts(_ layouts: Text.LayoutKey.Value, in proxy: GeometryProxy) -> [Part] {
         var parts: [Part] = []
@@ -133,6 +138,7 @@ enum CardBadgeIcon: Hashable {
         case .agent(let name): .glyph(name)
         case .server(let name): .symbol(servers[name] ?? "server.rack")
         case .repository: .github
+        case .knowledge: .symbol("book.closed")     // one file; the Knowledge page's own mark is books.vertical
         case .page(let page):
             switch FleetStore.cardPage(page) {
             case .settings(let tab): .symbol(tab.symbol)
@@ -188,12 +194,14 @@ private struct CardBadges: ViewModifier {
                             if case .agent(let name) = part.target { looks[name] = GlyphTeams.look(of: name, in: team) }
                         }
                         Canvas { context, _ in
+                            context.translateBy(x: CardBadge.bleed, y: CardBadge.bleed)     // the text's own places
                             for part in parts { draw(part, icon: icons[part.id], look: looks, in: &context) }
                         } symbols: {
                             ForEach(parts.filter { $0.icon != nil && icons[$0.id]?.isMark == true }) { part in
                                 if let icon = icons[part.id], let frame = part.icon { mark(icon, side: frame.width).tag(part.id) }
                             }
                         }
+                        .padding(-CardBadge.bleed)      // the canvas reaches past the text, so no badge edge is cut
                     }
                 }
                 .overlayPreferenceValue(Text.LayoutKey.self) { layouts in

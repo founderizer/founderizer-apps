@@ -278,7 +278,7 @@ struct ChatRow<Mark: View, Trailing: View>: View {
     var body: some View {
         Button(action: action) {
             // The name begins where the title of every navigation row above it begins, as the agent's name does
-            // beside its larger glyph in the status panel.
+            // on the first card of its chat's panel, which is this row's size.
             HStack(spacing: FormMetrics.markColumn + FormMetrics.markGap - Self.glyph) {
                 mark.frame(width: Self.glyph, height: Self.glyph)
                 VStack(alignment: .leading, spacing: 2) {

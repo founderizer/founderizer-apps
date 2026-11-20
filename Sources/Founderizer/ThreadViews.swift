@@ -424,7 +424,10 @@ struct ManagerView: View {
         let files = report.attachments ?? []
         guard !files.isEmpty || report.delivery != nil else { return nil }
         return AnyView(VStack(alignment: .leading, spacing: 8) {
-            if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .leading, keeps: false) }
+            // 12 points under the reply's words (its own gap is 4): the files breathe (the owner, 20 November 2026)
+            if !files.isEmpty {
+                MessageFilesView(store: store, files: files, alignment: .leading, keeps: false).padding(.top, report.text.isEmpty ? 0 : 8)
+            }
             if let delivery = report.delivery { DeliveryLine(store: store, delivery: delivery) }
         })
     }
@@ -496,7 +499,8 @@ private struct SentMessageView: View {
             // and 29 from his next one. A message of files alone has no bubble, and keeps it under its files.
             if !message.text.isEmpty { OwnerBubble(text: message.text, origin: message.origin, beside: AnyView(footer)) }
             if let files = message.attachments, !files.isEmpty {
-                MessageFilesView(store: store, files: files)
+                // 12 points under his bubble (the stack's spacing is 6), as under a reply
+                MessageFilesView(store: store, files: files).padding(.top, message.text.isEmpty ? 0 : 6)
             }
             if message.text.isEmpty { footer }
         }.contentShape(Rectangle()).onHover { hovered = $0; if !$0 { copied = false } }

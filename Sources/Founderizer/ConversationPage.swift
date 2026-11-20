@@ -122,7 +122,10 @@ struct ConversationPage: View {
         let files = item.attachments ?? [], unread = item.read_at == nil
         guard !files.isEmpty || unread else { return nil }
         return AnyView(VStack(alignment: .leading, spacing: 8) {
-            if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .leading, keeps: false) }
+            // 12 points under the words (the row's own gap is 4), as under a chat's messages
+            if !files.isEmpty {
+                MessageFilesView(store: store, files: files, alignment: .leading, keeps: false).padding(.top, item.text.isEmpty ? 0 : 8)
+            }
             if unread { Text("Not read yet").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted) }
         })
     }
@@ -133,7 +136,9 @@ struct ConversationPage: View {
         let files = item.attachments ?? []
         guard !files.isEmpty || item.delivery != nil else { return nil }
         return AnyView(VStack(alignment: .trailing, spacing: 8) {
-            if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .trailing, keeps: false) }
+            if !files.isEmpty {
+                MessageFilesView(store: store, files: files, alignment: .trailing, keeps: false).padding(.top, item.text.isEmpty ? 0 : 8)
+            }
             if let delivery = item.delivery {
                 ConversationDeliveryLine(store: store, delivery: delivery, app: head?.app)
             }

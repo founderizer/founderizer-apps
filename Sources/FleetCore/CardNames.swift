@@ -16,6 +16,8 @@ import Foundation
 /// - a repository: owner/name, in any case, or its name alone when it has a hyphen or an underscore, starts with no
 ///   point, and no other repository of the book has that name ("shop-api");
 /// - a server: its name, in any case, when it has a digit or a hyphen ("app-1");
+/// - a knowledge file of the owner's: its path, word for word ("knowledge/owner/brand.md"), also as the whole of an
+///   inline code, which is how agents write a path;
 /// - a page of the app: its words as the app writes them (`pages`), with their capitals, only in a sentence that names
 ///   Founderizer before them, because other products have pages of the same names; and a path that starts with
 ///   Settings neither after a word with a capital ("System Settings > General") nor before another step of a path
@@ -29,6 +31,9 @@ public struct CardNames: Equatable, Sendable {
         case server(String)
         /// A page of the app by its key (`pages`): `settings/<section>`, `app/<group>`, `activity`, `agents`.
         case page(String)
+        /// A knowledge file by its path (`knowledge/owner/<name>.md`), which the Knowledge page opens (the owner, 20
+        /// November 2026: "referencing knowledge files would be very nice too", and "Yes, as drawn").
+        case knowledge(String)
 
         static let scheme = "founderizer-card"
 
@@ -40,6 +45,7 @@ public struct CardNames: Equatable, Sendable {
             case .agent(let name): Self.own("agent", name)
             case .server(let name): Self.own("server", name)
             case .page(let page): Self.own("page", page)
+            case .knowledge(let path): Self.own("knowledge", path)
             }
         }
 
@@ -56,6 +62,7 @@ public struct CardNames: Equatable, Sendable {
             case "agent": self = .agent(value)
             case "server": self = .server(value)
             case "page": self = .page(value)
+            case "knowledge": self = .knowledge(value)
             default: return nil
             }
         }
@@ -119,8 +126,10 @@ public struct CardNames: Equatable, Sendable {
     /// characters is read against a book of hundreds of repositories.
     private let names: [Character: [Name]]
 
-    /// agents: each agent's name and role (nil for none); repositories: owner/name; servers: their names.
-    public init(agents: [(name: String, role: String?)], repositories: [String] = [], servers: [String] = []) {
+    /// agents: each agent's name and role (nil for none); repositories: owner/name; servers: their names; knowledge:
+    /// the paths of the owner's knowledge files.
+    public init(agents: [(name: String, role: String?)], repositories: [String] = [], servers: [String] = [],
+                knowledge: [String] = []) {
         var names: [Name] = []
         func add(_ words: String, anyCase: Bool, _ target: Target, _ rule: Rule) {
             if !words.isEmpty {
@@ -156,6 +165,7 @@ public struct CardNames: Equatable, Sendable {
             add(server, anyCase: true, .server(server), .exact)
         }
         for (words, page) in Self.pages { add(words, anyCase: false, .page(page), .inFounderizer) }
+        for path in Set(knowledge) where path.hasPrefix("knowledge/") { add(path, anyCase: false, .knowledge(path), .exact) }
         // the longest first, so that "Customer Support Lead" wins over "Customer Support" where both begin
         self.names = Dictionary(grouping: names.sorted { $0.length > $1.length }, by: { Self.first($0.words) })
     }
@@ -258,8 +268,8 @@ public struct CardNames: Equatable, Sendable {
         return found
     }
 
-    /// The names of `text` that its words show, each with its range in `text`'s characters: none in inline code or in
-    /// the words of a link of its own.
+    /// The names of `text` that its words show, each with its range in `text`'s characters: none in the words of a link
+    /// of its own, and none in inline code but a knowledge file's path that is the whole of one (`wholeCode`).
     private func shown(in text: AttributedString) -> [(Found, Range<AttributedString.Index>)] {
         let plain = String(text.characters)
         return find(in: plain).compactMap { found in
@@ -267,11 +277,28 @@ public struct CardNames: Equatable, Sendable {
             let count = plain.distance(from: found.range.lowerBound, to: found.range.upperBound)
             let start = text.characters.index(text.startIndex, offsetBy: lower)
             let range = start..<text.characters.index(start, offsetBy: count)
-            let hidden = text[range].runs.contains {
-                $0.link != nil || $0.inlinePresentationIntent?.contains(.code) == true
-            }
-            return hidden ? nil : (found, range)
+            if text[range].runs.contains(where: { $0.link != nil }) { return nil }
+            guard text[range].runs.contains(where: { Self.isCode($0.inlinePresentationIntent) }) else { return (found, range) }
+            if case .knowledge = found.target, Self.wholeCode(text, range) { return (found, range) }
+            return nil
         }
+    }
+
+    private static func isCode(_ intent: InlinePresentationIntent?) -> Bool { intent?.contains(.code) == true }
+
+    /// The characters of `range` are one inline code and nothing more: code on each of them, and none just before or
+    /// just after them ("`knowledge/owner/brand.md`", but not "`cat knowledge/owner/brand.md`").
+    private static func wholeCode(_ text: AttributedString, _ range: Range<AttributedString.Index>) -> Bool {
+        guard text[range].runs.allSatisfy({ isCode($0.inlinePresentationIntent) }) else { return false }
+        if range.lowerBound > text.startIndex {
+            let before = text.characters.index(before: range.lowerBound)
+            if text[before..<range.lowerBound].runs.contains(where: { isCode($0.inlinePresentationIntent) }) { return false }
+        }
+        if range.upperBound < text.endIndex {
+            let after = text.characters.index(after: range.upperBound)
+            if text[range.upperBound..<after].runs.contains(where: { isCode($0.inlinePresentationIntent) }) { return false }
+        }
+        return true
     }
 
     /// One piece of a request's words as a card draws them (`pieces(_:)`): words, or one name that it draws as a badge.
@@ -294,6 +321,11 @@ public struct CardNames: Equatable, Sendable {
                 pieces.append(Piece(words: AttributedString(text[start..<range.lowerBound]), badge: nil))
             }
             var words = AttributedString(text[range])
+            if case .knowledge = found.target {       // a path from inline code: the badge's look, not code's
+                let coded = words.runs.filter { Self.isCode($0.inlinePresentationIntent) }
+                    .map { ($0.range, $0.inlinePresentationIntent?.subtracting(.code)) }
+                for (part, rest) in coded { words[part].inlinePresentationIntent = rest?.isEmpty == true ? nil : rest }
+            }
             if let url = found.target.url { words.link = url }
             pieces.append(Piece(words: words, badge: found.target))
             start = range.upperBound

@@ -21,6 +21,9 @@ private let base = [ProfileSection(key: "character", title: "Character", text: "
          "source": "brand.pdf · added 2026-10-14", "commit": commit]])
     #expect(owned.knowledge?.map(\.path) == ["knowledge/owner/brand.md"])
     #expect(owned.knowledge?.first?.source == "brand.pdf · added 2026-10-14")
+    // the internal files stay apart, for a badge that opens one read-only, and only on a hub that gives the app one
+    #expect(owned.internalKnowledge?.map(\.path) == ["knowledge/services.md"])
+    #expect(!owned.readsInternalKnowledge)
     // A hub before owner knowledge: every file is internal, with its text.
     let older = try state(knowledge: [["path": "knowledge/services.md", "title": "Services", "text": "# Services", "commit": commit]])
     #expect(older.knowledge?.isEmpty == true)

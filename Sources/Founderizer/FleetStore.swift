@@ -737,8 +737,9 @@ final class FleetStore {
     var agentAction: AgentActionRequest?
     /// Delete… from an agent's menu: its confirmation stands over the window until he answers it (`AgentDeleteCard`).
     var deleting: AgentDeleteRequest?
-    /// The knowledge file whose text Settings › Knowledge opens, asked by the eye of a file's card on an agent's Can use:
-    /// the page takes it when it shows, and clears it.
+    /// The knowledge file whose text Settings › Knowledge opens, asked by the eye of a file's card on an agent's Can use
+    /// or by a press of the file's badge in a request's words (`openCardLink`): the page takes it when it shows, and
+    /// clears it.
     var knowledgeRead: String?
     var agentDrafts: [String: String] {
         didSet { UserDefaults.standard.set(agentDrafts, forKey: "agentDrafts") }

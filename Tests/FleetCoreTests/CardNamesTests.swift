@@ -84,6 +84,27 @@ private func names(_ text: String) -> [String: CardNames.Target] {
     #expect(CardNames.Target(url: try #require(URL(string: "https://github.com/acme/web"))) == nil)
 }
 
+/// A knowledge file of the owner's is its path (the owner, 20 November 2026: "referencing knowledge files would be very
+/// nice too", and "Yes, as drawn"): in words, or as the whole of an inline code, as agents write a path. A path that the
+/// book does not hold, or one inside a longer code, stays words: a badge that opens no file is worse than none.
+@Test func aKnowledgeFileIsItsPathInWordsOrAsTheWholeOfAnInlineCode() throws {
+    let files = CardNames(agents: [], knowledge: ["knowledge/owner/brand.md", "knowledge/owner/prices-2026.md"])
+    var whole = AttributedString("knowledge/owner/prices-2026.md")
+    whole.inlinePresentationIntent = .code
+    var longer = AttributedString("cat knowledge/owner/brand.md")
+    longer.inlinePresentationIntent = .code
+    let text = AttributedString("See knowledge/owner/brand.md, ") + whole + AttributedString(" and ") + longer
+        + AttributedString(", not knowledge/owner/other.md or knowledge/owner/brand.md.bak.")
+    let pieces = files.pieces(text)
+    #expect(pieces.compactMap(\.badge) ==
+            [.knowledge("knowledge/owner/brand.md"), .knowledge("knowledge/owner/prices-2026.md")])
+    #expect(pieces.map { String($0.words.characters) }.joined() == String(text.characters))
+    // the badge of a path from code has the badge's look, not code's
+    let badge = try #require(pieces.first { $0.badge == .knowledge("knowledge/owner/prices-2026.md") })
+    #expect(badge.words.runs.allSatisfy { $0.inlinePresentationIntent?.contains(.code) != true })
+    #expect(CardNames.Target(url: try #require(badge.words.link)) == .knowledge("knowledge/owner/prices-2026.md"))
+}
+
 /// A card draws each name as a badge (the owner, 20 November 2026): every word of the request stays, once and in its
 /// order, around them. A lost tail or a name drawn twice would change what the owner reads.
 @Test func theBadgesOfTheNamesKeepEveryWordInItsPlace() {

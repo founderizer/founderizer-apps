@@ -92,9 +92,21 @@ struct KnowledgePage: View {
     var body: some View {
         let entries = store.state?.knowledge
         Group {
-            if let entry = entries?.first(where: { $0.path == opened }) { reader(entry) } else { list(entries) }
+            if let entry = entries?.first(where: { $0.path == opened }) ?? internalOpened { reader(entry) } else { list(entries) }
         }
         .task(id: "\(store.hub)/\(store.state?.db ?? "")") { await poll() }
+        // a file asked while this page already shows (its poll takes one only when it starts)
+        .onChange(of: store.knowledgeRead) {
+            if agent == nil, let path = store.knowledgeRead { store.knowledgeRead = nil; opened = path }
+        }
+    }
+
+    /// An agent's internal file that a badge in a request's words opened (`FleetStore.openCardLink`), on a hub that gives
+    /// the app one: the reader shows it read-only, with no pencil (`readerActions`), and no list of this page shows it
+    /// (the owner's "Yes, read-only", 20 November 2026).
+    private var internalOpened: KnowledgeEntry? {
+        guard agent == nil, let opened, store.state?.readsInternalKnowledge == true else { return nil }
+        return store.state?.internalKnowledge?.first { $0.path == opened }
     }
 
     // MARK: list
@@ -710,7 +722,8 @@ struct KnowledgePage: View {
     /// Reads the profiles every 15 seconds while the page shows, and again after 3 seconds when a read failed.
     private func poll() async {
         opened = nil; deleting = nil; carded = nil
-        // The text that the eye of a file's card on an agent's Can use asked for (`readText`).
+        // The text that the eye of a file's card on an agent's Can use asked for (`readText`), or a press of the file's
+        // badge in a request's words (`FleetStore.openCardLink`).
         if agent == nil, let path = store.knowledgeRead { store.knowledgeRead = nil; opened = path }
         let start = ContinuousClock.now
         while !Task.isCancelled {
