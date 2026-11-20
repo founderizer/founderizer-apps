@@ -43,16 +43,6 @@ public struct CardNames: Equatable, Sendable {
             }
         }
 
-        /// **An agent and a server are badges on a card** (the owner, 20 November 2026: "for servers, show a server/vps
-        /// or mac icon before its name, and enclose it in like a badge entirely", and "Same for agents"): a repository
-        /// and a page of the app stay links in the words.
-        public var isBadge: Bool {
-            switch self {
-            case .agent, .server: true
-            case .repository, .page: false
-            }
-        }
-
         private static func own(_ kind: String, _ value: String) -> URL? {
             guard let path = value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
             return URL(string: "\(scheme)://\(kind)/\(path)")
@@ -284,39 +274,31 @@ public struct CardNames: Equatable, Sendable {
         }
     }
 
-    /// `text` with each name that it shows as a link (`Target.url`): a request's words, as `MessageText` draws them
-    /// on a card.
-    public func link(_ text: AttributedString) -> AttributedString {
-        var out = text
-        for (found, range) in shown(in: text) {
-            if let url = found.target.url { out[range].link = url }
-        }
-        return out
-    }
-
     /// One piece of a request's words as a card draws them (`pieces(_:)`): words, or one name that it draws as a badge.
     public struct Piece: Equatable, Sendable {
         public let words: AttributedString
-        /// The agent or the server that the piece names, with its link on its words; nil for the words around them,
-        /// a repository's link and a page's among them.
+        /// What the name of the piece opens, with its link (`Target.url`) on its words; nil for the words around the
+        /// names, a link of their own among them.
         public let badge: Target?
     }
 
-    /// `text` with its names as links (`link(_:)`), in pieces: **each agent and server that it shows is a piece of its
-    /// own**, which a card draws as a badge with its icon (`Target.isBadge`). The pieces hold every character of the
-    /// linked text once, in its order.
+    /// **`text` in pieces, each name that it shows a piece of its own with its link**, which a card draws as a badge
+    /// with its icon (the owner, 20 November 2026: "for servers, show a server/vps or mac icon before its name, and
+    /// enclose it in like a badge entirely", "Same for agents", and "Badge them too" of repositories and the app's
+    /// pages). The pieces hold every character of `text` once, in its order; a name in inline code or in the words of a
+    /// link of its own stays words.
     public func pieces(_ text: AttributedString) -> [Piece] {
-        let linked = link(text)
-        var pieces: [Piece] = [], start = linked.startIndex
-        for (url, range) in linked.runs[\.link] {
-            guard let url, let target = Target(url: url), target.isBadge else { continue }
+        var pieces: [Piece] = [], start = text.startIndex
+        for (found, range) in shown(in: text) {
             if start < range.lowerBound {
-                pieces.append(Piece(words: AttributedString(linked[start..<range.lowerBound]), badge: nil))
+                pieces.append(Piece(words: AttributedString(text[start..<range.lowerBound]), badge: nil))
             }
-            pieces.append(Piece(words: AttributedString(linked[range]), badge: target))
+            var words = AttributedString(text[range])
+            if let url = found.target.url { words.link = url }
+            pieces.append(Piece(words: words, badge: found.target))
             start = range.upperBound
         }
-        if start < linked.endIndex { pieces.append(Piece(words: AttributedString(linked[start...]), badge: nil)) }
+        if start < text.endIndex { pieces.append(Piece(words: AttributedString(text[start...]), badge: nil)) }
         return pieces
     }
 

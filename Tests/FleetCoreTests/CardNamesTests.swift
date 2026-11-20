@@ -66,37 +66,38 @@ private func names(_ text: String) -> [String: CardNames.Target] {
         .isEmpty)
 }
 
-@Test func aLinkLeavesCodeAndLinksAsTheyAreAndItsTargetComesBack() throws {
+@Test func aNameInCodeOrInALinkStaysWordsAndATargetComesBackFromItsLink() throws {
     var text = AttributedString("Nova reads ")
     var code = AttributedString("acme/web")
     code.inlinePresentationIntent = .code
     var linked = AttributedString("app-1")
     linked.link = URL(string: "https://example.com/")
     text += code + AttributedString(" on ") + linked + AttributedString(" and acme/web.")
-    let out = book.link(text)
-    let links = out.runs.compactMap { run in run.link.map { (String(out[run.range].characters), $0) } }
-    #expect(links.map(\.0) == ["Nova", "app-1", "acme/web"])
-    #expect(links[1].1 == URL(string: "https://example.com/"))
-    #expect(links[2].1 == URL(string: "https://github.com/acme/web"))
-    #expect(CardNames.Target(url: try #require(links[0].1)) == .agent("nova"))
+    let pieces = book.pieces(text)
+    #expect(pieces.map { String($0.words.characters) } == ["Nova", " reads acme/web on app-1 and ", "acme/web", "."])
+    #expect(pieces.map(\.badge) == [.agent("nova"), nil, .repository("acme/web"), nil])
+    // the link of the words' own stays theirs
+    #expect(pieces[1].words.runs.contains { $0.link == URL(string: "https://example.com/") })
+    #expect(pieces[2].words.link == URL(string: "https://github.com/acme/web"))
+    #expect(CardNames.Target(url: try #require(pieces[0].words.link)) == .agent("nova"))
     #expect(CardNames.Target(url: try #require(CardNames.Target.page("settings/apps").url)) == .page("settings/apps"))
     #expect(CardNames.Target(url: try #require(URL(string: "https://github.com/acme/web"))) == nil)
 }
 
-/// A card draws an agent and a server as badges (the owner, 20 November 2026): every word of the request stays, once and
-/// in its order, around them, and a repository and a page stay links in the words. A lost tail or a name drawn twice
-/// would change what the owner reads.
-@Test func theBadgesOfAgentsAndServersKeepEveryWordInItsPlace() {
+/// A card draws each name as a badge (the owner, 20 November 2026): every word of the request stays, once and in its
+/// order, around them. A lost tail or a name drawn twice would change what the owner reads.
+@Test func theBadgesOfTheNamesKeepEveryWordInItsPlace() {
     var bold = AttributedString("Nova")
     bold.inlinePresentationIntent = .stronglyEmphasized
-    let text = AttributedString("Please ask ") + bold + AttributedString(" to push acme/web on app-1, then app-1 again.")
+    let text = AttributedString("Please ask ") + bold
+        + AttributedString(" to push acme/web on app-1, then app-1 again. In Founderizer, open Settings › Apps")
     let pieces = book.pieces(text)
     #expect(pieces.map { String($0.words.characters) } ==
-            ["Please ask ", "Nova", " to push acme/web on ", "app-1", ", then ", "app-1", " again."])
-    #expect(pieces.map(\.badge) == [nil, .agent("nova"), nil, .server("app-1"), nil, .server("app-1"), nil])
-    // a badge keeps its link and its marks; the repository between them is still a link of the words
-    #expect(pieces[1].words.runs.allSatisfy { $0.link == CardNames.Target.agent("nova").url })
+            ["Please ask ", "Nova", " to push ", "acme/web", " on ", "app-1", ", then ", "app-1",
+             " again. In Founderizer, open ", "Settings › Apps"])
+    #expect(pieces.map(\.badge) == [nil, .agent("nova"), nil, .repository("acme/web"), nil, .server("app-1"), nil,
+                                     .server("app-1"), nil, .page("settings/apps")])
+    // a badge keeps its marks
     #expect(pieces[1].words.inlinePresentationIntent == .stronglyEmphasized)
-    #expect(pieces[2].words.runs.contains { $0.link == URL(string: "https://github.com/acme/web") })
     #expect(book.pieces(AttributedString("No name here.")).map(\.badge) == [nil])
 }

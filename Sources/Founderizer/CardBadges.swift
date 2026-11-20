@@ -3,11 +3,11 @@ import FleetCore
 import FleetMark
 import SwiftUI
 
-/// **A server or an agent in a request's words is a badge with its icon** (the owner, 20 November 2026, of a card whose
-/// words linked "worker-1": "for servers, show a server/vps or mac icon before its name, and enclose it in like a badge
-/// entirely, so it is easily identifable. Same for agents, use the agent icon first and the badge/card to wrap it", and
-/// "also show the hand cursor when hovering it so we know it is clickable"). `CardNames.pieces` finds them; the words
-/// stay one text, so they wrap, centre and select as before.
+/// **A name in a request's words is a badge with its icon** (the owner, 20 November 2026, of a card whose words linked
+/// "worker-1": "for servers, show a server/vps or mac icon before its name, and enclose it in like a badge entirely, so
+/// it is easily identifable. Same for agents, use the agent icon first and the badge/card to wrap it", "also show the
+/// hand cursor when hovering it so we know it is clickable", and then "Badge them too" of repositories and the app's
+/// pages). `CardNames.pieces` finds them; the words stay one text, so they wrap and centre as before.
 ///
 /// The badge is drawn behind the words from their own layout (`Text.LayoutKey`): the text keeps a room before the name
 /// for the icon, a no-break space with the link on it, so the icon never stands at the end of a line apart from its
@@ -18,8 +18,8 @@ enum CardBadgeText {
     /// The room after its name, in the words' size.
     static let end: CGFloat = 0.36
 
-    /// The words of `text` with each agent and server that `names` finds as a badge: the rest as `CardNames.link`
-    /// draws it. `size` is the size of the words' font.
+    /// The words of `text` with each name that `names` finds as a badge, and the rest as it is. `size` is the size of
+    /// the words' font.
     static func text(_ text: AttributedString, names: CardNames?, size: CGFloat) -> Text {
         guard let names else { return Text(text) }
         let pieces = names.pieces(text)
@@ -61,6 +61,12 @@ struct CardBadge: TextAttribute {
         /// The room of the icon, where this line has it.
         let room: CGRect?
         var id: String { "\(badge)-\(line)" }
+        /// The size of the words of its line.
+        var em: CGFloat { frame.height / 1.3 }
+        /// Where its icon stands, on the line that has the icon's room.
+        var icon: CGRect? {
+            room.map { CGRect(x: $0.minX + em * 0.3, y: frame.midY - em * 0.41, width: em * 0.82, height: em * 0.82) }
+        }
     }
 
     /// The badges of the texts of a view, from their layouts.
@@ -98,9 +104,50 @@ extension EnvironmentValues {
     @Entry var cardServerSymbols: [String: String] = [:]
 }
 
+/// What a badge shows before its name: what the app shows for the same thing elsewhere.
+enum CardBadgeIcon: Hashable {
+    /// An agent's own glyph, by its name.
+    case glyph(String)
+    /// An SF Symbol, in the link's colour.
+    case symbol(String)
+    /// The GitHub mark, in the link's colour, as Settings › Apps marks GitHub.
+    case github
+    /// The mark of Google Drive or Gmail, in its own colours.
+    case service(GoogleService)
+
+    /// A server's kind (a Mac or a server rack, `ServerEntry.symbol`), a repository's GitHub, and a page's own mark: the
+    /// symbol of its section in Settings, of its row in the sidebar, or the mark of its app on the Apps page.
+    @MainActor static func of(_ target: CardNames.Target, servers: [String: String]) -> CardBadgeIcon {
+        switch target {
+        case .agent(let name): .glyph(name)
+        case .server(let name): .symbol(servers[name] ?? "server.rack")
+        case .repository: .github
+        case .page(let page):
+            switch FleetStore.cardPage(page) {
+            case .settings(let tab): .symbol(tab.symbol)
+            case .app(.github): .github
+            case .app(.drive): .service(.drive)
+            case .app(.gmail): .service(.gmail)
+            case .app(.mcp): .symbol("puzzlepiece.extension")
+            case .activity: .symbol("rectangle.split.3x1")      // the Tasks row of the sidebar
+            case .agents: .symbol(AgentsPage.symbol)
+            default: .symbol("macwindow")
+            }
+        }
+    }
+
+    /// A mark that is a view of its own, which the badges' canvas draws as one of its symbols.
+    var isMark: Bool {
+        switch self {
+        case .github, .service: true
+        case .glyph, .symbol: false
+        }
+    }
+}
+
 extension View {
-    /// The badges of the agents and the servers in the texts of this view (`CardBadgeText`), and a press on one that
-    /// opens it, with the hand under the pointer.
+    /// The badges of the names in the texts of this view (`CardBadgeText`), and a press on one that opens it, with the
+    /// hand under the pointer.
     func cardBadges(_ on: Bool = true) -> some View { modifier(CardBadges(on: on)) }
 }
 
@@ -119,11 +166,18 @@ private struct CardBadges: ViewModifier {
                 .backgroundPreferenceValue(Text.LayoutKey.self) { layouts in
                     GeometryReader { proxy in
                         let parts = CardBadge.parts(layouts, in: proxy)
+                        let icons = parts.reduce(into: [String: CardBadgeIcon]()) { icons, part in
+                            icons[part.id] = CardBadgeIcon.of(part.target, servers: symbols)
+                        }
                         let looks = parts.reduce(into: [String: GlyphLook]()) { looks, part in
                             if case .agent(let name) = part.target { looks[name] = GlyphTeams.look(of: name, in: team) }
                         }
                         Canvas { context, _ in
-                            for part in parts { draw(part, look: looks, in: &context) }
+                            for part in parts { draw(part, icon: icons[part.id], look: looks, in: &context) }
+                        } symbols: {
+                            ForEach(parts.filter { $0.icon != nil && icons[$0.id]?.isMark == true }) { part in
+                                if let icon = icons[part.id], let frame = part.icon { mark(icon, side: frame.width).tag(part.id) }
+                            }
                         }
                     }
                 }
@@ -145,7 +199,6 @@ private struct CardBadges: ViewModifier {
         }
         .buttonStyle(.plain)
         .frame(width: part.frame.width, height: part.frame.height)
-        .position(x: part.frame.midX, y: part.frame.midY)
         // **The hand under the pointer.** The selectable words lay an AppKit field over the text whose cursor rect gives
         // the I-beam on the whole text, badges included, and AppKit sets it only where the pointer crosses that
         // rect's edge: each move over the badge sets the hand again, and its end lets AppKit set the cursor of the
@@ -163,36 +216,46 @@ private struct CardBadges: ViewModifier {
         }
         .focusable(false)
         .accessibilityHidden(true)
+        // last: a modifier after it takes the whole text, and the press of the last badge then took every press on it
+        .position(x: part.frame.midX, y: part.frame.midY)
     }
 
-    /// A badge: a soft violet fill with a violet edge (violet is what he can press), and the icon in the room before
-    /// its name — the agent's own glyph, or the symbol of the server's kind in the link's colour.
-    private func draw(_ part: CardBadge.Part, look: [String: GlyphLook], in context: inout GraphicsContext) {
-        let frame = part.frame, size = frame.height / 1.3
-        let shape = RoundedRectangle(cornerRadius: size * 0.36, style: .continuous)
+    /// A badge: a soft violet fill with a violet edge (violet is what he can press), and its icon in the room before its
+    /// name (`CardBadgeIcon`).
+    private func draw(_ part: CardBadge.Part, icon: CardBadgeIcon?, look: [String: GlyphLook],
+                      in context: inout GraphicsContext) {
+        let frame = part.frame
+        let shape = RoundedRectangle(cornerRadius: part.em * 0.36, style: .continuous)
         let over = hovered == part.badge
         context.fill(shape.path(in: frame), with: .color(FleetStyle.link.opacity(over ? 0.2 : 0.12)))
         context.stroke(shape.path(in: frame.insetBy(dx: 0.5, dy: 0.5)),
                        with: .color(FleetStyle.link.opacity(over ? 0.5 : 0.3)), lineWidth: 1)
-        guard let room = part.room else { return }
-        let side = size * 0.82
-        let icon = CGRect(x: room.minX + size * 0.3, y: frame.midY - side / 2, width: side, height: side)
-        switch part.target {
-        case .agent(let name):
+        guard let place = part.icon, let icon else { return }
+        switch icon {
+        case .glyph(let name):
             guard let look = look[name] else { return }
             let absent = presences[name] == .offline || presences[name] == .unknown
             let light = absent ? AgentGlyph.absentLight : look.light, deep = absent ? AgentGlyph.absentDeep : look.deep
-            context.fill(GlyphOutline(kind: look.kind).path(in: icon),
-                         with: .linearGradient(Gradient(colors: [light, deep]), startPoint: icon.origin,
-                                               endPoint: CGPoint(x: icon.maxX, y: icon.maxY)))
-            context.fill(GlyphCore(kind: look.kind).path(in: icon),
+            context.fill(GlyphOutline(kind: look.kind).path(in: place),
+                         with: .linearGradient(Gradient(colors: [light, deep]), startPoint: place.origin,
+                                               endPoint: CGPoint(x: place.maxX, y: place.maxY)))
+            context.fill(GlyphCore(kind: look.kind).path(in: place),
                          with: .color(look.kind == .moon ? light : .white.opacity(GlyphLook.coreOpacity)))
-        case .server(let name):
-            let symbol = Text(Image(systemName: symbols[name] ?? "server.rack"))
-                .font(.system(size: side * 0.86, weight: .medium)).foregroundColor(FleetStyle.link)
-            context.draw(symbol, at: CGPoint(x: icon.midX, y: icon.midY), anchor: .center)
-        case .repository, .page:
-            break
+        case .symbol(let name):
+            let symbol = Text(Image(systemName: name))
+                .font(.system(size: place.width * 0.86, weight: .medium)).foregroundColor(FleetStyle.link)
+            context.draw(symbol, at: CGPoint(x: place.midX, y: place.midY), anchor: .center)
+        case .github, .service:
+            if let mark = context.resolveSymbol(id: part.id) { context.draw(mark, in: place) }
+        }
+    }
+
+    /// The marks that are views of their own, at the icon's side.
+    @ViewBuilder private func mark(_ icon: CardBadgeIcon, side: CGFloat) -> some View {
+        switch icon {
+        case .github: GitHubMark(size: side).foregroundStyle(FleetStyle.link)
+        case .service(let service): ServiceMark(service: service, size: side)
+        case .glyph, .symbol: EmptyView()
         }
     }
 }
