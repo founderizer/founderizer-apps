@@ -650,6 +650,12 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// API 1.244: true on a team card of the manager (`change_team`, API 1.214), whose options are its yes options and
     /// then No; false on every other item, and nil from a hub before that version.
     public let team: Bool?
+    /// Owner feature `need_recommended` (API 1.269): the answer that the agent that raised the item recommends, one of
+    /// `options` word for word or, on an item with no options, a line of the agent's own words; nil on an item with
+    /// none and from a hub before that version. The card marks its row with a badge (`recommendedRow`). Not in
+    /// `signsTheSame`: a new field is nil before the hub's update and a value after it, and a press that waited across
+    /// the update would be dropped with no word.
+    public let recommended: String?
     /// **The options that only Founderizer on a Mac or a PC can press, by their index in `choices`** (the lane "Give on
     /// the iPhone": the owner's "Line to the Mac" of 19 November 2026 to the phone's picture, and his "Yes, add it" of
     /// the same day for the door's card). The hub refuses them from a phone: Give, the first option of an item that

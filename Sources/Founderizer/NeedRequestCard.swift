@@ -14,32 +14,95 @@ struct NeedOptionButtonStyle: ButtonStyle {
     /// 2026 to its mockup): the press that gives it, which is the card's one main action, so it is white, as the main
     /// action of a page is (`FleetPrimaryButtonStyle`), with dark words (`NeedAnswerBox.row`).
     var gives = false
+    /// **The answer that the agent recommends** (owner feature `need_recommended`; the owner's pick "B: badge on the
+    /// edge" of 20 November 2026): its row's edge in that agent's own colour, under its badge (`RecommendedBadge`); nil
+    /// on every other row. The violet edge of a number key's mark stands over it.
+    var recommended: Color? = nil
 
     func makeBody(configuration: Configuration) -> some View {
-        OptionRow(configuration: configuration, marked: marked, gives: gives)
+        OptionRow(configuration: configuration, marked: marked, gives: gives, recommended: recommended)
     }
 
     private struct OptionRow: View {
         let configuration: ButtonStyleConfiguration
         let marked: Bool
         let gives: Bool
+        let recommended: Color?
         @Environment(\.isEnabled) private var isEnabled
         @Environment(\.colorSchemeContrast) private var contrast
         @State private var hovered = false
 
         private var lit: Bool { (hovered || marked) && isEnabled }
+        /// The violet of a number key's mark, the agent's colour of the answer that it recommends, or the hairline.
+        private var edge: Color {
+            if marked && isEnabled { return FleetStyle.accent }
+            if let recommended { return recommended.opacity(RecommendedBadge.edge(lit: lit, contrast: contrast)) }
+            return FleetStyle.hairline(lit ? 0.18 : 0.10)
+        }
 
         var body: some View {
             configuration.label
                 .background(RoundedRectangle(cornerRadius: FormMetrics.inner)
                     .fill(Color.white.opacity(gives ? (configuration.isPressed ? 0.78 : lit ? 1 : 0.94) : lit ? 0.09 : 0.05))
                     .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner)
-                        .strokeBorder(marked && isEnabled ? FleetStyle.accent : FleetStyle.hairline(lit ? 0.18 : 0.10),
-                                      lineWidth: marked && isEnabled ? 1 : FleetStyle.edgeWidth(contrast))))
+                        .strokeBorder(edge, lineWidth: (marked && isEnabled) || recommended != nil
+                                      ? 1 : FleetStyle.edgeWidth(contrast))))
                 .opacity(configuration.isPressed ? 0.8 : isEnabled ? 1 : 0.55)
                 .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                 .onHover { hovered = $0 }
         }
+    }
+}
+
+/// **The badge of the answer that the agent recommends** (owner feature `need_recommended`, API 1.269; the owner's pick
+/// "B: badge on the edge" of three pictures, 20 November 2026, after "use the agent icon, and maybe like a badge or
+/// something, not that thumb icon"): a capsule on the top edge of that answer's row, at its trailing side and half over
+/// the edge, with the glyph of the agent that raised the request, at rest and with no dot, and the word Recommended, in
+/// that agent's own colour (`AgentTint`, the colour of a control that speaks to the agent): a dark tint of it fills the
+/// capsule, it is the capsule's edge, and a light tint of the glyph's light step is the word. The row's own edge takes
+/// the colour too (`NeedOptionButtonStyle.recommended`). VoiceOver reads the word on the row (its value or hint), so the
+/// badge itself is hidden from it.
+struct RecommendedBadge: View {
+    let agent: String
+    /// What the badge stands on, which its fill covers, so the row's edge does not show through it: the canvas under the
+    /// request at hand on Needs you, a card's surface in a chat.
+    let ground: Color
+    @Environment(\.glyphTeam) private var team
+
+    /// **The glyph's side: the size of the badge's words**, as the badge of a name in a request's words draws its glyph
+    /// at its words' size (`CardBadges`), and not one of `GlyphSize`'s sizes; 14 points, as the picture that he picked
+    /// drew it. The capsule is then 19 points high, so its lower half stays in the row's room above its first line.
+    static let glyph: CGFloat = 14
+    /// The room over the row of the badge, so the half of it over the row stands clear of what is above.
+    static let room: CGFloat = 8
+    /// From the row's trailing edge to the badge's, on a row with no tick at its end.
+    static let inset: CGFloat = 12
+    /// Over and under the words of a recommended row of options that combine, which has 4 points over its words: a
+    /// first line that wraps stands under the badge, as on any other row, and one line stays in its tick's middle.
+    static let wordsRoom: CGFloat = 6
+
+    /// The agent's own colour, as a control that speaks to it wears it (`AgentTint`): the middle of its glyph's gradient.
+    @MainActor static func colour(of agent: String, team: [String]) -> Color { AgentTint(agent: agent, team: team).fill }
+
+    /// How much of that colour the row's edge takes: all of it under the pointer and with Increase Contrast.
+    @MainActor static func edge(lit: Bool, contrast: ColorSchemeContrast) -> Double {
+        lit || contrast == .increased || NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0.75
+    }
+
+    var body: some View {
+        let colour = Self.colour(of: agent, team: team)
+        HStack(spacing: 5) {
+            AgentGlyph(name: agent, presence: .online, size: Self.glyph, dot: false)
+            Text("Recommended").font(FormMetrics.detail).lineLimit(1)
+        }
+        .foregroundStyle(GlyphTeams.look(of: agent, in: team).light.mix(with: .white, by: 0.5))
+        .padding(.leading, 4).padding(.trailing, 9).padding(.vertical, 2)
+        .background(Capsule().fill(ground).overlay(Capsule().fill(colour.opacity(0.25))))
+        .overlay(Capsule().strokeBorder(colour.opacity(0.8), lineWidth: 1))
+        .fixedSize()
+        // A press goes to the row under it, and the glyph makes no jump under the pointer.
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -76,6 +139,22 @@ struct NeedAnswerBox: View {
     /// the answer that he gave moves from there to the top as the others go (`NeedStep`).
     @State private var tops: [Int: CGFloat] = [:]
     private static let space = "need-answer-box"
+    /// The names of the hub's agents, for the colour of the answer that an agent recommends (`RecommendedBadge`).
+    @Environment(\.glyphTeam) private var team
+    /// Owner feature `need_recommended` (API 1.269): the row of the answer that the agent recommends, or nil
+    /// (`OwnerNeed.recommendedRow`).
+    private var recommendation: NeedRecommended.Row? {
+        need.recommendedRow(features: store.state?.ui_features, replies: Self.quickReplies)
+    }
+    /// The agent's own colour on the edge of that row.
+    private var tint: Color { RecommendedBadge.colour(of: need.by, team: team) }
+    /// What the badge stands on, which its fill covers: the canvas under the request at hand, a card in a chat.
+    private var ground: Color { onStep ? FleetStyle.canvas : FleetStyle.surface }
+    /// The place in `tops` of the row of the agent's own words (`NeedRecommended.Row.words`), beside the options' indexes
+    /// and the field's -1.
+    private static let recommendedWords = -2
+    /// The room at the end of a row of options that combine, after its tick.
+    private var tickInset: CGFloat { onStep ? 10 : 6 }
 
     /// Three answers that fit almost every request. **A press sends it at once, as his words** (the owner, 18 November
     /// 2026: "If I click done, I want to send it directly! not paste it into the text input!"): it only filled the box,
@@ -124,22 +203,40 @@ struct NeedAnswerBox: View {
     }
 
     var body: some View {
+        // owner feature need_recommended: the row that has the badge of the answer that the agent recommends
+        let recommended = recommendation
         VStack(alignment: .leading, spacing: 8) {
             if need.choices.isEmpty {
                 // **One look for an answer option** (T-22): the app's own three replies are rows like the ones an
                 // agent offers, and a press sends one as an option's press does. A page showed 24-pt dark chips under
                 // one request and 36-pt violet rows under the next.
                 VStack(alignment: .leading, spacing: onStep ? 8 : 7) {
+                    // **The agent's own words over the app's three replies** (owner API 1.269): a row whose press sends
+                    // them as his answer in words, as a reply's press sends its words.
+                    if case .words(let words) = recommended {
+                        Button {
+                            guard !(onStep && SecondClick.isNow) else { return }
+                            sendQuickReply(words, from: Self.recommendedWords)
+                        } label: { row(words) }
+                            .buttonStyle(NeedOptionButtonStyle(recommended: tint))
+                            .stands(in: Self.space, on: onStep) { tops[Self.recommendedWords] = $0 }
+                            .accessibilityValue("Recommended")
+                            .accessibilityIdentifier("need-recommended-\(need.id)")
+                            .recommendedBadge(by: need.by, ground: ground)
+                    }
                     ForEach(Array(Self.quickReplies.enumerated()), id: \.offset) { index, reply in
+                        let marks = recommended == .reply(index)
                         Button {
                             // Not from the second click of a double-click: it would answer the next request too
                             // (`SecondClick`).
                             guard !(onStep && SecondClick.isNow) else { return }
                             sendQuickReply(reply, from: index)
                         } label: { row(reply) }
-                            .buttonStyle(NeedOptionButtonStyle())
+                            .buttonStyle(NeedOptionButtonStyle(recommended: marks ? tint : nil))
                             .stands(in: Self.space, on: onStep) { tops[index] = $0 }
+                            .accessibilityValue(marks ? "Recommended" : "")
                             .accessibilityIdentifier("quick-\(reply.lowercased())-\(need.id)")
+                            .recommendedBadge(by: marks ? need.by : nil, ground: ground)
                     }
                 }
             } else if need.combines {
@@ -147,20 +244,33 @@ struct NeedAnswerBox: View {
                 // Send with how many he ticked; it stays off while none is ticked.
                 VStack(alignment: .leading, spacing: onStep ? 8 : 7) {
                     ForEach(Array(need.choices.enumerated()), id: \.offset) { index, option in
+                        let marks = recommended == .option(index)
                         HStack(spacing: 8) {
                             Text(option).font(words).foregroundStyle(FleetStyle.text)
                                 .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                                .padding(.vertical, marks ? RecommendedBadge.wordsRoom : 0)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Toggle("", isOn: Binding(get: { ticked.contains(index) }, set: { on in
                                 if on { ticked.insert(index) } else { ticked.remove(index) }
                             })).labelsHidden().toggleStyle(FleetCheckboxStyle()).accessibilityLabel(option)
+                                .accessibilityHint(marks ? "Recommended" : "")
                         }
-                        .padding(.leading, onStep ? 14 : 12).padding(.trailing, onStep ? 10 : 6).padding(.vertical, 4)
+                        .padding(.leading, onStep ? 14 : 12).padding(.trailing, tickInset).padding(.vertical, 4)
                         .frame(minHeight: onStep ? FormMetrics.row : nil)
                         .background(RoundedRectangle(cornerRadius: FormMetrics.inner).fill(Color.white.opacity(0.05)))
+                        // owner feature need_recommended: the edge of the answer that the agent recommends
+                        .overlay {
+                            if marks {
+                                RoundedRectangle(cornerRadius: FormMetrics.inner)
+                                    .strokeBorder(tint.opacity(RecommendedBadge.edge(lit: false, contrast: contrast)),
+                                                  lineWidth: 1)
+                            }
+                        }
                         .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                         .onTapGesture { if ticked.contains(index) { ticked.remove(index) } else { ticked.insert(index) } }
                         .accessibilityIdentifier("need-tick-\(need.id)-\(index)")
+                        // its badge ends before the tick's column, which stays clear
+                        .recommendedBadge(by: marks ? need.by : nil, ground: ground, inset: tickInset + IconMetrics.side)
                     }
                     HStack {
                         Spacer()
@@ -185,6 +295,8 @@ struct NeedAnswerBox: View {
                         // the lane "Give on a card": the first option of an item that carries its grant gives it, white
                         // on Needs you and in a chat (the owner's "Give + No" and "Yes, chat too", 19 November 2026)
                         let gives = index == 0 && need.give != nil
+                        // owner feature need_recommended: the answer that the agent recommends, with its badge
+                        let marks = recommended == .option(index)
                         Button {
                             guard !(onStep && SecondClick.isNow) else { return }
                             marked = nil
@@ -193,10 +305,12 @@ struct NeedAnswerBox: View {
                         } label: {
                             row(option, sendingSince: sending ? waiting?.since : nil, gives: gives)
                         }
-                            .buttonStyle(NeedOptionButtonStyle(marked: marked == index, gives: gives))
+                            .buttonStyle(NeedOptionButtonStyle(marked: marked == index, gives: gives,
+                                                               recommended: marks ? tint : nil))
                             .stands(in: Self.space, on: onStep) { tops[index] = $0 }
-                            .accessibilityValue(sending ? "Sending" : "")
+                            .accessibilityValue(sending ? "Sending" : marks ? "Recommended" : "")
                             .accessibilityIdentifier("need-option-\(need.id)-\(index)")
+                            .recommendedBadge(by: marks ? need.by : nil, ground: ground)
                     }
                 }
             }
@@ -844,5 +958,21 @@ private extension View {
         } else {
             self
         }
+    }
+
+    /// The badge of the answer that `agent` recommends on this row (`RecommendedBadge`), when it is not nil: its middle
+    /// on the row's top edge and its end `inset` from the row's, with room over the row for its upper half. The row is
+    /// one view with or without it, so a reading that brings the badge keeps the row's own state.
+    func recommendedBadge(by agent: String?, ground: Color, inset: CGFloat = RecommendedBadge.inset) -> some View {
+        overlay(alignment: .topTrailing) {
+            // The guide stands on a view that is always there: on the badge inside the `if`, the overlay did not read
+            // it, and the badge hung inside the row.
+            ZStack {
+                if let agent { RecommendedBadge(agent: agent, ground: ground) }
+            }
+            .alignmentGuide(.top) { $0[VerticalAlignment.center] }
+            .padding(.trailing, inset)
+        }
+        .padding(.top, agent == nil ? 0 : RecommendedBadge.room)
     }
 }

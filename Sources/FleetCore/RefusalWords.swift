@@ -47,6 +47,7 @@ enum RefusalWords {
         let days = names["days"]?.written, newest = names["newest"]?.written, reason = names["reason"]?.written
         let most = names["most"]?.written
         let account = names["account"]?.written         // a Drive folder's account (UI-API.md 1.255)
+        let repo = names["repo"]?.written               // one of the product's own repositories (repo_vendor)
         switch code {
         case "hub_changed":
             return say("hub generation changed; refresh state")
@@ -173,6 +174,11 @@ enum RefusalWords {
         case "drive_folder_google":
             guard let reason else { return nil }
             return say("Google did not answer about this folder: \(reason). Try again.")
+        // **A grant of one of the product's own repositories** (POST /ui/team/repos, POST /ui/resources; the owner's
+        // "Yes, use it" of 20 November 2026 to its Spanish).
+        case "repo_vendor":
+            guard let repo else { return nil }
+            return say("The door refuses \(repo) in every fleet, so no grant of it works: leave it out.")
         // **The MCP server form** (UI-API.md 1.187): a package at a registry, the MCP Registry, and a server's OAuth.
         case "package_unknown":
             guard let registry, let name else { return nil }

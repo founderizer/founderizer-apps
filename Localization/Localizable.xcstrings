@@ -16369,6 +16369,16 @@
         }
       }
     },
+    "Recommended" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recomendada"
+          }
+        }
+      }
+    },
     "Reconnecting" : {
       "localizations" : {
         "es" : {
@@ -20965,6 +20975,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La puerta tiene tu GitHub App. Borra el archivo .pem que descargaste."
+          }
+        }
+      }
+    },
+    "The door refuses %@ in every fleet, so no grant of it works: leave it out." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La puerta rechaza %@ en todos los equipos, así que ningún acceso a él funciona: déjalo fuera."
           }
         }
       }

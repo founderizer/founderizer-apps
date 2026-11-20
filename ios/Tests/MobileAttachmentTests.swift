@@ -93,7 +93,8 @@ struct MobileAttachmentTests {
     @Test("A file that the hub describes in another way is refused")
     func metadata() throws {
         #expect(throws: (any Error).self) { try file(["id": 0]).validate() }
-        #expect(throws: (any Error).self) { try file(["mime": "application/x-sh"]).validate() }
+        // a type token of any kind is a file that the apps open (CHAT-APPS.md 8.1); one that is no type token is not
+        #expect(throws: (any Error).self) { try file(["mime": "Application/X-SH"]).validate() }
         #expect(throws: (any Error).self) { try file(["size": 0]).validate() }
         #expect(throws: (any Error).self) { try file(["size": 26 * 1024 * 1024]).validate() }
         #expect(throws: (any Error).self) { try file(["sha256": "ABCD"]).validate() }
