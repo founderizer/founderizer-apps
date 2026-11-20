@@ -244,13 +244,12 @@ struct ModelAccountsTests {
 
     // MARK: the install and the setup with no sign-in
 
-    /// Picture 10: User, Checkout, AI provider, Service, and no Sign-in; "3 of 4" in the install's title.
+    /// Picture 10: User, Checkout, AI provider, Service, and no Sign-in; the install's bar has their four parts.
     @Test func theInstallHasFourRowsInItsOwnOrder() throws {
         let running = try job("running")
         #expect(Servers.steps(running).map(\.id) == ["user", "checkout", "runtime", "service"])
-        let count = try #require(AgentSetupFlow.installCount(running, onMac: false))
-        #expect(count.step == 3 && count.of == 4)
-        #expect(AgentSetupFlow.installing("Gemini", on: "app-1", job: running, onMac: false) == "Installing Gemini on app-1 · 3 of 4")
+        let bar = try #require(AgentSetupFlow.installBar(running, onMac: false))
+        #expect(bar.steps.count == 4 && bar.running == 2)
         // `sign_in: "none"` with no `steps` (5H's message of 16 November 2026): the same four rows.
         #expect(Servers.steps(try job("running", steps: nil, signIn: "none")).map(\.id) == ["user", "checkout", "runtime", "service"])
         // A rename of such an agent: item 10's rows too, with no Sign-in row (review M8).

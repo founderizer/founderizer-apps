@@ -195,7 +195,7 @@ struct SignInWizard: View {
                     // What he does on the provider's page comes before the code he enters there, so the steps stand
                     // over it, and their link opens the page with the code copied.
                     SetupSteps.deviceCode(at: url).environment(\.openURL, OpenURLAction { _ in open(url); return .handled })
-                    if let shown = login?.deviceCode { SetupCode(shown).accessibilityIdentifier("sign-in-device-code") }
+                    if let shown = login?.deviceCode { SetupCode(shown, id: "sign-in-device-code") }
                 }
             }
         } else {

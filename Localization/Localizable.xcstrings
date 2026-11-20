@@ -10419,16 +10419,6 @@
         }
       }
     },
-    "Installing %@ on %@ · %lld of %lld" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Instalando %@ en %@ · %lld de %lld"
-          }
-        }
-      }
-    },
     "Installing %@." : {
       "localizations" : {
         "es" : {

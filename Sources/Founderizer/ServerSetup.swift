@@ -165,9 +165,17 @@ struct SetupPromptView: View {
         VStack(alignment: .leading, spacing: 12) {
             switch prompt.kind {
             case "open_url":
-                if let code = prompt.data?.code { Text(code).font(FormMetrics.oneTimeCode).textSelection(.enabled) }
+                if let code = prompt.data?.code {
+                    // The code's own Copy, as on every sign-in (the owner, 20 November 2026: "add a button to copy the
+                    // code"); Sign in copies it too, as the first step's link of the other sign-ins does.
+                    HStack(spacing: 12) {
+                        Text(code).font(FormMetrics.oneTimeCode).textSelection(.enabled)
+                        CopyButton(text: code).accessibilityIdentifier("setup-code-copy")
+                    }
+                }
                 if let url = prompt.loginURL {
                     Button("Sign in", systemImage: "arrow.up.right") {
+                        if let code = prompt.data?.code { copyMessage(code) }
                         if NSWorkspace.shared.open(url) { Task { await session.answer("opened") } }
                     }.buttonStyle(FleetOutlineButtonStyle())
                     Text(url.host ?? "").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)

@@ -117,26 +117,37 @@ public enum AgentSetupFlow {
         return job
     }
 
-    /// **The step of an install that runs, as a number: 2 of 5** (the owner, 13 November 2026, of a wait that stood
-    /// for minutes with no sign of progress: "show some sort of progress bar there, otherwise it looks stuck! Same
-    /// thing for other long actions where we actually know the progress"). The server reports each step when it
-    /// starts (`ServerJob.step`), and the steps are the list that a server's page draws as rows (`Servers.steps`):
-    /// five on a Linux server, four on a Mac, two for a preparation. nil while the job waits in the queue, for a step
-    /// that is not in that list, and for a job of another kind, whose steps that list does not hold: the page shows
-    /// no number that the app does not have.
-    public static func installCount(_ job: ServerJob?, onMac: Bool) -> (step: Int, of: Int)? {
-        guard let job, job.state == "running", job.kind == "install" || job.kind == "prepare" else { return nil }
-        let steps = Servers.steps(job, onMac: onMac).map(\.id)
-        guard let at = steps.firstIndex(of: job.step ?? "") else { return nil }
-        return (at + 1, steps.count)
+    /// **The install's steps, as a bar under its moving title** (the owner, 20 November 2026, of "Installing Codex on
+    /// worker-1 · 5 of 5": "what is 5 of 5 and then 3-5??? show a progress bar or somethng different, this does not
+    /// look good"; before that, 13 November 2026, of a wait that stood for minutes with no sign of progress: "show
+    /// some sort of progress bar there, otherwise it looks stuck!"). One part for each step of the server's job, as a
+    /// server's page draws them as rows (`Servers.steps`): five on a Linux server, four on a Mac, two for a
+    /// preparation, four for an agent on a key or a model server; `steps` are their names, which only VoiceOver says.
+    /// `running` is the part of the step that the server reports now (`ServerJob.step`), from 0: nil while the job
+    /// waits in the queue and for a step that the list does not hold, so the bar shows no step that the app does not
+    /// have. With no job yet (the manager's own setup gives it its server, and the install comes with a later read),
+    /// the steps of an install on that server, none running. nil for a job of another kind, whose steps that list
+    /// does not hold: its page has no bar.
+    public static func installBar(_ job: ServerJob?, onMac: Bool) -> (steps: [String], running: Int?)? {
+        guard let job else { return (Servers.installSteps.filter { !onMac || $0.id != "user" }.map(\.title), nil) }
+        guard job.kind == "install" || job.kind == "prepare" else { return nil }
+        let steps = Servers.steps(job, onMac: onMac)
+        return (steps.map(\.title), job.state == "running" ? steps.firstIndex { $0.id == job.step } : nil)
     }
 
-    /// **The title of the install's page**: what installs and where, and after them the step that runs, once the
-    /// server reports one ("Installing Codex on app-1 · 2 of 5"). The count stands in the title itself, which is the
-    /// page's moving words: no bar and no spinner comes with it (UI-PATTERNS.md, "A wait that knows its count").
-    public static func installing(_ provider: String, on server: String, job: ServerJob?, onMac: Bool) -> String {
-        guard let count = installCount(job, onMac: onMac) else { return String(l10n: "Installing \(provider) on \(server)") }
-        return String(l10n: "Installing \(provider) on \(server) · \(count.step) of \(count.of)")
+    /// **The part of the bar that runs, which never goes back while one job runs**: the step that the server reports
+    /// now, or the furthest one that it reported before, whichever is further. A pinned program's checkout comes
+    /// before the program, out of the list's order (`server.py`, `Service.install`), and the bar stays where it stood.
+    /// The bar keeps what this gives as the furthest for the next report.
+    public static func barPart(running: Int?, furthest: Int?) -> Int? {
+        guard let running else { return furthest }
+        return max(running, furthest ?? running)
+    }
+
+    /// **The title of the install's page**: what installs and where. The step that runs is the bar under it
+    /// (`installBar`), never a number in the words.
+    public static func installing(_ provider: String, on server: String) -> String {
+        String(l10n: "Installing \(provider) on \(server)")
     }
 
     /// **The page the setup shows now, from the hub's own readings.** A job or a sign-in that goes on is its own page,

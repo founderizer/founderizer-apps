@@ -274,6 +274,9 @@ struct ProviderView: View {
                     Text(code).font(FormMetrics.oneTimeCode).textSelection(.enabled)
                         .accessibilityIdentifier("provider-code")
                 }
+            } accessory: {
+                // The code's own Copy (the owner, 20 November 2026: "add a button to copy the code").
+                CopyButton(text: code).accessibilityIdentifier("provider-code-copy")
             }
         } else if !held.joined, setup.running, (setup.timeline.prompt ?? setup.timeline.signIn) != nil {
             FormBlock("The setup needs you") { SetupPromptView(session: setup) }

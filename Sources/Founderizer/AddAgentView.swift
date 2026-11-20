@@ -616,7 +616,6 @@ struct ServerJobView: View {
     var onMac = false
     /// Opens the sign-in screen of an agent (`SignInWizard`), for a job whose sign-in the hub runs as the machine's own.
     var openSignIn: ((String) -> Void)?
-    @State private var copied = false
 
     var body: some View {
         FormSection(title, footer: job.state == "needs_owner" && job.prompt != nil ? nil : Servers.jobWords(job)) {
@@ -693,6 +692,9 @@ struct ServerJobView: View {
                     Text(code).font(FormMetrics.oneTimeCode).textSelection(.enabled)
                         .accessibilityIdentifier("job-code")
                 }
+            } accessory: {
+                // The code's own Copy (the owner, 20 November 2026: "add a button to copy the code").
+                CopyButton(text: code).accessibilityIdentifier("job-code-copy")
             }
         } else if let command = prompt.terminalCommand {
             FormBlock("Sign in to Claude Code", detail: String(l10n: "Run this command in a terminal on \(server). Sign in with /login, then type /exit. Founderizer goes on by itself.")) {
@@ -701,8 +703,7 @@ struct ServerJobView: View {
                     .background(FleetStyle.canvas, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
                     .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(FleetStyle.line, lineWidth: 0.5))
             } accessory: {
-                Button(copied ? "Copied" : "Copy") { copyMessage(command); copied = true }.buttonStyle(FleetOutlineButtonStyle())
-                    .accessibilityIdentifier("job-copy")
+                CopyButton(text: command).accessibilityIdentifier("job-copy")
             }
         } else if prompt.kind == "signin", let agent = job.agent, let openSignIn {
             // Claude Code's sign-in is the machine's own now (`{kind: "signin", login}`, UI-API.md): the hub starts it,

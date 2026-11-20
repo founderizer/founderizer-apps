@@ -287,52 +287,63 @@ struct AgentSetupFlowTests {
         #expect(AgentSetupFlow.blocker(nil) == nil)
     }
 
-    // **The install's title says the step that runs** (the owner, 13 November 2026: "show some sort of progress bar
-    // there, otherwise it looks stuck! Same thing for other long actions where we actually know the progress").
+    // **The install's steps are a bar under its title, and the title has no number** (the owner, 20 November 2026, of
+    // "Installing Codex on worker-1 · 5 of 5": "what is 5 of 5 and then 3-5??? show a progress bar or somethng
+    // different, this does not look good").
 
-    @Test func anInstallThatRunsCountsItsStepOfTheServersFive() throws {
+    @Test func anInstallThatRunsMovesThePartOfItsStepInTheServersFive() throws {
         let steps = ["user", "runtime", "checkout", "service", "sign_in"]
         for (index, step) in steps.enumerated() {
-            let count = AgentSetupFlow.installCount(try job("running", step: step), onMac: false)
-            #expect(count?.step == index + 1)
-            #expect(count?.of == 5)
+            let bar = AgentSetupFlow.installBar(try job("running", step: step), onMac: false)
+            #expect(bar?.steps.count == 5)
+            #expect(bar?.running == index)
         }
-        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: try job("running", step: "runtime"), onMac: false)
-                == "Installing Codex on app-1 · 2 of 5")
+    }
+
+    @Test func theBarNeverGoesBackWhileOneJobRuns() throws {
+        // A pinned program's install: its checkout comes before the program, out of the list's order (server.py).
+        var furthest: Int?, shown: [Int?] = []
+        for step in ["user", "checkout", "runtime", "service", "sign_in"] {
+            furthest = AgentSetupFlow.barPart(running: AgentSetupFlow.installBar(try job("running", step: step), onMac: false)?.running,
+                                              furthest: furthest)
+            shown.append(furthest)
+        }
+        #expect(shown == [0, 2, 2, 3, 4])
+        // A report with no step that the list holds keeps the part that ran; a bar with none yet has none.
+        #expect(AgentSetupFlow.barPart(running: nil, furthest: 3) == 3)
+        #expect(AgentSetupFlow.barPart(running: nil, furthest: nil) == nil)
     }
 
     @Test func aMacHasNoUserStepSoItsInstallHasFour() throws {
-        let checkout = try job("running", step: "checkout")
-        #expect(AgentSetupFlow.installCount(checkout, onMac: true)?.step == 2)
-        #expect(AgentSetupFlow.installCount(checkout, onMac: true)?.of == 4)
-        #expect(AgentSetupFlow.installing("Claude Code", on: "mac-1", job: checkout, onMac: true)
-                == "Installing Claude Code on mac-1 · 2 of 4")
-        // A step that a Mac's list does not hold gets no number.
-        #expect(AgentSetupFlow.installCount(try job("running", step: "user"), onMac: true) == nil)
+        let checkout = try #require(AgentSetupFlow.installBar(try job("running", step: "checkout"), onMac: true))
+        #expect(checkout.steps.count == 4 && checkout.running == 1)
+        // A step that a Mac's list does not hold runs in no part.
+        let user = try #require(AgentSetupFlow.installBar(try job("running", step: "user"), onMac: true))
+        #expect(user.steps.count == 4 && user.running == nil)
     }
 
-    @Test func aPreparationCountsItsTwoSteps() throws {
-        let signIn = try job("running", kind: "prepare", runtime: "claude", step: "sign_in")
-        #expect(AgentSetupFlow.installCount(signIn, onMac: false)?.step == 2)
-        #expect(AgentSetupFlow.installCount(signIn, onMac: false)?.of == 2)
+    @Test func aPreparationHasTwoParts() throws {
+        let signIn = try #require(AgentSetupFlow.installBar(try job("running", kind: "prepare", runtime: "claude", step: "sign_in"),
+                                                            onMac: false))
+        #expect(signIn.steps.count == 2 && signIn.running == 1)
     }
 
-    @Test func aTitleShowsNoNumberThatTheAppDoesNotHave() throws {
-        let plain = "Installing Codex on app-1"
-        // No job, a job in the queue, and a running job that has reported no step yet.
-        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: nil, onMac: false) == plain)
-        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: try job("queued", step: nil), onMac: false) == plain)
-        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: try job("running", step: nil), onMac: false) == plain)
-        // A step that the list does not hold, from a newer server.
-        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: try job("running", step: "warm_up"), onMac: false) == plain)
-        // A job of another kind has other steps: a rename moves the checkout and the service only.
-        #expect(AgentSetupFlow.installing("Codex", on: "app-1", job: try job("running", kind: "rename", step: "service"),
-                                          onMac: false) == plain)
-        #expect(AgentSetupFlow.installCount(try job("running", kind: "remove", step: "service"), onMac: false) == nil)
-        // A job that waits for him or that ended is no wait of the machine.
-        for state in ["needs_owner", "failed", "done", "canceled"] {
-            #expect(AgentSetupFlow.installCount(try job(state, step: "sign_in"), onMac: false) == nil)
+    @Test func theBarShowsNoStepThatTheAppDoesNotHave() throws {
+        // A job in the queue, a running job that has reported no step yet, a step that the list does not hold (from a
+        // newer server), and a job that waits for him or that ended: all its parts, and none runs.
+        var waiting = [try job("queued", step: nil), try job("running", step: nil), try job("running", step: "warm_up")]
+        for state in ["needs_owner", "failed", "done", "canceled"] { waiting.append(try job(state, step: "sign_in")) }
+        for one in waiting {
+            let bar = try #require(AgentSetupFlow.installBar(one, onMac: false))
+            #expect(bar.steps.count == 5 && bar.running == nil)
         }
+        // No job yet (the manager's own setup gives it its server): the steps of an install there, none running.
+        let none = try #require(AgentSetupFlow.installBar(nil, onMac: false))
+        #expect(none.steps.count == 5 && none.running == nil)
+        #expect(AgentSetupFlow.installBar(nil, onMac: true)?.steps.count == 4)
+        // A job of another kind has other steps, and no bar: a rename moves the checkout and the service only.
+        #expect(AgentSetupFlow.installBar(try job("running", kind: "rename", step: "service"), onMac: false) == nil)
+        #expect(AgentSetupFlow.installBar(try job("running", kind: "remove", step: "service"), onMac: false) == nil)
     }
 }
 

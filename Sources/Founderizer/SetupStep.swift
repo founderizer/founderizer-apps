@@ -11,13 +11,14 @@ enum SetupMetrics {
     /// Everything under the title: a line, a link, the field, a button and a provider's card.
     static let text: CGFloat = 15
     /// The two sizes as type (T-23): the title, semibold; everything under it; a choice's name on its card, medium; a
-    /// field or a line that holds an address, monospaced; and Codex's code, at the title's size. A key or a token that
-    /// he pastes takes the step's own words (`PasteField`), never this monospaced font.
+    /// field or a line that holds an address, monospaced; and Codex's code, at the title's size, medium, its digits of
+    /// one width (`SetupCode`). A key or a token that he pastes takes the step's own words (`PasteField`), never this
+    /// monospaced font.
     static let titleFont = Font.system(size: title, weight: .semibold)
     static let textFont = Font.system(size: text)
     static let choiceFont = Font.system(size: text, weight: .medium)
     static let monoFont = Font.system(size: text, design: .monospaced)
-    static let codeFont = Font.system(size: title)
+    static let codeFont = Font.system(size: title, weight: .medium).monospacedDigit()
     /// The mark over the title: a provider's icon or an agent's glyph, at the glyph's largest size.
     static let mark: CGFloat = GlyphSize.hero
     /// The width of the step's column, and of the field that takes a code.
@@ -556,14 +557,151 @@ struct SetupSteps: View {
     }
 }
 
-/// Codex's code, in the title's size and typeface, for him to read against the provider's page.
+/// **A sign-in code in its box, with its Copy** (the owner, 20 November 2026, of Codex's code on its sign-in page: "for
+/// the login code, add a button to copy the code, more visual!"). The code in the title's size and typeface
+/// (`SetupMetrics.codeFont`), for him to read against the provider's page, at the left of a box as wide as a step's
+/// field, in the look of the first run's prompt box (`SetupMetrics.promptFill`, the canvas's hairline), and Copy at the
+/// box's right (`CopyButton`). The first step's link copies the code too, as before.
 struct SetupCode: View {
     let code: String
+    /// The code's identifier for a check; its Copy has the same with "-copy" after it.
+    let id: String
 
-    init(_ code: String) { self.code = code }
+    init(_ code: String, id: String) { self.code = code; self.id = id }
 
     var body: some View {
-        Text(code).font(SetupMetrics.codeFont).tracking(2).textSelection(.enabled)
+        HStack(spacing: 12) {
+            Text(code).font(SetupMetrics.codeFont).tracking(3).textSelection(.enabled)
+                .lineLimit(1).minimumScaleFactor(0.6)
+                .accessibilityIdentifier(id)
+            Spacer(minLength: 0)
+            CopyButton(text: code).accessibilityIdentifier("\(id)-copy")
+        }
+        .padding(.leading, 18).padding(.trailing, 12).padding(.vertical, 12)
+        .frame(width: SetupMetrics.field)
+        .background(SetupMetrics.promptFill, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+        .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(FleetStyle.line, lineWidth: 0.5))
+    }
+}
+
+/// **Copy, for a sign-in code or a command that he takes to another page** (`SetupCode`, a server job's code and command
+/// in a form, the local installer's code): an outline button that puts the text on the clipboard and says Copied for
+/// two seconds, then Copy again, so that a second press says it again. A new text (a new sign-in's code) is not copied
+/// yet, so it says Copy at once.
+struct CopyButton: View {
+    let text: String
+    @State private var copied = false
+    @State private var presses = 0
+
+    var body: some View {
+        Button(copied ? "Copied" : "Copy") { copyMessage(text); copied = true; presses += 1 }
+            .buttonStyle(FleetOutlineButtonStyle())
+            .task(id: presses) {
+                guard presses > 0 else { return }
+                try? await Task.sleep(for: .seconds(2))
+                if !Task.isCancelled { copied = false }
+            }
+            .onChange(of: text) { copied = false }
+    }
+}
+
+/// **The steps of a server's job, as a bar under its moving title** (the owner, 20 November 2026, of "Installing Codex
+/// on worker-1 · 5 of 5": "what is 5 of 5 and then 3-5??? show a progress bar or somethng different, this does not look
+/// good"). One part for each step of the job (`AgentSetupFlow.installBar`), in the look of the first run's build page
+/// (`FleetBuildLine`): a part that is done in the words' faded colour, the part that runs in the green of work, the rest
+/// empty. **The part that runs breathes**, as the installer's "Steps bar" does (his yes of 4 November 2026), so that a
+/// long step never looks stuck; with Reduce Motion it stands still. No number and no word on the screen: the title says
+/// what runs, and only VoiceOver says the step by its name. **It never goes back while one job runs**
+/// (`AgentSetupFlow.barPart`): a step that the server takes out of the list's order leaves the bar where it stood. Its
+/// caller gives it the job's id as its `id`, so that a new job (Try again) starts it again.
+struct SetupStepsBar: View {
+    /// The names of the job's steps, one part each.
+    let steps: [String]
+    /// The part that runs now, from 0; nil while none runs that the list holds (a job in the queue).
+    let running: Int?
+    /// The furthest part that ran while this bar stood.
+    @State private var furthest: Int?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The bar's length, whatever the number of its parts: a little over half the field's width, under a title.
+    static let width: CGFloat = 240, gap: CGFloat = 6, thickness: CGFloat = 4
+    static let track = Color.white.opacity(0.10)
+
+    /// The part that runs, or the furthest one that ran; nil for a part that this bar does not have.
+    private var at: Int? { AgentSetupFlow.barPart(running: running, furthest: furthest).flatMap { steps.indices.contains($0) ? $0 : nil } }
+
+    var body: some View {
+        HStack(spacing: Self.gap) {
+            ForEach(steps.indices, id: \.self) { index in
+                Capsule().fill(fill(index))
+                    .overlay { if index == at, !reduceMotion { BreathingPart(color: NSColor(AgentPresence.working.color)) } }
+            }
+        }
+        .frame(width: Self.width, height: Self.thickness)
+        .animation(reduceMotion ? nil : FleetMotion.bar, value: at)
+        .onChange(of: running, initial: true) { _, now in furthest = AgentSetupFlow.barPart(running: now, furthest: furthest) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(at.map { String(l10n: "Step \($0 + 1) of \(steps.count): \(steps[$0]).") } ?? "")
+        .accessibilityHidden(at == nil)
+    }
+
+    /// A done part in the words' faded colour, as the build page's; the part that runs is the track under its breath,
+    /// and green with Reduce Motion.
+    private func fill(_ index: Int) -> Color {
+        guard let at, index <= at else { return Self.track }
+        if index < at { return FleetStyle.text.opacity(0.62) }
+        return reduceMotion ? AgentPresence.working.color : Self.track
+    }
+}
+
+/// The part of the bar that runs: the green of work, whose light comes and goes in a Core Animation layer, so the window
+/// does not draw again at each frame ("Marks before words": a motion that goes on).
+private struct BreathingPart: NSViewRepresentable {
+    let color: NSColor
+
+    func makeNSView(context: Context) -> BreathingPartView { BreathingPartView() }
+    func updateNSView(_ view: BreathingPartView, context: Context) { view.color = color }
+}
+
+private final class BreathingPartView: NSView {
+    var color = NSColor.systemGreen { didSet { if color != oldValue { needsDisplay = true } } }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        setAccessibilityElement(false)
+    }
+    required init?(coder: NSCoder) { nil }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    /// A click goes to what is under the bar.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    /// The colour in this appearance, and the breath once the layer has none.
+    override func updateLayer() {
+        layer?.backgroundColor = color.cgColor
+        breathe()
+    }
+
+    override func layout() {
+        super.layout()
+        layer?.cornerRadius = bounds.height / 2
+    }
+
+    /// A layer that left the window lost its motion.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { needsDisplay = true }
+    }
+
+    private func breathe() {
+        guard let layer, layer.animation(forKey: "breath") == nil else { return }
+        let breath = CABasicAnimation(keyPath: "opacity")
+        breath.fromValue = 1; breath.toValue = 0.3; breath.duration = 0.9
+        breath.autoreverses = true; breath.repeatCount = .infinity; breath.isRemovedOnCompletion = false
+        breath.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(breath, forKey: "breath")
     }
 }
 

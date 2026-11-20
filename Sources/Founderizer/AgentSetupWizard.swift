@@ -144,6 +144,9 @@ struct AgentSetupWizard: View {
     }
     /// The server it goes on: before the command that gives it its first server, the one that command names.
     private var serverName: String { server?.name ?? machine?.machine ?? placeOn ?? String(l10n: "its server") }
+    /// Its server is a Mac, which has no user step: also the server that it goes on before the hub lists it there, so
+    /// that the install's bar has its number of parts before the install's first read (the manager's first setup).
+    private var installsOnMac: Bool { (server ?? servers?.servers.first { $0.name == placeOn })?.isMac == true }
     /// Something goes on that the page is about: an install or a preparation, or a sign-in.
     private var running: Bool { job?.isOpen == true || machine?.login?.isOpen == true }
 
@@ -272,7 +275,13 @@ struct AgentSetupWizard: View {
                     case .servers: fleetServers
                     case .server: EmptyView()       // `serverStep`, in place of this page
                     case .provider: providers
-                    case .installing(let provider): SetupStep(title: title, waits: true) { mark(provider) }
+                    case .installing(let provider):
+                        SetupStep(title: title, waits: true) { mark(provider) } content: {
+                            // The steps of the server's job as a bar, from the queue on; a new job starts it again.
+                            if let bar = AgentSetupFlow.installBar(job, onMac: installsOnMac) {
+                                SetupStepsBar(steps: bar.steps, running: bar.running).id(job?.id)
+                            }
+                        }
                     case .switching: settingUp
                     case .signIn(let provider): signIn(provider)
                     case .activate:
@@ -311,9 +320,8 @@ struct AgentSetupWizard: View {
         case .servers: String(l10n: "Your fleet's servers")
         case .server: String(l10n: "\(name)'s server")
         case .provider: String(l10n: "\(name)'s AI provider")
-        // With the step of the server's job that runs, once it reports one: "Installing Codex on app-1 · 2 of 5".
-        case .installing(let provider):
-            AgentSetupFlow.installing(modelProvider?.label ?? providerName(provider), on: serverName, job: job, onMac: server?.isMac == true)
+        // The step of the server's job that runs is the bar under it (`SetupStepsBar`), never a number in it.
+        case .installing(let provider): AgentSetupFlow.installing(modelProvider?.label ?? providerName(provider), on: serverName)
         case .switching: String(l10n: "Setting up \(name)")
         case .signIn(let provider): String(l10n: "Sign in to \(providerName(provider))")
         case .activate: String(l10n: "Activate \(name)")
@@ -500,9 +508,10 @@ struct AgentSetupWizard: View {
     /// onboarding with steps, key etc... needs to be applied the same way in other places, like AI provider
     /// onboardings"), as a VPS provider's token page has them (`SetupSteps`). **Claude Code**: open the sign-in page,
     /// sign in and copy the code it shows, then the field, which sends a pasted code by itself. **Codex**: open the
-    /// sign-in page, sign in and enter the code under the steps, in large type; the page goes on by itself when the
-    /// machine reports the sign-in. The first step's link opens the page and copies Codex's code; no button and no
-    /// "Open it again" stand under it. Until the provider has printed its link, and from the code's send until the
+    /// sign-in page, sign in and enter the code under the steps, in large type in its box, with Copy beside it (the
+    /// owner, 20 November 2026: "add a button to copy the code, more visual!"); the page goes on by itself when the
+    /// machine reports the sign-in. The first step's link opens the page and copies Codex's code too; no "Open it
+    /// again" stands under it. Until the provider has printed its link, and from the code's send until the
     /// machine reports, the title moves. **After his own press on a card the provider's page opens by itself**
     /// (`AgentSetupFlow.Start.signsIn`): the link is the press for a sign-in that he did not start on this visit.
     @ViewBuilder private func signIn(_ provider: String) -> some View {
@@ -522,7 +531,7 @@ struct AgentSetupWizard: View {
                 if login?.waitsForCode == true {
                     CodeField(code: $code) { send() }.accessibilityIdentifier("agent-setup-paste")
                 } else if let shown {
-                    SetupCode(shown).accessibilityIdentifier("agent-setup-code")
+                    SetupCode(shown, id: "agent-setup-code")
                 }
                 refused
             }
