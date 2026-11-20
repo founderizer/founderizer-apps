@@ -534,12 +534,15 @@ final class InstallerModel {
             if !MacSittingRead.automaticLogin(said?.output ?? "", user: user) { pages.append(.automaticLogin) }
         }
         if needs.locked == true { pages.append(.lockScreen) }           // macOS gives no other reading of this setting
+        let vault = FileManager.default.fileExists(atPath: Self.vault.path)
+        var desktop: MacDesktop?
+        if needs.browser == true || vault { desktop = await readDesktop() }
         if needs.browser == true {
-            let desktop = await readDesktop(), signedIn = await claudeCodeSignedIn()
+            let signedIn = await claudeCodeSignedIn()
             // A Chrome that answers Claude Code has the extension on, or one that macOS hides from this reading.
             if !signedIn || desktop?.browser != true { pages.append(.claude) }
         }
-        if FileManager.default.fileExists(atPath: Self.vault.path), !appleEventsAllowed() { pages.append(.appleEvents) }
+        if MacDesktop.appleEventsMissing(vault: vault, desktop) { pages.append(.appleEvents) }
         if needs.chatgpt == true || adding.contains(.chatGPT) {
             if !(await chatGPTSignedIn(Self.chatGPT)) {
                 pages += [.chatGPT, .computerUse]
@@ -706,33 +709,23 @@ final class InstallerModel {
         return page.seen
     }
 
-    /// Chrome takes this menu item from a real keyboard or mouse alone, so nothing here can press it. The page reads
-    /// Chrome's own preferences. Then one harmless script runs through this Mac's vault, so that macOS asks its one
-    /// question for the vault now, with a person here: the vault's later sign-ins have nobody to answer it.
+    /// Chrome takes this menu item only from this Mac's own keyboard, mouse or trackpad, so nothing here can press it,
+    /// and it keeps the item for each profile. The page reads it where the vault's sign-ins need it, with the vault's own
+    /// check of each Chrome window (`MacVaultChrome`), whose profiles the page's line asks for: the first check asks
+    /// macOS its one question with a person here, and the checks after it are quiet (`MacAppleEventsWatch`).
     private func watchAppleEvents() {
         watching { model in
+            var watch = MacAppleEventsWatch()
             while !Task.isCancelled {
-                if model.appleEventsAllowed() {
-                    model.working = true
-                    let said = try? await LocalShell.sh("python3 \"$HOME/fleet-server/server.py\" chrome-script", timeout: 300)
-                    guard !Task.isCancelled else { return }
-                    guard said?.output.contains("\"ok\": true") == true || said?.output.contains("\"ok\":true") == true else {
-                        return model.stop("Chrome did not take the vault's script. In System Settings, Privacy & Security, "
-                                          + "Automation, allow Fleet Vault to control Chrome.")
-                    }
-                    return model.advance()
+                let said = try? await LocalShell.sh("python3 \"$HOME/fleet-server/server.py\" chrome-script"
+                                                    + (watch.loud ? "" : " --quiet"), timeout: 300)
+                guard !Task.isCancelled else { return }
+                switch watch.take(MacVaultChrome.read(said?.output ?? "")) {
+                case .next: return model.advance()
+                case .stop(let words): return model.stop(words)
+                case .wait: try? await Task.sleep(for: .seconds(2))
                 }
-                try? await Task.sleep(for: .seconds(2))
             }
-        }
-    }
-
-    private func appleEventsAllowed() -> Bool {
-        let chrome = Self.home.appendingPathComponent("Library/Application Support/Google/Chrome")
-        let profiles = (try? FileManager.default.contentsOfDirectory(atPath: chrome.path)) ?? []
-        return profiles.contains { profile in
-            (try? Data(contentsOf: chrome.appendingPathComponent(profile).appendingPathComponent("Preferences")))
-                .map(MacSittingRead.appleEventsAllowed) == true
         }
     }
 

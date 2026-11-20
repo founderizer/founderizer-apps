@@ -108,6 +108,52 @@ public sealed class SecondSetTests
         Assert.AreEqual(159, backups[0].Id, "the one that moved last first");
     }
 
+    /// <summary>A task whose outcome is unknown shows the question mark, as on the Mac (FleetCore's FleetTask.mark(in:), in
+    /// the search card): the orange "?" with "Outcome not known: check it", while the check is the owner's
+    /// (TaskOutcome.waitsOnOwner: a hold holds the task, it has ended, or its agent's Shell box is off). A task whose
+    /// agent's next session checks it first keeps its own mark.</summary>
+    [TestMethod]
+    public void ATaskWhoseOutcomeIsUnknownShowsTheQuestionMarkAsOnTheMac()
+    {
+        static JsonObject Unknown(long id, long task) => new()
+        {
+            ["id"] = id, ["task"] = task, ["attempt"] = 1, ["title"] = "Send the note", ["kind"] = "send", ["state"] = "unknown",
+        };
+        var s = Fleet(snapshot =>
+        {
+            foreach (var node in snapshot["agents"]!.AsArray())
+            {
+                var agent = node!.AsObject();                       // Marketing's Shell box is off
+                agent["can"] = agent["name"]!.GetValue<string>() == "orla" ? new JsonArray("web") : new JsonArray("shell", "web");
+            }
+            snapshot["holds"] = new JsonArray(new JsonObject { ["id"] = 1, ["task"] = 11, ["kind"] = "pause", ["state"] = "stopped", ["attempt"] = 1 });
+            snapshot["outcomes"] = new JsonArray(Unknown(1, 11), Unknown(2, 12), Unknown(3, 13), Unknown(4, 22));
+        });
+        var marks = Screens.Search(s, "", 0, Clock).Tasks.ToDictionary(t => t.Id, t => t.Mark);
+        var check = new TaskMark(TaskSymbol.Unknown, "Outcome not known: check it", Attention: true, InWork: false);
+        Assert.AreEqual(check, marks[11], "held");
+        Assert.AreEqual(check, marks[13], "its agent's Shell box is off");
+        Assert.AreEqual(check, marks[22], "ended");
+        Assert.AreEqual(TaskSymbol.Working, marks[12].Symbol, "running: its agent's next session checks it first");
+    }
+
+    /// <summary>A held task whose page is not open shows its hold in search, as on the Mac (FleetCore's
+    /// FleetTask.mark(in:) takes the state's holds, the iPhone its reading's): the hold comes from the hub's reading, as
+    /// the board and Needs you read it. The search card read the holds only from the task pages that were open, so a
+    /// paused task, or one whose stop was not confirmed, showed "Working" there.</summary>
+    [TestMethod]
+    public void AHeldTaskWhosePageIsNotOpenShowsItsHoldInSearchAsOnTheMac()
+    {
+        var s = Fleet(snapshot => snapshot["holds"] = new JsonArray(
+            new JsonObject { ["id"] = 1, ["task"] = 12, ["kind"] = "pause", ["state"] = "stopped", ["attempt"] = 1 },
+            new JsonObject { ["id"] = 2, ["task"] = 11, ["kind"] = "stop", ["state"] = "not_confirmed", ["attempt"] = 1 }));
+        Assert.AreEqual(0, s.TaskPages.Count, "no task's page is open");
+        var marks = Screens.Search(s, "", 0, Clock).Tasks.ToDictionary(t => t.Id, t => t.Mark);
+        Assert.AreEqual(new TaskMark(TaskSymbol.Paused, "Paused", Attention: false, InWork: false), marks[12], "paused");
+        Assert.AreEqual(new TaskMark(TaskSymbol.Alert, "Stop not confirmed", Attention: true, InWork: false), marks[11],
+                        "a stop that was not confirmed: the owner's to check");
+    }
+
     // ---------------------------------------------------------------- 4 · files
 
     [TestMethod]

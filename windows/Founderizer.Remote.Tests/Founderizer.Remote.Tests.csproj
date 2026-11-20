@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The tests of Founderizer.Remote: against a scratch sshd that each test starts as this user on a loopback port, and
+       for the password and sudo -S against an sshd in a Docker container that the test removes (category Container).
+       The 30-minute run is category Long and runs only with FOUNDERIZER_REMOTE_LONG=1. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Founderizer.Remote.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.11.0]" />
+    <PackageReference Include="MSTest.TestAdapter" Version="[4.5.1]" />
+    <PackageReference Include="MSTest.TestFramework" Version="[4.5.1]" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Founderizer.Remote/Founderizer.Remote.csproj" />
+  </ItemGroup>
+</Project>

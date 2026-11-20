@@ -15,6 +15,8 @@ seven pictures that the owner approved (`windows-app-pictures.md` in the plans f
 | `Founderizer.Core/` | the logic: the hub client, the models and decoders of the device routes, the live changes, the outbox, the canonical statement and the crypto. `net10.0`, no Windows call, trimming and Native AOT compatible, JSON only by source generation | any OS |
 | `Founderizer.Core.Tests/` | MSTest: unit tests, the vectors of `../vectors`, and the decode twin (`HubDecodeTwin`, and `OwnerDecodeTwin` as the owner's computer) | any OS |
 | `Founderizer.Owner/`, `Founderizer.Setup/` | step 2 (`windows-app-plan-v2.md`, section 6): the owner's pages, and the first run with what the owner's computer sets up; each with its tests in `Founderizer.Owner.Tests/` and `Founderizer.Setup.Tests/` | any OS |
+| `Founderizer.Remote/` | SSH from the owner's PC (step 2, piece L1): `IRemote` and `SshRemote`, the host key record, the app's own SSH key. The only project that names SSH.NET; it names no other project. `net10.0`, no Windows call | any OS |
+| `Founderizer.Remote.Tests/` | MSTest: against a scratch `sshd` of this machine, and an `sshd` in a Docker container for the password and `sudo -S` | macOS, Linux |
 | `Founderizer.SelfCheck/` | a small program that runs the vectors, published with Native AOT: the proof that the library and BouncyCastle work with no JIT | any OS |
 | `PARITY.md`, `parity.py` | each feature name of the hub and its state on Windows, and the script that prints each name with no line | |
 | `../vectors/` | the shared test vectors and `make_vectors.py`, which makes them with the hub's own code | |
@@ -317,6 +319,64 @@ store.Changed += (_, change) => dispatcher.TryEnqueue(() =>
 store.SetFront(true);
 ```
 
+### SSH from the PC: `Founderizer.Remote` (step 2, piece L1)
+
+For `Founderizer.Setup` (the install, the claim, the root jobs): no page calls SSH (`windows-app-plan-v2.md`, 5.5
+and 6). These names stay.
+
+- `IRemote.RunAsync(RemoteCall, Action<string>? line, CancellationToken)` gives a `RemoteResult(ExitStatus, Output,
+  Errors, Failure)`: one program on one server, on a connection of its own, as the Mac's `ssh` makes one for each
+  program. A failure is a result, with `ExitStatus` null. `RemoteFailure` has the Mac's kinds of not reaching a server
+  (`ServerCheck.unreached(_:said:)`), one sentence each: `NotFound` (the name), `Refused` (the port), `Closed` (the
+  server closed the connection, or found no common way to talk, before any login) and `NoAnswer` (no answer in time);
+  then `HostKeyChanged`, `HostKeyUnknown`, `LoginRefused`, `LoginNotOffered` (a password to a server that takes keys
+  only: `PasswordOnce.refusal`; the password was not sent), `Dropped`, `TimedOut` and `Canceled`. An exception is a
+  fault of the caller: a call that
+  `RemoteRules.Check` refuses (an address or a user that the Mac's `InstallTarget.problem` refuses, a program with a
+  carriage return or a NUL), or `AppKey` while the secret box has no key.
+- `RemoteCall(Target, Program, Input, Login, HostKey, Connect) { Limit = … }`. `Program` is the text that the Mac gives
+  `ssh`, after `InstallPlan.throughSudo`; `Input` is its standard input, and null is an end of file at once (the Mac's
+  `/dev/null`). SSH.NET sends the end of an input only after one byte of it, so such a program goes to the server as
+  `/bin/sh -c 'exec "${SHELL:-/bin/sh}" -c "$0" </dev/null' '<program>'` (quoted as `InstallPlan.quote`): sh takes
+  `/dev/null` and gives the program to the user's own login shell, as `sshd` would (tested with zsh and tcsh).
+  `RemoteCall.ConnectTimeout` is the Mac's 20 s. `Limit` bounds the whole call, `RemoteCall.DefaultLimit` (600 s, the
+  Mac's `LocalShell.run`) unless a step gives its own, and ends it as `TimedOut`. The Mac's `Runs.rootWithPassword`
+  stays the caller's: the password's line first in `Input`, and the caller clears its `Input` after the call. A call's
+  text (`ToString`) names its server alone: a program can hold a one-time code.
+- `RemoteLogin.AppKey()`, or `RemoteLogin.PasswordOnce(char[])`, whose array the call clears when it ends. The password
+  goes once: by keyboard-interactive (PAM's prompt) where the server asks so, else by the password method, never by
+  both.
+- `line` gets each line of standard output and of standard error as it comes, without its line end, one at a time,
+  never after the call has returned. `Output` and `Errors` keep the first 1 MiB each. The Mac's `LocalShell` gives one
+  text for both streams; their order between each other is the order of `line`.
+- `new SshRemote(new HostKeys(appFolder), () => box.Read(AppSshKey.BoxName))`: the function gives a fresh copy of the
+  key's private half, which the call clears. `DisposeAsync` cancels each call that runs and waits for it.
+- `HostKeys`: `known-hosts.json` in the app's folder; the owner's own `%USERPROFILE%\.ssh` is never read or written.
+  `TakeNew` (`accept-new`) keeps the key of a server with none on record. Under either rule, a server with a key on
+  record must show that key, of that type; a key of another type is a changed key (OpenSSH's `accept-new` would take
+  it). `Forget(host, port)` when a server is removed, `ForgetAll()` at start again. A file that cannot be read refuses
+  every server as `HostKeyChanged`, and nothing writes over it, until `ForgetAll`. No method takes a changed key, and
+  none is added.
+- `AppSshKey.Make()` gives `(PrivateKey, PublicLine)`: 32 bytes for the box under `AppSshKey.BoxName`, and
+  `ssh-ed25519 <base64> founderizer` for a server's `authorized_keys`. The key is never a file.
+
+| The Mac's `ssh` (`InstallPlan.arguments`, `PasswordOnce.passwordLogin`) | `SshRemote` |
+| --- | --- |
+| `ConnectTimeout=20` | `Connect`: the connection, the greeting, the key exchange and each wait of the login |
+| `LocalShell.run(timeout:)`, 600 s unless the step gives its own | `Limit`, `RemoteCall.DefaultLimit`; `TimedOut` |
+| `ServerAliveInterval=30` | a keep-alive every 30 s |
+| `BatchMode=yes`, `NumberOfPasswordPrompts=0` | `Login` alone |
+| `StrictHostKeyChecking=accept-new`, `=yes` | `HostKeyRule.TakeNew`, `.Known` |
+| `IdentitiesOnly=yes -i KEY` | `RemoteLogin.AppKey` |
+| `SSH_ASKPASS` and its pipe, `NumberOfPasswordPrompts=1` | `RemoteLogin.PasswordOnce`, sent once |
+| status 255 and `ssh`'s own line | `Failure`, one kind for each line that the Mac reads |
+| OpenSSH 10's algorithms | the same: no SHA-1 key exchange, no CBC, no `ssh-rsa` host signature, no compression |
+
+Where it differs: a server that goes silent (no reset, no answer) ends the Mac's `ssh` after three keep-alives with
+no answer (about 90 s); SSH.NET's keep-alive asks for no answer, so the call ends when the PC's TCP gives up on the
+keep-alive that waits (not measured on Windows), and at the latest at its `Limit`, as on the Mac. A server that ends
+the connection is `Dropped` at once on both.
+
 ## Build and test
 
 You need the .NET 10 SDK (`dotnet --version` says 10.0.x; `global.json` takes any 10.0 SDK).
@@ -337,6 +397,20 @@ That decodes the scratch hub with the Swift apps first, as before, and then with
 
 ```bash
 python3 app_decode.py --windows-only --ref HEAD
+```
+
+The tests of `Founderizer.Remote` start a scratch `sshd` (`/usr/sbin/sshd`, as this user, on a loopback port) and,
+for the password and `sudo -S`, an `sshd` in a Docker container (image `founderizer-remote-test-sshd:1`, made at the
+first run); each test removes its server and its container. Without Docker, those tests are inconclusive.
+
+```bash
+dotnet test app/windows/Founderizer.Remote.Tests/Founderizer.Remote.Tests.csproj --filter "TestCategory!=Long"
+```
+
+The run of 30 minutes (a line every 20 s on one connection, across the server's key exchanges), alone:
+
+```bash
+FOUNDERIZER_REMOTE_LONG=1 dotnet test app/windows/Founderizer.Remote.Tests/Founderizer.Remote.Tests.csproj --filter "TestCategory=Long"
 ```
 
 The self-check, published with Native AOT (on this Mac `osx-arm64`; on a PC `win-x64` or `win-arm64`):
@@ -376,6 +450,10 @@ process at a time.
 - **One package that is not in the box of .NET**: BouncyCastle.Cryptography, for X25519, Ed25519 and
   ChaCha20-Poly1305 (.NET 10 has no X25519 and no Ed25519). It is pinned to one version (`[2.7.0]`, released on
   30 July 2026), and `packages.lock.json` holds its checksum. A new version is at least 7 days old.
+- **SSH.NET** in `Founderizer.Remote` only (`[2026.0.0]`, released on 9 August 2026; MIT), with its logging package
+  Microsoft.Extensions.Logging.Abstractions (`[8.0.3]`; no logger is ever given to it, so it logs nothing) and
+  BouncyCastle at the library's version. 2026.0.1 (14 November 2026) has two hardening fixes and a fix of a race in a
+  key exchange that the server starts; it is 7 days old on 21 November 2026, and is the next version to take.
 - The tests take MSTest 4.5.1 and Microsoft.NET.Test.Sdk 18.11.0, with their own lock file.
 - `nuget.config` names nuget.org alone, so no source of a machine's own setup is asked.
 - The self-check has no lock file of its own: its one package is the library's, and a lock file there would change

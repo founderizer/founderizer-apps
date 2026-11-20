@@ -103,9 +103,80 @@ struct MacSittingTests {
         #expect(!MacSittingRead.claudeSignedIn("not json"))
         #expect(MacSittingRead.chatGPTSignedIn("Logged in using ChatGPT\n"))
         #expect(!MacSittingRead.chatGPTSignedIn("Not logged in\n"))
-        #expect(MacSittingRead.appleEventsAllowed(Data("{\"browser\":{\"allow_javascript_apple_events\":true}}".utf8)))
-        #expect(!MacSittingRead.appleEventsAllowed(Data("{\"browser\":{}}".utf8)))
-        #expect(!MacSittingRead.appleEventsAllowed(Data("not json".utf8)))
+    }
+
+    /// The page Allow JavaScript from Apple Events reads the vault's own check of each Chrome window (owner API
+    /// 1.271), and no more the profiles' files, which macOS 27 can hide (20 November 2026). Each word of the vault is a
+    /// step of the person, macOS's refusal, or a word that no step answers; an answer with no word is an older vault's.
+    @Test func theVaultsWordsAreReadAsTheVaultSaysThem() {
+        let answer = { (cause: String) in "{\"ok\": \(cause == "ok"), \"v\": 2, \"cause\": \"\(cause)\"}\n" }
+        #expect(MacVaultChrome.read(answer("ok")) == .ok)
+        for cause in ["javascript_off", "no_window", "not_asked"] {
+            #expect(MacVaultChrome.read(answer(cause)) == .waiting(cause), "\(cause)")
+        }
+        #expect(MacVaultChrome.read(answer("refused")) == .refused)
+        #expect(MacVaultChrome.read(answer("not_running")) == .unclear("not_running", number: nil))
+        #expect(MacVaultChrome.read("{\"ok\": false, \"v\": 2, \"cause\": \"error\", \"number\": -1712}")
+                == .unclear("error", number: -1712))
+        #expect(MacVaultChrome.read("{\"ok\": true, \"v\": 2}") == .ok)                  // a vault before 1.271
+        #expect(MacVaultChrome.read("{\"ok\": false, \"v\": 2, \"error\": \"The vault request is not supported.\"}")
+                == .older)
+        #expect(MacVaultChrome.read("usage: server.py\nserver.py: error: unrecognized arguments: --quiet\n") == .older)
+        #expect(MacVaultChrome.read("a line of the shell\n" + answer("javascript_off")) == .waiting("javascript_off"))
+        #expect(MacVaultChrome.read("Traceback (most recent call last):\nFileNotFoundError: [Errno 2]\n") == .silent)
+        #expect(MacVaultChrome.refused.stop.contains("System Settings, Privacy & Security, Automation"))
+        #expect(MacVaultChrome.unclear("error", number: 12).stop.hasPrefix("Chrome did not take the vault's script (error 12)."))
+        let line = MacSittingPage.appleEvents.line ?? ""
+        #expect(line.contains("Once in each open Chrome profile") && line.contains("own mouse") && line.contains("Screen Sharing"))
+    }
+
+    /// The page goes on only at `ok`, waits through a step of the person, stops at once at macOS's refusal, and stops
+    /// after 15 checks in a row with no word that a step answers. Its first check asks macOS with a person there, and
+    /// the checks after it are quiet, so that a check every two seconds keeps the vault's one queue free (the reviews
+    /// of 20 November 2026); a check is not quiet again while none got as far as macOS's question, after `not_asked`,
+    /// or after an answer of an older vault or `server.py`, which waits about three minutes before it stops.
+    @Test func theAppleEventsPageGoesOnOnlyWhereTheVaultsScriptRan() {
+        var watch = MacAppleEventsWatch()
+        #expect(watch.loud)
+        #expect(watch.take(.waiting("javascript_off")) == .wait)
+        #expect(!watch.loud)
+        for _ in 1..<MacAppleEventsWatch.most { #expect(watch.take(.silent) == .wait) }
+        #expect(watch.take(.waiting("no_window")) == .wait)          // a step of the person begins the count again
+        for _ in 1..<MacAppleEventsWatch.most { #expect(watch.take(.unclear("error", number: -1712)) == .wait) }
+        #expect(watch.take(.unclear("error", number: -1712)) == .stop("Chrome did not take the vault's script (error "
+                                                                        + "-1712). Quit Chrome and open it again."))
+        #expect(watch.take(.ok) == .next)
+
+        var refused = MacAppleEventsWatch()
+        #expect(refused.take(.refused) == .stop(MacVaultChrome.refused.stop))
+
+        var starting = MacAppleEventsWatch()        // no check got as far as macOS's question yet
+        for read in [MacVaultChrome.unclear("not_running", number: nil), .unclear("launching", number: nil), .silent] {
+            #expect(starting.take(read) == .wait)
+            #expect(starting.loud, "\(read)")
+        }
+        #expect(starting.take(.waiting("javascript_off")) == .wait)
+        #expect(!starting.loud)
+        #expect(starting.take(.waiting("not_asked")) == .wait)   // a quiet check: macOS has not asked, so ask again
+        #expect(starting.loud)
+
+        var older = MacAppleEventsWatch()           // an older vault: each check as the page made it before
+        for _ in 1..<MacAppleEventsWatch.olderMost {
+            #expect(older.take(.older) == .wait)
+            #expect(older.loud)
+        }
+        #expect(older.take(.older) == .stop(MacVaultChrome.older.stop))
+        #expect(older.take(.ok) == .next)
+    }
+
+    /// A later opening leads the page for a Mac with a vault unless the vault's own quiet word is `ok`.
+    @Test func aLaterOpeningLeadsTheAppleEventsPageUnlessTheVaultSaysOK() {
+        let desktop = { (word: String) in MacDesktop.read("{\"extension\": true, \"vault_chrome\": \"\(word)\"}") }
+        #expect(!MacDesktop.appleEventsMissing(vault: true, desktop("ok")))
+        #expect(MacDesktop.appleEventsMissing(vault: true, desktop("javascript_off")))
+        #expect(MacDesktop.appleEventsMissing(vault: true, MacDesktop.read("{\"extension\": true}")))
+        #expect(MacDesktop.appleEventsMissing(vault: true, nil))
+        #expect(!MacDesktop.appleEventsMissing(vault: false, desktop("javascript_off")))
     }
 
     /// `server.py desktop` on a Mac whose Chrome folder macOS 27 hides: `extension` is null whatever Chrome has, so
@@ -117,8 +188,10 @@ struct MacSittingTests {
             "{\"locked\": false, \"setup\": false, \"chrome\": true, \"extension\": null, \(more), \"chatgpt\": false, "
                 + "\"chatgpt_app\": true}\n"
         }
-        let signedOut = MacDesktop.read(line("\"browser\": null, \"claude_account\": null, \"bridge\": null, \"hidden\": true"))
+        let signedOut = MacDesktop.read(line("\"browser\": null, \"claude_account\": null, \"bridge\": null, \"hidden\": true, "
+            + "\"vault_chrome\": \"javascript_off\""))
         #expect(signedOut?.extensionReady == true)
+        #expect(signedOut?.vault_chrome == "javascript_off")     // a later opening leads the Apple Events page
         let hidden = MacDesktop.read(line("\"browser\": false, \"claude_account\": {\"email\": \"ana@example.com\", "
             + "\"org\": \"Example Org\"}, \"bridge\": true, \"hidden\": true"))
         #expect(hidden?.browser == false)
@@ -136,12 +209,13 @@ struct MacSittingTests {
         let none = MacDesktop.read(line("\"browser\": null, \"claude_account\": null, \"bridge\": null, \"hidden\": false"))
         #expect(none?.extensionReady == false)
         let older = MacDesktop.read("{\"extension\": true, \"browser\": false}")
-        #expect(older?.extensionReady == true)
+        #expect(older?.extensionReady == true && older?.vault_chrome == nil)
         #expect(MacDesktop.noAnswer(older) == "This Mac's Chrome did not open the test page. Check that Claude's "
             + "extension is logged in here, with the account made for this Mac.")
         #expect(MacDesktop.noAnswer(nil) == MacDesktop.noAnswer(older))
-        let odd = MacDesktop.read("{\"extension\": false, \"browser\": null, \"claude_account\": \"ana@example.com\"}")
-        #expect(odd?.extension == false && odd?.claude_account == nil)
+        let odd = MacDesktop.read("{\"extension\": false, \"browser\": null, \"claude_account\": \"ana@example.com\", "
+            + "\"vault_chrome\": 12}")
+        #expect(odd?.extension == false && odd?.claude_account == nil && odd?.vault_chrome == nil)
         #expect(MacDesktop.read("Traceback (most recent call last):") == nil)
     }
 

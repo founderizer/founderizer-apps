@@ -189,7 +189,10 @@ internal sealed class SearchCard : Grid
             TaskSymbol.Paused => (Icons.PauseCircle, Look.Muted),
             TaskSymbol.Checked or TaskSymbol.Ended => (Icons.Check, Look.Muted),
             TaskSymbol.Failed => (Icons.Dismiss16, Look.Brush(Look.Rgb(0xFF, 0x45, 0x3A))),
-            TaskSymbol.Alert or TaskSymbol.Limit or TaskSymbol.Question or TaskSymbol.SignIn => (Icons.Warning, Look.Orange),
+            // An outcome that the owner checks is the Mac's orange "?" (questionmark.circle), as a question is: both take
+            // this card's orange mark, with "Outcome not known: check it" under the pointer.
+            TaskSymbol.Unknown or TaskSymbol.Alert or TaskSymbol.Limit or TaskSymbol.Question or TaskSymbol.SignIn
+                => (Icons.Warning, Look.Orange),
             TaskSymbol.Reconnecting => (Icons.Refresh, Look.Muted),
             _ => (Icons.Hint, Look.Muted),
         };

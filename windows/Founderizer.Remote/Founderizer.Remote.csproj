@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- SSH from the owner's PC (windows-app-plan-v2.md, 5.5): one interface, IRemote, and SshRemote behind it. It names
+       no other project, and no other project names SSH.NET, so the library can be replaced. No Windows call: it builds
+       and tests on macOS, Linux and Windows. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Founderizer.Remote</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- SSH.NET 2026.0.0 of 9 August 2026 (2026.0.1 of 14 November was 6 days old when this piece was built). Its two
+         dependencies are pinned too: BouncyCastle at Founderizer.Core's version, and its logging package, which logs
+         nothing while no logger is given to it (none ever is). -->
+    <PackageReference Include="SSH.NET" Version="[2026.0.0]" />
+    <PackageReference Include="BouncyCastle.Cryptography" Version="[2.7.0]" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="[8.0.3]" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Founderizer.Remote.Tests" />
+  </ItemGroup>
+</Project>

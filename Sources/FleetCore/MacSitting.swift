@@ -38,7 +38,14 @@ public enum MacSittingPage: String, Codable, CaseIterable, Sendable {
         case .automaticLogin: "So your agents come back after a restart."
         case .lockScreen: "Require a password after the screen turns off: Never."
         case .claude: "In Chrome, with the account made for this Mac."
-        case .appleEvents: "In Chrome: View, Developer."
+        // Chrome keeps this menu item for each profile, and takes it only from this Mac's own hands (Chromium's
+        // browser_commands_mac.mm refuses an event of another process): on the fleet's Mac Studio the agent's profile
+        // had no tick, and neither Screen Sharing nor Computer Use could give it one (20 November 2026). The vault checks
+        // the active tab of each window, so each profile with a window needs the tick, and once: the item is a switch, and
+        // a second press in another window of the same profile takes the tick away. Three lines of the small window at
+        // most, so that a stop's two lines and Try again still fit it.
+        case .appleEvents: "Once in each open Chrome profile, with this Mac's own mouse (not Screen Sharing or Computer Use): "
+            + "View, Developer."
         case .chatGPT: "For computer use."
         case .computerUse: "In the window that opened. Skip Chrome Extension."
         case .finish: "This Mac restarts by itself."
@@ -207,13 +214,17 @@ public struct MacDesktop: Decodable, Equatable, Sendable {
     /// The account and the organization of Claude Code on this Mac, which the extension must be signed in to (owner
     /// API 1.238). Null while Claude Code is signed out.
     public let claude_account: ClaudeAccount?
+    /// What stops a sign-in of this Mac's Fleet Vault in Chrome now, the vault's own quiet word for the active tab of
+    /// each Chrome window (owner API 1.271): `ok` alone means nothing does. Null with no vault, a busy one, or a
+    /// `server.py` or a vault before that version.
+    public let vault_chrome: String?
 
     public struct ClaudeAccount: Decodable, Equatable, Sendable {
         public let email: String
         public let org: String?
     }
 
-    private enum Keys: String, CodingKey { case `extension`, browser, hidden, claude_account }
+    private enum Keys: String, CodingKey { case `extension`, browser, hidden, claude_account, vault_chrome }
 
     /// A `hidden` or an account of another shape reads as none: it never costs the reading of the extension and the link.
     public init(from decoder: Decoder) throws {
@@ -222,6 +233,13 @@ public struct MacDesktop: Decodable, Equatable, Sendable {
         browser = try values.decodeIfPresent(Bool.self, forKey: .browser)
         hidden = try? values.decodeIfPresent(Bool.self, forKey: .hidden)
         claude_account = try? values.decodeIfPresent(ClaudeAccount.self, forKey: .claude_account)
+        vault_chrome = try? values.decodeIfPresent(String.self, forKey: .vault_chrome)
+    }
+
+    /// A later opening leads the Apple Events page for a Mac with a vault, unless the vault's own quiet word is `ok`:
+    /// any other word, none, or no reading (the page's own check then goes on at once where the script runs).
+    public static func appleEventsMissing(vault: Bool, _ desktop: MacDesktop?) -> Bool {
+        vault && desktop?.vault_chrome != "ok"
     }
 
     /// The command's last line, as `MacNeeds` reads its own. Nil for an answer that is not this reading.
@@ -246,6 +264,118 @@ public struct MacDesktop: Decodable, Equatable, Sendable {
         // installer cannot see whether Chrome has the extension there.
         return "This Mac's Chrome did not open the test page. Check that Claude's extension is logged in here" + who
             + (desktop?.hidden == true ? " If Chrome has no Claude extension, add it from the Chrome Web Store first." : "")
+    }
+}
+
+/// **The vault's own check of Chrome**, for the page Allow JavaScript from Apple Events: `server.py chrome-script`, the
+/// `chrome` answer of this Mac's Fleet Vault (owner API 1.271). Chrome keeps that menu item for each profile, and the
+/// vault runs its one harmless script in the active tab of each Chrome window (the area Vault, keys and access, 20
+/// November 2026; before, of the front window only), so its answer is `ok` only when each profile with a window has the
+/// tick: the page's line asks for it once in each. Until that day the page read the `Preferences` file of every
+/// profile, which macOS 27 can hide: a first sitting went on when any one had the tick and the vault's script ran in
+/// the front window, and a later opening left the page out when any one had it. On the fleet's Mac Studio another
+/// profile had it and the agent's had none, and every sign-in of its vault failed.
+public enum MacVaultChrome: Equatable, Sendable {
+    /// The script ran: the page goes on.
+    case ok
+    /// A step of the person at this Mac: no tick in the profile in front (`javascript_off`), no window (`no_window`), or
+    /// macOS's question not answered yet (`not_asked`). The page's line says what to do.
+    case waiting(String)
+    /// macOS does not let Fleet Vault control Chrome: only System Settings changes that, and macOS never asks again.
+    case refused
+    /// A word that no step of the person answers: Chrome does not run (`not_running`), the vault starts (`launching`),
+    /// an error of Chrome or macOS (`error`, with its number where one came), or a word of a later vault.
+    case unclear(String, number: Int?)
+    /// An answer with no word: a vault before 1.271, whose `ok` alone says whether the script ran, a vault that refused
+    /// the quiet check, or a `server.py` before `--quiet`.
+    case older
+    /// No answer at all: no vault's socket, a vault that did not answer in time, or a command that failed before it.
+    case silent
+
+    /// The command's output: the vault's one line of JSON, which may follow a line of the shell; a traceback is none.
+    public static func read(_ output: String) -> MacVaultChrome {
+        for line in output.split(separator: "\n").reversed() {
+            guard let answer = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { continue }
+            guard let cause = answer["cause"] as? String else { return answer["ok"] as? Bool == true ? .ok : .older }
+            switch cause {
+            case "ok": return .ok
+            case "javascript_off", "no_window", "not_asked": return .waiting(cause)
+            case "refused": return .refused
+            default: return .unclear(cause, number: (answer["number"] as? NSNumber)?.intValue)
+            }
+        }
+        return output.contains("unrecognized arguments") ? .older : .silent
+    }
+
+    /// The page's orange line when this answer stops it: at most two lines of the small window, with the next step.
+    public var stop: String {
+        switch self {
+        case .refused: "In System Settings, Privacy & Security, Automation: allow Fleet Vault for Chrome."
+        case .unclear("not_running", _): "Chrome does not run. Open Chrome, then Try again."
+        case .unclear("launching", _): "Fleet Vault is still starting. Try again in a minute."
+        case .unclear(_, let number?): "Chrome did not take the vault's script (error \(number)). Quit Chrome and open it again."
+        case .silent: "Fleet Vault did not answer. Try again, or restart this Mac."
+        // An older vault says no more than that its script did not run: no tick, or macOS's refusal.
+        case .older: "Check the tick, and allow Fleet Vault in Privacy & Security, Automation."
+        case .ok, .waiting, .unclear: "Chrome did not take the vault's script. Quit Chrome and open it again."
+        }
+    }
+}
+
+/// **The Apple Events page's checks**, one after another, two seconds apart, and what the page does after each.
+/// The first check is not quiet: it starts a Chrome that does not run, and macOS asks its one question for the vault
+/// at once, with a person here, because the vault's later sign-ins have nobody to answer it. The checks after it are
+/// quiet (`--quiet`): they show nothing, start nothing and wait for no window, so they keep the vault's one queue of
+/// jobs free for the agents' sign-ins (the reviews of 20 November 2026). A check is not quiet again while no check got
+/// as far as macOS's question (Chrome did not run, the vault was starting or gave no answer), after an answer that
+/// macOS has not asked it (`not_asked`), and after an answer with no word (an older vault or `server.py`), which only
+/// a check that is not quiet answers.
+public struct MacAppleEventsWatch: Equatable, Sendable {
+    /// Whether the next check is not quiet (`server.py chrome-script`, with no `--quiet`).
+    public private(set) var loud = true
+    /// A check that was not quiet got as far as macOS's question: asked once, it is never asked again.
+    private var asked = false
+    private var older = false
+    /// Checks in a row with no word that a step of the person answers.
+    private var unclear = 0
+    /// The most of those before the page stops: about half a minute.
+    public static let most = 15
+    /// Checks in a row whose answer has no word, and the most of them: about three minutes, as the person may still be
+    /// in Chrome's menu.
+    private var olderInRow = 0
+    public static let olderMost = 90
+
+    public enum Step: Equatable, Sendable {
+        case next, wait
+        case stop(String)
+    }
+
+    public init() {}
+
+    public mutating func take(_ read: MacVaultChrome) -> Step {
+        if loud {
+            switch read {
+            case .unclear("not_running", _), .unclear("launching", _), .older, .silent: break
+            default: asked = true
+            }
+        }
+        if read == .waiting("not_asked") { asked = false }      // the next check asks macOS again
+        if read == .older { older = true }
+        defer { loud = older || !asked }
+        olderInRow = read == .older ? olderInRow + 1 : 0
+        switch read {
+        case .ok: return .next
+        case .refused: return .stop(read.stop)
+        case .waiting:
+            unclear = 0
+            return .wait
+        case .older:
+            unclear = 0
+            return olderInRow >= Self.olderMost ? .stop(read.stop) : .wait
+        case .unclear, .silent:
+            unclear += 1
+            return unclear >= Self.most ? .stop(read.stop) : .wait
+        }
     }
 }
 
@@ -286,12 +416,6 @@ public enum MacSittingRead {
     /// `codex login status`, which the ChatGPT app carries.
     public static func chatGPTSignedIn(_ output: String) -> Bool {
         output.contains("Logged in") && !output.contains("Not logged in")
-    }
-
-    /// One Chrome profile's `Preferences`: the menu item that Chromium takes only from a real keyboard or mouse.
-    public static func appleEventsAllowed(_ preferences: Data) -> Bool {
-        let object = try? JSONSerialization.jsonObject(with: preferences) as? [String: Any]
-        return (object?["browser"] as? [String: Any])?["allow_javascript_apple_events"] as? Bool == true
     }
 
     /// What stopped the root step, in the owner's words: the last stop in its log. The script's line for a join that

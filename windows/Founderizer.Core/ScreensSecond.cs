@@ -54,7 +54,12 @@ public static partial class Screens
     /// <summary>The search card (the Mac's SearchPalette, with no "In messages": a device may not read /ui/history): the
     /// agents whose role or name holds the words in the pane's order, then the tasks whose title holds them or whose number
     /// they are, the one that moved last first (with nothing typed the newest 20, else at most 50). <paramref name="highlighted"/>
-    /// is the row that Enter opens; it goes back to 0 when the words change (<see cref="SearchModel.Move"/>).</summary>
+    /// is the row that Enter opens; it goes back to 0 when the words change (<see cref="SearchModel.Move"/>). A task's mark
+    /// is the Mac's (FleetTask.mark(in:)), with the holds of the hub's reading (<see cref="MobileSnapshot.Holds"/>: the
+    /// Mac's state.holds, the iPhone's openHolds), as the board, Needs you and the agents' marks read them, and not only
+    /// those of the task pages that are open. An outcome that is not known and that the owner checks comes before all of
+    /// it, the orange "?" with "Outcome not known: check it", by the rule of Needs you and the board
+    /// (<see cref="Activity.OutcomeUnknown"/>).</summary>
     public static SearchModel Search(StoreState s, string query, int highlighted, DateTimeOffset now, CultureInfo? culture = null)
     {
         var words = query.Trim();
@@ -77,9 +82,9 @@ public static partial class Screens
             found = all.Where(t => compare.IndexOf(t.Title, words, loose) >= 0 ||
                                    t.Id.ToString(CultureInfo.InvariantCulture) == number).Take(50);
         }
-        var holds = s.TaskPages.Values.SelectMany(p => p.Holds).ToList();
         var tasks = found.Select(t => new SearchTaskRow(t.Id, t.Title,
-                TaskMark.Of(t, holds, s.Names, fleet!.Agents.Any(a => a.Name == t.Owner && a.Limit is not null))))
+                TaskMark.Of(t, fleet!.Holds, s.Names, fleet!.Agents.Any(a => a.Name == t.Owner && a.Limit is not null),
+                            outcomeUnknown: Activity.OutcomeUnknown(fleet!, t))))
             .ToList();
         var count = agents.Count + tasks.Count;
         return new SearchModel
