@@ -909,18 +909,9 @@ struct NeedRequestCard: View {
                     }
                 }
             }
-            if expanded, let details = need.details {
-                // **The door's card shows its script line for line** (API 1.125, review point 5.6): one code block, as
-                // the request at hand on Needs you draws it, which this Mac hashes before it signs Run it once
-                // (`DoorCall.checked`).
-                MessageText(text: details, chat: true, script: need.door_script != nil, card: true,
-                            names: need.door_script != nil ? nil : names)
-            }
-            if expanded, !todo.isEmpty, task.isEmpty {
-                Text("What it needs from you").font(FormMetrics.detailTitle)
-                    .foregroundStyle(FleetStyle.muted).padding(.top, 2)
-                MessageText(text: todo, chat: true, card: true, names: names)
-            }
+            // **The link stands where he pressed it, and what it opens comes under it**, as on Needs you
+            // (`NeedStep`; the owner, 20 November 2026: "The Details link seems to be positioned incorrectly"):
+            // the details came in over it, and the link went down under them.
             if hasMore {
                 HStack(spacing: 10) {
                     Button {
@@ -934,10 +925,26 @@ struct NeedRequestCard: View {
                                 Image(systemName: expanded ? "chevron.down" : "chevron.right").font(IconMetrics.symbol(9, weight: .semibold))
                             }
                         }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
-                    }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).font(FormMetrics.detail).foregroundStyle(FleetStyle.link)
+                    }.buttonStyle(.plain)
+                        // the hand under the pointer, as a link shows it (`NeedStep.moreLink` too), over all that a
+                        // click reaches: before the padding that gives the reach back to the layout
+                        .pointerStyle(.link)
+                        .padding(.vertical, -IconMetrics.reach).font(FormMetrics.detail).foregroundStyle(FleetStyle.link)
                         .accessibilityIdentifier("need-more-\(need.id)")
                     Spacer(minLength: 8)
                 }
+            }
+            if expanded, let details = need.details {
+                // **The door's card shows its script line for line** (API 1.125, review point 5.6): one code block, as
+                // the request at hand on Needs you draws it, which this Mac hashes before it signs Run it once
+                // (`DoorCall.checked`).
+                MessageText(text: details, chat: true, script: need.door_script != nil, card: true,
+                            names: need.door_script != nil ? nil : names)
+            }
+            if expanded, !todo.isEmpty, task.isEmpty {
+                Text("What it needs from you").font(FormMetrics.detailTitle)
+                    .foregroundStyle(FleetStyle.muted).padding(.top, 2)
+                MessageText(text: todo, chat: true, card: true, names: names)
             }
             NeedAnswerGiven(store: store, need: need)
             // Who asks, by the name the sidebar gives it and its glyph before it (D-8), and when: a clock time today

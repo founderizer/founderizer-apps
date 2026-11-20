@@ -123,6 +123,12 @@ struct TokenStatsTests {
         #expect(TokenFormat.count(999, in: spanish) == "999" && TokenFormat.count(4_469_636_540, in: spanish) == "4.469.636.540")
         #expect(TokenFormat.money(12_544.5, cents: true, in: spanish) == "$12.544,50")
         #expect(TokenFormat.money(2_544.97, cents: true, in: spanish) == "$2.544,97" && TokenFormat.money(9.04, in: spanish) == "$9,04")
+        // a table's count: whole under a million, short from a million on with two decimals ("for millions show 1.45M"),
+        // so a column's decimal marks line up; a count that rounds up to the next unit takes it (1.00B, never 1,000.00M)
+        #expect([999_999, 1_000_000, 1_450_000, 9_995_000, 30_643_673, 999_995_000, 1_185_354_514]
+                    .map { TokenFormat.column($0, in: english) }
+                == ["999,999", "1.00M", "1.45M", "10.00M", "30.64M", "1.00B", "1.19B"])
+        #expect(TokenFormat.column(28_146, in: spanish) == "28.146" && TokenFormat.column(30_643_673, in: spanish) == "30,64\u{A0}M")
         // the page's own language, with no locale given: the Spanish of the app's words
         #expect(try SpanishTable.run { [TokenFormat.tokens(737_212), TokenFormat.count(57_007)] }
                 == ["737\u{A0}mil", "57.007"])

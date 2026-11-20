@@ -35,10 +35,6 @@ struct AgentsPage: View {
     /// The machines' reads have failed one whole break, or the fleet's state is old (`FleetStore.pageReadingIsOld`;
     /// 17 November 2026): only then is the last reading gray, and "Not reported" said.
     private var saysFailed: Bool { readFailed && store.pageReadingIsOld(failedSince: readFailedSince) }
-    /// Each agent's part of its account's week, as the page read it last (`HubClient.accountShares`).
-    private var shares: AccountShares? {
-        get { store.reading("accountShares") } nonmutating set { store.keep(newValue, as: "accountShares") }
-    }
     @Environment(\.glyphTeam) private var team
     private var time: Double { store.state?.time ?? 0 }
     private var features: [String] { store.state?.ui_features ?? [] }
@@ -74,7 +70,7 @@ struct AgentsPage: View {
             }
         }
         .task(id: "\(store.hub)/\(store.state?.db ?? "")") { await poll() }
-        .task(id: "\(store.hub)/\(store.state?.db ?? "")") { await pollShares() }
+        .task(id: "\(store.hub)/\(store.state?.db ?? "")") { await store.keepAccountShares() }
     }
 
     /// The symbol of Agents: two people, which fits the sidebar's mark column ("person.3" stood 6 pt from its word).
@@ -271,7 +267,7 @@ struct AgentsPage: View {
                 ForEach(columns, id: \.self) { title in
                     if let window = own.first(where: { $0.shortTitle == title }) {
                         let stale = old || window.resetIsPast(at: time)
-                        let part = shares.flatMap { $0.db == store.state?.db ? $0 : nil }?.share(of: agent, account: reading.account_key, window: window.label)
+                        let part = store.accountShares?.share(of: agent, account: reading.account_key, window: window.label)
                         // Two lines, as the name and its role: a window with no reset keeps its second line empty, so
                         // the bars of one row stand on one line.
                         VStack(alignment: .leading, spacing: 2) {
@@ -377,28 +373,6 @@ struct AgentsPage: View {
             guard !Task.isCancelled else { return }
             // 3 s after a read that failed, as the lists do: the gray goes as soon as the hub is back.
             do { try await store.nap(readFailed ? 3 : machines != nil ? 30 : 5) } catch { return }
-        }
-    }
-
-    /// **Each agent's part of its account's week**, only while two agents of the team share an account (else no bar
-    /// shows a part): read when the page opens and then every 10 minutes, apart from the machines. `GET /ui/costs`
-    /// builds the whole fleet's report of costs under the hub's lock, whatever period it is asked for, and the parts of
-    /// a week move slowly. A read that failed keeps the last parts, and the next try is a minute later. **It waits on a
-    /// clock of its own** (`Task.sleep`), never on the store's nap, which every change of the hub ends: on a busy fleet
-    /// that read the report every two seconds (the review of 19 November 2026).
-    private func pollShares() async {
-        let clock = ContinuousClock()
-        while !Task.isCancelled {
-            let agents = store.state?.agents ?? []
-            let shared = UsageBar.bars(for: agents, time: time, isFresh: store.isFresh).values.contains { !$0.sharedWith.isEmpty }
-            var read = false
-            if shared, features.contains("costs"), store.isFresh, let database = store.state?.db {
-                let hub = store.hub
-                let answer = try? await HubClient().accountShares(hub: hub, database: database, at: time)
-                guard !Task.isCancelled else { return }
-                if store.hub == hub, store.state?.db == database, let answer { shares = answer; read = true }
-            }
-            do { try await clock.sleep(for: .seconds(read ? 600 : 60)) } catch { return }
         }
     }
 }

@@ -49,6 +49,7 @@
 		AC000000000000000000A1 /* SampleFleetData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000A1 /* SampleFleetData.swift */; };
 		AC000000000000000000A2 /* SampleFleetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000A2 /* SampleFleetTests.swift */; };
 		AC000000000000000000A3 /* MobileRefusalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000A3 /* MobileRefusalTests.swift */; };
+		AC000000000000000000B1 /* MobileRecommendedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000B1 /* MobileRecommendedTests.swift */; };
 		AC00000000000000000070 /* Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA00000000000000000070 /* Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AC00000000000000000071 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000070 /* ShareViewController.swift */; };
 		AC00000000000000000072 /* ShareModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000071 /* ShareModel.swift */; };
@@ -127,6 +128,7 @@
 		AB000000000000000000A1 /* SampleFleetData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleFleetData.swift; sourceTree = "<group>"; };
 		AB000000000000000000A2 /* SampleFleetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleFleetTests.swift; sourceTree = "<group>"; };
 		AB000000000000000000A3 /* MobileRefusalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileRefusalTests.swift; sourceTree = "<group>"; };
+		AB000000000000000000B1 /* MobileRecommendedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileRecommendedTests.swift; sourceTree = "<group>"; };
 		AA00000000000000000070 /* Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Share.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB00000000000000000070 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		AB00000000000000000071 /* ShareModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareModel.swift; sourceTree = "<group>"; };
@@ -282,6 +284,7 @@
 				AB0000000000000000001C /* MobileAttachmentTests.swift */,
 				AB000000000000000000A2 /* SampleFleetTests.swift */,
 				AB000000000000000000A3 /* MobileRefusalTests.swift */,
+				AB000000000000000000B1 /* MobileRecommendedTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -590,6 +593,7 @@
 				AC0000000000000000001C /* MobileAttachmentTests.swift in Sources */,
 				AC000000000000000000A2 /* SampleFleetTests.swift in Sources */,
 				AC000000000000000000A3 /* MobileRefusalTests.swift in Sources */,
+				AC000000000000000000B1 /* MobileRecommendedTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

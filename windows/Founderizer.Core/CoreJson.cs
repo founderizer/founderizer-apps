@@ -38,6 +38,9 @@ namespace Founderizer.Core;
 [JsonSerializable(typeof(KeptLedger))]
 [JsonSerializable(typeof(TaskEventPage))]
 [JsonSerializable(typeof(EndedReading))]
+[JsonSerializable(typeof(EndedBlockList))]
+[JsonSerializable(typeof(EndedBlock))]
+[JsonSerializable(typeof(KeptEndedBlock))]
 [JsonSerializable(typeof(TaskPermission))]
 internal sealed partial class CoreJson : JsonSerializerContext;
 

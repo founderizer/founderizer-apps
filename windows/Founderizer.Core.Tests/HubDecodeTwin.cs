@@ -194,6 +194,22 @@ public sealed class HubDecodeTwin
         Assert.IsTrue(week > 20, $"the week holds {week}");
         Assert.IsTrue(Activity.Lanes(fleet, null, ActivityPeriod.Week, ScreenContext.Local)[ActivityColumn.Done].Count <= 20,
                       "without the read, the 20 of recent");
+
+        // Owner API 1.270: the window and the blocks of the list, joined, are the whole read, head for head.
+        Assert.IsTrue(fleet.Offers("ended_blocks"));
+        var window = await Read(c => c.EndedWindowAsync(Hub, key, Database));
+        var list = await Read(c => c.EndedBlocksAsync(Hub, key, Database));
+        Assert.AreEqual((fleet.EndedMark, window.Older!.Mark), (window.Mark, list.Mark));
+        Assert.IsTrue(list.Blocks.Count(b => b.Tasks > 0) >= 2, $"the twin's hub has blocks with heads: {list.Blocks.Count}");
+        var blocks = new EndedBlocks();
+        blocks.See(window);
+        foreach (var entry in blocks.Wanted(list))
+            Assert.IsTrue(blocks.Take(await Read(c => c.EndedBlockAsync(Hub, key, Database, entry.From, list.Block))));
+        blocks.Finish(list);
+        Assert.IsFalse(blocks.IsBehind);
+        var joined = blocks.Join(window, null);
+        Assert.AreEqual((ended.Db, ended.Mark, null), (joined.Db, joined.Mark, joined.Older));
+        CollectionAssert.AreEqual(ended.Tasks.ToArray(), joined.Tasks.ToArray(), "the same heads, with the same values");
     }
 
     /// <summary>Owner API 1.161: a parked task's head says until when, and the board puts it in Waiting.</summary>

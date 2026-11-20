@@ -236,7 +236,11 @@ renamed or removed without a word to the screens lane.
   `LaneModel.Count`, `EndedModel.Failed`, `RestWords` and `Days`, with the runs of one schedule as one row
   (`MobileTaskHead.TriggerId`). Nothing changes for the window: the lane has the same models. With an older hub the
   lane is the 20 newest ended tasks of the reading, as before. The pane's Needs-you count, the agent filter, Search
-  and a task's parent and follow-up title read the same heads (`StoreState.AllTasks()`).
+  and a task's parent and follow-up title read the same heads (`StoreState.AllTasks()`). With a hub that offers
+  `ended_blocks` (owner API 1.270), the store reads the heads of the newest ids (`HubClient.EndedWindowAsync`), and
+  the older ones in blocks of 100 ids (`EndedBlocksAsync`, `EndedBlockAsync`), each once and again only when its mark
+  moves; it keeps the blocks in its folder `ended` and joins them (`EndedBlocks`), so `StoreState.Ended` holds every
+  ended head, and no read grows with the fleet's history.
 - **The Mac's request card of Founderizer 0.1.239** (app commit `95811d21b`; the owner, 15 November 2026: "the task
   itself need to be very clear and also formatted like the chat messages (links, code format etc)" and "apply the
   style of the hover time (relative too)"). **Names beside the present ones**: the window keeps drawing the present

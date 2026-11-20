@@ -765,7 +765,12 @@ private struct NeedStep: View {
                     Image(systemName: expanded ? "chevron.down" : "chevron.right").font(IconMetrics.symbol(10, weight: .semibold))
                 }
             }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
-        }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).font(SetupMetrics.textFont).foregroundStyle(FleetStyle.link)
+        }.buttonStyle(.plain)
+            // the hand under the pointer, as a link shows it (the owner, 20 November 2026: "links should show like the
+            // hand cursor, like in Needs You"), over all that a click reaches: before the padding that gives the reach
+            // back to the layout
+            .pointerStyle(.link)
+            .padding(.vertical, -IconMetrics.reach).font(SetupMetrics.textFont).foregroundStyle(FleetStyle.link)
             .accessibilityValue(expanded ? String(localized: "Open (a state)", defaultValue: "Open", bundle: Localized.bundle, locale: Localized.digits) : String(l10n: "Closed")).accessibilityIdentifier("need-more-\(need.id)")
     }
 

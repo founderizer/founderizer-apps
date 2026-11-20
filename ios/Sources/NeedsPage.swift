@@ -1,5 +1,7 @@
 import FleetCore
+import FleetMark
 import SwiftUI
+import UIKit
 
 /// Needs you: the open items in full, newest first, each with the agent that raised it, the question, the reason and
 /// what it wants. Each item has its own answer and its own draft, which stays on this phone until the hub takes it
@@ -400,9 +402,10 @@ struct NeedCard: View {
                 // Needs clarification, under the line about the Mac, for a hub that takes his words from a phone
                 if store.supportsClarify { NeedClarify(store: store, need: need, sent: answerGiven?.words) }
             } else {
-                if !need.phoneRows.isEmpty {
+                // the options, and on an item with none the row of the words that its agent recommends; each row dims
+                // by itself beside the answer that he gave
+                if !need.phoneRows.isEmpty || NeedOptions.recommendedWords(need, store: store) != nil {
                     NeedOptions(store: store, need: need, given: answerGiven)
-                        .opacity(answerGiven?.words != nil ? NeedOptions.dimmed : 1)
                 }
                 NeedAnswerBox(store: store, need: need, sent: answerGiven?.words)
                     .opacity(answerGiven?.option != nil ? NeedOptions.dimmed : 1)
@@ -681,26 +684,54 @@ struct NeedOptions: View {
         need.choices.isEmpty && !need.todo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// **The words that the agent recommends on an item with no options** (owner feature `need_recommended`, API 1.269):
+    /// one row of their own over his answer; nil on every other item. The phone has none of the Mac's three replies, so
+    /// no reply takes their badge.
+    static func recommendedWords(_ need: OwnerNeed, store: MobileStore) -> String? {
+        guard case .words(let words) = need.recommendedRow(features: Array(store.features), replies: []) else {
+            return nil
+        }
+        return words
+    }
+
+    @Environment(\.markTeam) private var team
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    /// Over and under the words of the recommended row: a first line that wraps stands under the badge, and one line
+    /// keeps the row's 44 points. It grows with the badge, which stops growing at the largest ordinary text size.
+    @ScaledMetric(relativeTo: .caption) private var clearScaled: CGFloat = 11
+    private var clear: CGFloat { min(clearScaled, RecommendedBadge.clearMost) }
+
+    /// The edge of the recommended row, in the colour of the agent that raised the item.
+    private var recommendedEdge: Color {
+        RecommendedBadge.colours(of: MarkTeam.look(of: need.by, in: team), dark: scheme == .dark,
+                                 increased: contrast == .increased).rowEdge
+    }
+
     var body: some View {
         let rows = need.phoneRows
+        // owner feature need_recommended: the row of the answer that the agent recommends, with its badge
+        let recommended = need.recommendedRow(features: Array(store.features), replies: [])
         VStack(alignment: .leading, spacing: 8) {
+            if case .words(let words) = recommended { recommendedWords(words) }
             ForEach(rows, id: \.self) { row in
                 switch row {
                 case .option(let index):
-                    option(index)
+                    option(index, recommended: recommended == .option(index))
                 case .onTheComputer:
-                    // it stands for answers that he does not give here, so it dims with them once he presses one; as the
+                    // it stands for answers that he does not give here, so it dims with them once he gives one; as the
                     // first row it keeps 16 points to the row under it, as the line of Give and of a team card had
                     NeedComputerNote(need: need)
                         .padding(.bottom, row == rows.first ? 4 : 0)
-                        .opacity(given?.option != nil ? Self.dimmed : 1)
+                        .opacity(given != nil ? Self.dimmed : 1)
                 }
             }
         }
     }
 
-    /// One option to press: its press sends its own index.
-    private func option(_ index: Int) -> some View {
+    /// One option to press: its press sends its own index. The answer that the agent recommends has that agent's colour
+    /// on its edge and its badge on the edge's top (`RecommendedBadge`).
+    private func option(_ index: Int, recommended marks: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         return Button { store.press(needID: need.id, choice: index) } label: {
             // The agent's words, drawn as a plain label: they are data, never markup.
@@ -710,17 +741,144 @@ struct NeedOptions: View {
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
+                .padding(.vertical, marks ? clear : 0)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .padding(.horizontal, 14)
                 .background(Brand.bubble, in: shape)
+                .overlay { if marks { shape.strokeBorder(recommendedEdge, lineWidth: 1) } }
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color.primary)
-        .opacity(given?.option.map { $0 != index } == true ? Self.dimmed : 1)
+        .recommendedBadge(by: marks ? need.by : nil)
+        // it dims, with its badge, beside the answer that he gave: another option, or his words
+        .opacity(given.map { $0 != .option(index) } == true ? Self.dimmed : 1)
         .accessibilityAddTraits(given?.option == index ? .isSelected : [])
+        .accessibilityValue(marks ? Text("Recommended") : Text(verbatim: ""))
         .accessibilityIdentifier("need-option-\(need.id)-\(index)")
     }
+
+    /// **The words that the agent recommends, as one row over his own answer** (owner feature `need_recommended`): a
+    /// press sends them as his answer in words, as if he had typed them, so they stand in the field while they go and
+    /// the hub knows them as the agent's words, not as an option.
+    private func recommendedWords(_ words: String) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return Button { send(words) } label: {
+            // The agent's words, drawn as a plain label: they are data, never markup.
+            Text(verbatim: words)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, clear)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.horizontal, 14)
+                .background(Brand.bubble, in: shape)
+                .overlay(shape.strokeBorder(recommendedEdge, lineWidth: 1))
+                .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.primary)
+        .recommendedBadge(by: need.by)
+        .opacity(given.map { $0 != .words(words) } == true ? Self.dimmed : 1)
+        .accessibilityValue(Text("Recommended"))
+        .accessibilityIdentifier("need-recommended-\(need.id)")
+    }
+
+    /// His answer in the words that the agent recommends (`MobileStore.press(needID:words:)`): they stand in the field
+    /// and go as his words go, and a press that waits for the hub says "Sending…", as a press on an option does.
+    private func send(_ words: String) {
+        guard given == nil else { return }
+        store.press(needID: need.id, words: words)
+    }
+}
+
+/// **The badge of the answer that the agent recommends** (owner feature `need_recommended`, API 1.269; the owner's pick
+/// "B: badge on the edge" of three pictures, 20 November 2026, whose words said that the word shows on the iPhone too,
+/// where there is no hover): the Mac's `RecommendedBadge`, a capsule on the top edge of that answer's row, at its
+/// trailing side and half over the edge, with the glyph of the agent that raised the item, at rest, and the word
+/// Recommended, in that agent's own colour (`GlyphLook.mid`). **In light its word is the glyph's deep step, darkened**:
+/// the Mac's word, a light tint for a dark card, read under 2:1 on the phone's white card (`MobileRecommendedTests`).
+/// A press goes to the row under it, and VoiceOver reads the word on the row.
+struct RecommendedBadge: View {
+    let agent: String
+    @Environment(\.markTeam) private var team
+    @Environment(\.colorScheme) private var scheme
+    @ScaledMetric(relativeTo: .caption) private var glyph: CGFloat = 14
+
+    /// **The badge stops growing at the largest ordinary text size**, as the round buttons of a chat do: at the largest
+    /// accessibility size it stood wider than a 375-pt phone's row (two reviews of 20 November 2026).
+    static let largest = DynamicTypeSize.xxxLarge
+    /// The room over the badge's row, and the space over the row's own words, at that size.
+    static let roomMost: CGFloat = 13
+    static let clearMost: CGFloat = 14
+
+    /// The colours of the badge and of its row's edge.
+    struct Colours {
+        /// A part of the agent's colour over the card, which hides the row's edge under the badge.
+        let fill: Color
+        let edge: Color
+        let word: Color
+        /// The edge of the row that has the badge: all of the colour under Increase Contrast.
+        let rowEdge: Color
+    }
+
+    /// The Mac's colours on a dark card (a quarter of the colour, its light step half way to white for the word), and on
+    /// the phone's white card a lighter fill and a word half way from the deep step to black.
+    static func colours(of look: GlyphLook, dark: Bool, increased: Bool = false) -> Colours {
+        let mid = look.mid
+        return Colours(fill: mid.opacity(dark ? 0.25 : 0.15), edge: mid.opacity(0.8),
+                       word: dark ? mix(look.light, .white, 0.5) : mix(look.deep, .black, 0.5),
+                       rowEdge: mid.opacity(increased ? 1 : 0.75))
+    }
+
+    /// The colour `part` of the way from `one` to `two`, in sRGB, as `GlyphLook.mid` mixes its two steps.
+    static func mix(_ one: Color, _ two: Color, _ part: Double) -> Color {
+        var a: (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0), b = a
+        UIColor(one).getRed(&a.0, green: &a.1, blue: &a.2, alpha: &a.3)
+        UIColor(two).getRed(&b.0, green: &b.1, blue: &b.2, alpha: &b.3)
+        return Color(red: Double(a.0 + (b.0 - a.0) * part), green: Double(a.1 + (b.1 - a.1) * part),
+                     blue: Double(a.2 + (b.2 - a.2) * part))
+    }
+
+    var body: some View {
+        let colours = Self.colours(of: MarkTeam.look(of: agent, in: team), dark: scheme == .dark)
+        HStack(spacing: 5) {
+            AgentMark(name: agent, size: glyph, moves: false)
+            Text("Recommended").font(.caption).lineLimit(1)
+        }
+        .foregroundStyle(colours.word)
+        .padding(.leading, 4).padding(.trailing, 9).padding(.vertical, 2)
+        .background(Capsule().fill(Brand.surface).overlay(Capsule().fill(colours.fill)))
+        .overlay(Capsule().strokeBorder(colours.edge, lineWidth: 1))
+        .fixedSize()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The badge of the answer that `agent` recommends on a row, when it is not nil: its middle on the row's top edge and
+/// its end 12 points from the row's, with room over the row for its upper half. The row is one view with or without it,
+/// so a read that brings the badge keeps the row's own state.
+private struct RecommendedPlace: ViewModifier {
+    let agent: String?
+    @ScaledMetric(relativeTo: .caption) private var room: CGFloat = 10
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .topTrailing) {
+                // the guide stands on a view that is always there, as on the Mac
+                ZStack {
+                    if let agent { RecommendedBadge(agent: agent).dynamicTypeSize(...RecommendedBadge.largest) }
+                }
+                .alignmentGuide(.top) { $0[VerticalAlignment.center] }
+                .padding(.trailing, 12)
+            }
+            .padding(.top, agent == nil ? 0 : min(room, RecommendedBadge.roomMost))
+    }
+}
+
+extension View {
+    /// The badge of the answer that `agent` recommends on this row (`RecommendedBadge`); nothing for nil.
+    func recommendedBadge(by agent: String?) -> some View { modifier(RecommendedPlace(agent: agent)) }
 }
 
 /// **The answer of one item in words or files, in the chat composer's look** (fix round 2, item 78): one capsule with

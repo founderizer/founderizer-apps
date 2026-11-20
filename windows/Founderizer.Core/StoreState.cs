@@ -271,7 +271,8 @@ public sealed record StoreState
     /// <summary>The checked outputs of the open task, or null: nothing pressed, or another task.</summary>
     public OutputsState? Outputs { get; init; }
     /// <summary>Every ended task (GET /ui/mobile/ended, owner API 1.166), read again when the reading's `ended_mark` is
-    /// not its mark; null before its first read and from a hub without `mobile_ended`.</summary>
+    /// not its mark: from a hub with `ended_blocks` (owner API 1.270), its window joined with the blocks of the older
+    /// heads (EndedBlocks). Null before its first read and from a hub without `mobile_ended`.</summary>
     public EndedReading? Ended { get; init; }
 
     /// <summary>The ended heads to count and open beside the reading's own, from this generation only.</summary>

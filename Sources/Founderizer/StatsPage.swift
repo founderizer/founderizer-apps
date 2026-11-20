@@ -205,10 +205,11 @@ struct StatsPage: View {
     /// **Each agent's or model's own totals, the most list dollars first, as the Agents page draws its rows** (the owner,
     /// 20 November 2026: "the same effects you did on the Agents tab", "more logos"): the agent's glyph with its role over
     /// its name, or the logo of the model's provider; the row's list dollars of each day of the period as small columns
-    /// in its own colour, on the one scale of every row, so two rows compare by their height; then each number whole,
-    /// with the language's thousands separator, and the dollars with their cents, right-aligned, so the numbers of a
-    /// column line up digit under digit as a sheet's do ("column units should be properly aligned ... like in excel").
-    /// A new reading rolls each number to its digits.
+    /// in its own colour, on the one scale of every row, so two rows compare by their height; then each count under a
+    /// million whole, with the language's thousands separator, and from a million on short with two decimals ("for
+    /// millions show 1.45M", `TokenFormat.column`), and the dollars with their cents, right-aligned in tabular digits, so
+    /// the decimal marks of a column's short counts, and of its dollars, line up ("column units should be properly
+    /// aligned ... like in excel"); a whole count under a million has none. A new reading rolls each number to its digits.
     private func table(_ stats: TokenStats) -> some View {
         let groups = stats.groups(split)
         let days = stats.dayCosts(split)
@@ -231,11 +232,11 @@ struct StatsPage: View {
                     GridRow {
                         rowName(group.key).frame(minHeight: height)
                         if most > 0 { strip(days[group.id] ?? [], most: most, tint: tint(of: group.key, looks: looks)) }
-                        cell(TokenFormat.count(group.totals.input))
-                        cell(TokenFormat.count(group.totals.cacheRead))
-                        cell(TokenFormat.count(group.totals.cacheWrite))
-                        cell(TokenFormat.count(group.totals.output))
-                        cell(TokenFormat.count(group.totals.calls))
+                        cell(TokenFormat.column(group.totals.input))
+                        cell(TokenFormat.column(group.totals.cacheRead))
+                        cell(TokenFormat.column(group.totals.cacheWrite))
+                        cell(TokenFormat.column(group.totals.output))
+                        cell(TokenFormat.column(group.totals.calls))
                         cell(TokenFormat.money(group.totals.cost, cents: true))
                     }
                     .font(FormMetrics.text).monospacedDigit()
@@ -358,7 +359,7 @@ struct StatsPage: View {
         TokenStats.days(count: 90, at: Date().timeIntervalSince1970, zone: zone).first ?? ""
     }
 
-    /// Reads the last 90 days when the page opens and then every minute, on a clock of its own (`AgentsPage.pollShares`
+    /// Reads the last 90 days when the page opens and then every minute, on a clock of its own (`keepAccountShares`
     /// says why not the store's nap), and keeps them in the store. Its first read asks for this Mac's days; when the
     /// hub's own time zone is another, it reads again at once with that zone's days. A read that failed keeps the last
     /// reading, gray once the reads have failed for a whole break, and says the hub's words where there is none.

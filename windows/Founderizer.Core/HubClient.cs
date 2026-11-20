@@ -127,25 +127,85 @@ public sealed partial class HubClient : IDisposable
 
     /// <summary>GET /ui/mobile/ended (owner API 1.166): the head of every ended task, with its schedule, and the mark of
     /// GET /ui/mobile that it is of. Held to its rules: this generation, ended states only, each id once, by id.</summary>
-    public async Task<EndedReading> EndedAsync(Uri hub, string? key, string database, CancellationToken cancel = default)
+    public Task<EndedReading> EndedAsync(Uri hub, string? key, string database, CancellationToken cancel = default) =>
+        EndedReadAsync(hub, key, database, [("db", database)], "GET /ui/mobile/ended", cancel);
+
+    /// <summary>GET /ui/mobile/ended?window=1 (owner API 1.270): the heads of the ended tasks at or above
+    /// `older.before`, and `older`. A hub that does not serve the window gives every head and no `older`. Held to the
+    /// rules of the whole read, with each head at or above `older.before`.</summary>
+    public async Task<EndedReading> EndedWindowAsync(Uri hub, string? key, string database, CancellationToken cancel = default)
     {
-        using var request = Request(HttpMethod.Get, hub, "ui/mobile/ended", key, [("db", database)]);
+        const string read = "GET /ui/mobile/ended?window";
+        var reading = await EndedReadAsync(hub, key, database, [("db", database), ("window", "1")], read, cancel);
+        if (reading.Older is { } older && (!older.IsValid || reading.Tasks.Any(t => t.Id < older.Before)))
+            throw HubException.InvalidResponse(read, "the answer breaks its rules");
+        return reading;
+    }
+
+    private async Task<EndedReading> EndedReadAsync(Uri hub, string? key, string database,
+                                                    IReadOnlyList<(string Name, string Value)> query, string read,
+                                                    CancellationToken cancel)
+    {
+        using var request = Request(HttpMethod.Get, hub, "ui/mobile/ended", key, query);
         var answer = await SendAsync(request, EndedLimit, options.RequestTimeout, cancel);
-        EndedReading reading;
+        var reading = Decoded(answer.Body, CoreJson.Default.EndedReading, read);
+        if (reading.Db != database || reading.Mark.Length == 0 || !AreEndedHeads(reading.Tasks))
+            throw HubException.InvalidResponse(read, "the answer breaks its rules");
+        return reading;
+    }
+
+    /// <summary>GET /ui/mobile/ended?blocks=1 (owner API 1.270): the blocks below the window, each with its mark. Held to
+    /// its rules: this generation, and each block once, below `before`, at a multiple of `block`.</summary>
+    public async Task<EndedBlockList> EndedBlocksAsync(Uri hub, string? key, string database, CancellationToken cancel = default)
+    {
+        const string read = "GET /ui/mobile/ended?blocks";
+        using var request = Request(HttpMethod.Get, hub, "ui/mobile/ended", key, [("db", database), ("blocks", "1")]);
+        var answer = await SendAsync(request, EndedLimit, options.RequestTimeout, cancel);
+        var list = Decoded(answer.Body, CoreJson.Default.EndedBlockList, read);
+        var starts = list.Blocks.Select(b => b.From).ToList();
+        if (list.Db != database || !list.Head.IsValid || starts.Distinct().Count() != starts.Count ||
+            list.Blocks.Any(b => b.From < 0 || b.From >= list.Before || b.From % list.Block != 0 || b.Mark.Length == 0 || b.Tasks < 0))
+            throw HubException.InvalidResponse(read, "the answer breaks its rules");
+        return list;
+    }
+
+    /// <summary>GET /ui/mobile/ended?block=&lt;from&gt; (owner API 1.270): the heads of the block of <paramref name="size"/>
+    /// ids from <paramref name="from"/>. Held to its rules: this generation and block, ended states only, each id once,
+    /// by id, inside the block.</summary>
+    public async Task<EndedBlock> EndedBlockAsync(Uri hub, string? key, string database, long from, long size,
+                                                  CancellationToken cancel = default)
+    {
+        const string read = "GET /ui/mobile/ended?block";
+        if (from < 0 || size <= 0 || from % size != 0) throw HubException.InvalidResponse(read, "not the first id of a block");
+        using var request = Request(HttpMethod.Get, hub, "ui/mobile/ended", key,
+                                    [("db", database), ("block", from.ToString(CultureInfo.InvariantCulture))]);
+        var answer = await SendAsync(request, EndedLimit, options.RequestTimeout, cancel);
+        var block = Decoded(answer.Body, CoreJson.Default.EndedBlock, read);
+        if (block.Db != database || block.From != from || block.Mark.Length == 0 || !AreEndedHeads(block.Tasks) ||
+            block.Tasks.Any(t => t.Id < from || t.Id >= from + size))
+            throw HubException.InvalidResponse(read, "the answer breaks its rules");
+        return block;
+    }
+
+    /// <summary>Heads as an ended read gives them: ended states only, each id once, by id.</summary>
+    internal static bool AreEndedHeads(IReadOnlyList<MobileTaskHead> tasks)
+    {
+        for (var i = 0; i < tasks.Count; i++)
+            if (!tasks[i].IsTerminal || i > 0 && tasks[i].Id <= tasks[i - 1].Id) return false;
+        return true;
+    }
+
+    private static T Decoded<T>(byte[] body, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type, string read)
+        where T : class
+    {
         try
         {
-            reading = System.Text.Json.JsonSerializer.Deserialize(answer.Body, CoreJson.Default.EndedReading)
-                      ?? throw HubException.InvalidResponse("GET /ui/mobile/ended", "no answer");
+            return JsonSerializer.Deserialize(body, type) ?? throw HubException.InvalidResponse(read, "no answer");
         }
-        catch (System.Text.Json.JsonException e)
+        catch (JsonException e)
         {
-            throw HubException.InvalidResponse("GET /ui/mobile/ended", e.Message, e);
+            throw HubException.InvalidResponse(read, e.Message, e);
         }
-        var ids = reading.Tasks.Select(t => t.Id).ToList();
-        if (reading.Db != database || reading.Mark.Length == 0 || reading.Tasks.Any(t => !t.IsTerminal) ||
-            !ids.SequenceEqual(ids.Order()) || ids.Distinct().Count() != ids.Count)
-            throw HubException.InvalidResponse("GET /ui/mobile/ended", "the answer breaks its rules");
-        return reading;
     }
 
     /// <summary>GET /ui/owner/devices: the owner's devices, so that Settings can name this one.</summary>

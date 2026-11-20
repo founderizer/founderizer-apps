@@ -62,6 +62,9 @@ public sealed class OwnerStore : IAsyncDisposable
     private string? key;
     private string? etag;
     private string? keptDatabase;
+    /// <summary>The blocks of ended heads that the store holds for its hub (owner API 1.270), which each window read of
+    /// the ended tasks is joined with. A new hub or generation replaces it.</summary>
+    private EndedBlocks endedBlocks = new();
     private double? lastReadUptime;
     private double lastRequestTook;
     private double slowestRequest;
@@ -410,6 +413,7 @@ public sealed class OwnerStore : IAsyncDisposable
         chatCursor.Clear();
         taskCursor.Clear();
         Update(x => x.Ended is null ? x : x with { Ended = null });
+        ForgetEndedBlocks();
         StopEvents();
         lock (timelines) timelines.Clear();
         EndOutputs(null);
@@ -517,21 +521,133 @@ public sealed class OwnerStore : IAsyncDisposable
     }
 
     /// <summary>GET /ui/mobile/ended when the reading's `ended_mark` is not the mark of the ended read that the store
-    /// holds (owner API 1.166), so the Ended lane counts and opens every ended task as the Mac's does. A hub without
-    /// `mobile_ended` keeps the lane on the reading's 20 newest. A failure is quiet: the lane keeps what it had, and the
-    /// next pass tries again.</summary>
+    /// holds (owner API 1.166), so the Ended lane counts and opens every ended task as the Mac's does. A hub with
+    /// `ended_blocks` (owner API 1.270) gives the heads of the newest ids, and the store reads the older ones in blocks
+    /// when the window's `older` mark is not the one that its blocks are current at (<see cref="EndedBlocks"/>), so no
+    /// read grows with the fleet's history. A hub without `mobile_ended` keeps the lane on the reading's 20 newest. A
+    /// failure is quiet: the lane keeps what it had, and the next pass tries again.</summary>
     private async Task ReadEndedAsync(Uri requested, string database)
     {
         var s = State;
+        var blocks = endedBlocks;
         if (s.Fleet is not { EndedMark: { } mark } fleet || !fleet.Offers("mobile_ended") ||
-            s.Ended is { } held && held.Db == database && held.Mark == mark) return;
+            s.Ended is { } held && held.Db == database && held.Mark == mark && !blocks.IsBehind) return;
         try
         {
-            var reading = await client.EndedAsync(requested, key, database);
-            if (State.Hub != requested || State.Fleet?.Db != database) return;
-            Update(x => x with { Ended = reading });
+            if (!fleet.Offers("ended_blocks"))
+            {
+                var reading = await client.EndedAsync(requested, key, database);
+                if (!Reads(blocks, requested, database)) return;
+                // Every head, with no `older`: the blocks of an earlier read go, with their files, and with them a read of
+                // the blocks that waits, which would read every head at each pass.
+                foreach (var from in blocks.See(reading)) Remove(EndedFile(from));
+                Update(x => x with { Ended = reading });
+                return;
+            }
+            var window = await client.EndedWindowAsync(requested, key, database);
+            if (!Reads(blocks, requested, database)) return;
+            foreach (var from in blocks.See(window)) Remove(EndedFile(from));
+            if (blocks.IsBehind)
+            {
+                try { await ReadEndedBlocksAsync(blocks, requested, database); }
+                catch (Exception e) when (e is HubException or IOException) { }    // the next pass reads them again
+                if (!Reads(blocks, requested, database)) return;
+            }
+            Update(x => x with { Ended = blocks.Join(window, x.Ended) });
         }
         catch (Exception e) when (e is HubException or IOException) { }
+    }
+
+    /// <summary>The list of the blocks of ended heads, then each block whose mark differs from the one held, the newest
+    /// first: each one that comes is kept in the folder, and the file of a block that the list no longer names goes. A
+    /// block whose own answer fails does not stop the others (<see cref="EndedBlocks.BlockFailed"/>); every other failure
+    /// ends this read.</summary>
+    private async Task ReadEndedBlocksAsync(EndedBlocks blocks, Uri requested, string database)
+    {
+        var list = await client.EndedBlocksAsync(requested, key, database);
+        if (!Reads(blocks, requested, database)) return;
+        foreach (var entry in blocks.Wanted(list))
+        {
+            EndedBlock block;
+            try
+            {
+                block = await client.EndedBlockAsync(requested, key, database, entry.From, list.Block);
+            }
+            catch (HubException e) when (EndedBlocks.BlockFailed(e))
+            {
+                blocks.Fail(entry);
+                continue;
+            }
+            if (!Reads(blocks, requested, database)) return;
+            if (blocks.Take(block)) KeepEndedBlock(requested, block);
+        }
+        foreach (var from in blocks.Finish(list)) Remove(EndedFile(from));
+    }
+
+    /// <summary>Whether a read of the ended heads still reads for the store: its hub, its generation and its blocks.</summary>
+    private bool Reads(EndedBlocks blocks, Uri requested, string database) =>
+        State.Hub == requested && State.Fleet?.Db == database && ReferenceEquals(blocks, endedBlocks);
+
+    // ---------------------------------------------------------------- the kept blocks of ended heads
+
+    /// <summary>The folder of the blocks of ended heads (owner API 1.270): one file for each block, with the hub that
+    /// gave it, so that a start reads only the blocks that changed.</summary>
+    private const string EndedFolder = "ended";
+
+    private static string EndedFile(long from) =>
+        Path.Combine(EndedFolder, from.ToString(CultureInfo.InvariantCulture) + ".json");
+
+    private void KeepEndedBlock(Uri hub, EndedBlock block)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(settings.Folder, EndedFolder));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+        Keep(EndedFile(block.From), JsonSerializer.SerializeToUtf8Bytes(new KeptEndedBlock(hub.ToString(), block),
+                                                                         CoreJson.Default.KeptEndedBlock));
+    }
+
+    /// <summary>The kept blocks of this hub and generation, each held to the rules of its read; the file of any other
+    /// block goes.</summary>
+    private List<EndedBlock> KeptEndedBlocks(Uri hub, string database)
+    {
+        var kept = new List<EndedBlock>();
+        string[] files;
+        try
+        {
+            var folder = Path.Combine(settings.Folder, EndedFolder);
+            files = Directory.Exists(folder) ? Directory.GetFiles(folder, "*.json") : [];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return kept;
+        }
+        foreach (var file in files)
+        {
+            var name = Path.Combine(EndedFolder, Path.GetFileName(file));
+            if (Read(name, CoreJson.Default.KeptEndedBlock) is { Block: { } block } held && held.Hub == hub.ToString() &&
+                block.Db == database && name == EndedFile(block.From) && block.From >= 0 && block.Mark.Length > 0 &&
+                HubClient.AreEndedHeads(block.Tasks) && block.Tasks.All(t => t.Id >= block.From))
+                kept.Add(block);
+            else
+                Remove(name);
+        }
+        return kept;
+    }
+
+    /// <summary>The blocks of a hub or a generation that the store no longer reads go, with their folder.</summary>
+    private void ForgetEndedBlocks()
+    {
+        endedBlocks = new EndedBlocks();
+        try
+        {
+            Directory.Delete(Path.Combine(settings.Folder, EndedFolder), recursive: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     // ---------------------------------------------------------------- the steps and the checked outputs
@@ -1651,6 +1767,12 @@ public sealed class OwnerStore : IAsyncDisposable
             }
             catch (Exception e) when (e is HubException or FormatException) { }
         }
+        // Owner API 1.270: the blocks of ended heads of the kept reading's hub and generation, so that the first read of
+        // this start reads only the blocks that changed.
+        if (address is not null && initial.Fleet?.Db is { } keptGeneration)
+            endedBlocks = new EndedBlocks(KeptEndedBlocks(address, keptGeneration), keptGeneration);
+        else
+            ForgetEndedBlocks();
         if (address is not null && Read("chats.json", CoreJson.Default.KeptChats) is { } chats && chats.Hub == address.ToString() &&
             (initial.Fleet is null || initial.Fleet.Db == chats.Db))
         {
@@ -1851,6 +1973,9 @@ internal sealed record KeptSnapshot(string Hub, string? ETag, double At, string 
 
 /// <summary>The newest 40 items of each chat, for one hub and generation.</summary>
 internal sealed record KeptChats(string Hub, string? Db, Dictionary<string, List<MobileChatItem>> Chats);
+
+/// <summary>One block of ended heads (owner API 1.270), with the hub that gave it.</summary>
+internal sealed record KeptEndedBlock(string Hub, EndedBlock Block);
 
 /// <summary>The seen marks of one hub and generation.</summary>
 internal sealed record KeptSeen(string? Context, Dictionary<string, double> Seen);

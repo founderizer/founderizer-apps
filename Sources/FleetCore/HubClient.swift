@@ -498,7 +498,7 @@ public final class HubClient: Sendable {
     /// **Each agent's part of its account's main window** (`GET /ui/costs`, owner feature `costs`), for the week bars of
     /// the Agents page. The shares do not depend on the period that the route is asked for, so it asks for the last
     /// minute before the hub's `time`. The route still builds the fleet's whole report of costs under the hub's lock,
-    /// so the page reads it seldom (`AgentsPage.pollShares`).
+    /// so the pages read it seldom (`FleetStore.keepAccountShares`).
     public func accountShares(hub: URL, database: String, at time: Double) async throws -> AccountShares {
         var parts = URLComponents(url: hub.appendingPathComponent("ui/costs"), resolvingAgainstBaseURL: false)!
         let stamp = ISO8601DateFormatter()

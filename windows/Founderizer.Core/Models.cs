@@ -401,8 +401,29 @@ public sealed record SendReceipt(
     string? MessageRequestId = null);
 
 /// <summary>GET /ui/mobile/ended (owner API 1.166): the head of every ended task, by id, with its schedule, and the
-/// `ended_mark` of GET /ui/mobile that it is of.</summary>
-public sealed record EndedReading(string Db, string Mark, IReadOnlyList<MobileTaskHead> Tasks);
+/// `ended_mark` of GET /ui/mobile that it is of. With `window=1` (owner API 1.270) the heads of the newest ids and
+/// <see cref="Older"/>, where the others are; a reading that the store joined holds every head and no Older.</summary>
+public sealed record EndedReading(string Db, string Mark, IReadOnlyList<MobileTaskHead> Tasks, EndedOlder? Older = null);
+
+/// <summary>`older` of GET /ui/mobile/ended?window=1 (owner API 1.270): the id below which the heads are in blocks, the ids
+/// of one block, and a mark that differs when a block below <see cref="Before"/> changed, or Before did.</summary>
+public sealed record EndedOlder(long Before, long Block, string Mark)
+{
+    public bool IsValid => Block > 0 && Before >= 0 && Before % Block == 0 && Mark.Length > 0;
+}
+
+/// <summary>GET /ui/mobile/ended?blocks=1 (owner API 1.270): the blocks below the window, each with its mark.</summary>
+public sealed record EndedBlockList(string Db, long Before, long Block, string Mark, IReadOnlyList<EndedBlockEntry> Blocks)
+{
+    public EndedOlder Head => new(Before, Block, Mark);
+}
+
+/// <summary>One block of <see cref="EndedBlockList"/>: its first id, its mark and the number of its heads.</summary>
+public sealed record EndedBlockEntry(long From, string Mark, long Tasks);
+
+/// <summary>GET /ui/mobile/ended?block=&lt;from&gt; (owner API 1.270): the heads of the ended tasks of one block, by id,
+/// and its mark of the same moment.</summary>
+public sealed record EndedBlock(string Db, long From, string Mark, IReadOnlyList<MobileTaskHead> Tasks);
 
 /// <summary>A task's guidance as the hub keeps it (FleetCore's TaskSteer).</summary>
 public sealed record TaskSteer(long Id, long Task, long Attempt, string Text, double Created, string RequestId,

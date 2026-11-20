@@ -271,6 +271,16 @@ public enum TokenFormat {
         marks(value.formatted(.number.locale(sheet)), of: locale)
     }
 
+    /// **A count in a column of the table**: whole, with the language's thousands separator, under a million (28,146),
+    /// and short from a million on, in the language's own words (the owner, 20 November 2026, after he saw them whole:
+    /// "for millions show 1.45M for example instead, otherwise too many numbers"). The short form has two decimals, as a
+    /// sheet that shows millions has (1.45M, 30.64M, 1.19B; 30,64 M in Spanish): with three significant digits, 30.6M
+    /// and 1.45M stood at one width with their decimal marks apart, a 21-fold difference that a column hid.
+    public static func column(_ value: Int, in locale: Locale = language) -> String {
+        value < 1_000_000 ? count(value, in: locale)
+            : value.formatted(.number.notation(.compactName).precision(.fractionLength(2)).locale(locale))
+    }
+
     /// List dollars with the language's thousands separator: whole dollars from $100 on and cents under it, for a card
     /// and a scale; with `cents` always the cents, for a table's column, whose sums then line up at their decimal mark
     /// as a sheet's do. $0 for nothing (a model of the owner's own); a dash where nothing has a price.

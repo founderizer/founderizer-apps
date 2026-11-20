@@ -389,3 +389,39 @@ private final class LinkHub: @unchecked Sendable {
         }
     }
 }
+
+extension SampleFleetTests {
+    /// **A press on the words that an item's agent recommends waits as a press on an option waits** (owner feature
+    /// `need_recommended`; two reviews of 20 November 2026): behind the item's own answer that waits unsent it is
+    /// dropped, so his Discard of that answer sends nothing in its place. The press waited in a task of its own, and
+    /// the agent's words went by themselves after the Discard.
+    @MainActor @Test("a press on the agent's words is dropped behind the item's own refused answer, and Discard sends nothing")
+    func aPressOnTheAgentsWordsIsDroppedBehindARefusedAnswer() async throws {
+        try await Self.withoutHub {
+            let store = MobileStore()
+            try #require(store.pending == nil, "the simulator holds a request of its own")
+            store.startSample()
+            defer { store.leaveSample() }
+            await store.refresh()
+            try #require(store.canWrite && store.openNeeds.contains(where: { $0.id == 1 }))
+
+            let words = "Offer a 20% voucher"
+            store.press(needID: 1, words: words)
+            // the words stand in the field at once, as if he had typed them, and the sample refuses them
+            #expect(store.answerDraft(for: 1) == words)
+            for _ in 0..<60 where store.pending?.refusal == nil { try await Task.sleep(for: .milliseconds(50)) }
+            try #require(store.pending?.refusal != nil && store.waitsUnsent(for: 1))
+
+            // a second press while that answer waits unsent does not wait behind it, and it leaves his field as it
+            // is: only Try again moves that answer
+            store.setAnswerDraft("Ask the customer first", for: 1)
+            store.press(needID: 1, words: words)
+            #expect(store.waitingPresses[1] == nil)
+            #expect(store.answerDraft(for: 1) == "Ask the customer first")
+            store.discardRefused()
+            #expect(store.pending == nil)
+            try await Task.sleep(for: .milliseconds(800))
+            #expect(store.pending == nil, "a press that waited went after the Discard")
+        }
+    }
+}

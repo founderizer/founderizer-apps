@@ -135,6 +135,8 @@ internal sealed class FakeHub : IDisposable
     /// <summary>The answer of GET /ui/mobile/ended (owner API 1.166) while it is set, and how many reads came.</summary>
     public JsonObject? Ended;
     public int EndedReads;
+    /// <summary>The window and the blocks of GET /ui/mobile/ended (owner API 1.270) while it is set.</summary>
+    public EndedBlocksHub? Blocks;
     /// <summary>While it is set, the status and the body of each read of a record.</summary>
     public (int Status, string Body)? RefuseEvents;
     /// <summary>Each accepted task's checked files (GET /ui/tasks/&lt;id&gt;/artifacts and /artifact) from one commit.</summary>
@@ -162,6 +164,13 @@ internal sealed class FakeHub : IDisposable
             HoldReads?.Wait(TimeSpan.FromSeconds(20));
             if (seen.Header("If-None-Match") == ETag) return LoopbackHub.Raw(304, [], ("ETag", ETag));
             return LoopbackHub.Json(200, Snapshot.ToJsonString(), ("ETag", ETag));
+        }
+        if (path == "/ui/mobile/ended" && Blocks is { } blocks)
+        {
+            string? Word(string name) => query.Split('&').Select(p => p.Split('=', 2)).FirstOrDefault(p => p[0] == name) is { Length: 2 } p
+                ? Uri.UnescapeDataString(p[1]) : null;
+            if (Word("window") == "1" || Word("blocks") == "1" || Word("block") is not null)
+                return blocks.Answer(Db, Word("window") == "1", Word("blocks") == "1", Word("block"));
         }
         if (path == "/ui/mobile/ended" && Ended is { } ended)
         {
@@ -273,4 +282,89 @@ internal sealed class FakeHub : IDisposable
     }
 
     public void Dispose() => Server.Dispose();
+}
+
+/// <summary>The window and the blocks of GET /ui/mobile/ended (owner API 1.270) as the hub gives them, from its heads: the
+/// heads at or above <see cref="Before"/> in the window, the others in blocks of 100 ids, each with a count that a write
+/// of one of its heads moves (<see cref="Touch"/>), and the reads of each.</summary>
+internal sealed class EndedBlocksHub
+{
+    public const long Size = 100;
+    private readonly object gate = new();
+    public readonly SortedDictionary<long, JsonObject> Heads = new();
+    public long Before;
+    /// <summary>`ended_mark` of GET /ui/mobile, which the window gives back.</summary>
+    public string Mark = "m1";
+    /// <summary>The count of each block, by its first id.</summary>
+    public readonly Dictionary<long, int> Counts = new();
+    /// <summary>A hub whose marks are not in place: the window is every head, with no `older`.</summary>
+    public bool NoOlder;
+    /// <summary>The blocks whose answer the hub cannot make (500).</summary>
+    public readonly HashSet<long> Broken = new();
+    /// <summary>The list does not come: the hub restarts (503).</summary>
+    public bool ListFails;
+    public int WindowReads, ListReads;
+    public readonly List<long> BlockReads = new();
+
+    /// <summary>Heads of ended tasks with these ids, at a block's count of 1.</summary>
+    public void Add(IEnumerable<long> ids)
+    {
+        lock (gate)
+            foreach (var id in ids)
+            {
+                var head = SampleFleet.Head(id, "Daily report " + id, "pax", id % 9 == 0 ? "failed" : "completed", SampleFleet.Now - (2000 - id) * 600);
+                head["trigger_id"] = id % 2 == 0 ? 4 : null;
+                Heads[id] = head;
+                Counts[id / Size * Size] = Counts.GetValueOrDefault(id / Size * Size) + 1;
+            }
+    }
+
+    /// <summary>A write of the head <paramref name="id"/>: its block's count moves.</summary>
+    public void Touch(long id)
+    {
+        lock (gate) Counts[id / Size * Size] = Counts.GetValueOrDefault(id / Size * Size) + 1;
+    }
+
+    private string OlderMark => $"{Before}.{Counts.Where(c => c.Key < Before).Sum(c => c.Value)}.s1";
+
+    private string BlockMark(long from) => $"{Counts.GetValueOrDefault(from)}.s1";
+
+    private JsonArray Of(Func<long, bool> which) => new(Heads.Where(h => which(h.Key)).Select(h => (JsonNode?)h.Value.DeepClone()).ToArray());
+
+    public byte[] Answer(string db, bool window, bool list, string? block)
+    {
+        lock (gate)
+        {
+            if (block is not null)
+            {
+                var from = long.Parse(block, System.Globalization.CultureInfo.InvariantCulture);
+                if (from >= Before) return LoopbackHub.Json(404, """{"error":"no such block of ended tasks"}""");
+                BlockReads.Add(from);
+                if (Broken.Contains(from)) return LoopbackHub.Json(500, """{"error":"the hub could not make it"}""");
+                return LoopbackHub.Json(200, new JsonObject
+                {
+                    ["db"] = db, ["from"] = from, ["mark"] = BlockMark(from), ["tasks"] = Of(id => id >= from && id < from + Size),
+                }.ToJsonString());
+            }
+            if (list)
+            {
+                ListReads++;
+                if (ListFails) return LoopbackHub.Json(503, """{"error":"the hub restarts"}""");
+                var blocks = new JsonArray();
+                for (var from = 0L; from < Before; from += Size)
+                {
+                    var start = from;
+                    blocks.Add(new JsonObject { ["from"] = start, ["mark"] = BlockMark(start), ["tasks"] = Heads.Keys.Count(id => id >= start && id < start + Size) });
+                }
+                return LoopbackHub.Json(200, new JsonObject
+                {
+                    ["db"] = db, ["before"] = Before, ["block"] = Size, ["mark"] = OlderMark, ["blocks"] = blocks,
+                }.ToJsonString());
+            }
+            WindowReads++;
+            var answer = new JsonObject { ["db"] = db, ["mark"] = Mark, ["tasks"] = Of(id => NoOlder || id >= Before) };
+            if (!NoOlder) answer["older"] = new JsonObject { ["before"] = Before, ["block"] = Size, ["mark"] = OlderMark };
+            return LoopbackHub.Json(200, answer.ToJsonString());
+        }
+    }
 }

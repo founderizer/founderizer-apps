@@ -6,10 +6,11 @@ import SwiftUI
 /// D-4: "Servers and devices are one section of Settings"; they were two pages of the main sidebar). Two groups, each
 /// with its add on its heading: Servers with Add server, Your devices with Add device (`DevicesSection`).
 ///
-/// The servers (owner feature `servers`, `GET /ui/servers` and `GET /ui/health` every 15 seconds while it shows): a card
-/// for each machine that runs agents or can run them, also one with no agent (`ServerCards`): its mark, its name, its
-/// CPU, memory and disk, its agents with what each runs on, and a mark only where it needs something. A click opens the
-/// server's page. Add server, on the page's title, opens the wizard that adds one (`AddServerView` in
+/// The servers (owner feature `servers`, `GET /ui/servers` and `GET /ui/health` every 15 seconds while it shows): one
+/// table in the style of the Agents page (`ServersTable`), with a row for each machine that runs agents or can run them,
+/// also one with no agent — its mark, its name, its CPU, memory and disk, and a mark only where it needs something — and
+/// each of its agents in a row under it, as the Agents page draws one. A click on a server opens the server's page, and
+/// on an agent its chat. Add server, on the page's title, opens the wizard that adds one (`AddServerView` in
 /// `AddMachineView.swift`). A hub without `servers` shows the machines of its agents (`GET /ui/machines`), as before.
 struct ServersPage: View {
     @Bindable var store: FleetStore
@@ -49,14 +50,14 @@ struct ServersPage: View {
             Group {
                 if offered, let list {
                     if store.pageReadingIsOld(failedSince: failedSince) && !store.hubNoticeShows { lastReading }
-                    // No line under the list about what a click does: every card says it with its own pointer,
-                    // and the other lists of the app (Apps, Devices) carry none. **No heading over the cards**: the
+                    // No line under the list about what a click does: every row says it with its own pointer,
+                    // and the other lists of the app (Apps, Devices) carry none. **No heading over the table**: the
                     // page's title says "Servers" and carries Add server (the owner's yes of 13 November 2026 to the
                     // clean page; "Servers" stood twice, as the title and as the heading under it).
                     if list.servers.isEmpty {
                         FormSection { FormEmpty("No servers yet", symbol: "server.rack") }
                     } else {
-                        ServerCards(store: store, list: list, helpers: helpers)
+                        ServersTable(store: store, list: list, helpers: helpers)
                     }
                 } else if older, let machines {
                     if store.pageReadingIsOld(failedSince: failedSince) && !store.hubNoticeShows { lastReading }

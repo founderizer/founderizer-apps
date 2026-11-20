@@ -1923,9 +1923,17 @@ final class MobileStore {
                     files: readyFiles(for: Self.stageKey(need: needID)))
     }
 
-    /// **The presses on an item's own options that wait until the hub can take them**, by item: the newest press of an
+    /// **The presses on an item's answers that wait until the hub can take them**, by item: the newest press of an
     /// item wins (fix round 2, item 51).
-    private(set) var waitingPresses: [Int: Int] = [:]
+    private(set) var waitingPresses: [Int: WaitingPress] = [:]
+
+    /// A press that waits: one of the item's own options, by its index, or the words that its agent recommends (owner
+    /// feature `need_recommended`), which go as his answer in words, with the files of his answer that were up when he
+    /// pressed: a file that he adds while the press waits stops it.
+    enum WaitingPress: Equatable, Sendable {
+        case option(Int)
+        case words(String, files: [Int])
+    }
 
     /// **The answers that the hub took, by item, until the item folds away** (polish pass: the receipt's jump): from
     /// the receipt to the read that folds the item, it keeps its look — his words in its field and "Sending…" under
@@ -1954,25 +1962,52 @@ final class MobileStore {
     /// November 2026). A press on any other item waits as before, also behind a request that waits unsent: it goes
     /// when he sends that one again, or when a read finds that the hub has it.
     func press(needID: Int, choice: Int) {
+        press(needID: needID, .option(choice))
+    }
+
+    /// **A press on the words that an item's agent recommends** (owner feature `need_recommended`: the phone's row of
+    /// them on an item with no options): his answer in those words, as if he had typed them. The words go into the
+    /// item's field at once and then as his words go (`send(needID:)`), with the files that are up, and they wait as a
+    /// press on an option waits, with its drop behind the item's own unsent request. While a file of the answer still
+    /// uploads they only stand in the field, and his Send sends them with it; a file that starts, or other words in
+    /// the field, while the press waits, drop the press.
+    func press(needID: Int, words: String) {
+        // behind this item's own answer that waits unsent a press changes nothing, as a press on an option does: only
+        // his Try again moves that answer, and the words in the field are his to send with it
+        guard canWrite || !waitsUnsent(for: needID) else {
+            waitingPresses[needID] = nil
+            return
+        }
+        setAnswerDraft(words, for: needID)
+        guard !filesAreWaiting(for: Self.stageKey(need: needID)) else {
+            // the newest press wins: an older press of this item that still waits goes with it
+            waitingPresses[needID] = nil
+            return
+        }
+        press(needID: needID, .words(words, files: readyFiles(for: Self.stageKey(need: needID))))
+    }
+
+    private func press(needID: Int, _ press: WaitingPress) {
         guard canWrite else {
             guard !waitsUnsent(for: needID) else {
                 // the newest press wins: an older press of this item that still waits goes with it
                 waitingPresses[needID] = nil
                 return
             }
-            waitingPresses[needID] = choice
+            waitingPresses[needID] = press
             guard pressWaits[needID] == nil else { return }
             let hub = hub, database = snapshot?.db
             pressWaits[needID] = Task { [weak self] in
                 while let store = self, !Task.isCancelled {
                     guard store.hub == hub, store.snapshot?.db == database, store.storageError == nil,
                           !store.waitsUnsent(for: needID),
-                          store.openNeeds.contains(where: { $0.id == needID }), let choice = store.waitingPresses[needID]
+                          store.openNeeds.contains(where: { $0.id == needID }), let press = store.waitingPresses[needID],
+                          store.stillMeant(press, for: needID)
                     else { break }
                     if store.canWrite {
                         store.waitingPresses[needID] = nil
                         store.pressWaits[needID] = nil
-                        await store.send(needID: needID, choice: choice)
+                        await store.send(needID: needID, press)
                         return
                     }
                     try? await Task.sleep(for: .milliseconds(250))
@@ -1983,7 +2018,22 @@ final class MobileStore {
             return
         }
         waitingPresses[needID] = nil
-        Task { await send(needID: needID, choice: choice) }
+        Task { await send(needID: needID, press) }
+    }
+
+    /// A press on the agent's words still means them while the field holds those words and the answer has the files
+    /// that it had at the press, all of them up; a press on an option always does.
+    private func stillMeant(_ press: WaitingPress, for needID: Int) -> Bool {
+        guard case .words(let words, let files) = press else { return true }
+        let composer = Self.stageKey(need: needID)
+        return answerDraft(for: needID) == words && !filesAreWaiting(for: composer) && readyFiles(for: composer) == files
+    }
+
+    private func send(needID: Int, _ press: WaitingPress) async {
+        switch press {
+        case .option(let choice): await send(needID: needID, choice: choice)
+        case .words: await send(needID: needID)
+        }
     }
 
     /// One answer to one open item by one of the options its agent offered (owner feature `need_options`): the hub

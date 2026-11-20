@@ -119,4 +119,186 @@ public sealed class EndedLaneTests
             Directory.Delete(folder, recursive: true);
         }
     }
+
+    /// <summary>A hub with `ended_blocks` and the heads of the ended tasks 1001 to 1350: the window holds those from 1300,
+    /// and the blocks the others (owner API 1.270).</summary>
+    private static FakeHub BlocksHub()
+    {
+        var hub = new FakeHub { Blocks = new EndedBlocksHub { Before = 1300 } };
+        hub.Blocks.Add(Enumerable.Range(1001, 350).Select(n => (long)n));
+        foreach (var feature in new[] { "mobile_ended", "ended_blocks" }) hub.Snapshot["ui_features"]!.AsArray().Add((JsonNode)feature);
+        hub.Snapshot["ended_mark"] = "m1";
+        return hub;
+    }
+
+    private static OwnerStore Store(string folder) => new(new StoreSettings
+    {
+        Folder = folder, Keys = new MemoryKeyStore("device-key-1"), ClientLabel = "founderizer-windows/1",
+    });
+
+    private static long[] Ids(OwnerStore store) => store.State.Ended!.Tasks.Select(t => t.Id).ToArray();
+
+    private static void Moved(FakeHub hub, string mark)
+    {
+        hub.Blocks!.Mark = mark;
+        hub.Snapshot["ended_mark"] = mark;
+    }
+
+    [TestMethod]
+    public async Task TheStoreJoinsTheWindowAndTheBlocksAndReadsABlockAgainOnlyWhenItsMarkMoves()
+    {
+        // The Windows app's read of the ended tasks does not grow with the fleet's history (owner API 1.270): it reads the
+        // window, the list, and each block once; then only a block whose mark moved; and at a new start only the blocks
+        // that changed, from the ones in its folder. Its Ended lane holds every head, as with the whole read.
+        var folder = Directory.CreateTempSubdirectory("founderizer-ended-blocks-").FullName;
+        using var hub = BlocksHub();
+        var blocks = hub.Blocks!;
+        try
+        {
+            await using (var store = Store(folder))
+            {
+                await store.ConnectAsync(hub.Address.ToString());
+                store.Unlock();
+                await store.RefreshAsync();
+                CollectionAssert.AreEqual(Enumerable.Range(1001, 350).Select(n => (long)n).ToArray(), Ids(store));
+                CollectionAssert.AreEqual(Enumerable.Range(0, 13).Select(n => 1200L - 100 * n).ToArray(), blocks.BlockReads,
+                                          "each block below the window once, the newest first");
+                Assert.AreEqual((1, 1, 0), (blocks.WindowReads, blocks.ListReads, hub.EndedReads), "no read of every head");
+                var whole = Activity.Lanes(store.State.Fleet!, null, ActivityPeriod.All, Utc,
+                                           blocks.Heads.Values.Select(h => JsonSerializer.Deserialize(h.ToJsonString(), CoreJson.Default.MobileTaskHead)!).ToList());
+                var lane = Screens.Board(store.State, ActivityPeriod.All, null, DateTimeOffset.UtcNow, Utc).Lanes.Single(l => l.Column == ActivityColumn.Done);
+                Assert.AreEqual(whole[ActivityColumn.Done].Count, lane.Count, "the lane of every head");
+
+                await store.RefreshAsync();
+                Assert.AreEqual((1, 1, 13), (blocks.WindowReads, blocks.ListReads, blocks.BlockReads.Count), "the same mark reads nothing");
+
+                blocks.Heads[1150]["title"] = "Weekly report";
+                blocks.Touch(1150);
+                Moved(hub, "m2");
+                await store.RefreshAsync();
+                Assert.AreEqual((2, 2, 1100L), (blocks.WindowReads, blocks.ListReads, blocks.BlockReads[^1]));
+                Assert.AreEqual(14, blocks.BlockReads.Count, "only the block whose mark moved");
+                Assert.AreEqual("Weekly report", store.State.Ended!.Tasks.Single(t => t.Id == 1150).Title);
+
+                blocks.Add([1351]);
+                Moved(hub, "m3");
+                await store.RefreshAsync();
+                Assert.AreEqual((3, 2, 14, 1351L), (blocks.WindowReads, blocks.ListReads, blocks.BlockReads.Count, Ids(store)[^1]),
+                                "a task that ends in the window is in the window alone");
+            }
+            // The window moves up while the app is closed: the next start reads only the block that it left.
+            blocks.Add(Enumerable.Range(1352, 99).Select(n => (long)n));
+            blocks.Before = 1400;
+            Moved(hub, "m4");
+            await using (var again = Store(folder))
+            {
+                again.Unlock();
+                await again.RefreshAsync();
+                CollectionAssert.AreEqual(Enumerable.Range(1001, 450).Select(n => (long)n).ToArray(), Ids(again));
+                Assert.AreEqual((15, 1300L), (blocks.BlockReads.Count, blocks.BlockReads[^1]), "the kept blocks are read no more");
+            }
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task ABlockThatCannotBeReadStopsNoOtherAndItsHeadsStay()
+    {
+        // A block whose answer the hub cannot make: the others come, it is asked for again three times at its mark and
+        // then rests, and at a new mark once more. The heads that the lane showed for its tasks stay meanwhile, as a head
+        // that leaves the window stays until its block comes. A window with no `older` is every head: the blocks go.
+        var folder = Directory.CreateTempSubdirectory("founderizer-ended-broken-").FullName;
+        using var hub = BlocksHub();
+        var blocks = hub.Blocks!;
+        try
+        {
+            await using var store = Store(folder);
+            await store.ConnectAsync(hub.Address.ToString());
+            store.Unlock();
+            blocks.Broken.Add(1100);
+            await store.RefreshAsync();
+            Assert.AreEqual(250, Ids(store).Length, "every head but the block's");
+            for (var pass = 0; pass < 4; pass++) await store.RefreshAsync();
+            Assert.AreEqual(3, blocks.BlockReads.Count(b => b == 1100), "three times at one mark, then it rests");
+            Assert.AreEqual(1, blocks.BlockReads.Count(b => b == 1000));
+
+            blocks.Heads.Remove(1050);              // a task that left the records, while the block of 1100 still fails
+            blocks.Touch(1050);
+            Moved(hub, "m2");
+            await store.RefreshAsync();
+            Assert.AreEqual((249, 4), (Ids(store).Length, blocks.BlockReads.Count(b => b == 1100)),
+                            "the task leaves with its block's answer, and the failed block is asked for once more at a new mark");
+
+            blocks.Broken.Clear();
+            Moved(hub, "m2b");
+            await store.RefreshAsync();
+            Assert.AreEqual(4, blocks.BlockReads.Count(b => b == 1100), "it failed once more at this mark: it rests");
+            blocks.Touch(1250);
+            Moved(hub, "m2c");
+            await store.RefreshAsync();
+            Assert.AreEqual((349, 5), (Ids(store).Length, blocks.BlockReads.Count(b => b == 1100)), "and comes at the next");
+
+            blocks.Add(Enumerable.Range(1351, 100).Select(n => (long)n));
+            Moved(hub, "m3");
+            await store.RefreshAsync();
+            blocks.Before = 1400;
+            blocks.Broken.Add(1300);
+            Moved(hub, "m4");
+            await store.RefreshAsync();
+            Assert.AreEqual((449, 1300L), (Ids(store).Length, blocks.BlockReads[^1]),
+                            "the heads that left the window stay until their block comes");
+            Assert.IsTrue(Directory.GetFiles(Path.Combine(folder, "ended")).Length > 0);
+
+            blocks.NoOlder = true;
+            Moved(hub, "m5");
+            await store.RefreshAsync();
+            Assert.AreEqual(449, Ids(store).Length, "a window with no older is every head");
+            Assert.AreEqual(0, Directory.GetFiles(Path.Combine(folder, "ended")).Length, "and the blocks go");
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task AHubThatNoLongerOffersTheBlocksIsReadWholeOnce()
+    {
+        // A read of the blocks that a restart of the hub broke off, and then a hub of a release before owner API 1.270:
+        // the store reads every head once, as before, and its blocks go with their files. Not again at each pass.
+        var folder = Directory.CreateTempSubdirectory("founderizer-ended-older-hub-").FullName;
+        using var hub = BlocksHub();
+        var blocks = hub.Blocks!;
+        try
+        {
+            await using var store = Store(folder);
+            await store.ConnectAsync(hub.Address.ToString());
+            store.Unlock();
+            await store.RefreshAsync();
+            blocks.ListFails = true;
+            blocks.Touch(1050);
+            Moved(hub, "m2");
+            await store.RefreshAsync();
+            Assert.AreEqual((2, 2, 350), (blocks.WindowReads, blocks.ListReads, Ids(store).Length));
+
+            var features = hub.Snapshot["ui_features"]!.AsArray();
+            features.Remove(features.Single(f => f!.GetValue<string>() == "ended_blocks"));
+            hub.Ended = new JsonObject
+            {
+                ["db"] = "gen1", ["mark"] = "m3",
+                ["tasks"] = new JsonArray(blocks.Heads.Values.Select(h => (JsonNode?)h.DeepClone()).ToArray()),
+            };
+            hub.Snapshot["ended_mark"] = "m3";
+            for (var pass = 0; pass < 3; pass++) await store.RefreshAsync();
+            Assert.AreEqual((1, 350, 2), (hub.EndedReads, Ids(store).Length, blocks.WindowReads), "every head once");
+            Assert.AreEqual(0, Directory.GetFiles(Path.Combine(folder, "ended")).Length, "and the blocks go");
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
 }
