@@ -533,7 +533,7 @@ private struct PlanSteps: View {
 /// A task's guidance, under its thread. **It is the chat's composer** (one kind, one look: the capsule of one line at
 /// rest that grows upward, `ComposerCapsule`), up to five lines. **Its plus sends files with the guidance** (owner API
 /// 1.223; the owner's "Yes, build it" of 19 November 2026 to the pictures): the chat's plus, its chips over the line,
-/// and a file dropped on the task's page or a picture pasted with Cmd+V, all where its composer takes files
+/// and a file dropped on the task's thread or a picture pasted with Cmd+V, all where its composer takes files
 /// (`FleetStore.guidanceComposer`). Send needs words too: the hub keeps a guidance's words as its record.
 struct TaskSteering: View {
     @Bindable var store: FleetStore
@@ -685,7 +685,16 @@ struct TaskOutcomeCheck: View {
 
     var body: some View {
         if let outcome = resolving, unknown.contains(where: { $0.id == outcome.id }) {
-            // The check of one result, in place of the list; no sheet.
+            form(outcome).preference(key: OutcomeFormOpen.self, value: true)
+        } else if !unknown.isEmpty {
+            list
+        }
+    }
+
+    /// The check of one result, in place of the list; no sheet. Its Cancel takes Esc, and the card around it gives
+    /// Esc to it alone while it is open (`OutcomeFormOpen`).
+    private func form(_ outcome: TaskOutcome) -> some View {
+        Group {
             FormSection("Check the result", detail: String(l10n: "Confirm what happened before the task repeats an action.")) {
                 FormRow(outcome.title) {
                     FleetSelect("Result", selection: $finding, options: [
@@ -709,18 +718,28 @@ struct TaskOutcomeCheck: View {
                     }
                 }
             }
-        } else if !unknown.isEmpty {
-            VStack(alignment: .leading, spacing: 9) {
-                Label("Check before repeating", systemImage: "exclamationmark.circle").foregroundStyle(.orange)
-                ForEach(unknown) { outcome in
-                    // The row clicks in 26 points and more, over and under its words (`IconMetrics.reach`, T-21):
-                    // its line of 14 points was all that took the click. The card keeps its rhythm.
-                    Button { finding = nil; note = ""; resolving = outcome } label: {
-                        HStack { Text(outcome.title).lineLimit(2); Spacer(); Image(systemName: "chevron.right").font(IconMetrics.symbol(9)) }
-                            .padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
-                    }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).disabled(!store.canWrite)
-                }
-            }.font(FormMetrics.detail).padding(12).background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
         }
     }
+
+    /// The actions whose outcome is not known, each a row that opens its check.
+    private var list: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Label("Check before repeating", systemImage: "exclamationmark.circle").foregroundStyle(.orange)
+            ForEach(unknown) { outcome in
+                // The row clicks in 26 points and more, over and under its words (`IconMetrics.reach`, T-21):
+                // its line of 14 points was all that took the click. The card keeps its rhythm.
+                Button { finding = nil; note = ""; resolving = outcome } label: {
+                    HStack { Text(outcome.title).lineLimit(2); Spacer(); Image(systemName: "chevron.right").font(IconMetrics.symbol(9)) }
+                        .padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
+                }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).disabled(!store.canWrite)
+            }
+        }.font(FormMetrics.detail).padding(12).background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+    }
+}
+
+/// **The check of a result has its form open** (`TaskOutcomeCheck`): the card around it gives Esc to the form's Cancel
+/// alone (`TaskDetail`), so one Esc ends the check and never drops it with the card's level.
+struct OutcomeFormOpen: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }

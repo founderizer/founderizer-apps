@@ -24,7 +24,9 @@ import SwiftUI
 /// - **Its agent**, and at the end of that line why it waits ("Resumes at 10:00", "Waiting for Fleet Manager"), or the red
 ///   word of a result that did not succeed.
 ///
-/// The whole card opens the task of the job that matters now (`Job.lead`), as the card of a task did.
+/// The whole card opens the job in the detail card over the window (`Job.detail`): the job level for a job of several
+/// tasks or one that waits on his request, else the task level of its one task. A task's row in it opens the task
+/// level.
 struct JobCard: View {
     @Bindable var store: FleetStore
     let job: Job
@@ -179,7 +181,7 @@ struct JobCard: View {
             if isOpen {
                 ForEach(job.lines) { task in
                     Button([task.title, task.owner.agentLabel, when(task, waits: waits.contains(task.id))].joined(separator: ", ")) {
-                        store.destination = .task(task.id)
+                        store.show(.task(task.id))
                     }
                 }
             }
@@ -213,7 +215,7 @@ struct JobCard: View {
             .lineLimit(1)
         let time = Text(when).monospacedDigit().lineLimit(1).fixedSize()
         let glyph = AgentGlyph(name: task.owner, size: GlyphSize.inline, dot: false)
-        return Button { store.destination = .task(task.id) } label: {
+        return Button { store.show(.task(task.id)) } label: {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Group {
                     if waits { Image(systemName: "hand.raised.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(.orange) }

@@ -17,7 +17,9 @@ enum Destination: Hashable {
     /// or of a new rule (nil). The servers and the owner's own devices are Settings › Servers (`settings(.servers)`);
     /// `server` is one server's page there (by its name, or the name of an agent on it), and `addServer` its wizard.
     /// People, their conversations and an agent's duties belong to one agent, so they are parts of `agentDetail` and
-    /// have no case of their own.
+    /// have no case of their own. **A task and a job are no pages** (the owner, 21 November 2026: "task details to open
+    /// as a modal ... even for the tasks page!"): they open as the detail card over the page that shows
+    /// (`FleetStore.detail`), and the page under it stays as it is.
     ///
     /// **No Dashboard and no Agents table** (the owner's yes of 28 October 2026 to D-4, "the whole map"): the agents'
     /// rows of the sidebar are the one list of the agents, and the app opens on Needs you while a request waits, else on
@@ -25,7 +27,7 @@ enum Destination: Hashable {
     /// sidebar's row under Tasks (`AgentsPage`). `app` is one app's own page of Settings › Apps (the owner's yes of 10
     /// November 2026 to its split), as `server` is one server's page of Settings › Servers. `connectKey` is his Tailscale
     /// key page of Turn on for the connected apps (`ConnectAppKeyStep`), a page of Settings › Servers too.
-    case needs, activity, agents, addAgent, server(String), addServer, task(Int), agent(String),
+    case needs, activity, agents, addAgent, server(String), addServer, agent(String),
          agentDetail(String, AgentTab),
          /// The sign-in page of an agent's server (`SignInWizard`). Its second value is the provider that the page was
          /// opened for, from "Sign in again" on the error row of a task's thread (`RuntimeErrorLine`; the owner's "Yes,
@@ -35,11 +37,7 @@ enum Destination: Hashable {
          /// the provider that it was opened for, and the page's Back and Done go to the page that he came from. Nil for
          /// every other opening (`signIn(_:)`), which signs in the server's own choice.
          signIn(String, String?), agentRule(String, ProfileSectionID?), settings(SettingsTab),
-         app(AppsGroup), connectKey,
-         /// The page of one thing of an agent's work, a ticket or an incident with its tasks, from a row of the card
-         /// Work of that agent's chat panel (`WorkItemPage`; the owner's "Yes, as drawn" of 17 November 2026). Its
-         /// back link goes to that chat.
-         work(String, WorkItem.Key)
+         app(AppsGroup), connectKey
 
     /// **Tasks, opened from an agent's chat panel** (View all of its card Asked): the board of `activity`, with that
     /// agent's back link over its title, which goes back to its chat (the owner's "Yes, build both" of 17 November 2026
@@ -58,7 +56,7 @@ enum Destination: Hashable {
     /// The agent whose page shows, or nil on every other page.
     var agentName: String? {
         switch self {
-        case .agent(let name), .agentDetail(let name, _), .agentRule(let name, _), .signIn(let name, _), .work(let name, _): name
+        case .agent(let name), .agentDetail(let name, _), .agentRule(let name, _), .signIn(let name, _): name
         default: nil
         }
     }
@@ -345,8 +343,39 @@ final class FleetStore {
             forgetFilesOfAnotherFleet()     // a new hub or database numbers its files from 1 again
             dropUnsendableGuidanceFiles()   // a task's box that can send no more keeps no file
             JobColumns.shared.note(state)   // each job card's time in its column, at every reading (ColumnTimes)
+            // **The card over the window shows only what this reading lists** (`DetailCard.kept`): a task or a job that
+            // the hub lists no more, another hub or generation, or a moment with no reading closes it, and nothing opens
+            // it again. `-openPage task.<id>` opens it at the first reading (`askedCard`).
+            readingCount += 1
+            if let asked = askedCard, state != nil {
+                askedCard = nil
+                keepDetail(DetailCard(asked).kept(in: state, before: nil))
+            } else if let card = detail {
+                keepDetail(card.kept(in: state, before: oldValue))
+            }
         }
     }
+    /// The card as a reading kept it, with the job levels that it worked out for it (`detailLevels`).
+    private func keepDetail(_ kept: (card: DetailCard, levels: DetailLevels)?) {
+        if let kept { levelsCache = (kept.card, readingCount, kept.levels) }
+        if kept?.card != detail { detail = kept?.card }
+    }
+    /// One more at each reading of the hub: the job levels of the card are worked out once for each (`detailLevels`).
+    @ObservationIgnored private var readingCount = 0
+    @ObservationIgnored private var levelsCache: (card: DetailCard, reading: Int, levels: DetailLevels)?
+    /// **The job levels of the card that shows, worked out once for each reading and each change of the card**
+    /// (`DetailLevels`), as `asks` is read once for each reading: a job of the board is found by working out that whole
+    /// board, and the card's two builds (`fleetModal`'s card as high as its content) and its back link read it at each
+    /// draw.
+    var detailLevels: DetailLevels? {
+        guard let detail, let state else { return nil }
+        if let kept = levelsCache, kept.card == detail, kept.reading == readingCount { return kept.levels }
+        let levels = state.levels(of: detail)
+        levelsCache = (detail, readingCount, levels)
+        return levels
+    }
+    /// The card that this start was asked to open on (`FleetStore.askedDetail`), until the first reading.
+    @ObservationIgnored private var askedCard = FleetStore.askedDetail
     /// **What he asked for (`HubState.asks`), read once for each reading**: an agent's chat reads it at each of its
     /// frames, and it walks every task of the fleet.
     var asks: [Ask] {
@@ -370,7 +399,12 @@ final class FleetStore {
         // start of the app on a chosen page, also on one that acts when it opens, and so went around the rules of
         // `setup_show`. The other lane did the same for `firstRunStep` on 15 November 2026. (The page he left, which
         // this Mac keeps, opens only as one of `setup_show`'s places: `keptPage`.)
-        (UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["openPage"] as? String).flatMap(page(named:))
+        askedName.flatMap(page(named:))
+    }
+    /// The card that this start opens on over `asked` (`-openPage task.<id>`), or nil.
+    static var askedDetail: DetailPlace? { askedName.flatMap(detail(named:)) }
+    private static var askedName: String? {
+        UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["openPage"] as? String
     }
 
     /// A page by its name of `-openPage`, or nil for a name that names none.
@@ -391,9 +425,10 @@ final class FleetStore {
         case let page where page.hasPrefix("server."): return .server(String(page.dropFirst("server.".count)))
         // Settings › Updates is gone (15 November 2026): its versions and its switch are in General.
         case "updates", "updates.subscription": return .settings(.general)
-        // `task.<id>`: the thread of one task. It is no sidebar row, so nothing else opens it on its own — and it
-        // was the one screen of the app nobody could look at without a task to click to.
-        case let page where page.hasPrefix("task."): return Int(page.dropFirst("task.".count)).map { .task($0) }
+        // `task.<id>`: the thread of one task, as the detail card over Tasks (`detail(named:)`). It is no sidebar row,
+        // so nothing else opens it on its own — and it was the one screen of the app nobody could look at without a
+        // task to click to.
+        case let page where page.hasPrefix("task."): return detail(named: page) == nil ? nil : .activity
         case let page where page.hasPrefix("agent."):
             // `agent.<name>` is the agent's chat, as its row in the sidebar is; `agent.<name>.<section>` is one
             // section of its details, so any one of them can be looked at on its own.
@@ -404,6 +439,13 @@ final class FleetStore {
             return .agentDetail(String(name), tab)
         default: return nil
         }
+    }
+
+    /// The detail card that a name of `-openPage` and of the page he left opens over its page (`page(named:)`): the task
+    /// level of `task.<id>`, or nil for every other name.
+    static func detail(named name: String) -> DetailPlace? {
+        guard name.hasPrefix("task.") else { return nil }
+        return Int(name.dropFirst("task.".count)).map { .task($0) }
     }
 
     /// The first-run wizard holds the window, after the hub it installed has answered. It is set and cleared by
@@ -519,9 +561,15 @@ final class FleetStore {
                                    changed: destination != oldValue) { welcomePassed = true }
             homeChosen = true
             // The page he left opens at the next start (`keptPage`); every other page leaves none.
-            let kept = Self.keptName(destination)
+            let kept = Self.keptName(destination, detail: detail)
             if keptPages[hub.absoluteString] != kept { keptPages[hub.absoluteString] = kept }
             if destination != oldValue { childThreadRequest = nil; keptUnread = nil }
+            // **A page that opens closes the card over the window** (`detail`), also the page that shows under it: a row
+            // of the card that leads out of it (the agent's chat, the server's page, "Sign in again", a name or "Open"
+            // in a request's words) opens its page, and the card would stand over it. Every writer of the page is a
+            // press of the owner's, but these, which keep it: a page that only takes another name or shows as another
+            // page (`stepping`: Back, Forward, a server's new name, `standIn`; `keepsDetail`: the manager's new name).
+            if !stepping, !keepsDetail, detail != nil { detail = nil }
             // A chat that `setup_show` just opened keeps its mark; every other change of page ends it (`ShownPage`).
             if shown.chat != nil { shown.went(to: destination.agentTab == .chat ? destination.agentName : nil) }
             markRepliesSeen()
@@ -531,6 +579,55 @@ final class FleetStore {
     }
     /// The app has its first page: the one asked for, the one `home` chose from a reading, or one he went to first.
     @ObservationIgnored private var homeChosen = FleetStore.asked != nil
+
+    /// **The detail card over the window, or nil** (`DetailCard` in FleetCore, which has the rules and their tests; the
+    /// owner, 20 November 2026, of the Tasks board: "we should probably consider showing the cards here as modals once
+    /// clicked instead of moving pages", and 21 November 2026: "task details to open as a modal ... even for the tasks
+    /// page!"): a task or a job over the page that shows, which stays as it is under it. Every place that opened the
+    /// page of a task or of a job opens it (`show(_:)` of a `DetailPlace`); `FleetView` draws it (`DetailCardView`).
+    /// A new reading closes it when the hub lists what it shows no more (`state`), and a page that opens closes it
+    /// (`destination`).
+    var detail: DetailCard? {
+        didSet {
+            guard detail != oldValue else { return }
+            childThreadRequest = nil
+            detailHoldsEscape = false
+            // The task level is the place that he left, and opens at the next start (`keptName`).
+            let kept = Self.keptName(destination, detail: detail)
+            if keptPages[hub.absoluteString] != kept { keptPages[hub.absoluteString] = kept }
+            // The chat under a card was not read while the card covered it (`markRepliesSeen`): it is now.
+            if detail == nil { markRepliesSeen() }
+        }
+    }
+    /// A page that takes another name while the card shows: it keeps the card (`destination`).
+    @ObservationIgnored private var keepsDetail = false
+
+    /// **Opens the detail card at `place`** (`DetailCard.showing`). `inCard`: the press is a row of the card itself (a
+    /// task's row of the job level, Follow-up to, Parent task, a subtask), so a task from the job level stands over that
+    /// job, and a task from the task level takes its place with the same job under it; every other opener opens the
+    /// card fresh. A place that the reading does not list opens nothing: the card would have nothing to show.
+    func show(_ place: DetailPlace, inCard: Bool = false) {
+        guard state?.has(place) == true else { return }
+        detail = DetailCard.showing(place, over: detail, inCard: inCard)
+    }
+    /// The back link of the task level, and Esc: the job level it came from, else the card closes.
+    func detailBack() { detail = detail?.back }
+    /// **Esc that reaches the card's own window** (`fleetModal`'s `escape`: a field passes it up when no button of
+    /// the card took it): one level back, but never while the check of a result has its form open, whose Cancel is
+    /// Esc's (`TaskDetail`): one Esc would drop the check with the level.
+    func detailEscape() { if !detailHoldsEscape { detailBack() } }
+    /// The card's check of a result has its form open (`TaskDetail`, `OutcomeFormOpen`).
+    @ObservationIgnored var detailHoldsEscape = false
+    /// Done, and a click on the dimmed window.
+    func closeDetail() { detail = nil }
+    /// **`setup_show`'s `task.<number>`**: the task level over the page that shows, noted as a show before the card
+    /// changes, as a change of page is (`show(_:)` of a `Destination`), so no second show comes before the owner acts
+    /// in the app's main window or in this card. Its name has no word of Swift's concurrency in it: the rule that
+    /// `showPlace` checks and changes in one turn reads its body for none (`OwnerShowRulesTests`).
+    func showLinked(_ place: DetailPlace) {
+        shown.shows(nil)
+        show(place)
+    }
 
     /// **What a `setup_show` that changed the page leaves open until the owner acts in the app's main window**
     /// (`ShownPage` in FleetOwnerAPI, which has the rules and their tests; the plan "The app's pages and actions for
@@ -551,7 +648,8 @@ final class FleetStore {
     /// before the latest show, do nothing.
     func ownerHandled(_ act: ShownPage.Act) {
         guard shown.waitsForOwner || shown.chat != nil else { return }
-        let chat = destination.agentTab == .chat ? destination.agentName : nil
+        // A chat under the card over the window does not show (`detail`): an act in the card marks it not read.
+        let chat = detail == nil && destination.agentTab == .chat ? destination.agentName : nil
         if shown.handled(act, showing: chat) { markRepliesSeen() }
     }
 
@@ -563,8 +661,10 @@ final class FleetStore {
     var canGoBack: Bool { !history.back.isEmpty }
     var canGoForward: Bool { !history.forward.isEmpty }
 
-    /// One page back, ⌘[: the newest page he left that can still open.
+    /// One page back, ⌘[: the newest page he left that can still open. **With the card over the window, Back closes
+    /// it**: the page under it is the page that he opened it from, where Back from a task's page went.
     func goBack() {
+        if detail != nil { closeDetail(); return }
         guard let page = history.goBack(from: destination, canOpen: canOpen) else { return }
         stepping = true; destination = page; stepping = false
     }
@@ -578,9 +678,11 @@ final class FleetStore {
         stepping = true; destination = page; stepping = false
     }
 
-    /// One page forward, ⌘], after a step back.
+    /// One page forward, ⌘], after a step back. The card over the window closes with it, as it does for every page
+    /// that opens.
     func goForward() {
         guard let page = history.goForward(from: destination, canOpen: canOpen) else { return }
+        closeDetail()
         stepping = true; destination = page; stepping = false
     }
 
@@ -640,13 +742,10 @@ final class FleetStore {
         stepping = false
     }
 
-    /// A page of an agent the hub no longer lists, or of a task it no longer has, cannot open again: Back passes over it.
+    /// A page of an agent the hub no longer lists cannot open again: Back passes over it.
     private func canOpen(_ page: Destination) -> Bool {
         guard let state else { return true }
-        // A thing of an agent's work that the hub lists no more is no page for Back and Forward either.
-        if case .work(_, let key) = page, state.workItem(key) == nil { return false }
         if let agent = page.agentName { return state.agents.contains { $0.name == agent } }
-        if case .task(let id) = page { return state.tasks.contains { $0.id == id } }
         // His Tailscale key page of Turn on is a page only while that turn waits for the key: Back and Forward pass
         // over it afterwards, so that no token is pasted into a page that would drop it.
         if page == .connectKey { return connectSwitch().run == .keyPage }
@@ -665,7 +764,10 @@ final class FleetStore {
     /// this start may open it (`keptPage`).
     private func chooseHome() {
         guard !homeChosen, state != nil else { return }
+        // The card of the page he left, read before the page itself writes the name of the page that it opens.
+        let card = keptDetail()
         destination = keptPage() ?? Self.home(state)
+        if let card { detail = DetailCard(card) }
     }
 
     /// **The page he left, by hub address** (the owner's "Build ideas 1–5" of 16 November 2026, of "The app opens on
@@ -676,19 +778,21 @@ final class FleetStore {
     }
 
     /// The name of a page that the next start may open (`page(named:)` reads it back), or nil: only the places that
-    /// `setup_show` opens (`SetupShow.targetForms`), whose pages do nothing by themselves when they show.
-    static func keptName(_ page: Destination) -> String? {
+    /// `setup_show` opens (`SetupShow.targetForms`), whose pages do nothing by themselves when they show. **A task's card
+    /// is the place that he left**, as its page was: `task.<id>`, which opens that task's card over Tasks
+    /// (`detail(named:)`); a job's card is not, and the page under it is.
+    static func keptName(_ page: Destination, detail: DetailCard?) -> String? {
+        if let task = detail?.shown.task { return "task.\(task)" }
         switch page {
-        case .needs: "needs"
+        case .needs: return "needs"
         // Tasks that an agent's panel opened opens at the next start as Tasks, with no back link.
-        case .activity, .activityFrom: "tasks"
-        case .agents: "agents"
-        case .task(let number): "task.\(number)"
-        case .agent(let name): "agent.\(name)"
+        case .activity, .activityFrom: return "tasks"
+        case .agents: return "agents"
+        case .agent(let name): return "agent.\(name)"
         case .agentDetail(let name, let tab) where [.behaviour, .tasks, .people, .canUse].contains(tab):
-            "agent.\(name).\(tab.rawValue)"
-        case .settings(let tab) where ![.servers, .backup].contains(tab): "settings.\(tab.rawValue)"
-        default: nil
+            return "agent.\(name).\(tab.rawValue)"
+        case .settings(let tab) where ![.servers, .backup].contains(tab): return "settings.\(tab.rawValue)"
+        default: return nil
         }
     }
 
@@ -704,6 +808,14 @@ final class FleetStore {
         if case .agent(let agent) = page, chatShowsDetail(agent) { return nil }
         if page == .needs, state?.needs.contains(where: \.isOpen) != true { return nil }
         return page
+    }
+
+    /// **The task's card of the page he left** (`task.<id>`), when this start may open it: over Tasks, which `keptPage`
+    /// opens for that name by its own checks, and only for a task that the reading has.
+    private func keptDetail() -> DetailPlace? {
+        guard let name = keptPages[hub.absoluteString], let place = Self.detail(named: name),
+              keptPage() == .activity, state?.has(place) == true else { return nil }
+        return place
     }
     /// The newest chat reply that the owner has seen from each agent, for one hub generation (`seenContext`).
     private var seenReplies: [String: Int] = [:]
@@ -1300,7 +1412,9 @@ final class FleetStore {
            fresh.agents.contains(where: { $0.name == renamed.now }),
            !fresh.agents.contains(where: { $0.name == renamed.was }) {
             shown.renamed(from: renamed.was, to: renamed.now)       // a chat that `setup_show` opened stays not read
-            if let page = Self.renamed(destination, was: renamed.was, now: renamed.now) { destination = page }
+            if let page = Self.renamed(destination, was: renamed.was, now: renamed.now) {
+                keepsDetail = true; destination = page; keepsDetail = false
+            }
             renamedManager = nil
         }
         guard fresh.ui_features?.contains(AgentSetupFlow.serverFeature) == true else { return }
@@ -1841,10 +1955,11 @@ final class FleetStore {
         notifications.openRequest = { [weak self] context, id in
             guard let self, let state = self.state,
                   context == FleetNotifications.context(hub: self.hub, database: state.db) else { return }
+            // The page that it opens is the one in front: no card stands over it.
             if let id {
                 guard state.needs.contains(where: { $0.id == id }) else { return }
-                self.destination = .needs; self.selectedNeed = id
-            } else { self.destination = Self.home(state) }
+                self.closeDetail(); self.destination = .needs; self.selectedNeed = id
+            } else { self.closeDetail(); self.destination = Self.home(state) }
         }
         // **Every write wakes the page loops as soon as its answer comes**: the outbox's sends, the saves, and every
         // POST a page makes itself, through any client of the hub. It is the owner's own action, so no cap holds it
@@ -1945,9 +2060,10 @@ final class FleetStore {
     /// Nothing is written on a kept reading alone: a write waits for the hub's own answer of this launch.
     var canWrite: Bool { answersWrites && !sending && pending == nil && storageError == nil }
     var openNeeds: [OwnerNeed] { state?.needs.filter(\.isOpen) ?? [] }
+    /// The task of the card's task level, for its thread's reading (`taskFiles` and its kin).
     var currentTask: FleetTask? {
-        if case .task(let id) = destination { return state?.tasks.first { $0.id == id } }
-        return nil
+        guard let id = detail?.shown.task else { return nil }
+        return state?.tasks.first { $0.id == id }
     }
     var canRetry: Bool {
         guard let pending else { return false }
@@ -2737,7 +2853,8 @@ final class FleetStore {
            olderRows.behind(window).contains(.reports) { return }
         var seen = seenContext == context ? seenReplies : [:]
         if seenContext != context { for agent in state.agents { seen[agent.name] = Self.newestReply(agent.name, in: state) } }
-        if case .agent(let name) = destination, name != keptUnread, shown.countsAsRead(name) {
+        // **Not while the card over the window covers the chat** (`detail`): its replies are read when it closes.
+        if detail == nil, case .agent(let name) = destination, name != keptUnread, shown.countsAsRead(name) {
             seen[name] = Self.newestReply(name, in: state)
         }
         keep(seen, context: context)

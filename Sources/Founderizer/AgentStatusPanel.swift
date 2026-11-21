@@ -340,7 +340,7 @@ struct AgentStatusPanel: View {
         let words = row.until == nil ? row.words : line
         return Button {
             if let request = row.request { store.selectedNeed = request; store.destination = .needs }
-            else if let task = row.task { store.destination = .task(task) }
+            else if let task = row.task { store.show(.task(task)) }
         } label: {
             HStack(spacing: 0) {
                 RowMark {
@@ -382,20 +382,20 @@ struct AgentStatusPanel: View {
 
     /// **The rows of Work** (`WorkCard`; the owner's "Yes, as drawn" of 17 November 2026): each task that waits for him,
     /// each thing that a turn works on now by its name, then the newest things that ended, each with how it ended and
-    /// how long ago. A row of a thing opens its page (`WorkItemPage`).
+    /// how long ago. A row of a thing opens it in the card over the window (`openWork`).
     @ViewBuilder private func workRows(_ card: WorkCard) -> some View {
         ForEach(card.waits) { wait in
             // The orange raised hand of a request that stops work, as Asked draws it, and it opens what Asked's opens.
             workRow(title: wait.title, line: wait.line, id: "wait-\(wait.id)") {
                 if let request = wait.request { store.selectedNeed = request; store.destination = .needs }
-                else { store.destination = .task(wait.id) }
+                else { store.show(.task(wait.id)) }
             } mark: {
                 Image(systemName: "hand.raised.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(.orange)
             }.transition(.opacity)
         }
         ForEach(card.working) { row in
             workRow(title: row.title, line: row.words, id: "now-\(Self.key(row.id))", opensPage: true) {
-                store.destination = .work(agent, row.id)
+                openWork(row.id)
             } mark: {
                 // It turns only by a current reading of this wake (`marksMove`), and rests green before the hub's
                 // first answer after a wake: motion says that the work goes on now (UI-PATTERNS, "Statuses must be
@@ -409,7 +409,7 @@ struct AgentStatusPanel: View {
             let line = [row.words, row.endedAt.map { activityAge($0, now: time) } ?? ""].filter { !$0.isEmpty }
                 .joined(separator: " · ")
             workRow(title: row.title, line: line, id: "ended-\(Self.key(row.id))", failed: row.end == .failed, opensPage: true) {
-                store.destination = .work(agent, row.id)
+                openWork(row.id)
             } mark: {
                 switch row.end {
                 case .done: Image(systemName: "checkmark.circle.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetTask.MarkTint.checked.color)
@@ -420,9 +420,15 @@ struct AgentStatusPanel: View {
         }
     }
 
+    /// **A thing of the work in the card over the window** (`HubState.detail(of:agent:)`): the job level of a thing
+    /// that has a case or more than one task (`JobDetail`), else the task level of its one task.
+    private func openWork(_ key: WorkItem.Key) {
+        if let place = store.state?.detail(of: key, agent: agent) { store.show(place) }
+    }
+
     /// One row of Work, as one row of Asked: its mark, its title on one line, and one line under it, muted, or red
-    /// for a result that did not succeed. A row of a thing, which opens its page, ends in the chevron of a row that
-    /// opens a page of its own, as the picture of 17 November 2026 drew it.
+    /// for a result that did not succeed. A row of a thing, which opens its card over the window, ends in the chevron of
+    /// a row that opens something of its own, as the picture of 17 November 2026 drew it.
     private func workRow<Mark: View>(title: String, line: String, id: String, failed: Bool = false, opensPage: Bool = false,
                                      open: @escaping () -> Void, @ViewBuilder mark: () -> Mark) -> some View {
         Button(action: open) {

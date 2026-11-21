@@ -331,7 +331,7 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     public let job_name: String?
     /// **What came of the task, in plain words for the owner** (hub 1.226), on one line, or nil: the agent gave none,
     /// the task ended in another way, or an older hub. The hub writes it for a typed result of a session whose Shell
-    /// box is off. The card of a job that ended shows it (`Job.result`), and so does the result on the task's page at
+    /// box is off. The card of a job that ended shows it (`Job.result`), and so does the result in the task's card at
     /// rest (`FleetTask.resultAtRest`).
     public let plain: String?
     /// **A person's conversation drives this task's session** (owner feature `steer_files`, owner API 1.231): the
@@ -681,6 +681,15 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// a new plan of team changes replaced it), whose answer is the hub's own words; nil on every other item and from a
     /// hub before that version. No page draws a card for it (`drawn`). Not in `signsTheSame`, as `recommended`.
     public let replaced_by: Int?
+    /// Owner feature `need_marks` (API 1.280): where a team card's plan stands after his yes ("making", "made" or
+    /// "not_made"), and with "not_made" the hub's one or two sentences for him; nil on every other item and from a hub
+    /// before that version. The card's mark reads them (`answeredMark`). Not in `signsTheSame`, as `recommended`: they
+    /// are no words of the card.
+    public let team_state: String?
+    public let team_reason: String?
+    /// Owner feature `need_marks`: the task that his answer lets go on (a question's, a door card's or a take-over's),
+    /// or nil; the hub writes it with the item, and it never changes. Not in `signsTheSame`.
+    public let task: Int?
     /// **The options that only Founderizer on a Mac or a PC can press, by their index in `choices`** (the lane "Give on
     /// the iPhone": the owner's "Line to the Mac" of 19 November 2026 to the phone's picture, and his "Yes, add it" of
     /// the same day for the door's card). The hub refuses them from a phone: Give, the first option of an item that

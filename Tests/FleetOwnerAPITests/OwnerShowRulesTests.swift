@@ -928,17 +928,24 @@ struct OwnerShowRulesTests {
     /// **The app asks the rules again and changes the page in one turn of the main actor** (the app has no test
     /// target, so its source is read): in `SetupChannel.showPlace` the rules come before the change, the window's
     /// own rule of what a page draws comes before it too, the page changes through `FleetStore.show`, and no `await`
-    /// stands in the function, so nothing that the owner does comes between the check and the change.
+    /// stands in the function, so nothing that the owner does comes between the check and the change. **A task opens
+    /// as its card over the page** (`FleetStore.showLinked`, the detail card): its change is made in the same turn, after
+    /// the same rules, which ask whether the hub has that task (`targetState`), and the card draws that task.
     @Test func theAppChecksAndChangesThePageInOneTurn() throws {
         let channel = try Self.source("Sources/Founderizer/SetupChannel.swift")
         let body = try Self.body(of: "private func showPlace(", in: channel)
         let rules = try #require(body.range(of: "SetupShow.refusal(page: page, seen: seen, facts: facts)"))
+        let card = try #require(body.range(of: "if case .task(let number) = target {"))
+        let opensCard = try #require(body.range(of: "open = { store.showLinked(.task(number)) }"))
         let draws = try #require(body.range(of: "Self.place(of: store, showing: destination) == target"))
-        // The front holds the keys and the first click first (`OutsideFront`), then the page changes.
+        let opensPage = try #require(body.range(of: "open = { store.show(destination) }"))
+        // The front holds the keys and the first click first (`OutsideFront`), then the page or the card changes.
         let front = try #require(body.range(of: "AppFront.come(pageChanged: changes) {"))
-        let change = try #require(body.range(of: "if changes { store.show(destination) }"))
-        #expect(rules.upperBound < draws.lowerBound && draws.upperBound < front.lowerBound
-                && front.upperBound < change.lowerBound)
+        let change = try #require(body.range(of: "if changes { open() }"))
+        #expect(rules.upperBound < card.lowerBound && card.upperBound < opensCard.lowerBound
+                && opensCard.upperBound < draws.lowerBound && draws.upperBound < opensPage.lowerBound
+                && opensPage.upperBound < front.lowerBound && front.upperBound < change.lowerBound)
+        #expect(body.components(separatedBy: "open = {").count == 3)
         #expect(body.contains("let changes = SetupShow.changesPlace(to: page, from: facts.place)"))
         #expect(!body.contains("await") && !body.contains("Task"))
         #expect(!body.contains("store.destination ="))
@@ -950,7 +957,14 @@ struct OwnerShowRulesTests {
         #expect(channel.contains("keys.came(appInFront: inFront, pageChanged: pageChanged)"))
         // The facts of that ask are the store's own, with the windows of that moment, the place asked for and the
         // mouse button's state now: no page changes while a button is down.
-        #expect(body.contains("Self.showFacts(of: store, over: Self.over().0, target: target,"))
+        #expect(body.contains("Self.showFacts(of: store, over: Self.over(taskCard: store.detail?.shown.task != nil).0, target: target,"))
+        // A task's card is the place of its task (`place(of:)`), and so no card for `over` while it shows that task.
+        let over = try Self.body(of: "static func over(taskCard: Bool) -> (AppOver, kinds: String) {", in: channel)
+        #expect(over.contains("let shown = NSApp.windows.filter { $0.isVisible && !(taskCard && $0.identifier?.rawValue == detailWindow) }"))
+        let place = try Self.body(of: "static func place(of store: FleetStore, showing destination: Destination? = nil) -> AppPlace {",
+                                  in: channel)
+        #expect(place.contains("let card = destination == nil ? store.detail?.shown.task : nil"))
+        #expect(place.contains("return AppPlace.shows(window, destination: card.map { .task($0) } ?? destinationPlace(of: store, destination))"))
         #expect(body.contains("buttonDown: NSEvent.pressedMouseButtons != 0)"))
         let showFacts = try Self.body(of: "static func showFacts(of store: FleetStore, over: AppOver, target: AppPlace? = nil,",
                                       in: channel)
@@ -1009,8 +1023,12 @@ struct OwnerShowRulesTests {
         #expect(watch[key.upperBound...].contains("tellHandled(.init(isClick: false, reached: true, began: pageChange?() ?? 0))"))
         #expect(watch.components(separatedBy: "tellHandled(").count == 3)
         #expect(watch.components(separatedBy: "isClick: true").count == 2)
-        // The main window is the fleet's, and the handling is told after the event, on a later turn.
-        #expect(channel.contains("event.window?.identifier?.rawValue == SetupChannel.fleetWindow"))
+        // The main window is the fleet's, with the detail card over it, which shows a task as its page did: a click
+        // there is the owner's act too. The handling is told after the event, on a later turn.
+        #expect(channel.contains("[SetupChannel.fleetWindow, SetupChannel.detailWindow].contains(event.window?.identifier?.rawValue)"))
+        // The detail card's window is the one that carries that name.
+        let view = try Self.source("Sources/Founderizer/FleetView.swift")
+        #expect(view.contains("name: SetupChannel.detailWindow) { card in"))
         let handled = try Self.body(of: "private static func tellHandled(_ act: ShownPage.Act) {", in: channel)
         #expect(handled.contains("Task { @MainActor in") && handled.contains("await Task.yield()")
                 && handled.contains("ownerHandled?(act)"))
@@ -1029,16 +1047,27 @@ struct OwnerShowRulesTests {
         let changes = try #require(show.range(of: "destination = page"))
         #expect(tells.upperBound < changes.lowerBound)
         #expect(store.contains("if shown.chat != nil { shown.went(to: destination.agentTab == .chat ? destination.agentName : nil) }"))
+        // **A chat under the detail card does not show**: it is marked read only with no card over it, and an act of
+        // the owner's in the card marks it not read; it is read once the card closes.
         let marks = try Self.body(of: "private func markRepliesSeen() {", in: store)
-        #expect(marks.contains("if case .agent(let name) = destination, name != keptUnread, shown.countsAsRead(name) {"))
+        #expect(marks.contains("if detail == nil, case .agent(let name) = destination, name != keptUnread, shown.countsAsRead(name) {"))
         let handled = try Self.body(of: "func ownerHandled(_ act: ShownPage.Act) {", in: store)
-        #expect(handled.contains("let chat = destination.agentTab == .chat ? destination.agentName : nil"))
+        #expect(handled.contains("let chat = detail == nil && destination.agentTab == .chat ? destination.agentName : nil"))
+        #expect(store.contains("if detail == nil { markRepliesSeen() }"))
+        // A show of a task's card is told before the card changes, as a show of a page is.
+        let linked = try Self.body(of: "func showLinked(_ place: DetailPlace) {", in: store)
+        let tellsCard = try #require(linked.range(of: "shown.shows(nil)"))
+        let opensCard = try #require(linked.range(of: "show(place)"))
+        #expect(tellsCard.upperBound < opensCard.lowerBound)
         #expect(handled.contains("if shown.handled(act, showing: chat) { markRepliesSeen() }"))
         // No other word of the owner's act: a mouse-down alone, or a dropped click, frees nothing and marks nothing.
         #expect(!store.contains("func ownerActed") && store.components(separatedBy: "shown.handled(").count == 2)
         let renamed = try #require(store.range(of: "shown.renamed(from: renamed.was, to: renamed.now)"))
-        let moves = try #require(store.range(of: "if let page = Self.renamed(destination, was: renamed.was, now: renamed.now) { destination = page }"))
+        let moves = try #require(store.range(of: "if let page = Self.renamed(destination, was: renamed.was, now: renamed.now) {\n"
+                                                + "                keepsDetail = true; destination = page; keepsDetail = false"))
         #expect(renamed.upperBound < moves.lowerBound)
+        // The new name keeps the detail card over the page: only a page that the owner opens closes it.
+        #expect(store.contains("if !stepping, !keepsDetail, detail != nil { detail = nil }"))
     }
 
     /// **Every watch of the app's own events is known, and each one that can act on a key or on a mouse-down asks

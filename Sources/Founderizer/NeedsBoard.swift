@@ -355,7 +355,7 @@ struct NeedsBoard: View {
                             ActivityCard(title: task.title, identifier: "activity-task-\(task.id)",
                                          requestIdentifier: "activity-request-\(task.id)", owner: task.owner, ownerLine: words,
                                          why: nil, words: words ?? task.stateWord(in: state), openRequest: nil) {
-                                store.destination = .task(task.id)
+                                store.show(.task(task.id))
                             }.opensTask(task.id, store: store).focused($focusedTask, equals: task.id)
                         }
                         if lane.endedCount > 0 { endedRows(lane, now: now) }

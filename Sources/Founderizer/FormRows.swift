@@ -683,9 +683,14 @@ extension PageHeader where Actions == EmptyView {
 struct FleetBack: View {
     private let title: String
     private let action: () -> Void
+    /// Esc follows it. False while another control of the same card takes Esc first (the detail card's check of a
+    /// result: `TaskDetail`), so that one Esc never does two things.
+    private let escapes: Bool
 
     @_disfavoredOverload
-    init(_ title: String, action: @escaping () -> Void) { self.title = title; self.action = action }
+    init(_ title: String, escapes: Bool = true, action: @escaping () -> Void) {
+        self.title = title; self.escapes = escapes; self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
@@ -695,7 +700,7 @@ struct FleetBack: View {
             }.font(FormMetrics.text).foregroundStyle(FleetStyle.muted)
                 .padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
         }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach)
-            .keyboardShortcut(.cancelAction).accessibilityLabel("Back to \(title)")
+            .keyboardShortcut(escapes ? .cancelAction : nil).accessibilityLabel("Back to \(title)")
     }
 }
 
@@ -835,15 +840,30 @@ extension View {
     /// It is a window of its own over the app's window, not a `sheet`: a sheet brings its own frame and its own
     /// colour, which is the second thing a modal must never do.
     func fleetModal<Item: Identifiable, Card: View>(item: Binding<Item?>, @ViewBuilder card: @escaping (Item) -> Card) -> some View {
+        fleetModal(item: item, sized: { _ in nil }, escape: nil, card: card)
+    }
+
+    /// **The same modal, with a card of a fixed size for some items** (`sized`): such a card takes the size that it
+    /// gives, or the window's room less 32 points at each edge where that is less, and is built once. The card of
+    /// today's form is built twice, as it is and inside a scroll, for the one that fits (`FleetModalCard`), which would
+    /// run the reads and the layout of a task's thread two times. When an item takes the other form, the card keeps
+    /// its window and changes its size over `FleetMotion.cardGrows`. `escape`: what Esc does, where it is not the
+    /// close of the card (the detail card's one level back); a click on the dimmed window still closes it. `name`: the
+    /// identifier of the card's window, for what reads the app's windows (`SetupChannel.over`).
+    func fleetModal<Item: Identifiable, Card: View>(item: Binding<Item?>, sized: @escaping (Item) -> CGSize?,
+                                                    escape: (() -> Void)?, name: String? = nil,
+                                                    @ViewBuilder card: @escaping (Item) -> Card) -> some View {
         background(FleetModalAnchor(card: item.wrappedValue.map { shown in
-            AnyView(FleetModalCard(dismiss: { item.wrappedValue = nil }) { card(shown) })
-        }, dismiss: { item.wrappedValue = nil }))
+            AnyView(FleetModalCard(dismiss: { item.wrappedValue = nil }, size: sized(shown)) { card(shown) })
+        }, dismiss: escape ?? { item.wrappedValue = nil }, name: name))
     }
 }
 
 /// What the modal's own window shows: the dimmed backdrop, which a click closes, and the card in the middle of it.
 private struct FleetModalCard<Card: View>: View {
     let dismiss: () -> Void
+    /// The card's own size (`fleetModal(item:sized:escape:card:)`), or nil for a card as high as its content.
+    let size: CGSize?
     @ViewBuilder let card: () -> Card
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -860,13 +880,25 @@ private struct FleetModalCard<Card: View>: View {
                 .onTapGesture { dismiss() }
                 .accessibilityElement().accessibilityLabel("Close").accessibilityAddTraits(.isButton)
                 .accessibilityAction { dismiss() }
-            ViewThatFits(in: .vertical) {
-                card()
-                ScrollView { card() }
+            ZStack {
+                // **A card of its own size is built once**, and lays its content out in its frame; a card of today's
+                // form is the one of its two builds that fits. Its new form comes at once and the old one goes at once,
+                // while the card's edge and ground go from the old size to the new one (`cardGrows`).
+                if let size {
+                    card().frame(maxWidth: size.width, maxHeight: size.height).transition(.identity)
+                } else {
+                    ViewThatFits(in: .vertical) {
+                        card()
+                        ScrollView { card() }
+                    }.transition(.identity)
+                }
             }
+            // What stands at the new size while the edge goes there shows only inside the edge.
+            .clipShape(RoundedRectangle(cornerRadius: FormMetrics.radius))
             .background(FleetStyle.canvas, in: RoundedRectangle(cornerRadius: FormMetrics.radius))
             .overlay(RoundedRectangle(cornerRadius: FormMetrics.radius).strokeBorder(FleetStyle.hairline(0.1), lineWidth: FleetStyle.edgeWidth(contrast)))
             .shadow(color: .black.opacity(0.45), radius: 24, y: 8)
+            .animation(reduceMotion ? nil : FleetMotion.cardGrows, value: size)
             .accessibilityAddTraits(.isModal)
             .padding(32)
             .scaleEffect(arrived || reduceMotion ? 1 : 0.97)
@@ -881,10 +913,12 @@ private struct FleetModalCard<Card: View>: View {
 private struct FleetModalAnchor: NSViewRepresentable {
     let card: AnyView?
     let dismiss: () -> Void
+    var name: String? = nil
 
     func makeNSView(context: Context) -> NSView { ModalHolder() }
 
     func updateNSView(_ view: NSView, context: Context) {
+        (view as? ModalHolder)?.name = name
         (view as? ModalHolder)?.show(card, dismiss: dismiss)
     }
 
@@ -894,6 +928,10 @@ private struct FleetModalAnchor: NSViewRepresentable {
     private final class ModalHolder: NSView {
         private var panel: ModalPanel?
         private var watching: NSWindow?
+        /// The identifier of the card's window (`fleetModal`'s `name`).
+        var name: String?
+        /// The app's coming to the front is watched while a card shows (`takeKeys`).
+        private var watchesActivation = false
 
         func show(_ card: AnyView?, dismiss: @escaping () -> Void) {
             guard let card else { close(); return }
@@ -906,6 +944,7 @@ private struct FleetModalAnchor: NSViewRepresentable {
                 return
             }
             let panel = panel ?? makePanel()
+            panel.identifier = name.map { NSUserInterfaceItemIdentifier($0) }
             panel.onCancel = dismiss
             panel.content.rootView = card
             follow(host)
@@ -927,7 +966,40 @@ private struct FleetModalAnchor: NSViewRepresentable {
                 // another app is in front; that update must leave its keyboard focus alone.
                 if NSApp.isActive { panel.makeKeyAndOrderFront(nil) }
                 if fades { panel.fade.run(panel, to: 1, over: FleetMotion.cardIn) }
+                watchActivation()
             }
+        }
+
+        /// **A card that came while the app was not in front takes the keyboard when the app comes to the front**: the
+        /// task that the app kept at its start, `-openPage`, `setup_show`. The window under it took the keys back, and
+        /// what he typed went into the page under the dim. Only the card on top of the window takes them.
+        private func watchActivation() {
+            guard !watchesActivation else { return }
+            watchesActivation = true
+            NotificationCenter.default.addObserver(self, selector: #selector(appCame),
+                                                   name: NSApplication.didBecomeActiveNotification, object: nil)
+        }
+
+        @objc private func appCame() {
+            // After AppKit gives the keys back to the window that had them.
+            DispatchQueue.main.async { [weak self] in MainActor.assumeIsolated { self?.takeKeys() } }
+        }
+
+        private func takeKeys() {
+            guard let panel, panel.isVisible, let host = panel.parent,
+                  Self.topCard(of: host, leaving: nil) === panel, !panel.isKeyWindow else { return }
+            panel.makeKey()
+        }
+
+        /// The card on top of a window: the newest card's window that hangs on it, shows, and is not leaving.
+        static func topCard(of host: NSWindow, leaving: NSWindow?) -> NSWindow? {
+            host.childWindows?.last { $0 is ModalPanel && $0 !== leaving && $0.isVisible && !$0.ignoresMouseEvents }
+        }
+
+        private func stopActivation() {
+            guard watchesActivation else { return }
+            NotificationCenter.default.removeObserver(self, name: NSApplication.didBecomeActiveNotification, object: nil)
+            watchesActivation = false
         }
 
         private func makePanel() -> ModalPanel {
@@ -941,6 +1013,9 @@ private struct FleetModalAnchor: NSViewRepresentable {
             made.isMovable = false
             made.animationBehavior = .none
             made.collectionBehavior = [.fullScreenAuxiliary, .transient]
+            // **The card stays while another app is in front** (a panel hides by default): he follows a task's thread
+            // while he works in another app, as he followed its page (`FleetMenu` keeps its menus the same way).
+            made.hidesOnDeactivate = false
             made.contentView = made.content
             panel = made
             return made
@@ -956,7 +1031,12 @@ private struct FleetModalAnchor: NSViewRepresentable {
         }
 
         private func stopWatching() {
-            if watching != nil { NotificationCenter.default.removeObserver(self) }
+            // Its own two names only: the watch of the app's coming to the front stays (`watchActivation`).
+            if let watching {
+                for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
+                    NotificationCenter.default.removeObserver(self, name: name, object: watching)
+                }
+            }
             watching = nil
         }
 
@@ -974,16 +1054,20 @@ private struct FleetModalAnchor: NSViewRepresentable {
             let leaving = panel
             panel = nil
             stopWatching()
+            stopActivation()
             guard let leaving else { return }
             guard !FleetMotion.reduced, leaving.isVisible else {
                 // No fade: a fade-in that still runs ends here, with the window.
                 leaving.fade.stop()
+                if leaving.isKeyWindow, let host = leaving.parent { (Self.topCard(of: host, leaving: leaving) ?? host).makeKey() }
                 leaving.parent?.removeChildWindow(leaving)
                 leaving.orderOut(nil)
                 return
             }
             leaving.ignoresMouseEvents = true
-            if leaving.isKeyWindow, let host = leaving.parent { host.makeKey() }
+            // The keys go to the card that stays on top of the window, else to the window: a card that opened over
+            // another one (the secret's over a request's) gave them to the page under both.
+            if leaving.isKeyWindow, let host = leaving.parent { (Self.topCard(of: host, leaving: leaving) ?? host).makeKey() }
             leaving.fade.run(leaving, to: 0, over: FleetMotion.cardOut) {
                 leaving.parent?.removeChildWindow(leaving)
                 leaving.orderOut(nil)

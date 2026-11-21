@@ -811,7 +811,7 @@ struct PasteAttachments: ViewModifier {
 
 /// What a view shows while a file is over it: the dashed frame of a drop and the words of what the drop does.
 struct DropMark: View {
-    /// Over a task's page, the file goes into its guidance.
+    /// Over a task's thread, the file goes into its guidance.
     var guidance = false
 
     var body: some View {

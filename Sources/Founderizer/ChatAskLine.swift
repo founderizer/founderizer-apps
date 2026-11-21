@@ -5,7 +5,7 @@ import SwiftUI
 /// 2026: "this tasks should also show inside the conversation!! like in codex or claude code! not only there", and his
 /// three picks to its picture): under the agent's reply of the turn in which the work began, its mark, its name on one
 /// line and one muted line under it, on the surface of a card, at most 430 points wide, with the chevron of a row that
-/// opens something. A click opens the task (`ChatAskRow.task`), as a card on Tasks does.
+/// opens something. A click opens the task (`ChatAskRow.task`) in the card over the window, as a card on Tasks does.
 struct ChatAskLine: View {
     @Bindable var store: FleetStore
     let row: ChatAskRow
@@ -27,7 +27,7 @@ struct ChatAskLine: View {
 
     var body: some View {
         Button {
-            if let task = row.task { store.destination = .task(task) }
+            if let task = row.task { store.show(.task(task)) }
         } label: {
             HStack(spacing: 11) {
                 mark.frame(width: 16).accessibilityHidden(true)
@@ -81,7 +81,7 @@ struct ChatAskHead: View {
     var body: some View {
         VStack(spacing: 0) {
             Button {
-                if let task = row.task { store.destination = .task(task) }
+                if let task = row.task { store.show(.task(task)) }
             } label: {
                 HStack(spacing: 9) {
                     Image(systemName: row.symbol).font(IconMetrics.symbol(13)).foregroundStyle(row.tint.color)

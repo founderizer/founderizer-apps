@@ -1,9 +1,10 @@
 import FleetCore
 import SwiftUI
 
-/// **The panel at the right of a task's thread, in the cards of an agent's chat panel** (the owner's "Yes, build it" of
-/// 17 November 2026 to the pictures of the Task page; `AgentStatusPanel` is the chat's). Its head names the thread by
-/// the task's title, over the panel's scroll, because a name that scrolls out of reach is no name (`FleetView`). Under
+/// **The facts at the right of a task's thread, in the cards of an agent's chat panel** (the owner's "Yes, build it" of
+/// 17 November 2026 to the pictures of the Task page; `AgentStatusPanel` is the chat's), the right column of the task's
+/// card over the window (`TaskDetail`), 340 points wide. Its head names the thread by the task's title, with the card's
+/// Done at its right, over the panel's scroll, because a name that scrolls out of reach is no name. Under
 /// it: one card of the agent that does the task (its glyph, role and name, which open its chat), the task's state with
 /// its Pause and Stop, who asked for it, and its attempt after a restart, with its project, its schedule, the task it
 /// follows and the task it is part of where it has them; then Done when; Runs on, the AI provider with the model that
@@ -18,6 +19,10 @@ import SwiftUI
 struct TaskPanel: View {
     @Bindable var store: FleetStore
     let task: FleetTask
+    /// Done takes Esc (`TaskDetail`): false while the back link to a job or the open check of a result takes it.
+    let escapes: Bool
+    /// Done of the card that it stands in.
+    let done: () -> Void
     /// The read of the machines failed, in the hub's words, and none was kept.
     @State private var readError: String?
     /// The read of the machines has answered or failed in this visit.
@@ -39,11 +44,15 @@ struct TaskPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(task.title).font(FormMetrics.title).lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16).padding(.top, FleetSpace.underBand + FleetSpace.lights).padding(.bottom, 14)
-                .accessibilityIdentifier("task-name")
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(task.title).font(FormMetrics.title).lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("task-name")
+                Button("Done", action: done).buttonStyle(FleetOutlineButtonStyle())
+                    .keyboardShortcut(escapes ? .cancelAction : nil).accessibilityIdentifier("detail-done")
+            }
+            .padding(.horizontal, 16).padding(.top, TaskDetail.top).padding(.bottom, 14)
             Rule()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) { content }
@@ -216,13 +225,14 @@ struct TaskPanel: View {
                         symbol: "clock", opens: false)
     }
 
-    /// A task that this one follows or is part of: its title, what it is to this one, and the chevron that opens it.
+    /// A task that this one follows or is part of: its title, what it is to this one, and the chevron that opens it in
+    /// this card. One that the hub lists no more has no card to open, and keeps its words alone.
     private func taskRow(_ id: Int, missing: String, line: String, symbol: String) -> some View {
         let other = state?.tasks.first { $0.id == id }
-        return Button { store.destination = .task(id) } label: {
-            twoLines(other?.title ?? missing, line: other == nil ? nil : line, symbol: symbol, opens: true)
+        return Button { store.show(.task(id), inCard: true) } label: {
+            twoLines(other?.title ?? missing, line: other == nil ? nil : line, symbol: symbol, opens: other != nil)
         }
-        .buttonStyle(FleetRowButtonStyle()).opensTask(id, store: store)
+        .buttonStyle(FleetRowButtonStyle()).disabled(other == nil).opensTask(id, store: store)
     }
 
     // MARK: Runs on
@@ -303,7 +313,8 @@ struct TaskPanel: View {
                 .fill(Color.white.opacity(serverHovered ? 0.035 : 0))
                 .padding(.horizontal, 6).padding(.vertical, 3))
             .onHover { serverHovered = $0 }
-        } else if let readError, !store.hubNoticeShows {
+        } else if let readError {
+            // In the card, also while the window's notice says the outage: that notice is under the card's dim.
             row(readError, symbol: "desktopcomputer", muted: true)
         } else if store.isFresh && !readEnded && state?.ui_features?.contains("machines") == true {
             // Its read is on its way: the one loading look of the app, as the chat panel's (`AgentStatusPanel.readingRow`).
@@ -343,7 +354,7 @@ struct TaskPanel: View {
     /// A subtask by its own mark and word, as the board draws a task; it opens.
     private func subtaskRow(_ child: FleetTask) -> some View {
         let mark = child.mark(in: state), tint = child.tint(in: state)
-        return Button { store.destination = .task(child.id) } label: {
+        return Button { store.show(.task(child.id), inCard: true) } label: {
             HStack(spacing: 0) {
                 RowMark { Image(systemName: mark.symbol).font(IconMetrics.symbol(Self.mark)).foregroundStyle(tint.color) }
                     .accessibilityHidden(true)

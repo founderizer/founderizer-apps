@@ -248,19 +248,30 @@ struct SearchPalette: View {
     private func open(_ found: Found) {
         switch found {
         case .agent(let agent): store.destination = .agent(agent.name)
-        case .task(let task): store.destination = .task(task.id)
+        case .task(let task): openTask(task.id)
         case .message(let match):
             // His chat with the agent at that message; else the task that the record is part of; else the agent's chat.
             if let entry = match.chatEntry {
                 store.chatFocus = ChatFocus(agent: match.agent, entry: entry, at: match.at)
                 store.destination = .agent(match.agent)
             } else if let task = match.taskNumber, store.state?.tasks.contains(where: { $0.id == task }) == true {
-                store.destination = .task(task)
+                openTask(task)
             } else {
                 store.destination = .agent(match.agent)
             }
         }
         close()
+    }
+
+    /// **A task opens in the detail card once this card has gone** (`FleetMotion.cardOut`): two cards over the window
+    /// would dim it twice for that moment, and the keyboard goes to the window under this card as it goes, then to the
+    /// detail card's own window as that one comes.
+    private func openTask(_ id: Int) {
+        let store = store
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(FleetMotion.cardOut))
+            store.show(.task(id))
+        }
     }
 }
 

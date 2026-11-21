@@ -235,7 +235,14 @@ final class ReportProblemModel {
         reading = true
         defer { reading = false }
         if again { await store.refresh() }
-        let screen = self.screen ?? ProblemReport.screenName(String(describing: store.destination))
+        // The card over the window is the screen that he sees: a task's, or a thing's of an agent's work, by the names
+        // that their pages had ("Task", "Work"); a job of the board names the board under it.
+        let shown: String = switch store.detail?.shown {
+        case .task(let id)?: String(describing: DetailPlace.task(id))
+        case .work(let agent, let key)?: String(describing: DetailPlace.work(agent, key))
+        default: String(describing: store.destination)
+        }
+        let screen = self.screen ?? ProblemReport.screenName(shown)
         self.screen = screen
         let hub = store.hub, client = HubClient()
         var health: FleetHealth?, machines: [MachineStatus] = [], servers: [ServerEntry] = [], releases: ReleaseState?

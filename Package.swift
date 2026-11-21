@@ -38,6 +38,9 @@ let package = Package(
         .testTarget(name: "FleetVaultTests", dependencies: ["FleetVaultCore", "FleetVaultIPC"]),
         .testTarget(name: "FleetImportTests", dependencies: ["FleetImport", "FleetCore"], exclude: ["make_fixtures.py"]),
         .testTarget(name: "FleetMarkTests", dependencies: ["FleetMark"]),
-        .testTarget(name: "FleetOwnerAPITests", dependencies: ["FleetOwnerAPI", "FleetCore"], resources: [.copy("Fixtures")])
+        .testTarget(name: "FleetOwnerAPITests", dependencies: ["FleetOwnerAPI", "FleetCore"], resources: [.copy("Fixtures")]),
+        // The tests of the Mac app's views: the real views in a window that no screen shows, on a test's own defaults
+        // and folder and a hub address where no server answers (`ViewHost`).
+        .testTarget(name: "FounderizerViewTests", dependencies: ["Founderizer", "FleetCore"])
     ]
 )

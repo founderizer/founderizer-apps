@@ -74,8 +74,8 @@ struct FleetView: View {
             } else {
             // **No bar.** Every pane below runs to the top edge of the window and the traffic lights float over
             // its own background; `FleetSpace.lights` is the room each one leaves for them. Every screen names
-            // itself: a page by its own title, an agent's chat by the pill over the conversation, a task thread
-            // by the head of the panel that carries the task's facts.
+            // itself: a page by its own title, an agent's chat by the pill over the conversation. A task's thread
+            // stands in its card over the window, named by the head of its facts (`TaskDetail`).
             HStack(spacing: 0) {
                 sidebar.sideMenu(.leading, width: $sidebarWidth, range: FleetStyle.sidebarWidths)
                 Rule(vertical: true)
@@ -85,23 +85,6 @@ struct FleetView: View {
                     // margins of 30 October 2026, row 2, with the owner's crop: they began 36 pt down).
                     if !store.destination.ownsSidebar { Color.clear.frame(height: FleetSpace.lights) }
                     content.frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // **Under a task's thread, its guidance box alone, as a chat has its composer** (the owner's yes of 17
-                    // November 2026 to the pictures of the Task page): its Pause and Stop are in its panel's state row
-                    // (`TaskHoldControls`). Only the check of a result that nobody knows stands over the box, and only
-                    // while it is his: while the task runs or waits for its next session, its agent checks first
-                    // (`TaskOutcome.waitsOnOwner`).
-                    if let task = store.currentTask, store.state?.ui_features?.contains("task_controls") == true,
-                       store.state?.outcomeUnknown(task.id) == true {
-                        // **Room under it where no guidance box stands under it** (the margins of 30 October 2026, row 7).
-                        let boxUnder = !task.isTerminal && store.state?.ui_features?.contains("task_steering") == true
-                            && TaskSteering.shows(task, in: store.state)
-                        TaskOutcomeCheck(store: store, task: task)
-                            .id("\(store.hub)/\(task.id)")
-                            .chatColumn().padding(.top, 8).padding(.bottom, boxUnder ? 0 : FleetSpace.under)
-                    }
-                    if let task = store.currentTask, !task.isTerminal, store.state?.ui_features?.contains("task_steering") == true {
-                        TaskSteering(store: store, task: task).id("\(store.hub)/\(task.id)/\(task.attempt)")
-                    }
                     // **Only a request that is not on its way.** This panel is for one the hub did not confirm:
                     // it carries Retry, Discard and the request's own id, which are of no use while the request
                     // is in flight — and showing it then made it appear and vanish above the text box on every
@@ -128,20 +111,15 @@ struct FleetView: View {
                 // bar on the main view, not on the sidebars"; fix round 3c, where round 3 ran it over both). A page that
                 // draws a sidebar of its own draws it itself, over its own column (`pageNotices`).
                 .overlay(alignment: .top) { if !store.destination.ownsSidebar { FleetNotices(store: store) } }
-                // The panel of an agent's chat, and the facts of a task in a task thread. Neither is hidden and
-                // neither waits to be asked for: the two pages that have a panel show it, every other page has none.
-                // Each panel draws by the page's own mark (`pageClear`), so a panel that comes with its page fades in
-                // with it: a fade on the panel itself saw no change when the panel was new, and the panel stood whole
-                // beside a page that was still clear.
+                // The panel of an agent's chat. It is not hidden and does not wait to be asked for: the page that has a
+                // panel shows it, every other page has none. It draws by the page's own mark (`pageClear`), so a panel
+                // that comes with its page fades in with it: a fade on the panel itself saw no change when the panel
+                // was new, and the panel stood whole beside a page that was still clear. A task's facts are the right
+                // column of its card over the window (`TaskDetail`).
                 if let name = chatAgent, setupAgent == nil, startingAgent == nil, accountAgent == nil, store.state != nil {
                     Rule(vertical: true).opacity(pageClear ? 0 : 1)
                     AgentStatusPanel(store: store, agent: name) { openAgent(name, .settings) }
                         .id("\(store.hub)/\(name)")
-                        .opacity(pageClear ? 0 : 1)
-                        .sideMenu(.trailing, width: $panelWidth, range: FleetStyle.panelWidths)
-                } else if let task = store.currentTask {
-                    Rule(vertical: true).opacity(pageClear ? 0 : 1)
-                    TaskPanel(store: store, task: task).id("\(store.hub)/\(task.id)")
                         .opacity(pageClear ? 0 : 1)
                         .sideMenu(.trailing, width: $panelWidth, range: FleetStyle.panelWidths)
                 }
@@ -220,6 +198,18 @@ struct FleetView: View {
             SearchPalette(store: store) { searching = nil }
                 .environment(\.glyphTeam, store.state?.agents.map(\.name) ?? [])
                 .environment(\.glyphPresence, glyphPresences)
+        }
+        // **A task and a job open as one card over the window** (`FleetStore.detail`, `DetailCardView`): the job level
+        // as high as its content, the task level at its own size, built once (`sized`). Esc goes one level back; Done
+        // and a click on the dimmed window close it.
+        .fleetModal(item: $store.detail, sized: { $0.shown.task == nil ? nil : TaskDetail.size }, escape: { store.detailEscape() },
+                    name: SetupChannel.detailWindow) { card in
+            DetailCardView(store: store, card: card)
+                .environment(\.glyphTeam, store.state?.agents.map(\.name) ?? [])
+                .environment(\.glyphPresence, glyphPresences)
+                // The card's window is in no scene of SwiftUI's: it takes the main window's phase, by which the live
+                // view of a task's desktop runs (`DesktopView`).
+                .environment(\.scenePhase, scenePhase)
         }
     }
 
@@ -490,7 +480,7 @@ struct FleetView: View {
         if isSettings { return "settings" }
         switch store.destination {
         case .needs: return "needs"
-        case .activity, .activityFrom, .task: return "tasks"
+        case .activity, .activityFrom: return "tasks"
         case .agents: return "agents"
         default: return store.destination.agentName.map { "agent/\($0)" } ?? ""
         }
@@ -612,10 +602,10 @@ struct FleetView: View {
         }
     }
 
-    /// **Tasks**, the board that was Activity (the iPhone's word for it). It stays selected on the page its board
-    /// opens (T-32), a task's thread, so every page has one row that says where he is.
+    /// **Tasks**, the board that was Activity (the iPhone's word for it), selected on its board (T-32), so every page has
+    /// one row that says where he is. A task's card stands over the page that shows, whose row stays selected.
     private var tasksRow: some View {
-        let selected = switch store.destination { case .activity, .activityFrom, .task: true; default: false }
+        let selected = switch store.destination { case .activity, .activityFrom: true; default: false }
         return SidebarRow(String(l10n: "Tasks"), symbol: "rectangle.split.3x1", selected: selected) { store.destination = .activity }
             .accessibilityIdentifier("nav-tasks")
     }
@@ -728,15 +718,6 @@ struct FleetView: View {
             case .agents: AgentsPage(store: store) { openAgent($0, .chat) }
             case .addAgent: addAgentPage
             case .settings, .server, .addServer, .app, .connectKey: EmptyView()
-            case .task: if let task = store.currentTask {
-                TaskView(store: store, task: task, state: store.state!, hub: store.hub, isFresh: store.isFresh)
-                    .id("\(store.hub)/\(task.id)")
-            } else {
-                // The strip the window used to draw said "Task · No current task" here. With no strip and no panel
-                // — both need the task — the window would be blank, so the one line it carried stays.
-                EmptyState(symbol: "folder", title: String(l10n: "Task not found"),
-                           detail: String(l10n: "This hub does not list that task. Tasks has the tasks it has."), centered: true)
-            }
             // Signing a machine's runtime in: its own wizard, as adding a machine has one.
             case .signIn(let name, let runtime):
                 SignInWizard(store: store, agent: name, asked: runtime).id("\(store.hub)/\(name)/\(runtime ?? "")")
@@ -766,9 +747,6 @@ struct FleetView: View {
             // One case for every section and a rule's editor, so that the sidebar of the details stays.
             case .agentDetail(let name, _), .agentRule(let name, _):
                 AgentPage(store: store, team: team, agent: name, destination: store.destination) { store.destination = $0 }
-            // One thing of an agent's work, from a row of its chat panel's card Work.
-            case .work(let name, let key):
-                WorkItemPage(store: store, agent: name, key: key).id("\(store.hub)/\(name)/work/\(key)")
             }
         }
     }
@@ -1014,11 +992,29 @@ struct FleetView: View {
         }
     }
 
-    /// **A write the hub did not confirm, in the phone's words** (review B7): "Not sent", and why — the hub's own words
-    /// after it, "Not sent: Atlas is in setup.", or "Your hub did not confirm it. Sending it again does not send it
-    /// twice." — with no request number (D-2 cut it on the phone). It said "Receipt not confirmed" or "Request refused"
-    /// over a longer sentence of the Mac's own, and the request's id under its buttons.
-    @ViewBuilder private var pendingBar: some View {
+    /// The window's request line (`PendingBar`).
+    private var pendingBar: some View { PendingBar(store: store) }
+
+    /// The request line stands for a write that waits, **unless its own row on this page says it** (fix round 3c, the
+    /// lead's call): an unanswered save of Runs on said so in its row with Try again, and here a second time with a
+    /// second Try again.
+    private var pendingBarShows: Bool {
+        guard let pending = store.pending, !store.sending else { return false }
+        guard let row = store.pendingInItsRow, row.id == pending.requestID else { return true }
+        return store.destination.agentName != row.agent || store.destination.agentTab != row.tab
+    }
+
+}
+
+/// **A write the hub did not confirm, in the phone's words** (review B7): "Not sent", and why — the hub's own words
+/// after it, "Not sent: Atlas is in setup.", or "Your hub did not confirm it. Sending it again does not send it twice."
+/// — with no request number (D-2 cut it on the phone). It said "Receipt not confirmed" or "Request refused" over a
+/// longer sentence of the Mac's own, and the request's id under its buttons. The window draws it under its page, and
+/// a task's card over its guidance box (`TaskDetail`), because the card's dim covers the window's.
+struct PendingBar: View {
+    @Bindable var store: FleetStore
+
+    var body: some View {
         if let pending = store.pending {
             VStack(alignment: .leading, spacing: 8) {
                 Text(pending.refusal == nil ? String(l10n: "Not sent") : Self.notSent(pending))
@@ -1050,15 +1046,6 @@ struct FleetView: View {
         }
     }
 
-    /// The request line stands for a write that waits, **unless its own row on this page says it** (fix round 3c, the
-    /// lead's call): an unanswered save of Runs on said so in its row with Try again, and here a second time with a
-    /// second Try again.
-    private var pendingBarShows: Bool {
-        guard let pending = store.pending, !store.sending else { return false }
-        guard let row = store.pendingInItsRow, row.id == pending.requestID else { return true }
-        return store.destination.agentName != row.agent || store.destination.agentTab != row.tab
-    }
-
     /// "Not sent: Atlas is in setup." — the hub's own words of a refusal as a sentence after "Not sent:", without its
     /// status ("Hub refused the request (409): …"), as the phone says it.
     private static func notSent(_ pending: PendingRequest) -> String {
@@ -1067,7 +1054,6 @@ struct FleetView: View {
         let sentence = words.prefix(1).uppercased() + words.dropFirst() + (".!?".contains(last) ? "" : ".")
         return String(l10n: "Not sent: \(sentence)")
     }
-
 }
 
 /// What the app says over the page, and what the owner can do about each of them. A message with nothing to press
@@ -1082,8 +1068,7 @@ struct FleetNotices: View {
 
     var body: some View { notices.environment(\.noticeReading, reading) }
 
-    /// The page under the notices stands in the column of prose: an agent's chat (not its setup, which is a page) and
-    /// a task thread.
+    /// The page under the notices stands in the column of prose: an agent's chat (not its setup, which is a page).
     private var reading: Bool {
         switch store.destination {
         case .agent(let name):
@@ -1091,7 +1076,6 @@ struct FleetNotices: View {
             !store.setupShows(name) && !(store.isAdding(name) && !store.isFresh)
                 && !AgentSetupFlow.chatStarts(store.state?.agents.first { $0.name == name },
                                               serverTime: store.state?.time ?? 0, fresh: store.isFresh)
-        case .task: true
         default: false
         }
     }

@@ -10,10 +10,10 @@ import Foundation
 /// waits for him, by what it waits for (the title of his request in Needs you); one row for each thing that a turn
 /// works on now, by that thing's name; then the newest things that ended in the last 72 hours, at most three, each
 /// with how it ended ("Drafted", "Done"), a result that succeeded or one that did not (a result that waits for its
-/// check, and work that somebody canceled, have no row, as on Asked). A row of a thing opens its page. The counts of
-/// what waits and of what ended went (his pick, "Remove the counts"): the agent's Tasks has the rest. **The tasks of
-/// what he asked this agent for are the card Asked's**, so this card leaves them out, and no task is in both cards.
-/// With nothing to say there is no card.
+/// check, and work that somebody canceled, have no row, as on Asked). A row of a thing opens it in the detail card.
+/// The counts of what waits and of what ended went (his pick, "Remove the counts"): the agent's Tasks has the rest.
+/// **The tasks of what he asked this agent for are the card Asked's**, so this card leaves them out, and no task is in
+/// both cards. With nothing to say there is no card.
 public struct WorkCard: Sendable {
     /// One open task of the agent that waits for him.
     public struct Wait: Identifiable, Sendable, Equatable {

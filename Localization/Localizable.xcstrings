@@ -905,6 +905,16 @@
         }
       }
     },
+    "%@ has your answer" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ tiene tu respuesta"
+          }
+        }
+      }
+    },
     "%@ holds it" : {
       "localizations" : {
         "es" : {
@@ -5700,6 +5710,16 @@
         }
       }
     },
+    "Changed" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiado"
+          }
+        }
+      }
+    },
     "Changed (a file)" : {
       "localizations" : {
         "es" : {
@@ -9916,6 +9936,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Indica el usuario con el que te conectas a este servidor."
+          }
+        }
+      }
+    },
+    "Given" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Concedido"
           }
         }
       }
@@ -20290,16 +20320,6 @@
         }
       }
     },
-    "Task not found" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No se encontró la tarea"
-          }
-        }
-      }
-    },
     "Tasks" : {
       "localizations" : {
         "es" : {
@@ -22086,6 +22106,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El hub no creó ningún código."
+          }
+        }
+      }
+    },
+    "The hub makes the change" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El hub está haciendo el cambio"
           }
         }
       }
@@ -24946,16 +24976,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este hub aún no muestra sus secretos."
-          }
-        }
-      }
-    },
-    "This hub does not list that task. Tasks has the tasks it has." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este hub no tiene esa tarea en su lista. En Tareas están las tareas que tiene."
           }
         }
       }

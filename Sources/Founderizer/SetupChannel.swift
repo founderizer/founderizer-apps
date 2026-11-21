@@ -85,7 +85,7 @@ enum AppFront {
     /// that began before the latest show. A click that counts frees the next `setup_show`; a click or a key that
     /// counts marks the chat that a `setup_show` opened as read, when it still shows: a click on a control acts at
     /// its mouse-up, so the click that leaves the chat does not mark it. A click in another window of the app
-    /// (Report a problem, a card) is not told. **A click
+    /// (Report a problem, a card) is not told, but for the detail card over the main window (`inMainWindow`). **A click
     /// whose mouse-up a control of AppKit takes in its own tracking loop (a text field, a switch, a slider) is not
     /// told**: the app's watch does not see that mouse-up (`NSEvent.addLocalMonitorForEvents`' own limit). The chat
     /// then stays not read until the next key or click that the watch sees, and the next change of page stays held
@@ -98,9 +98,11 @@ enum AppFront {
     /// That number at the last mouse-down: its mouse-up is told with it.
     private static var clickBegan = 0
 
-    /// The event is of the app's main window, the window of the fleet's pages (`SetupChannel.fleetWindow`).
+    /// The event is of the app's main window, the window of the fleet's pages (`SetupChannel.fleetWindow`), or of the
+    /// detail card over it (`SetupChannel.detailWindow`), which shows a task as its page did: a click there is the
+    /// owner's act in the app as a click on that page was, and frees the next `setup_show` (`ShownPage`).
     private static func inMainWindow(_ event: NSEvent) -> Bool {
-        event.window?.identifier?.rawValue == SetupChannel.fleetWindow
+        [SetupChannel.fleetWindow, SetupChannel.detailWindow].contains(event.window?.identifier?.rawValue)
     }
 
     /// After the event that the watch now passes on: one turn of the main queue for the app to handle it, and one
@@ -531,6 +533,8 @@ final class SetupChannel {
     /// The scene of the fleet's pages (`FounderizerApp`'s `Window("Founderizer", id: "fleet")`): SwiftUI gives the
     /// scene's id to its window as the window's identifier.
     static let fleetWindow = "fleet"
+    /// The window of the detail card over the fleet's window (`FleetView`'s `fleetModal` of `FleetStore.detail`).
+    static let detailWindow = "detail-card"
     private static let overLog = Logger(subsystem: "com.founderizer.app", category: "over")
     private var overLogged: String?
     private var watchesWindows = false
@@ -542,8 +546,10 @@ final class SetupChannel {
     /// version adds counts with no line here. A window whose identifier is not the fleet's counts as another window:
     /// when SwiftUI names the fleet's window another way, the answer is `window` and an agent does not look, which
     /// is the safe side. The one window that counts as nothing is the title bar of full screen (`AppOver.barClass`).
-    static func over() -> (AppOver, kinds: String) {
-        let shown = NSApp.windows.filter(\.isVisible)
+    /// **A task's card is no card here while `place` names its task** (`taskCard`; `place(of:)`): it is the place of
+    /// that task, as its page was, and `over` names only what `place` does not. A job's card counts as a card.
+    static func over(taskCard: Bool) -> (AppOver, kinds: String) {
+        let shown = NSApp.windows.filter { $0.isVisible && !(taskCard && $0.identifier?.rawValue == detailWindow) }
         let facts = shown.map { window in
             AppOver.Shown(isFleet: window.identifier?.rawValue == fleetWindow,
                           hangs: window.parent != nil || window.sheetParent != nil || window is NSPanel,
@@ -560,7 +566,7 @@ final class SetupChannel {
 
     /// `over` for the facts, with one log line at each change of the windows that count: fixed words and class names.
     private func overNow() -> AppOver {
-        let (over, kinds) = Self.over()
+        let (over, kinds) = Self.over(taskCard: store?.detail?.shown.task != nil)
         let line = "\(over.rawValue): \(kinds)"
         if line != overLogged {
             overLogged = line
@@ -597,13 +603,17 @@ final class SetupChannel {
     /// from, so it holds when the window is closed too: where it would open. `showing`: another destination than the
     /// store's, for the place that the window would show with it (`setup_show`'s last check before it changes the page).
     static func place(of store: FleetStore, showing destination: Destination? = nil) -> AppPlace {
+        let card = destination == nil ? store.detail?.shown.task : nil
         let destination = destination ?? store.destination
         let snapshot = store.setupSnapshot
         let window = WindowFacts(launched: store.launched, hasReading: store.state != nil,
                                  answeredBefore: store.hubAnsweredBefore, firstRunHolds: store.firstRunHolds,
                                  welcomeCovers: store.welcomeCovers, settings: destination.settingsTab != nil,
                                  firstRunPage: snapshot.shows ? snapshot.page : nil)
-        return AppPlace.shows(window, destination: destinationPlace(of: store, destination))
+        // **A task's card over the window is the place of that task** (`task.<number>`, as its page was): it is what
+        // the owner reads, and `setup_show` opens it there (`showPlace`). The card stands over the page, so `over` says
+        // card too. A job's card has no place of its own: the place is the page under it.
+        return AppPlace.shows(window, destination: card.map { .task($0) } ?? destinationPlace(of: store, destination))
     }
 
     /// **What a destination draws when nothing covers it**: a switch with no default, so that a new destination
@@ -632,9 +642,6 @@ final class SetupChannel {
         case .addAgent: return .addAgent(pages.addAgent)
         case .server(let name): return .server(name)
         case .addServer: return .addServer(pages.addServer)
-        // A task that the hub no longer has draws "Task not found": the kind alone (`FleetStore.currentTask`).
-        case .task(let number):
-            return store.state?.tasks.contains { $0.id == number } == true ? .task(number) : .someTask
         case .agent(let name):
             if store.setupShows(name) { return setup(name) }
             guard let state = store.state else { return .agent(name) }
@@ -658,9 +665,6 @@ final class SetupChannel {
         case .settings(let tab): return .settings(settingsPage(tab))
         case .app(let group): return .app(appGroup(group))
         case .connectKey: return .connectKey
-        // One thing of an agent's work, from its chat panel (`WorkItemPage`), is a page of the agent's work: the name of
-        // its Tasks, which lists the same work task by task. A name of its own waits for a lane of the owner's places.
-        case .work(let name, _): return .agentPart(name, .tasks)
         }
     }
 
@@ -737,13 +741,13 @@ final class SetupChannel {
         }
     }
 
-    /// The store's page for a place that `setup_show` opens, or nil for a place that is no page of this list.
+    /// The store's page for a place that `setup_show` opens, or nil for a place that is no page of this list (a task,
+    /// which opens as its card over the page: `showPlace`).
     private static func destination(for target: AppPlace) -> Destination? {
         switch target {
         case .needs: .needs
         case .tasks: .activity
         case .agents: .agents
-        case .task(let number): .task(number)
         case .agent(let name): .agent(name)
         case .agentPart(let name, let part): .agentDetail(name, agentTab(part))
         case .settings(let page): SettingsTab.allCases.first { settingsPage($0) == page }.map { .settings($0) }
@@ -926,26 +930,35 @@ final class SetupChannel {
     /// page changes in the same turn of the main actor: no `await` stands between the check and the change, so
     /// nothing that the owner does can come between them. **The last check is the window's own rule**: the store's
     /// page for the place must draw exactly that place now (`place(of:showing:)`, the rule that `setup_state` reads),
-    /// so a show never falls back to another page (General for a section that the hub does not offer, "Task not
-    /// found", an agent's setup in place of its chat). The page changes through the store (`FleetStore.show`): Back
+    /// so a show never falls back to another page (General for a section that the hub does not offer, an agent's setup
+    /// in place of its chat); a task opens as its card, which draws it while the hub has it. The page changes through
+    /// the store (`FleetStore.show`): Back
     /// returns to the page before, the sidebar's row follows, and the chat that it opens is not marked as read. The
     /// place that shows already changes nothing and only comes to the front. No page gets a notice of it.
     private func showPlace(_ target: AppPlace, page: String, seen: String, in store: FleetStore) -> String? {
         // The button's state is the hardware's, read in this same turn as the change: no page changes while a
         // mouse button is down (`SetupShow.buttonHeld`).
-        let facts = Self.showFacts(of: store, over: Self.over().0, target: target,
+        let facts = Self.showFacts(of: store, over: Self.over(taskCard: store.detail?.shown.task != nil).0, target: target,
                                    buttonDown: NSEvent.pressedMouseButtons != 0)
         if let words = SetupShow.refusal(page: page, seen: seen, facts: facts) { return words }
-        guard let destination = Self.destination(for: target),
-              Self.place(of: store, showing: destination) == target else {
-            return SetupShow.wouldShowAnother(target.name)
+        // **A task opens as its card over the page that shows** (`FleetStore.showLinked`), which draws that task whenever
+        // the hub has it: the rules above have asked that (`targetState`).
+        let open: () -> Void
+        if case .task(let number) = target {
+            open = { store.showLinked(.task(number)) }
+        } else {
+            guard let destination = Self.destination(for: target),
+                  Self.place(of: store, showing: destination) == target else {
+                return SetupShow.wouldShowAnother(target.name)
+            }
+            open = { store.show(destination) }
         }
         // **The keys and the first click are held before the page changes**, also for an owner who works in the app
         // (`OutsideFront`): what they type or click now is for the page that goes. And the store notes the change
         // (`ShownPage`): no second change of page until the owner acted in the app's main window.
         let changes = SetupShow.changesPlace(to: page, from: facts.place)
         AppFront.come(pageChanged: changes) {
-            if changes { store.show(destination) }
+            if changes { open() }
             store.notifications.showWindow?()
         }
         return nil

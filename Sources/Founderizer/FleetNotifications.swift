@@ -13,18 +13,21 @@ final class FleetNotifications: NSObject, UNUserNotificationCenterDelegate {
     private(set) var requestingPermission = false
     private var lastSnapshot = ""
     private var ledger: NotificationLedger
-    private let center = UNUserNotificationCenter.current()
+    /// The system's notification center, or none in a process that is no app's bundle (a test of the app's views, or
+    /// the program run from its build folder): the system has no center for such a process, and stops it at the call.
+    private let center: UNUserNotificationCenter? = Bundle.main.bundleURL.pathExtension.lowercased() == "app"
+        ? UNUserNotificationCenter.current() : nil
     var openRequest: ((String, Int?) -> Void)?
     var showWindow: (() -> Void)?
 
     override init() {
         ledger = AppDefaults.store.data(forKey: "notificationLedger").flatMap { try? JSONDecoder().decode(NotificationLedger.self, from: $0) } ?? NotificationLedger()
         super.init()
-        center.delegate = self
+        center?.delegate = self
     }
 
     func toggle() async {
-        guard !requestingPermission else { return }
+        guard let center, !requestingPermission else { return }
         requestingPermission = true
         defer { requestingPermission = false }
         if enabled {
@@ -60,6 +63,7 @@ final class FleetNotifications: NSObject, UNUserNotificationCenterDelegate {
         var open = Set(state.needs.filter(\.isOpen).map { "\(context)/\($0.id)" })
         if let warning { open.insert("\(context)/warning/\(warning)") }
         NSApplication.shared.dockTile.badgeLabel = open.isEmpty ? nil : String(open.count)
+        guard let center else { return }
         let delivered = await center.deliveredNotifications()
         let answered = delivered.map(\.request.identifier).filter { $0.hasPrefix(context + "/") && !open.contains($0) }
         center.removeDeliveredNotifications(withIdentifiers: answered)

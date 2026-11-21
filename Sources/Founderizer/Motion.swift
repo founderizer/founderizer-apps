@@ -126,8 +126,6 @@ extension Destination {
         case .activity, .activityFrom: "tasks"
         case .agents: "agents"
         case .addAgent: "add-agent"
-        case .task(let id): "task/\(id)"
-        case .work(let name, let key): "work/\(name)/\(key)"
         case .agent(let name): "agent/\(name)"
         case .signIn(let name, let runtime): "sign-in/\(name)/\(runtime ?? "")"
         case .agentDetail(let name, _), .agentRule(let name, _): "details/\(name)"

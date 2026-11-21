@@ -218,7 +218,7 @@ public struct Job: Identifiable, Sendable {
     /// Whether its card stands in Done.
     public var isOver: Bool { column == .done }
     /// **For what he asked for, while only the check of its result holds it: who checks it** ("Waiting for Fleet
-    /// Manager's check", the words of that task's own page: `FleetTask.checkStatus`); nil for every other job. Its
+    /// Manager's check", the words of that task's own card: `FleetTask.checkStatus`); nil for every other job. Its
     /// card in Waiting says it at the end of its agent's line.
     public var checkWords: String? { column == .waiting && open.isEmpty && wait == nil ? unchecked?.checkStatus : nil }
     /// **Its card in Done says its result**: he asked for it, its last word is a result that its requester checked,

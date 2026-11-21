@@ -813,6 +813,44 @@ extension FleetStore {
 
 /// What the owner answered: the words, and the files that went with them, because an answer may be files alone.
 /// The files are the ones on the message that answered this request.
+/// **The mark of an answered card, in the place of its check** (owner feature `need_marks`; the owner's "Yes, as drawn"
+/// of 21 November 2026): the check, the turning green mark of work, or the red mark of work that failed
+/// (`OwnerNeed.answeredMark`). Its words are on hover (`hover`) and for
+/// VoiceOver (the folded card's value, `foldedMarkWords`) only: the folded card is one button, so the mark holds no
+/// popover of its own (`StateMark`'s rule for a row that is already one button). `mark` nil: his answer is on its way,
+/// and the check stands as before.
+private struct AnsweredMarkView: View {
+    let mark: AnsweredMark?
+    let moves: Bool
+
+    var body: some View {
+        if let mark {
+            look(mark).help(hover(mark))
+        } else {
+            check
+        }
+    }
+
+    private var check: some View { Image(systemName: "checkmark").font(IconMetrics.symbol(10, weight: .semibold)) }
+
+    /// The words on hover. **Not yet for the work of a task**: his yes was to a hover with the agent's badge there, and
+    /// its look waits for his answer (the area Needs-you and the manager, 21 November 2026); VoiceOver reads its words.
+    private func hover(_ mark: AnsweredMark) -> String {
+        if case .working(_, let agent?, _) = mark, !agent.isEmpty { return "" }
+        return mark.words
+    }
+
+    @ViewBuilder private func look(_ mark: AnsweredMark) -> some View {
+        switch mark {
+        case .done: check
+        case .working: WorkMark(size: 10, moves: moves)
+        case .failed:
+            Image(systemName: "exclamationmark.circle.fill").font(IconMetrics.symbol(10))
+                .foregroundStyle(FleetTask.MarkTint.failed.color)
+        }
+    }
+}
+
 struct NeedAnswerGiven: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
@@ -954,6 +992,7 @@ struct NeedRequestCard: View {
                         .buttonStyle(CardFoldStyle(fill: files.isEmpty ? .whole : .top))
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(Text("\(need.shownTitle), answered: \(answerWords)"))
+                        .accessibilityValue(foldedMarkWords)
                         .accessibilityHint("Shows the whole request")
                         .accessibilityIdentifier("need-folded-\(need.id)")
                     if !files.isEmpty {
@@ -1027,6 +1066,14 @@ struct NeedRequestCard: View {
     /// answer is not on its way (an opened folded card shows no Take over).
     private var takeOverWay: ScreenSharingConnection? { onItsWay == nil ? need.takeOverWay(in: store) : nil }
 
+    /// **What VoiceOver reads of the folded card's mark** (`AnsweredMarkView`), after its title and his answer: the
+    /// button reads none of its children, so the mark's words are its value. Empty where no mark stands: a written
+    /// answer, the key card, the Run card, and an answer on its way.
+    private var foldedMarkWords: String {
+        guard !need.answeredWithKey, ranAnswer == nil, !inWords, onItsWay == nil else { return "" }
+        return need.answeredMark(in: store.state).words
+    }
+
     /// What a press of Run answered (owner feature `need_run`), or nil.
     private var ranAnswer: NeedRunAnswer? { NeedRunAnswer.of(need, onItsWay: onItsWay) }
 
@@ -1058,7 +1105,9 @@ struct NeedRequestCard: View {
                     FoldedWords(words: written, names: names)
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        if !inWords { Image(systemName: "checkmark").font(IconMetrics.symbol(10, weight: .semibold)) }
+                        // owner feature need_marks: what came of his answer, in the check's place (`AnsweredMarkView`)
+                        if !inWords { AnsweredMarkView(mark: onItsWay == nil ? need.answeredMark(in: store.state) : nil,
+                                                       moves: store.marksMove) }
                         CardBadgeText.text(MessageBlock.inline(answerWords), names: names, size: FormMetrics.detailSize)
                             .lineLimit(1).tint(FleetStyle.link)
                     }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)

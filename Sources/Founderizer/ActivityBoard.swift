@@ -3,7 +3,8 @@ import SwiftUI
 
 /// Tasks: the tasks on a board of three columns (In progress, Waiting, Ended), for all agents or one, in a period of
 /// days. Each column scrolls by itself and makes only the cards that show, so hundreds of tasks stay fast. A card opens
-/// the task's page. The board changes with each hub reading; the two filters stay for the next start.
+/// its job in the detail card over the board (`DetailCardView`), and the board stays as it is under it. The board
+/// changes with each hub reading; the two filters stay for the next start.
 ///
 /// **The owner's yes of 11 November 2026 to its picture** ("I like the tasks one … yes, build it"), after "I like
 /// simple things! not too much information! AI does a lot of things, so this need to be a very clean page that's easy
@@ -189,8 +190,9 @@ struct ActivityBoard: View {
     }
 
     /// **One job's card** (`JobCard`). `why`: why a job that waits for somebody else waits.
-    /// The card opens the task of the job that matters now (`Job.lead`), and its counts line opens its tasks in the card
-    /// (`openJobs`). A card in Done that he opens, or whose tasks he opens, is read from then on (`readJobs`).
+    /// The card opens the job in the detail card over the board (`Job.detail`, `FleetStore.show`), and its counts line
+    /// opens its tasks in the board's card (`openJobs`). A card in Done that he opens, or whose tasks he opens, is read
+    /// from then on (`readJobs`). Its thread is read while the pointer is on it, by the task that it stands for.
     @ViewBuilder private func jobCard(_ job: Job, state: HubState, why: String?, works: Bool = false, ended: Bool = false,
                                       read: Bool = false, lane: CGFloat) -> some View {
         if let lead = job.lead {
@@ -203,10 +205,16 @@ struct ActivityBoard: View {
                     },
                     open: {
                         if ended { markRead(job, state: state) }
-                        store.destination = .task(lead.id)
+                        open(job)
                     })
                 .opensTask(lead.id, store: store)
         }
+    }
+
+    /// **A job in the detail card over the board**: the job level, or the task level of its one task (`Job.detail`),
+    /// by its id on this board, of all agents or of one.
+    private func open(_ job: Job) {
+        if let place = job.detail(board: agent.isEmpty ? nil : agent) { store.show(place) }
     }
 
     /// He has opened this card of Done. What he has opened is kept for the results that the board can still show, so the
@@ -279,7 +287,8 @@ struct ActivityBoard: View {
 
     /// **Waiting: the jobs that only a time holds, behind one row** (`WaitingTasks`; the owner's "Yes, build it" of 18
     /// November 2026 to its picture): "9 later", muted, under the cards, as "more" is in Done. It opens them by the day
-    /// that they start again (Today, Tomorrow, "Sat 21 Nov"), each with its agent and its time; a click opens the job.
+    /// that they start again (Today, Tomorrow, "Sat 21 Nov"), each with its agent and its time; a click opens the job in
+    /// the detail card, as its card would (`open`).
     /// When its agent starts it again, it leaves the row and comes into Working as a card.
     @ViewBuilder private func laterRows(_ waiting: WaitingTasks, state: HubState) -> some View {
         if waiting.laterCount > 0 {
@@ -307,7 +316,7 @@ struct ActivityBoard: View {
                             // The day is its heading's, so the row says the time alone.
                             EndedRow(title: job.title, owner: scope == nil ? job.agent : nil,
                                      note: job.until.map { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) }) {
-                                store.destination = .task(lead.id)
+                                open(job)
                             }.opensTask(lead.id, store: store).accessibilityIdentifier("activity-task-\(lead.id)")
                         }
                     }
@@ -322,7 +331,7 @@ struct ActivityBoard: View {
         if let task = group.tasks.first, group.tasks.count == 1 {
             // A task that waits for its check, or that somebody canceled, says so; a checked result says nothing.
             EndedRow(title: group.title, owner: owner, note: task.accepted == 1 ? nil : task.stateWord(in: state)) {
-                store.destination = .task(task.id)
+                store.show(.task(task.id))
             }.opensTask(task.id, store: store).accessibilityIdentifier("activity-task-\(task.id)")
         } else {
             let open = openRows.contains(group.id)
@@ -332,7 +341,7 @@ struct ActivityBoard: View {
             if open {
                 ForEach(group.tasks) { task in
                     EndedRow(title: task.title, owner: nil, note: messageTime(task.activityTime), indent: true) {
-                        store.destination = .task(task.id)
+                        store.show(.task(task.id))
                     }.opensTask(task.id, store: store).accessibilityIdentifier("activity-task-\(task.id)")
                 }
             }

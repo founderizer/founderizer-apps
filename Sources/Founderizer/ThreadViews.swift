@@ -544,12 +544,17 @@ private struct SentMessageView: View {
     }
 }
 
+/// **A task's thread**, the left column of its card over the window (`TaskDetail`): what the agent said, from the request
+/// that the task began with to its result, in the column of prose, with its live line while its session works.
 struct TaskView: View {
     @Bindable var store: FleetStore
     let task: FleetTask
     let state: HubState
     let hub: URL
     let isFresh: Bool
+    /// The room over its first row, into which its rows fade as they leave at the top: under the card's edge, or under
+    /// the back link to a job (`TaskDetail`).
+    let top: CGFloat
     @State private var end = ChatEnd()
     /// The thread's end is more than three of its room's heights away: "Latest" goes there in one frame.
     @State private var farFromEnd = false
@@ -639,7 +644,7 @@ struct TaskView: View {
                 // **A first read that takes longer than a second says so in the thread's first slot** (the loading
                 // contract, D-1 rule 1; fix round 2): the one loading line, at the column's edge where the request will
                 // stand, and nothing of the thread until all of it comes.
-                LoadingLine(String(l10n: "Reading the task…")).padding(.horizontal, -FormMetrics.rowInset).threadRows(top: FleetSpace.underBand)
+                LoadingLine(String(l10n: "Reading the task…")).padding(.horizontal, -FormMetrics.rowInset).threadRows(top: top)
             }
         }
         // A file dropped anywhere on the thread waits in its guidance box, as on a chat, while that box shows and takes
@@ -733,10 +738,9 @@ struct TaskView: View {
                         TaskRequest(task: task).wordsSelectable(in: selection, row: "request")
                     }
                     if threadEvents {
-                        // Its "Activity is unavailable" not while the window's notice says the outage
-                        // (`FleetStore.hubNoticeShows`; fix round 3, item 33), and only once its reads have failed one
-                        // whole break.
-                        RuntimeActivity(activity: activity ?? TaskActivity(), error: store.hubNoticeShows || !store.pageReadingIsOld(failedSince: readFailedSince) ? nil : readError, task: task.id, attempt: task.attempt, stoppedAttempt: state.stoppedAttempt(of: task.id), terminal: task.isTerminal, isFresh: isFresh, followsLatest: $end.followsLatest,
+                        // Its "Activity is unavailable" only once its reads have failed one whole break, and also while
+                        // the window's notice says the outage (fix round 3, item 33): that notice is under the card's dim.
+                        RuntimeActivity(activity: activity ?? TaskActivity(), error: !store.pageReadingIsOld(failedSince: readFailedSince) ? nil : readError, task: task.id, attempt: task.attempt, stoppedAttempt: state.stoppedAttempt(of: task.id), terminal: task.isTerminal, isFresh: isFresh, followsLatest: $end.followsLatest,
                                         steers: state.steers?.filter { $0.task == task.id } ?? [],
                                         notes: notes, permissions: permissions,
                                         childRequest: $store.childThreadRequest, selection: selection, startedAt: task.created,
@@ -793,7 +797,7 @@ struct TaskView: View {
                     // **No name under the record**: the agent that did it heads the panel beside it (`TaskPanel`). Its
                     // muted name stood here, the one place the thread named it.
                     Color.clear.frame(height: ManagerView.endRoom).id("latest-task")
-                }.threadRows(top: FleetSpace.underBand)
+                }.threadRows(top: top)
             }
             .keepsEnd($end, room: Self.endRoom)
             .knowsFarEnd($farFromEnd, room: Self.endRoom)
@@ -801,9 +805,9 @@ struct TaskView: View {
             .scrollsAsAChat(selection, store: store)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             // Its rows fade as they leave at the top, over the room the thread leaves above its first row (T-20): its first
-            // row stands 14 pt under the band, level with the first thing of every pane (the margins of 30 October 2026,
-            // row 28, and its review: it stood 26 pt under it, 12 under the panel's head beside it).
-            .topFade(FleetSpace.underBand)
+            // row stands level with the head of the facts beside it (the margins of 30 October 2026, row 28, and its
+            // review: it stood 12 pt under the panel's head beside it).
+            .topFade(top)
             .onChange(of: latestActivity) { _, _ in
                 if end.followsLatest { proxy.scrollTo("latest-task", anchor: .bottom) }
             }
