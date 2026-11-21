@@ -64,7 +64,7 @@ struct AgentStatusPanel: View {
     /// ("<fleet's id>/") the hub's time when this Mac first drew the card for it, so that a Mac that reads a fleet for
     /// the first time does not show that fleet's whole past. One number for each agent: it does not grow with the
     /// asks. This Mac keeps it: what he has seen here is no fact of the fleet.
-    @AppStorage("askedSeen") private var seenAsks = ""
+    @AppStorage("askedSeen", store: AppDefaults.store) private var seenAsks = ""
     private var seenTimes: [String: Double] {
         get { (try? JSONDecoder().decode([String: Double].self, from: Data(seenAsks.utf8))) ?? [:] }
         nonmutating set { seenAsks = (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) } ?? seenAsks }
@@ -319,7 +319,7 @@ struct AgentStatusPanel: View {
             ForEach(card.waits) { row in askedRow(row).transition(.opacity) }
         }
         // Tasks keeps the agent chosen for its next visit, as its own filter does, and has this chat's back link.
-        Button { UserDefaults.standard.set(agent, forKey: "activityAgent"); store.destination = .activityFrom(agent) } label: {
+        Button { AppDefaults.store.set(agent, forKey: "activityAgent"); store.destination = .activityFrom(agent) } label: {
             self.row(String(l10n: "View all"), muted: true, opens: true) { Color.clear.frame(width: 1, height: 1) }
         }
         .buttonStyle(FleetRowButtonStyle())

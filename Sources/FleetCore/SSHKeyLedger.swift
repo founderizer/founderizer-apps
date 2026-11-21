@@ -23,8 +23,7 @@ public final class SSHKeyLedger: @unchecked Sendable {
 
     /// The folder of the app's ledger.
     public static var folder: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Founderizer").appendingPathComponent("ssh")
+        AppFolders.support.appendingPathComponent("Founderizer").appendingPathComponent("ssh")
     }
 
     /// One account on one server: as whom, at which address and port the app logs in.

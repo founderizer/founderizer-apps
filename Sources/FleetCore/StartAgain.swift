@@ -731,13 +731,13 @@ public enum StartAgain {
 
         /// Keeps a hub that a run left, and the other addresses that the same hub answers at (its address on the
         /// private network, when the kept one is a name).
-        public static func note(_ hub: URL, also others: [URL] = [], in defaults: UserDefaults = .standard) {
+        public static func note(_ hub: URL, also others: [URL] = [], in defaults: UserDefaults = AppDefaults.store) {
             var all = defaults.stringArray(forKey: key) ?? []
             for name in ([hub] + others).compactMap(name) where !all.contains(name) { all.append(name) }
             defaults.set(all, forKey: key)
         }
 
-        public static func holds(_ hub: URL, in defaults: UserDefaults = .standard) -> Bool {
+        public static func holds(_ hub: URL, in defaults: UserDefaults = AppDefaults.store) -> Bool {
             name(hub).map { (defaults.stringArray(forKey: key) ?? []).contains($0) } ?? false
         }
 
@@ -746,7 +746,7 @@ public enum StartAgain {
         /// private network, by the device that has that name now (its name in Tailscale, its own host name, or its
         /// whole name there).
         public static func addresses(among devices: [FleetOnTailscale.Device], dnsNames: [String: String] = [:],
-                                     in defaults: UserDefaults = .standard) -> Set<String> {
+                                     in defaults: UserDefaults = AppDefaults.store) -> Set<String> {
             let kept = Set(defaults.stringArray(forKey: key) ?? [])
             guard !kept.isEmpty else { return [] }
             let port = FleetOnTailscale.hubPort
@@ -772,7 +772,7 @@ public enum StartAgain {
         }
 
         /// The owner connects to this hub himself: it is no longer passed over.
-        public static func forget(_ hub: URL, in defaults: UserDefaults = .standard) {
+        public static func forget(_ hub: URL, in defaults: UserDefaults = AppDefaults.store) {
             guard let name = name(hub), let all = defaults.stringArray(forKey: key), all.contains(name) else { return }
             defaults.set(all.filter { $0 != name }, forKey: key)
         }
@@ -801,7 +801,7 @@ public enum StartAgain {
     /// **Never**: a provider's token, the key of the private network, a key in the keychain, the backup's settings,
     /// the installation id, the app's own settings and what the first run keeps (the manager's name, the servers'
     /// step).
-    public static func forgetKept(hub: URL, hubServerDeleted: Bool, in defaults: UserDefaults = .standard) {
+    public static func forgetKept(hub: URL, hubServerDeleted: Bool, in defaults: UserDefaults = AppDefaults.store) {
         let address = hub.absoluteString
         if defaults.string(forKey: "hubAddress") == address { defaults.removeObject(forKey: "hubAddress") }
         if let answered = defaults.stringArray(forKey: "hubsAnswered"), answered.contains(address) {

@@ -1011,13 +1011,13 @@ public enum DoorAccess {
 
         static func key(hub: URL) -> String { "doorLoginKeys|\(hub.absoluteString)" }
 
-        public static func read(hub: URL, in defaults: UserDefaults = .standard) -> LoginKeys {
+        public static func read(hub: URL, in defaults: UserDefaults = AppDefaults.store) -> LoginKeys {
             var keys = LoginKeys()
             keys.refused = defaults.dictionary(forKey: key(hub: hub)) as? [String: String] ?? [:]
             return keys
         }
 
-        public func save(hub: URL, in defaults: UserDefaults = .standard) {
+        public func save(hub: URL, in defaults: UserDefaults = AppDefaults.store) {
             defaults.set(refused, forKey: Self.key(hub: hub))
         }
     }
@@ -1060,13 +1060,13 @@ public enum DoorAccess {
 
         static func key(hub: URL) -> String { "doorRefusals|\(hub.absoluteString)" }
 
-        public static func read(hub: URL, in defaults: UserDefaults = .standard) -> Refusals {
+        public static func read(hub: URL, in defaults: UserDefaults = AppDefaults.store) -> Refusals {
             var refusals = Refusals()
             refusals.at = defaults.dictionary(forKey: key(hub: hub)) as? [String: Date] ?? [:]
             return refusals
         }
 
-        public func save(hub: URL, in defaults: UserDefaults = .standard) {
+        public func save(hub: URL, in defaults: UserDefaults = AppDefaults.store) {
             defaults.set(at, forKey: Self.key(hub: hub))
         }
     }

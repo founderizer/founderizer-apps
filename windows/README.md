@@ -15,8 +15,8 @@ seven pictures that the owner approved (`windows-app-pictures.md` in the plans f
 | `Founderizer.Core/` | the logic: the hub client, the models and decoders of the device routes, the live changes, the outbox, the canonical statement and the crypto. `net10.0`, no Windows call, trimming and Native AOT compatible, JSON only by source generation | any OS |
 | `Founderizer.Core.Tests/` | MSTest: unit tests, the vectors of `../vectors`, and the decode twin (`HubDecodeTwin`, and `OwnerDecodeTwin` as the owner's computer) | any OS |
 | `Founderizer.Owner/`, `Founderizer.Setup/` | step 2 (`windows-app-plan-v2.md`, section 6): the owner's pages, and the first run with what the owner's computer sets up; each with its tests in `Founderizer.Owner.Tests/` and `Founderizer.Setup.Tests/` | any OS |
-| `Founderizer.Remote/` | SSH from the owner's PC (step 2, piece L1): `IRemote` and `SshRemote`, the host key record, the app's own SSH key. The only project that names SSH.NET; it names no other project. `net10.0`, no Windows call | any OS |
-| `Founderizer.Remote.Tests/` | MSTest: against a scratch `sshd` of this machine, and an `sshd` in a Docker container for the password and `sudo -S` | macOS, Linux |
+| `Founderizer.Remote/` | SSH from the owner's PC (step 2, piece L1): `IRemote` and `SshRemote`, the host key record, the app's own SSH key; the owner's key once and its check (piece L1a). The only project that names SSH.NET; it names no other project. `net10.0`, no Windows call | any OS |
+| `Founderizer.Remote.Tests/` | MSTest: against a scratch `sshd` of this machine, and an `sshd` in a Docker container for the password and `sudo -S`; the owner's keys made by this machine's `ssh-keygen`, and in the container by `puttygen` and OpenSSL's `ssh-keygen` | macOS, Linux |
 | `Founderizer.Setup/Install/` | the install of a server and the claim of a new hub from the owner's PC (step 2, piece L3): the Mac's `InstallPlan`, `MachineInstaller`, `ServerCheck` and their reads, over `IRemote`; held to `../vectors/remote-install.json` and `install-reads.json` | any OS |
 | `Founderizer.SelfCheck/` | a small program that runs the vectors, published with Native AOT: the proof that the library and BouncyCastle work with no JIT | any OS |
 | `PARITY.md`, `parity.py` | each feature name of the hub and its state on Windows, and the script that prints each name with no line | |
@@ -353,7 +353,7 @@ store.Changed += (_, change) => dispatcher.TryEnqueue(() =>
 store.SetFront(true);
 ```
 
-### SSH from the PC: `Founderizer.Remote` (step 2, piece L1)
+### SSH from the PC: `Founderizer.Remote` (step 2, pieces L1 and L1a)
 
 For `Founderizer.Setup` (the install, the claim, the root jobs): no page calls SSH (`windows-app-plan-v2.md`, 5.5
 and 6). These names stay.
@@ -380,6 +380,25 @@ and 6). These names stay.
 - `RemoteLogin.AppKey()`, or `RemoteLogin.PasswordOnce(char[])`, whose array the call clears when it ends. The password
   goes once: by keyboard-interactive (PAM's prompt) where the server asks so, else by the password method, never by
   both.
+- `RemoteLogin.KeyOnce(byte[] KeyFile, char[]? Passphrase)` (piece L1a; the owner's "Choose key, as Mac" and "One
+  field, only then", 21 November 2026): the bytes of the one file that the owner picked in Windows' own picker (the
+  window reads it, at most `OwnerKeyFile.MaxLength`, 64 KiB; this library opens no file) and its passphrase or null.
+  The call offers that key and no other (never the app's key, never a password), and clears both arrays as soon as it
+  has read the key, before it connects, so they are zero after the call whatever its end. A server that does not take
+  the key is `LoginRefused`. A file that does not open throws `ArgumentException` before any connection. An RSA key
+  signs with `rsa-sha2-512` or `rsa-sha2-256`, never with SHA-1 (`ssh-rsa`), as the Mac's OpenSSH 10.
+- `OwnerKeyFile.Check(byte[]? file, char[]? passphrase)` gives `OwnerKeyCheck.Usable`, `NotAKey`, `NeedsPassphrase` or
+  `WrongPassphrase`, before any connection, so a wrong file or a wrong passphrase costs no login try at the server. It
+  keeps nothing and changes neither array: give the same two to `KeyOnce`. A null or empty passphrase is none. The
+  formats, each proved with a key that a test makes with the tool that owners use: OpenSSH's own (`ssh-keygen`'s
+  default: Ed25519, RSA, ECDSA), PEM (PKCS#1 `RSA PRIVATE KEY`, SEC 1 `EC PRIVATE KEY`), PKCS#8 (`PRIVATE KEY`,
+  `ENCRYPTED PRIVATE KEY`) and PuTTY's `.ppk` (versions 2 and 3, of `puttygen` 0.81), each with and without a
+  passphrase. Not read, so `NotAKey`: DSA (with or without a passphrase: the type, which OpenSSH's format and PuTTY's
+  keep in clear text, says so before any passphrase is asked), a public key, and an ECDSA key in PEM or PKCS#8 whose
+  curve is written as numbers and not by its name (what `ssh-keygen` with LibreSSL 3.3.6 writes on macOS; OpenSSL 3
+  names the curve). A key that opens must sign and check its own signature, or it is no key. SSH.NET 2026.0.0 reads
+  Ed25519, ECDSA and RSA only, so a security key's file (`sk-ssh-ed25519@openssh.com`) is no key by the same rule (not
+  measured: making one needs the hardware).
 - `line` gets each line of standard output and of standard error as it comes, without its line end, one at a time,
   never after the call has returned. `Output` and `Errors` keep the first 1 MiB each. The Mac's `LocalShell` gives one
   text for both streams; their order between each other is the order of `line`.
@@ -402,6 +421,7 @@ and 6). These names stay.
 | `BatchMode=yes`, `NumberOfPasswordPrompts=0` | `Login` alone |
 | `StrictHostKeyChecking=accept-new`, `=yes` | `HostKeyRule.TakeNew`, `.Known` |
 | `IdentitiesOnly=yes -i KEY` | `RemoteLogin.AppKey` |
+| `-i` with the file of "Choose key" (`MachineInstallView`), kept in the server's record | `RemoteLogin.KeyOnce`, for the one call that adds this PC's key; nothing is kept, not even the path |
 | `SSH_ASKPASS` and its pipe, `NumberOfPasswordPrompts=1` | `RemoteLogin.PasswordOnce`, sent once |
 | status 255 and `ssh`'s own line | `Failure`, one kind for each line that the Mac reads |
 | OpenSSH 10's algorithms | the same: no SHA-1 key exchange, no CBC, no `ssh-rsa` host signature, no compression |
@@ -507,8 +527,10 @@ python3 app_decode.py --windows-only --ref HEAD
 ```
 
 The tests of `Founderizer.Remote` start a scratch `sshd` (`/usr/sbin/sshd`, as this user, on a loopback port) and,
-for the password and `sudo -S`, an `sshd` in a Docker container (image `founderizer-remote-test-sshd:1`, made at the
-first run); each test removes its server and its container. Without Docker, those tests are inconclusive.
+for the password and `sudo -S`, an `sshd` in a Docker container (image `founderizer-remote-test-sshd:3`, made at the
+first run; it also holds `puttygen` and OpenSSL's `ssh-keygen`, which make the owner's keys of
+`OtherToolsKeyTests`); each test removes its server and its container. Without Docker, those tests are inconclusive.
+A passphrase of a test reaches `ssh-keygen` and `puttygen` on their standard input only.
 
 ```bash
 dotnet test app/windows/Founderizer.Remote.Tests/Founderizer.Remote.Tests.csproj --filter "TestCategory!=Long"

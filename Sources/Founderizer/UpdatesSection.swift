@@ -200,7 +200,7 @@ struct FleetDetailsToggle: View {
 
     /// `-showDetails YES` opens every Details of the app at once, which is how what is behind one can be looked at
     /// without clicking to it. The argument domain is not written to the app's settings, so it leaves no trace.
-    static var asked: Bool { UserDefaults.standard.bool(forKey: "showDetails") }
+    static var asked: Bool { AppDefaults.store.bool(forKey: "showDetails") }
 
     var body: some View {
         Button {

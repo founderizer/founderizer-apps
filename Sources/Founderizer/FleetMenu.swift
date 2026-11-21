@@ -801,7 +801,7 @@ private final class FleetMenuPanel: NSPanel {
             sources.append((item, place))
         }
         guard !items.isEmpty else { return false }
-        let chosen = UserDefaults.standard.object(forKey: ViewZoom.key) as? Double ?? 1
+        let chosen = AppDefaults.store.object(forKey: ViewZoom.key) as? Double ?? 1
         let zoom = ViewZoom.shown(chosen, in: window.contentView?.bounds.size ?? .zero)
         menu.delegate?.menuWillOpen?(menu)
         FleetMenu.show(items, at: .pointer(window.convertPoint(toScreen: event.locationInWindow)), over: window, zoom: zoom,

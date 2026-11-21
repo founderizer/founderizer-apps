@@ -18,7 +18,7 @@ struct MachineChecks {
         var all = read()
         all[name(machine, hub: hub)] = Kept(checks: checklist.checks,
                                             readAt: checklist.readAt ?? Date().timeIntervalSince1970)
-        if let data = try? JSONEncoder().encode(all) { UserDefaults.standard.set(data, forKey: key) }
+        if let data = try? JSONEncoder().encode(all) { AppDefaults.store.set(data, forKey: key) }
     }
 
     static func checklist(machine: String, hub: URL) -> VerifyChecklist? {
@@ -31,11 +31,11 @@ struct MachineChecks {
         var all = read()
         guard let kept = all.removeValue(forKey: name(machine, hub: hub)), all[name(new, hub: hub)] == nil else { return }
         all[name(new, hub: hub)] = kept
-        if let data = try? JSONEncoder().encode(all) { UserDefaults.standard.set(data, forKey: key) }
+        if let data = try? JSONEncoder().encode(all) { AppDefaults.store.set(data, forKey: key) }
     }
 
     private static func read() -> [String: Kept] {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return [:] }
+        guard let data = AppDefaults.store.data(forKey: key) else { return [:] }
         return (try? JSONDecoder().decode([String: Kept].self, from: data)) ?? [:]
     }
 

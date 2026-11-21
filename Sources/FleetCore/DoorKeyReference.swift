@@ -18,7 +18,7 @@ public enum DoorKeyReference {
     public static func make() -> String { "bws://\(UUID().uuidString.lowercased())" }
 
     /// The reference for the move of one App's key: the one that an earlier round kept, or a new one, now kept.
-    public static func take(hub: URL, database: String, app: String, in defaults: UserDefaults = .standard) -> String {
+    public static func take(hub: URL, database: String, app: String, in defaults: UserDefaults = AppDefaults.store) -> String {
         let name = key(hub: hub, database: database, app: app)
         if let kept = defaults.string(forKey: name), LoginSecret.isReference(kept) { return kept }
         let made = make()
@@ -27,7 +27,7 @@ public enum DoorKeyReference {
     }
 
     /// The door's file names the App: its move keeps no reference any more.
-    public static func done(hub: URL, database: String, app: String, in defaults: UserDefaults = .standard) {
+    public static func done(hub: URL, database: String, app: String, in defaults: UserDefaults = AppDefaults.store) {
         defaults.removeObject(forKey: key(hub: hub, database: database, app: app))
     }
 }

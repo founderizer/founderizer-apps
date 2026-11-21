@@ -9,6 +9,16 @@ import Foundation
 public enum NeedClarify {
     /// `ui_features` of a hub that takes his message under a card (`POST /ui/needs/<id>/talk`).
     public static let feature = "need_clarify"
+
+    /// **The card whose Needs clarification field takes a key that a chat would send to its box**, or nil for the box
+    /// (the owner, 21 November 2026: "I clicked on discuss and typed, dont remember where"; on his busy Mac the keys
+    /// came before the field took them, and his words left as a chat message): `open`, the card whose field he opened,
+    /// while it is a card of this chat's agent and its item is still open. A card of another chat, an answered item and
+    /// a card that left the reading leave the box as it was.
+    public static func field(open: Int?, chat agent: String, needs: [OwnerNeed]) -> Int? {
+        guard let open, let need = needs.first(where: { $0.id == open }), need.by == agent, need.isOpen else { return nil }
+        return open
+    }
 }
 
 extension OwnerNeed {

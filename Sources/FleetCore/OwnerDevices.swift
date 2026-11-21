@@ -333,19 +333,19 @@ public enum DeviceBinding {
 public enum DeviceBinds {
     static let key = "deviceBinds"
 
-    public static func remember(_ bind: String, until: Double, in defaults: UserDefaults = .standard) {
+    public static func remember(_ bind: String, until: Double, in defaults: UserDefaults = AppDefaults.store) {
         var all = defaults.dictionary(forKey: key) as? [String: Double] ?? [:]
         all[bind] = until
         defaults.set(all, forKey: key)
     }
 
-    public static func all(now: Double = Date().timeIntervalSince1970, in defaults: UserDefaults = .standard) -> [String] {
+    public static func all(now: Double = Date().timeIntervalSince1970, in defaults: UserDefaults = AppDefaults.store) -> [String] {
         let all = (defaults.dictionary(forKey: key) as? [String: Double] ?? [:]).filter { $0.value > now }
         defaults.set(all, forKey: key)
         return all.keys.sorted()
     }
 
-    public static func forget(_ bind: String, in defaults: UserDefaults = .standard) {
+    public static func forget(_ bind: String, in defaults: UserDefaults = AppDefaults.store) {
         var all = defaults.dictionary(forKey: key) as? [String: Double] ?? [:]
         all[bind] = nil
         defaults.set(all, forKey: key)

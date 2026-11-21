@@ -1,3 +1,4 @@
+import FleetCore
 import SwiftUI
 
 /// **View › Bigger, Smaller and Actual Size** (the owner's yes of 28 October 2026, D-8, as Grok Bot zooms with ⌘): the
@@ -30,7 +31,7 @@ enum ViewZoom {
 /// The three items of the View menu, under Refresh Founderizer. Each one shows only what it can do: Bigger stops at
 /// 150 %, and Smaller and Actual Size at 100 %.
 struct ViewZoomCommands: Commands {
-    @AppStorage(ViewZoom.key) private var zoom = 1.0
+    @AppStorage(ViewZoom.key, store: AppDefaults.store) private var zoom = 1.0
     /// The size of the window in front (`zoomRoom`).
     @FocusedValue(\.zoomRoom) private var room
 
@@ -110,7 +111,7 @@ private struct ZoomedSize: Layout {
 /// At 100 % it is the content as it is: the same views in the same place, so choosing a zoom never builds the window's
 /// views again (a field that has the keyboard stays the same field).
 struct ViewZoomed: ViewModifier {
-    @AppStorage(ViewZoom.key) private var zoom = 1.0
+    @AppStorage(ViewZoom.key, store: AppDefaults.store) private var zoom = 1.0
     @State private var size = CGSize.zero
 
     func body(content: Content) -> some View {

@@ -334,7 +334,7 @@ private struct DefaultModelsSection: View {
         .fleetModal(item: $open) { card($0.id) }
         // `-openProvider <runtime>` opens one provider's card, so that it can be looked at without a click to it, as
         // `-openResource` opens a repository's.
-        .onAppear { if open == nil { open = UserDefaults.standard.string(forKey: "openProvider").map(ShownProvider.init) } }
+        .onAppear { if open == nil { open = AppDefaults.store.string(forKey: "openProvider").map(ShownProvider.init) } }
     }
 
     /// One provider: its icon, its name and its choice, and a click opens its card. A save that failed says so here

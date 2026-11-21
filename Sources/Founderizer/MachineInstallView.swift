@@ -20,7 +20,7 @@ struct InstallTargets {
         var all = read()
         all[name(machine, hub: hub)] = Kept(host: target.host, user: target.user, port: target.port,
                                             identityFile: target.identityFile)
-        if let data = try? JSONEncoder().encode(all) { UserDefaults.standard.set(data, forKey: key) }
+        if let data = try? JSONEncoder().encode(all) { AppDefaults.store.set(data, forKey: key) }
     }
 
     static func target(machine: String, hub: URL) -> InstallTarget? {
@@ -51,11 +51,11 @@ struct InstallTargets {
         var all = read()
         guard let kept = all.removeValue(forKey: name(machine, hub: hub)), all[name(new, hub: hub)] == nil else { return }
         all[name(new, hub: hub)] = kept
-        if let data = try? JSONEncoder().encode(all) { UserDefaults.standard.set(data, forKey: key) }
+        if let data = try? JSONEncoder().encode(all) { AppDefaults.store.set(data, forKey: key) }
     }
 
     private static func read() -> [String: Kept] {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return [:] }
+        guard let data = AppDefaults.store.data(forKey: key) else { return [:] }
         return (try? JSONDecoder().decode([String: Kept].self, from: data)) ?? [:]
     }
 

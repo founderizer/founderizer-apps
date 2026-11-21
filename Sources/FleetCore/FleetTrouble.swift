@@ -258,14 +258,18 @@ extension FleetTrouble {
                                               one: String(l10n: "The update of \(machine.agent.agentLabel) failed"),
                                               many: String(l10n: "servers failed their update"),
                                               says: machine.update.detail ?? String(l10n: "The last Founderizer update on this server did not finish."),
-                                              fix: String(l10n: "Its server kept running the revision it had. Update Fleet on its page tries again.")))
+                                              fix: String(l10n: "Its server kept running the revision it had. Update fleet in Settings › System status tries again, and so does the next release."),
+                                              manyFix: String(l10n: "Their servers kept running the revisions they had. Update fleet in Settings › System status tries again, and so does the next release."),
+                                              ownerOnly: true))     // a press in his app, which no agent makes
             }
             if let check = machine.check, ["failed", "offline"].contains(check.state) {
                 trouble.append(MachineTrouble(slug: "check", machine: machine.agent, server: machine.machine,
                                               one: String(l10n: "The check of \(machine.agent.agentLabel) failed"),
                                               many: String(l10n: "servers failed their check"),
                                               says: check.detail ?? String(l10n: "The hub's own check of this server did not come back."),
-                                              fix: String(l10n: "Check it again from its page.")))
+                                              // no fix line: no control runs the hub's check again, so the
+                                              // row names none, and Report a problem gives no agent a prompt
+                                              fix: nil))
             }
             if machine.security.reboot_required == true {
                 trouble.append(restart(machine: machine.agent, server: machine.machine,
@@ -335,7 +339,7 @@ extension FleetTrouble {
         let one: String
         let many: String
         let says: String
-        let fix: String
+        let fix: String?
         /// The same two lines when several machines share this, where one of them would read as "it".
         var manySays: String?
         var manyFix: String?

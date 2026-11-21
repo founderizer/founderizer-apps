@@ -287,12 +287,12 @@ public enum DoorHosts {
 
         static func key(hub: URL, database: String) -> String { "doorHosts|\(hub.absoluteString)|\(database)" }
 
-        public static func read(hub: URL, database: String, in defaults: UserDefaults = .standard) -> State {
+        public static func read(hub: URL, database: String, in defaults: UserDefaults = AppDefaults.store) -> State {
             defaults.data(forKey: key(hub: hub, database: database)).flatMap { try? JSONDecoder().decode(State.self, from: $0) }
                 ?? State()
         }
 
-        public func save(hub: URL, database: String, in defaults: UserDefaults = .standard) {
+        public func save(hub: URL, database: String, in defaults: UserDefaults = AppDefaults.store) {
             defaults.set(try? JSONEncoder().encode(self), forKey: Self.key(hub: hub, database: database))
         }
     }

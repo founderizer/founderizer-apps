@@ -290,6 +290,26 @@ struct MobileReadTests {
         }
     }
 
+    /// Owner API 1.274 (the owner, 20 November 2026, of a chat where a folded card said "Replaced by manager with a new
+    /// item: …" over the card of the new item): the bug that this catches is a chat of the phone, or the line of its
+    /// row on Chats, that places the hub's answered requests as they come, so the old card with the hub's own words
+    /// stands over the new one; or one that drops the card while his own answer to it is still in the outbox.
+    @Test("A request that a new item replaced has no card in its chat, unless his answer to it is in the outbox")
+    func aReplacedRequestHasNoCard() throws {
+        func need(_ id: Int, answer: String, replacedBy: Int? = nil) -> [String: Any] {
+            var fields: [String: Any] = ["id": id, "by": "manager", "title": "Publish the post?", "why": "", "todo": "",
+                                         "raised": 20.0, "answer": answer, "answered": 40.0]
+            if let replacedBy { fields["replaced_by"] = replacedBy }
+            return fields
+        }
+        let read = try snapshot(agents: [agentFields()], ["answered_needs": [
+            need(3, answer: "Replaced by manager with a new item: Publish the post?", replacedBy: 4),
+            need(5, answer: "Yes")]])
+        #expect(MobileStore.answered(read, holding: nil).map(\.id) == [5])
+        // his answer to it is the outbox's request: its card stays until that answer is cleared
+        #expect(MobileStore.answered(read, holding: 3).map(\.id) == [3, 5])
+    }
+
     @Test("A time to come reads as the Mac writes it: the time today, the weekday this week, else the day")
     func aTimeToCome() throws {
         var calendar = Calendar(identifier: .gregorian)

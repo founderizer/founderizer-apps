@@ -75,11 +75,11 @@ final class ClaimFromLink {
     /// keeps it for that hub, so a second attempt carries the same id and not a new one. The hub then takes the id from
     /// the token it is given.
     private func fleetID(hub: URL) -> String {
-        var all = (UserDefaults.standard.dictionary(forKey: Self.fleetKey) as? [String: String]) ?? [:]
+        var all = (AppDefaults.store.dictionary(forKey: Self.fleetKey) as? [String: String]) ?? [:]
         if let kept = all[hub.absoluteString], FleetID.isValid(kept) { return kept }
         let made = FleetID.make()
         all[hub.absoluteString] = made
-        UserDefaults.standard.set(all, forKey: Self.fleetKey)
+        AppDefaults.store.set(all, forKey: Self.fleetKey)
         return made
     }
 }

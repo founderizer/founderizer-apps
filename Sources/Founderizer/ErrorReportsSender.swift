@@ -15,7 +15,7 @@ final class CrashSubscriber: NSObject, MXMetricManagerSubscriber, Sendable {
 
     private override init() {
         let images = ErrorReport.ownImages(running: ErrorReport.runningImage,
-                                           kept: UserDefaults.standard.stringArray(forKey: Self.imagesKey) ?? [])
+                                           kept: AppDefaults.store.stringArray(forKey: Self.imagesKey) ?? [])
         own = Set(images)
         super.init()
     }
@@ -23,8 +23,8 @@ final class CrashSubscriber: NSObject, MXMetricManagerSubscriber, Sendable {
     /// Adds the running build to the list of this app's builds: called only after the hub has said that the switch is on.
     static func remember() {
         let images = ErrorReport.ownImages(running: ErrorReport.runningImage,
-                                           kept: UserDefaults.standard.stringArray(forKey: imagesKey) ?? [])
-        UserDefaults.standard.set(images, forKey: imagesKey)
+                                           kept: AppDefaults.store.stringArray(forKey: imagesKey) ?? [])
+        AppDefaults.store.set(images, forKey: imagesKey)
     }
 
     @MainActor private static var started = false

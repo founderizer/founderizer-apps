@@ -212,7 +212,7 @@ public enum MadeServers {
 
     /// Keeps a server made for this hub: by its name right before its provider is asked for it (a call that fails can
     /// leave the server there), and with the provider's id once the provider gave one.
-    public static func note(_ name: String, id: String? = nil, hub: URL, in defaults: UserDefaults = .standard) {
+    public static func note(_ name: String, id: String? = nil, hub: URL, in defaults: UserDefaults = AppDefaults.store) {
         let name = name.lowercased(), start = "\(prefix(hub))\(name)"
         var all = (defaults.stringArray(forKey: key) ?? []).filter { $0 != start && !$0.hasPrefix(start + "|") }
         all.append(id.map { "\(start)|\($0)" } ?? start)
@@ -221,7 +221,7 @@ public enum MadeServers {
 
     /// The servers made for this hub: each name in lower case with the provider's id, or an empty id where the provider
     /// gave none.
-    public static func kept(hub: URL, in defaults: UserDefaults = .standard) -> [String: String] {
+    public static func kept(hub: URL, in defaults: UserDefaults = AppDefaults.store) -> [String: String] {
         let prefix = prefix(hub)
         var kept: [String: String] = [:]
         for entry in defaults.stringArray(forKey: key) ?? [] where entry.hasPrefix(prefix) {
@@ -233,7 +233,7 @@ public enum MadeServers {
     }
 
     /// Forgets the servers made for this hub: the app forgets that fleet ("Start again").
-    public static func forget(hub: URL, in defaults: UserDefaults = .standard) {
+    public static func forget(hub: URL, in defaults: UserDefaults = AppDefaults.store) {
         let prefix = prefix(hub)
         defaults.set((defaults.stringArray(forKey: key) ?? []).filter { !$0.hasPrefix(prefix) }, forKey: key)
     }
@@ -260,21 +260,21 @@ public enum MadeServers {
 public enum InstallEnds {
     static let key = "installsEnded"
 
-    public static func note(_ server: String, address: String, hub: URL, in defaults: UserDefaults = .standard) {
+    public static func note(_ server: String, address: String, hub: URL, in defaults: UserDefaults = AppDefaults.store) {
         var all = defaults.dictionary(forKey: key) as? [String: String] ?? [:]
         all["\(hub.absoluteString)|\(server.lowercased())"] = address
         defaults.set(all, forKey: key)
     }
 
     /// Forgets the ended installs of this hub: the app forgets that fleet ("Start again").
-    public static func forget(hub: URL, in defaults: UserDefaults = .standard) {
+    public static func forget(hub: URL, in defaults: UserDefaults = AppDefaults.store) {
         let prefix = "\(hub.absoluteString)|"
         let all = (defaults.dictionary(forKey: key) as? [String: String] ?? [:]).filter { !$0.key.hasPrefix(prefix) }
         defaults.set(all, forKey: key)
     }
 
     /// The address that each ended install of this hub reached, by the server's name in lower case.
-    public static func ended(hub: URL, in defaults: UserDefaults = .standard) -> [String: String] {
+    public static func ended(hub: URL, in defaults: UserDefaults = AppDefaults.store) -> [String: String] {
         let prefix = "\(hub.absoluteString)|"
         var ended: [String: String] = [:]
         for (key, address) in defaults.dictionary(forKey: key) as? [String: String] ?? [:] where key.hasPrefix(prefix) {

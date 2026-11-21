@@ -8,10 +8,16 @@ namespace Founderizer.Remote;
 /// <summary>A server as the owner gave it: its address or host name, its SSH port, and the user the app logs in as.</summary>
 public sealed record RemoteTarget(string Host, int Port, string User);
 
-/// <summary>How the app logs in. Never the owner's own keys, never an SSH agent, never a file of keys.</summary>
+/// <summary>
+/// How the app logs in. Never an SSH agent, never a file of keys, and the owner's own key only as the bytes of the one
+/// file that the owner picked (<see cref="KeyOnce"/>).
+/// </summary>
 public abstract record RemoteLogin
 {
     private RemoteLogin() { }
+
+    /// <summary>Overwrites the secrets that the caller gave, so no copy of the caller's stays after the call.</summary>
+    internal virtual void Clear() { }
 
     /// <summary>The app's own key (<see cref="AppSshKey"/>), and nothing else: the Mac's <c>IdentitiesOnly=yes -i KEY</c>.</summary>
     public sealed record AppKey() : RemoteLogin;
@@ -21,7 +27,31 @@ public abstract record RemoteLogin
     /// array when it ends, whatever its outcome, so a caller that needs the password again keeps a copy of its own.
     /// It is offered once: a server that refuses it is not asked again in the same call.
     /// </summary>
-    public sealed record PasswordOnce(char[] Password) : RemoteLogin;
+    public sealed record PasswordOnce(char[] Password) : RemoteLogin
+    {
+        internal override void Clear()
+        {
+            if (Password is not null) Array.Clear(Password);
+        }
+    }
+
+    /// <summary>
+    /// **The owner's own key, for one call** (the owner's choice of 21 November 2026, "Choose key, as Mac"; plan 5.5):
+    /// the bytes of the one file that the owner picked in Windows' own picker, and its passphrase or null. The call
+    /// offers that key and no other: not the app's key, not a password. It clears both arrays when it ends, whatever
+    /// its outcome (in fact as soon as it has read the key, before it connects), so a caller that needs them again
+    /// keeps a copy of its own. A file that <see cref="OwnerKeyFile.Check"/> does not find
+    /// <see cref="OwnerKeyCheck.Usable"/> never reaches a server: the call throws, as for a call that breaks
+    /// <see cref="RemoteRules"/>. This library opens no file: the window reads the one file and gives its bytes.
+    /// </summary>
+    public sealed record KeyOnce(byte[] KeyFile, char[]? Passphrase) : RemoteLogin
+    {
+        internal override void Clear()
+        {
+            if (KeyFile is not null) Array.Clear(KeyFile);
+            if (Passphrase is not null) Array.Clear(Passphrase);
+        }
+    }
 }
 
 /// <summary>What a host key must be. <c>TakeNew</c> is OpenSSH's <c>accept-new</c>; <c>Known</c> is its <c>yes</c>.</summary>
@@ -76,7 +106,7 @@ public enum RemoteFailure
     HostKeyChanged,
     /// <summary>Under <c>Known</c>, the server has no key on record. Nothing was sent.</summary>
     HostKeyUnknown,
-    /// <summary>The server did not take the login: the app's key, or the password that it was given.</summary>
+    /// <summary>The server did not take the login: the app's key, the owner's key that it was given, or the password.</summary>
     LoginRefused,
     /// <summary>A password login to a server that never asked for a password (it takes keys only). The password was not sent.</summary>
     LoginNotOffered,
@@ -102,7 +132,9 @@ public interface IRemote : IAsyncDisposable
     /// Runs <c>call.Program</c> on <c>call.Target</c>. <c>line</c>, when given, gets each line of standard output and of
     /// standard error as it arrives (without its line end; never after the call has returned; never two at once). A
     /// failure is a result, never an exception; an exception is a fault of the caller (a call that breaks
-    /// <see cref="RemoteRules"/>, or an <see cref="RemoteLogin.AppKey"/> while the app has no key).
+    /// <see cref="RemoteRules"/>, an <see cref="RemoteLogin.AppKey"/> while the app has no key, or a
+    /// <see cref="RemoteLogin.KeyOnce"/> whose file <see cref="OwnerKeyFile.Check"/> does not find usable). The secrets
+    /// of <c>call.Login</c> are cleared on each of those ways out too.
     /// </summary>
     Task<RemoteResult> RunAsync(RemoteCall call, Action<string>? line, CancellationToken cancel);
 }
@@ -139,6 +171,8 @@ public static partial class RemoteRules
             throw new ArgumentException("The limit of a call is between 0 and 24 hours.", nameof(call));
         if (call.Login is RemoteLogin.PasswordOnce { Password: null })
             throw new ArgumentException("A password login needs its password.", nameof(call));
+        if (call.Login is RemoteLogin.KeyOnce { KeyFile: null })
+            throw new ArgumentException("A key login needs the bytes of its key's file.", nameof(call));
     }
 
     [GeneratedRegex(@"^[a-zA-Z0-9]([a-zA-Z0-9.:-]{0,252}[a-zA-Z0-9])?\z")]

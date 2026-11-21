@@ -38,9 +38,10 @@ final class FleetCopyKeeper {
     /// a file of his quietly is the one thing a backup must never do.
     static let keeps = 7
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = AppDefaults.store) {
+        self.defaults = defaults
         // `object(forKey:)`, not `bool(forKey:)`: nil is "he has never been asked", which is the only state the
         // default applies to. A switch he turned off stays off through every start.
         let decided = defaults.object(forKey: "copyAutomatic") as? Bool

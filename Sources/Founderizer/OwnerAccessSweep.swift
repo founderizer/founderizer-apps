@@ -94,11 +94,11 @@ final class OwnerAccessModel {
 
     /// The fingerprint of the key whose line this Mac put on each server, by the hub's address, the server's name and
     /// its private address (`OwnerAccessMarks`).
-    static func marks(defaults: UserDefaults = .standard) -> OwnerAccessMarks {
+    static func marks(defaults: UserDefaults = AppDefaults.store) -> OwnerAccessMarks {
         OwnerAccessMarks((defaults.dictionary(forKey: keptKey) as? [String: String]) ?? [:])
     }
 
-    static func keep(_ fingerprint: String, for server: ServerEntry, hub: URL, defaults: UserDefaults = .standard) {
+    static func keep(_ fingerprint: String, for server: ServerEntry, hub: URL, defaults: UserDefaults = AppDefaults.store) {
         var marks = Self.marks(defaults: defaults)
         marks.keep(fingerprint, for: server.name, address: server.address, hub: hub)
         defaults.set(marks.all, forKey: keptKey)
@@ -265,11 +265,11 @@ final class ServerHardeningModel {
     /// the round's log line, and nothing else keeps it.
     private static let publicCheckKey = "publicSSHCheck"
 
-    static func publicCheckDue(_ name: String, defaults: UserDefaults = .standard) -> Double? {
+    static func publicCheckDue(_ name: String, defaults: UserDefaults = AppDefaults.store) -> Double? {
         (defaults.dictionary(forKey: publicCheckKey) as? [String: Double])?[name]
     }
 
-    static func keepPublicCheck(_ next: Double, for name: String, defaults: UserDefaults = .standard) {
+    static func keepPublicCheck(_ next: Double, for name: String, defaults: UserDefaults = AppDefaults.store) {
         var all = (defaults.dictionary(forKey: publicCheckKey) as? [String: Double]) ?? [:]
         all[name] = next
         defaults.set(all, forKey: publicCheckKey)
@@ -302,11 +302,11 @@ final class ServerHardeningModel {
     private static let keptBrowserKey = "serverBrowser"
     private static let browserMark = "browser "
 
-    static func browserMemory(_ name: String, defaults: UserDefaults = .standard) -> ServerBrowser.Memory {
+    static func browserMemory(_ name: String, defaults: UserDefaults = AppDefaults.store) -> ServerBrowser.Memory {
         ServerBrowser.Memory.kept((defaults.dictionary(forKey: keptBrowserKey) as? [String: Data])?[name])
     }
 
-    static func keepBrowser(_ memory: ServerBrowser.Memory, for name: String, defaults: UserDefaults = .standard) {
+    static func keepBrowser(_ memory: ServerBrowser.Memory, for name: String, defaults: UserDefaults = AppDefaults.store) {
         var all = (defaults.dictionary(forKey: keptBrowserKey) as? [String: Data]) ?? [:]
         all[name] = try? JSONEncoder().encode(memory)
         defaults.set(all, forKey: keptBrowserKey)
@@ -319,12 +319,12 @@ final class ServerHardeningModel {
     }
 
     /// The count in it is of the runs alone (`ServerHardening.Memory.kept`).
-    static func memory(_ name: String, defaults: UserDefaults = .standard,
+    static func memory(_ name: String, defaults: UserDefaults = AppDefaults.store,
                        key: String = keptKey) -> ServerHardening.Memory {
         ServerHardening.Memory.kept((defaults.dictionary(forKey: key) as? [String: Data])?[name])
     }
 
-    static func keep(_ memory: ServerHardening.Memory, for name: String, defaults: UserDefaults = .standard,
+    static func keep(_ memory: ServerHardening.Memory, for name: String, defaults: UserDefaults = AppDefaults.store,
                      key: String = keptKey) {
         var all = (defaults.dictionary(forKey: key) as? [String: Data]) ?? [:]
         guard all[name].flatMap({ try? JSONDecoder().decode(ServerHardening.Memory.self, from: $0) }) != memory else { return }

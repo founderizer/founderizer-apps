@@ -19,8 +19,8 @@ struct FleetView: View {
     /// October 2026: "after activation, focus on the textbox so I can start typing").
     @State private var focusChat: String?
     /// The widths of the two side menus, which the owner sets by dragging their edges (`SideEdge`), kept on this Mac.
-    @AppStorage("sidebarWidth") private var sidebarWidth = Double(FleetStyle.sidebarWidth)
-    @AppStorage("panelWidth") private var panelWidth = Double(FleetStyle.panelWidth)
+    @AppStorage("sidebarWidth", store: AppDefaults.store) private var sidebarWidth = Double(FleetStyle.sidebarWidth)
+    @AppStorage("panelWidth", store: AppDefaults.store) private var panelWidth = Double(FleetStyle.panelWidth)
     /// The search card over the window, while it shows (`SearchPalette`).
     @State private var searching: SearchRequest?
     /// The page of a wizard that fills the window shows its Back (`SetupBackShows`): Esc is Back's, not ×'s.
@@ -300,6 +300,18 @@ struct FleetView: View {
     /// it has it, at the end of its words (`ComposerCaret`). False when neither shows.
     private func typeIntoBox(_ event: NSEvent) -> Bool {
         guard let name = lineAgent else { return false }
+        // **A card of this chat has its Needs clarification field open: the key is the card's** (the owner, 21 November
+        // 2026: "I clicked on discuss and typed, dont remember where"; on his busy Mac the keys came before the field took
+        // them, and his words left as a chat message). The field takes the keyboard (`FleetStore.clarifyKeys`), and the
+        // key and the ones after it go to it once it has it, at the end of its words. A card of another chat, an
+        // answered one and one that left the reading leave the box as it was (`NeedClarify.field`).
+        if let open = store.clarifying, NeedClarify.field(open: open.need, chat: name, needs: store.state?.needs ?? []) != nil {
+            ComposerCaret.hold(event)
+            store.clarifyKeys += 1
+            // up to 2 s: the field comes with a draw of the card, which a busy Mac does late
+            ComposerCaret.toEnd(of: open.words, in: ComposerCaret.clarify(open.need), tries: 100)
+            return true
+        }
         if store.editingMessage?.chatRecipient == name {
             guard !store.sending, store.pending == nil else { return false }
             ComposerCaret.hold(event)
@@ -1333,6 +1345,8 @@ private enum ComposerCaret {
     /// The wait for an agent's box, and the one for the correction's line: no name of an agent is the second.
     static func box(_ agent: String) -> String { "box \(agent)" }
     static let correction = "correction"
+    /// The wait for the Needs clarification field of the card of this need (`typeIntoBox`).
+    static func clarify(_ need: Int) -> String { "clarify \(need)" }
 
     /// A wait runs: the next key joins its keys, wherever the cursor is.
     static var waits: Bool { wait != nil }
@@ -1354,7 +1368,7 @@ private enum ComposerCaret {
         return true
     }
 
-    static func toEnd(of draft: String, in field: String) {
+    static func toEnd(of draft: String, in field: String, tries: Int = 25) {
         // A wait for another field ends, and its keys wait on for this one: sent now, the field that takes the
         // keyboard has its words selected, and they would replace them. Not its Return: it would send them to
         // another chat.
@@ -1366,7 +1380,7 @@ private enum ComposerCaret {
         let id = UUID()
         wait = (field, id)
         Task {
-            for _ in 0..<25 {
+            for _ in 0..<tries {
                 guard wait?.id == id else { return }
                 if let editor = NSApp.windows.first(where: { $0.identifier?.rawValue == SetupChannel.fleetWindow })?
                     .firstResponder as? NSTextView, editor.isFieldEditor, editor.string == draft {

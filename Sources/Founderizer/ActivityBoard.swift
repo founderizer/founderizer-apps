@@ -50,8 +50,8 @@ struct ActivityBoard: View {
     /// The agent whose chat panel opened this board, for its back link; nil from the sidebar.
     var back: String? = nil
     /// The agent filter of the main sidebar's board: an agent's name, or empty for all agents.
-    @AppStorage("activityAgent") private var chosen = ""
-    @AppStorage("activityPeriod") private var periodName = ActivityPeriod.week.rawValue
+    @AppStorage("activityAgent", store: AppDefaults.store) private var chosen = ""
+    @AppStorage("activityPeriod", store: AppDefaults.store) private var periodName = ActivityPeriod.week.rawValue
     private var period: ActivityPeriod { ActivityPeriod(rawValue: periodName) ?? .week }
     /// Ended shows the tasks behind its "more" row.
     @State private var showsRest = false
@@ -63,7 +63,7 @@ struct ActivityBoard: View {
     /// The cards that show their tasks, by the job's id (`JobCard`).
     @State private var openJobs: Set<String> = []
     /// The cards of Done that he has opened, one job's id on each line: their names are lighter (`markRead`).
-    @AppStorage("activityReadJobs") private var readJobs = ""
+    @AppStorage("activityReadJobs", store: AppDefaults.store) private var readJobs = ""
     /// The narrowest lane: a card keeps its agent's name on one line. A window too narrow for three shows as many whole
     /// lanes as fit, and the board scrolls sideways one lane at a time.
     private static let laneWidth: CGFloat = 150

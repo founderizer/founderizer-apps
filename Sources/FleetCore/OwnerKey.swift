@@ -159,7 +159,7 @@ public enum GrantClock {
     /// So a last time from 23 to 24 hours ahead also starts again from now, where the vault would still take it.
     public static let ahead = 86400 - 3600
 
-    public static func next(fleet: String, now: Int = OwnerStatement.now(), in defaults: UserDefaults = .standard) -> Int {
+    public static func next(fleet: String, now: Int = OwnerStatement.now(), in defaults: UserDefaults = AppDefaults.store) -> Int {
         var all = defaults.dictionary(forKey: key) as? [String: Int] ?? [:]
         let last = all[fleet] ?? 0
         let at = last >= now && last - now < ahead ? last + 1 : now     // no overflow, also for a damaged value

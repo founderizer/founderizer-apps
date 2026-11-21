@@ -51,13 +51,13 @@ public enum FirstRunReports {
     public static let waitingKey = "firstRunErrorReportsWaiting"
 
     /// The card that the owner chose last on this Mac: true to send, false not to, nil before the first answer.
-    public static func chosen(in defaults: UserDefaults = .standard) -> Bool? { answer(defaults.string(forKey: choiceKey)) }
+    public static func chosen(in defaults: UserDefaults = AppDefaults.store) -> Bool? { answer(defaults.string(forKey: choiceKey)) }
 
     /// The answer that waits for a hub, or nil when none waits.
-    public static func waiting(in defaults: UserDefaults = .standard) -> Bool? { answer(defaults.string(forKey: waitingKey)) }
+    public static func waiting(in defaults: UserDefaults = AppDefaults.store) -> Bool? { answer(defaults.string(forKey: waitingKey)) }
 
     /// A press on a card of the page: the check mark, and the answer that the next hub gets.
-    public static func choose(_ send: Bool, in defaults: UserDefaults = .standard) {
+    public static func choose(_ send: Bool, in defaults: UserDefaults = AppDefaults.store) {
         defaults.set(word(send), forKey: choiceKey)
         defaults.set(word(send), forKey: waitingKey)
     }
@@ -67,7 +67,7 @@ public enum FirstRunReports {
     /// the switch (`offered`) gets nothing, and an answer that a call did not bring to the hub (no answer, a refusal)
     /// waits for the next call. It runs on the caller's own actor (`isolation`), the app's main actor.
     @discardableResult
-    public static func deliver(offered: Bool, in defaults: UserDefaults = .standard,
+    public static func deliver(offered: Bool, in defaults: UserDefaults = AppDefaults.store,
                                isolation: isolated (any Actor)? = #isolation,
                                send: (Bool) async throws -> Void) async -> Bool {
         guard offered, let answer = waiting(in: defaults) else { return false }
@@ -77,7 +77,7 @@ public enum FirstRunReports {
     }
 
     /// The wait ends with no send. The check mark stays.
-    public static func forget(in defaults: UserDefaults = .standard) { defaults.removeObject(forKey: waitingKey) }
+    public static func forget(in defaults: UserDefaults = AppDefaults.store) { defaults.removeObject(forKey: waitingKey) }
 
     private static func word(_ send: Bool) -> String { send ? "send" : "none" }
 

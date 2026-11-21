@@ -604,8 +604,8 @@ final class FleetStore {
     /// **The agents that Add agent added on this Mac, until their chat opens** (hub address, generation and name, as
     /// `unplaced`): their setup, then their "Setting up", fill the window, also after × and after the app starts again.
     /// A fresh reading ends them (`noteAdded`); a deactivated or signed-out agent that ran before is never on it.
-    private var adding = Set(UserDefaults.standard.stringArray(forKey: "addingAgents") ?? []) {
-        didSet { UserDefaults.standard.set(adding.sorted(), forKey: "addingAgents") }
+    private var adding = Set(AppDefaults.store.stringArray(forKey: "addingAgents") ?? []) {
+        didSet { AppDefaults.store.set(adding.sorted(), forKey: "addingAgents") }
     }
     func isAdding(_ agent: String) -> Bool { state.map { adding.contains(placingKey(agent, database: $0.db)) } ?? false }
     /// Add agent handed this agent to its setup.
@@ -671,8 +671,8 @@ final class FleetStore {
     /// **The page he left, by hub address** (the owner's "Build ideas 1–5" of 16 November 2026, of "The app opens on
     /// the page you left when you quit"; it opened on `home` each time): its name of `-openPage` (`keptName`), kept on
     /// this Mac for the next start.
-    private var keptPages = UserDefaults.standard.dictionary(forKey: "lastPages") as? [String: String] ?? [:] {
-        didSet { UserDefaults.standard.set(keptPages, forKey: "lastPages") }
+    private var keptPages = AppDefaults.store.dictionary(forKey: "lastPages") as? [String: String] ?? [:] {
+        didSet { AppDefaults.store.set(keptPages, forKey: "lastPages") }
     }
 
     /// The name of a page that the next start may open (`page(named:)` reads it back), or nil: only the places that
@@ -712,7 +712,7 @@ final class FleetStore {
     /// the next reading would take his mark away again under his pointer; it stays until he goes to another page.
     @ObservationIgnored private var keptUnread: String?
     /// The agents he pinned to the top of the sidebar, newest pin first, by hub address. This Mac keeps them.
-    private var pins = UserDefaults.standard.dictionary(forKey: "pinnedAgents") as? [String: [String]] ?? [:]
+    private var pins = AppDefaults.store.dictionary(forKey: "pinnedAgents") as? [String: [String]] ?? [:]
     /// The open task's thread as it was read last (`TaskActivity`). Its panel draws from it the files the task
     /// changed, its child agents and the runtimes and models it used, so a task opened again has them in its first
     /// frame, and one of another task or generation is never drawn.
@@ -723,6 +723,13 @@ final class FleetStore {
     var taskModels: [RuntimeModelUse] { taskActivity?.timeline.models ?? [] }
     var childThreadRequest: RuntimeToolKey?
     var selectedNeed: Int?
+    /// **The card of a chat whose Needs clarification field is open, with its words** (owner feature `need_clarify`;
+    /// the owner, 21 November 2026, of his first message under a card: "I clicked on discuss and typed, dont remember
+    /// where", and his words went to the chat's box): a key that the chat would send to its box goes to that field
+    /// (`FleetView.typeIntoBox`), and `clarifyKeys` tells the field to take the keyboard. Memory only.
+    var clarifying: (need: Int, words: String)?
+    /// A count that the open Needs clarification field of a chat watches: at each change it takes the keyboard.
+    var clarifyKeys = 0
     /// A message of one agent's chat that the chat scrolls to as it shows, then forgets: a match of the search card
     /// (`SearchPalette`, "In messages").
     var chatFocus: ChatFocus?
@@ -743,7 +750,7 @@ final class FleetStore {
     /// clears it.
     var knowledgeRead: String?
     var agentDrafts: [String: String] {
-        didSet { UserDefaults.standard.set(agentDrafts, forKey: "agentDrafts") }
+        didSet { AppDefaults.store.set(agentDrafts, forKey: "agentDrafts") }
     }
     /// **The words of each task's guidance box** (`TaskSteering`), by its key (`stageKey(task:database:)`): the store's,
     /// as a chat's draft is, so a guidance that a later read confirms also empties its box (`finish`), and a second
@@ -1010,7 +1017,7 @@ final class FleetStore {
 
     private func keepStaged() {
         guard let data = try? JSONEncoder().encode(staged) else { return }
-        UserDefaults.standard.set(data, forKey: "stagedFiles")
+        AppDefaults.store.set(data, forKey: "stagedFiles")
     }
 
     func stagedURL(_ file: StagedFile) -> URL {
@@ -1186,8 +1193,8 @@ final class FleetStore {
     /// fleet), as hub address, hub generation and name: their setup goes on after the press that gives them one, through
     /// the install and the sign-in, until they run (`AgentSetupFlow.places`). This Mac keeps them, so an app that starts
     /// again during an install of minutes opens on that install, and not on a chat that cannot answer yet.
-    private var unplaced = Set(UserDefaults.standard.stringArray(forKey: "unplacedAgents") ?? []) {
-        didSet { UserDefaults.standard.set(unplaced.sorted(), forKey: "unplacedAgents") }
+    private var unplaced = Set(AppDefaults.store.stringArray(forKey: "unplacedAgents") ?? []) {
+        didSet { AppDefaults.store.set(unplaced.sorted(), forKey: "unplacedAgents") }
     }
     private func placingKey(_ agent: String, database: String) -> String { "\(hub.absoluteString)|\(database)|\(agent)" }
     /// This Mac saw the agent with no server on this hub generation, and has not seen it run since.
@@ -1243,8 +1250,8 @@ final class FleetStore {
     /// **The server that joined for an agent with no server yet**, by the same key: the setup gives it that server with
     /// its provider. This Mac keeps it, so an app that starts again between the join and that command goes on with that
     /// server, and does not open on the server's page, where a press would make another server.
-    private var joinedFor = UserDefaults.standard.dictionary(forKey: "serversJoinedFor") as? [String: String] ?? [:] {
-        didSet { UserDefaults.standard.set(joinedFor, forKey: "serversJoinedFor") }
+    private var joinedFor = AppDefaults.store.dictionary(forKey: "serversJoinedFor") as? [String: String] ?? [:] {
+        didSet { AppDefaults.store.set(joinedFor, forKey: "serversJoinedFor") }
     }
     func joinedServer(_ agent: String) -> String? { state.flatMap { joinedFor[placingKey(agent, database: $0.db)] } }
     func noteJoined(_ server: String, for agent: String) {
@@ -1255,8 +1262,8 @@ final class FleetStore {
     /// "agent onboarding should ask first for the name and AI provider before the server page"): the setup gives it to
     /// the agent with its server, as soon as that server is there. This Mac keeps it, so an app that starts again
     /// between the press and the server goes on to the server, and does not ask for the provider again.
-    private var providerFor = UserDefaults.standard.dictionary(forKey: "providersChosenFor") as? [String: String] ?? [:] {
-        didSet { UserDefaults.standard.set(providerFor, forKey: "providersChosenFor") }
+    private var providerFor = AppDefaults.store.dictionary(forKey: "providersChosenFor") as? [String: String] ?? [:] {
+        didSet { AppDefaults.store.set(providerFor, forKey: "providersChosenFor") }
     }
     func chosenProvider(_ agent: String) -> String? { state.flatMap { providerFor[placingKey(agent, database: $0.db)] } }
     /// nil takes the choice away: Back from the page after it.
@@ -1273,8 +1280,8 @@ final class FleetStore {
         let address: String
     }
     /// Its own key: `MadeServers` keeps a list of another form under "serversMadeFor".
-    private var madeFor = UserDefaults.standard.dictionary(forKey: "firstRunServerFor") as? [String: [String]] ?? [:] {
-        didSet { UserDefaults.standard.set(madeFor, forKey: "firstRunServerFor") }
+    private var madeFor = AppDefaults.store.dictionary(forKey: "firstRunServerFor") as? [String: [String]] ?? [:] {
+        didSet { AppDefaults.store.set(madeFor, forKey: "firstRunServerFor") }
     }
     func madeServer(_ agent: String) -> MadeServer? {
         guard let kept = state.flatMap({ madeFor[placingKey(agent, database: $0.db)] }), kept.count == 2 else { return nil }
@@ -1346,10 +1353,10 @@ final class FleetStore {
     var lastReceipt: SendReceipt?
     private(set) var lastControlReceipt: ControlReceipt?
     var draft: String {
-        didSet { UserDefaults.standard.set(draft, forKey: "managerDraft") }
+        didSet { AppDefaults.store.set(draft, forKey: "managerDraft") }
     }
     var answers: [String: String] {
-        didSet { UserDefaults.standard.set(answers, forKey: "answerDrafts") }
+        didSet { AppDefaults.store.set(answers, forKey: "answerDrafts") }
     }
     /// Owner feature `attachments`: the files that the owner picked for each composer, by its key. They are kept
     /// across a restart, as the drafts are; the bytes of a file that is not on the hub yet wait beside the Outbox,
@@ -1514,8 +1521,8 @@ final class FleetStore {
 
     /// The hub addresses that have answered this Mac, kept between launches.
     private static var answeredHubs: [String] {
-        get { UserDefaults.standard.stringArray(forKey: "hubsAnswered") ?? [] }
-        set { UserDefaults.standard.set(newValue, forKey: "hubsAnswered") }
+        get { AppDefaults.store.stringArray(forKey: "hubsAnswered") ?? [] }
+        set { AppDefaults.store.set(newValue, forKey: "hubsAnswered") }
     }
 
     /// The file of the last reading of this hub address: one for each address, so a reading of another hub is never
@@ -1801,31 +1808,31 @@ final class FleetStore {
            (try? HubClient.address(asked)) == nil {
             fatalError("-hubAddress \(asked) is not a hub address. Founderizer stops here rather than read another hub.")
         }
-        let kept = UserDefaults.standard.string(forKey: "hubAddress")
+        let kept = AppDefaults.store.string(forKey: "hubAddress")
         let address = kept ?? HubClient.defaultAddress
         // The field of the hub's address is empty on a Mac that was never given one: the address of no hub is not a
         // thing to show or to correct (the onboarding test of 13 November 2026, Settings › System status).
         addressText = kept ?? ""
-        let installationID = UserDefaults.standard.string(forKey: "installationID") ?? UUID().uuidString.lowercased()
-        UserDefaults.standard.set(installationID, forKey: "installationID")
+        let installationID = AppDefaults.store.string(forKey: "installationID") ?? UUID().uuidString.lowercased()
+        AppDefaults.store.set(installationID, forKey: "installationID")
         installation = "founderizer-swift/1/\(installationID)"
         hub = (try? HubClient.address(address)) ?? (try! HubClient.address(HubClient.defaultAddress))
-        draft = UserDefaults.standard.string(forKey: "managerDraft") ?? ""
-        agentDrafts = UserDefaults.standard.dictionary(forKey: "agentDrafts") as? [String: String] ?? [:]
-        answers = UserDefaults.standard.dictionary(forKey: "answerDrafts") as? [String: String] ?? [:]
+        draft = AppDefaults.store.string(forKey: "managerDraft") ?? ""
+        agentDrafts = AppDefaults.store.dictionary(forKey: "agentDrafts") as? [String: String] ?? [:]
+        answers = AppDefaults.store.dictionary(forKey: "answerDrafts") as? [String: String] ?? [:]
         // Settings and rules save themselves now: no profile draft is kept, and the drafts of earlier versions go.
-        UserDefaults.standard.removeObject(forKey: "profileDrafts")
-        if let seen = UserDefaults.standard.dictionary(forKey: "chatRepliesSeen"), let context = seen["context"] as? String,
+        AppDefaults.store.removeObject(forKey: "profileDrafts")
+        if let seen = AppDefaults.store.dictionary(forKey: "chatRepliesSeen"), let context = seen["context"] as? String,
            let replies = seen["seen"] as? [String: Int] {
             seenContext = context; seenReplies = replies
         }
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let support = AppFolders.support          // Application Support, or a test's folder (`AppFolders`)
         outbox = Outbox(file: support.appendingPathComponent("Founderizer/pending.json"))
         stagedDirectory = support.appendingPathComponent("Founderizer/staged")
         readingsFolder = support.appendingPathComponent("Founderizer")
         hubAnsweredBefore = Self.answeredHubs.contains(hub.absoluteString)
         startedWithFleet = hubAnsweredBefore
-        if let kept = UserDefaults.standard.data(forKey: "stagedFiles"),
+        if let kept = AppDefaults.store.data(forKey: "stagedFiles"),
            let files = try? JSONDecoder().decode([String: [StagedFile]].self, from: kept) {
             staged = files
         }
@@ -2088,7 +2095,7 @@ final class FleetStore {
             // left): that hub is passed over no more.
             StartAgain.LeftHubs.forget(next)
             hubAnsweredBefore = Self.answeredHubs.contains(next.absoluteString)
-            UserDefaults.standard.set(next.absoluteString, forKey: "hubAddress")
+            AppDefaults.store.set(next.absoluteString, forKey: "hubAddress")
             connectionError = nil; failedReads = 0; readsFail = false; staleNoticeStood = false; readHeld = false
             await refresh()
         } catch { lastReadError = error; connectionError = HubReach.words(error, hub: nil).line }
@@ -2715,7 +2722,7 @@ final class FleetStore {
     func togglePin(_ agent: String) {
         let list = (pinned.contains(agent) ? [] : [agent]) + pinned.filter { $0 != agent }
         pins[hub.absoluteString] = list.isEmpty ? nil : list
-        UserDefaults.standard.set(pins, forKey: "pinnedAgents")
+        AppDefaults.store.set(pins, forKey: "pinnedAgents")
     }
 
     /// The open chat's replies are seen. A new hub generation takes the replies that it has as seen, so that only later
@@ -2739,7 +2746,7 @@ final class FleetStore {
     private func keep(_ seen: [String: Int], context: String) {
         guard seen != seenReplies || seenContext != context else { return }
         seenContext = context; seenReplies = seen
-        UserDefaults.standard.set(["context": context, "seen": seen], forKey: "chatRepliesSeen")
+        AppDefaults.store.set(["context": context, "seen": seen], forKey: "chatRepliesSeen")
     }
 
     func discardRefused() {
@@ -2774,7 +2781,7 @@ final class FleetStore {
                 agentDrafts = [:]
                 guidanceDrafts = [:]
                 cancelEdit()
-                do { pending = try outbox.rejectSecret(matching: request.requestID, drafts: .standard) }
+                do { pending = try outbox.rejectSecret(matching: request.requestID, drafts: AppDefaults.store) }
                 catch { storageError = String(l10n: "Cannot remove rejected text from local storage. Sending is blocked.") }
                 sendError = String(l10n: "The hub refused registered login text.")
             } else if let error = error as? HubError, case .refusal(let refusal) = error, error.definitiveRefusal || error.conflict {

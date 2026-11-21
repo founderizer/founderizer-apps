@@ -6,7 +6,7 @@ import UserNotifications
 
 @MainActor @Observable
 final class FleetNotifications: NSObject, UNUserNotificationCenterDelegate {
-    private(set) var enabled = UserDefaults.standard.bool(forKey: "notifyNeedsYou")
+    private(set) var enabled = AppDefaults.store.bool(forKey: "notifyNeedsYou")
     private(set) var status: String?
     /// The system's own words for why notifications are unavailable: behind the line, never in it.
     private(set) var cause: String?
@@ -18,7 +18,7 @@ final class FleetNotifications: NSObject, UNUserNotificationCenterDelegate {
     var showWindow: (() -> Void)?
 
     override init() {
-        ledger = UserDefaults.standard.data(forKey: "notificationLedger").flatMap { try? JSONDecoder().decode(NotificationLedger.self, from: $0) } ?? NotificationLedger()
+        ledger = AppDefaults.store.data(forKey: "notificationLedger").flatMap { try? JSONDecoder().decode(NotificationLedger.self, from: $0) } ?? NotificationLedger()
         super.init()
         center.delegate = self
     }
@@ -41,7 +41,7 @@ final class FleetNotifications: NSObject, UNUserNotificationCenterDelegate {
                 status = enabled ? nil : String(l10n: "Allow Founderizer notifications in System Settings.")
             } catch { status = String(l10n: "Notifications are unavailable."); cause = error.localizedDescription }
         }
-        UserDefaults.standard.set(enabled, forKey: "notifyNeedsYou")
+        AppDefaults.store.set(enabled, forKey: "notifyNeedsYou")
     }
 
     static func context(hub: URL, database: String) -> String {
@@ -56,7 +56,7 @@ final class FleetNotifications: NSObject, UNUserNotificationCenterDelegate {
         lastSnapshot = signature
         let new = ledger.observe(context: context, needs: state.needs, manager: state.managerName)
         let newWarning = ledger.observeWarning(context: context, warning: state.manager_warning)
-        if let data = try? JSONEncoder().encode(ledger) { UserDefaults.standard.set(data, forKey: "notificationLedger") }
+        if let data = try? JSONEncoder().encode(ledger) { AppDefaults.store.set(data, forKey: "notificationLedger") }
         var open = Set(state.needs.filter(\.isOpen).map { "\(context)/\($0.id)" })
         if let warning { open.insert("\(context)/warning/\(warning)") }
         NSApplication.shared.dockTile.badgeLabel = open.isEmpty ? nil : String(open.count)

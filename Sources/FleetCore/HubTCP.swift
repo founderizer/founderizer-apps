@@ -92,7 +92,7 @@ public enum HubTCP {
     /// run, as the vault's own tries do, so a run that waited for its time-out still waits 10 minutes before the next.
     public static func round(_ reading: VaultReading?, hub: URL, release: String?, tries: VaultTries?,
                              now: @Sendable () -> Double = { Date().timeIntervalSince1970 },
-                             in defaults: UserDefaults = .standard,
+                             in defaults: UserDefaults = AppDefaults.store,
                              run: @Sendable (String) async throws -> String) async -> VaultTries? {
         guard let reading, hasStep(release: release) != false,
               isDue(hub: hub, fleet: reading.fleetID, db: reading.db, tries: tries, now: now(), in: defaults),
@@ -111,7 +111,7 @@ public enum HubTCP {
     static let doneKey = "hubTCPDone"
 
     /// This Mac finished the step on this hub of this fleet, in this generation of the hub.
-    public static func isDone(hub: URL, fleet: String, db: String, in defaults: UserDefaults = .standard) -> Bool {
+    public static func isDone(hub: URL, fleet: String, db: String, in defaults: UserDefaults = AppDefaults.store) -> Bool {
         (defaults.dictionary(forKey: doneKey) as? [String: Double])?[name(hub, fleet, db)] != nil
     }
 
@@ -121,7 +121,7 @@ public enum HubTCP {
     /// again on that hub, also when its owner later takes the value off by hand. A new generation of the hub (a
     /// restore, or a new install at the same address) gets one more run, which costs the check alone.
     public static func isDue(hub: URL, fleet: String?, db: String, tries: VaultTries?, now: Double,
-                             in defaults: UserDefaults = .standard) -> Bool {
+                             in defaults: UserDefaults = AppDefaults.store) -> Bool {
         guard let fleet, CentralVault.isFleet(fleet), !db.isEmpty else { return false }
         return !isDone(hub: hub, fleet: fleet, db: db, in: defaults) && (tries?.isDue(at: now) ?? true)
     }
@@ -129,7 +129,7 @@ public enum HubTCP {
     /// What one run leaves: a done step is kept for the hub, and every other outcome is one more try. A run that finds no
     /// step is a try too, so such a hub gets at most 6 runs until the app starts again or the hub takes another release.
     public static func keep(_ outcome: Outcome, hub: URL, fleet: String, db: String, after tries: VaultTries?,
-                            at now: Double, in defaults: UserDefaults = .standard) -> VaultTries? {
+                            at now: Double, in defaults: UserDefaults = AppDefaults.store) -> VaultTries? {
         switch outcome {
         case .done:
             var all = defaults.dictionary(forKey: doneKey) as? [String: Double] ?? [:]

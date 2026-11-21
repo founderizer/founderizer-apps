@@ -141,7 +141,7 @@ final class FirstRunModel {
     /// **The manager's name, as the owner typed it on "Name your manager"**: the name that the page had the last time
     /// on this Mac, or the suggested one. It is kept on this Mac from Continue on, so a new start of the app does not
     /// ask for it again with an empty field.
-    var managerName = UserDefaults.standard.string(forKey: FirstRunModel.nameKey) ?? ManagerName.suggested
+    var managerName = AppDefaults.store.string(forKey: FirstRunModel.nameKey) ?? ManagerName.suggested
     static let nameKey = "firstRunManagerName"
     /// The owner went on from "Name your manager" in this first run: its pages show their steps, and the hub's
     /// installer gets the name. False for a first run that opens on a later page with no name (`-firstRunStep`):
@@ -168,7 +168,7 @@ final class FirstRunModel {
     /// Continue of "Name your manager": on to the manager's AI provider.
     func nameChosen() {
         guard ManagerName.agentName(managerName) != nil else { return }
-        UserDefaults.standard.set(ManagerName.shown(managerName), forKey: Self.nameKey)
+        AppDefaults.store.set(ManagerName.shown(managerName), forKey: Self.nameKey)
         named = true
         start(.aiProvider)
     }
@@ -179,7 +179,7 @@ final class FirstRunModel {
     /// **The manager's AI provider, as the owner chose it on its page**: the one that the page had the last time on this
     /// Mac, or none. It is kept on this Mac from the press on, so that the card that he chose keeps its check mark
     /// after Back and after a new start of the app.
-    private(set) var aiProvider = UserDefaults.standard.string(forKey: FirstRunModel.aiKey).flatMap {
+    private(set) var aiProvider = AppDefaults.store.string(forKey: FirstRunModel.aiKey).flatMap {
         FirstRunModel.aiChoices.contains($0) ? $0 : nil
     }
     static let aiKey = "firstRunAIProvider"
@@ -194,7 +194,7 @@ final class FirstRunModel {
     func aiChosen(_ provider: String) {
         guard Self.aiChoices.contains(provider) else { return }
         aiProvider = provider
-        UserDefaults.standard.set(provider, forKey: Self.aiKey)
+        AppDefaults.store.set(provider, forKey: Self.aiKey)
         choseAI = true
         start(.servers)
     }
@@ -204,7 +204,7 @@ final class FirstRunModel {
     /// two steps build the same fleet at first, the hub's server and the manager's own: they differ when the second
     /// agent comes. The hub's installer gets each step (`InstallPlan.hub`'s `shape`), and a hub with the feature
     /// `fleet_shape` keeps it; this Mac keeps the choice too, for the page's next opening.
-    var serversStep = UserDefaults.standard.string(forKey: FirstRunModel.stepKey).flatMap(ServersStep.init(rawValue:)) ?? .two
+    var serversStep = AppDefaults.store.string(forKey: FirstRunModel.stepKey).flatMap(ServersStep.init(rawValue:)) ?? .two
     static let stepKey = "firstRunServersStep"
 
     /// **One server for all**: the owner came through the slider's page and chose its first step. The hub's installer
@@ -242,7 +242,7 @@ final class FirstRunModel {
     /// they are missing, as after a press on a card. Then the VPS page's own press needs neither, and the steps on
     /// Back's line never go back.
     func serversChosen() {
-        UserDefaults.standard.set(serversStep.rawValue, forKey: Self.stepKey)
+        AppDefaults.store.set(serversStep.rawValue, forKey: Self.stepKey)
         shaped = true
         choose(.cloud)
     }

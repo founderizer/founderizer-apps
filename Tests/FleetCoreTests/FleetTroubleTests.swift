@@ -455,21 +455,24 @@ struct FleetTroubleTests {
     /// A finding keeps the agent's name, which its page in the app goes by, and an agent's server can have another
     /// name: studio runs on mac-studio (review B, round 3, 30 October 2026). The prompt said "Server: studio", and
     /// "Machine: studio" before that, so step 1 sent his agent to a server that is not there. It names the server by
-    /// its own name and the agent apart, for a failed check and for a failed update alike.
+    /// its own name and the agent apart. A failed update is the owner's own press, Update fleet in Settings › System
+    /// status (21 November 2026), so it gives no agent a prompt: the prompt says "Carry out the fix line above", and an
+    /// agent cannot press a button of the owner's app.
     @Test func thePromptNamesTheServerByItsOwnNameAndTheAgentApart() throws {
         let studio = try machine("studio", over: ["machine": "mac-studio", "update": ["state": "failed"]])
         let found = read(machines: [studio], checklists: ["mac-studio": VerifyChecklist(checks: [
             .init(check: "services", state: "fail", says: "Studio is not running.",
                   fix: "Start it again on this server.", command: "systemctl --user restart fleet-studio")])])
-        for id in ["mac-studio/services", "studio/update"] {
-            let finding = try #require(found.findings.first { $0.id == id })
-            let text = TroublePrompt.text(for: finding, fleet: nil, revision: nil)
-            #expect(finding.takesAnAgent)
-            #expect(finding.machine == "studio")         // its page in the app, and the link to it
-            #expect(text.contains("\nServer: mac-studio\nAgent: Studio\nCheck: \(id)\n"))
-            #expect(!text.contains("Server: studio"))
-            #expect(text.contains("\n1. Reach the server named above,"))
-        }
+        let finding = try #require(found.findings.first { $0.id == "mac-studio/services" })
+        let text = TroublePrompt.text(for: finding, fleet: nil, revision: nil)
+        #expect(finding.takesAnAgent)
+        #expect(finding.machine == "studio")         // its page in the app, and the link to it
+        #expect(text.contains("\nServer: mac-studio\nAgent: Studio\nCheck: mac-studio/services\n"))
+        #expect(!text.contains("Server: studio"))
+        #expect(text.contains("\n1. Reach the server named above,"))
+        let update = try #require(found.findings.first { $0.id == "studio/update" })
+        #expect(update.machine == "studio" && update.server == "mac-studio")
+        #expect(!update.takesAnAgent)
     }
 
     // ------------------------------------------------------------ a server's checks, under the server's own name

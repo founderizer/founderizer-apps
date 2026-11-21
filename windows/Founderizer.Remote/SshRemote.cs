@@ -1,9 +1,11 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,7 +25,8 @@ namespace Founderizer.Remote;
 /// the greeting, the key exchange and each wait of the login); <c>ServerAliveInterval=30</c> is a keep-alive every 30
 /// seconds, so a server that went away ends the call as <see cref="RemoteFailure.Dropped"/> once the PC's network gives
 /// up on it; <c>BatchMode=yes</c> and <c>NumberOfPasswordPrompts=0</c> are a login with <c>call.Login</c> alone;
-/// <c>IdentitiesOnly=yes -i KEY</c> is <see cref="RemoteLogin.AppKey"/>; <c>StrictHostKeyChecking</c> is
+/// <c>IdentitiesOnly=yes -i KEY</c> is <see cref="RemoteLogin.AppKey"/>, or <see cref="RemoteLogin.KeyOnce"/> for the key
+/// that the owner picked (the Mac's <c>-i</c> with the file of "Choose key"); <c>StrictHostKeyChecking</c> is
 /// <see cref="HostKeyRule"/>, checked against <see cref="HostKeys"/> before anything is sent.
 ///
 /// The algorithms are the Mac's <c>ssh</c>'s (OpenSSH 10): no SHA-1 key exchange, no CBC cipher, no <c>ssh-rsa</c>
@@ -67,11 +70,20 @@ public sealed class SshRemote : IRemote
     /// <inheritdoc/>
     public async Task<RemoteResult> RunAsync(RemoteCall call, Action<string>? line, CancellationToken cancel)
     {
-        RemoteRules.Check(call);
-        lock (gate)
+        try
         {
-            ObjectDisposedException.ThrowIf(disposed, this);
-            running++;
+            RemoteRules.Check(call);
+            lock (gate)
+            {
+                ObjectDisposedException.ThrowIf(disposed, this);
+                running++;
+            }
+        }
+        catch
+        {
+            // A call that no server may get ends here: its password or the owner's key is cleared all the same.
+            call?.Login?.Clear();
+            throw;
         }
         try
         {
@@ -118,6 +130,7 @@ public sealed class SshRemote : IRemote
         private int refused;                       // a HostKeyVerdict that the host key check refused, plus one
         private byte[]? seed;
         private ED25519Key? key;
+        private OwnerKey? ownerKey;
         private Once? password;
         private readonly List<AuthenticationMethod> methods = [];
 
@@ -190,7 +203,10 @@ public sealed class SshRemote : IRemote
             }
         }
 
-        /// <summary>The login's methods: the app's key alone, or the password once (keyboard-interactive first, as the Mac).</summary>
+        /// <summary>
+        /// The login's methods: the app's key alone, the owner's key alone, or the password once (keyboard-interactive
+        /// first, as the Mac). The caller's arrays are cleared here, before anything connects.
+        /// </summary>
         private void Login()
         {
             var user = call.Target.User;
@@ -210,8 +226,21 @@ public sealed class SshRemote : IRemote
                     methods.Add(new OnceKeyboardInteractive(user, password));
                     methods.Add(new OncePassword(user, password));
                     break;
+                case RemoteLogin.KeyOnce once:
+                    OwnerKeyCheck state;
+                    try { state = OpenOwnerKey(once.KeyFile, once.Passphrase, out ownerKey); }
+                    finally { once.Clear(); }
+                    if (ownerKey is null)
+                        throw new ArgumentException(state switch
+                        {
+                            OwnerKeyCheck.NeedsPassphrase => "The owner's key has a passphrase, and the call gave none.",
+                            OwnerKeyCheck.WrongPassphrase => "The passphrase that the call gave does not open the owner's key.",
+                            _ => "The owner's file is not a private key that the app reads.",
+                        } + " Check it with OwnerKeyFile.Check first.", nameof(call));
+                    methods.Add(new PrivateKeyAuthenticationMethod(user, ownerKey));
+                    break;
                 default:
-                    throw new ArgumentException("A login is the app's key or a password.", nameof(call));
+                    throw new ArgumentException("A login is the app's key, the owner's key or a password.", nameof(call));
             }
         }
 
@@ -316,12 +345,13 @@ public sealed class SshRemote : IRemote
         private RemoteResult Result(int? status, RemoteFailure? failure) =>
             new(status, printed.Text(Printed.Out), printed.Text(Printed.Err), failure);
 
-        /// <summary>Clears every secret of the call: the password's bytes and text, and the app key's private half.</summary>
+        /// <summary>Clears every secret of the call: the password's bytes and text, the app key's private half, the owner's key.</summary>
         private void Release()
         {
             password?.Clear();
             if (seed is not null) Array.Clear(seed);
             if (key is not null) Array.Clear(key.PrivateKey);
+            ownerKey?.Dispose();
             foreach (var method in methods) Quietly(method.Dispose);
         }
 
@@ -361,6 +391,185 @@ public sealed class SshRemote : IRemote
         try { action(); } catch (Exception) { }
     }
 
+    /// <summary>
+    /// Overwrites a string of the call's own (never one that the runtime shares or interns), as far as .NET lets a
+    /// program reach the memory it used: a copy that the garbage collector made when it moved the string stays.
+    /// </summary>
+    private static void Overwrite(string? text)
+    {
+        if (text is { Length: > 0 })
+            MemoryMarshal.CreateSpan(ref Unsafe.AsRef(in text.GetPinnableReference()), text.Length).Clear();
+    }
+
+    /// <summary>The PEM label of PKCS#8's encrypted form, whose reader gives no word of its own for a missing passphrase.</summary>
+    private static ReadOnlySpan<byte> EncryptedPkcs8 => "-----BEGIN ENCRYPTED PRIVATE KEY-----"u8;
+
+    /// <summary>
+    /// **The owner's key file** (<see cref="OwnerKeyFile.Check"/>, <see cref="RemoteLogin.KeyOnce"/>): what it is, and
+    /// the key when it is <see cref="OwnerKeyCheck.Usable"/>, for the caller to dispose. It changes neither array. The
+    /// passphrase goes to SSH.NET as a string of its own (SSH.NET takes no other form), which is overwritten when the
+    /// read ends. SSH.NET's own copies are not reached: the file's text as a string, its decoded and its decrypted
+    /// bytes, the passphrase's UTF-8 bytes or characters inside its key derivation, and an RSA key's numbers. They are
+    /// garbage when the read or the call ends and stay in the process's memory until the runtime uses that memory again.
+    /// </summary>
+    internal static OwnerKeyCheck OpenOwnerKey(byte[]? file, char[]? passphrase, out OwnerKey? key)
+    {
+        key = null;
+        if (file is null || file.Length is 0 or > OwnerKeyFile.MaxLength) return OwnerKeyCheck.NotAKey;
+        var pkcs8 = file.AsSpan().IndexOf(EncryptedPkcs8) >= 0;
+        try
+        {
+            key = OwnerKey.Proven(ParseKey(file, null));
+            return key is null ? OwnerKeyCheck.NotAKey : OwnerKeyCheck.Usable;
+        }
+        catch (SshPassPhraseNullOrEmptyException) { }                   // OpenSSH, PEM, PuTTY, ssh.com
+        catch (Exception) when (pkcs8) { }                              // PKCS#8: BouncyCastle's own error
+        catch (Exception) { return OwnerKeyCheck.NotAKey; }
+
+        // SSH.NET reads the type of an encrypted key only once it has decrypted it, so a key of a type that it does not
+        // take (DSA, a security key's) would read as a wrong passphrase for ever. OpenSSH's format and PuTTY's keep
+        // the type in clear text, and it says so first.
+        if (ClearType(file) is { } type && Array.IndexOf(ReadTypes, type) < 0) return OwnerKeyCheck.NotAKey;
+
+        if (passphrase is not { Length: > 0 }) return OwnerKeyCheck.NeedsPassphrase;
+        // PKCS#8's PBES2 derives its key from the passphrase's UTF-8 bytes (OpenSSL and LibreSSL write it so), and
+        // BouncyCastle, which reads it for SSH.NET, from one byte of each character. So a passphrase with a letter
+        // outside ASCII goes to it once more, as one character for each of its UTF-8 bytes.
+        var tries = new List<string>(2) { new(passphrase) };
+        if (pkcs8 && Array.Exists(passphrase, c => c > '\x7f')) tries.Add(OneCharacterForEachByte(passphrase));
+        var state = OwnerKeyCheck.WrongPassphrase;
+        try
+        {
+            foreach (var text in tries)
+            {
+                try
+                {
+                    key = OwnerKey.Proven(ParseKey(file, text));
+                    if (key is not null) return OwnerKeyCheck.Usable;
+                }
+                catch (NotSupportedException) { state = OwnerKeyCheck.NotAKey; }   // a type that SSH.NET does not take
+                catch (Exception) { }
+            }
+            return state;
+        }
+        finally
+        {
+            foreach (var text in tries) Overwrite(text);
+        }
+    }
+
+    /// <summary>The key types that SSH.NET's readers take.</summary>
+    private static readonly string[] ReadTypes =
+        ["ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "ssh-rsa"];
+
+    /// <summary>
+    /// The key's type where its file keeps it in clear text before the encrypted part: PuTTY's first line, and the first
+    /// public key of OpenSSH's own format. Null for another format, or a file that does not read so. Called for an
+    /// encrypted file only, so what it decodes is the public key and the encrypted part.
+    /// </summary>
+    private static string? ClearType(byte[] file)
+    {
+        var bytes = file.AsSpan();
+        try
+        {
+            if (bytes.StartsWith("PuTTY-User-Key-File-"u8))
+            {
+                var line = bytes[..Math.Max(0, bytes.IndexOfAny((byte)'\r', (byte)'\n'))];
+                var colon = line.IndexOf(": "u8);
+                return colon < 0 ? null : Encoding.ASCII.GetString(line[(colon + 2)..]);
+            }
+            var begin = bytes.IndexOf(OpenSshBegin);
+            var end = bytes.IndexOf("-----END OPENSSH PRIVATE KEY-----"u8);
+            if (begin < 0 || end < begin) return null;
+            var blob = Convert.FromBase64String(Encoding.ASCII.GetString(bytes[(begin + OpenSshBegin.Length)..end]));
+            var magic = "openssh-key-v1\0"u8;
+            if (!blob.AsSpan().StartsWith(magic)) return null;
+            var at = magic.Length;
+            for (var field = 0; field < 3; field++)          // the cipher, the key derivation and its options
+                at += 4 + (int)BinaryPrimitives.ReadUInt32BigEndian(blob.AsSpan(at));
+            at += 4 + 4;                                     // the number of keys; the length of the first public key
+            var length = (int)BinaryPrimitives.ReadUInt32BigEndian(blob.AsSpan(at));
+            return length is < 1 or > 64 ? null : Encoding.ASCII.GetString(blob, at + 4, length);
+        }
+        catch (Exception) { return null; }
+    }
+
+    private static ReadOnlySpan<byte> OpenSshBegin => "-----BEGIN OPENSSH PRIVATE KEY-----"u8;
+
+    /// <summary>The passphrase's UTF-8 bytes, each as the character of the same number.</summary>
+    private static string OneCharacterForEachByte(char[] passphrase)
+    {
+        var bytes = Encoding.UTF8.GetBytes(passphrase);
+        try
+        {
+            return string.Create(bytes.Length, bytes, static (chars, b) =>
+            {
+                for (var i = 0; i < b.Length; i++) chars[i] = (char)b[i];
+            });
+        }
+        finally { Array.Clear(bytes); }
+    }
+
+    private static PrivateKeyFile ParseKey(byte[] file, string? passphrase)
+    {
+        using var stream = new MemoryStream(file, writable: false);
+        return new PrivateKeyFile(stream, passphrase);
+    }
+
+    /// <summary>
+    /// The owner's key as the login offers it: the ways of signing of the Mac's <c>ssh</c> (OpenSSH 10), so an RSA key
+    /// signs with SHA-2 only (<c>rsa-sha2-512</c>, then <c>rsa-sha2-256</c>) and never with SHA-1 (<c>ssh-rsa</c>).
+    /// </summary>
+    internal sealed class OwnerKey : IPrivateKeySource, IDisposable
+    {
+        private readonly PrivateKeyFile file;
+        private readonly List<HostAlgorithm> algorithms;
+        private int disposed;
+
+        private OwnerKey(PrivateKeyFile file, List<HostAlgorithm> algorithms)
+        {
+            this.file = file;
+            this.algorithms = algorithms;
+        }
+
+        public IReadOnlyCollection<HostAlgorithm> HostKeyAlgorithms => algorithms;
+
+        /// <summary>The key once it has signed and its own signature checks; else null, and the file is disposed.</summary>
+        internal static OwnerKey? Proven(PrivateKeyFile file)
+        {
+            try
+            {
+                var algorithms = new List<HostAlgorithm>();
+                foreach (var algorithm in file.HostKeyAlgorithms)
+                    if (algorithm.Name != "ssh-rsa") algorithms.Add(algorithm);
+                if (algorithms.Count > 0)
+                {
+                    var data = RandomNumberGenerator.GetBytes(32);
+                    if (algorithms[0].VerifySignature(data, algorithms[0].Sign(data))) return new OwnerKey(file, algorithms);
+                }
+            }
+            catch (Exception) { }
+            Clear(file);
+            return null;
+        }
+
+        /// <summary>Overwrites the private parts that SSH.NET keeps as arrays, and lets the system's key objects go.</summary>
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref disposed, 1) == 0) Clear(file);
+        }
+
+        private static void Clear(PrivateKeyFile file)
+        {
+            switch (file.Key)
+            {
+                case ED25519Key ed25519: Array.Clear(ed25519.PrivateKey); break;
+                case EcdsaKey { PrivateKey: { } d }: Array.Clear(d); break;
+            }
+            Quietly(file.Dispose);
+        }
+    }
+
     /// <summary>A password that the call sends once at most, by whichever method the server asks for first.</summary>
     private sealed class Once(byte[] bytes)
     {
@@ -386,8 +595,7 @@ public sealed class SshRemote : IRemote
         public void Clear()
         {
             Array.Clear(bytes);
-            if (text is { Length: > 0 })
-                MemoryMarshal.CreateSpan(ref Unsafe.AsRef(in text.GetPinnableReference()), text.Length).Clear();
+            Overwrite(text);
         }
     }
 

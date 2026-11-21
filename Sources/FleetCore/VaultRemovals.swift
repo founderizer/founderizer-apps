@@ -55,7 +55,7 @@ public struct VaultRemovals: Codable, Equatable, Sendable {
 
     /// The file of this Mac's record: in the app's own folder, beside its other files.
     public static var file: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppFolders.support
             .appendingPathComponent("Founderizer/vault-removals.json")
     }
 

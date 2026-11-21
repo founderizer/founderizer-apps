@@ -118,6 +118,11 @@ struct NeedAnswerBox: View {
     @State private var cursorToClarify = false
     /// He chose to keep what looks like a key in this message, as `keyAllowed` in his answer.
     @State private var clarifyKeyAllowed = false
+    /// On a step, the keys that came while the field of Needs clarification had no cursor yet: they go to it once it
+    /// has the cursor (`key`, `awaitClarifyCursor`).
+    @State private var clarifyHeld: [NSEvent] = []
+    /// On a step, from the press of Needs clarification until the field's editor has the keys: the page's keys wait.
+    @State private var awaitingClarifyCursor = false
     /// The card takes his message under it (`OwnerNeed.clarifies`): the hub says so, and the item is open.
     private var clarifies: Bool { need.clarifies(features: store.state?.ui_features) }
     /// His talk over the answers of an open item in a chat's card (`OwnerNeed.shownTalk`). An answered chat card shows
@@ -416,6 +421,16 @@ struct NeedAnswerBox: View {
     /// its option, and Return sends the ticked ones. With nothing marked or ticked, Return puts the cursor in Your
     /// answer.
     private func key(_ event: NSEvent) -> Bool {
+        // **From the press of Needs clarification until its field has the cursor, the step's keys are its words** (the
+        // owner, 21 November 2026: "I clicked on discuss and typed, dont remember where"; on his busy Mac the keys came
+        // before the field took them, and "2" and Return pressed option 2): a key waits and goes to the field once it
+        // has the cursor, so a number marks no option and Return presses none (`awaitClarifyCursor`). After that the
+        // page's keys are as before, also after Escape leaves the field.
+        if awaitingClarifyCursor {
+            clarifyHeld.append(event)
+            clarifyFocused = true
+            return true
+        }
         let choices = need.choices
         if let digit = event.charactersIgnoringModifiers.flatMap({ Int($0) }), (1...9).contains(digit) {
             // A number with no option is a key as any other: the mark goes.
@@ -616,6 +631,44 @@ extension NeedAnswerBox {
         guard !(onStep && SecondClick.isNow) else { return }
         clarifying = true
         cursorToClarify = true
+        // **The keys leave the field that has them at once, and the next ones are the card's** (the owner, 21 November
+        // 2026, of his first message under a card: "I clicked on discuss and typed, dont remember where"; his words went
+        // to the chat's box, which kept the keys until the field came): until this field takes them, a chat sends a key
+        // that it would send to its box here (`FleetStore.clarifying`, `FleetView.typeIntoBox`), and a step's keys wait
+        // for it (`key`).
+        if let window = NSApp.keyWindow ?? NSApp.windows.first(where: \.isKeyWindow), window.firstResponder is NSTextView {
+            window.makeFirstResponder(nil)
+        }
+        if onStep { awaitClarifyCursor() } else { store.clarifying = (need.id, clarifyText) }
+    }
+
+    /// The chat's open Needs clarification field is no longer this one (sent, closed, or gone from the chat).
+    private func leaveClarify() {
+        if store.clarifying?.need == need.id { store.clarifying = nil }
+    }
+
+    /// **On a step, the page's keys wait for the field until its editor has the keys**, up to 2 s at the pace of a draw,
+    /// as a chat's box waits for its field (`ComposerCaret`): then the keys that waited go to it, first in the queue and
+    /// in their order, and the page leaves a key to a field that has the cursor (`PageKeys`). A field that never takes
+    /// the cursor drops them, so that no key of his words reaches the options.
+    private func awaitClarifyCursor() {
+        awaitingClarifyCursor = true
+        Task { @MainActor in
+            for _ in 0..<100 {
+                guard awaitingClarifyCursor else { return }
+                if let window = NSApp.keyWindow ?? NSApp.windows.first(where: \.isKeyWindow),
+                   let editor = window.firstResponder as? NSTextView, editor.isFieldEditor {
+                    awaitingClarifyCursor = false
+                    let keys = clarifyHeld
+                    clarifyHeld = []
+                    for key in keys.reversed() { NSApp.postEvent(key, atStart: true) }
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            awaitingClarifyCursor = false
+            clarifyHeld = []
+        }
     }
 
     /// **The field of Needs clarification**, as the key card's: the box of his answer with no files and no replies, its
@@ -640,6 +693,8 @@ extension NeedAnswerBox {
                     .composerField(alone: true, lines: 1...8, font: onStep ? SetupMetrics.textFont : ChatStyle.font,
                                    line: onStep ? Self.stepLine : ChatStyle.line)
                     .onChange(of: clarifyText) { _, now in
+                        // the chat's box sends a key here once the field has these words (`FleetView.typeIntoBox`)
+                        if store.clarifying?.need == need.id { store.clarifying = (need.id, now) }
                         // kept while the card is open, in memory: never words that look like a key
                         let kept = now.trimmingCharacters(in: .whitespacesAndNewlines)
                         Self.clarifyDrafts[clarifyDraftKey] = kept.isEmpty || KeyInText.contains(now) ? nil : now
@@ -671,6 +726,9 @@ extension NeedAnswerBox {
         // The cursor comes once the field stands, as the key card's field takes it: set in the press that makes the
         // field, it could stay where it was.
         .task { if cursorToClarify { clarifyFocused = true; cursorToClarify = false } }
+        // a key that the chat would have sent to its box (`FleetStore.clarifyKeys`): this field takes the keyboard
+        .onChange(of: store.clarifyKeys) { _, _ in if store.clarifying?.need == need.id { clarifyFocused = true } }
+        .onDisappear { leaveClarify(); clarifyHeld = []; awaitingClarifyCursor = false }
     }
 
     /// His message goes to the manager, and the item stays open (`OwnerCommand.needTalk`). Once the hub has it, the
@@ -691,6 +749,7 @@ extension NeedAnswerBox {
             if sent || (store.pending?.command == command && store.pending?.refusal == nil) {
                 clarifyText = ""
                 clarifying = false
+                leaveClarify()
                 Self.clarifyDrafts[clarifyDraftKey] = nil
             }
             clarifySending = false

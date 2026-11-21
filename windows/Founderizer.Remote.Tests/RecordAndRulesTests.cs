@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -97,5 +98,37 @@ public sealed class RecordAndRulesTests
                                   new RemoteLogin.AppKey(), HostKeyRule.TakeNew, RemoteCall.ConnectTimeout);
         await Assert.ThrowsExactlyAsync<ArgumentException>(() => app.Remote.RunAsync(call, null, CancellationToken.None));
         Assert.AreEqual(0, app.KeyReads);
+    }
+
+    /// <summary>
+    /// A call that no server may get (a rule that it breaks, or an SshRemote that was disposed) still clears the
+    /// password and the owner's key that it was given, because the caller leaves that to the call. Bug: the owner's
+    /// password or key stays in the PC's memory after a call that ended before it started.
+    /// </summary>
+    [TestMethod]
+    public async Task A_call_that_ends_before_it_starts_clears_its_secrets()
+    {
+        var app = new App();
+        var target = new RemoteTarget("127.0.0.1", 22, "root");
+        var password = "Tést-password".ToCharArray();
+        var file = Encoding.ASCII.GetBytes("-----BEGIN OPENSSH PRIVATE KEY-----\n");
+        var passphrase = "Pâss-words".ToCharArray();
+        foreach (var login in new RemoteLogin[] { new RemoteLogin.PasswordOnce(password), new RemoteLogin.KeyOnce(file, passphrase) })
+        {
+            var broken = new RemoteCall(target, "echo one\r\n", null, login, HostKeyRule.TakeNew, RemoteCall.ConnectTimeout);
+            await Assert.ThrowsExactlyAsync<ArgumentException>(() => app.Remote.RunAsync(broken, null, CancellationToken.None));
+        }
+        Assert.IsTrue(password.All(c => c == '\0') && file.All(b => b == 0) && passphrase.All(c => c == '\0'),
+                      "A call that broke a rule kept its secrets.");
+
+        await app.DisposeAsync();
+        password = "Tést-password".ToCharArray();
+        file = Encoding.ASCII.GetBytes("-----BEGIN OPENSSH PRIVATE KEY-----\n");
+        foreach (var login in new RemoteLogin[] { new RemoteLogin.PasswordOnce(password), new RemoteLogin.KeyOnce(file, null) })
+        {
+            var late = new RemoteCall(target, "echo one", null, login, HostKeyRule.TakeNew, RemoteCall.ConnectTimeout);
+            await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => app.Remote.RunAsync(late, null, CancellationToken.None));
+        }
+        Assert.IsTrue(password.All(c => c == '\0') && file.All(b => b == 0), "A call after the end kept its secrets.");
     }
 }

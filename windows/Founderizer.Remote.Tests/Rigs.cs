@@ -18,7 +18,7 @@ namespace Founderizer.Remote.Tests;
 internal static class Local
 {
     public static (int Status, string Output) Run(string program, IEnumerable<string> arguments, string? input = null,
-                                                   int seconds = 120)
+                                                   int seconds = 120, IReadOnlyDictionary<string, string>? environment = null)
     {
         var start = new ProcessStartInfo(program)
         {
@@ -28,6 +28,7 @@ internal static class Local
             UseShellExecute = false,
         };
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>()) start.Environment[name] = value;
         using var process = Process.Start(start)!;
         var output = process.StandardOutput.ReadToEndAsync();
         var errors = process.StandardError.ReadToEndAsync();
@@ -41,9 +42,10 @@ internal static class Local
         return (process.ExitCode, output.Result + errors.Result);
     }
 
-    public static string Must(string program, IEnumerable<string> arguments, string? input = null, int seconds = 120)
+    public static string Must(string program, IEnumerable<string> arguments, string? input = null, int seconds = 120,
+                              IReadOnlyDictionary<string, string>? environment = null)
     {
-        var (status, output) = Run(program, arguments, input, seconds);
+        var (status, output) = Run(program, arguments, input, seconds, environment);
         if (status != 0) throw new InvalidOperationException($"{program} {string.Join(' ', arguments)} answered {status}: {output}");
         return output;
     }
@@ -324,19 +326,20 @@ internal sealed class Closing : IDisposable
 /// <c>founder</c> (bash) gets the test's password through <c>chpasswd</c>'s standard input, never an argument; the user
 /// <c>tcshuser</c> has tcsh as its login shell; both take the app's key. Port 22 takes keyboard-interactive and password,
 /// as a VPS does; port 2222 takes the password method alone. The container goes when the test ends; the image stays,
-/// as a cache, under the name below (about 160 MB).
+/// as a cache, under the name below (about 165 MB). The image also has PuTTY's puttygen, which makes the
+/// <c>.ppk</c> keys of <see cref="OwnerKeys.Puttygen"/>.
 /// </summary>
 internal sealed class ContainerSshd : IDisposable
 {
-    public const string Image = "founderizer-remote-test-sshd:2";
+    public const string Image = "founderizer-remote-test-sshd:3";
     public const string User = "founder";
     public const string TcshUser = "tcshuser";
-    private const string Docker = "/usr/local/bin/docker";
+    internal const string Docker = "/usr/local/bin/docker";
 
     private const string Dockerfile = """
         FROM ubuntu:24.04
         RUN apt-get update \
-         && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server sudo tcsh \
+         && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server sudo tcsh putty-tools \
          && rm -rf /var/lib/apt/lists/* \
          && mkdir -p /run/sshd \
          && useradd -m -s /bin/bash founder && useradd -m -s /usr/bin/tcsh tcshuser \
@@ -356,11 +359,17 @@ internal sealed class ContainerSshd : IDisposable
             Assert.Inconclusive("This machine has no Docker that runs.");
     }
 
-    public ContainerSshd(string password, string authorizedLine)
+    /// <summary>Docker that runs, and the image: built once from the text above, then kept.</summary>
+    public static void RequireImage()
     {
         RequireOrSkip();
         if (Local.Run(Docker, ["image", "inspect", Image]).Status != 0)
             Local.Must(Docker, ["build", "-t", Image, "-"], Dockerfile, seconds: 600);
+    }
+
+    public ContainerSshd(string password, string authorizedLine)
+    {
+        RequireImage();
         Local.Must(Docker, ["run", "-d", "--name", Name, "-p", "127.0.0.1::22", "-p", "127.0.0.1::2222", Image]);
         try
         {
@@ -417,4 +426,93 @@ internal sealed class ContainerSshd : IDisposable
     }
 
     public void Dispose() => Local.Run(Docker, ["rm", "-f", Name], seconds: 60);
+}
+
+/// <summary>
+/// **The owner's keys of a test**, each made by the tool that owners use and read back as bytes: this machine's
+/// <c>ssh-keygen</c> (OpenSSH's own format, and PEM by <c>-m PEM</c> and <c>-m PKCS8</c>) in a folder that goes with
+/// the call; and in a container of the test image that goes with its run, Ubuntu's <c>ssh-keygen</c> (with OpenSSL 3)
+/// and PuTTY's <c>puttygen</c> (<c>.ppk</c>). A passphrase reaches each tool on its standard input alone, never in an
+/// argument, a variable or a file: <c>ssh-keygen</c> asks a helper for it (<c>SSH_ASKPASS_REQUIRE=force</c>, so it
+/// never asks a terminal), and the helper reads one line of the standard input that it shares with
+/// <c>ssh-keygen</c>; <c>puttygen</c> reads it from <c>/dev/stdin</c>.
+/// </summary>
+internal static class OwnerKeys
+{
+    private const string Keygen = "/usr/bin/ssh-keygen";
+
+    /// <summary>The bytes of a private key's file, and the public line for <c>authorized_keys</c>.</summary>
+    public sealed record Made(byte[] File, string PublicLine);
+
+    /// <summary>A passphrase of the test alone, with a letter outside ASCII, so each tool and SSH.NET must agree on UTF-8.</summary>
+    public static string NewPassphrase() =>
+        "Pâss-" + Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(12)).Replace('/', '_').Replace('+', '-');
+
+    /// <summary>A key of <c>ssh-keygen -t type [-m format]</c>, with this passphrase or none.</summary>
+    public static Made Make(string type, string? format, string? passphrase)
+    {
+        ScratchSshd.RequireOrSkip();
+        var folder = Local.Folder("founderizer-owner-key");
+        try
+        {
+            var askpass = Path.Combine(folder, "askpass");
+            File.WriteAllText(askpass, "#!/bin/sh\nIFS= read -r line && printf '%s\\n' \"$line\"\n");
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(askpass, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            var key = Path.Combine(folder, "key");
+            var arguments = new List<string> { "-q", "-t", type, "-C", "owner@example.com", "-f", key };
+            if (format is not null) arguments.AddRange(["-m", format]);
+            if (passphrase is null)
+            {
+                arguments.AddRange(["-N", ""]);
+                Local.Must(Keygen, arguments);
+            }
+            else
+            {
+                Local.Must(Keygen, arguments, passphrase + "\n" + passphrase + "\n",
+                           environment: new Dictionary<string, string> { ["SSH_ASKPASS"] = askpass, ["SSH_ASKPASS_REQUIRE"] = "force" });
+            }
+            return new Made(File.ReadAllBytes(key), PublicLine(File.ReadAllText(key + ".pub")));
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    /// <summary>A key of <c>puttygen -t type [-b bits]</c> in PPK's version 2 or 3, with this passphrase or none.</summary>
+    public static Made Puttygen(string type, int? bits, int version, string? passphrase)
+    {
+        var make = $"puttygen -q -t {type}{(bits is { } b ? $" -b {b}" : "")} -C owner@example.com -o k --ppk-param version={version}";
+        return InImage((passphrase is null ? make + " --new-passphrase /dev/null"
+                                           : $"IFS= read -r p; printf '%s\\n' \"$p\" | {make} --new-passphrase /dev/stdin")
+                       + "; cat k; echo =====; puttygen k -L",
+                       passphrase is null ? "" : passphrase + "\n");
+    }
+
+    /// <summary>A key of Ubuntu's <c>ssh-keygen -t type [-m format]</c> (OpenSSH 9.6 with OpenSSL 3), with this passphrase or none.</summary>
+    public static Made KeygenInImage(string type, string? format, string? passphrase)
+    {
+        var make = $"ssh-keygen -q -t {type}{(format is null ? "" : " -m " + format)} -C owner@example.com -f k";
+        return InImage((passphrase is null ? make + " -N ''"
+                                           : "printf '#!/bin/sh\\nIFS= read -r l && printf \"%%s\\\\n\" \"$l\"\\n' > a; chmod 700 a; "
+                                             + "SSH_ASKPASS=/tmp/a SSH_ASKPASS_REQUIRE=force " + make)
+                       + "; cat k; echo =====; cat k.pub",
+                       passphrase is null ? "" : passphrase + "\n" + passphrase + "\n");
+    }
+
+    /// <summary>Runs a script in /tmp of a new container with no network, and reads its key file and its public line.</summary>
+    private static Made InImage(string script, string input)
+    {
+        ContainerSshd.RequireImage();
+        var output = Local.Must(ContainerSshd.Docker, ["run", "--rm", "-i", "--network", "none", ContainerSshd.Image, "/bin/sh", "-c",
+                                                       "set -e; cd /tmp; " + script], input, seconds: 180);
+        var at = output.IndexOf("=====\n", StringComparison.Ordinal);
+        if (at < 0) throw new InvalidOperationException("The image made no key: " + output);
+        return new Made(Encoding.UTF8.GetBytes(output[..at]), PublicLine(output[(at + 6)..]));
+    }
+
+    /// <summary>"type base64" of a public line, without its comment.</summary>
+    private static string PublicLine(string line)
+    {
+        var parts = line.Trim().Split(' ');
+        return parts[0] + " " + parts[1];
+    }
 }

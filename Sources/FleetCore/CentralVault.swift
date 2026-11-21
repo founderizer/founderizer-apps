@@ -420,11 +420,11 @@ public final class VaultClient: Sendable {
 public enum CentralVaultPins {
     static let key = "centralVaultPins"
 
-    public static func recipient(hub: URL, fleet: String, in defaults: UserDefaults = .standard) -> String? {
+    public static func recipient(hub: URL, fleet: String, in defaults: UserDefaults = AppDefaults.store) -> String? {
         (defaults.dictionary(forKey: key) as? [String: String])?[name(hub, fleet)]
     }
 
-    public static func pin(_ recipient: String, hub: URL, fleet: String, in defaults: UserDefaults = .standard) {
+    public static func pin(_ recipient: String, hub: URL, fleet: String, in defaults: UserDefaults = AppDefaults.store) {
         var all = defaults.dictionary(forKey: key) as? [String: String] ?? [:]
         all[name(hub, fleet)] = recipient
         defaults.set(all, forKey: key)

@@ -24,7 +24,7 @@ public protocol KeptRecord: Codable, Equatable, Sendable, Identifiable where ID 
 /// Where the app keeps its records: a folder of its own in `Application Support/Founderizer`.
 enum KeptRecordsPlace {
     static func folder(_ name: String) -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppFolders.support
             .appendingPathComponent("Founderizer").appendingPathComponent(name)
     }
 }

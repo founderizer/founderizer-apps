@@ -349,11 +349,11 @@ public enum ConnectGate {
         "connectTurn." + (hub.host ?? "") + (hub.port.map { ":\($0)" } ?? "")
     }
 
-    public static func kept(_ hub: URL, in defaults: UserDefaults = .standard) -> ConnectTurn? {
+    public static func kept(_ hub: URL, in defaults: UserDefaults = AppDefaults.store) -> ConnectTurn? {
         defaults.string(forKey: keptKey(hub)).flatMap(ConnectTurn.init(rawValue:))
     }
 
-    public static func keep(_ turn: ConnectTurn?, for hub: URL, in defaults: UserDefaults = .standard) {
+    public static func keep(_ turn: ConnectTurn?, for hub: URL, in defaults: UserDefaults = AppDefaults.store) {
         if let turn { defaults.set(turn.rawValue, forKey: keptKey(hub)) } else { defaults.removeObject(forKey: keptKey(hub)) }
     }
 

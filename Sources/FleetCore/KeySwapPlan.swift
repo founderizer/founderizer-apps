@@ -380,7 +380,7 @@ public struct KeySwapState: Codable, Equatable, Sendable {
     public mutating func setUpdate(_ update: KeySwapUpdate?, fleet: String) { updates[fleet] = update }
 
     public static var file: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppFolders.support
             .appendingPathComponent("Founderizer/key-swap.json")
     }
 

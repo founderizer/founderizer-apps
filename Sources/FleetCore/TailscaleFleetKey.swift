@@ -529,7 +529,7 @@ public enum PolicyPlace: Equatable, Sendable {
 
     /// Keeps the place as the key's step read it, for a line of a later install. It is no secret: Tailscale shows the
     /// same address on its Access controls page.
-    public func keep(in defaults: UserDefaults = .standard) {
+    public func keep(in defaults: UserDefaults = AppDefaults.store) {
         switch self {
         case .tailscale: defaults.set("tailscale", forKey: Self.key)
         case .tool(let link): defaults.set(link.map { "tool " + $0.absoluteString } ?? "tool", forKey: Self.key)
@@ -537,7 +537,7 @@ public enum PolicyPlace: Equatable, Sendable {
     }
 
     /// The place as the last key's step read it; nil on a Mac whose key is from before 13 November 2026.
-    public static func kept(in defaults: UserDefaults = .standard) -> PolicyPlace? {
+    public static func kept(in defaults: UserDefaults = AppDefaults.store) -> PolicyPlace? {
         guard let value = defaults.string(forKey: key) else { return nil }
         if value == "tailscale" { return .tailscale }
         guard value == "tool" || value.hasPrefix("tool ") else { return nil }

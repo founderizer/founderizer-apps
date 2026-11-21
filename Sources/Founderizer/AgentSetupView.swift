@@ -336,7 +336,7 @@ struct AgentSetupView: View {
                     }
                     Button(machine?.machine ?? String(l10n: "Open")) { store.destination = .server(machine?.machine ?? agent) }
                         .buttonStyle(FleetOutlineButtonStyle())
-                        .help("Its server: versions, network, security, updates and the server check")
+                        .help("Its server: system, Founderizer, security, CPU, memory, disk and agents")
                         .accessibilityIdentifier("settings-server")
                 }
             }

@@ -17,16 +17,19 @@ struct RefusalWordsVectorsTests {
     /// code that it does not know, and the code is named here so that the test that holds every other code to a case
     /// stays green meanwhile. A code in this list that has a case is a fault: the case takes it out of the list.
     /// Waiting now: `knowledge_unread` (a knowledge file that the hub cannot read now, 20 November 2026),
-    /// `profile_unread` (an agent's profile that the hub cannot read now, 20 November 2026) and
-    /// `signature_unchecked` (a phone's yes whose second check could not run, 20 November 2026). `repo_vendor` (a grant
-    /// of one of the product's own repositories) waited from 20 November 2026 until his "Yes, use it" of the same
+    /// `profile_unread` (an agent's profile that the hub cannot read now, 20 November 2026),
+    /// `signature_unchecked` (a phone's yes whose second check could not run, 20 November 2026) and
+    /// `about_unreadable` (a message about a task to an agent whose chat cannot read it, 21 November 2026).
+    /// `repo_vendor` (a grant of one of the product's own repositories) waited from 20 November 2026 until his "Yes,
+    /// use it" of the same
     /// day. The 29 that
     /// waited (`time_passed`, the seven of Google's Connect and Disconnect, the twelve of
     /// the MCP form, `server_name_kept`, the two of the sealed Google file and the six of Telegram) have their cases and
     /// their Spanish since the owner's "Yes, all 29" of 19 November 2026, so the test below holds each of them to the
     /// hub's vector and to the catalog. A new code of the hub is named here until his yes to the Spanish of its slice.
     /// The five of a Drive folder waited from 20 November 2026 until his "Yes, ship them" of the same day.
-    private static let waiting: Set<String> = ["knowledge_unread", "profile_unread", "signature_unchecked"]
+    private static let waiting: Set<String> = ["about_unreadable", "knowledge_unread", "profile_unread",
+                                                "signature_unchecked"]
 
     /// The codes that have a case: every code of the hub's table that is not waiting.
     private static func known(_ table: RefusalVectors.Table) -> [String] {

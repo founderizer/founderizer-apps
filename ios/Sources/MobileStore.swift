@@ -1408,8 +1408,19 @@ final class MobileStore {
 
     var agents: [MobileAgent] { snapshot?.agents ?? [] }
     var openNeeds: [OwnerNeed] { (snapshot?.needs ?? []).sorted { ($0.raised, $0.id) > ($1.raised, $1.id) } }
-    /// The newest answered items, for the folded cards of the chats (fix round 2, item 103).
-    var answeredNeeds: [OwnerNeed] { snapshot?.answered_needs ?? [] }
+    /// The newest answered items, for the folded cards of the chats (fix round 2, item 103) and the line of a row on
+    /// Chats (`ChatsPage.waitingRequest`), with none that a new item replaced (`answered(_:holding:)`).
+    var answeredNeeds: [OwnerNeed] { Self.answered(snapshot, holding: pending?.needID) }
+    /// **No card for a request that a new item replaced** (owner API 1.274, `replaced_by`; FleetCore's `drawn`, as the
+    /// Mac's chat draws its requests; the owner, 20 November 2026, of a chat where a folded card said "Replaced by
+    /// manager with a new item: …" over the card of the new item with the same title): the hub answers such an item
+    /// with its own words, so a chat leaves it out before it places its cards in time, and the new item's card stands
+    /// there alone. The one whose answer of his is on its way or was refused (`held`, the outbox's request) keeps its
+    /// card until that answer is cleared. An open item never has the field, because the hub sets it with its own
+    /// answer: Needs you and its count, which draw the open items, have none to leave out.
+    nonisolated static func answered(_ read: MobileSnapshot?, holding held: Int?) -> [OwnerNeed] {
+        (read?.answered_needs ?? []).drawn(holding: held)
+    }
     /// The open tasks, newest activity first.
     var openTasks: [MobileTaskHead] { sorted(snapshot?.tasks ?? []) }
     /// The last tasks that ended, newest first.

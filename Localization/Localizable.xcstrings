@@ -5850,16 +5850,6 @@
         }
       }
     },
-    "Check it again from its page." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compruébalo de nuevo desde su página."
-          }
-        }
-      }
-    },
     "Check schedule" : {
       "localizations" : {
         "es" : {
@@ -11310,12 +11300,12 @@
         }
       }
     },
-    "Its server kept running the revision it had. Update Fleet on its page tries again." : {
+    "Its server kept running the revision it had. Update fleet in Settings › System status tries again, and so does the next release." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Su servidor siguió ejecutando la revisión que tenía. Para volver a intentarlo, pulsa «Actualizar Founderizer» en su página."
+            "value" : "Su servidor siguió ejecutando la revisión que tenía. «Actualizar el equipo» en Ajustes › Estado del sistema lo vuelve a intentar, y también la próxima versión."
           }
         }
       }
@@ -11350,12 +11340,12 @@
         }
       }
     },
-    "Its server: versions, network, security, updates and the server check" : {
+    "Its server: system, Founderizer, security, CPU, memory, disk and agents" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Su servidor: versiones, red, seguridad, actualizaciones y la comprobación del servidor"
+            "value" : "Su servidor: sistema, Founderizer, seguridad, CPU, memoria, disco y agentes"
           }
         }
       }
@@ -23936,6 +23926,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Su nombre"
+          }
+        }
+      }
+    },
+    "Their servers kept running the revisions they had. Update fleet in Settings › System status tries again, and so does the next release." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sus servidores siguieron ejecutando las revisiones que tenían. «Actualizar el equipo» en Ajustes › Estado del sistema lo vuelve a intentar, y también la próxima versión."
           }
         }
       }

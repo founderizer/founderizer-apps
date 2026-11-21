@@ -22,7 +22,7 @@ struct ReportProblemView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model = ReportProblemModel()
     @State private var text = ""
-    @AppStorage("reportEmail") private var email = ""
+    @AppStorage("reportEmail", store: AppDefaults.store) private var email = ""
     /// The text that the owner's own agent put into the box (`prepare_problem_report`), while the box still holds it
     /// whole (`ProblemReport.AgentDraft`): the report then says, as one more fact, that an agent wrote it.
     @State private var draft = ProblemReport.AgentDraft()

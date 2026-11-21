@@ -1054,7 +1054,7 @@ struct AccessSettings: View {
     private func poll() async {
         failedSince = nil; note = nil
         // `-openResource <id>` opens one item's detail, so that card can be looked at without clicking to it.
-        shown = UserDefaults.standard.string(forKey: "openResource").map(ShownResource.init)
+        shown = AppDefaults.store.string(forKey: "openResource").map(ShownResource.init)
         let start = ContinuousClock.now
         while !Task.isCancelled {
             let current = await read(since: start)

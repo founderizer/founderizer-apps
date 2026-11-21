@@ -26,6 +26,7 @@ Mac, and a device route is all that the PC reaches.
 | `live_desktop` | waits (step 2) | a task's screen; not at the iPhone's level |
 | `machines` | waits (2.1) | a setup page of the Mac |
 | `goals` | waits (step 2) | `/ui/goals` is no device route; a task's goal text is built |
+| `kpis` | waits (step 2) | the Mac's agent page only in version 1 (`lanes/agent-kpis.md`) |
 | `profiles` | waits (2.2) | a setup page of the Mac |
 | `goal_tokens` | waits (step 2) | |
 | `task_steering` | built | `OwnerCommand.Steer`, `POST /ui/tasks/<id>/steer`, with its receipt |

@@ -79,7 +79,8 @@
     "takeover_late": "{agent}'s server did not open its screen in time: press Take over again",
     "takeover_no_browser": "{agent}'s browser does not run now, so there is no screen to take over",
     "takeover_provider": "{agent}'s browser shows an AI provider's site, which is never taken over",
-    "takeover_screen_failed": "{agent}'s server could not share its screen: press Take over again"
+    "takeover_screen_failed": "{agent}'s server could not share its screen: press Take over again",
+    "about_unreadable": "{agent} cannot read this work in its chat, so it cannot get a message about it"
   },
   "holes": {
     "profile_unread": [
@@ -197,6 +198,9 @@
       "agent"
     ],
     "takeover_screen_failed": [
+      "agent"
+    ],
+    "about_unreadable": [
       "agent"
     ]
   }

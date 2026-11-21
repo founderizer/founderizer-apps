@@ -48,6 +48,20 @@ struct NeedTalkTests {
         #expect(answered.shownTalk(features: [NeedTalk.feature]).isEmpty && older.shownTalk(features: features).isEmpty)
     }
 
+    /// The owner, 21 November 2026: "I clicked on discuss and typed, dont remember where". On his busy Mac the keys came
+    /// before the field took them, and the chat sent them to its box: a key that the chat would send to its box goes to
+    /// the open field of a card of that chat while its item is open, and to the box in every other case, also for a
+    /// card of another agent's chat, an answered one and one that left the reading.
+    @Test func aKeyForTheChatsBoxGoesToTheOpenFieldOfACardOfThatChat() throws {
+        let needs = [try need(), try need(["id": 8, "by": "leo"]), try need(["id": 9, "answer": "Keep the pool", "answered": 4])]
+        #expect(NeedClarify.field(open: 7, chat: "manager", needs: needs) == 7)
+        #expect(NeedClarify.field(open: nil, chat: "manager", needs: needs) == nil)
+        #expect(NeedClarify.field(open: 7, chat: "leo", needs: needs) == nil)       // the box of another chat
+        #expect(NeedClarify.field(open: 8, chat: "manager", needs: needs) == nil)   // a card of another chat
+        #expect(NeedClarify.field(open: 9, chat: "manager", needs: needs) == nil)   // answered
+        #expect(NeedClarify.field(open: 12, chat: "manager", needs: needs) == nil)  // gone from the reading
+    }
+
     /// The owner, 15 November 2026: "the task itself need to be very clear". The words an agent wrote as his task stand
     /// on the card; the hub's own sentences and the words of an item with a door call stay behind Details.
     @Test func theTaskOfAnAgentsItemStandsInFrontAndTheHubsOwnSentencesDoNot() throws {

@@ -641,7 +641,9 @@ final class OwnerGuideTests {
         // secret. One typed constant: the same parts joined inside the macro take the type checker too long.
         let needsYou: String = "A Needs-you item is a question of the fleet to the owner. Read it to the owner, and "
             + "answer it with `answer_needs_you` only in the owner's own words or with the option that the owner "
-            + "chose. Files that the owner gives for the answer go up first with `attach_file`, and their ids, at "
+            + "chose. To give the manager more context or ask first, with the item still open, send the owner's "
+            + "own words with `clarify_needs_you`. Files that the owner gives for the answer go up first with "
+            + "`attach_file`, and their ids, at "
             + "most four, then go in \"attachments\", with the owner's words or alone; a choice carries no file. A "
             + "request for a secret has its own tools: see \"An agent's request for a secret\"."
         #expect(guide.contains(needsYou))

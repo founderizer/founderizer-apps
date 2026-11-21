@@ -629,11 +629,11 @@ final class DoorSyncModel {
 
     private static func name(_ hub: URL, _ database: String) -> String { "doorHoldings|\(hub.absoluteString)|\(database)" }
 
-    static func recorded(hub: URL, database: String, in defaults: UserDefaults = .standard) -> [String: [String: String]] {
+    static func recorded(hub: URL, database: String, in defaults: UserDefaults = AppDefaults.store) -> [String: [String: String]] {
         defaults.dictionary(forKey: name(hub, database)) as? [String: [String: String]] ?? [:]
     }
 
-    static func keep(_ holdings: [String: [String: String]], hub: URL, database: String, in defaults: UserDefaults = .standard) {
+    static func keep(_ holdings: [String: [String: String]], hub: URL, database: String, in defaults: UserDefaults = AppDefaults.store) {
         defaults.set(holdings, forKey: name(hub, database))
     }
 

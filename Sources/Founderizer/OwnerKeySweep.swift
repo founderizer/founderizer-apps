@@ -151,14 +151,14 @@ final class OwnerKeyModel {
     /// address with and without its last "/" is one hub. It holds no secret: a host, a user, a port and a key's path.
     private static func name(_ hub: URL) -> String { OwnerMacKey.name(hub: hub) ?? hub.absoluteString }
 
-    static func keep(_ target: InstallTarget, hub: URL, defaults: UserDefaults = .standard) {
+    static func keep(_ target: InstallTarget, hub: URL, defaults: UserDefaults = AppDefaults.store) {
         var all = (defaults.data(forKey: keptKey).flatMap { try? JSONDecoder().decode([String: Kept].self, from: $0) }) ?? [:]
         all[name(hub)] = Kept(host: target.host, user: target.user, port: target.port,
                               identityFile: target.identityFile, becomeRoot: target.becomeRoot)
         if let data = try? JSONEncoder().encode(all) { defaults.set(data, forKey: keptKey) }
     }
 
-    static func kept(hub: URL, defaults: UserDefaults = .standard) -> InstallTarget? {
+    static func kept(hub: URL, defaults: UserDefaults = AppDefaults.store) -> InstallTarget? {
         guard let all = defaults.data(forKey: keptKey).flatMap({ try? JSONDecoder().decode([String: Kept].self, from: $0) }),
               let kept = all[name(hub)] else { return nil }
         let target = InstallTarget(host: kept.host, user: kept.user, port: kept.port, identityFile: kept.identityFile,
