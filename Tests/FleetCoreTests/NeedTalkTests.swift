@@ -16,7 +16,7 @@ struct NeedTalkTests {
     }
 
     @Test func anItemCarriesItsDetailsAndItsTicksAndAnOldDiscussionDoesNotStopItsRead() throws {
-        // the hub still gives the record of a discussion from before API 1.158, which the app no longer reads
+        // the hub gives the record of an item's talk, also of a discussion from before API 1.158
         let item = try need(["details": "Leo's plan, in full.", "multi": true, "chose": NSNull(),
                              "talk": [["who": "owner", "text": "Why now?", "ts": 2],
                                       ["who": "manager", "text": "Support ends tomorrow.", "ts": 3]]])
@@ -24,6 +24,28 @@ struct NeedTalkTests {
         let older = try need()                                                  // a hub before the feature
         #expect(older.details == nil && older.multi == nil && !older.combines)
         #expect(try need(["multi": true, "options": ["Only one"]]).combines == false)     // one option is no choice
+    }
+
+    /// Needs clarification (owner API 1.272; the owner's "Keep Your answer too", 20 November 2026): the card takes his
+    /// message under it only where the hub says so (`clarify`: no key request, no conversation's question, no other
+    /// agent's item), on a hub that names the feature, while the item is open. A hub with Discuss's old `need_talk`
+    /// alone has no such route, and a hub before the version sends neither field.
+    @Test func aCardTakesAMessageUnderItOnlyWhereTheHubSaysSo() throws {
+        let features = [NeedTalk.feature, NeedClarify.feature]
+        let older = try need()
+        #expect(older.clarify == nil && older.talk == nil && !older.clarifies(features: features))
+        let open = try need(["clarify": true, "talk": [["who": "owner", "text": "Why now?", "ts": 2],
+                                                       ["who": "manager", "text": "Support ends tomorrow.", "ts": 3]]])
+        #expect(open.clarifies(features: features) && open.talk?.map(\.fromOwner) == [true, false])
+        #expect(!open.clarifies(features: [NeedTalk.feature]) && !open.clarifies(features: nil))
+        #expect(try !need(["clarify": false]).clarifies(features: features))
+        #expect(try !need(["clarify": true, "answer": "Tide", "answered": 4]).clarifies(features: features))
+        // the talk stays in the card after his answer, and on a card that takes no more of it; an older hub's has none
+        let talk: [[String: Any]] = [["who": "owner", "text": "Why now?", "ts": 2]]
+        let answered = try need(["clarify": false, "answer": "Tide", "answered": 4, "talk": talk])
+        #expect(answered.shownTalk(features: features).map(\.text) == ["Why now?"])
+        #expect(try need(["clarify": false, "talk": talk]).shownTalk(features: features).count == 1)
+        #expect(answered.shownTalk(features: [NeedTalk.feature]).isEmpty && older.shownTalk(features: features).isEmpty)
     }
 
     /// The owner, 15 November 2026: "the task itself need to be very clear". The words an agent wrote as his task stand
@@ -77,14 +99,17 @@ struct NeedTalkTests {
         #expect(message.choices == nil)                                         // only an item takes ticks
     }
 
-    /// Nothing makes this command since Discuss left the app, but an outbox that an app before 0.1.205 saved can hold
-    /// one: it still reads, so the outbox is not blocked, and it still matches its receipt.
-    @Test func aSavedDiscussionMessageStillReadsAndItsReceiptConfirmsIt() throws {
+    /// His message under a card (Needs clarification, owner API 1.272) goes only to a hub that takes it again: a hub
+    /// with `need_talk` alone has no such route since Discuss left (API 1.158). An outbox that an app before 0.1.205
+    /// saved still reads, and the receipt with his message in the item's talk confirms it.
+    @Test func aMessageUnderACardGoesToAHubThatTakesItAndItsReceiptConfirmsIt() throws {
         let command = OwnerCommand.needTalk(need: 7)
-        #expect(command.route == "ui/needs/7/talk" && command.requiredFeature == NeedTalk.feature)
+        #expect(command.route == "ui/needs/7/talk" && command.requiredFeature == NeedClarify.feature)
         #expect(try command.bodyFields(text: "  Why now?  ") as? [String: String] == ["text": "Why now?"])
         #expect(throws: HubError.self) { try command.bodyFields(text: "   ") }
         #expect(throws: HubError.self) { try command.bodyFields(text: String(repeating: "x", count: NeedTalk.most + 1)) }
+        // as the hub counts it: 1,001 characters of a letter and its accent are 2,002 code points, which it refuses
+        #expect(throws: HubError.self) { try command.bodyFields(text: String(repeating: "e\u{301}", count: NeedTalk.most / 2 + 1)) }
         #expect(throws: HubError.self) { try OwnerCommand.needTalk(need: 0).bodyFields(text: "Hi") }
         let request = PendingRequest(hub: hub, database: "db", client: "mac", command: command, text: "Why now?")
         #expect(try JSONDecoder().decode(PendingRequest.self, from: JSONEncoder().encode(request)) == request)

@@ -64,6 +64,22 @@ public enum DoorAccess {
     /// The door's service port on the private network, the default of its entry in the fleet's configuration.
     public static let doorPort = 8766
 
+    /// **When the next door round starts** (20 November 2026: a task session that started right after a repository
+    /// grant had no GitHub token, because the door gets each grant only at a round, and three tasks that day paid a
+    /// question and a restart for it). A round starts `roundGap` after the last one, as before, and also once for each
+    /// new value of the hub's `door_grant_waits`, the time of the newest grant that the door may not hold yet, at
+    /// least `earlyGap` after the last one. `acted` is the value that a round started with last: a round that fails
+    /// leaves it acted on, so the next one comes at the old cadence and no failure repeats itself every few seconds.
+    public static let roundGap: TimeInterval = 300
+    public static let earlyGap: TimeInterval = 15
+    public static func roundDue(lastRead: Date?, now: Date, grantWaits: Double?, acted: Double?) -> Bool {
+        guard let lastRead else { return true }
+        let since = now.timeIntervalSince(lastRead)
+        if since >= roundGap { return true }
+        guard let grantWaits, grantWaits != acted else { return false }
+        return since >= earlyGap
+    }
+
     /// What a door with no follow timer yet runs once (DevOps plan 13, item 2): the hub's signed release, which the
     /// door checks with its own pinned keys, through the door's own root command. That release's update writes the
     /// timer, and from then on the door takes each release by itself. A door with the timer only says so. nil when the
@@ -1103,11 +1119,12 @@ public struct DoorSetupClient: Sendable {
     /// that the hub held, so the hub may ask for it (plan 13, item 4; an older app shows no form, and the hub raises
     /// nothing while only such an app reads). held, also when empty (API 1.234): a read with no `held` is an app before
     /// that word, for which the hub takes two reads after a grant as the door having it, so this read would end a
-    /// restart's wait while the door's file may not have the grant yet.
+    /// restart's wait while the door's file may not have the grant yet. early=1: this build starts a round at once for
+    /// a new grant (`roundDue`), so a session's start may wait for that round (hub.py `door_round_wait`).
     public static func viewURL(hub: URL, database: String, held: String) -> URL {
         var parts = URLComponents(url: hub.appendingPathComponent("ui/door"), resolvingAgainstBaseURL: false)!
         parts.queryItems = [.init(name: "db", value: database), .init(name: "renew", value: "form"),
-                            .init(name: "held", value: held)]
+                            .init(name: "held", value: held), .init(name: "early", value: "1")]
         return parts.url!
     }
 

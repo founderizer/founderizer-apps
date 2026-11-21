@@ -47,6 +47,10 @@ public struct HubState: Decodable, Sendable {
     public var reportCount: Int { reports.count + (older_rows?.reports?.rows ?? 0) }
     /// Owner feature `chat_apps`: Pause all, and the accounts that are not connected or not linked.
     public let chat_apps: ChatAppsSummary?
+    /// The time of the newest repository grant that the door may not hold yet, or nil: the Mac's door round starts once
+    /// for each new value (`DoorAccess.roundDue`). nil also from a hub before it; an optional var, so the phone's reading
+    /// (`init(phoneTime:)`) has none by itself.
+    public private(set) var door_grant_waits: Double?
     /// Owner feature `live_changes`: the hub's change count at the moment of this snapshot, `<boot>.<state>.<activity>`,
     /// read under the same lock as the snapshot. The app's watcher of `/ui/wait` starts from it.
     public let token: String?
@@ -662,6 +666,13 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// `signsTheSame`: a new field is nil before the hub's update and a value after it, and a press that waited across
     /// the update would be dropped with no word.
     public let recommended: String?
+    /// Owner feature `need_clarify` (API 1.272): true when the card takes his message under it (Needs clarification:
+    /// an open item of the manager's that is no conversation's question and no key request), as the hub decides it;
+    /// nil from a hub before that version. The card draws its link only then (`clarifies`).
+    public let clarify: Bool?
+    /// His talk with the manager under the card, oldest first: his messages and its replies (`NeedMessage`); nil or
+    /// empty for an item with none.
+    public let talk: [NeedMessage]?
     /// **The options that only Founderizer on a Mac or a PC can press, by their index in `choices`** (the lane "Give on
     /// the iPhone": the owner's "Line to the Mac" of 19 November 2026 to the phone's picture, and his "Yes, add it" of
     /// the same day for the door's card). The hub refuses them from a phone: Give, the first option of an item that

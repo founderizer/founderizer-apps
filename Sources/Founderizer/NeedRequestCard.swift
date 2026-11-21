@@ -116,6 +116,36 @@ struct NeedAnswerBox: View {
     @Environment(\.colorSchemeContrast) private var contrast
     /// The owner chose to keep what looks like a key in this answer: no second question while it is there.
     @State private var keyAllowed = false
+    /// Owner feature `need_clarify` (API 1.272): Needs clarification is open, its field where its link stood.
+    @State private var clarifying = false
+    /// His message under the card, until the hub has it.
+    @State private var clarifyText = ""
+    /// It is on its way: the field waits for the hub's receipt.
+    @State private var clarifySending = false
+    @FocusState private var clarifyFocused: Bool
+    /// He pressed the link now: the field takes the cursor once it stands.
+    @State private var cursorToClarify = false
+    /// He chose to keep what looks like a key in this message, as `keyAllowed` in his answer.
+    @State private var clarifyKeyAllowed = false
+    /// The card takes his message under it (`OwnerNeed.clarifies`): the hub says so, and the item is open.
+    private var clarifies: Bool { need.clarifies(features: store.state?.ui_features) }
+    /// His talk over the answers of an open item in a chat's card (`OwnerNeed.shownTalk`). An answered chat card shows
+    /// it in its parts, and the step on Needs you over its answers itself (`NeedStep.answers`), where it stays when he
+    /// answers.
+    private var talk: [NeedMessage] { need.isOpen && !onStep ? need.shownTalk(features: store.state?.ui_features) : [] }
+    /// The guard's own key for the field of Needs clarification, beside the answer's (`guardKey`).
+    private var clarifyGuardKey: String { "need-clarify-\(need.id)" }
+    private var clarifyWords: String { clarifyText.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// As the hub counts a message: code points, not the characters that he sees (`OwnerCommand.needTalk`).
+    private var canClarify: Bool {
+        store.canWrite && !clarifySending && !clarifyWords.isEmpty && clarifyWords.unicodeScalars.count <= NeedTalk.most
+    }
+    /// **His unsent message under each card, in memory only** (as the key card's words, `SecretRequestForm`): the
+    /// request at hand is a new view each time it comes to hand, and the words were gone after a click on another
+    /// card. Never on the disk, because a key pasted there by mistake must not stay; words that look like a key are not
+    /// kept at all. By the hub, its generation and the item.
+    @MainActor private static var clarifyDrafts: [String: String] = [:]
+    private var clarifyDraftKey: String { "\(store.hub.absoluteString) \(store.state?.db ?? "") \(need.id)" }
     /// Owner feature `need_talk` (API 1.106): the options he ticked, on an item whose options combine.
     @State private var ticked: Set<Int> = []
     /// **Under the request at hand on Needs you** (`NeedStep`; the owner's yes of 11 November 2026 to its picture), the
@@ -206,6 +236,9 @@ struct NeedAnswerBox: View {
         // owner feature need_recommended: the row that has the badge of the answer that the agent recommends
         let recommended = recommendation
         VStack(alignment: .leading, spacing: 8) {
+            // owner feature need_clarify: his talk with the manager under the card, over its answers (also where the
+            // card takes no more of it, as after a switch of the manager: the talk stays his record)
+            if !talk.isEmpty { NeedTalkLines(talk: talk, font: words).padding(.bottom, 2) }
             if need.choices.isEmpty {
                 // **One look for an answer option** (T-22): the app's own three replies are rows like the ones an
                 // agent offers, and a press sends one as an option's press does. A page showed 24-pt dark chips under
@@ -316,7 +349,9 @@ struct NeedAnswerBox: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 if let held = store.heldKey, held.composer == guardKey {
-                    KeyHoldBanner(hold: held.hold, agent: need.by) { saveHeldKey(held) } goOn: { keepHeldKey(held) }
+                    KeyHoldBanner(hold: held.hold, agent: need.by) { saveHeldKey(held, words: text) } goOn: {
+                        keepHeldKey(held, words: text, allowed: $keyAllowed)
+                    }
                 }
                 if let composer { StagedFilesStrip(store: store, composer: composer) }
                 HStack(alignment: .bottom, spacing: 8) {
@@ -380,11 +415,17 @@ struct NeedAnswerBox: View {
                 .stageDroppedFiles(store: store, composer: composer)
             // No "Connection required" under it (D-2): the notice over the page is the one sign of an outage, as in
             // the chat's composer.
+            // owner feature need_clarify: the quiet link Needs clarification under his answer, and its field in its place
+            if clarifies {
+                if clarifying { clarifyBox } else { clarifyLink }
+            }
         }
         .coordinateSpace(.named(Self.space))
         // The keys of the request at hand, through the page's one watch; a card in a chat has none.
         .background { if let keys { StepKeysBox(keys: keys, need: need.id, take: key) } }
         .task { if takesCursor { focused = true } }
+        // owner feature need_clarify: his unsent message of this card, kept while he looked at another one
+        .onAppear { restoreClarifyDraft() }
     }
 
     /// **The keys of the request at hand**, while no field has the cursor (`PageKeys`): a number marks that option, and
@@ -552,21 +593,177 @@ extension NeedAnswerBox {
         }
     }
 
-    /// "Save it as a secret": the key goes into the secure form and out of the answer. The agent that asked gets
-    /// its name in its chat, when the owner has one with it.
-    private func saveHeldKey(_ held: HeldKey) {
+    /// "Save it as a secret": the key goes into the secure form and out of his words (the answer, or his message under
+    /// the card). The agent that asked gets its name in its chat, when the owner has one with it.
+    private func saveHeldKey(_ held: HeldKey, words: Binding<String>) {
         store.heldKey = nil
         var key: String?
         if held.hold == .paste { key = KeyCut.onClipboard() }
-        else if let cut = KeyCut.split(text.wrappedValue) { text.wrappedValue = cut.rest; key = cut.key }
+        else if let cut = KeyCut.split(words.wrappedValue) { words.wrappedValue = cut.rest; key = cut.key }
         store.secretForm = SecretPreset(tell: store.canChat(with: need.by) ? need.by : nil, key: key)
     }
 
-    /// "Paste it anyway" or "Keep it": the owner's choice, and no second question while the key is in the answer.
-    private func keepHeldKey(_ held: HeldKey) {
+    /// "Paste it anyway" or "Keep it": the owner's choice, and no second question while the key is in his words.
+    private func keepHeldKey(_ held: HeldKey, words: Binding<String>, allowed: Binding<Bool>) {
         store.heldKey = nil
-        keyAllowed = true
-        if held.hold == .paste, let pasted = NSPasteboard.general.string(forType: .string) { text.wrappedValue += pasted }
+        allowed.wrappedValue = true
+        if held.hold == .paste, let pasted = NSPasteboard.general.string(forType: .string) { words.wrappedValue += pasted }
+    }
+
+    // MARK: Needs clarification (owner feature need_clarify, owner API 1.272)
+
+    /// **Needs clarification**: the key card's quiet link and words (`SetupLink` on a step; in a chat's card, the
+    /// card's small muted words), under his answer, with the hand of a link. A press puts the field in its place.
+    @ViewBuilder private var clarifyLink: some View {
+        let help = String(l10n: "Write to \(need.by.agentLabel) about this request")
+        if onStep {
+            // in the middle, as a step's one link and its one button stand
+            SetupLink(String(l10n: "Needs clarification")) { openClarify() }
+                .pointerStyle(.link)
+                .help(help).accessibilityIdentifier("need-clarify-\(need.id)")
+                .frame(maxWidth: .infinity)
+        } else {
+            Button { openClarify() } label: {
+                Text("Needs clarification").padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+                .pointerStyle(.link)
+                .padding(.vertical, -IconMetrics.reach).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                .help(help).accessibilityIdentifier("need-clarify-\(need.id)")
+        }
+    }
+
+    /// His press of the link: the field stands, and takes the cursor once it does (`clarifyBox`). Not from the second
+    /// click of a double-click on the request before this one (`SecondClick`).
+    private func openClarify() {
+        guard !(onStep && SecondClick.isNow) else { return }
+        clarifying = true
+        cursorToClarify = true
+    }
+
+    /// **The field of Needs clarification**, as the key card's: the box of his answer with no files and no replies, its
+    /// words "Message to <agent>", one line at rest and a line more for each line he writes, Send with Return. Words that
+    /// look like a key wait for his choice, as in his answer (`KeyHoldBanner`).
+    private var clarifyBox: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let held = store.heldKey, held.composer == clarifyGuardKey {
+                KeyHoldBanner(hold: held.hold, agent: need.by) { saveHeldKey(held, words: $clarifyText) } goOn: {
+                    keepHeldKey(held, words: $clarifyText, allowed: $clarifyKeyAllowed)
+                }
+            }
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField(String(l10n: "Message to \(need.by.agentLabel)"), text: $clarifyText, axis: .vertical)
+                    .focused($clarifyFocused)
+                    .accessibilityIdentifier("need-clarify-words-\(need.id)")
+                    .onKeyPress(keys: [.return], phases: .down) { press in
+                        if press.modifiers.contains(.shift) { return .ignored }
+                        sendClarify()
+                        return .handled
+                    }
+                    .composerField(alone: true, lines: 1...8, font: onStep ? SetupMetrics.textFont : ChatStyle.font,
+                                   line: onStep ? Self.stepLine : ChatStyle.line)
+                    .onChange(of: clarifyText) { _, now in
+                        // kept while the card is open, in memory: never words that look like a key
+                        let kept = now.trimmingCharacters(in: .whitespacesAndNewlines)
+                        Self.clarifyDrafts[clarifyDraftKey] = kept.isEmpty || KeyInText.contains(now) ? nil : now
+                        guard guards else { return }
+                        if !KeyInText.contains(now) {
+                            clarifyKeyAllowed = false
+                            if store.heldKey == HeldKey(composer: clarifyGuardKey, hold: .text) { store.heldKey = nil }
+                        } else if !clarifyKeyAllowed && store.heldKey == nil {
+                            store.heldKey = HeldKey(composer: clarifyGuardKey, hold: .text)
+                        }
+                    }
+                SendSlot(shows: canClarify) {
+                    Button { sendClarify() } label: { SendMark() }
+                        .buttonStyle(FleetIconButtonStyle(filled: true)).disabled(!canClarify)
+                        .help("Send this message").accessibilityLabel("Send message")
+                        .accessibilityIdentifier("need-clarify-send-\(need.id)")
+                }
+            }
+            .padding(onStep ? (FormMetrics.row - IconMetrics.side) / 2 : ComposerCapsule<EmptyView, EmptyView>.inset)
+            .background(FleetStyle.composer, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+            .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner)
+                .strokeBorder(FleetStyle.hairline(0.32), lineWidth: FleetStyle.edgeWidth(contrast)))
+            .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
+            .onTapGesture { clarifyFocused = true }
+            .keyPasteGuard(store: store, composer: clarifyFocused && guards ? clarifyGuardKey : nil)
+            // while it goes: his words stand, and nothing takes a second send
+            .disabled(clarifySending)
+        }
+        // The cursor comes once the field stands, as the key card's field takes it: set in the press that makes the
+        // field, it could stay where it was.
+        .task { if cursorToClarify { clarifyFocused = true; cursorToClarify = false } }
+    }
+
+    /// His message goes to the manager, and the item stays open (`OwnerCommand.needTalk`). Once the hub has it, the
+    /// field goes and the link comes back; his message stands in the card's talk from the next reading.
+    private func sendClarify() {
+        guard !(onStep && SecondClick.isNow), canClarify else { return }
+        if guards && !clarifyKeyAllowed && KeyInText.contains(clarifyText) {
+            store.heldKey = HeldKey(composer: clarifyGuardKey, hold: .text)
+            return
+        }
+        let words = clarifyWords, command = OwnerCommand.needTalk(need: need.id)
+        clarifySending = true
+        Task {
+            let sent = await store.command(command, note: words)
+            // **Gone from the field once the outbox has it**: a request that the hub did not confirm yet goes again from
+            // the outbox (its line says so), and words left here would go a second time with a second Send. Words that
+            // the hub refused stay here, with the request line's reason.
+            if sent || (store.pending?.command == command && store.pending?.refusal == nil) {
+                clarifyText = ""
+                clarifying = false
+                Self.clarifyDrafts[clarifyDraftKey] = nil
+            }
+            clarifySending = false
+        }
+    }
+
+    /// His unsent message of this card comes back with the card (`clarifyDrafts`), and the words of cards that closed
+    /// on this hub go.
+    private func restoreClarifyDraft() {
+        let here = "\(store.hub.absoluteString) \(store.state?.db ?? "") "
+        let open = Set(store.openNeeds.map { here + String($0.id) })
+        Self.clarifyDrafts = Self.clarifyDrafts.filter { !$0.key.hasPrefix(here) || open.contains($0.key) }
+        if clarifies, !clarifying, let draft = Self.clarifyDrafts[clarifyDraftKey] {
+            clarifyText = draft
+            clarifying = true
+        }
+    }
+}
+
+/// **His talk with the manager under a card** (Needs clarification, owner feature `need_clarify`): his messages at the
+/// right in the chat's own bubble, the agent's replies at the left with its glyph, compact, over the card's answers. The
+/// words are plain text, as he and the agent wrote them.
+struct NeedTalkLines: View {
+    let talk: [NeedMessage]
+    /// The words of the card's answers: 13 points in a chat's card, the step's 15 on Needs you.
+    let font: Font
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(talk.enumerated()), id: \.offset) { _, line in
+                if line.fromOwner {
+                    Text(line.text).font(font).foregroundStyle(FleetStyle.text).textSelection(.enabled)
+                        .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(ChatStyle.bubble, in: RoundedRectangle(cornerRadius: ChatStyle.bubbleRadius))
+                        .padding(.leading, 48)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .accessibilityElement(children: .ignore).accessibilityLabel(Text("You: \(line.text)"))
+                } else {
+                    HStack(alignment: .top, spacing: 8) {
+                        AgentGlyph(name: line.who, presence: .online, size: GlyphSize.inline, dot: false).padding(.top, 1)
+                        Text(line.text).font(font).foregroundStyle(FleetStyle.text).textSelection(.enabled)
+                            .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.trailing, 48)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text(verbatim: "\(line.who.agentLabel): \(line.text)"))
+                }
+            }
+        }
     }
 }
 
@@ -949,6 +1146,13 @@ struct NeedRequestCard: View {
                 Text("What it needs from you").font(FormMetrics.detailTitle)
                     .foregroundStyle(FleetStyle.muted).padding(.top, 2)
                 MessageText(text: todo, chat: true, card: true, names: names)
+            }
+            // owner feature need_clarify: **an answered card keeps his talk with the manager, read only**, before his
+            // answer as it came (the area of Needs-you, 20 November 2026: "the talk stands in the card" holds after his
+            // answer too); an open card has it over its answers (`NeedAnswerBox`)
+            if !need.isOpen {
+                let talk = need.shownTalk(features: store.state?.ui_features)
+                if !talk.isEmpty { NeedTalkLines(talk: talk, font: FormMetrics.text) }
             }
             NeedAnswerGiven(store: store, need: need)
             // Who asks, by the name the sidebar gives it and its glyph before it (D-8), and when: a clock time today

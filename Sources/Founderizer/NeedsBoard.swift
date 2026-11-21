@@ -792,6 +792,19 @@ private struct NeedStep: View {
 
     /// What he answers with; for a request that ended, what he answered.
     private var answers: some View {
+        VStack(spacing: 10) {
+            // owner feature need_clarify: **his talk with the manager stands over the answers, and over his answer once
+            // the request ended**, read only (the area of Needs-you, 20 November 2026: "the talk stands in the card"
+            // holds after his answer too): it is outside the answers' switch, so it keeps its place when he answers,
+            // and his answer moves up from where he gave it to just under the talk (`answerTop` is the box's own)
+            let talk = need.shownTalk(features: store.state?.ui_features)
+            if !talk.isEmpty { NeedTalkLines(talk: talk, font: SetupMetrics.textFont) }
+            choices
+        }
+    }
+
+    /// The answers, or what he answered once the request ended.
+    private var choices: some View {
         VStack(spacing: 18) {
             // the form, also once the request ended, while his key save holds it (`KeySaveCard.showsForm`)
             if !keySave.showsForm(open: !ended) {

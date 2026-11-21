@@ -109,13 +109,13 @@ public enum OwnerCommand: Codable, Equatable, Sendable {
     case machineSigninCode(agent: String, code: String)
     case control(task: Int, action: ControlAction)
     case outcome(id: Int, finding: OutcomeFinding)
-    /// Owner feature `need_talk` (API 1.106): his message in the discussion of one open Needs-you item. Nothing makes
-    /// one since Discuss left the app (API 1.158): only a request that an app before 0.1.205 saved in its outbox holds
-    /// one, so the outbox still reads it, and the hub's 404 gives the request line its Discard.
+    /// His message under one open Needs-you card (Needs clarification, owner feature `need_clarify`, API 1.272), which
+    /// keeps the item open and goes to the manager. The same route took Discuss (API 1.106) until it left the app (API
+    /// 1.158), so an outbox that an app before 0.1.205 saved can hold one too, and it still reads.
     case needTalk(need: Int)
     public var requiredFeature: String {
         switch self {
-        case .needTalk: return NeedTalk.feature
+        case .needTalk: return NeedClarify.feature
         case .steer: return "task_steering"
         case .goalState: return "goals"
         case .triggerState(_, _, .check_now): return "trigger_checks"
@@ -285,8 +285,9 @@ public enum OwnerCommand: Codable, Equatable, Sendable {
     public func bodyFields(text: String) throws -> [String: Any] {
         switch self {
         case .needTalk(let need):
+            // the hub counts code points (Python's len), not the characters that a person sees
             let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard need > 0, !words.isEmpty, words.count <= NeedTalk.most else { throw HubError.invalidResponse }
+            guard need > 0, !words.isEmpty, words.unicodeScalars.count <= NeedTalk.most else { throw HubError.invalidResponse }
             return ["text": words]
         case .steer(let task, let attempt):
             let normalized = normalizedOwnerText(text)

@@ -81,6 +81,25 @@ struct DoorAccessTests {
         #expect(DoorAccess.devices(status: "not json").isEmpty)
     }
 
+    /// A new grant reaches the door at once, not at the round after five minutes (20 November 2026: three tasks paid a
+    /// question and a restart for a session that started right after its grant), and a round that fails, or one that
+    /// leaves the grant out, is not started again every few seconds for the same grant.
+    @Test func aNewGrantStartsOneRoundAtOnceAndTheSameGrantNoSecond() {
+        let read = Date(timeIntervalSince1970: 1_000_000)
+        func due(after seconds: TimeInterval, _ waits: Double?, acted: Double?) -> Bool {
+            DoorAccess.roundDue(lastRead: read, now: read.addingTimeInterval(seconds), grantWaits: waits, acted: acted)
+        }
+        #expect(DoorAccess.roundDue(lastRead: nil, now: read, grantWaits: nil, acted: nil))     // the first round
+        #expect(!due(after: 299, nil, acted: nil))                      // no grant waits: the old cadence
+        #expect(due(after: 300, nil, acted: nil))
+        #expect(due(after: 15, 999_990, acted: nil))                    // a grant that no round took yet
+        #expect(due(after: 20, 999_995, acted: 999_990))                // a newer grant than the one acted on
+        #expect(!due(after: 14, 999_990, acted: nil))                   // never two rounds within 15 s
+        #expect(!due(after: 60, 999_990, acted: 999_990))               // the same grant, after its round
+        #expect(!due(after: 60, nil, acted: 999_990))                   // no grant waits any more
+        #expect(due(after: 300, 999_990, acted: 999_990))               // and the cadence goes on
+    }
+
     @Test func anOperatorTagThatTwoBoxesCarryOrABoxOfTwoBusinessesNamesNoBox() {
         let twice = DoorAccess.operatorBoxes(devices: DoorAccess.devices(status: Self.status([
             Self.peer("box-x", "100.64.0.31", ["tag:operator-one"])])))
@@ -378,7 +397,8 @@ struct DoorAccessTests {
     /// API 1.234: each read of `GET /ui/door` by this app says which view the door's file holds (`held`), empty when
     /// it names none, as the GitHub App flow's read does. A read with no `held` is an app before that word, for which
     /// the hub takes two reads after a grant as the door having it: a read that loses the word ends a restart's wait
-    /// while the door's file may not have the grant yet, and the new session has no token.
+    /// while the door's file may not have the grant yet, and the new session has no token. `early` says that this build
+    /// starts a round at once for a new grant, for which the hub lets a session's start wait (`door_round_wait`).
     @Test func eachReadOfTheHubsViewSaysWhatTheDoorsFileHolds() throws {
         func items(_ held: String) throws -> [String: String] {
             let url = DoorSetupClient.viewURL(hub: URL(string: "http://100.64.0.2:8765")!, database: "g", held: held)
@@ -386,8 +406,8 @@ struct DoorAccessTests {
             let parts = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
             return Dictionary(parts.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
         }
-        #expect(try items("0123456789abcdef0123456789abcdef") == ["db": "g", "renew": "form", "held": "0123456789abcdef0123456789abcdef"])
-        #expect(try items("") == ["db": "g", "renew": "form", "held": ""])
+        #expect(try items("0123456789abcdef0123456789abcdef") == ["db": "g", "renew": "form", "held": "0123456789abcdef0123456789abcdef", "early": "1"])
+        #expect(try items("") == ["db": "g", "renew": "form", "held": "", "early": "1"])
     }
 
     /// The Support session's case (plan v50): the hub, or the file, can call an agent a business's DevOps agent, and

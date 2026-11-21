@@ -28,6 +28,8 @@ final class DoorSyncModel {
     /// What the last round could not do, one line each, for the log.
     private(set) var problems: [String] = []
     private var lastRead: Date?
+    /// The hub's `door_grant_waits` that the last round started with (`DoorAccess.roundDue`).
+    private var grantActed: Double?
     /// The last round with no problem; `whole`: its plan held every agent's GitHub grants (`Plan.leftOut`, API 1.234).
     private var lastRound: (key: String, at: Date, whole: Bool)?
     /// The door said that it has its follow timer: it takes each release by itself, and this asks no more.
@@ -55,8 +57,11 @@ final class DoorSyncModel {
     func tick(store: FleetStore, now: Date = Date()) {
         guard !working, store.hub == hub, store.isFresh, store.state?.db != nil,
               store.state?.ui_features?.contains(ServerGrantCommand.feature) == true else { return }
-        guard lastRead.map({ now.timeIntervalSince($0) >= 300 }) ?? true else { return }
+        // About every five minutes, and once at once for each new grant that the door may not hold yet (roundDue)
+        let waits = store.state?.door_grant_waits
+        guard DoorAccess.roundDue(lastRead: lastRead, now: now, grantWaits: waits, acted: grantActed) else { return }
         lastRead = now
+        if waits != nil { grantActed = waits }      // this round reads that grant: no second early round for it
         working = true
         Task {
             let before = held
