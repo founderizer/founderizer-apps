@@ -225,19 +225,27 @@ public sealed class RequestCardAsTheMacTests
 
     /// <summary>The Mac's AnsweredMark of a card whose answer lets a task go on (NeedMarksTests
     /// .aCardWithATaskTurnsOnlyWhileItWorksAndIsRedOnlyWhenItFailed): the turning mark only while the task is in work now,
-    /// with "Role · title" for an assistive app and no hover yet (the badge's hover waits for the Mac); the red mark for a
-    /// result that is no success, with its word; the check with "Done" for a checked result; the orange mark of a question
-    /// that waits for the manager, as its row; and else the check with the task's state word ("Working" at rest, "Queued",
-    /// a result that waits for its check). A task that the reading does not hold: the agent that raised it has his answer.
-    /// The work mark turns only on a current reading. Breaks if the work mark follows the state alone, if a task at rest
-    /// loses its state word or a checked one its "Done", or if a task's work shows words on hover.</summary>
+    /// with "Role · title" for an assistive app, and under the pointer the tag of the owner's "Yes, badge as drawn" (21
+    /// November 2026; the Mac's AnsweredMarkView): the badge of the agent whose task it is (its role, and its own mark at
+    /// rest) and the task's title, in place of plain words; the red mark for a result that is no success, with its word;
+    /// the check with "Done" for a checked result; the orange mark of a question that waits for the manager, as its row;
+    /// and else the check with the task's state word ("Working" at rest, "Queued", a result that waits for its check). A
+    /// task that the reading does not hold: the agent that raised it has his answer. Every mark but a task's work keeps
+    /// its words under the pointer, with no badge. The work mark turns only on a current reading. Breaks if the work mark
+    /// follows the state alone, if a task at rest loses its state word or a checked one its "Done", if a task's work has
+    /// no badge, the badge of the agent that raised the card, a mark that moves, or plain words on hover, or if another
+    /// mark gets a badge or loses its words.</summary>
     [TestMethod]
     public void AnAnsweredCardTurnsOnlyWhileItsTaskWorksAndIsRedOnlyWhenItFailed()
     {
         var ids = new long[] { 11, 14, 15, 13, 24, 25, 22, 26, 999 };
-        var marks = MarksOf(true, ids.Select((task, i) => Pressed(41 + i, Marks(task: task))).ToArray());
+        var answered = Answered(true, ids.Select((task, i) => Pressed(41 + i, Marks(task: task))).ToArray());
+        var marks = answered.Fleet!.AnsweredNeeds!.Select(n => Screens.Card(answered, n, [], Clock, Utc).AnswerMark).ToArray();
         var work = new AnswerMark(AnswerSymbol.Working, "Customer Support · Answer today's support tickets", "wren",
-                                  "Answer today's support tickets");
+                                  "Answer today's support tickets")
+        {
+            Badge = new AgentBadge("Customer Support", MarkLook.Of(answered.MarkOf("wren"), AgentState.Online, moves: false)),
+        };
         CollectionAssert.AreEqual(new[]
         {
             work, Done("Working"), Done("Queued"),
@@ -245,8 +253,11 @@ public sealed class RequestCardAsTheMacTests
             new AnswerMark(AnswerSymbol.Failed, "Failed"), new AnswerMark(AnswerSymbol.Failed, "Not accepted"),
             Done("Done"), Done("Awaiting check"), Done("Fleet Manager has your answer"),
         }, marks, "work, at rest, queued, a question, failed, not accepted, checked, awaiting its check, not in the reading");
-        Assert.IsNull(marks[0].Hover, "no hover for a task's work until the Mac draws its badge there");
-        Assert.AreEqual("Failed", marks[4].Hover);
+        Assert.AreEqual(((string?)null, "Customer Support", "Answer today's support tickets"),
+                        (marks[0].Hover, marks[0].Badge?.Label, marks[0].Title),
+                        "a task's work: its tag under the pointer, the agent's badge and the task's title, and no plain words");
+        Assert.IsTrue(marks.Skip(1).All(m => m.Badge is null && m.Hover == m.Words && !string.IsNullOrEmpty(m.Words)),
+                      "every other mark keeps its words under the pointer, with no badge");
         var s = Answered(true, Pressed(41, Marks(task: 11)));
         var need = s.Fleet!.AnsweredNeeds![0];
         Assert.IsTrue(Screens.Card(s, need, [], Clock, Utc).MarkMoves, "a current reading turns the work mark");

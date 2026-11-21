@@ -461,16 +461,41 @@ internal sealed class AnswerParts
 /// seconds as the Mac's WorkMark does and rests, green, on a last reading and where Windows' animation effects are off;
 /// the search card's red mark of a result that is no success; or, where the task's row needs him (his "Orange mark" of
 /// the same day), the search card's icon of the task's own mark (<see cref="AnswerMark.Row"/>, <see cref="SearchCard.IconOf"/>)
-/// in its orange. Its <see cref="AnswerMark.Hover"/> shows under the pointer as the system's tooltip (none for the work of
-/// a task, and none for the plain check), and an assistive app reads its <see cref="AnswerMark.Words"/> as its name (the
-/// Mac's value of the folded card). The compositor turns it, so the app does no work for a frame.</summary>
+/// in its orange. Its <see cref="AnswerMark.Hover"/> shows under the pointer as the system's tooltip (none for the plain
+/// check); the work of a task shows its tag under the mark instead (<see cref="WorkTag"/>). An assistive app reads its
+/// <see cref="AnswerMark.Words"/> as its name (the Mac's value of the folded card). The compositor turns it, so the app
+/// does no work for a frame.</summary>
 internal sealed class AnswerMarkView : Grid
 {
     private static readonly UISettings Settings = new();
     private static readonly SolidColorBrush FailedTint = Look.Brush(Look.Rgb(0xFF, 0x45, 0x3A));
+    /// <summary>A badge's fill and edge: the link's colour at 12 and at 30 %, as the Mac's CardBadge draws them.</summary>
+    private static readonly SolidColorBrush BadgeFill = Look.Brush(global::Windows.UI.Color.FromArgb(31, Look.LinkColor.R, Look.LinkColor.G, Look.LinkColor.B));
+    private static readonly SolidColorBrush BadgeEdge = Look.Brush(global::Windows.UI.Color.FromArgb(77, Look.LinkColor.R, Look.LinkColor.G, Look.LinkColor.B));
+    /// <summary>The widest that the tag's words run before they wrap (the Mac's HoverTag.widest).</summary>
+    private const double TagWidest = 360;
+    /// <summary>The room around the tag's words, and between the tag and its mark (the Mac's HoverTag.inset and gap).</summary>
+    private const double TagInsetX = 9, TagInsetY = 6, TagGap = 6;
+    /// <summary>The rest of the pointer on the mark before its tag shows (the Mac's AnsweredMarkView: 350 ms).</summary>
+    private static readonly TimeSpan TagRest = TimeSpan.FromMilliseconds(350);
     private FrameworkElement? icon;
     /// <summary>The look drawn now: the mark's symbol, and for the orange mark the task's own symbol.</summary>
     private (AnswerSymbol, TaskSymbol?)? shown;
+    /// <summary>The badge and the title of the tag that the mark has now: a reading with the same ones keeps its tooltip.</summary>
+    private (AgentBadge, string)? tagged;
+    /// <summary>The tag of a task's work, which this view opens and closes itself (<see cref="OpenTag"/>).</summary>
+    private ToolTip? workTag;
+    /// <summary>The tag's owner for the system's tooltip service, as large as the mark and at its place: the pointer never
+    /// finds it, so the service never opens the tag by itself. A tooltip that the service opens for the pointer stands
+    /// where the pointer is, whatever its placement rectangle says (WinUI's ToolTip,
+    /// `PerformDirectionalPlacementWithWindowedPopup`).</summary>
+    private readonly Border tagOwner = new() { IsHitTestVisible = false };
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? tagRest;
+    /// <summary>A click, a key or a scroll took the tag away: it shows again only after the pointer left the mark (the
+    /// Mac's HoverTag.silenced).</summary>
+    private bool silenced;
+    /// <summary>Where the mark stood in the window when its tag opened: the tag goes when the mark moves.</summary>
+    private global::Windows.Foundation.Point tagAt;
     private bool moves;
     private bool turning;
 
@@ -480,8 +505,70 @@ internal sealed class AnswerMarkView : Grid
         VerticalAlignment = VerticalAlignment.Center;
         // A clear fill, so that the pointer finds the mark for its words (the icon itself takes no pointer).
         Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(0, 0, 0, 0));
+        Children.Add(tagOwner);
         Loaded += (_, _) => { Settings.AnimationsEnabledChanged += AnimationsChanged; Turn(); };
-        Unloaded += (_, _) => { Settings.AnimationsEnabledChanged -= AnimationsChanged; Rest(); };
+        Unloaded += (_, _) => { Settings.AnimationsEnabledChanged -= AnimationsChanged; Rest(); CloseTag(); };
+        PointerEntered += (_, e) =>
+        {
+            if (workTag is null || silenced || e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Touch) return;
+            if (tagRest is null)
+            {
+                tagRest = DispatcherQueue.CreateTimer();
+                tagRest.Interval = TagRest;
+                tagRest.IsRepeating = false;
+                tagRest.Tick += (_, _) => OpenTag();
+            }
+            tagRest.Start();
+        };
+        PointerExited += (_, _) => LeaveTag();
+        PointerCanceled += (_, _) => LeaveTag();
+    }
+
+    /// <summary>The pointer rested on the mark: its tag shows, at its place (<see cref="PlaceTag"/>).</summary>
+    private void OpenTag()
+    {
+        if (workTag is not { } tag || silenced || !IsLoaded || XamlRoot is null) return;
+        tagAt = TransformToVisual(null).TransformPoint(default);
+        // A tag that showed before knows its size; a new one takes its place when it has one (Watch, its SizeChanged).
+        if (tag.ActualWidth > 0) PlaceTag(tag, new global::Windows.Foundation.Size(tag.ActualWidth, tag.ActualHeight));
+        tag.IsOpen = true;
+    }
+
+    /// <summary>The pointer left the mark: its tag goes, and the next rest shows it again.</summary>
+    private void LeaveTag()
+    {
+        silenced = false;
+        CloseTag();
+    }
+
+    private void CloseTag()
+    {
+        tagRest?.Stop();
+        if (workTag is { IsOpen: true } tag) tag.IsOpen = false;
+    }
+
+    /// <summary>**The tag stands under its mark, its words at the answer line's left edge** (the Mac's HoverTag.show:
+    /// `anchor.minX - inset`, the gap under the mark), and above the mark only where the window's bottom ends, so it
+    /// never stands over another column, also where the answer line is centred (the request at hand in Needs you). The
+    /// mark is the first part of its answer line, so its left edge is the line's. WinUI centres a tooltip that it does
+    /// not open for the pointer on its placement rectangle (in its owner's points, which are the mark's): a rectangle as
+    /// wide as the tag, from the inset left of the mark, puts the tag's left edge there; it reaches from the gap over the
+    /// mark to the gap under it, so the tag stands at the same gap under the mark or over it. <paramref name="size"/>:
+    /// the tag's own.</summary>
+    private void PlaceTag(ToolTip tag, global::Windows.Foundation.Size size)
+    {
+        if (!IsLoaded || XamlRoot is null || size.Width <= 0) return;
+        double top = TransformToVisual(null).TransformPoint(default).Y;
+        var placement = top + ActualHeight + TagGap + size.Height <= XamlRoot.Size.Height
+            ? Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Bottom
+            : Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Top;
+        if (tag.Placement != placement)
+        {
+            tag.Placement = placement;
+            // WinUI places an open tag again when its rectangle changes, not when its placement does.
+            if (tag.IsOpen) tag.PlacementRect = null;
+        }
+        tag.PlacementRect = new global::Windows.Foundation.Rect(-TagInsetX, -TagGap, size.Width, ActualHeight + 2 * TagGap);
     }
 
     public void Show(AnswerMark mark, bool marksMove)
@@ -490,6 +577,7 @@ internal sealed class AnswerMarkView : Grid
         {
             Rest();
             shown = (mark.Symbol, mark.Row);
+            if (icon is not null) Children.Remove(icon);
             icon = mark.Symbol switch
             {
                 AnswerSymbol.Working => Icons.Of(Icons.Hint, Look.Green, 12),
@@ -497,8 +585,7 @@ internal sealed class AnswerMarkView : Grid
                 AnswerSymbol.Attention => Icons.Of(SearchCard.IconOf(mark.Row ?? TaskSymbol.Alert), Look.Orange, 12),
                 _ => Icons.Of(Icons.Check, Look.Muted, 12),
             };
-            Children.Clear();
-            Children.Add(icon);
+            Children.Insert(0, icon);
         }
         if (marksMove != moves)
         {
@@ -506,8 +593,125 @@ internal sealed class AnswerMarkView : Grid
             Rest();
         }
         Turn();
-        ToolTipService.SetToolTip(this, mark.Hover);
+        if (mark.Badge is { } badge && mark.Title is { } title)
+        {
+            if (tagged != (badge, title))
+            {
+                // A new title while the tag shows: the new tag shows in its place.
+                bool open = workTag?.IsOpen == true;
+                CloseTag();
+                tagged = (badge, title);
+                workTag = WorkTag(badge, title);
+                Watch(workTag);
+                ToolTipService.SetToolTip(this, null);
+                ToolTipService.SetToolTip(tagOwner, workTag);
+                if (open) OpenTag();
+            }
+        }
+        else
+        {
+            if (workTag is not null)
+            {
+                CloseTag();
+                ToolTipService.SetToolTip(tagOwner, null);
+                workTag = null;
+            }
+            tagged = null;
+            ToolTipService.SetToolTip(this, mark.Hover);
+        }
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(this, mark.Words ?? "");
+    }
+
+    /// <summary>**The hover of a task's work** (the owner's "Yes, badge as drawn" of 21 November 2026; the Mac's
+    /// AnsweredMarkView tag): the agent's badge, then " · " and the task's title, in one text that wraps at 360 under
+    /// the badge. The badge is the Mac's CardBadge at the words' 12: the agent's mark at 10 (0.82 of the words' size),
+    /// then its label in the words' colour, on the link's colour at 12 % with an edge at 30 %, 18 high, so that it stands
+    /// a pixel over the line of 16 and a pixel under it, as the Mac's does. It is the system's tooltip, as the other
+    /// marks' words are, so it takes no focus and no click; but this view opens it, after the Mac's rest of the pointer
+    /// (350 ms, <see cref="OpenTag"/>), and it goes when the pointer leaves, when the mark moves, and at a click, a key or
+    /// a scroll (<see cref="Watch"/>); it stands under the mark, its words at the answer line's left edge
+    /// (<see cref="PlaceTag"/>), so that it hides no title of the card and no other column.</summary>
+    private static ToolTip WorkTag(AgentBadge badge, string title)
+    {
+        var mark = Look.Glyph(badge.Mark, 10);
+        mark.VerticalAlignment = VerticalAlignment.Center;
+        var face = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        face.Children.Add(mark);
+        face.Children.Add(Look.Words(badge.Label, 12, 16, wrap: false));
+        var pill = new Border
+        {
+            Background = BadgeFill,
+            BorderBrush = BadgeEdge,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(3, 0, 3, 0),
+            // An element in a text stands on the text's baseline: 4 under it, the badge's middle is the line's.
+            Margin = new Thickness(0, 0, 0, -4),
+            Child = face,
+        };
+        var line = new Microsoft.UI.Xaml.Documents.Paragraph();
+        line.Inlines.Add(new Microsoft.UI.Xaml.Documents.InlineUIContainer { Child = pill });
+        line.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = " · " + title });
+        var words = new RichTextBlock
+        {
+            FontFamily = Look.TextFont,
+            FontSize = 12,
+            LineHeight = 16,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            Foreground = Look.Text,
+            TextWrapping = TextWrapping.Wrap,
+            IsTextSelectionEnabled = false,
+            MaxWidth = TagWidest,
+        };
+        words.Blocks.Add(line);
+        // The tooltip's own widest (320) would wrap the words before 360; its room is the Mac's tag's.
+        return new ToolTip
+        {
+            Content = words,
+            MaxWidth = double.PositiveInfinity,
+            Padding = new Thickness(TagInsetX, TagInsetY, TagInsetX, TagInsetY),
+            BorderThickness = new Thickness(1),
+            Placement = Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Bottom,
+        };
+    }
+
+    /// <summary>While the tag shows: it takes its place again when its size changes (the first time that it shows, WinUI
+    /// measures it then), and it goes when its mark moves, hides or leaves, and at a click, a key or a scroll anywhere in
+    /// the window, as the Mac's does (HoverTag), and then stays away until the pointer leaves the mark. The window's
+    /// content tells it only while it shows, also of a press or a key that a control took.</summary>
+    private void Watch(ToolTip tag)
+    {
+        UIElement? root = null;
+        var press = new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) => { silenced = true; CloseTag(); });
+        var key = new Microsoft.UI.Xaml.Input.KeyEventHandler((_, _) => { silenced = true; CloseTag(); });
+        tag.SizeChanged += (_, e) => { if (tag.IsOpen) PlaceTag(tag, e.NewSize); };
+        tag.Opened += (_, _) =>
+        {
+            root = XamlRoot?.Content;
+            root?.AddHandler(PointerPressedEvent, press, true);
+            root?.AddHandler(PointerWheelChangedEvent, press, true);
+            root?.AddHandler(KeyDownEvent, key, true);
+            LayoutUpdated -= Moved;
+            LayoutUpdated += Moved;
+        };
+        tag.Closed += (_, _) =>
+        {
+            root?.RemoveHandler(PointerPressedEvent, press);
+            root?.RemoveHandler(PointerWheelChangedEvent, press);
+            root?.RemoveHandler(KeyDownEvent, key);
+            root = null;
+            // A tag of a new title can show before the old one has closed: the watch stays for it.
+            if (workTag is not { IsOpen: true }) LayoutUpdated -= Moved;
+        };
+    }
+
+    /// <summary>A layout of the window while the tag shows: the tag goes when its mark moved, hid or left.</summary>
+    private void Moved(object? sender, object e)
+    {
+        if (workTag is not { IsOpen: true }) return;
+        if (!IsLoaded || XamlRoot is null || Visibility != Visibility.Visible) { CloseTag(); return; }
+        var at = TransformToVisual(null).TransformPoint(default);
+        if (Math.Abs(at.X - tagAt.X) > 0.5 || Math.Abs(at.Y - tagAt.Y) > 0.5) CloseTag();
     }
 
     /// <summary>Windows' animation effects were turned on or off: the mark follows at once.</summary>

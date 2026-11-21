@@ -463,7 +463,9 @@ struct NeedAnswerBox: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 if let held = store.heldKey, held.composer == guardKey {
-                    KeyHoldBanner(hold: held.hold, agent: need.by, narrow: cardWindow != nil) { saveHeldKey(held, words: text) } goOn: {
+                    KeyHoldBanner(hold: held.hold, agent: need.by, narrow: cardWindow != nil) {
+                        saveHeldKey(held, words: text)
+                    } goOn: {
                         keepHeldKey(held, words: text, allowed: $keyAllowed)
                     }
                 }
@@ -833,7 +835,9 @@ extension NeedAnswerBox {
     private var clarifyBox: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let held = store.heldKey, held.composer == clarifyGuardKey {
-                KeyHoldBanner(hold: held.hold, agent: need.by, narrow: cardWindow != nil) { saveHeldKey(held, words: $clarifyText) } goOn: {
+                KeyHoldBanner(hold: held.hold, agent: need.by, narrow: cardWindow != nil) {
+                    saveHeldKey(held, words: $clarifyText)
+                } goOn: {
                     keepHeldKey(held, words: $clarifyText, allowed: $clarifyKeyAllowed)
                 }
             }
@@ -1349,7 +1353,7 @@ struct NeedRequestCard: View {
             if !need.why.isEmpty || !task.isEmpty {
                 VStack(alignment: .leading, spacing: ChatStyle.blockSpacing) {
                     if expanded || short {
-                        MessageText(text: need.why, chat: true, card: true, names: names)
+                        MessageText(text: need.why, chat: true, card: true, names: names, values: true)
                     } else {
                         // **An older long card folds to three lines** (the owner, 9 November 2026: "MUCH better so they
                         // are shorter"): the start of its reason, until Show all opens the rest.
@@ -1362,7 +1366,7 @@ struct NeedRequestCard: View {
                     // owner feature need_run: the block of its command has Run (the owner's "Yes, as drawn")
                     if !task.isEmpty {
                         MessageText(text: task, chat: true, card: true, run: NeedRunTarget.of(need, store: store),
-                                    names: names)
+                                    names: names, values: true)
                         CardPageButton(store: store, need: need, task: task)
                     }
                 }
@@ -1401,12 +1405,12 @@ struct NeedRequestCard: View {
                 // the request at hand on Needs you draws it, which this Mac hashes before it signs Run it once
                 // (`DoorCall.checked`).
                 MessageText(text: details, chat: true, script: need.door_script != nil, card: true,
-                            names: need.door_script != nil ? nil : names)
+                            names: need.door_script != nil ? nil : names, values: need.door_script == nil)
             }
             if expanded, !todo.isEmpty, task.isEmpty {
                 Text("What it needs from you").font(FormMetrics.detailTitle)
                     .foregroundStyle(FleetStyle.muted).padding(.top, 2)
-                MessageText(text: todo, chat: true, card: true, names: names)
+                MessageText(text: todo, chat: true, card: true, names: names, values: true)
             }
             // owner feature need_clarify: **an answered card keeps his talk with the manager, read only**, before his
             // answer as it came (the area of Needs-you, 20 November 2026: "the talk stands in the card" holds after his

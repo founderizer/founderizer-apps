@@ -102,7 +102,8 @@ app/windows/vm/vm.sh start                     # starts QEMU detached and waits 
 app/windows/vm/vm.sh run 'dotnet --version'    # one PowerShell command in an SSH session
 app/windows/vm/vm.sh run 'New-Item -ItemType Directory -Force -Path C:\fz\src\windows, C:\fz\src\vectors, C:\fz\setup | Out-Null'
 app/windows/vm/vm.sh copy app/windows/Directory.Build.props app/windows/global.json app/windows/nuget.config \
-    app/windows/Founderizer.Core app/windows/Founderizer.Install app/windows/Founderizer.Windows vm:C:/fz/src/windows/
+    app/windows/Founderizer.Core app/windows/Founderizer.Install app/windows/Founderizer.Owner \
+    app/windows/Founderizer.Remote app/windows/Founderizer.Setup app/windows/Founderizer.Windows vm:C:/fz/src/windows/
 app/windows/vm/vm.sh copy app/vectors/agent-marks.json vm:C:/fz/src/vectors/   # Founderizer.Core embeds ../../vectors/agent-marks.json
 app/windows/vm/vm.sh copy app/windows/vm/setup/build-window.ps1 vm:C:/fz/setup/
 app/windows/vm/vm.sh run 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\fz\setup\build-window.ps1 -Source C:\fz\src\windows\Founderizer.Windows'

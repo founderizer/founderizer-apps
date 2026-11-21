@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -122,9 +123,9 @@ public sealed record TaskMark(TaskSymbol Symbol, string Words, bool Attention, b
 /// the task's own row"), with the row's own symbol (<see cref="Row"/>) and words, so that the row and the card never
 /// disagree. A task whose row is muted (queued, at rest, his own pause, a result that waits for its check) is the check
 /// with its state word. <see cref="Words"/> are what an assistive app reads for the mark, and <see cref="Hover"/> what
-/// shows under the pointer. <see cref="Plain"/> is the check with no words, where no mark of his answer stands: a written
-/// answer, a request that a saved key answered, an answer on its way, and an open card. <see cref="Row"/> is null for the
-/// other three looks.</summary>
+/// shows under the pointer; for the work of a task, <see cref="Badge"/> and <see cref="Title"/> show there. <see cref="Plain"/>
+/// is the check with no words, where no mark of his answer stands: a written answer, a request that a saved key answered,
+/// an answer on its way, and an open card. <see cref="Row"/> is null for the other three looks.</summary>
 public sealed record AnswerMark(AnswerSymbol Symbol, string? Words = null, string? Agent = null, string? Title = null,
                                 TaskSymbol? Row = null)
 {
@@ -133,9 +134,15 @@ public sealed record AnswerMark(AnswerSymbol Symbol, string? Words = null, strin
     /// <summary>`ui_features` of a hub that gives an item's `team_state`, `team_reason` and `task`.</summary>
     public const string Feature = "need_marks";
 
-    /// <summary>The words under the pointer. Not yet for the work of a task: his yes is to a hover with the agent's badge
-    /// there, which the Mac draws first (AnsweredMarkView.hover); an assistive app reads its <see cref="Words"/>. Null
-    /// where there are no words, so that no empty tip shows.</summary>
+    /// <summary>The badge of the agent whose task is in work now (<see cref="Agent"/>), which the hover of the work mark
+    /// draws before " · " and the task's <see cref="Title"/>; <see cref="Screens.AnsweredMark"/> adds it. Null for every
+    /// other mark.</summary>
+    public AgentBadge? Badge { get; init; }
+
+    /// <summary>The plain words under the pointer, as the system's tooltip. None for the work of a task: there the
+    /// pointer shows the tag of the owner's "Yes, badge as drawn" (21 November 2026; the Mac's AnsweredMarkView tag),
+    /// the agent's <see cref="Badge"/>, then " · " and the task's <see cref="Title"/>, and an assistive app reads the
+    /// same <see cref="Words"/>. Null where there are no words, so that no empty tip shows.</summary>
     public string? Hover =>
         string.IsNullOrEmpty(Words) || Symbol == AnswerSymbol.Working && !string.IsNullOrEmpty(Agent) ? null : Words;
 
@@ -174,6 +181,19 @@ public sealed record AnswerMark(AnswerSymbol Symbol, string? Words = null, strin
         if (mark.Attention) return new(AnswerSymbol.Attention, mark.Words, Row: mark.Symbol);
         if (mark.InWork) return new(AnswerSymbol.Working, $"{names.Label(task.Owner)} · {task.Title}", task.Owner, task.Title);
         return new(AnswerSymbol.Check, mark.Words);
+    }
+}
+
+/// <summary>An agent's name as a badge in words (the Mac's CardBadgeText for an agent): its mark, then its
+/// <see cref="Label"/> as the words name it. The mark is at rest, in its own colours, and grey for an agent that is not
+/// there (offline, or not in the reading), as the Mac's badge draws it.</summary>
+public sealed record AgentBadge(string Label, MarkLook Mark)
+{
+    /// <summary>The badge of <paramref name="agent"/> in this reading.</summary>
+    public static AgentBadge Of(StoreState s, string agent, DateTimeOffset now)
+    {
+        var absent = s.StatusOf(agent, now).State is AgentState.Offline or AgentState.Unknown;
+        return new(s.Names.Label(agent), MarkLook.Of(s.MarkOf(agent), absent ? AgentState.Offline : AgentState.Online, moves: false));
     }
 }
 

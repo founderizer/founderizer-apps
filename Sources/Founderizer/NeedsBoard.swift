@@ -729,7 +729,7 @@ private struct NeedStep: View {
 
     @ViewBuilder private var why: some View {
         if short || expanded {
-            MessageText(text: need.why, step: true, names: names).foregroundStyle(FleetStyle.text)
+            MessageText(text: need.why, step: true, names: names, values: true).foregroundStyle(FleetStyle.text)
                 .multilineTextAlignment(centred ? .center : .leading)
                 .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
         } else {
@@ -747,7 +747,7 @@ private struct NeedStep: View {
     /// steps as a list.
     private var taskWords: some View {
         // owner feature need_run: the block of its command has Run (the owner's "Yes, as drawn")
-        MessageText(text: task, step: true, run: NeedRunTarget.of(need, store: store), names: names)
+        MessageText(text: task, step: true, run: NeedRunTarget.of(need, store: store), names: names, values: true)
             .foregroundStyle(FleetStyle.text)
             .multilineTextAlignment(centred ? .center : .leading)
             .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
@@ -780,11 +780,12 @@ private struct NeedStep: View {
             // The door's card wraps its script (API 1.125): no end of a line is off the screen when Script is open.
             if let details = need.details {
                 MessageText(text: details, step: true, script: need.door_script != nil,
-                            names: need.door_script != nil ? nil : names).foregroundStyle(FleetStyle.text)
+                            names: need.door_script != nil ? nil : names, values: need.door_script == nil)
+                    .foregroundStyle(FleetStyle.text)
             }
             if !todo.isEmpty, task.isEmpty {
                 Text("What it needs from you").font(.system(size: SetupMetrics.text, weight: .medium)).foregroundStyle(FleetStyle.muted)
-                MessageText(text: todo, step: true, names: names).foregroundStyle(FleetStyle.text)
+                MessageText(text: todo, step: true, names: names, values: true).foregroundStyle(FleetStyle.text)
             }
         }
         .multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)

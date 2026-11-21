@@ -1125,7 +1125,7 @@ enum SampleFleetData {
      "in_reply_to": "00000000-0000-0000-0000-000000000005",
      "kind": "report",
      "pushed": false,
-     "text": "Sí. Marketing tiene el correo listo, y Desarrollador publica el banner de las rebajas el domingo por la noche. El correo espera tu sí en Te necesita.",
+     "text": "Sí. Marketing tiene el correo listo, y Desarrollador publica el banner de las rebajas el domingo por la noche. Puedes aprobar el envío en «Por atender».",
      "ts": "@-480",
      "turn": null
     }
@@ -1197,7 +1197,7 @@ enum SampleFleetData {
      "in_reply_to": null,
      "kind": "report",
      "pushed": true,
-     "text": "Hoy respondí 23 tickets. Un cliente pide un reembolso fuera del plazo de 30 días: está en Te necesita.",
+     "text": "Hoy respondí 23 tickets. Un cliente pide un reembolso fuera del plazo de 30 días. Dejé la solicitud en «Por atender».",
      "ts": "@-2460",
      "turn": null
     }
@@ -1241,7 +1241,7 @@ enum SampleFleetData {
     "chat_undelivered": false,
     "direct_chat": true,
     "last": {
-     "preview": "Hoy respondí 23 tickets. Un cliente pide un reembolso fuera del plazo de 30 días: está en Te necesita.",
+     "preview": "Hoy respondí 23 tickets. Un cliente pide un reembolso fuera del plazo de 30 días. Dejé la solicitud en «Por atender».",
      "side": "agent",
      "ts": "@-2460"
     },

@@ -338,7 +338,7 @@ public static partial class Screens
             Folded = ended,
             AnswerWords = answer.Length == 0 ? "Answered" : answer,
             AnsweredInWords = inWords,
-            AnswerMark = AnsweredMark(s, need, inWords),
+            AnswerMark = AnsweredMark(s, need, inWords, now),
             MarkMoves = s.ShowsCurrent(now),
             Spoken = spoken,
             Answered = !need.IsOpen,
@@ -398,11 +398,16 @@ public static partial class Screens
     /// <summary>What stands in the check's place of an answered request (NeedRequestCard's AnsweredMarkView and
     /// foldedMarkWords): its mark (<see cref="AnswerMark.Of"/>), or the plain check where none stands: an answer in his
     /// own words, a request that a saved key answered (the Mac's key card), and a card that the hub has not answered in
-    /// a reading, whose answer is on its way. A press of Run is no option that he pressed, so it is in words here.</summary>
-    public static AnswerMark AnsweredMark(StoreState s, OwnerNeed need, bool inWords) =>
-        inWords || need.IsOpen || need.AnsweredWithKeyOrWords
-            ? AnswerMark.Plain
-            : AnswerMark.Of(need, s.Fleet, need.Task is null ? [] : s.AllTasks(), s.Names);
+    /// a reading, whose answer is on its way. A press of Run is no option that he pressed, so it is in words here. The
+    /// work of a task gets its agent's badge (<see cref="AnswerMark.Badge"/>), which its hover draws.</summary>
+    public static AnswerMark AnsweredMark(StoreState s, OwnerNeed need, bool inWords, DateTimeOffset now)
+    {
+        if (inWords || need.IsOpen || need.AnsweredWithKeyOrWords) return AnswerMark.Plain;
+        var mark = AnswerMark.Of(need, s.Fleet, need.Task is null ? [] : s.AllTasks(), s.Names);
+        return mark is { Symbol: AnswerSymbol.Working, Agent: { Length: > 0 } agent }
+            ? mark with { Badge = AgentBadge.Of(s, agent, now) }
+            : mark;
+    }
 
     /// <summary>NeedTalk.why: the most characters of a card's why that shows whole.</summary>
     public const int NeedTalkWhy = 240;
@@ -740,7 +745,7 @@ public static partial class Screens
             Ended = ended,
             AnswerWords = answer.Length == 0 ? "Answered" : answer,
             AnsweredInWords = inWords,
-            AnswerMark = AnsweredMark(s, need, inWords),
+            AnswerMark = AnsweredMark(s, need, inWords, now),
             MarkMoves = s.ShowsCurrent(now),
             Options = Options(s, need, now, ended),
             Answer = AnswerBox(s, need),
@@ -1599,8 +1604,9 @@ public sealed record RequestCard
     public bool ShowsCheck => !AnsweredInWords;
     /// <summary>What stands in the check's place (owner API 1.280, <see cref="Screens.AnsweredMark"/>): the check, the
     /// turning green mark of work, the red mark of work that ended with no success, or the orange mark of a task that
-    /// needs him (its row's symbol); its <see cref="AnswerMark.Hover"/> under the pointer, and its
-    /// <see cref="AnswerMark.Words"/> for an assistive app.</summary>
+    /// needs him (its row's symbol); its <see cref="AnswerMark.Hover"/> under the pointer (for the work of a task, its
+    /// agent's <see cref="AnswerMark.Badge"/> and the task's title), and its <see cref="AnswerMark.Words"/> for an
+    /// assistive app.</summary>
     public AnswerMark AnswerMark { get; init; } = AnswerMark.Plain;
     /// <summary>The work mark turns: the reading is current (the Mac's marksMove). On a last reading it rests, green, as
     /// it does where Windows' animation effects are off.</summary>

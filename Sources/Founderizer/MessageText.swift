@@ -22,6 +22,10 @@ struct MessageText: View, Equatable {
     /// **The names that a request's words link** (`CardNames`; the lane "Give on a card"): an agent, a repository, a
     /// server and a page of the app, where a card draws the words. A chat's message takes `chatNames` instead.
     var names: CardNames? = nil
+    /// **Each value that the agent put in inline code is a chip with a copy icon** (`CardValueText`; the owner's "Yes,
+    /// as drawn" of 21 November 2026): only in the reason, the task, the steps and the details of a request's card and
+    /// of the request at hand on Needs you. Inline code everywhere else keeps its flat fill.
+    var values = false
     /// **The names that a chat's message draws as badges** (`AgentReply`, `OwnerBubble`; the owner, 20 November 2026:
     /// "ok but use always the agent badges and icons!!"): the card's names by the chat's stricter rules (`ChatNames`),
     /// drawn with the words in every row and pressed in the row under the pointer (`chatBadges`). A table's cells keep
@@ -120,7 +124,9 @@ struct MessageText: View, Equatable {
     /// it makes none of its texts again (`ChatBadges`).
     private func linked(_ block: Block) -> (text: Text, badges: [ChatBadgeMap.Entry], lead: CGFloat) {
         let size = step ? SetupMetrics.text : chat ? ChatStyle.size : FleetStyle.bodySize
-        guard let chatNames else { return (CardBadgeText.text(block.formatted, names: names, size: size), [], 0) }
+        guard let chatNames else {
+            return (CardBadgeText.text(block.formatted, names: names, size: size, values: values), [], 0)
+        }
         return ChatBadgeText.text(chatNames.words(block.formatted), links: block.links, size: size)
     }
 
@@ -128,6 +134,9 @@ struct MessageText: View, Equatable {
         let blocks = blocks, lines = chat ? ChatStyle.lineSpacing : 5
         // owner feature need_run: the first block of the command has Run, and no second one
         let runs = run.flatMap { run in blocks.firstIndex { $0.kind == .code && $0.text == run.command } }
+        // a request's values, by block: their chips, their presses and VoiceOver's actions on the block's words
+        // (`cardValues`)
+        let valued = blocks.map { values ? CardValues.values(in: $0.formatted, names: names) : [] }
         VStack(alignment: .leading, spacing: chat ? 0 : 9) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
                 Group {
@@ -136,13 +145,13 @@ struct MessageText: View, Equatable {
                     let words = linked(block)
                     ChatBadgeText.led(words.text, lead: words.lead).lineSpacing(lines).selectableWords()
                         .chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
-                        .linkPresses(block.links, fold: fold, always: folded)
+                        .linkPresses(block.links, fold: fold, always: folded).cardValues(valued[index])
                 case .heading:
                     let words = linked(block)
                     ChatBadgeText.led(words.text, lead: words.lead)
                         .font(step ? Font.system(size: SetupMetrics.text, weight: .semibold) : chat ? ChatStyle.heading : FormMetrics.title)
                         .selectableWords().chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
-                        .linkPresses(block.links, fold: fold, always: folded)
+                        .linkPresses(block.links, fold: fold, always: folded).cardValues(valued[index])
                         .padding(.top, chat ? 0 : 3)
                 case .item:
                     // An item under another starts its mark where that item's words start: the mark's 12 and the 9
@@ -152,7 +161,7 @@ struct MessageText: View, Equatable {
                         let words = linked(block)
                         ChatBadgeText.led(words.text, lead: words.lead).lineSpacing(lines).selectableWords()
                             .chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
-                            .linkPresses(block.links, fold: fold, always: folded)
+                            .linkPresses(block.links, fold: fold, always: folded).cardValues(valued[index])
                     }.padding(.leading, 3 + CGFloat(block.level) * 21)
                 case .quote:
                     HStack(spacing: 10) {
@@ -160,7 +169,7 @@ struct MessageText: View, Equatable {
                         let words = linked(block)
                         ChatBadgeText.led(words.text, lead: words.lead).foregroundStyle(FleetStyle.muted).lineSpacing(lines)
                             .selectableWords().chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
-                            .linkPresses(block.links, fold: fold, always: folded)
+                            .linkPresses(block.links, fold: fold, always: folded).cardValues(valued[index])
                     }
                 case .code: CodeBlock(text: block.text, font: chat ? ChatStyle.code : step && !script ? Self.stepCode : FormMetrics.code,
                                       spacing: chat ? 5 : 4, fill: card ? FleetStyle.canvas : FleetStyle.surface,

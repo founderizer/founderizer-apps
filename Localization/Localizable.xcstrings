@@ -250,7 +250,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ respondió algo que esta app no entiende."
+            "value" : "La app no reconoce la respuesta de %@."
           }
         }
       }
@@ -330,7 +330,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ no puede chatear ahora"
+            "value" : "%@ no puede responder en el chat ahora"
           }
         }
       }
@@ -500,7 +500,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ no dio los datos de %@ (%@)."
+            "value" : "%@ no devolvió los datos de %@ (%@)."
           }
         }
       }
@@ -700,7 +700,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ no dio datos de %@."
+            "value" : "%@ no devolvió datos de %@."
           }
         }
       }
@@ -860,7 +860,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ no tiene servicio de servidor: no se unió con una línea de unión."
+            "value" : "%@ no tiene el servicio de Founderizer porque no se vinculó con un código de conexión."
           }
         }
       }
@@ -900,7 +900,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ tiene tu respuesta"
+            "value" : "%@ ya recibió tu respuesta"
           }
         }
       }
@@ -1610,7 +1610,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ reporta a"
+            "value" : "%@ depende de"
           }
         }
       }
@@ -1942,7 +1942,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ · Inicio de sesión sin informar"
+            "value" : "%@ · Sin datos de inicio de sesión"
           }
         }
       }
@@ -2165,7 +2165,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@, respondida"
+            "value" : "%@, con respuesta"
           }
         }
       }
@@ -2175,7 +2175,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@, respondida: %@"
+            "value" : "%@: respuesta %@"
           }
         }
       }
@@ -2349,7 +2349,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "chats en espera: %lld"
+            "value" : "Chats en espera: %lld"
           }
         }
       }
@@ -2509,7 +2509,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld elementos te necesitan"
+            "value" : "%lld asuntos requieren tu atención"
           }
         }
       }
@@ -2819,7 +2819,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld cosa que te necesitaba"
+            "value" : "%lld asunto que requería tu atención"
           }
         }
       }
@@ -2839,7 +2839,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld cosas que te necesitaban"
+            "value" : "%lld asuntos que requerían tu atención"
           }
         }
       }
@@ -2991,7 +2991,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "1 elemento te necesita"
+            "value" : "1 asunto requiere tu atención"
           }
         }
       }
@@ -3275,7 +3275,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Un canal te necesita"
+            "value" : "Un canal requiere tu atención"
           }
         }
       }
@@ -3315,7 +3315,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hay un código abierto · %@"
+            "value" : "Código activo · %@"
           }
         }
       }
@@ -3495,7 +3495,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Una línea más reciente sustituyó a esta."
+            "value" : "Hay un comando más reciente que sustituye a este."
           }
         }
       }
@@ -3505,7 +3505,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No se pudo entregar una notificación. Revisa «Te necesita» en Founderizer."
+            "value" : "No se pudo entregar una notificación. Abre «Por atender» en Founderizer."
           }
         }
       }
@@ -3895,7 +3895,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cuenta sin informar"
+            "value" : "Cuenta sin datos"
           }
         }
       }
@@ -4555,7 +4555,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ya respondida."
+            "value" : "Ya tiene respuesta."
           }
         }
       }
@@ -4865,7 +4865,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Respuesta sin confirmar"
+            "value" : "No se confirmó el envío"
           }
         }
       }
@@ -4875,7 +4875,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Respuesta no enviada"
+            "value" : "No se envió la respuesta"
           }
         }
       }
@@ -4895,7 +4895,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Respuesta al elemento %lld"
+            "value" : "Respuesta a la solicitud %lld"
           }
         }
       }
@@ -4905,7 +4905,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Responder con esto"
+            "value" : "Usarlo para responder"
           }
         }
       }
@@ -4925,7 +4925,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Respondida"
+            "value" : "Con respuesta"
           }
         }
       }
@@ -4935,7 +4935,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Respondida: %@"
+            "value" : "Respuesta: %@"
           }
         }
       }
@@ -5095,7 +5095,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pedida por"
+            "value" : "Quién lo solicitó"
           }
         }
       }
@@ -5105,7 +5105,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pedida por %@"
+            "value" : "Solicitado por %@"
           }
         }
       }
@@ -5115,7 +5115,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pedida por ti"
+            "value" : "Lo solicitaste tú"
           }
         }
       }
@@ -5125,7 +5125,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pregunta antes: %@"
+            "value" : "Pide permiso antes de: %@"
           }
         }
       }
@@ -5135,7 +5135,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Te pregunta antes"
+            "value" : "Te pide permiso antes"
           }
         }
       }
@@ -5605,7 +5605,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No se puede guardar esta respuesta. No se envió nada."
+            "value" : "No se pudo guardar la respuesta. No se envió nada."
           }
         }
       }
@@ -5815,7 +5815,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Chatear con %@"
+            "value" : "Abrir chat con %@"
           }
         }
       }
@@ -5995,7 +5995,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Revisa las líneas de reporte antes de guardar."
+            "value" : "Revisa la jerarquía del equipo antes de guardar."
           }
         }
       }
@@ -6005,7 +6005,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Comprueba el resultado"
+            "value" : "Comprobar el resultado"
           }
         }
       }
@@ -6575,7 +6575,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Confirma qué pasó antes de que la tarea repita una acción."
+            "value" : "Confirma qué pasó antes de que el agente repita la acción."
           }
         }
       }
@@ -6755,7 +6755,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conectando con el trabajador…"
+            "value" : "Conectando con el equipo del agente…"
           }
         }
       }
@@ -6795,7 +6795,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Se perdió la conexión. La vista se detuvo."
+            "value" : "Se perdió la conexión y se interrumpió la vista del escritorio."
           }
         }
       }
@@ -6866,6 +6866,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Copiar"
+          }
+        }
+      }
+    },
+    "Copy %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar %@"
           }
         }
       }
@@ -7185,7 +7195,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Líneas de reporte actuales"
+            "value" : "Jerarquía actual"
           }
         }
       }
@@ -7555,7 +7565,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La captura del escritorio no está disponible. Revisa el instalador del trabajador y el permiso de pantalla."
+            "value" : "No se puede mostrar el escritorio. Comprueba la instalación del agente y el permiso para capturar la pantalla."
           }
         }
       }
@@ -7615,7 +7625,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No terminó"
+            "value" : "Sin completar"
           }
         }
       }
@@ -7685,7 +7695,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Desconectado · último estado"
+            "value" : "Sin conexión · Último estado"
           }
         }
       }
@@ -7865,7 +7875,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cada agente debe reportar al gestor o a un líder."
+            "value" : "Cada agente debe depender del gestor o de un líder."
           }
         }
       }
@@ -7895,7 +7905,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cada línea de reporte debe terminar en el gestor."
+            "value" : "Cada agente debe depender del gestor, directamente o a través de un líder."
           }
         }
       }
@@ -7985,7 +7995,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Editar las líneas de reporte"
+            "value" : "Editar la jerarquía del equipo"
           }
         }
       }
@@ -8025,7 +8035,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Correo sin informar"
+            "value" : "Correo no disponible"
           }
         }
       }
@@ -9285,7 +9295,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Founderizer te necesita"
+            "value" : "Founderizer requiere tu atención"
           }
         }
       }
@@ -9755,7 +9765,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dar a %@ acceso a la bóveda"
+            "value" : "Conceder a %@ acceso a la bóveda"
           }
         }
       }
@@ -9855,7 +9865,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dar acceso"
+            "value" : "Conceder acceso"
           }
         }
       }
@@ -9965,7 +9975,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Da tareas a los agentes que le reportan"
+            "value" : "Asigna tareas a los agentes que supervisa"
           }
         }
       }
@@ -10225,7 +10235,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hetzner responde a mano, en su horario laboral. Una cuenta de menos de un mes aún no puede pedirlo."
+            "value" : "El personal de Hetzner responde en horario laboral. La cuenta debe tener al menos un mes para hacer la solicitud."
           }
         }
       }
@@ -10655,7 +10665,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Instalar a mano"
+            "value" : "Instalar manualmente"
           }
         }
       }
@@ -10835,7 +10845,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No se unió con una línea de unión, así que no tiene servicio de servidor."
+            "value" : "El servidor no tiene el servicio de Founderizer porque no se vinculó con el comando de conexión."
           }
         }
       }
@@ -10875,7 +10885,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Va directo a la bóveda. Ningún agente ve su valor."
+            "value" : "Se guarda directamente en la bóveda. Ningún agente puede ver su valor."
           }
         }
       }
@@ -10955,7 +10965,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sale de Founderizer. Sus archivos se quedan en el servidor y puede volver a unirse con una línea nueva."
+            "value" : "El servidor se desvincula de Founderizer. Sus archivos se conservan y puedes volver a vincularlo con un comando nuevo."
           }
         }
       }
@@ -11325,7 +11335,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Su servidor no tiene almacén de bóveda."
+            "value" : "El servidor del agente no tiene configurada la bóveda."
           }
         }
       }
@@ -11445,7 +11455,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Su sistema instaló actualizaciones que necesitan un reinicio."
+            "value" : "El sistema debe reiniciarse para aplicar las actualizaciones."
           }
         }
       }
@@ -11465,7 +11475,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sus tareas en curso y su parte de lo que te necesita"
+            "value" : "Sus tareas en curso y los asuntos que requieren tu atención"
           }
         }
       }
@@ -11485,7 +11495,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Línea de unión"
+            "value" : "Comando de conexión"
           }
         }
       }
@@ -11755,7 +11765,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Última lectura %@ · Abrir su servidor"
+            "value" : "Última comprobación: %@ · Abrir el servidor"
           }
         }
       }
@@ -12345,7 +12355,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Crear la línea"
+            "value" : "Generar el comando"
           }
         }
       }
@@ -12405,7 +12415,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El gestor puede dar:"
+            "value" : "El gestor puede conceder acceso:"
           }
         }
       }
@@ -12415,7 +12425,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El gestor puede dar: %@"
+            "value" : "El gestor puede conceder acceso: %@"
           }
         }
       }
@@ -12685,7 +12695,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Necesita aclaración"
+            "value" : "Pedir aclaración"
           }
         }
       }
@@ -12695,7 +12705,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Te necesita"
+            "value" : "Por atender"
           }
         }
       }
@@ -12705,7 +12715,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Te necesita: %@"
+            "value" : "Requiere tu atención: %@"
           }
         }
       }
@@ -12715,7 +12725,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Te necesita: %lld"
+            "value" : "Por atender: %lld"
           }
         }
       }
@@ -12815,7 +12825,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Línea nueva"
+            "value" : "Nuevo comando"
           }
         }
       }
@@ -12835,7 +12845,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Respuesta nueva"
+            "value" : "Nueva respuesta"
           }
         }
       }
@@ -12845,7 +12855,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Respuesta nueva en su chat"
+            "value" : "Nueva respuesta en el chat"
           }
         }
       }
@@ -13045,7 +13055,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No llegó ninguna respuesta en 10 minutos. Vuelve a pulsar Conectar."
+            "value" : "Han pasado 10 minutos sin respuesta. Pulsa «Conectar» de nuevo."
           }
         }
       }
@@ -13115,7 +13125,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aún no ha respondido ninguna comprobación de %@."
+            "value" : "Aún no hay resultados de las comprobaciones de %@."
           }
         }
       }
@@ -13215,7 +13225,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No hay un estado actual de este hub. Vuelve a intentarlo cuando responda."
+            "value" : "El estado del hub aún no está disponible. Vuelve a intentarlo cuando responda."
           }
         }
       }
@@ -13545,7 +13555,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No se informó de ningún resultado"
+            "value" : "Sin resultado registrado"
           }
         }
       }
@@ -13825,7 +13835,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No entregadas · tarea reiniciada"
+            "value" : "No se entregaron · Se reinició la tarea"
           }
         }
       }
@@ -14025,7 +14035,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sin informar"
+            "value" : "Sin datos"
           }
         }
       }
@@ -14205,7 +14215,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nada te necesita"
+            "value" : "No tienes nada pendiente"
           }
         }
       }
@@ -14395,7 +14405,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lectura desactualizada"
+            "value" : "Estado sin actualizar"
           }
         }
       }
@@ -14685,7 +14695,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abrir «Se ejecuta en»"
+            "value" : "Ver dónde se ejecuta"
           }
         }
       }
@@ -14895,7 +14905,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abrir el hilo hijo · Intento %lld"
+            "value" : "Abrir el hilo del subagente · Intento %lld"
           }
         }
       }
@@ -14905,7 +14915,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abrir en su propia ventana"
+            "value" : "Abrir en otra ventana"
           }
         }
       }
@@ -15065,7 +15075,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abrir esta solicitud en Te necesita"
+            "value" : "Abrir esta solicitud en «Por atender»"
           }
         }
       }
@@ -15325,7 +15335,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nuestro sitio respondió algo que esta app no pudo leer."
+            "value" : "La app no pudo leer la respuesta del sitio web."
           }
         }
       }
@@ -15355,7 +15365,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Estado final"
+            "value" : "Resultado"
           }
         }
       }
@@ -15365,7 +15375,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Resultado desconocido: compruébalo"
+            "value" : "Resultado sin confirmar. Compruébalo."
           }
         }
       }
@@ -15595,7 +15605,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pega esta línea en Terminal en el Mac, como el usuario que ejecutará los agentes"
+            "value" : "Pega este comando en Terminal con la cuenta del Mac que ejecutará los agentes"
           }
         }
       }
@@ -15605,7 +15615,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pega esta línea en una shell de root en el VPS"
+            "value" : "Pega este comando en una terminal del VPS como usuario root"
           }
         }
       }
@@ -16095,7 +16105,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Volver a leer %@"
+            "value" : "Volver a consultar %@"
           }
         }
       }
@@ -16335,7 +16345,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Leyendo las líneas de reporte…"
+            "value" : "Cargando la jerarquía del equipo…"
           }
         }
       }
@@ -16405,7 +16415,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Leyendo los ajustes…"
+            "value" : "Cargando los ajustes…"
           }
         }
       }
@@ -16415,7 +16425,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Leyendo la tarea…"
+            "value" : "Cargando la tarea…"
           }
         }
       }
@@ -16575,7 +16585,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Acuse de recibo sin confirmar. La solicitud guardada se conserva; actualiza para comprobarla o vuelve a intentar la misma solicitud."
+            "value" : "No se pudo confirmar la recepción. La solicitud sigue guardada. Actualiza la vista para comprobar su estado o vuelve a enviar la misma solicitud."
           }
         }
       }
@@ -16665,7 +16675,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Actualizar las líneas de reporte"
+            "value" : "Actualizar la jerarquía"
           }
         }
       }
@@ -16915,7 +16925,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Quitar a %@ el acceso a la bóveda"
+            "value" : "Retirar a %@ el acceso a la bóveda"
           }
         }
       }
@@ -17095,7 +17105,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Informar de un problema"
+            "value" : "Notificar un problema"
           }
         }
       }
@@ -17105,7 +17115,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Informar de un problema…"
+            "value" : "Notificar un problema…"
           }
         }
       }
@@ -17125,7 +17135,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Líneas de reporte"
+            "value" : "Jerarquía del equipo"
           }
         }
       }
@@ -17135,7 +17145,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Las líneas de reporte no pueden formar un bucle."
+            "value" : "Un agente no puede depender de sí mismo ni directa ni indirectamente."
           }
         }
       }
@@ -17145,7 +17155,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Reporta a"
+            "value" : "Depende de"
           }
         }
       }
@@ -17255,7 +17265,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hace falta reiniciar"
+            "value" : "Reinicio necesario"
           }
         }
       }
@@ -17385,7 +17395,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Resultado desconocido"
+            "value" : "Resultado sin confirmar"
           }
         }
       }
@@ -18405,7 +18415,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enviar los comentarios"
+            "value" : "Enviar comentarios"
           }
         }
       }
@@ -18445,7 +18455,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enviar indicaciones a la tarea"
+            "value" : "Enviar indicaciones sobre la tarea"
           }
         }
       }
@@ -18505,7 +18515,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enviar estas indicaciones a la tarea"
+            "value" : "Enviar estas indicaciones sobre la tarea"
           }
         }
       }
@@ -18545,7 +18555,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mensaje para ti"
+            "value" : "Enviarte un mensaje"
           }
         }
       }
@@ -18745,7 +18755,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enviado. Tu referencia es %@ y te responderemos a %@."
+            "value" : "Informe enviado. Tu referencia es %@. Te responderemos en %@."
           }
         }
       }
@@ -18795,7 +18805,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Servidor sin informar"
+            "value" : "Servidor no indicado"
           }
         }
       }
@@ -18895,7 +18905,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Configúralo tú mismo"
+            "value" : "Configurar por tu cuenta"
           }
         }
       }
@@ -18945,7 +18955,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Configurando a %@"
+            "value" : "Configurando %@"
           }
         }
       }
@@ -18985,7 +18995,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No se pudieron leer los ajustes"
+            "value" : "No se pudieron cargar los ajustes"
           }
         }
       }
@@ -19015,7 +19025,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La configuración se desconectó."
+            "value" : "Se perdió la conexión durante la configuración."
           }
         }
       }
@@ -19305,7 +19315,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hace falta iniciar sesión"
+            "value" : "Requiere inicio de sesión"
           }
         }
       }
@@ -19315,7 +19325,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Se desconoce el inicio de sesión en %@."
+            "value" : "No se pudo comprobar si hay una sesión iniciada en %@."
           }
         }
       }
@@ -19485,7 +19495,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hay trabajo que da vueltas en círculo"
+            "value" : "Hay trabajo que se repite sin avanzar"
           }
         }
       }
@@ -19925,7 +19935,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sistema sin informar"
+            "value" : "Sistema no indicado"
           }
         }
       }
@@ -19965,7 +19975,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tailscale respondió algo que esta app no entiende."
+            "value" : "La app no reconoce la respuesta de Tailscale."
           }
         }
       }
@@ -20225,7 +20235,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Retirar acceso"
+            "value" : "Retirar el acceso"
           }
         }
       }
@@ -20355,7 +20365,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Avisarme cuando se me necesite"
+            "value" : "Avisarme cuando algo requiera mi atención"
           }
         }
       }
@@ -20875,7 +20885,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La respuesta no se aceptó. Comprueba la conexión de la configuración."
+            "value" : "Se rechazó la respuesta. Comprueba la conexión durante la configuración."
           }
         }
       }
@@ -21035,7 +21045,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La respuesta del canal no trae ninguna suma de comprobación para la descarga."
+            "value" : "El canal de actualizaciones no incluyó la suma de verificación de la descarga."
           }
         }
       }
@@ -21045,7 +21055,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La respuesta del canal no trae ninguna firma."
+            "value" : "El canal de actualizaciones no incluyó la firma."
           }
         }
       }
@@ -21075,7 +21085,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La respuesta del canal no da a la descarga un tamaño creíble."
+            "value" : "El canal de actualizaciones indicó un tamaño de descarga que no es válido."
           }
         }
       }
@@ -21085,7 +21095,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La respuesta del canal no tiene número de compilación."
+            "value" : "El canal de actualizaciones no indicó el número de compilación."
           }
         }
       }
@@ -21095,7 +21105,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La respuesta del canal no tiene nombre de versión."
+            "value" : "El canal de actualizaciones no indicó la versión."
           }
         }
       }
@@ -21425,7 +21435,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La descarga contiene %lld aplicaciones, y una actualización debe contener solo una."
+            "value" : "La descarga contiene %lld aplicaciones. Una actualización debe contener solo una."
           }
         }
       }
@@ -21725,7 +21735,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El hub no respondió al intentar guardar. No se envió nada. %@"
+            "value" : "El hub no respondió al guardar. No se envió nada. %@"
           }
         }
       }
@@ -21875,7 +21885,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El hub no dio ninguna línea de unión. Vuelve a intentarlo."
+            "value" : "El hub no devolvió el comando de conexión. Vuelve a intentarlo."
           }
         }
       }
@@ -21885,7 +21895,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El hub no dio ninguna línea. Crea una línea nueva."
+            "value" : "El hub no devolvió el comando. Genera uno nuevo."
           }
         }
       }
@@ -22005,7 +22015,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El hub no ha respondido. «Reintentar» envía la misma solicitud."
+            "value" : "El hub no ha respondido. Pulsa «Reintentar» para enviar la misma solicitud."
           }
         }
       }
@@ -22055,7 +22065,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El hub retiene esta tarea."
+            "value" : "El hub ha puesto esta tarea en espera."
           }
         }
       }
@@ -22235,7 +22245,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El hub no indica ahora ninguna clave de bóveda para %@."
+            "value" : "El hub no encuentra la clave de %@ en la bóveda."
           }
         }
       }
@@ -22715,7 +22725,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La línea funciona una vez, durante 30 minutos. Hace que %@ se una a tu red privada y a Founderizer. Una línea nueva cancela esta."
+            "value" : "El comando funciona una sola vez y caduca a los 30 minutos. Conecta %@ a tu red privada y a Founderizer. Si generas otro, este dejará de funcionar."
           }
         }
       }
@@ -22725,7 +22735,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La línea que tu hub dio para este servidor, tal como la escribió."
+            "value" : "Usa el comando que generó el hub para este servidor, tal como aparece."
           }
         }
       }
@@ -22875,7 +22885,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El gestor te necesita"
+            "value" : "El gestor requiere tu atención"
           }
         }
       }
@@ -23025,7 +23035,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Se desconoce el resultado de esta acción."
+            "value" : "No se pudo confirmar el resultado de esta acción."
           }
         }
       }
@@ -23265,7 +23275,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El informe no nos llegó."
+            "value" : "No recibimos el informe."
           }
         }
       }
@@ -23285,7 +23295,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La solicitud aún no tiene respuesta"
+            "value" : "La solicitud sigue sin respuesta"
           }
         }
       }
@@ -23435,7 +23445,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El servidor no respondió a sus comprobaciones. No se instaló nada dos veces."
+            "value" : "El servidor no respondió a las comprobaciones. No se repitió la instalación."
           }
         }
       }
@@ -23505,7 +23515,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El servidor los indica en su propia lectura."
+            "value" : "Estos datos proceden de las comprobaciones del propio servidor."
           }
         }
       }
@@ -23575,7 +23585,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El servidor que instalas a mano"
+            "value" : "El servidor que instalas manualmente"
           }
         }
       }
@@ -23595,7 +23605,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La bóveda del servidor aún no puede servir a más de un agente."
+            "value" : "La bóveda del servidor aún admite un solo agente."
           }
         }
       }
@@ -23635,7 +23645,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La configuración te necesita"
+            "value" : "Falta un paso que debes completar"
           }
         }
       }
@@ -23645,7 +23655,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El inicio de sesión no terminó"
+            "value" : "Inicio de sesión incompleto"
           }
         }
       }
@@ -23655,7 +23665,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El inicio de sesión no terminó."
+            "value" : "No se completó el inicio de sesión."
           }
         }
       }
@@ -23845,7 +23855,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La actualización a %@ no terminó."
+            "value" : "No se completó la actualización a %@."
           }
         }
       }
@@ -23885,7 +23895,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La bóveda no dio ninguna clave para esta cuenta."
+            "value" : "La bóveda no devolvió ninguna clave para esta cuenta."
           }
         }
       }
@@ -23925,7 +23935,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El escritorio del trabajador está bloqueado. Desbloquéalo para continuar."
+            "value" : "El escritorio del agente está bloqueado. Desbloquéalo para continuar."
           }
         }
       }
@@ -23935,7 +23945,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El trabajador llegó al límite de su registro de actividad."
+            "value" : "El agente alcanzó el límite de su registro de actividad."
           }
         }
       }
@@ -24015,7 +24025,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sus sistemas instalaron actualizaciones que necesitan un reinicio."
+            "value" : "Los sistemas deben reiniciarse para aplicar las actualizaciones."
           }
         }
       }
@@ -24615,7 +24625,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esta respuesta no es para esta conexión. Vuelve a pulsar «Conectar»."
+            "value" : "Esta respuesta corresponde a otro intento de conexión. Pulsa «Conectar» de nuevo."
           }
         }
       }
@@ -25125,7 +25135,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esta línea caducó. Crea una línea nueva."
+            "value" : "El comando caducó. Genera uno nuevo."
           }
         }
       }
@@ -25495,7 +25505,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este servidor se llama %@ en Tailscale, y Founderizer reserva ese nombre para sí mismo. Cambia el nombre de este servidor en Tailscale y vuelve a ejecutar la línea de unión."
+            "value" : "Este servidor se llama %@ en Tailscale, pero Founderizer se reserva ese nombre. Cámbialo en Tailscale y vuelve a ejecutar el comando de conexión."
           }
         }
       }
@@ -25585,7 +25595,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esta tarea no está aquí"
+            "value" : "Esta tarea no está disponible"
           }
         }
       }
@@ -26285,7 +26295,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Uso sin informar"
+            "value" : "Sin datos de uso"
           }
         }
       }
@@ -27005,7 +27015,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Semana sin informar"
+            "value" : "Sin datos de la semana"
           }
         }
       }
@@ -27145,7 +27155,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Qué necesita de ti"
+            "value" : "Qué debes hacer"
           }
         }
       }
@@ -27505,7 +27515,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Trabajo detenido"
+            "value" : "Trabajo interrumpido"
           }
         }
       }
@@ -27515,7 +27525,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Trabajador"
+            "value" : "Agente operativo"
           }
         }
       }
@@ -27615,7 +27625,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Escribe la dirección a la que debemos responder."
+            "value" : "Escribe el correo donde quieres recibir la respuesta."
           }
         }
       }
@@ -27715,7 +27725,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Escritura, también archivos compartidos"
+            "value" : "Escritura (incluye compartidos)"
           }
         }
       }
@@ -28325,7 +28335,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tu hub respondió algo que esta app no pudo leer."
+            "value" : "La app no pudo leer la respuesta de tu hub."
           }
         }
       }
@@ -28405,7 +28415,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tu hub no respondió. Abre Founderizer para ver si quedó respondida."
+            "value" : "Tu hub no respondió. Abre Founderizer para comprobar si se registró tu respuesta."
           }
         }
       }
@@ -28695,7 +28705,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tu línea de unión"
+            "value" : "Tu comando de conexión"
           }
         }
       }
@@ -28985,7 +28995,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "cada trabajador y líder"
+            "value" : "todos los agentes operativos y líderes"
           }
         }
       }
@@ -29215,7 +29225,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "macOS 14 o posterior, con la sesión de Tailscale iniciada y Homebrew instalado. Los agentes se ejecutan como el usuario del Mac que pega la línea."
+            "value" : "Usa macOS 14 o posterior, con una sesión activa en Tailscale y Homebrew instalado. Los agentes se ejecutarán con la cuenta del Mac que ejecute el comando."
           }
         }
       }
@@ -29315,7 +29325,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "sin informar"
+            "value" : "sin datos"
           }
         }
       }
@@ -29575,7 +29585,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La configuración del equipo cambió mientras tanto. Vuelve a cargar las líneas de reporte."
+            "value" : "La configuración del equipo cambió. Vuelve a cargar la jerarquía."
           }
         }
       }
@@ -29855,7 +29865,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "semana sin informar"
+            "value" : "sin datos de la semana"
           }
         }
       }
@@ -29865,7 +29875,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "escritura, también archivos compartidos"
+            "value" : "escritura (incluye compartidos)"
           }
         }
       }

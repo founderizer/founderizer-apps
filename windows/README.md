@@ -145,9 +145,16 @@ renamed or removed without a word to the screens lane.
     once in three seconds while `MarkMoves`, at rest on a last reading and where Windows' animation effects are off),
     the search card's red mark, or, where the task's row needs him, the orange mark (`AnswerSymbol.Attention`): the
     row's own symbol (`Row`, drawn with the search card's icon for it, `SearchCard.IconOf`, in its orange) and the row's
-    words, for example "Outcome not known: check it". `Hover` shows under the pointer (none for the work of a task: the
-    Mac draws its badge there first), and `Words` are its automation name. `AnswerMark.Plain`, the check with no words, stands for words
-    that he wrote, a key that answered the request, and an answer on its way.
+    words, for example "Outcome not known: check it". `Hover` shows under the pointer as the system's tooltip, and
+    `Words` are its automation name. The work of a task has `Badge` (`AgentBadge.Of`: the agent's role and its mark at
+    rest, grey where the agent is not there) and `Title` in place of `Hover`: its tooltip is the Mac's tag (the
+    owner's "Yes, badge as drawn", 21 November 2026; `AnswerMarkView.WorkTag`), the badge then " · " and the title,
+    wrapping at 360, under the mark with its words at the answer line's left edge (above it only where the window's
+    bottom ends; `PlaceTag`). The view opens it after the Mac's rest of the pointer, 350 ms (`OpenTag`): WinUI puts a
+    tooltip that its service opens for the pointer at the pointer, whatever its placement rectangle says. It goes when
+    the pointer leaves, when the mark moves, and at a click, a key or a scroll in the window (`Watch`).
+    `AnswerMark.Plain`, the check with no words, stands for words that he wrote, a key that answered the request, and
+    an answer on its way.
     A request raised before the chat's oldest item stands only while the PC holds the chat's whole history
     (`ChatPageState.Whole`: its first read gave fewer than `StoreState.ChatFirstPage` items);
   - the inline marks of a reply as runs: `InlineMarks.Runs(text)` gives each `InlineRun` (`Text`, `Bold`, `Italic`,

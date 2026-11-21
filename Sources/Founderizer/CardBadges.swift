@@ -18,19 +18,26 @@ enum CardBadgeText {
     /// The room after its name, in the words' size.
     static let end: CGFloat = 0.36
 
-    /// The words of `text` with each name that `names` finds as a badge, each link of its own a piece with its mark
-    /// (`LinkRun`, which `linkPresses` gives the hand), and the rest as it is. `size` is the size of the words' font. A
-    /// text with no name and no link is the one `Text` that it was.
-    static func text(_ text: AttributedString, names: CardNames?, size: CGFloat) -> Text {
-        let pieces = names?.pieces(text) ?? []
-        guard pieces.contains(where: { $0.badge != nil }) || LinkRun.has(text) else { return Text(text) }
-        var drawn: [Text] = [], index = 0, links = 0
-        // Words that are no badge: each link among them is a piece of its own, with its mark.
-        func words(_ plain: AttributedString) {
+    /// The words of `text` with each name that `names` finds as a badge, a name and its role beside it as one
+    /// (`CardJoin`), each link of its own a piece with its mark (`LinkRun`, which `linkPresses` gives the hand), and
+    /// the rest as it is. `size` is the size of the words' font. `values`: each value of a request's words, which the
+    /// agent put in inline code, is a piece with its mark too, which `cardValues` draws as a chip (`CardValueText`). A
+    /// text with no name, no link and no such value is the one `Text` that it was.
+    static func text(_ text: AttributedString, names: CardNames?, size: CGFloat, values: Bool = false) -> Text {
+        let pieces = names.map { CardJoin.join($0.pieces(text)) } ?? []
+        let chips = values && (names == nil ? [text] : pieces.filter { $0.badge == nil }.map(\.words))
+            .contains { !CardValues.runs(in: $0).isEmpty }
+        guard chips || pieces.contains(where: { $0.badge != nil }) || LinkRun.has(text) else { return Text(text) }
+        var drawn: [Text] = [], index = 0, links = 0, found = 0
+        // Words that are no badge: each link among them is a piece of its own, with its mark, and so is each value.
+        func words(_ piece: AttributedString) {
+            let (plain, values) = chips ? CardValueText.marked(piece, size: size) : (piece, [])
             for (url, range) in plain.runs[\.link] {
-                let run = Text(AttributedString(plain[range]))
-                guard let url else { drawn.append(run); continue }
-                drawn.append(run.customAttribute(LinkRun(index: links, url: url)))
+                guard let url else {
+                    drawn += CardValueText.texts(plain, range, values: values, size: size, index: &found)
+                    continue
+                }
+                drawn.append(Text(AttributedString(plain[range])).customAttribute(LinkRun(index: links, url: url)))
                 links += 1
             }
         }

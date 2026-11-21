@@ -95,10 +95,11 @@ WORDS = {
                "41 % de su disco.",
         "theo": "Encontré el error del pago: Safari en iPhone enviaba el código postal dos veces. Pruebo la corrección "
                 "con tres tarjetas antes de publicarla.",
-        "wren": "Hoy respondí 23 tickets. Un cliente pide un reembolso fuera del plazo de 30 días: está en Te necesita.",
+        "wren": "Hoy respondí 23 tickets. Un cliente pide un reembolso fuera del plazo de 30 días. "
+                "Dejé la solicitud en «Por atender».",
         "owner": "¿Podemos empezar las rebajas de primavera el lunes?",
         "manager": "Sí. Marketing tiene el correo listo, y Desarrollador publica el banner de las rebajas el domingo por "
-                   "la noche. El correo espera tu sí en Te necesita.",
+                   "la noche. Puedes aprobar el envío en «Por atender».",
     },
 }
 W = WORDS[LANGUAGE]

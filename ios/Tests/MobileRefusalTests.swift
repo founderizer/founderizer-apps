@@ -421,12 +421,12 @@ struct MobileRefusalTests {
         }
         try PhoneSpanish.run {
             // The code decides: the hub's words here say something else altogether.
-            #expect(words(409, "request_answered", "x") == "Ya respondida.")
+            #expect(words(409, "request_answered", "x") == "Ya tiene respuesta.")
             #expect(words(409, "hub_changed", "x") == "Los registros del hub cambiaron después de la notificación. Abre Founderizer y responde allí.")
             #expect(words(409, "hub_changed_sending", "x") == "Los registros del hub cambiaron después de la notificación. Abre Founderizer y responde allí.")
             // A refusal with another code is read by that code alone, whatever the hub's words hold.
             let other = words(409, "command_reused", "owner request is already answered")
-            #expect(other != "Ya respondida." && other.hasPrefix("El hub lo rechazó: "))
+            #expect(other != "Ya tiene respuesta." && other.hasPrefix("El hub lo rechazó: "))
             // The status is the line's own test: a 404 is a request that is gone, whatever its code.
             #expect(words(404, "hub_changed", "x") == "Esta solicitud ya no está en el hub.")
         }
@@ -446,7 +446,7 @@ struct MobileRefusalTests {
                 == "The hub's records changed after the ping. Open Founderizer and answer there.")
         #expect(words(404, "owner request does not exist") == "This request is no longer on the hub.")
         try PhoneSpanish.run {
-            #expect(words(409, "owner request is already answered") == "Ya respondida.")
+            #expect(words(409, "owner request is already answered") == "Ya tiene respuesta.")
             #expect(words(404, "owner request does not exist") == "Esta solicitud ya no está en el hub.")
         }
     }

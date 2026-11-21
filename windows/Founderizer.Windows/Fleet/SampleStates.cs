@@ -303,9 +303,12 @@ public sealed partial class SampleSource
                 Agent("manager")["last"] = new JsonObject { ["preview"] = "Offer a 20% voucher", ["side"] = "owner", ["ts"] = now };
                 break;
             }
-            case "all-answered":
+            case "all-answered" or "work-mark":
             {
-                // Picture 12: both requests answered.
+                // Picture 12: both requests answered. "work-mark": from a hub that names need_marks, whose yes to the
+                // email lets Marketing's task go on, so its card wears the work mark and its hover (the owner's "Yes,
+                // badge as drawn" of 21 November 2026).
+                if (pictureState == "work-mark") mobile["ui_features"]!.AsArray().Add((JsonNode)AnswerMark.Feature);
                 var needs = mobile["needs"]!.AsArray();
                 var answers = new[] { "Offer a 20% voucher", "Send it on Monday" };
                 foreach (var n in needs.ToArray())
@@ -317,6 +320,7 @@ public sealed partial class SampleSource
                     need["answered"] = now - 120 + id * 30;
                     need["answered_by"] = "owner";
                     need["chose"] = new JsonArray(id == 1 ? 1 : 0);
+                    if (pictureState == "work-mark" && id == 2) need["task"] = 3;
                     mobile["answered_needs"]!.AsArray().Add(need);
                 }
                 // The task that waited on the email's yes goes on.

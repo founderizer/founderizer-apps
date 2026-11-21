@@ -37,12 +37,12 @@ public enum CardValues {
     }
 
     /// The values of a block's words as a card draws them, in their order, each with its exact characters: the words
-    /// that `names` makes no badge of (`CardNames.pieces`), or the whole text with no names. For a copy and for
-    /// VoiceOver's "Copy <value>".
+    /// that `names` makes no badge of (`CardNames.pieces`, joined as the card joins them, `CardJoin`), or the whole
+    /// text with no names. For a copy and for VoiceOver's "Copy <value>".
     public static func values(in text: AttributedString, names: CardNames?) -> [String] {
         // Most words hold no inline code: then no book is read for them.
         guard text.runs.contains(where: { isCode($0.inlinePresentationIntent) }) else { return [] }
-        let words = names.map { $0.pieces(text).filter { $0.badge == nil }.map(\.words) } ?? [text]
+        let words = names.map { CardJoin.join($0.pieces(text)).filter { $0.badge == nil }.map(\.words) } ?? [text]
         return words.flatMap { piece in runs(in: piece).map { String(piece[$0].characters) } }
     }
 

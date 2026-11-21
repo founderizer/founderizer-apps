@@ -108,6 +108,18 @@ private func scheduleSummary(_ schedule: TriggerSchedule) -> String {
     case "once": return line(String(l10n: "Once"), schedule.at?.replacingOccurrences(of: "T", with: " "), zone)
     case "every": return String(l10n: "Every \(schedule.minutes ?? 0) minutes")
     case "monthly": return line(String(l10n: "Day \(schedule.day ?? 1)"), schedule.time, zone)
-    default: return line(schedule.days?.map(\.capitalized).joined(separator: ", ") ?? String(l10n: "Daily"), schedule.time, zone)
+    default:
+        guard let days = schedule.days else { return line(String(l10n: "Daily"), schedule.time, zone) }
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.calendar = Calendar(identifier: .gregorian)
+        let symbols = formatter.shortStandaloneWeekdaySymbols ?? []
+        let names = days.map { day in
+            guard symbols.count == TriggerSchedule.weekdays.count,
+                  let index = TriggerSchedule.weekdays.firstIndex(of: day) else { return day.capitalized }
+            // Foundation lists Sunday first. The hub lists Monday first.
+            return symbols[(index + 1) % symbols.count]
+        }
+        return line(names.joined(separator: ", "), schedule.time, zone)
     }
 }
