@@ -160,8 +160,9 @@ struct FeedbackRows: View {
                     ChatAskLine(store: store, row: ChatAskRow(ask, agent: message.chatRecipient, state: state))
                 }
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("feedback-\(message.request_id)")
+            // No group of its own and no identifier on the stack: a group with no label is one more level for
+            // VoiceOver, and an identifier on a stack stands on each element in it. His words, his files and the
+            // answer stand in the thread's order, as the chat's rows do.
             // **His message comes up from the box**, as the chat's from its composer (`AnyTransition.sentMessage`):
             // only the one that he sends now, never a message of the reading.
             .transition(!reduceMotion && going.map { $0.requestID.uuidString.lowercased() == message.request_id } == true

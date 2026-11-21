@@ -175,8 +175,11 @@ struct TaskPanel: View {
                 if mark.inWork && store.isFresh { WorkMark(size: Self.mark, moves: store.marksMove) }
                 else { Image(systemName: mark.symbol).font(IconMetrics.symbol(Self.mark)).foregroundStyle(tint.color) }
             }.accessibilityHidden(true)
+            // The state's words are the element of the state, and Pause, Stop and Resume keep their own identifiers:
+            // on the row's stack "task-state" was the identifier of each element in it.
             Text(until.map { fleetResumes($0, now: state?.time ?? Date().timeIntervalSince1970) } ?? mark.words)
                 .font(FormMetrics.text).foregroundStyle(FleetStyle.text).lineLimit(1)
+                .accessibilityIdentifier("task-state")
             Spacer(minLength: 8)
             if TaskHoldControls.shows(task, in: state) {
                 TaskHoldControls(store: store, task: task)
@@ -186,7 +189,6 @@ struct TaskPanel: View {
         }
         .padding(.horizontal, FormMetrics.rowInset).frame(minHeight: FormMetrics.row)
         .help(hover.joined(separator: "\n"))
-        .accessibilityIdentifier("task-state")
     }
 
     /// Who asked for the task: him, also for what he asked an agent for in its chat, where the hub makes the agent's line

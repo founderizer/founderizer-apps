@@ -57,7 +57,7 @@ struct OwnerParityTests {
         let named = Set(Self.cases.map(\.tool))
         let both = Set(Fixture.table.tools.filter { $0.kind != .absent }.map(\.name))
         #expect(both.subtracting(named).isEmpty, "\(both.subtracting(named).sorted())")
-        #expect(both.count == 55 + 4 + 9)
+        #expect(both.count == 57 + 4 + 9)
         #expect(Self.cases.count > 100)
     }
 

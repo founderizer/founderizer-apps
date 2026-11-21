@@ -124,6 +124,5 @@ struct TaskDetail: View {
                 .id("\(store.hub)/\(task.id)")
                 .frame(width: Self.facts)
         }
-        .accessibilityIdentifier("task-detail")
     }
 }

@@ -73,7 +73,6 @@ struct JobDetail: View {
         }
         .padding(22).frame(width: FormMetrics.formWidth)
         .keepsFeedbackSent($feedbackSent, store: store, feedback: feedback)
-        .accessibilityIdentifier("job-detail")
     }
 
     /// **How it ended, and when**, or where it stands while it goes on: its mark, its words, and under them what its
@@ -125,14 +124,17 @@ struct JobDetail: View {
 
     /// One task of it: its mark, its title on one line, and under it its agent and its end, or its state while it is
     /// open (what it waits for from him, as his panel says it, when it waits for him); a subtask one step further in
-    /// than the task that gave it. It opens the task level over this job.
+    /// than the task that gave it. It opens the task level over this job, also by an assistive app's press (VoiceOver's
+    /// VO-Space, `AXPress`): the row's one element of its words is no button's own, so it takes the row's action as its
+    /// default action, as a card of the board does.
     private func taskRow(_ line: WorkItem.Line, wait: OwnerWait?) -> some View {
         let task = line.task, mark = task.mark(in: state)
         let standing: String = if case .request? = wait { String(l10n: "Waits for you") } else { wait?.words ?? mark.words }
         let when = task.isTerminal ? ChatStamp.words(task.delivered ?? task.checked_at ?? task.activityTime) : standing
         let detail = [task.owner.agentLabel, task.isTerminal ? task.failedResult : nil, when].compactMap { $0 }
             .joined(separator: " · ")
-        return Button { store.show(.task(task.id), inCard: true) } label: {
+        let open = { store.show(.task(task.id), inCard: true) }
+        return Button(action: open) {
             HStack(spacing: 0) {
                 RowMark {
                     if wait != nil { Image(systemName: "hand.raised.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(.orange) }
@@ -156,6 +158,7 @@ struct JobDetail: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([task.title, detail].joined(separator: ", "))
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default, open)
         .accessibilityIdentifier("work-task-\(task.id)")
     }
 
