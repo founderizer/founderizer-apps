@@ -20,7 +20,7 @@ import SwiftUI
 /// use** is the secrets, the knowledge and the apps it has, as rows of the fleet's own that open the same card as
 /// Settings, where each kind is given and taken back.
 enum AgentTab: String, CaseIterable, Hashable {
-    case settings, capabilities, chat, behaviour, tasks, people, canUse = "canuse"
+    case settings, capabilities, chat, behaviour, tasks, kpis, people, canUse = "canuse"
 
     /// A part by its name, also by the names of the sections that are in one of the parts now: `-openPage
     /// agent.<name>.memory` opens Behaviour, `.secrets` Can use, `.channels` People.
@@ -42,6 +42,7 @@ enum AgentTab: String, CaseIterable, Hashable {
         case .chat: String(l10n: "Chat")
         case .behaviour: String(l10n: "Behaviour")
         case .tasks: String(l10n: "Tasks")
+        case .kpis: String(l10n: "KPIs")
         case .people: String(l10n: "People")
         case .canUse: String(l10n: "Can use")
         }
@@ -64,6 +65,7 @@ enum AgentTab: String, CaseIterable, Hashable {
         case .behaviour: "text.book.closed"
         // The symbol of Tasks in the main sidebar: one board, one mark.
         case .tasks: "rectangle.split.3x1"
+        case .kpis: "chart.bar"
         case .people: "person.2"
         case .canUse: "key"
         }
@@ -71,8 +73,10 @@ enum AgentTab: String, CaseIterable, Hashable {
 
     /// The parts of the details that this hub offers for an agent of this role. Chat is not one of them. The manager has
     /// no Tasks, because it owns no task, and no Can use, because it holds no secret, file or app of its own. People
-    /// stands for every agent on a hub with messages between agents: its conversations with the others are there.
-    static func available(features: [String], role: String?) -> [AgentTab] {
+    /// stands for every agent on a hub with messages between agents: its conversations with the others are there. KPIs
+    /// stands for a worker or a lead that has one (`kpis`, the agent's count of active KPIs; the KPI design's 8.2): the
+    /// fleet manager has none.
+    static func available(features: [String], role: String?, kpis: Int? = nil) -> [AgentTab] {
         let worker = role == "worker" || role == "lead"
         return allCases.filter { tab in
             switch tab {
@@ -86,6 +90,7 @@ enum AgentTab: String, CaseIterable, Hashable {
                 || features.contains(AgentMemory.feature) || features.contains(Duties.feature) || features.contains("triggers")
             // Every hub sends its tasks in its state.
             case .tasks: worker
+            case .kpis: AgentKPIs.tabShown(role: role, features: features, count: kpis)
             case .people: features.contains(ChatApps.feature) || features.contains(AgentMessages.feature)
                 || worker && (features.contains(People.feature) || features.contains(People.conversationsFeature))
             case .canUse: worker && (features.contains(ResourceList.feature) || features.contains(KnowledgeClient.feature)
@@ -120,11 +125,15 @@ struct AgentPage: View {
     var body: some View {
         // Its sections keep their identity across a generation: an owner write gives the fleet a new one, and a
         // page rebuilt under a field that holds the keyboard took the app down (`SettingsPage`, 22 October 2026).
-        let tab = destination.agentTab ?? .settings
+        let row = store.state?.agents.first { $0.name == agent }
+        let tabs = AgentTab.available(features: store.state?.ui_features ?? [], role: row?.role, kpis: row?.kpis)
+        // A part that this agent has no more (its last KPI ended while KPIs stood open) gives way to Runs on, as
+        // Settings does: the page never shows a heading over nothing. Before the first reading nothing gives way.
+        let asked = destination.agentTab ?? .settings
+        let tab = row == nil || tabs.contains(asked) || asked == .chat ? asked : .settings
         let attention = channelsOffered && channels?.db == store.state?.db && channels?.needsOwner(agent, serverTime: store.state?.time) == true
         HStack(spacing: 0) {
-            PageSidebar(items: AgentTab.available(features: store.state?.ui_features ?? [],
-                                                  role: store.state?.agents.first { $0.name == agent }?.role).map {
+            PageSidebar(items: tabs.map {
                 .init(value: $0, title: $0.title, symbol: $0.symbol, attention: $0 == .people && attention ? String(l10n: "A channel needs you") : nil)
             }, selection: tab, identifier: "agent-tab", select: select) { head }
             Rule(vertical: true)
@@ -145,6 +154,9 @@ struct AgentPage: View {
             .environment(\.columnPull, (FleetStyle.pageSidebarWidth + 1) / 2)
         }
         .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(agent)/\(store.state?.chat_apps?.problems ?? -1)") { await readChannels() }
+        // The part that gave way is left for good: the owner's places say Runs on (`setup_state`), and a KPI set later
+        // does not bring the page back to KPIs by itself.
+        .onChange(of: tab != asked, initial: true) { _, gone in if gone { open(.agentDetail(agent, .settings)) } }
     }
 
     /// The accounts every 15 seconds, and at once when the hub's count of accounts that need the owner changes.
@@ -171,6 +183,7 @@ struct AgentPage: View {
             }
         case .behaviour: BehaviourView(store: store, team: team, agent: agent, open: open)
         case .tasks: ActivityBoard(store: store, scope: agent)
+        case .kpis: KPIsTab(store: store, agent: agent)
         case .people: AgentPeoplePart(store: store, agent: agent) { channels = $0 }
         case .canUse: AgentCanUsePart(store: store, agent: agent)
         case .capabilities: AgentCapabilitiesPart(store: store, agent: agent)

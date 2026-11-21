@@ -648,6 +648,7 @@ final class SetupChannel {
                 return store.setupShows(name) ? setup(name) : .agentPart(name, .runsOn)
             case .behaviour: return .agentPart(name, .behaviour)
             case .tasks: return .agentPart(name, .tasks)
+            case .kpis: return .agentPart(name, .kpis)
             case .people: return .agentPart(name, .people)
             case .canUse: return .agentPart(name, .canUse)
             case .capabilities: return .agentPart(name, .capabilities)
@@ -720,7 +721,8 @@ final class SetupChannel {
         guard let state = store.state else { return .missing }
         func agent(_ name: String, part: AgentTab?) -> ShowTarget {
             guard let agent = state.agents.first(where: { $0.name == name }) else { return .missing }
-            if let part, !AgentTab.available(features: state.ui_features ?? [], role: agent.role).contains(part) {
+            if let part, !AgentTab.available(features: state.ui_features ?? [], role: agent.role, kpis: agent.kpis)
+                .contains(part) {
                 return .noPart
             }
             // The agent's own page draws its setup or its "Setting up" (`destinationPlace`), or fills the window.
@@ -754,6 +756,7 @@ final class SetupChannel {
         case .runsOn: .settings
         case .behaviour: .behaviour
         case .tasks: .tasks
+        case .kpis: .kpis
         case .people: .people
         case .canUse: .canUse
         case .capabilities: .capabilities

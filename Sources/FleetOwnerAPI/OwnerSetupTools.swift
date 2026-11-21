@@ -52,7 +52,7 @@ public enum OwnerSetupTools {
             own windows, and it is nothing also when the app shows no window. \
             The forms of a place: needs, tasks, agents; task.<number>, or task for a task that the hub no longer \
             has; agent.<name> (the agent's chat); \
-            agent.<name>.<part> with part runs_on, capabilities, behaviour, tasks, people, can_use; agent.<name>.rule (one rule's \
+            agent.<name>.<part> with part runs_on, capabilities, behaviour, tasks, kpis, people, can_use; agent.<name>.rule (one rule's \
             editor); agent.<name>.setup.<page> with page name, servers, server, provider, installing, switching, \
             sign_in, activate, \
             or agent.<name>.setup when the page is not known; agent.<name>.setup.server.<page> with a page of \

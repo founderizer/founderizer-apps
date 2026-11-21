@@ -189,6 +189,8 @@ public struct FleetAgent: Decodable, Identifiable, Sendable {
     /// **Its account cannot work now** (owner API 1.186, item 7 of the AI providers' pictures): the key has no credit,
     /// or its model server does not answer. nil while it works, for an agent on a plan, and from a hub before it.
     public let account_problem: AccountProblem?
+    /// Owner API 1.275: the number of its active KPIs (`GET /ui/kpis` has them), or nil from a hub before it.
+    public let kpis: Int?
     public var id: String { name }
     /// The AI that the owner picked for an agent on a key or a model server, which the app names in the place of its
     /// program (his answer 12 of 14 November 2026); nil for an agent on a plan.
@@ -201,7 +203,7 @@ public struct FleetAgent: Decodable, Identifiable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case name, role, title, runtime, active, direct_chat, local_model, reports_to, can, last_seen, alive_ts, client_seen, alive, client, usage, limit,
-             signed_in, chat_ready, placed, turn_ended_after, chat_undelivered, model_account, account_problem
+             signed_in, chat_ready, placed, turn_ended_after, chat_undelivered, model_account, account_problem, kpis
     }
 
     public init(from decoder: Decoder) throws {
@@ -230,6 +232,7 @@ public struct FleetAgent: Decodable, Identifiable, Sendable {
         chat_undelivered = try data.decodeIfPresent(Bool.self, forKey: .chat_undelivered)
         model_account = (try? data.decodeIfPresent(AgentModelAccount.self, forKey: .model_account)) ?? nil
         account_problem = (try? data.decodeIfPresent(AccountProblem.self, forKey: .account_problem)) ?? nil
+        kpis = (try? data.decodeIfPresent(Int.self, forKey: .kpis)) ?? nil
         // Bad telemetry must not block chat or hide the rest of the fleet state.
         do {
             let reading = try data.decodeIfPresent(AgentUsage.self, forKey: .usage)

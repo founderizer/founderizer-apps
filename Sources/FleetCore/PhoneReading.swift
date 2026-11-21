@@ -61,5 +61,6 @@ extension FleetAgent {
         chat_undelivered = nil
         model_account = nil
         account_problem = nil
+        kpis = nil
     }
 }

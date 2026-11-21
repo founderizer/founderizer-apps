@@ -969,6 +969,24 @@ public final class HubClient: Sendable {
         return list
     }
 
+    /// `GET /ui/kpis?agent=` (owner API 1.275, feature `kpis`): one agent's active KPIs, oldest first, with 8 weeks of
+    /// values. A reading of another generation or of another agent is no reading of this one.
+    public func kpis(hub: URL, database: String, agent: String) async throws -> AgentKPIs {
+        guard agent.range(of: "^[a-z][a-z0-9_-]{0,63}$", options: .regularExpression) != nil else {
+            throw HubError.invalidResponse
+        }
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/kpis"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database), .init(name: "agent", value: agent)]
+        var request = URLRequest(url: parts.url!)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, _) = try await boundedArtifactRead(request, limit: 2_097_152)
+        let list = try JSONDecoder().decode(AgentKPIs.self, from: data)
+        guard list.db == database, list.agent == agent, list.kpis.allSatisfy({ $0.agent == agent }) else {
+            throw HubError.invalidResponse
+        }
+        return list
+    }
+
     /// `GET /ui/notes/<agent>` (owner feature `agent_notes`): one agent's own working notes and every version of
     /// them. There is no write beside it, here or on the hub: these are not the owner's words.
     public func notes(hub: URL, database: String, agent: String) async throws -> AgentNotes {

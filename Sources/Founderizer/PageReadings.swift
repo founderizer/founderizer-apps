@@ -258,7 +258,7 @@ extension PagePrefetch {
     @MainActor static let agent: [PagePrefetch] = AgentMemorySection.prefetch + [
         PeoplePage.agentPrefetch, ConversationsPage.prefetch, AgentMessagesReading.prefetch,
         KnowledgePage.agentPrefetch, AccessSettings.agentPrefetch,
-        ChannelsPage.prefetch, ChannelsPage.peoplePrefetch, SecretsPage.agentPrefetch,
+        ChannelsPage.prefetch, ChannelsPage.peoplePrefetch, SecretsPage.agentPrefetch, KPIsTab.prefetch,
     ]
 }
 

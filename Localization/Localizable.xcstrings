@@ -2200,6 +2200,26 @@
         }
       }
     },
+    "%@, level %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, nivel %@"
+          }
+        }
+      }
+    },
+    "%@, off target, level %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, fuera del objetivo, nivel %@"
+          }
+        }
+      }
+    },
     "%@. %@" : {},
     "%@. %@. %@" : {},
     "%@.pub could not be written." : {
@@ -11490,6 +11510,16 @@
         }
       }
     },
+    "KPIs" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KPI"
+          }
+        }
+      }
+    },
     "Keep %@" : {
       "localizations" : {
         "es" : {
@@ -13656,6 +13686,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No hay tokens"
+          }
+        }
+      }
+    },
+    "No value yet, level %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún sin valor, nivel %@"
           }
         }
       }
@@ -16176,6 +16216,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Leyendo una página web"
+          }
+        }
+      }
+    },
+    "Reading the KPIs…" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leyendo los KPI…"
           }
         }
       }
@@ -18810,6 +18860,16 @@
         }
       }
     },
+    "Set by %@, %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lo fijó %@, el %@."
+          }
+        }
+      }
+    },
     "Set it up yourself" : {
       "localizations" : {
         "es" : {
@@ -20616,6 +20676,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La GitHub App no tiene acceso a este repositorio"
+          }
+        }
+      }
+    },
+    "The KPIs could not be read. They are read again when the hub answers." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudieron leer los KPI. Se leen de nuevo cuando el hub responda."
           }
         }
       }
@@ -26956,6 +27026,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Semana sin informar"
+          }
+        }
+      }
+    },
+    "Week of %@: %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semana del %@: %@"
+          }
+        }
+      }
+    },
+    "Week of %@: %@, before it counted" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semana del %@: %@, antes de contar"
+          }
+        }
+      }
+    },
+    "Week of %@: %@, off target" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semana del %@: %@, fuera del objetivo"
+          }
+        }
+      }
+    },
+    "Week of %@: no value" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semana del %@: sin valor"
           }
         }
       }

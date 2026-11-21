@@ -301,8 +301,8 @@ struct OwnerShowRulesTests {
                 == "This fleet has no such task (task.42): the hub does not list it. fleet_overview gives the open tasks.")
         #expect(Self.refusal("agent.juno.can_use", from: .tasks, Self.facts(on: .tasks, target: .noPart))
                 == "That agent has no such part on this hub (agent.juno.can_use): tasks and can_use are parts of a "
-                + "worker or a lead, and the manager has neither; each part also needs a hub that offers it. Say the "
-                + "page in words, or offer the owner another place.")
+                + "worker or a lead, and the manager has neither; kpis is a part of a worker or a lead with a KPI; each "
+                + "part also needs a hub that offers it. Say the page in words, or offer the owner another place.")
         for page in ["agent.juno", "agent.juno.behaviour", "agent.juno.tasks", "agent.juno.people", "agent.juno.can_use"] {
             #expect(Self.refusal(page, from: .tasks, Self.facts(on: .tasks, target: .inSetup))
                     == "The app shows that agent's setup, its \"Setting up\" or its sign-in in place of its pages "

@@ -292,8 +292,8 @@ extension SetupShow {
     /// The parts by role are the app's own (`AgentTab.available`): Tasks and Can use for a worker or a lead only.
     static func noPart(_ name: String) -> String {
         "That agent has no such part on this hub (\(name)): tasks and can_use are parts of a worker or a lead, and "
-            + "the manager has neither; each part also needs a hub that offers it. Say the page in words, or offer "
-            + "the owner another place."
+            + "the manager has neither; kpis is a part of a worker or a lead with a KPI; each part also needs a hub that "
+            + "offers it. Say the page in words, or offer the owner another place."
     }
 
     /// Rule 4: a place of an agent whose setup, "Setting up" or sign-in would show in its place.

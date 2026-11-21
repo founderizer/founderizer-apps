@@ -11,7 +11,7 @@ import Foundation
 public enum AppPlace: Hashable, Sendable {
     /// A part of an agent's details (`AgentTab` in the app; its tab `chat` is the agent's chat, `agent.<name>`).
     public enum AgentPart: String, CaseIterable, Sendable {
-        case runsOn = "runs_on", capabilities, behaviour, tasks, people
+        case runsOn = "runs_on", capabilities, behaviour, tasks, kpis, people
         case canUse = "can_use"
     }
 
