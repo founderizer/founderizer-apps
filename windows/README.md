@@ -18,6 +18,7 @@ seven pictures that the owner approved (`windows-app-pictures.md` in the plans f
 | `Founderizer.Remote/` | SSH from the owner's PC (step 2, piece L1): `IRemote` and `SshRemote`, the host key record, the app's own SSH key; the owner's key once and its check (piece L1a). The only project that names SSH.NET; it names no other project. `net10.0`, no Windows call | any OS |
 | `Founderizer.Remote.Tests/` | MSTest: against a scratch `sshd` of this machine, and an `sshd` in a Docker container for the password and `sudo -S`; the owner's keys made by this machine's `ssh-keygen`, and in the container by `puttygen` and OpenSSL's `ssh-keygen` | macOS, Linux |
 | `Founderizer.Setup/Install/` | the install of a server and the claim of a new hub from the owner's PC (step 2, piece L3): the Mac's `InstallPlan`, `MachineInstaller`, `ServerCheck` and their reads, over `IRemote`; held to `../vectors/remote-install.json` and `install-reads.json` | any OS |
+| `Founderizer.Setup/FirstRun/`, `Founderizer.Setup/Agents/`, `Founderizer.Owner/Reads/` | the first run and the manager's setup as models (step 2, piece L4): the Mac's `FirstRunModel` and its page models, the build, Start again, the records, the password once, the agent setup and its sign-in, and the reads of `GET /ui/servers`, `/ui/machines` and `/ui/team`; held to `../vectors/setup-words.json` and `remote-password.json` | any OS |
 | `Founderizer.SelfCheck/` | a small program that runs the vectors, published with Native AOT: the proof that the library and BouncyCastle work with no JIT | any OS |
 | `PARITY.md`, `parity.py` | each feature name of the hub and its state on Windows, and the script that prints each name with no line | |
 | `../vectors/` | the shared test vectors and `make_vectors.py`, which makes them with the hub's own code | |
@@ -368,6 +369,12 @@ and 6). These names stay.
   fault of the caller: a call that
   `RemoteRules.Check` refuses (an address or a user that the Mac's `InstallTarget.problem` refuses, a program with a
   carriage return or a NUL), or `AppKey` while the secret box has no key.
+- `RemoteResult.LoginWays` (piece L4c; the owner's "Key row here too", 21 November 2026): with `LoginRefused` or
+  `LoginNotOffered`, the ways in that the server named with its last refusal of the call's own login ("publickey",
+  "password", "keyboard-interactive"), as it sent them. Null for every other result, for a server that named none, and
+  for a server that refused before the call's own way was tried (it named none of the call's ways: SSH.NET keeps that
+  first answer to itself). The call sends no password to learn it. The list chooses a page and nothing else; nothing
+  keeps it. Proved against the scratch `sshd`, which takes keys only, and the same `sshd` with the password ways on.
 - `RemoteCall(Target, Program, Input, Login, HostKey, Connect) { Limit = … }`. `Program` is the text that the Mac gives
   `ssh`, after `InstallPlan.throughSudo`; `Input` is its standard input, and null is an end of file at once (the Mac's
   `/dev/null`). SSH.NET sends the end of an input only after one byte of it, so such a program goes to the server as
@@ -469,8 +476,11 @@ names stay.
   `InstallCauses.Of(error)` the installer's cause (`InstallCause`).
 - **The check of a server before an install**: `ServerCheck.RunAsync(remote, target, job, login, holdsSudoPassword,
   tailnet, firstRun, policy)` gives `Result(Verdict, Reading)`; `Verdict` is `Ready(Summary, Changes)`, `Wait(Says)`,
-  `NeedsPassword(Need)` or `Stop(Says)`. The app's own key refused asks for the password once
-  (`NeedsPassword(PasswordNeed.Ssh)`); the password's own call then says when the server takes keys only. `Read`,
+  `NeedsPassword(Need)`, `KeysOnly(Says)` or `Stop(Says)`. The app's own key refused reads the ways that the server
+  named with its refusal (`RemoteResult.LoginWays`; piece L4c): a password way ("password", "keyboard-interactive")
+  among them, or no list, asks for the password once (`NeedsPassword(PasswordNeed.Ssh)`), whose page also takes the
+  owner's key; ways with no password way are `KeysOnly`, the stop of a server that takes keys only, at once and with no
+  password try ("… Choose its key."). A password that a server refuses as not offered still says so. `Read`,
   `VerdictOf` and the words are the Mac's.
 - **The words of a call that failed**: `ServerCheck.Failed(server, port, user, failure, login, firstRun, policy)`, with
   `Unreached(server, port, failure, policy)` for the four ways of not reaching a server (the Mac's
@@ -494,9 +504,100 @@ names stay.
   `Done`, `Stop`, `Retry`, `Cancel`; `InstallRecord.WordsOf(error, host)`), and `BuildRecord` (`Begin`, `Made`,
   `CallEnded(AtProvider)`, `Joined`, `End`, `IsUnjoined`, `NamesInUse(records, now, life)`). Which `AtProvider` a
   provider's error leaves is the providers' piece (L2), and so is the life of a join key in `NamesInUse`.
-- **Not here**: the records' store and file form (the Mac's `KeptRecords`) come with piece L4, which keeps them; the
-  password once and the app's key onto a server (`PasswordOnce`), the report of a stop (`InstallReport`) and the
-  prompt to fix one (`InstallFixPrompt`) come with their pages.
+- **Not here**: the records' store and file form (the Mac's `KeptRecords`) and the password once (`PasswordOnce`) are
+  piece L4's (the section after this one); the report of a stop (`InstallReport`) and the prompt to fix one
+  (`InstallFixPrompt`) come with their pages.
+
+### The first run and the agent setup: `Founderizer.Setup/FirstRun`, `Agents` and `Founderizer.Owner/Reads` (step 2, piece L4)
+
+For the window's pieces U1 to U3. The Mac's `FirstRunModel`, `FirstRunWork`, `FleetNetworkModel`, `FleetCloudModel`,
+`FleetVPSModel` and the flow of `FirstRunView.swift`; FleetCore's `FleetShape.swift`, `FleetBuild.swift`,
+`AgentSetupFlow.swift`, `MachineSignin.swift`, `StartAgain.swift`, `PasswordOnce.swift` and `KeptRecords.swift`; and the
+reads of `Servers.swift`, `Machines.swift` and `Team.swift`. Each sentence that FleetCore holds, and each rule that decides
+from a reading, is held to `../vectors/setup-words.json`, and the password's program to `remote-password.json`, which
+FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`). These names stay.
+
+- **The store**: `new SetupStore(new SetupSettings { Owner, Box, Remote, HostKeys, Records, Tailscale, Cloud, Status })`
+  with `Tailscale = new FleetNet(new TailscaleApi(ProviderHandler.Create(), box))`, `Cloud = p => CloudServers.For(p,
+  ProviderHandler.Create(), box)`, `Status` the PC's `tailscale status --json`, `Records = new SetupRecords(appFolder)`,
+  and `Choices` the kept answers (`ISetupChoices`: the name, the AI, the slider, the reports' answer; no secret). `State`
+  is a `SetupState` (its `Page`, `Progress` for Back's line, `HoldsWindow`, the hub's and the manager's `CloudStep.View`,
+  `Vps`, `Install`, `ManagerInstall`), and `Changed` comes after each change, on no thread in particular.
+- **One method for each press**, in the Mac's order: `SetUp`, `ChooseReports`, `TypeName` and `ChooseName`, `ChooseAi`,
+  `MoveSlider` and `ChooseServers`; `ReadPc(statusJson, installed)` from the window's poll, `PressConnect`,
+  `NetworkStopped(words)`; `SendKeyAsync(token)` (also on the install's page of a stop for the network's key: a key that
+  Tailscale ended makes `FleetKeyEnded`, and the key's page comes again before a server until a paste makes a new key); `ChooseProvider`, `ChooseOtherVps`, `SendTokenAsync`, `ChooseOffer`,
+  `ChooseManagersOffer`, `ChooseExisting`, `HubAt`, `ManagersAt`, `SendManagersTokenAsync`, `ShowManagersMore`;
+  `MakeFleet()` (the one press: false when a build runs already), `MakeManagersServerAgain()`; `CheckVpsAsync(address)`,
+  `GivePasswordAsync(char[])` (the array is cleared, unless the server's sudo asks for it: then the install takes it and
+  clears it), `VpsAgainAsync`, `InstallVps`; `ChooseKey(bytes, name)`, `GiveKeyPassphrase(char[])` and `ForgetKey()` (below);
+  `InstallAgain()` (Try again of a stopped install, and Install again after a new key of the network); `Back()` (nothing
+  while `Runs`). The network page goes on by itself when
+  `ReadPc` sees the PC on its tailnet; the key's page when the key is made.
+- **The pages**: `SetupScreens.Of(state, store.Runs, store.ShowsBuild)` gives a `SetupScreen`: its name, title (which moves
+  while `Waits`), its muted line, its controls (`SetupControl`: a card, a button, a link, a field, a paste field, a secret
+  field, steps whose link is written `[words](address)`), its orange line, and whether it has Back. The words are its
+  constants (`SetupScreens.WelcomeTitle`, …). The build page's line of each server is a `FleetBuildRow`.
+- **The build**: `CloudStep` is the Mac's `FleetCloudModel` over `ICloud`: a token, the choice before anything is made,
+  and the build of exactly the offer that the owner chose, with its `BuildRecord` written from the moment the provider is
+  asked. The hub's server is kept under the hub's address to be (`StartAgain.HubAddress`), and the manager's own server
+  under the same address, so that Start again finds both by its records.
+- **The install, the claim and the join**: the hub's plan gets the manager's name in the installer's form
+  (`ManagerName.AgentName`), "1 server", the slider's step and the chosen AI; up to three tries for a stop that passes
+  (`InstallRetry`), never after a sudo password. At the claim the store calls `OwnerStore.ConnectOwnerAsync` with the
+  hub that the installer claimed, and the manager's own server joins that hub with the hub's one-time line
+  (`OwnerReads.JoinCodeAsync`). Each install keeps its `InstallRecord`. **The hand-over is one decision, asked at each
+  change that can make it true** (a state of the store, a change of the owner's store, the end of the join's wait), and
+  taken once: the hub's checks passed, the hub answers this PC, and the manager's own server neither builds, nor joins,
+  nor waits for a choice that can lead on (the Mac's `onChange` of the install page). It gives `HandedOver`: the manager,
+  the provider that the owner chose, the server that joined for it, whether the sign-in was asked, and the server that
+  the run made and that did not join (the manager's setup installs it). The first run's answer on "Help improve
+  Founderizer" goes to the hub (`POST /ui/error-reports`) once the hub offers `error_reports`. `SetupSettings.Calls` and
+  `Fleet` are the new hub's owner calls and reading (the owner store's, unless a test gives its own).
+- **Start again**: `StartAgainPlanAsync(hub)` gives the plan (the servers that this PC's records prove, the machines of
+  the private network), `StartAgainRunAsync(plan)` runs its steps (`StartAgain.RunAsync`, the Mac's rules), and its last
+  step forgets this hub's records (and no other's), calls `HostKeys.ForgetAll()`, and forgets the hub
+  (`OwnerStore.ForgetOwnedHub(hub, hubServerDeleted)`: the store is as on a PC that was never given a hub, and the key of
+  the owner's computer goes only when the run deleted the hub's own server). `ForgetServer(addresses)` calls `HostKeys.Forget(address,
+  22)` for a server that the app deleted.
+- **The records**: `KeptRecords<T>` (one file for each record under `records/builds` and `records/installs`, a time as
+  whole milliseconds, a record of an earlier start that runs read as cut off), `BuildRecord` and `InstallRecord` (L3's).
+- **The password once**: `PasswordOnce.RunAsync(remote, target, need, password, publicLine)`: the Mac's program in one
+  call, the password as its login (`Ssh`) and on the first line of its input, then the proof that the app's key alone
+  opens the server.
+- **The owner's key once** (the owner's "Choose key, as Mac" and "One field, only then"; on L1a's `RemoteLogin.KeyOnce`
+  and `OwnerKeyFile.Check`). **Where the key's card shows** (`VpsView.TakesKey`; the owner's "Key row here too" of 21
+  November 2026, picture 14b, W15, piece L4c): on the stop of a server that takes keys only ("… Choose its key.", which
+  the check reaches with no password try when the server names no password way), and on the password's page of an SSH
+  password, under the password's field and its line, where the owner gives the password or the key. Not on the
+  password's page of a `sudo` password, where the app's key got in. There the window gives `ChooseKey(bytes, name)` the
+  one file that the owner picked (at most 64 KiB; the model takes the array and clears it); anywhere else the model
+  clears the bytes and does nothing. A password given on that page takes the place of a chosen key, which goes.
+  The check runs before any connection and off the caller's thread: a file that is no key says "This app cannot read that
+  file as an SSH private key."; a key with a passphrase shows the one field (W14), and `GiveKeyPassphrase` with a wrong one
+  says "That passphrase does not open this key." with no call; a key with none is its own press. Then one call with the
+  key (`PasswordOnce.KeyAsync`, the password's program), the proof with the app's key alone, and every later call with the
+  app's key. A sudo that asks for its password gets it asked once, and the same call goes again with it on its input's
+  first line. A refused key says "<server> did not take that key for <user>." under the card, on the page that it was
+  chosen on, its row empty again. The model's only copies of the bytes and
+  the passphrase are cleared when the call ends, when another file is picked, when the step is left, and when the app's
+  key is found to work, with the file's name; no record, setting, box or line ever holds them, nor the file's path.
+- **The agent setup**: `AgentSetupFlow` (the Mac's rules: `Page`, `StartOf`, `Stopped`, `InstallBar`, `Blocker`, …),
+  `ManagerSetupStart` and `ManagerSetupSteps`, `SignIn` (`Line`, `Page`, the provider's steps), and `AgentSetupModel(calls,
+  agent)` for the manager's first setup: `ReadAsync(fleet)`, `Page`, `PlaceChosenAsync` (its server and its provider in
+  one move, read again once after a changed team), `ChooseAsync`, `SendCodeAsync`, `OpensByItself`. A link that the
+  window opens is only ever `SignInPage.Link`, which is a link of the provider's own hosts.
+- **The reads**: `OwnerReads.ServersAsync`, `MachinesAsync`, `TeamAsync` (the Mac's caps and checks), and the writes
+  `JoinCodeAsync`, `MoveAsync`, `SignInAsync`, `SignInCodeAsync`, through `OwnerReads.Of(store)`. The text of a
+  `SignInPage`, a `JobPrompt`, a `MachineLogin` and a `JoinCode` names no link, no code and no command. A field that the Mac reads
+  with `try?` is a `JsonElement` with a reader that never fails the list; fields that no page of the setup reads are
+  skipped. `MobileAgent.Alive` is the sessions of an agent's helper, for the end of the manager's first setup.
+- **Not here, and why**: an agent on a key or a model server (its seal is wave B); a change of an agent's provider
+  (wave C's agent page); the account's own servers' re-install of the hub (`hubAgain`) and the three lines over the
+  press of a list (wave C, with Add server); the second way of the welcome page; the Mac's `MadeServers` notes (each server
+  that the PC makes has a build record with its hub). The sentences that the Mac holds only in its view files are copied
+  in `SetupScreens` and held to the Mac's string catalog (`app/Localization/Localizable.xcstrings`) by a test; the area
+  "Setup, servers and owner tools" has queued a FleetCore `FirstRunWords` that the writer will then read.
 
 ## Build and test
 

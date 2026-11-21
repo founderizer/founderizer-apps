@@ -397,7 +397,8 @@ struct NeedCard: View {
                 openRows.padding(.top, 12)
                     .opacity(1 - share).allowsHitTesting(false).accessibilityHidden(true)
                 if NeedAnswered.saysAnswer(need, spoken: spoken) {
-                    NeedAnswered.answerLine(need).padding(.top, 4).opacity(share)
+                    NeedAnswered.answerLine(need, mark: NeedAnswered.mark(of: need, store: store))
+                        .padding(.top, 4).opacity(share)
                 } else {
                     Color.clear.frame(height: 0)
                 }
@@ -540,7 +541,9 @@ private struct NothingNeedsYou: View {
 /// typed a custom answer instead of choosign one of the suggested ones, do not show the CHECK animation because it is
 /// misleading"): words that he wrote can ask something back or say no, so they stand with no check, and where they
 /// are his own message in the chat (`spoken`) the card folds to its title alone. (The Mac's card says his answer
-/// always, and stands where he answered it, since 19 November 2026: `ChatRequestPlaces.Answered`.)
+/// always, and stands where he answered it, since 19 November 2026: `ChatRequestPlaces.Answered`.) **The check says what
+/// came of his answer** (owner feature `need_marks`; `AnsweredMarkView`): the check, the green mark of work, or the red
+/// mark of work that failed, whose words VoiceOver reads as the folded card's value.
 private struct NeedAnswered: View {
     let store: MobileStore
     let need: OwnerNeed
@@ -554,7 +557,7 @@ private struct NeedAnswered: View {
     private var answerWords: String { Self.words(of: need) }
     static func words(of need: OwnerNeed) -> String {
         // owner feature need_run: a press of Run on the Mac, in this phone's words: "Ran on <Mac>"
-        if !need.isOpen, need.run_command != nil, need.run_status != nil {
+        if ran(need) {
             let place = need.run_on == NeedRun.ownMac || need.run_on == nil ? String(l10n: "your Mac") : need.run_on!
             return String(l10n: "Ran on \(place)")
         }
@@ -568,14 +571,32 @@ private struct NeedAnswered: View {
     /// The folded card has its second line: not where his own words stand in the chat as his message.
     static func saysAnswer(_ need: OwnerNeed, spoken: Bool) -> Bool { !(need.answeredInWords && spoken) }
 
-    /// The folded card's second line: what he answered, an option that he pressed with a check ("✓ Correos"), and
-    /// words that he wrote with none.
-    static func answerLine(_ need: OwnerNeed) -> some View {
+    /// His answer is a press of Run on the Mac (owner feature `need_run`).
+    static func ran(_ need: OwnerNeed) -> Bool { !need.isOpen && need.run_command != nil && need.run_status != nil }
+
+    /// **What came of his answer, in the check's place** (owner feature `need_marks`; `AnsweredMarkView`), or nil where
+    /// the line keeps what it drew before, as the Mac's folded card holds the mark back: words that he wrote (no check),
+    /// a press of Run (its check or its cross), a request that a saved key answered (its check), and an answer of his
+    /// on its way (the plain check).
+    static func mark(of need: OwnerNeed, store: MobileStore) -> AnsweredMark? {
+        guard !need.answeredInWords, !ran(need), !need.answeredWithKey, store.givenAnswer(to: need.id) == nil else {
+            return nil
+        }
+        return store.answeredMark(of: need)
+    }
+
+    /// The folded card's second line: what he answered, an option that he pressed with a check ("✓ Correos"), or the
+    /// mark of what came of it (`mark`), and words that he wrote with none.
+    static func answerLine(_ need: OwnerNeed, mark: AnsweredMark?) -> some View {
         HStack(spacing: 5) {
             // a cross for a command that he ran on the Mac and that ended with another exit status than 0
             if !need.answeredInWords {
-                Image(systemName: (need.run_status ?? 0) == 0 ? "checkmark" : "xmark").font(.caption.weight(.semibold))
-                    .accessibilityHidden(true)
+                Group {
+                    if let mark { AnsweredMarkView(mark: mark) }
+                    else { Image(systemName: (need.run_status ?? 0) == 0 ? "checkmark" : "xmark") }
+                }
+                .font(.caption.weight(.semibold))
+                .accessibilityHidden(true)
             }
             Text(verbatim: words(of: need)).lineLimit(1)
         }
@@ -641,10 +662,11 @@ private struct NeedAnswered: View {
     }
 
     private var folded: some View {
-        Button { expanded = true } label: {
+        let mark = Self.saysAnswer(need, spoken: spoken) ? Self.mark(of: need, store: store) : nil
+        return Button { expanded = true } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Self.titleLine(need)
-                if Self.saysAnswer(need, spoken: spoken) { Self.answerLine(need) }
+                if Self.saysAnswer(need, spoken: spoken) { Self.answerLine(need, mark: mark) }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -656,9 +678,45 @@ private struct NeedAnswered: View {
         // Words that stand in the chat as his own message are read there, not here a second time.
         .accessibilityLabel(Self.saysAnswer(need, spoken: spoken) ? Text("\(need.shownTitle), answered: \(answerWords)")
                             : Text("\(need.shownTitle), answered"))
+        // owner feature need_marks: the mark's words, as the Mac's folded card gives them (the phone has no hover)
+        .accessibilityValue(Text(verbatim: mark?.words ?? ""))
         .accessibilityHint("Shows the whole request")
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("need-folded-\(need.id)")
+    }
+}
+
+/// **The mark of an answered card, in the place of its check** (owner feature `need_marks`; the owner's "Yes, as drawn"
+/// of 21 November 2026; the Mac's `AnsweredMarkView`): the check, the green mark of work, or the red mark of work that
+/// ended with no success (`OwnerNeed.answeredMark`), and no fourth look. They are the phone's own marks of a task's
+/// states: work is the green dotted circle, which stands still here as on Tasks and on the row of what he asked for in a
+/// chat (the phone has no turning mark of work, so it is the Mac's mark at rest, as under Reduce Motion), and a failure
+/// is the red filled exclamation of a failed task. Its words are VoiceOver's, as the folded card's value.
+///
+/// **Not on Needs you** (the owner's "Yes, same marks there", 21 November 2026, for the Mac's answered step): the
+/// phone's page keeps no answered step. An item that he answers there shows the check on his option while the answer
+/// is on its way, and folds away 0.78 s after his press, or at once when the reading that closes it comes later, so a
+/// mark could only stand there for the fold's quarter second.
+struct AnsweredMarkView: View {
+    let mark: AnsweredMark
+
+    /// The look of each mark: its symbol, and the tint of a task's mark that it takes (`MobileStore.color`); nil keeps
+    /// the line's own quiet colour, as the check had it.
+    nonisolated static func look(of mark: AnsweredMark) -> (symbol: String, tint: FleetTask.MarkTint?) {
+        switch mark {
+        case .done: ("checkmark", nil)
+        case .working: ("circle.dotted", .work)
+        case .failed: ("exclamationmark.circle.fill", .failed)
+        }
+    }
+
+    var body: some View {
+        let look = Self.look(of: mark)
+        if let tint = look.tint {
+            Image(systemName: look.symbol).symbolRenderingMode(.hierarchical).foregroundStyle(MobileStore.color(tint))
+        } else {
+            Image(systemName: look.symbol)
+        }
     }
 }
 

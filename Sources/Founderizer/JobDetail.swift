@@ -16,11 +16,20 @@ import SwiftUI
 /// words of the owner's lists, or the agent's own note), or that it works now or waits; then its tasks, in the order
 /// they began, each subtask under the task that gave it, one step further in. A task opens the task level in the same
 /// card, over this job. A thing with no task (a case that the Fleet Manager closed itself) has no card of tasks. A
-/// write that the hub did not confirm stands at the card's foot with its Retry and Discard (`PendingBar`).
+/// write that the hub did not confirm stands at the card's foot with its Retry and Discard (`PendingBar`), and under it
+/// the box of his feedback on the job, with his messages about it over the bar (`FeedbackBox`, `FeedbackRows`).
 struct JobDetail: View {
     @Bindable var store: FleetStore
     let level: JobLevel
     let state: HubState
+
+    /// His feedback on the job, to the job's agent where its chat can read the job (`HubState.feedback(onJob:)`), on a
+    /// hub that takes it; else nil.
+    private var feedback: Feedback? {
+        state.ui_features?.contains("message_about") == true ? state.feedback(onJob: level) : nil
+    }
+    /// His feedback that this card saw go, until the reading holds the hub's copy (`keepsFeedbackSent`).
+    @State private var feedbackSent: PendingRequest?
 
     /// The request that it waits on, while the hub lists it open.
     private var need: OwnerNeed? { level.request.flatMap { id in store.openNeeds.first { $0.id == id } } }
@@ -49,13 +58,21 @@ struct JobDetail: View {
                     ForEach(lines) { line in taskRow(line, wait: waits[line.task.id]) }
                 }
             }
+            // His feedback on the job, between its tasks and the box, from the frame he sends it (`FeedbackRows`).
+            // No selection of their words here: the card of a job has no thread to select in.
+            FeedbackRows(store: store, messages: state.messages(aboutJob: level), state: state, feedback: feedback,
+                         sent: feedbackSent, selection: nil)
             // **An answer that the hub did not confirm, at the card's foot**, with its Retry and Discard: the window's
             // own request line is under the card's dim, as for the task level (`TaskDetail`).
             if store.pending != nil, !store.sending {
                 PendingBar(store: store).clipShape(RoundedRectangle(cornerRadius: FormMetrics.radius))
             }
+            // **His feedback on the job, at the card's foot** (design part 2), to the job's agent where its chat can
+            // read the job (`HubState.feedback(onJob:)`), on a hub that takes it.
+            if let feedback { FeedbackBox(store: store, feedback: feedback) }
         }
         .padding(22).frame(width: FormMetrics.formWidth)
+        .keepsFeedbackSent($feedbackSent, store: store, feedback: feedback)
         .accessibilityIdentifier("job-detail")
     }
 

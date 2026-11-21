@@ -5,16 +5,18 @@ import Foundation
 /// its own page, never the whole snapshot. The first rule that needs it is what he asked for in a chat
 /// (`HubState.asks`, `ChatAskRow`, `ChatAskPlaces`; the owner, 16 November 2026: "the Mac and the iPhone"), so both apps
 /// say the same of one ask: one rule, not a copy of it on the phone. Every part that the phone does not read is empty.
+/// `features` are the hub's own feature names, which a rule reads where the hub's answer depends on them: the mark of an
+/// answered card (`OwnerNeed.answeredMark`, owner feature `need_marks`). nil: a rule that reads none.
 extension HubState {
     public init(phoneTime time: Double, db: String, agents: [FleetAgent], tasks: [FleetTask], needs: [OwnerNeed],
-                messages: [OwnerMessage], holds: [TaskHold], outcomes: [TaskOutcome]) {
+                messages: [OwnerMessage], holds: [TaskHold], outcomes: [TaskOutcome], features: [String]? = nil) {
         schema_version = 1
         self.db = db
         self.time = time
         manager_flag = nil
         manager_warning = nil
         goals = nil
-        ui_features = nil
+        ui_features = features
         // `knowledge` is an optional var: nil by itself.
         secrets = nil
         self.agents = agents

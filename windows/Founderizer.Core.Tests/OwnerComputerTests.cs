@@ -417,4 +417,40 @@ public sealed class OwnerComputerTests
         Assert.AreEqual(hub.Claims.Single(), key is null ? null : OwnerPcKey.Digest(key));
         Assert.IsNull(OwnerPcKey.Waiting(box, hub.Hub.Address));
     }
+
+    /// <summary>**Start again's last step makes this PC a PC that was never given a hub** (step 2, piece L4; the Mac's
+    /// <c>forgetFleet</c>): the store holds no hub, a new start reads none from its folder, the first page is the welcome
+    /// page, and the key of the owner's computer for that hub goes from the box only when the run deleted the hub's own
+    /// server. A store at another hub forgets nothing. The bug: Start again that leaves the dead hub in the app, so that
+    /// the next first run never shows and the PC keeps reading a hub that is gone; or a key that goes for a hub that
+    /// still runs.</summary>
+    [TestMethod]
+    public async Task Forgetting_an_owned_hub_leaves_a_PC_that_was_never_given_one()
+    {
+        foreach (var deleted in new[] { true, false })
+        {
+            var folder = Folder();
+            var owned = Hub();
+            var box = new MemorySecretBox();
+            var ownerKey = OwnerPcKey.Make();
+            OwnerPcKey.Promote(box, owned.Address, ownerKey);
+            owned.Gate = Takes(ownerKey);
+            var settings = new StoreSettings { Folder = folder, Keys = new MemoryKeyStore(), Box = box, Welcome = true };
+            await using (var store = new OwnerStore(settings))
+            {
+                await store.ConnectOwnerAsync(owned.Address);
+                Assert.IsNotNull(store.State.Fleet);
+                store.ForgetOwnedHub(new Uri("http://127.0.0.2:8765/"), deleted);
+                Assert.AreEqual(owned.Address, store.State.Hub, "a store at another hub forgets nothing");
+                store.ForgetOwnedHub(owned.Address, deleted);
+                var s = store.State;
+                Assert.AreEqual((null as Uri, null as MobileSnapshot, HubRole.Device), (s.Hub, s.Fleet, s.Role));
+                Assert.IsTrue(s.HasNoHub && s.HasWelcome);
+            }
+            await using (var again = new OwnerStore(settings))
+                Assert.IsTrue(again.State.HasNoHub, "a new start reads no hub from the folder");
+            Assert.AreEqual(!deleted, OwnerPcKey.Read(box, owned.Address) is not null,
+                            deleted ? "the key of a deleted hub goes" : "the key of a hub that stays alive stays");
+        }
+    }
 }

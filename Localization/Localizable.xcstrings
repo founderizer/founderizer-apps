@@ -9870,6 +9870,16 @@
         }
       }
     },
+    "Give feedback…" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribe tus comentarios…"
+          }
+        }
+      }
+    },
     "Give the address of the Founderizer repository, from your own download page." : {
       "localizations" : {
         "es" : {
@@ -18416,6 +18426,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enviar la corrección"
+          }
+        }
+      }
+    },
+    "Send feedback" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviar los comentarios"
           }
         }
       }

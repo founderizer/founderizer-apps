@@ -123,7 +123,7 @@ public sealed record InstallRecordStep(InstallStepId Id, RecordStepState State, 
 /// was, each step by a fixed name with its state and its times, and how it ended. **What it never holds**: a line that
 /// the server printed, a join code, a key or a password. <c>Says</c> is the page's one orange line, kept only where the
 /// words are this app's own (<see cref="WordsOf"/>), for the owner's own eyes on this PC.</summary>
-public sealed record InstallRecord
+public sealed record InstallRecord : Founderizer.Setup.FirstRun.IKeptRecord<InstallRecord>
 {
     public const int SaysLimit = 300;
     public const int MostSteps = 64;
@@ -135,22 +135,34 @@ public sealed record InstallRecord
     public string Launch { get; init; } = "";
     /// <summary>The hub's address in the app's own form, with its last slash; null for a hub's own install until its
     /// claim step ended well.</summary>
+    [System.Text.Json.Serialization.JsonInclude]
     public string? Hub { get; internal set; }
     /// <summary>The address that the install reached the server at: the one given, then the one on the private network.</summary>
+    [System.Text.Json.Serialization.JsonInclude]
     public string Host { get; internal set; } = "";
+    [System.Text.Json.Serialization.JsonInclude]
     public string? Server { get; internal set; }
+    [System.Text.Json.Serialization.JsonInclude]
     public IReadOnlyList<InstallRecordStep> Steps { get; internal set; } = [];
     public DateTimeOffset Began { get; init; }
+    [System.Text.Json.Serialization.JsonInclude]
     public DateTimeOffset? Ended { get; internal set; }
+    [System.Text.Json.Serialization.JsonInclude]
     public InstallOutcome Outcome { get; internal set; } = InstallOutcome.Running;
+    [System.Text.Json.Serialization.JsonInclude]
     public InstallStop? Stop { get; internal set; }
     /// <summary>The install stopped only because the server is not on the private network and no key was given.</summary>
+    [System.Text.Json.Serialization.JsonInclude]
     public bool WaitsForNetwork { get; internal set; }
+    [System.Text.Json.Serialization.JsonInclude]
     public string? Says { get; internal set; }
+    [System.Text.Json.Serialization.JsonInclude]
     public InstallCause? Cause { get; internal set; }
     /// <summary>How many tries the owner's press made: 2 or 3 after a retry; null for one try.</summary>
+    [System.Text.Json.Serialization.JsonInclude]
     public int? Tries { get; internal set; }
     /// <summary>Why each earlier try stopped, oldest first: the fixed name of its cause or of its stop.</summary>
+    [System.Text.Json.Serialization.JsonInclude]
     public IReadOnlyList<string>? Retried { get; internal set; }
 
     /// <summary>**The line that a record keeps for a stop**: the page's own line where its words are this app's own,
@@ -159,16 +171,22 @@ public sealed record InstallRecord
         error is InstallError install && InstallStops.Of(install) != InstallStop.InstallerStopped ? install.Plain(host) : null;
 
     /// <summary>The step that the install stopped at: the one that failed, else the one that ran.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public InstallStepId? StoppedAt => Outcome is InstallOutcome.Running or InstallOutcome.Done
         ? null
         : Steps.FirstOrDefault(s => s.State == RecordStepState.Failed)?.Id ?? Steps.LastOrDefault(s => s.State == RecordStepState.Running)?.Id;
 
     /// <summary>The newest time in the record.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public DateTimeOffset LastChange =>
         Steps.Aggregate(Max(Began, Ended ?? Began), (at, step) => Max(at, Max(step.Began, step.Ended ?? step.Began)));
 
     /// <summary>The same record as a later start reads it when it says that its work runs: cut off.</summary>
     public InstallRecord CutOff() => this with { Outcome = InstallOutcome.Interrupted };
+
+    /// <summary>The record says that its work runs.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Runs => Outcome == InstallOutcome.Running;
 
     private static DateTimeOffset Max(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
 }

@@ -339,6 +339,9 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     /// could get what a file of the owner's guidance says, so its guidance box takes no file (the owner's "Yes, build
     /// it" of 19 November 2026 to the pictures). nil from a hub without the feature.
     public let from_conversation: Bool?
+    /// **The person of a narrowed pair whose work this task is** (`tasks.scope_person`), or nil: no agent outside that
+    /// pair may read it, so no feedback of the owner's names it (`HubState.feedback(onTask:)`).
+    public let scope_person: Int?
 
     public var isTerminal: Bool { ["completed", "failed", "rejected", "canceled"].contains(state) }
     /// Who checks the result, by the name the app gives everywhere: an agent's capitalised ("Accepted by Manager"),
@@ -844,6 +847,10 @@ public struct OwnerMessage: Decodable, Identifiable, Sendable, Equatable {
     /// Owner feature `asks`: the name of what he asked for in this message, as his list shows it, or nil for a message
     /// that no task names. The first task of the message writes it, once.
     public let asked: String?
+    /// **What the message is about** (owner feature `message_about`, API 1.279): the task or the job of the card that he
+    /// wrote it on, with its title as the hub gives it; nil for a message about nothing. Never strict: a shape that
+    /// this app does not read is none, and nothing else of the reading is lost.
+    public let about: MessageAbout?
     public var id: String { request_id }
 }
 

@@ -30,7 +30,7 @@ public enum AtProvider
 /// a server that was made and never joined exists at its provider and is billed. A record exists only from the moment
 /// the call for the server begins. The server's name and the provider's id stay on this PC, for the owner's own eyes.
 /// The provider and the use are kept by their names ("hetzner", "hub"), as the Mac's file has them.</summary>
-public sealed record BuildRecord
+public sealed record BuildRecord : Founderizer.Setup.FirstRun.IKeptRecord<BuildRecord>
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public string Launch { get; init; } = "";
@@ -38,19 +38,30 @@ public sealed record BuildRecord
     public string Use { get; init; } = "";
     /// <summary>The address of the hub that the server was made for; a first run's server has none until it is on the
     /// private network.</summary>
+    [System.Text.Json.Serialization.JsonInclude]
     public string? Hub { get; internal set; }
     public string Name { get; init; } = "";
+    [System.Text.Json.Serialization.JsonInclude]
     public string? ServerId { get; internal set; }
+    [System.Text.Json.Serialization.JsonInclude]
     public BuildStage Stage { get; internal set; } = BuildStage.Making;
+    [System.Text.Json.Serialization.JsonInclude]
     public AtProvider AtProvider { get; internal set; } = AtProvider.NotKnown;
     /// <summary>The private network's own list had the server, and this PC did not see it.</summary>
+    [System.Text.Json.Serialization.JsonInclude]
     public bool OnNetwork { get; internal set; }
     public DateTimeOffset Began { get; init; }
+    [System.Text.Json.Serialization.JsonInclude]
     public DateTimeOffset? MadeAt { get; internal set; }
+    [System.Text.Json.Serialization.JsonInclude]
     public string? Type { get; internal set; }
+    [System.Text.Json.Serialization.JsonInclude]
     public decimal? MonthlyPrice { get; internal set; }
+    [System.Text.Json.Serialization.JsonInclude]
     public string? Currency { get; internal set; }
+    [System.Text.Json.Serialization.JsonInclude]
     public DateTimeOffset? Ended { get; internal set; }
+    [System.Text.Json.Serialization.JsonInclude]
     public BuildOutcome Outcome { get; internal set; } = BuildOutcome.Running;
 
     /// <summary>The provider is asked for the server now.</summary>
@@ -85,17 +96,24 @@ public sealed record BuildRecord
 
     /// <summary>**The server can stand at its provider with no place in a fleet**: this PC never saw it join, and the
     /// build did not leave nothing there.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public bool IsUnjoined => Outcome is BuildOutcome.Stopped or BuildOutcome.Cancelled or BuildOutcome.Interrupted &&
                               AtProvider != AtProvider.Nothing;
 
     /// <summary>The provider answered with the server's id, so it exists there for sure.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public bool IsMade => ServerId is not null;
 
     /// <summary>The newest time in the record.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public DateTimeOffset LastChange => new[] { Began, MadeAt ?? Began, Ended ?? Began }.Max();
 
     /// <summary>The same record as a later start reads it when it says that its work runs: cut off.</summary>
     public BuildRecord CutOff() => this with { Outcome = BuildOutcome.Interrupted };
+
+    /// <summary>The record says that its work runs.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Runs => Outcome == BuildOutcome.Running;
 
     /// <summary>**The names that a new server of this PC must not take**: of each build that did not join, left
     /// something at its provider (or does not know yet) and began less than <paramref name="life"/> ago (the Mac's

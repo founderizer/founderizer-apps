@@ -1,0 +1,396 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Founderizer.Remote;
+using Founderizer.Setup.Cloud;
+using Founderizer.Setup.FirstRun;
+using Founderizer.Setup.Install;
+using Founderizer.Setup.Network;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Founderizer.Setup.Tests;
+
+/// <summary>**The first run as a model** (windows-app-plan-v2.md, piece L4), on a stand-in PC: the order of its pages, the
+/// one press that makes every server, the records that Start again deletes by, and the manager's name for the hub.</summary>
+[TestClass]
+public sealed class SetupStoreTests
+{
+    /// <summary>**A PC that is on a tailnet, with the fleet's key in its box, goes from the slider straight to the VPS
+    /// page, and a provider whose token it holds opens its choice at once.** Bug: a network page or a key page that shows
+    /// every time, which would send an owner with Tailscale to install it again, or ask for a second access token.</summary>
+    [TestMethod]
+    public async Task A_PC_on_a_tailnet_with_a_fleet_key_has_no_network_page_and_no_key_page()
+    {
+        await using var rig = new SetupRig();
+        rig.ThroughTheFirstPages();
+        Assert.AreEqual(SetupPage.Cloud, rig.Store.State.Page);
+        rig.Store.ChooseProvider(CloudProvider.Hetzner);
+        var s = await rig.Until(x => x.Cloud?.Offer is not null, "the hub's offer");
+        Assert.AreEqual((SetupPage.Token, CloudProvider.Hetzner), (s.Page, s.TokenOf));
+        Assert.AreEqual(new[] { "Manager", "AI provider", "Servers", "Network", "VPS", "Build" }.Length, s.Progress!.Names.Count);
+        Assert.AreEqual(4, s.Progress.Current, "the token page is the step VPS");
+
+        // On a tailnet with no fleet key in the box: the key's page, once, before the VPS page.
+        await using var keyless = new SetupRig();
+        keyless.Net.IsHeld = false;
+        keyless.ThroughTheFirstPages();
+        Assert.AreEqual(SetupPage.Key, keyless.Store.State.Page);
+        await keyless.Store.SendKeyAsync("tskey-api-kEXAMPLE06-NOTAKEYNOTAKEY");
+        Assert.AreEqual(SetupPage.Cloud, keyless.Store.State.Page);
+    }
+
+    /// <summary>**A PC on no tailnet gets Connect Tailscale first, and the key's page next while its box holds no fleet
+    /// key; each goes on by itself to the card that was pressed.** Bug: a VPS page that a PC off the network reaches,
+    /// whose install then cannot claim the hub at its private address; or a key page that ends on the VPS page when the
+    /// owner had pressed a provider's card.</summary>
+    [TestMethod]
+    public async Task A_PC_off_the_network_gets_the_network_page_then_the_key_page_then_the_card_it_pressed()
+    {
+        await using var rig = new SetupRig();
+        rig.Status.Connected = false;
+        rig.Net.IsHeld = false;
+        rig.ThroughTheFirstPages();
+        Assert.AreEqual(SetupPage.Network, rig.Store.State.Page);
+        Assert.AreEqual(3, rig.Store.State.Progress!.Current, "the network page is the step Network");
+        rig.Store.PressConnect();
+        Assert.AreEqual(SetupScreens.WaitingForTailscale, SetupScreens.Of(rig.Store.State).Title);
+        rig.Status.Connected = true;
+        rig.Store.ReadPc(rig.Status.Json());
+        Assert.AreEqual(SetupPage.Key, rig.Store.State.Page, "no fleet key: the key's page comes after the network");
+        await rig.Store.SendKeyAsync("tskey-api-kEXAMPLE05-NOTAKEYNOTAKEY");
+        Assert.AreEqual(SetupPage.Cloud, rig.Store.State.Page);
+
+        // The card that was pressed while the PC was off the network is the page that comes.
+        await using var other = new SetupRig();
+        other.Status.Connected = false;
+        other.ThroughTheFirstPages();
+        other.Store.Back();
+        Assert.AreEqual(SetupPage.Servers, other.Store.State.Page, "Back from the network page goes to the slider");
+        other.Store.ChooseServers();
+        other.Store.Back();
+        other.Store.ChooseServers();
+        Assert.AreEqual(SetupPage.Network, other.Store.State.Page);
+        other.Status.Connected = true;
+        other.Store.ReadPc(other.Status.Json());
+        Assert.AreEqual(SetupPage.Cloud, other.Store.State.Page);
+        other.Status.Connected = false;
+        other.Store.ReadPc(other.Status.Json());
+        other.Store.ChooseProvider(CloudProvider.Hetzner);
+        Assert.AreEqual(SetupPage.Network, other.Store.State.Page);
+        other.Status.Connected = true;
+        other.Store.ReadPc(other.Status.Json());
+        Assert.AreEqual((SetupPage.Token, CloudProvider.Hetzner), (other.Store.State.Page, other.Store.State.TokenOf));
+    }
+
+    /// <summary>**One press makes every server of the fleet: the hub's and, on 2 servers, the manager's own; a second
+    /// press while they are made makes nothing.** And the hub's installer gets the manager's name in the installer's
+    /// form. Bugs: a press that makes only the hub's server (the manager's setup then asks for a VPS again), a double
+    /// press that rents two of each, and "Juno" sent as typed, which the installer leaves out so that the manager is
+    /// named "manager".</summary>
+    [TestMethod]
+    public async Task One_press_makes_every_server_and_never_two_builds_at_once()
+    {
+        await using var rig = new SetupRig();
+        rig.ThroughTheFirstPages(ServersStep.Two, "Juno");
+        rig.Store.ChooseProvider(CloudProvider.Hetzner);
+        await rig.Until(x => x.Cloud?.Offer is not null && x.ManagersCloud?.Offer is not null, "both offers");
+        var screen = SetupScreens.Of(rig.Store.State);
+        Assert.AreEqual(SetupScreens.FleetTitle, screen.Title);
+        Assert.AreEqual("Make 2 servers", screen.Controls.Single(c => c.Kind == SetupControlKind.Button).Words);
+
+        Assert.IsTrue(rig.Store.MakeFleet());
+        Assert.IsFalse(rig.Store.MakeFleet(), "a second press while the build runs makes nothing");
+        await rig.Until(x => x.ManagersServer?.Address is not null && x.Install.Checklist is not null, "both servers and the hub's install");
+
+        var hetzner = rig.Clouds[CloudProvider.Hetzner];
+        CollectionAssert.AreEqual(new[] { CloudServerUse.Hub, CloudServerUse.Agent }, hetzner.Orders.Select(o => o.Use).ToList());
+        Assert.AreEqual(2, hetzner.Orders.Select(o => o.Name).Distinct().Count(), "two servers of two names");
+        Assert.IsTrue(rig.Clouds.Where(c => c.Key != CloudProvider.Hetzner).All(c => c.Value.Orders.Count == 0));
+
+        var hub = rig.Plans.First();
+        Assert.IsTrue(hub.Steps.Any(), "a hub plan ran");
+        Assert.IsTrue(rig.Remote.Calls.Any(c => c.Program.Contains("--manager-name juno", StringComparison.Ordinal)),
+                      "the installer gets the name in the installer's form");
+        Assert.IsFalse(rig.Remote.Calls.Any(c => c.Program.Contains("--manager-name Juno", StringComparison.Ordinal)));
+        Assert.AreEqual(1, rig.Connected.Count, "the claim made this PC the owner's computer of the new hub, once");
+        Assert.AreEqual($"http://{rig.Status.AddressOf(hetzner.Orders[0].Name)}:8765/", rig.Connected[0].ToString());
+    }
+
+    /// <summary>**A build keeps the record of each server that it made, with the hub that it is for, so that Start again
+    /// deletes those and no other**: not a server of another hub's record, not a server of the account that no record
+    /// names; and Start again forgets the host keys and the records of this hub. Bugs: a record written only when the
+    /// build ends (a build that stopped leaves a paid server that nothing knows), a manager's server kept with no hub,
+    /// or Start again by a server's name or label, which deletes the owner's own servers.</summary>
+    [TestMethod]
+    public async Task Start_again_deletes_the_servers_that_this_PCs_records_prove_and_no_other()
+    {
+        await using var rig = new SetupRig();
+        rig.ThroughTheFirstPages(ServersStep.Two);
+        rig.Store.ChooseProvider(CloudProvider.Hetzner);
+        await rig.Until(x => x.Cloud?.Offer is not null && x.ManagersCloud?.Offer is not null, "both offers");
+        rig.Store.MakeFleet();
+        await rig.Until(x => x.ManagersServer?.Address is not null && x.Install.ClaimedHub is not null, "both servers and the claim");
+        var hub = rig.Store.State.Install.ClaimedHub!;
+        var builds = rig.Records.Builds.All();
+        Assert.AreEqual(2, builds.Count);
+        Assert.IsTrue(builds.All(b => b.Hub == hub && b.ServerId is not null), string.Join("; ", builds.Select(b => $"{b.Name} {b.Hub} {b.ServerId}")));
+
+        // Another hub's server, and a server of the account that no record names.
+        rig.Records.Builds.Write(BuildRecord.Begin("hetzner", "hub", "http://100.64.0.99:8765/", "worker-9", "launch-0", DateTimeOffset.UtcNow)
+                                            .Made("999", DateTimeOffset.UtcNow));
+        rig.Records.Builds.Write(BuildRecord.Begin("hetzner", "hub", null, "worker-8", "launch-0", DateTimeOffset.UtcNow).End(DateTimeOffset.UtcNow));
+        var hetzner = rig.Clouds[CloudProvider.Hetzner];
+        hetzner.Existing.Add(new CloudExisting("555", "owners-own", "203.0.113.55", "cx22", 4096, "ubuntu", "24.04", "Nuremberg", true, null, null));
+        hetzner.Existing.Add(new CloudExisting("999", "worker-9", "203.0.113.99", "cx23", 4096, "ubuntu", "24.04", "Nuremberg", true, null, null));
+        foreach (var b in builds) hetzner.Existing.Add(new CloudExisting(b.ServerId!, b.Name, null, "cx23", 4096, "ubuntu", "24.04", "Nuremberg", true, null, null));
+        File.WriteAllText(rig.HostKeys.Path, "{}");
+
+        var plan = await rig.Store.StartAgainPlanAsync(hub);
+        CollectionAssert.AreEquivalent(builds.Select(b => b.ServerId).ToList(), plan.Servers.Select(s => s.ServerId).ToList());
+        Assert.AreEqual(CloudServerUse.Hub, plan.Servers[0].Use, "the hub's own server first");
+        var steps = await rig.Store.StartAgainRunAsync(plan);
+        Assert.IsTrue(steps.All(s => s.State == StartAgain.StepState.Done), string.Join("; ", steps.Select(s => $"{s.Title} {s.State} {s.Says}")));
+        CollectionAssert.AreEquivalent(builds.Select(b => b.ServerId).ToList(), hetzner.DeletedServers);
+        Assert.IsFalse(File.Exists(rig.HostKeys.Path), "Start again forgets the host keys");
+        CollectionAssert.AreEqual(new[] { (new Uri(hub), true) }, rig.Forgotten, "the PC forgets the hub, with its key: its server was deleted");
+        CollectionAssert.AreEquivalent(new[] { "worker-9", "worker-8" }, rig.Records.Builds.All().Select(b => b.Name).ToList(),
+                                       "the other hub's record and a record of no hub stay: the run deleted neither server");
+        Assert.AreEqual(SetupPage.Welcome, rig.Store.State.Page);
+    }
+
+    /// <summary>**A build that stops after the provider made the server keeps its record**, so the server stays known.
+    /// Bug: a stopped build that forgets what it left at the provider.</summary>
+    [TestMethod]
+    public async Task A_build_that_stopped_keeps_the_record_of_the_server_that_it_made()
+    {
+        await using var rig = new SetupRig();
+        rig.ThroughTheFirstPages(ServersStep.One);
+        rig.Store.ChooseProvider(CloudProvider.Hetzner);
+        await rig.Until(x => x.Cloud?.Offer is not null, "the hub's offer");
+        rig.Clouds[CloudProvider.Hetzner].Refuses = _ => new CloudException(CloudFailure.LeftBehind, CloudProvider.Hetzner, "The firewall did not come up.", ["worker-1"]);
+        Assert.IsTrue(rig.Store.MakeFleet());
+        var s = await rig.Until(x => x.Cloud?.Stopped is not null && x.Cloud.Stage == CloudStep.Stage.Token, "the stop");
+        Assert.IsNotNull(s.Cloud!.Failure);
+        var record = rig.Records.Builds.All().Single();
+        Assert.AreEqual((BuildOutcome.Stopped, AtProvider.LeftBehind), (record.Outcome, record.AtProvider));
+        Assert.IsTrue(record.IsUnjoined);
+    }
+
+    /// <summary>**"1 server" makes one server, and Other VPS installs the hub on the owner's own server with the app's
+    /// key, with no build at all.** Bug: a press of "1 server" that rents the manager's server too.</summary>
+    [TestMethod]
+    public async Task One_server_makes_one_server_and_other_vps_makes_none()
+    {
+        await using var rig = new SetupRig();
+        rig.ThroughTheFirstPages(ServersStep.One);
+        rig.Store.ChooseProvider(CloudProvider.Hetzner);
+        await rig.Until(x => x.Cloud?.Offer is not null, "the hub's offer");
+        Assert.AreEqual("Make the server", SetupScreens.Of(rig.Store.State).Controls.Single(c => c.Kind == SetupControlKind.Button).Words);
+        rig.Store.MakeFleet();
+        await rig.Until(x => x.Install.Checklist is not null, "the hub's install");
+        Assert.AreEqual(1, rig.Clouds[CloudProvider.Hetzner].Orders.Count);
+
+        await using var own = new SetupRig();
+        own.ThroughTheFirstPages(ServersStep.One);
+        own.Store.ChooseOtherVps();
+        await own.Store.CheckVpsAsync("203.0.113.10");
+        Assert.AreEqual(VpsPhase.Ready, own.Store.State.Vps.Phase, own.Store.State.Vps.Why);
+        own.Store.InstallVps();
+        await own.Until(x => x.Install.Checklist is not null, "the hub's install on the owner's server");
+        Assert.IsTrue(own.Clouds.Values.All(c => c.Orders.Count == 0));
+        Assert.IsTrue(own.Remote.Calls.All(c => c.Login is RemoteLogin.AppKey));
+    }
+
+    private static async Task<SetupRig> Built(SetupRig rig, ServersStep step = ServersStep.Two)
+    {
+        rig.ThroughTheFirstPages(step);
+        rig.Store.ChooseProvider(CloudProvider.Hetzner);
+        await rig.Until(x => x.Cloud?.Offer is not null && (step == ServersStep.One || x.ManagersCloud?.Offer is not null), "the offers");
+        Assert.IsTrue(rig.Store.MakeFleet());
+        return rig;
+    }
+
+    /// <summary>**The hand-over waits for the manager's join and comes at its end, with the server that joined.** The
+    /// bug: a first run that goes to the manager's setup while its server joins, so that the setup asks for a server
+    /// again; or one that never leaves the build page.</summary>
+    [TestMethod]
+    public async Task The_hand_over_comes_at_the_joins_end_with_the_server_that_joined()
+    {
+        await using var rig = new SetupRig { Fleet = SetupRig.NewFleet() };
+        await Built(rig);
+        var s = await rig.Until(x => x.HandedOver, "the hand-over");
+        Assert.IsNotNull(s.ManagerInstall.Checklist, "the join ended before the hand-over");
+        var handed = rig.Store.HandedOver!;
+        Assert.AreEqual(("juno", "claude", s.ManagersServer!.Name, false, null as MadeServer), (handed.Manager, handed.Provider, handed.Joined, handed.SignInAsked, handed.Made));
+        Assert.AreEqual(0, rig.Calls.SignIns, "a manager with no server gets its provider with its server, and no sign-in now");
+        Assert.AreEqual(1, rig.Calls.Posts.Count(p => p == "ui/servers/join"));
+    }
+
+    /// <summary>**When the join's wait ends by its count and the new hub answers late, the hand-over comes at that
+    /// answer, with the server that the run made for the manager's setup to install.** The bug: the run stays on the build
+    /// page for good (the hand-over was asked only at the two ends of the installs).</summary>
+    [TestMethod]
+    public async Task The_hand_over_comes_when_the_joins_wait_ended_and_the_hub_answers_late()
+    {
+        await using var rig = new SetupRig();
+        await Built(rig);
+        await rig.Until(x => x.Install.Checklist is not null && x.ManagersServer?.Address is not null, "the hub's install and the manager's server");
+        await Task.Delay(100);
+        Assert.IsFalse(rig.Store.State.HandedOver, "no hand-over before the hub answers this PC");
+        Assert.AreEqual(0, rig.Calls.Posts.Count(p => p == "ui/servers/join"), "the join's wait ended by its count");
+        rig.Fleet = SetupRig.NewFleet();
+        rig.Store.Recheck();
+        await rig.Until(x => x.HandedOver, "the hand-over at the hub's late answer");
+        var handed = rig.Store.HandedOver!;
+        Assert.IsNull(handed.Joined);
+        Assert.AreEqual(rig.Store.State.ManagersServer, handed.Made, "the manager's setup gets the server that the run made");
+    }
+
+    /// <summary>**A manager's server that its provider refused with no way on does not hold the run**: the hand-over comes
+    /// after the hub's install, and the manager's setup asks for the server. The bug: a first run that waits for good for
+    /// a choice that cannot lead on.</summary>
+    [TestMethod]
+    public async Task The_hand_over_comes_when_the_managers_server_is_refused_with_no_way_on()
+    {
+        await using var rig = new SetupRig { Fleet = SetupRig.NewFleet() };
+        rig.Clouds[CloudProvider.Hetzner].Refuses = order => order.Use == CloudServerUse.Agent ? new CloudException(CloudFailure.Full, CloudProvider.Hetzner) : null;
+        await Built(rig);
+        var s = await rig.Until(x => x.HandedOver, "the hand-over");
+        Assert.IsTrue(s.ManagersFull.Contains(CloudProvider.Hetzner));
+        Assert.AreEqual((null as string, null as MadeServer), (rig.Store.HandedOver!.Joined, rig.Store.HandedOver.Made));
+    }
+
+    /// <summary>**Two asks of the hand-over at once ask for the manager's sign-in once**: "1 server" puts the manager on the
+    /// hub's own server, and the run asks for its sign-in as it hands over. The bug: two codes started on one machine.</summary>
+    [TestMethod]
+    public async Task Two_asks_of_the_hand_over_at_once_ask_for_the_sign_in_once()
+    {
+        await using var rig = new SetupRig();
+        rig.Calls.ManagerOn = "worker-1";
+        await Built(rig, ServersStep.One);
+        await rig.Until(x => x.Install.Checklist is not null, "the hub's install");
+        rig.Fleet = SetupRig.NewFleet();
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(rig.Store.Recheck)));
+        await rig.Until(x => x.HandedOver, "the hand-over");
+        await Task.Delay(50);
+        Assert.AreEqual(1, rig.Calls.SignIns);
+        Assert.IsTrue(rig.Store.HandedOver!.SignInAsked);
+    }
+
+    /// <summary>**Try again of a stopped install runs the same install again**, from its first step. The bug: a stop with a
+    /// Try again that does nothing.</summary>
+    [TestMethod]
+    public async Task Try_again_runs_a_stopped_install_again()
+    {
+        var failures = 1;
+        await using var rig = new SetupRig(call => call.Program.Contains("git clone", StringComparison.Ordinal) && Interlocked.Decrement(ref failures) >= 0
+            ? StandInRemote.Said("fatal: unable to access the repository", 128) : null);
+        await Built(rig, ServersStep.One);
+        var stopped = await rig.Until(x => x.Install.Failure is not null, "the stop");
+        var screen = SetupScreens.Of(stopped);
+        Assert.AreEqual(SetupScreens.HubDidNotInstall, screen.Title);
+        Assert.AreEqual("first-run-install-again", screen.Controls.Single(c => c.Kind == SetupControlKind.Button).Id);
+        rig.Store.InstallAgain();
+        await rig.Until(x => x.Install.Checklist is not null, "the second try's checks");
+        Assert.AreEqual(2, rig.Plans.Count(p => p.Steps.Any(st => st.Id == "claim")), "the same install again");
+    }
+
+    /// <summary>**A fleet key that Tailscale ended says L2's sentence and asks for the key again**: on the install's page a
+    /// paste makes a new key and Install again shows; before a server the key's page comes again though the box holds the
+    /// ended key. The bug: "Connect Tailscale again" with no way to connect it.</summary>
+    [TestMethod]
+    public async Task An_ended_fleet_key_asks_for_the_key_again()
+    {
+        await using var rig = new SetupRig();
+        rig.Net.Refuses = name => name == "hub" ? new FleetKeyException(FleetKeyFailure.FleetKeyEnded) : null;
+        rig.ThroughTheFirstPages(ServersStep.One);
+        rig.Store.ChooseOtherVps();
+        await rig.Store.CheckVpsAsync("203.0.113.10");
+        rig.Store.InstallVps();
+        var s = await rig.Until(x => x.Install.Failure is not null, "the stop");
+        Assert.IsTrue(s.Install.NeedsNetworkKey && s.FleetKeyEnded);
+        var screen = SetupScreens.Of(s);
+        Assert.AreEqual(new FleetKeyException(FleetKeyFailure.FleetKeyEnded).Message, screen.Warning, "L2's own sentence");
+        Assert.IsTrue(screen.Controls.Any(c => c.Kind == SetupControlKind.Paste));
+        Assert.IsFalse(screen.Controls.Any(c => c.Words == SetupScreens.InstallAgainWords), "no Install again before a new key");
+        rig.Net.Refuses = null;
+        await rig.Store.SendKeyAsync("tskey-api-kEXAMPLE07-NOTAKEYNOTAKEY");
+        Assert.AreEqual(SetupPage.Installing, rig.Store.State.Page);
+        Assert.IsTrue(SetupScreens.Of(rig.Store.State).Controls.Any(c => c.Words == SetupScreens.InstallAgainWords));
+        rig.Store.InstallAgain();
+        await rig.Until(x => x.Install.Checklist is not null, "the install with the new key");
+
+        // Before a server: the key's page again, while the key that the box holds is the ended one.
+        await using var other = new SetupRig();
+        other.Net.Refuses = _ => new FleetKeyException(FleetKeyFailure.FleetKeyEnded);
+        await Built(other, ServersStep.One);
+        await other.Until(x => x.Cloud?.Stopped is not null && x.Cloud.Stage == CloudStep.Stage.Token, "the build's stop");
+        Assert.IsTrue(other.Store.State.FleetKeyEnded);
+        other.Store.Back();
+        other.Store.ChooseProvider(CloudProvider.Hetzner);
+        Assert.AreEqual(SetupPage.Key, other.Store.State.Page);
+    }
+
+    /// <summary>**A whole run on the stand-in PC leaves no secret in the state's text, a record's file or a step's
+    /// line**: not the auth key of a server, not the hub's one-time join code, not the claim's link code, not the
+    /// password once. The bug: a record or a line that a person or a report can read, with a key to the private network
+    /// or a code that claims the hub in it.</summary>
+    [TestMethod]
+    public async Task A_whole_run_leaves_no_secret_in_the_state_a_record_or_a_line()
+    {
+        string[] secrets = [StandInNet.AuthKey, "7KMQ2PRJ4TVW", "ABCD-EFGH-JKLM", "ABCDEFGHJKLM", "correct horse battery"];
+        await using var rig = new SetupRig { Fleet = SetupRig.NewFleet() };
+        await Built(rig);
+        await rig.Until(x => x.HandedOver, "the hand-over");
+        await using var own = new SetupRig(call => call.Program == "/bin/sh -s" && call.Login is Remote.RemoteLogin.AppKey && own_keyless
+            ? StandInRemote.Failed(Remote.RemoteFailure.LoginRefused) : null);
+        own_keyless = true;
+        own.ThroughTheFirstPages(ServersStep.One);
+        own.Store.ChooseOtherVps();
+        await own.Store.CheckVpsAsync("203.0.113.10");
+        Assert.AreEqual(VpsPhase.Password, own.Store.State.Vps.Phase);
+        own_keyless = false;
+        await own.Store.GivePasswordAsync("correct horse battery".ToCharArray());
+        Assert.AreEqual(VpsPhase.Ready, own.Store.State.Vps.Phase, own.Store.State.Vps.Why);
+        own.Store.InstallVps();
+        await own.Until(x => x.Install.Checklist is not null, "the install of the owner's server");
+        foreach (var r in new[] { rig, own })
+        {
+            var s = r.Store.State;
+            var texts = new List<string> { s.ToString(), s.Install.ToString(), s.ManagerInstall.ToString(), s.Vps.ToString(), $"{r.Store.HandedOver}" };
+            texts.AddRange(s.Install.Steps.Concat(s.ManagerInstall.Steps).SelectMany(p => p.Lines.Append(p.Detail ?? "").Append(p.ToString())));
+            texts.AddRange(Directory.EnumerateFiles(Path.Combine(r.Folder, "records"), "*", SearchOption.AllDirectories).Select(File.ReadAllText));
+            foreach (var secret in secrets)
+                Assert.IsFalse(texts.Any(x => x.Contains(secret, StringComparison.Ordinal)), "a text holds " + secret);
+        }
+    }
+
+    private static volatile bool own_keyless;
+
+    /// <summary>**A second first run after Start again, in the same run of the app, hands over again**: Start again stands
+    /// on the manager's pages, after the first run's hand-over, and proof A runs twice with it between. The bug: the
+    /// hand-over's flag, or the first run's hand-over, that stays set, so the second run's build page stays for good.</summary>
+    [TestMethod]
+    public async Task A_second_first_run_after_start_again_hands_over()
+    {
+        await using var rig = new SetupRig { Fleet = SetupRig.NewFleet() };
+        await Built(rig);
+        var first = await rig.Until(x => x.HandedOver, "the first hand-over");
+        var hub = first.Install.ClaimedHub!;
+        var firstServer = first.ManagersServer!.Name;
+        var plan = await rig.Store.StartAgainPlanAsync(hub);
+        var steps = await rig.Store.StartAgainRunAsync(plan);
+        Assert.IsTrue(steps.All(st => st.State == StartAgain.StepState.Done), string.Join("; ", steps.Select(st => $"{st.Title} {st.Says}")));
+        Assert.AreEqual(SetupPage.Welcome, rig.Store.State.Page);
+        Assert.IsNull(rig.Store.HandedOver, "Start again takes the first run's hand-over away");
+
+        await Built(rig);
+        var second = await rig.Until(x => x.HandedOver, "the second hand-over");
+        Assert.AreNotEqual(hub, second.Install.ClaimedHub, "a new hub");
+        Assert.AreEqual(second.ManagersServer!.Name, rig.Store.HandedOver!.Joined);
+        Assert.AreNotEqual(firstServer, rig.Store.HandedOver.Joined);
+    }
+}

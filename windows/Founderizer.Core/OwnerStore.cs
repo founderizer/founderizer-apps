@@ -1758,6 +1758,38 @@ public sealed class OwnerStore : IAsyncDisposable
         return null;
     }
 
+    /// <summary>**This PC forgets a hub that it owns** (the last step of the first run's Start again, step 2's piece L4; the
+    /// Mac's <c>FleetStore.forgetFleet</c>): what the store keeps of that hub goes, in memory and in its folder (the kept
+    /// hub, its reading, its chats, the seen marks and the drafts, and a write that waits for it and is not on its way),
+    /// and the store is as on a PC that was never given a hub, so the first page is the welcome page again. It asks the
+    /// hub nothing. <paramref name="hubServerDeleted"/>: the run deleted the hub's own server, so the key of the owner's
+    /// computer for that hub goes from the box too (the one that waits as well); a hub that stays alive keeps it, as the
+    /// Mac keeps its key. A store that is at another hub, or that is no owner's computer of it, forgets nothing.</summary>
+    public void ForgetOwnedHub(Uri hub, bool hubServerDeleted)
+    {
+        var s = State;
+        if (s.Hub is not { } now || now != HubClient.Address(hub.ToString()) || s.Role != HubRole.Owner) return;
+        ForgetGeneration(keepSnapshot: false);
+        if (s.Pending is { } waiting && waiting.Hub == now && !s.Sending)
+        {
+            try { outbox.Clear(waiting.RequestId); }
+            catch (Exception e) when (e is IOException or OutboxException or UnauthorizedAccessException) { }
+        }
+        foreach (var name in new[] { "hub.json", "snapshot.json", "chats.json", "seen.json", "drafts.json" }) Remove(name);
+        if (hubServerDeleted && settings.Box is { } box && OwnerPcKey.Name(now) is { } keyName)
+        {
+            try { box.Remove(keyName); box.Remove(keyName + ".pending"); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+        ForgetOwnerKeyInHand();
+        lastRequestTook = 0;
+        Update(x => new StoreState
+        {
+            HasWelcome = settings.Welcome, Key = settings.Keys.Has ? KeyState.Locked : KeyState.None, Front = x.Front,
+            Staged = x.Staged, Version = x.Version + 1,
+        });
+    }
+
     /// <summary>The owner's computer key in hand goes, so that the next <see cref="Unlock"/> reads the box again: after a
     /// claim, a new key, or another hub.</summary>
     private void ForgetOwnerKeyInHand()

@@ -13,6 +13,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Founderizer.Core/Founderizer.Core.csproj" />
+    <!-- The decode twin of the owner's reads of each page family (windows-app-plan-v2.md, section 6), which app_decode.py
+         runs from this project: Founderizer.Owner names Founderizer.Core alone. -->
+    <ProjectReference Include="../Founderizer.Owner/Founderizer.Owner.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../../vectors/*.json" Link="vectors/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

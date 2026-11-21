@@ -546,7 +546,7 @@ private struct SentMessageView: View {
 
 /// **A task's thread**, the left column of its card over the window (`TaskDetail`): what the agent said, from the request
 /// that the task began with to its result, in the column of prose, with its live line while its session works.
-struct TaskView: View {
+struct TaskView<After: View>: View {
     @Bindable var store: FleetStore
     let task: FleetTask
     let state: HubState
@@ -555,6 +555,11 @@ struct TaskView: View {
     /// The room over its first row, into which its rows fade as they leave at the top: under the card's edge, or under
     /// the back link to a job (`TaskDetail`).
     let top: CGFloat
+    /// **What stands at the thread's end, after its result**: the owner's feedback on the task with its answers
+    /// (`FeedbackRows`), which its card gives, with the thread's selection, so their words are selected as the thread's
+    /// are; and how many rows it has, so that a new one is followed to the end as a new row of the thread is.
+    let after: (ChatSelection) -> After
+    let afterCount: Int
     @State private var end = ChatEnd()
     /// The thread's end is more than three of its room's heights away: "Latest" goes there in one frame.
     @State private var farFromEnd = false
@@ -574,7 +579,7 @@ struct TaskView: View {
     /// thread scrolls to, and the gap between two blocks over it, so the last words stand as far over the guidance box
     /// as a chat's last words over its composer (the owner's yes of 17 November 2026 to the pictures of the Task page).
     /// They stood right on it. The scroll's measure of its end leaves it out (`keepsEnd(room:)`).
-    private static let endRoom = ManagerView.endRoom + ChatStyle.blockSpacing
+    private static var endRoom: CGFloat { ManagerView.endRoom + ChatStyle.blockSpacing }
 
     /// **The thread's live line while its session works** (the owner's yes of 17 November 2026 to the pictures of the
     /// Task page): the chat's "Thinking" line (`ChatWaitingLine`), the agent's glyph moving before what it does now:
@@ -794,6 +799,7 @@ struct TaskView: View {
                             ArtifactSection(context: context, isFresh: isFresh).id(context)
                         }
                     }
+                    after(selection)
                     // **No name under the record**: the agent that did it heads the panel beside it (`TaskPanel`). Its
                     // muted name stood here, the one place the thread named it.
                     Color.clear.frame(height: ManagerView.endRoom).id("latest-task")
@@ -812,6 +818,9 @@ struct TaskView: View {
                 if end.followsLatest { proxy.scrollTo("latest-task", anchor: .bottom) }
             }
             .onChange(of: task.state) { _, _ in
+                if end.followsLatest { proxy.scrollTo("latest-task", anchor: .bottom) }
+            }
+            .onChange(of: afterCount) { _, _ in
                 if end.followsLatest { proxy.scrollTo("latest-task", anchor: .bottom) }
             }
             .onChange(of: state.steers?.last(where: { $0.task == task.id })?.id) { _, _ in

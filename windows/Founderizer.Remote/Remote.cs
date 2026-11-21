@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -123,7 +124,20 @@ public enum RemoteFailure
 /// a signal ended. <c>Output</c> and <c>Errors</c> are its standard output and standard error as UTF-8, each the first
 /// 1 MiB (the Mac's bound); what came before a failure stays in them.
 /// </summary>
-public sealed record RemoteResult(int? ExitStatus, string Output, string Errors, RemoteFailure? Failure);
+public sealed record RemoteResult(int? ExitStatus, string Output, string Errors, RemoteFailure? Failure)
+{
+    /// <summary>
+    /// **The ways in that the server still takes** (plan 5.5, "Which ways a server still takes"; the owner's "Key row
+    /// here too" of 21 November 2026, piece L4c). With a refused login (<see cref="RemoteFailure.LoginRefused"/> or
+    /// <see cref="RemoteFailure.LoginNotOffered"/>): the names that the server sent with its last refusal of this call's
+    /// own way in ("publickey", "password", "keyboard-interactive"), as it sent them. Null for every other result, for a
+    /// server that named no way, and for a server that refused before the call's own way was tried: that server named
+    /// none of the call's ways in its answer to SSH's first ask (the login "none"), and SSH.NET keeps that answer to
+    /// itself. The call learns the list from its one login and from nothing else: it sends no password to learn it.
+    /// The list is the server's word. It chooses a page and nothing else, and nothing keeps it.
+    /// </summary>
+    public IReadOnlyList<string>? LoginWays { get; init; }
+}
 
 /// <summary>SSH from the owner's computer: one program on one server, with one login, under one host key rule.</summary>
 public interface IRemote : IAsyncDisposable

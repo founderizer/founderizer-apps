@@ -55,6 +55,31 @@ Necesitas Founderizer en un Mac. Añade este teléfono desde la app del Mac: Aju
 
 asistente,automatización,aprobaciones,tareas,equipo,negocio,operaciones,atención al cliente,DevOps
 
+## What's new in 1.3 (4000)
+
+The same words on the pages of Spain and Mexico (the owner's "Yes, submit", 21 November 2026).
+
+• Cada solicitud aparece ahora en el chat donde el agente la planteó, y tu respuesta queda en su tarjeta.
+• «Necesita aclaración» en cada tarjeta: pregunta al agente por una solicitud antes de responderla.
+• Una etiqueta marca la respuesta que recomienda el agente.
+• Envía archivos de Word, Excel y PowerPoint con tus respuestas.
+• Una tarjeta que te pide ejecutar un script te muestra antes ese script.
+• En Chats, la fila de un chat muestra en naranja una solicitud que te espera.
+• La marca de cada agente se mueve a su manera mientras trabaja.
+• Cuando tu hub rechaza una solicitud, la app te dice por qué, en tu idioma.
+• La app dice ahora «equipo» en lugar de «flota».
+
+## What's new in 1.3, English (4000)
+
+• Each request now stands in the chat where the agent raised it, and your answer stays on its card.
+• "Needs clarification" on every card: ask the agent about a request before you answer it.
+• A badge marks the answer that the agent recommends.
+• Send Word, Excel and PowerPoint files with your answers.
+• A card that asks you to run a script shows that script first.
+• In Chats, a chat's row shows in orange a request that waits for you.
+• Each agent's mark moves in its own way while it works.
+• When your hub turns down a request, the app says why, in your language.
+
 ## What's new in 1.2 (4000)
 
 Founderizer ya habla español: un iPhone en español muestra la app, y su equipo de ejemplo, en español.

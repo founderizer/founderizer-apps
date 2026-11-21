@@ -89,7 +89,6 @@ struct KPIGrid: View {
 /// One KPI's card.
 struct KPICard: View {
     let kpi: KPI
-    @Environment(\.glyphTeam) private var team
     @Environment(\.colorSchemeContrast) private var contrast
 
     static let least: CGFloat = 300, gap: CGFloat = 12
@@ -146,7 +145,8 @@ struct KPICard: View {
                         line.move(to: CGPoint(x: 0, y: y))
                         line.addLine(to: CGPoint(x: box.size.width, y: y))
                     }
-                    .stroke(FleetStyle.muted, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    // light enough to stand over a gray column too, not only between them
+                    .stroke(FleetStyle.text.opacity(0.8), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
@@ -158,12 +158,14 @@ struct KPICard: View {
         }
     }
 
-    /// One week: its value that counts, as high as its value on the card's one scale, in the agent's own colour, or red
-    /// when it is off target; a week with no value that counts is the short gray stub.
+    /// One week: its value that counts, as high as its value on the card's one scale, in neutral gray, or red when it is
+    /// off target; a week with no value that counts is the short gray stub. Gray for every agent, never the agent's own
+    /// colour (the owner, 21 November 2026, "Gray", to the two pictures of a coral agent): coral, amber and rose stood
+    /// next to the red of off target, so a good week read as a bad one.
     private func column(_ week: KPI.Week, top: Double) -> some View {
         let counted = kpi.counted(week)
         let height = counted.map { max(Self.leastColumn, Self.chartHeight * CGFloat(max($0, 0) / top)) } ?? Self.stub
-        let fill = counted.map { kpi.isOff($0) ? FleetTask.MarkTint.failed.color : AgentTint(agent: kpi.agent, team: team).fill }
+        let fill = counted.map { kpi.isOff($0) ? FleetTask.MarkTint.failed.color : FleetStyle.text.opacity(0.55) }
             ?? FleetStyle.muted.opacity(0.5)
         return VStack(spacing: 0) {
             Spacer(minLength: 0)

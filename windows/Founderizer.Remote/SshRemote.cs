@@ -133,6 +133,7 @@ public sealed class SshRemote : IRemote
         private OwnerKey? ownerKey;
         private Once? password;
         private readonly List<AuthenticationMethod> methods = [];
+        private IReadOnlyList<string>? ways;      // the server's ways with its last refusal of the login (LoginWays)
 
         public async Task<RemoteResult> Go()
         {
@@ -269,12 +270,16 @@ public sealed class SshRemote : IRemote
             if (HostKeyFailure() is { } hostKey) return hostKey;
             if (cancel.IsCancellationRequested) return stopped();
             var login = password is { Taken: false } ? RemoteFailure.LoginNotOffered : RemoteFailure.LoginRefused;
-            if (e is SshAuthenticationException) return login;
-            if (e is SshConnectionException
+            if (e is SshAuthenticationException
+                || e is SshConnectionException
                 {
                     DisconnectReason: DisconnectReason.NoMoreAuthenticationMethodsAvailable or DisconnectReason.IllegalUserName
                         or DisconnectReason.AuthenticationCanceledByUser,
-                }) return login;
+                })
+            {
+                ways = Named(methods);
+                return login;
+            }
             if (e is SshOperationTimeoutException or TimeoutException or OperationCanceledException) return RemoteFailure.NoAnswer;
             if (SocketErrorOf(e) is { } error)
                 return error switch
@@ -287,6 +292,20 @@ public sealed class SshRemote : IRemote
                     _ => RemoteFailure.NoAnswer,
                 };
             return e is SshException or IOException ? RemoteFailure.Closed : RemoteFailure.NoAnswer;
+        }
+
+        /// <summary>
+        /// The ways that the server named with its last refusal of the login (<see cref="RemoteResult.LoginWays"/>), as a
+        /// copy: SSH.NET keeps the list of each failure message on the method that it answered, and tries the methods
+        /// in their order, each once. A method that the server never answered has none. Null when no method has a
+        /// list, or the list is empty: a server that named no way.
+        /// </summary>
+        internal static IReadOnlyList<string>? Named(IEnumerable<AuthenticationMethod> methods)
+        {
+            string[]? last = null;
+            foreach (var method in methods)
+                if (method.AllowedAuthentications is { Length: > 0 } named) last = named;
+            return last is null ? null : Array.AsReadOnly((string[])last.Clone());
         }
 
         /// <summary>The socket's own error under an exception, if one is there.</summary>
@@ -343,7 +362,10 @@ public sealed class SshRemote : IRemote
         }
 
         private RemoteResult Result(int? status, RemoteFailure? failure) =>
-            new(status, printed.Text(Printed.Out), printed.Text(Printed.Err), failure);
+            new(status, printed.Text(Printed.Out), printed.Text(Printed.Err), failure)
+            {
+                LoginWays = failure is RemoteFailure.LoginRefused or RemoteFailure.LoginNotOffered ? ways : null,
+            };
 
         /// <summary>Clears every secret of the call: the password's bytes and text, the app key's private half, the owner's key.</summary>
         private void Release()

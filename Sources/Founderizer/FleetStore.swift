@@ -868,6 +868,10 @@ final class FleetStore {
     /// as a chat's draft is, so a guidance that a later read confirms also empties its box (`finish`), and a second
     /// press cannot send it again.
     var guidanceDrafts: [String: String] = [:]
+    /// **The words of each card's feedback box** (`FeedbackBox`), by its key (`stageKey(about:database:)`): what the
+    /// message is about, so the draft of a task's or a job's card stays through a change of the card's level and a
+    /// close of the card, as a guidance's draft stays with its task, and the hub's receipt empties it (`finish`).
+    var feedbackDrafts: [String: String] = [:]
     var supportsDirectChat: Bool { state?.ui_features?.contains("direct_chat") == true }
     func canChat(with agent: String) -> Bool { state?.supportsChat(with: agent) == true }
     var supportsCorrections: Bool { state?.ui_features?.contains("corrections") == true }
@@ -908,9 +912,18 @@ final class FleetStore {
     /// The composer of one task's guidance (owner API 1.223, feature `steer_files`), with its hub's database: a task
     /// of another database with the same number never shows these files.
     static func stageKey(task: Int, database: String) -> String { "task:\(database):\(task)" }
-    /// The composer whose files a request carries: a guidance's, a request's answer's or a chat's.
+    /// The composer of the feedback on a card (owner feature `message_about`), by what it is about, with its hub's
+    /// database.
+    static func stageKey(about place: MessagePlace, database: String) -> String {
+        switch place {
+        case .task(let id): "about:\(database):task:\(id)"
+        case .job(let id): "about:\(database):job:\(id)"
+        }
+    }
+    /// The composer whose files a request carries: a guidance's, a request's answer's, a card's feedback's or a chat's.
     static func stageKey(of request: PendingRequest) -> String {
         if case .steer(let task, _) = request.command { return stageKey(task: task, database: request.database) }
+        if let about = request.about, request.needID == nil { return stageKey(about: about, database: request.database) }
         return request.needID.map { stageKey(need: $0) } ?? stageKey(agent: request.recipient ?? "manager")
     }
 
@@ -2505,6 +2518,15 @@ final class FleetStore {
         vaultModel().tick(store: self, woken: true)
     }
 
+    /// **His feedback from a card** (`FeedbackBox`): the chat's own send (`sendText`), to the agent that the card's rule
+    /// names, with what it is about, from the card's own draft and files.
+    func sendFeedback(_ feedback: Feedback) async {
+        guard let state else { return }
+        let composer = Self.stageKey(about: feedback.about, database: state.db)
+        guard let files = await freshFiles(for: composer) else { return }
+        await sendText(feedbackDrafts[composer] ?? "", recipient: feedback.recipient, files: files, about: feedback.about)
+    }
+
     func send(needID: Int? = nil) async {
         let text = needID.map { answers[String($0)] ?? "" } ?? draft(for: chatAgent)
         let recipient = needID.flatMap { id in state?.needs.first { $0.id == id }?.by } ?? chatAgent
@@ -2679,7 +2701,7 @@ final class FleetStore {
     }
 
     private func sendText(_ value: String, needID: Int? = nil, recipient: String, replaces: String? = nil,
-                          files: [Int] = []) async {
+                          files: [Int] = [], about: MessagePlace? = nil) async {
         guard canWrite, let state else { return }
         guard needID != nil || canChat(with: recipient) else { return }
         guard files.isEmpty || supportsAttachments else { return }
@@ -2687,9 +2709,11 @@ final class FleetStore {
         // A message carries text, or files, or both. Without a file it must carry text, as the hub asks.
         guard !text.isEmpty || !files.isEmpty, text.count <= 16_000 else { return }
         if let needID, !openNeeds.contains(where: { $0.id == needID }) { return }
+        // `about` only on a hub that takes it: an older hub refuses a field that it does not know.
+        let about = state.ui_features?.contains("message_about") == true ? about : nil
         let request = PendingRequest(hub: hub, database: state.db, client: installation, needID: needID,
                                      recipient: needID == nil && supportsDirectChat ? recipient : nil,
-                                     replacesRequestID: replaces, attachments: files, text: text)
+                                     replacesRequestID: replaces, attachments: files, about: about, text: text)
         do {
             try outbox.save(request)
             pending = request
@@ -2952,6 +2976,11 @@ final class FleetStore {
             }
         } else if request.replacesRequestID != nil {
             if editingMessage?.id == request.replacesRequestID { cancelEdit() }
+        } else if request.needID == nil, let about = request.about {
+            // A card's feedback empties its own box, and leaves the chat's draft as it is.
+            let box = Self.stageKey(about: about, database: request.database)
+            if feedbackDrafts[box]?.trimmingCharacters(in: .whitespacesAndNewlines) == request.text { feedbackDrafts[box] = nil }
+            clearStaged(box, sent: request.attachments)
         } else if request.needID == nil {
             let agent = request.recipient ?? "manager"
             if draft(for: agent).trimmingCharacters(in: .whitespacesAndNewlines) == request.text { setDraft("", for: agent) }

@@ -53,7 +53,8 @@ public sealed record MobileCounts(long TasksOpen, long NeedsOpen, long Messages,
 /// <summary>One agent's row of GET /ui/mobile (MobileAgent). `can` is its Tools boxes (team.json `can`): without "shell",
 /// a worker's or a lead's sessions record no outcome, and the owner checks its tasks' unknown outcomes
 /// (<see cref="TaskOutcome.ShellOff"/>). Null from a hub that does not send it, which reads as [], as the hub sends a
-/// missing list.</summary>
+/// missing list. `alive` is the sessions that its helper lists, comma-separated ("manager,owner-chat"): the setup of the
+/// owner's computer reads it for the end of a manager's first setup (step 2, piece L4).</summary>
 public sealed record MobileAgent(
     string Name,
     string Role,
@@ -70,7 +71,8 @@ public sealed record MobileAgent(
     double? TurnEndedAfter = null,
     double? WaitsSince = null,
     bool? ChatUndelivered = null,
-    IReadOnlyList<string>? Can = null)
+    IReadOnlyList<string>? Can = null,
+    string? Alive = null)
 {
     /// <summary>The helper answered in the last minute of the hub's own clock (helperIsRecent).</summary>
     public bool HelperIsRecent(double serverTime) =>

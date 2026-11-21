@@ -92,6 +92,9 @@ public struct JobLevel: Sendable {
     public let request: Int?
     /// Its tasks as the card lists them: in the order they began, each subtask under the task that gave it.
     public let lines: [WorkItem.Line]
+    /// The ids of all its tasks, also of one that somebody canceled, which `lines` leaves out: his feedback on the job
+    /// names one of them, and stays on the card when that task is canceled later (`HubState.messages(aboutJob:)`).
+    public let taskIDs: Set<Int>
     /// The tasks of it that are not over, for the status row of one that goes on; empty once it ended.
     public let open: [FleetTask]
     /// How it ended (`WorkItem.result`), or nil while it goes on.
@@ -160,7 +163,7 @@ extension HubState {
                 let open = item.isOver ? [] : item.tasks.filter { !$0.isTerminal }
                 let waits = ownerWaits(of: open).sorted { $0.key < $1.key }.map(\.value)
                 return JobLevel(title: item.title, agent: agent, request: request(of: waits),
-                                lines: item.lines, open: open, result: item.result, recorded: item.recorded,
+                                lines: item.lines, taskIDs: Set((item.tasks + item.shown).map(\.id)), open: open, result: item.result, recorded: item.recorded,
                                 endedAt: item.endedAt)
             }
         }
@@ -178,7 +181,7 @@ extension HubState {
         let item = WorkItem(id: key, title: job.title, tasks: job.tasks.sorted { $0.id < $1.id }, shown: shown,
                             dutyCase: head, endedAt: job.open.isEmpty && !job.tasks.isEmpty ? job.endedAt : nil)
         return JobLevel(title: job.title, agent: job.agent, request: request(of: job.wait.map { [$0] } ?? []),
-                        lines: item.lines, open: job.open, result: item.result, recorded: item.recorded,
+                        lines: item.lines, taskIDs: Set((item.tasks + item.shown).map(\.id)), open: job.open, result: item.result, recorded: item.recorded,
                         endedAt: item.endedAt)
     }
 

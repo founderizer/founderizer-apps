@@ -1,0 +1,2620 @@
+{
+  "about" : "The sentences and the rules of the first run and of the agent setup that FleetCore holds, for fixed examples, with \"Mac\" where the Windows app says \"PC\". The readings are example answers of the hub.",
+  "blockers" : [
+    {
+      "blocker" : "Runtime Signed In: Claude Code is not signed in.",
+      "name" : "one failed with words",
+      "verify" : {
+        "check" : 3,
+        "checked_at" : 1763700000,
+        "items" : [
+          {
+            "detail" : "Claude Code is not signed in.",
+            "kind" : "machine",
+            "ref" : "runtime_signed_in",
+            "required" : true,
+            "state" : "fail"
+          }
+        ],
+        "revision" : "abc"
+      }
+    },
+    {
+      "blocker" : "Vault Broker did not pass.",
+      "name" : "one failed with no words",
+      "verify" : {
+        "check" : 3,
+        "checked_at" : 1763700000,
+        "items" : [
+          {
+            "detail" : " ",
+            "kind" : "machine",
+            "ref" : "vault_broker",
+            "required" : true,
+            "state" : "fail"
+          }
+        ],
+        "revision" : "abc"
+      }
+    },
+    {
+      "blocker" : null,
+      "name" : "all passed",
+      "verify" : {
+        "check" : 3,
+        "checked_at" : 1763700000,
+        "items" : [
+          {
+            "detail" : "",
+            "kind" : "machine",
+            "ref" : "tailscale",
+            "required" : true,
+            "state" : "ok"
+          },
+          {
+            "detail" : "No browser.",
+            "kind" : "machine",
+            "ref" : "browser",
+            "required" : false,
+            "state" : "fail"
+          }
+        ],
+        "revision" : "abc"
+      }
+    }
+  ],
+  "build_rows" : [
+    {
+      "name" : "building",
+      "row" : {
+        "minutes" : 16,
+        "owners_turn" : false,
+        "parts" : [
+          0.20000000000000001,
+          0,
+          0,
+          0
+        ],
+        "words" : "Making your server"
+      }
+    },
+    {
+      "name" : "joining",
+      "row" : {
+        "minutes" : 15,
+        "owners_turn" : false,
+        "parts" : [
+          0.59999999999999998,
+          0,
+          0,
+          0
+        ],
+        "words" : "Starting your server"
+      }
+    },
+    {
+      "name" : "waits for the hub",
+      "row" : {
+        "minutes" : 9,
+        "owners_turn" : false,
+        "parts" : [
+          0.59999999999999998,
+          0,
+          0,
+          0
+        ],
+        "words" : "Waiting for your hub"
+      }
+    },
+    {
+      "name" : "starting after a build",
+      "row" : {
+        "minutes" : 9,
+        "owners_turn" : false,
+        "parts" : [
+          0.59999999999999998,
+          0,
+          0,
+          0
+        ],
+        "words" : "Starting your server"
+      }
+    },
+    {
+      "name" : "starting",
+      "row" : {
+        "minutes" : 15,
+        "owners_turn" : false,
+        "parts" : [
+          0,
+          0,
+          0,
+          0
+        ],
+        "words" : "Starting your server"
+      }
+    },
+    {
+      "name" : "setting up",
+      "row" : {
+        "minutes" : 1,
+        "owners_turn" : false,
+        "parts" : [
+          1,
+          1,
+          1,
+          0.5
+        ],
+        "words" : "Installing Claude Code"
+      }
+    },
+    {
+      "name" : "sign-in",
+      "row" : {
+        "minutes" : null,
+        "owners_turn" : true,
+        "parts" : [
+          1,
+          1,
+          1,
+          1
+        ],
+        "words" : "Waiting for your sign-in"
+      }
+    },
+    {
+      "name" : "ready",
+      "row" : {
+        "minutes" : null,
+        "owners_turn" : false,
+        "parts" : null,
+        "words" : null
+      }
+    },
+    {
+      "name" : "installing",
+      "row" : {
+        "minutes" : 15,
+        "owners_turn" : false,
+        "parts" : [
+          0.59999999999999998,
+          0,
+          0,
+          0
+        ],
+        "words" : "Starting your server"
+      }
+    }
+  ],
+  "codes" : [
+    {
+      "code" : null,
+      "given" : "abc"
+    },
+    {
+      "code" : "abcd",
+      "given" : "abcd"
+    },
+    {
+      "code" : "ABCD-1234",
+      "given" : "ABCD-1234"
+    },
+    {
+      "code" : "code#state_part.two-3",
+      "given" : "code#state_part.two-3"
+    },
+    {
+      "code" : "padded-code",
+      "given" : " padded-code "
+    },
+    {
+      "code" : null,
+      "given" : "with space"
+    },
+    {
+      "code" : null,
+      "given" : "😀emoji"
+    },
+    {
+      "code" : null,
+      "given" : "-dash-first"
+    },
+    {
+      "code" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "given" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "code" : null,
+      "given" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "first_run_step_of" : [
+    {
+      "named" : true,
+      "page" : "welcome",
+      "step" : null
+    },
+    {
+      "named" : false,
+      "page" : "welcome",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "errorReports",
+      "step" : null
+    },
+    {
+      "named" : false,
+      "page" : "errorReports",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "name",
+      "step" : "Manager"
+    },
+    {
+      "named" : false,
+      "page" : "name",
+      "step" : "Manager"
+    },
+    {
+      "named" : true,
+      "page" : "aiProvider",
+      "step" : "AI provider"
+    },
+    {
+      "named" : false,
+      "page" : "aiProvider",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "servers",
+      "step" : "Servers"
+    },
+    {
+      "named" : false,
+      "page" : "servers",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "network",
+      "step" : "Network"
+    },
+    {
+      "named" : false,
+      "page" : "network",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "key",
+      "step" : "Network"
+    },
+    {
+      "named" : false,
+      "page" : "key",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "cloud",
+      "step" : "VPS"
+    },
+    {
+      "named" : false,
+      "page" : "cloud",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "token",
+      "step" : "VPS"
+    },
+    {
+      "named" : false,
+      "page" : "token",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "vps",
+      "step" : "VPS"
+    },
+    {
+      "named" : false,
+      "page" : "vps",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "machine",
+      "step" : "VPS"
+    },
+    {
+      "named" : false,
+      "page" : "machine",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "building",
+      "step" : null
+    },
+    {
+      "named" : false,
+      "page" : "building",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "installing",
+      "step" : null
+    },
+    {
+      "named" : false,
+      "page" : "installing",
+      "step" : null
+    },
+    {
+      "named" : true,
+      "page" : "done",
+      "step" : null
+    },
+    {
+      "named" : false,
+      "page" : "done",
+      "step" : null
+    }
+  ],
+  "first_run_steps" : [
+    "Manager",
+    "AI provider",
+    "Servers",
+    "Network",
+    "VPS",
+    "Build"
+  ],
+  "fleet_counts" : [
+    {
+      "macs" : 0,
+      "server_words" : "1 server",
+      "servers" : 1,
+      "words" : "1 server"
+    },
+    {
+      "macs" : 0,
+      "server_words" : "2 servers",
+      "servers" : 2,
+      "words" : "2 servers"
+    },
+    {
+      "macs" : 0,
+      "server_words" : "4 servers",
+      "servers" : 4,
+      "words" : "4 servers"
+    },
+    {
+      "macs" : 1,
+      "server_words" : "6 servers",
+      "servers" : 6,
+      "words" : "6 servers and 1 Mac"
+    },
+    {
+      "macs" : 2,
+      "server_words" : "3 servers",
+      "servers" : 3,
+      "words" : "3 servers and 2 Macs"
+    }
+  ],
+  "handovers" : [
+    {
+      "asked" : false,
+      "chosen" : "claude",
+      "handover" : {
+        "keep" : "claude"
+      },
+      "installed_one_server" : false,
+      "placed" : false,
+      "runtime" : "claude",
+      "writes" : true
+    },
+    {
+      "asked" : false,
+      "chosen" : "claude",
+      "handover" : {
+        "sign_in" : "claude"
+      },
+      "installed_one_server" : true,
+      "placed" : true,
+      "runtime" : "claude",
+      "writes" : true
+    },
+    {
+      "asked" : false,
+      "chosen" : "claude",
+      "handover" : "none",
+      "installed_one_server" : true,
+      "placed" : true,
+      "runtime" : "codex",
+      "writes" : true
+    },
+    {
+      "asked" : false,
+      "chosen" : "claude",
+      "handover" : "none",
+      "installed_one_server" : false,
+      "placed" : true,
+      "runtime" : "claude",
+      "writes" : true
+    },
+    {
+      "asked" : false,
+      "chosen" : "claude",
+      "handover" : "none",
+      "installed_one_server" : true,
+      "placed" : true,
+      "runtime" : "claude",
+      "writes" : false
+    },
+    {
+      "asked" : true,
+      "chosen" : "claude",
+      "handover" : "none",
+      "installed_one_server" : true,
+      "placed" : true,
+      "runtime" : "claude",
+      "writes" : true
+    },
+    {
+      "asked" : false,
+      "chosen" : null,
+      "handover" : "none",
+      "installed_one_server" : false,
+      "placed" : false,
+      "runtime" : "claude",
+      "writes" : true
+    }
+  ],
+  "hub_plan" : [
+    "read",
+    "network",
+    "code",
+    "plan",
+    "start",
+    "wait_claim",
+    "claim",
+    "wait_ready",
+    "verify"
+  ],
+  "install_bar_no_job" : [
+    "User",
+    "AI provider",
+    "Checkout",
+    "Service",
+    "Sign-in"
+  ],
+  "installing" : "Installing Claude Code on worker-2",
+  "join_plan" : [
+    "read",
+    "network",
+    "join",
+    "verify"
+  ],
+  "made_by" : "app/Tests/FleetCoreTests/SetupWordsVectorsTests.swift",
+  "manager_names" : [
+    {
+      "agent_name" : "juno",
+      "shown" : "Juno",
+      "typed" : "Juno"
+    },
+    {
+      "agent_name" : "juno",
+      "shown" : "juno",
+      "typed" : " juno "
+    },
+    {
+      "agent_name" : "ada-2",
+      "shown" : "Ada-2",
+      "typed" : "Ada-2"
+    },
+    {
+      "agent_name" : null,
+      "shown" : "a",
+      "typed" : "a"
+    },
+    {
+      "agent_name" : "manager",
+      "shown" : "manager",
+      "typed" : "manager"
+    },
+    {
+      "agent_name" : null,
+      "shown" : "hub",
+      "typed" : "hub"
+    },
+    {
+      "agent_name" : null,
+      "shown" : "vault-1",
+      "typed" : "vault-1"
+    },
+    {
+      "agent_name" : null,
+      "shown" : "login-x",
+      "typed" : "login-x"
+    },
+    {
+      "agent_name" : null,
+      "shown" : "Zoë",
+      "typed" : "Zoë"
+    },
+    {
+      "agent_name" : null,
+      "shown" : "two words",
+      "typed" : "two words"
+    },
+    {
+      "agent_name" : "nnnnnnnnnnnnnnnnnnnnnnnnnn",
+      "shown" : "nnnnnnnnnnnnnnnnnnnnnnnnnn",
+      "typed" : "nnnnnnnnnnnnnnnnnnnnnnnnnn"
+    },
+    {
+      "agent_name" : null,
+      "shown" : "nnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      "typed" : "nnnnnnnnnnnnnnnnnnnnnnnnnnn"
+    },
+    {
+      "agent_name" : null,
+      "shown" : "9lives",
+      "typed" : "9lives"
+    }
+  ],
+  "manager_setup_current" : [
+    {
+      "current" : 0,
+      "page" : "name"
+    },
+    {
+      "current" : 2,
+      "page" : "servers"
+    },
+    {
+      "current" : 2,
+      "page" : "server"
+    },
+    {
+      "current" : 1,
+      "page" : "provider"
+    },
+    {
+      "current" : 2,
+      "page" : "installing",
+      "runtime" : "claude"
+    },
+    {
+      "current" : 2,
+      "page" : "switching",
+      "runtime" : "codex"
+    },
+    {
+      "current" : 3,
+      "page" : "signIn",
+      "runtime" : "claude"
+    },
+    {
+      "current" : 4,
+      "page" : "activate"
+    }
+  ],
+  "manager_setup_steps" : [
+    "Manager",
+    "AI provider",
+    "Servers",
+    "Sign in"
+  ],
+  "manager_starts" : [
+    {
+      "features" : [
+
+      ],
+      "name" : "a hub with no parts",
+      "named" : false,
+      "pages" : [
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : null,
+          "provider" : null,
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "server"
+          },
+          "place_on" : null,
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "installing",
+            "runtime" : "claude"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : true
+        }
+      ],
+      "renaming" : {
+        "page" : "name"
+      },
+      "servers" : {
+        "db" : "db-1",
+        "servers" : [
+          {
+            "agents" : [
+
+            ],
+            "available" : false,
+            "hub" : true,
+            "joined" : false,
+            "name" : "worker-1",
+            "why" : [
+
+            ]
+          },
+          {
+            "agents" : [
+
+            ],
+            "available" : true,
+            "hub" : false,
+            "joined" : true,
+            "name" : "worker-2",
+            "why" : [
+
+            ]
+          }
+        ],
+        "time" : 1763700100
+      },
+      "start" : {
+        "start" : "server"
+      }
+    },
+    {
+      "features" : [
+        "fleet_shape",
+        "hub_shared_later",
+        "manager_rename"
+      ],
+      "name" : "not read yet",
+      "named" : false,
+      "pages" : [
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : null,
+          "provider" : null,
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : null,
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : true
+        }
+      ],
+      "renaming" : {
+        "page" : "name"
+      },
+      "servers" : null,
+      "start" : {
+        "start" : "unread"
+      }
+    },
+    {
+      "features" : [
+        "fleet_shape",
+        "hub_shared_later",
+        "manager_rename"
+      ],
+      "name" : "no kept step, a hub that renames",
+      "named" : false,
+      "pages" : [
+        {
+          "page" : {
+            "page" : "name"
+          },
+          "place_on" : null,
+          "provider" : null,
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "name"
+          },
+          "place_on" : null,
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "name"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "name"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : true
+        }
+      ],
+      "renaming" : {
+        "page" : "name"
+      },
+      "servers" : {
+        "db" : "db-1",
+        "servers" : [
+          {
+            "agents" : [
+
+            ],
+            "available" : false,
+            "hub" : true,
+            "joined" : false,
+            "name" : "worker-1",
+            "why" : [
+
+            ]
+          },
+          {
+            "agents" : [
+
+            ],
+            "available" : true,
+            "hub" : false,
+            "joined" : true,
+            "name" : "worker-2",
+            "why" : [
+
+            ]
+          }
+        ],
+        "time" : 1763700100
+      },
+      "start" : {
+        "start" : "name"
+      }
+    },
+    {
+      "features" : [
+        "fleet_shape",
+        "hub_shared_later",
+        "manager_rename"
+      ],
+      "name" : "no kept step, named",
+      "named" : true,
+      "pages" : [
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : null,
+          "provider" : null,
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : null,
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : true
+        }
+      ],
+      "renaming" : {
+        "page" : "name"
+      },
+      "servers" : {
+        "db" : "db-1",
+        "servers" : [
+          {
+            "agents" : [
+
+            ],
+            "available" : false,
+            "hub" : true,
+            "joined" : false,
+            "name" : "worker-1",
+            "why" : [
+
+            ]
+          },
+          {
+            "agents" : [
+
+            ],
+            "available" : true,
+            "hub" : false,
+            "joined" : true,
+            "name" : "worker-2",
+            "why" : [
+
+            ]
+          }
+        ],
+        "time" : 1763700100
+      },
+      "start" : {
+        "start" : "servers"
+      }
+    },
+    {
+      "features" : [
+        "fleet_shape",
+        "hub_shared_later"
+      ],
+      "name" : "no kept step, a hub that does not rename",
+      "named" : false,
+      "pages" : [
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : null,
+          "provider" : null,
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : null,
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : true
+        }
+      ],
+      "renaming" : {
+        "page" : "name"
+      },
+      "servers" : {
+        "db" : "db-1",
+        "servers" : [
+          {
+            "agents" : [
+
+            ],
+            "available" : false,
+            "hub" : true,
+            "joined" : false,
+            "name" : "worker-1",
+            "why" : [
+
+            ]
+          },
+          {
+            "agents" : [
+
+            ],
+            "available" : true,
+            "hub" : false,
+            "joined" : true,
+            "name" : "worker-2",
+            "why" : [
+
+            ]
+          }
+        ],
+        "time" : 1763700100
+      },
+      "start" : {
+        "start" : "servers"
+      }
+    },
+    {
+      "features" : [
+        "fleet_shape",
+        "hub_shared_later",
+        "manager_rename"
+      ],
+      "name" : "two kept",
+      "named" : false,
+      "pages" : [
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : null,
+          "provider" : null,
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "server"
+          },
+          "place_on" : null,
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "installing",
+            "runtime" : "claude"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : true
+        }
+      ],
+      "renaming" : {
+        "page" : "name"
+      },
+      "servers" : {
+        "db" : "db-1",
+        "hub_shared" : false,
+        "servers" : [
+          {
+            "agents" : [
+
+            ],
+            "available" : false,
+            "hub" : true,
+            "joined" : false,
+            "name" : "worker-1",
+            "why" : [
+
+            ]
+          },
+          {
+            "agents" : [
+
+            ],
+            "available" : true,
+            "hub" : false,
+            "joined" : true,
+            "name" : "worker-2",
+            "why" : [
+
+            ]
+          }
+        ],
+        "shape" : {
+          "step" : "two"
+        },
+        "time" : 1763700100
+      },
+      "start" : {
+        "start" : "server"
+      }
+    },
+    {
+      "features" : [
+        "fleet_shape",
+        "hub_shared_later",
+        "manager_rename"
+      ],
+      "name" : "one kept, the hub's server not shared",
+      "named" : false,
+      "pages" : [
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : null,
+          "provider" : null,
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : null,
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : true
+        }
+      ],
+      "renaming" : {
+        "page" : "name"
+      },
+      "servers" : {
+        "db" : "db-1",
+        "hub_shared" : false,
+        "servers" : [
+          {
+            "agents" : [
+
+            ],
+            "available" : false,
+            "hub" : true,
+            "joined" : false,
+            "name" : "worker-1",
+            "why" : [
+
+            ]
+          },
+          {
+            "agents" : [
+
+            ],
+            "available" : true,
+            "hub" : false,
+            "joined" : true,
+            "name" : "worker-2",
+            "why" : [
+
+            ]
+          }
+        ],
+        "shape" : {
+          "step" : "one"
+        },
+        "time" : 1763700100
+      },
+      "start" : {
+        "root_step" : false,
+        "start" : "sharing"
+      }
+    },
+    {
+      "features" : [
+        "fleet_shape",
+        "hub_shared_later",
+        "manager_rename"
+      ],
+      "name" : "one kept, the hub's server with no service",
+      "named" : false,
+      "pages" : [
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : null,
+          "provider" : null,
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : null,
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : true
+        }
+      ],
+      "renaming" : {
+        "page" : "name"
+      },
+      "servers" : {
+        "db" : "db-1",
+        "hub_shared" : true,
+        "servers" : [
+          {
+            "agents" : [
+
+            ],
+            "available" : false,
+            "hub" : true,
+            "joined" : false,
+            "name" : "worker-1",
+            "why" : [
+
+            ]
+          },
+          {
+            "agents" : [
+
+            ],
+            "available" : true,
+            "hub" : false,
+            "joined" : true,
+            "name" : "worker-2",
+            "why" : [
+
+            ]
+          }
+        ],
+        "shape" : {
+          "step" : "one"
+        },
+        "time" : 1763700100
+      },
+      "start" : {
+        "root_step" : true,
+        "start" : "sharing"
+      }
+    },
+    {
+      "features" : [
+        "fleet_shape",
+        "hub_shared_later",
+        "manager_rename"
+      ],
+      "name" : "one kept, the hub's server joined, not free",
+      "named" : false,
+      "pages" : [
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : null,
+          "provider" : null,
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : null,
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "servers"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : true
+        }
+      ],
+      "renaming" : {
+        "page" : "name"
+      },
+      "servers" : {
+        "db" : "db-1",
+        "hub_shared" : true,
+        "servers" : [
+          {
+            "agents" : [
+
+            ],
+            "available" : false,
+            "hub" : true,
+            "joined" : true,
+            "name" : "worker-1",
+            "why" : [
+
+            ]
+          },
+          {
+            "agents" : [
+
+            ],
+            "available" : true,
+            "hub" : false,
+            "joined" : true,
+            "name" : "worker-2",
+            "why" : [
+
+            ]
+          }
+        ],
+        "shape" : {
+          "step" : "one"
+        },
+        "time" : 1763700100
+      },
+      "start" : {
+        "root_step" : false,
+        "start" : "sharing"
+      }
+    },
+    {
+      "features" : [
+        "fleet_shape",
+        "hub_shared_later",
+        "manager_rename"
+      ],
+      "name" : "one kept, the hub's server ready",
+      "named" : false,
+      "pages" : [
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : null,
+          "provider" : null,
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "server"
+          },
+          "place_on" : null,
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "installing",
+            "runtime" : "claude"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "provider"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : true
+        }
+      ],
+      "renaming" : {
+        "page" : "name"
+      },
+      "servers" : {
+        "db" : "db-1",
+        "hub_shared" : true,
+        "servers" : [
+          {
+            "agents" : [
+
+            ],
+            "available" : true,
+            "hub" : true,
+            "joined" : true,
+            "name" : "worker-1",
+            "why" : [
+
+            ]
+          },
+          {
+            "agents" : [
+
+            ],
+            "available" : true,
+            "hub" : false,
+            "joined" : true,
+            "name" : "worker-2",
+            "why" : [
+
+            ]
+          }
+        ],
+        "shape" : {
+          "step" : "one"
+        },
+        "time" : 1763700100
+      },
+      "start" : {
+        "server" : "worker-1",
+        "start" : "onHub"
+      }
+    },
+    {
+      "features" : [
+        "fleet_shape",
+        "hub_shared_later",
+        "manager_rename"
+      ],
+      "name" : "a step this app does not know",
+      "named" : false,
+      "pages" : [
+        {
+          "page" : {
+            "page" : "name"
+          },
+          "place_on" : null,
+          "provider" : null,
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "name"
+          },
+          "place_on" : null,
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "name"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : false
+        },
+        {
+          "page" : {
+            "page" : "name"
+          },
+          "place_on" : "worker-2",
+          "provider" : "claude",
+          "refused" : true
+        }
+      ],
+      "renaming" : {
+        "page" : "name"
+      },
+      "servers" : {
+        "db" : "db-1",
+        "servers" : [
+          {
+            "agents" : [
+
+            ],
+            "available" : false,
+            "hub" : true,
+            "joined" : false,
+            "name" : "worker-1",
+            "why" : [
+
+            ]
+          },
+          {
+            "agents" : [
+
+            ],
+            "available" : true,
+            "hub" : false,
+            "joined" : true,
+            "name" : "worker-2",
+            "why" : [
+
+            ]
+          }
+        ],
+        "shape" : {
+          "step" : "three"
+        },
+        "time" : 1763700100
+      },
+      "start" : {
+        "start" : "name"
+      }
+    }
+  ],
+  "offline" : [
+    {
+      "detail" : "Codex did not install (ETIMEDOUT).",
+      "server" : "worker-1",
+      "words" : "Codex did not install: worker-1 could not reach the internet."
+    },
+    {
+      "detail" : "npm: EAI_AGAIN registry",
+      "server" : null,
+      "words" : "Codex did not install: its server could not reach the internet."
+    },
+    {
+      "detail" : "no network words",
+      "server" : "worker-1",
+      "words" : null
+    }
+  ],
+  "provider_names" : [
+    {
+      "name" : "Claude Code",
+      "runtime" : "claude"
+    },
+    {
+      "name" : "Codex",
+      "runtime" : "codex"
+    },
+    {
+      "name" : "Grok Build",
+      "runtime" : "grok"
+    },
+    {
+      "name" : "Gemini",
+      "runtime" : "gemini"
+    }
+  ],
+  "servers_steps" : [
+    {
+      "fact" : "Everything runs on one server.",
+      "first_press" : "Make the server",
+      "managers_own_server" : false,
+      "means" : "Everything runs on one server. An agent that breaks out of its account can reach every key of your fleet.",
+      "risk" : "An agent that breaks out of its account can reach every key of your fleet.",
+      "step" : "one",
+      "words" : "1 server"
+    },
+    {
+      "fact" : "The hub and its keys have a server of their own.",
+      "first_press" : "Make 2 servers",
+      "managers_own_server" : true,
+      "means" : "The hub and its keys have a server of their own. An agent that breaks out of its account can reach the other agents, but not those keys.",
+      "risk" : "An agent that breaks out of its account can reach the other agents, but not those keys.",
+      "step" : "two",
+      "words" : "2 servers"
+    },
+    {
+      "fact" : "The hub and each agent have a server of their own.",
+      "first_press" : "Make 2 servers",
+      "managers_own_server" : true,
+      "means" : "The hub and each agent have a server of their own. An agent that breaks out of its account finds nothing else there.",
+      "risk" : "An agent that breaks out of its account finds nothing else there.",
+      "step" : "each",
+      "words" : "1 per agent"
+    }
+  ],
+  "setups" : [
+    {
+      "bar" : {
+        "running" : 1,
+        "steps" : [
+          "User",
+          "AI provider",
+          "Checkout",
+          "Service",
+          "Sign-in"
+        ]
+      },
+      "job" : {
+        "agent" : "juno",
+        "created" : 1763700000,
+        "id" : 12,
+        "kind" : "install",
+        "runtime" : "claude",
+        "state" : "running",
+        "step" : "runtime",
+        "updated" : 1763700060
+      },
+      "name" : "an install that runs",
+      "page" : {
+        "page" : "installing",
+        "runtime" : "claude"
+      },
+      "start_claude" : "signIn",
+      "start_codex" : "prepare",
+      "stopped" : null,
+      "switching_to" : null
+    },
+    {
+      "bar" : {
+        "running" : null,
+        "steps" : [
+          "User",
+          "AI provider",
+          "Checkout",
+          "Service",
+          "Sign-in"
+        ]
+      },
+      "job" : {
+        "agent" : "juno",
+        "created" : 1763700000,
+        "id" : 12,
+        "kind" : "install",
+        "prompt" : {
+          "code" : "KDRT-7QXP",
+          "kind" : "open_url",
+          "purpose" : "codex_login",
+          "url" : "https://auth.openai.com/codex/device"
+        },
+        "runtime" : "claude",
+        "state" : "needs_owner",
+        "step" : "sign_in",
+        "updated" : 1763700060
+      },
+      "name" : "an install that waits for the sign-in",
+      "page" : {
+        "page" : "signIn",
+        "runtime" : "claude"
+      },
+      "start_claude" : "signIn",
+      "start_codex" : "prepare",
+      "stopped" : null,
+      "switching_to" : null
+    },
+    {
+      "bar" : {
+        "running" : null,
+        "steps" : [
+          "User",
+          "AI provider",
+          "Checkout",
+          "Service",
+          "Sign-in"
+        ]
+      },
+      "job" : {
+        "agent" : "juno",
+        "created" : 1763700000,
+        "detail" : "Claude Code did not install: npm could not reach the registry (ETIMEDOUT).",
+        "id" : 12,
+        "kind" : "install",
+        "runtime" : "claude",
+        "state" : "failed",
+        "updated" : 1763700060
+      },
+      "name" : "an install that failed offline",
+      "page" : {
+        "page" : "provider"
+      },
+      "start_claude" : "installAgain",
+      "start_codex" : "prepare",
+      "stopped" : "Claude Code did not install: its server could not reach the internet.",
+      "switching_to" : null
+    },
+    {
+      "bar" : {
+        "running" : null,
+        "steps" : [
+          "User",
+          "AI provider",
+          "Checkout",
+          "Service",
+          "Sign-in"
+        ]
+      },
+      "job" : {
+        "agent" : "juno",
+        "created" : 1763700000,
+        "detail" : "The server's service did not start. Try again in Founderizer.",
+        "id" : 12,
+        "kind" : "install",
+        "runtime" : "claude",
+        "state" : "failed",
+        "updated" : 1763700060
+      },
+      "name" : "an install that failed",
+      "page" : {
+        "page" : "provider"
+      },
+      "start_claude" : "installAgain",
+      "start_codex" : "prepare",
+      "stopped" : "The server's service did not start.",
+      "switching_to" : null
+    },
+    {
+      "bar" : {
+        "running" : null,
+        "steps" : [
+          "User",
+          "AI provider",
+          "Checkout",
+          "Service",
+          "Sign-in"
+        ]
+      },
+      "job" : {
+        "agent" : "juno",
+        "created" : 1763700000,
+        "detail" : "Claude Code did not sign in within 15 minutes.",
+        "id" : 12,
+        "kind" : "install",
+        "runtime" : "claude",
+        "state" : "failed",
+        "timed_out" : true,
+        "updated" : 1763700060
+      },
+      "name" : "an install that only waited",
+      "page" : {
+        "page" : "provider"
+      },
+      "start_claude" : "installAgain",
+      "start_codex" : "prepare",
+      "stopped" : null,
+      "switching_to" : null
+    },
+    {
+      "bar" : {
+        "running" : null,
+        "steps" : [
+          "User",
+          "AI provider",
+          "Checkout",
+          "Service",
+          "Sign-in"
+        ]
+      },
+      "job" : {
+        "agent" : "juno",
+        "created" : 1763700000,
+        "id" : 12,
+        "kind" : "install",
+        "runtime" : "claude",
+        "state" : "failed",
+        "updated" : 1763700060
+      },
+      "name" : "an install that failed with no words",
+      "page" : {
+        "page" : "provider"
+      },
+      "start_claude" : "installAgain",
+      "start_codex" : "prepare",
+      "stopped" : "The install stopped.",
+      "switching_to" : null
+    },
+    {
+      "bar" : {
+        "running" : null,
+        "steps" : [
+          "AI provider",
+          "Sign-in"
+        ]
+      },
+      "job" : {
+        "agent" : "juno",
+        "created" : 1763700000,
+        "id" : 12,
+        "kind" : "prepare",
+        "runtime" : "codex",
+        "state" : "failed",
+        "updated" : 1763700060
+      },
+      "name" : "a preparation of the other provider that failed",
+      "page" : {
+        "page" : "provider"
+      },
+      "start_claude" : "signIn",
+      "start_codex" : "prepare",
+      "stopped" : "The install stopped.",
+      "switching_to" : "codex"
+    },
+    {
+      "bar" : {
+        "running" : 0,
+        "steps" : [
+          "AI provider",
+          "Sign-in"
+        ]
+      },
+      "job" : {
+        "agent" : "juno",
+        "created" : 1763700000,
+        "id" : 12,
+        "kind" : "prepare",
+        "runtime" : "codex",
+        "state" : "running",
+        "step" : "runtime",
+        "updated" : 1763700060
+      },
+      "name" : "a preparation of the other provider",
+      "page" : {
+        "page" : "installing",
+        "runtime" : "codex"
+      },
+      "start_claude" : "signIn",
+      "start_codex" : "prepare",
+      "stopped" : null,
+      "switching_to" : "codex"
+    },
+    {
+      "bar" : {
+        "running" : null,
+        "steps" : [
+          "User",
+          "AI provider",
+          "Checkout",
+          "Service",
+          "Sign-in"
+        ]
+      },
+      "job" : {
+        "agent" : "juno",
+        "created" : 1763700000,
+        "id" : 12,
+        "kind" : "install",
+        "runtime" : "claude",
+        "state" : "queued",
+        "updated" : 1763700060
+      },
+      "name" : "a queued install",
+      "page" : {
+        "page" : "installing",
+        "runtime" : "claude"
+      },
+      "start_claude" : "signIn",
+      "start_codex" : "prepare",
+      "stopped" : null,
+      "switching_to" : null
+    }
+  ],
+  "sign_ins" : [
+    {
+      "device_code" : null,
+      "line" : {
+        "says" : "Not signed in on this server.",
+        "warn" : false
+      },
+      "line_already_said" : null,
+      "link" : null,
+      "machine" : {
+        "agent" : "juno",
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : false,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "signed out, no attempt",
+      "page" : {
+        "page" : "provider"
+      },
+      "reason" : null,
+      "signed_in" : false,
+      "stopped" : null,
+      "summary" : null,
+      "waits_for_code" : false
+    },
+    {
+      "device_code" : null,
+      "line" : null,
+      "line_already_said" : null,
+      "link" : null,
+      "machine" : {
+        "agent" : "juno",
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : true,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "signed in",
+      "page" : {
+        "page" : "activate"
+      },
+      "reason" : null,
+      "signed_in" : true,
+      "stopped" : null,
+      "summary" : null,
+      "waits_for_code" : false
+    },
+    {
+      "device_code" : null,
+      "line" : {
+        "says" : "Open the link, then paste the code it gives you.",
+        "warn" : false
+      },
+      "line_already_said" : {
+        "says" : "Open the link, then paste the code it gives you.",
+        "warn" : false
+      },
+      "link" : "https://claude.ai/oauth/authorize?code=true",
+      "machine" : {
+        "agent" : "juno",
+        "login" : {
+          "id" : 7,
+          "runtime" : "claude",
+          "started_at" : 1763700000,
+          "state" : "needs_owner",
+          "updated_at" : 1763700060,
+          "url" : "https://claude.ai/oauth/authorize?code=true",
+          "wants_code" : true
+        },
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : false,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "a sign-in that waits for a code",
+      "page" : {
+        "page" : "signIn",
+        "runtime" : "claude"
+      },
+      "reason" : null,
+      "signed_in" : false,
+      "stopped" : null,
+      "summary" : "Open the link, then paste the code it gives you.",
+      "waits_for_code" : true
+    },
+    {
+      "device_code" : "KDRT-7QXP",
+      "line" : {
+        "says" : "Open the link and enter KDRT-7QXP there.",
+        "warn" : false
+      },
+      "line_already_said" : {
+        "says" : "Open the link and enter KDRT-7QXP there.",
+        "warn" : false
+      },
+      "link" : "https://auth.openai.com/codex/device",
+      "machine" : {
+        "agent" : "juno",
+        "login" : {
+          "id" : 7,
+          "runtime" : "codex",
+          "shows_code" : "KDRT-7QXP",
+          "started_at" : 1763700000,
+          "state" : "needs_owner",
+          "updated_at" : 1763700060,
+          "url" : "https://auth.openai.com/codex/device",
+          "wants_code" : false
+        },
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "codex",
+          "signed_in" : false,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "Codex's device code",
+      "page" : {
+        "page" : "signIn",
+        "runtime" : "codex"
+      },
+      "reason" : null,
+      "signed_in" : false,
+      "stopped" : null,
+      "summary" : "Open the link and enter KDRT-7QXP there.",
+      "waits_for_code" : false
+    },
+    {
+      "device_code" : null,
+      "line" : {
+        "says" : "Open the link, then paste the code it gives you.",
+        "warn" : false
+      },
+      "line_already_said" : {
+        "says" : "Open the link, then paste the code it gives you.",
+        "warn" : false
+      },
+      "link" : null,
+      "machine" : {
+        "agent" : "juno",
+        "login" : {
+          "id" : 7,
+          "runtime" : "claude",
+          "started_at" : 1763700000,
+          "state" : "needs_owner",
+          "updated_at" : 1763700060,
+          "url" : "https://claude.ai.example.com/oauth",
+          "wants_code" : true
+        },
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : false,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "a link of another host",
+      "page" : {
+        "page" : "signIn",
+        "runtime" : "claude"
+      },
+      "reason" : null,
+      "signed_in" : false,
+      "stopped" : null,
+      "summary" : "Open the link, then paste the code it gives you.",
+      "waits_for_code" : false
+    },
+    {
+      "device_code" : null,
+      "line" : {
+        "says" : "Open the link, then paste the code it gives you.",
+        "warn" : false
+      },
+      "line_already_said" : {
+        "says" : "Open the link, then paste the code it gives you.",
+        "warn" : false
+      },
+      "link" : null,
+      "machine" : {
+        "agent" : "juno",
+        "login" : {
+          "id" : 7,
+          "runtime" : "claude",
+          "started_at" : 1763700000,
+          "state" : "needs_owner",
+          "updated_at" : 1763700060,
+          "url" : "https://claude.ai:443/oauth",
+          "wants_code" : true
+        },
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : false,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "a link with a port",
+      "page" : {
+        "page" : "signIn",
+        "runtime" : "claude"
+      },
+      "reason" : null,
+      "signed_in" : false,
+      "stopped" : null,
+      "summary" : "Open the link, then paste the code it gives you.",
+      "waits_for_code" : false
+    },
+    {
+      "device_code" : null,
+      "line" : {
+        "says" : "Open the link, then paste the code it gives you.",
+        "warn" : false
+      },
+      "line_already_said" : {
+        "says" : "Open the link, then paste the code it gives you.",
+        "warn" : false
+      },
+      "link" : null,
+      "machine" : {
+        "agent" : "juno",
+        "login" : {
+          "id" : 7,
+          "runtime" : "claude",
+          "started_at" : 1763700000,
+          "state" : "needs_owner",
+          "updated_at" : 1763700060,
+          "url" : "http://claude.ai/oauth",
+          "wants_code" : true
+        },
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : false,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "a link over http",
+      "page" : {
+        "page" : "signIn",
+        "runtime" : "claude"
+      },
+      "reason" : null,
+      "signed_in" : false,
+      "stopped" : null,
+      "summary" : "Open the link, then paste the code it gives you.",
+      "waits_for_code" : false
+    },
+    {
+      "device_code" : null,
+      "line" : {
+        "says" : "Claude Code did not sign in. Start it again.",
+        "warn" : true
+      },
+      "line_already_said" : {
+        "says" : "Claude Code did not sign in. Start it again.",
+        "warn" : true
+      },
+      "link" : null,
+      "machine" : {
+        "agent" : "juno",
+        "login" : {
+          "detail" : "Claude Code did not sign in. Start it again.",
+          "id" : 7,
+          "runtime" : "claude",
+          "started_at" : 1763700000,
+          "state" : "failed",
+          "updated_at" : 1763700060,
+          "wants_code" : true
+        },
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : false,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "a sign-in that failed",
+      "page" : {
+        "page" : "provider"
+      },
+      "reason" : "Claude Code did not sign in.",
+      "signed_in" : false,
+      "stopped" : "Claude Code did not sign in.",
+      "summary" : "Claude Code did not sign in. Start it again.",
+      "waits_for_code" : false
+    },
+    {
+      "device_code" : null,
+      "line" : {
+        "says" : "Not signed in on this server.",
+        "warn" : false
+      },
+      "line_already_said" : null,
+      "link" : null,
+      "machine" : {
+        "agent" : "juno",
+        "login" : {
+          "detail" : "No code came back in 14 minutes.",
+          "id" : 7,
+          "runtime" : "claude",
+          "started_at" : 1763700000,
+          "state" : "failed",
+          "timed_out" : true,
+          "updated_at" : 1763700060,
+          "wants_code" : true
+        },
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : false,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "a sign-in that only waited",
+      "page" : {
+        "page" : "provider"
+      },
+      "reason" : null,
+      "signed_in" : false,
+      "stopped" : null,
+      "summary" : "No code came back in 14 minutes.",
+      "waits_for_code" : false
+    },
+    {
+      "device_code" : null,
+      "line" : {
+        "says" : "Signing out of the account it used…",
+        "warn" : false
+      },
+      "line_already_said" : {
+        "says" : "Signing out of the account it used…",
+        "warn" : false
+      },
+      "link" : null,
+      "machine" : {
+        "agent" : "juno",
+        "login" : {
+          "id" : 7,
+          "runtime" : "claude",
+          "started_at" : 1763700000,
+          "state" : "signing_out",
+          "updated_at" : 1763700060,
+          "wants_code" : true
+        },
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : false,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "signing out",
+      "page" : {
+        "page" : "signIn",
+        "runtime" : "claude"
+      },
+      "reason" : null,
+      "signed_in" : false,
+      "stopped" : null,
+      "summary" : "Signing out of the account it used…",
+      "waits_for_code" : false
+    },
+    {
+      "device_code" : null,
+      "line" : {
+        "says" : "Starting the sign-in on that server…",
+        "warn" : false
+      },
+      "line_already_said" : {
+        "says" : "Starting the sign-in on that server…",
+        "warn" : false
+      },
+      "link" : null,
+      "machine" : {
+        "agent" : "juno",
+        "login" : {
+          "id" : 7,
+          "runtime" : "claude",
+          "started_at" : 1763700000,
+          "state" : "starting",
+          "updated_at" : 1763700060,
+          "wants_code" : true
+        },
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : false,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "starting",
+      "page" : {
+        "page" : "signIn",
+        "runtime" : "claude"
+      },
+      "reason" : null,
+      "signed_in" : false,
+      "stopped" : null,
+      "summary" : "Starting the sign-in on that server…",
+      "waits_for_code" : false
+    },
+    {
+      "device_code" : null,
+      "line" : {
+        "says" : "The code went to the server…",
+        "warn" : false
+      },
+      "line_already_said" : {
+        "says" : "The code went to the server…",
+        "warn" : false
+      },
+      "link" : null,
+      "machine" : {
+        "agent" : "juno",
+        "login" : {
+          "id" : 7,
+          "runtime" : "claude",
+          "started_at" : 1763700000,
+          "state" : "signing_in",
+          "updated_at" : 1763700060,
+          "wants_code" : true
+        },
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : false,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : false,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "the code on its way",
+      "page" : {
+        "page" : "signIn",
+        "runtime" : "claude"
+      },
+      "reason" : null,
+      "signed_in" : false,
+      "stopped" : null,
+      "summary" : "The code went to the server…",
+      "waits_for_code" : false
+    },
+    {
+      "device_code" : null,
+      "line" : null,
+      "line_already_said" : null,
+      "link" : null,
+      "machine" : {
+        "agent" : "juno",
+        "machine" : "worker-1",
+        "os" : {
+          "name" : "Ubuntu 24.04"
+        },
+        "reported_at" : 1763700000,
+        "role" : "manager",
+        "runtime" : {
+          "name" : "claude",
+          "signed_in" : true,
+          "version" : "2.1.0"
+        },
+        "security" : {
+
+        },
+        "stale" : true,
+        "update" : {
+          "state" : "current"
+        }
+      },
+      "name" : "a stale reading",
+      "page" : {
+        "page" : "provider"
+      },
+      "reason" : null,
+      "signed_in" : false,
+      "stopped" : null,
+      "summary" : null,
+      "waits_for_code" : false
+    }
+  ],
+  "start_again" : {
+    "app_title" : "Clear what the app keeps of this fleet",
+    "deleted_at" : [
+      {
+        "provider" : "hetzner",
+        "words" : "Deleted at Hetzner"
+      },
+      {
+        "provider" : "digitalocean",
+        "words" : "Deleted at DigitalOcean"
+      },
+      {
+        "provider" : "vultr",
+        "words" : "Deleted at Vultr"
+      },
+      {
+        "provider" : "akamai",
+        "words" : "Deleted at Akamai"
+      }
+    ],
+    "details" : [
+      {
+        "detail" : "Your fleet's server · CX23",
+        "provider" : "hetzner",
+        "type" : "cx23",
+        "use" : "hub"
+      },
+      {
+        "detail" : "The manager's server · s-1vcpu-2gb",
+        "provider" : "digitalocean",
+        "type" : "s-1vcpu-2gb",
+        "use" : "agent"
+      },
+      {
+        "detail" : "The manager's server",
+        "provider" : "vultr",
+        "type" : null,
+        "use" : "agent"
+      }
+    ],
+    "firewalls" : [
+      {
+        "count" : 1,
+        "made_for" : "Founderizer made them for this server.",
+        "provider" : "hetzner",
+        "title" : "Delete its firewall and SSH key at Hetzner",
+        "words" : "Its firewall and Founderizer's SSH key"
+      },
+      {
+        "count" : 2,
+        "made_for" : "Founderizer made them for these servers.",
+        "provider" : "hetzner",
+        "title" : "Delete their firewalls and SSH key at Hetzner",
+        "words" : "Their 2 firewalls and Founderizer's SSH key"
+      },
+      {
+        "count" : 1,
+        "made_for" : "Founderizer made them for this server.",
+        "provider" : "digitalocean",
+        "title" : "Delete its firewall and SSH key at DigitalOcean",
+        "words" : "Its firewall and Founderizer's SSH key"
+      },
+      {
+        "count" : 2,
+        "made_for" : "Founderizer made them for these servers.",
+        "provider" : "digitalocean",
+        "title" : "Delete their firewalls and SSH key at DigitalOcean",
+        "words" : "Their 2 firewalls and Founderizer's SSH key"
+      },
+      {
+        "count" : 1,
+        "made_for" : "Founderizer made them for this server.",
+        "provider" : "vultr",
+        "title" : "Delete its firewall and SSH key at Vultr",
+        "words" : "Its firewall and Founderizer's SSH key"
+      },
+      {
+        "count" : 2,
+        "made_for" : "Founderizer made them for these servers.",
+        "provider" : "vultr",
+        "title" : "Delete their firewalls and SSH key at Vultr",
+        "words" : "Their 2 firewalls and Founderizer's SSH key"
+      },
+      {
+        "count" : 1,
+        "made_for" : "Founderizer made it for this server.",
+        "provider" : "akamai",
+        "title" : "Delete its firewall at Akamai",
+        "words" : "Its firewall"
+      },
+      {
+        "count" : 2,
+        "made_for" : "Founderizer made them for these servers.",
+        "provider" : "akamai",
+        "title" : "Delete their firewalls at Akamai",
+        "words" : "Their 2 firewalls"
+      }
+    ],
+    "fixed" : {
+      "press" : "Delete and start again",
+      "start" : "Start again",
+      "starting" : "Starting again",
+      "still_costs" : "The server is still there and still costs money."
+    },
+    "machines" : [
+      {
+        "names" : [
+          "worker-1"
+        ],
+        "title" : "Remove the machine from Tailscale",
+        "words" : "The machine worker-1"
+      },
+      {
+        "names" : [
+          "worker-1",
+          "worker-2"
+        ],
+        "title" : "Remove both machines from Tailscale",
+        "words" : "The machines worker-1 and worker-2"
+      },
+      {
+        "names" : [
+          "worker-1",
+          "worker-2",
+          "worker-3"
+        ],
+        "title" : "Remove the 3 machines from Tailscale",
+        "words" : "The machines worker-1, worker-2 and worker-3"
+      }
+    ],
+    "sentences" : [
+      {
+        "sentence" : "Hetzner refused.",
+        "words" : "Hetzner refused"
+      },
+      {
+        "sentence" : "Done.",
+        "words" : "Done."
+      },
+      {
+        "sentence" : "Really?",
+        "words" : "Really?"
+      },
+      {
+        "sentence" : "spaced.",
+        "words" : "  spaced  "
+      }
+    ],
+    "server_title" : "Delete worker-1 at Hetzner",
+    "states" : [
+      {
+        "state" : "waiting",
+        "words" : "Waiting"
+      },
+      {
+        "state" : "now",
+        "words" : "Now"
+      },
+      {
+        "state" : "done",
+        "words" : "Done"
+      },
+      {
+        "state" : "failed",
+        "words" : "Failed"
+      }
+    ]
+  }
+}

@@ -312,8 +312,9 @@ public sealed class Outbox(string file)
                          ?? throw new OutboxException(OutboxException.Problem.InvalidRecord);
             if (record.Command == DroppedKind)
             {
-                // A question about a request that a build before Discuss left the product saved (owner API 1.158): its
-                // route answers 404 now, so it is dropped here, with no word to the owner, and never goes again.
+                // A question about a request that a build saved before Discuss left the product (owner API 1.158). The
+                // hub serves that route again since owner API 1.272, but this app has no talk write and such a question
+                // is stale, so it is dropped here, with no word to the owner, and never goes again.
                 System.IO.File.Delete(File);
                 return null;
             }

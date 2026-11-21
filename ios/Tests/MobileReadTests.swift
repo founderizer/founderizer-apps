@@ -519,6 +519,47 @@ struct MobileReadTests {
         #expect(drawn.map(\.id) == [7, 8])
         #expect(drawn.map { $0.talk?.map(\.text) ?? [] } == [["Yes, the same customer."], []])
     }
+
+    // MARK: The mark of an answered card
+
+    /// The Fleet Manager's request that he answered with its first option, which let task 41 go on.
+    private var answeredNeed: [String: Any] {
+        ["id": 9, "title": "Move the shop?", "why": "", "todo": "", "raised": 900.0, "by": "manager", "answer": "Yes",
+         "answered": 950.0, "options": ["Yes", "No"], "chosen": 0, "task": 41]
+    }
+
+    /// **An answered card in a chat says what came of his answer, from the parts that the phone reads** (owner feature
+    /// `need_marks`): the red mark for its task that failed, which only the heads of the tasks that ended hold, and the
+    /// green mark while it works, each in the look of the phone's own mark of that state. The phone's reading had none
+    /// of the hub's features, so every card stood with the check, also on a hub that sends the marks.
+    @Test("An answered card is red for its task that failed and green while it works, on a hub that sends the marks")
+    func anAnsweredCardsMark() throws {
+        let agents = [agentFields(["name": "manager", "role": "manager"]), agentFields(["name": "vps"])]
+        let failed = headFields(["id": 41, "title": "Move the shop", "state": "failed", "delivered": 40.0])
+        let features = ["mobile", AnsweredMark.feature]
+        let read = try snapshot(agents: agents, ["ui_features": features, "recent": [failed],
+                                                 "answered_needs": [answeredNeed]])
+        let need = try #require(read.answered_needs?.first)
+        let red = need.answeredMark(in: MobileStore.markReading(read, ended: [], of: need))
+        #expect(red == .failed(words: "Failed"))
+        let redLook = AnsweredMarkView.look(of: red)
+        #expect(redLook.symbol == "exclamationmark.circle.fill" && redLook.tint == .failed)
+        // an ended head that a chat's read of the ended tasks brought, and an open task in work
+        let ended = try head(["id": 41, "title": "Move the shop", "state": "failed", "delivered": 40.0])
+        let alone = try snapshot(agents: agents, ["ui_features": features])
+        #expect(need.answeredMark(in: MobileStore.markReading(alone, ended: [ended], of: need)) == red)
+        let working = headFields(["id": 41, "title": "Move the shop", "works": true])
+        let open = try snapshot(agents: agents, ["ui_features": features, "tasks": [working]])
+        let green = need.answeredMark(in: MobileStore.markReading(open, ended: [], of: need))
+        #expect(green == .working(words: "\("vps".agentLabel) · Move the shop", agent: "vps", title: "Move the shop"))
+        let greenLook = AnsweredMarkView.look(of: green)
+        #expect(greenLook.symbol == "circle.dotted" && greenLook.tint == .work)
+        // a hub before the feature: the check, as before
+        let older = try snapshot(agents: agents, ["ui_features": ["mobile"], "recent": [failed]])
+        let check = need.answeredMark(in: MobileStore.markReading(older, ended: [], of: need))
+        #expect(check == .done(words: "\("manager".agentLabel) has your answer"))
+        #expect(AnsweredMarkView.look(of: check).symbol == "checkmark" && AnsweredMarkView.look(of: check).tint == nil)
+    }
 }
 
 /// What a chat draws from what it read: the waiting line's state, Send's arrow and a chat app's mark.

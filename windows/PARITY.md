@@ -133,6 +133,7 @@ Mac, and a device route is all that the PC reaches.
 | `contact_roles` | waits (2.4) | |
 | `connected_apps` | waits (2.4) | the Mac alone today: no device route |
 | `connect_offer` | not planned | Turn on runs a root step over the Mac's SSH and takes a Tailscale access token, and `/ui/connect*` is no device route |
+| `need_pictures` | waits | pictures as the options of a request (owner API 1.285). The PC sends no `X-Fleet-Draws` until its card is built and the owner said yes to it, so the hub raises no such item for it |
 
 ## What no feature name carries
 

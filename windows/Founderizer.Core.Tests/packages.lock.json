@@ -102,6 +102,12 @@
         "dependencies": {
           "BouncyCastle.Cryptography": "[2.7.0, 2.7.0]"
         }
+      },
+      "founderizer.owner": {
+        "type": "Project",
+        "dependencies": {
+          "Founderizer.Core": "[1.0.0, )"
+        }
       }
     }
   }

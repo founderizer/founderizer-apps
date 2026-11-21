@@ -1527,6 +1527,28 @@ final class MobileStore {
                         needs: snapshot.needs + (snapshot.answered_needs ?? []), messages: messages,
                         holds: snapshot.holds, outcomes: snapshot.outcomes)
     }
+
+    /// **What came of his answer to `need`, in the place of its check** (owner feature `need_marks`; the owner's "Yes,
+    /// as drawn" of 21 November 2026): FleetCore's own rule (`OwnerNeed.answeredMark`), as the Mac's folded card reads
+    /// it, from the reading that the phone holds (`markReading`). Before the first reading: the check.
+    func answeredMark(of need: OwnerNeed) -> AnsweredMark {
+        need.answeredMark(in: snapshot.map { Self.markReading($0, ended: endedHeads, of: need) })
+    }
+
+    /// **The reading of an answered card's mark, made of the parts that the phone holds**: the hub's features, the task
+    /// that his answer lets go on — from the open heads, the 20 that ended last and every ended one that the phone read
+    /// — and the holds, the outcomes and the agents' usage limits and Tools boxes, which that task's mark reads, as on
+    /// the Mac. A task that none of them holds is none, and the rule then says that the agent has his answer.
+    nonisolated static func markReading(_ snapshot: MobileSnapshot, ended: [MobileTaskHead],
+                                        of need: OwnerNeed) -> HubState {
+        let head = need.task.flatMap { id in (snapshot.tasks + snapshot.recent + ended).first { $0.id == id } }
+        let agents = snapshot.agents.map {
+            FleetAgent(phoneName: $0.name, role: $0.role, runtime: $0.runtime, limit: $0.limit, can: $0.can ?? [])
+        }
+        return HubState(phoneTime: snapshot.time, db: snapshot.db, agents: agents,
+                        tasks: head?.fleetTask.map { [$0] } ?? [], needs: [need], messages: [],
+                        holds: snapshot.holds, outcomes: snapshot.outcomes, features: snapshot.ui_features)
+    }
     /// This chat was read at least once on this hub generation: before that, it is not empty, it is not read yet.
     func hasRead(chat agent: String) -> Bool { chatItems[agent] != nil }
 

@@ -32,6 +32,10 @@ public struct PendingRequest: Codable, Equatable, Sendable {
     /// an answer in words, which the hub refuses for such a request. False on every other request, and on one that a
     /// version before it saved.
     public let clarifies: Bool
+    /// **The task or the job that a message of his is about** (owner feature `message_about`, API 1.279): his feedback
+    /// from a task's or a job's card names it, and the agent reads which page it was. nil on every other request, and on
+    /// one that a version before it saved.
+    public let about: MessagePlace?
     public fileprivate(set) var text: String
     public let createdAt: Date
     public let client: String
@@ -47,7 +51,7 @@ public struct PendingRequest: Codable, Equatable, Sendable {
     /// for one that an older version refused (its words are in `refusal`).
     public var hubRefusal: HubRefusal?
 
-    public init(hub: URL, database: String, client: String, needID: Int? = nil, choice: Int? = nil, choices: [Int]? = nil, recipient: String? = nil, replacesRequestID: String? = nil, command: OwnerCommand? = nil, attachments: [Int] = [], approval: (statement: String, signature: String)? = nil, ran: NeedRunResult? = nil, clarifies: Bool = false, text: String) {
+    public init(hub: URL, database: String, client: String, needID: Int? = nil, choice: Int? = nil, choices: [Int]? = nil, recipient: String? = nil, replacesRequestID: String? = nil, command: OwnerCommand? = nil, attachments: [Int] = [], approval: (statement: String, signature: String)? = nil, ran: NeedRunResult? = nil, clarifies: Bool = false, about: MessagePlace? = nil, text: String) {
         requestID = UUID()
         // Only the words of a request's answer: no option, no ticked options, no run and no command are words about
         // it. Nor a request with files, a statement or a message that it replaces: the route of those words takes
@@ -66,6 +70,8 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         self.recipient = recipient
         self.command = command
         self.replacesRequestID = replacesRequestID
+        // Only a message to a chat says what it is about: the hub refuses it on an answer and on a command.
+        self.about = needID == nil && command == nil ? about : nil
         self.text = text
         self.client = client
         createdAt = Date()
@@ -90,6 +96,8 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         ran = try saved.decodeIfPresent(NeedRunResult.self, forKey: .ran)
         // A request that a version before Needs clarification saved is none.
         clarifies = try saved.decodeIfPresent(Bool.self, forKey: .clarifies) ?? false
+        // A request that a version before `about` saved names nothing.
+        about = try? saved.decodeIfPresent(MessagePlace.self, forKey: .about)
         text = try saved.decode(String.self, forKey: .text)
         createdAt = try saved.decode(Date.self, forKey: .createdAt)
         client = try saved.decode(String.self, forKey: .client)
@@ -156,6 +164,7 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         else { fields[needID == nil ? "text" : "answer"] = text }
         if let recipient { fields["recipient"] = recipient }
         if let replacesRequestID { fields["replaces_request_id"] = replacesRequestID }
+        if let about, needID == nil { fields["about"] = about.fields }
         if !attachments.isEmpty { fields["attachments"] = attachments }
         if let statement, let signature, needID != nil { fields["statement"] = statement; fields["signature"] = signature }
         return try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])

@@ -242,6 +242,12 @@ struct SampleFleetTests {
         }
         try await body()
     }
+
+    /// Waits until `done` holds: it looks again every 20 ms, and the event ends the wait, not a time. The bound, 20 s
+    /// inside the test's own limit, only makes a regression fail at the expectation that follows, in place of a hang.
+    @MainActor private static func until(_ done: () -> Bool) async throws {
+        for _ in 0..<1_000 where !done() { try await Task.sleep(for: .milliseconds(20)) }
+    }
 }
 
 /// **A hub on this Mac's loopback**, for a check of the phone's own client: it listens on the loopback alone, takes each
@@ -606,17 +612,23 @@ extension SampleFleetTests {
                 hub.mode = .cutsAfter
                 let second = "And the voucher, does it end this month?"
                 await store.talk(needID: 7, words: second)
-                for _ in 0..<60 where store.pending != nil { try await Task.sleep(for: .milliseconds(50)) }
+                // (it goes again in a task of the store's own, and that send ends with a read: until both ended, the
+                // store takes no message, and on a slow Mac the next step's message was dropped)
+                try await Self.until { store.pending == nil && !store.sending }
                 #expect(store.pending == nil && store.talkReceipts[7] == 2)
                 #expect(hub.messages.count == 4 && Set(hub.messages).count == 2)
                 #expect(store.talk(of: try #require(store.openNeeds.first)).map(\.text) == [first, second])
 
                 // the same words again, cut before the hub took them: his older line with those words is no sign that
                 // the hub has them, so no read sends them by itself, and his Try again does
+                try #require(store.canWrite)
                 hub.mode = .cutsBefore
                 await store.talk(needID: 7, words: second)
+                // The send's own read has his line with those words. A read that sends them by itself does it in a
+                // task of its own, which begins at the first wait of the store after it: the wait of one more read.
+                // So, when that read ended and no send is on its way, each send of a read is at the hub.
                 await store.refresh()
-                try await Task.sleep(for: .milliseconds(500))
+                try await Self.until { !store.sending }
                 #expect(hub.messages.count == 5 && store.pending?.talkNeed == 7 && store.pending?.refusal == nil)
                 hub.mode = .answers
                 await store.retry()

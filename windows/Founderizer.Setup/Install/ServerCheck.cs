@@ -222,6 +222,10 @@ public static class ServerCheck
         public sealed record Wait(string Says) : Verdict;
         /// <summary>The server asks for a password that this PC does not hold.</summary>
         public sealed record NeedsPassword(PasswordNeed Need) : Verdict;
+        /// <summary>**The server takes SSH keys only, and not this PC's key** (piece L4c; the owner's "Key row here too" of
+        /// 21 November 2026): it named its ways with its refusal of the app's key, and no password way among them. The
+        /// owner's key is the way in; no password is asked. <c>Says</c> is <see cref="ServerCheck.KeysOnly"/>.</summary>
+        public sealed record KeysOnly(string Says) : Verdict;
         /// <summary>The install cannot go on this server: one plain line of the cause and the fix.</summary>
         public sealed record Stop(string Says) : Verdict;
     }
@@ -309,9 +313,11 @@ public static class ServerCheck
     /// (set 8).</summary>
     public static string KeyRefused(string server) => $"{server} did not take this PC's SSH key. Check the server again.";
 
-    /// <summary>A password to a server that takes keys only (the Mac's PasswordOnce.refusal, with "PC").</summary>
+    /// <summary>A password to a server that takes keys only (the Mac's PasswordOnce.refusal): its second sentence names the
+    /// step's own way in, the owner's key once (the owner's "Choose key, as Mac" of 21 November 2026, and his words for
+    /// set 8: "… Choose its key." in place of the Mac's "Give it this Mac's key at your provider").</summary>
     public static string KeysOnly(string server) =>
-        $"{server} takes SSH keys only, so a password cannot open it. Give it this PC's key at your provider.";
+        $"{server} takes SSH keys only, so a password cannot open it. Choose its key.";
 
     /// <summary>A password that the server did not take (the Mac's PasswordOnce.refusal).</summary>
     public static string PasswordRefused(string server, string user) => $"{server} did not take that password for {user}.";
@@ -387,6 +393,13 @@ public static class ServerCheck
 
     // ------------------------------------------------------------ one check of one server
 
+    /// <summary>**Whether a password can open a server**, by the ways that it named with a refusal (SSH's names): the
+    /// password method, or keyboard-interactive (PAM's prompt, which the Mac's <c>ssh</c> asks first and which
+    /// <see cref="RemoteLogin.PasswordOnce"/> answers). A server that named no way may still take one, so it is asked.</summary>
+    internal static bool TakesPassword(IReadOnlyList<string>? ways) =>
+        ways is not { Count: > 0 } || ways.Contains("password", StringComparer.Ordinal) ||
+        ways.Contains("keyboard-interactive", StringComparer.Ordinal);
+
     /// <summary>One check and what it read: null when the server could not be read at all.</summary>
     public sealed record Result(Verdict Verdict, Reading? Reading);
 
@@ -395,9 +408,12 @@ public static class ServerCheck
 
     /// <summary>**One check of one server**: one SSH session as the login user, with the script on standard input, under
     /// the host key rule of an install (a new server's key is kept). Where the call failed, its words say why: a server
-    /// not reached, another host key, and a login refused. **The app's own key refused asks for the password once**
-    /// (<see cref="PasswordNeed.Ssh"/>): IRemote cannot say which ways a server offers, and the password's own call
-    /// says when the server takes keys only. <paramref name="firstRun"/> chooses the words of a changed host key.</summary>
+    /// not reached, another host key, and a login refused. **The app's own key refused** asks for the way in by the ways
+    /// that the server named with its refusal (<see cref="RemoteResult.LoginWays"/>; piece L4c): a password way among
+    /// them, or no list, asks for the password once (<see cref="PasswordNeed.Ssh"/>), whose page also takes the owner's
+    /// key; ways with no password way are <see cref="Verdict.KeysOnly"/> at once, with no password try. The list chooses
+    /// the verdict and nothing else: a password that such a server then refuses says its own sentence, as before.
+    /// <paramref name="firstRun"/> chooses the words of a changed host key.</summary>
     public static async Task<Result> RunAsync(IRemote remote, InstallTarget target, InstallJob job, RemoteLogin login,
                                               bool holdsSudoPassword = false, string? tailnet = null, bool firstRun = true,
                                               PolicyPlace? policy = null, CancellationToken cancel = default)
@@ -408,7 +424,8 @@ public static class ServerCheck
         var answer = await remote.RunAsync(call, null, cancel);
         if (answer.Failure == RemoteFailure.Canceled) throw new OperationCanceledException(cancel);
         if (answer.Failure == RemoteFailure.LoginRefused && login is RemoteLogin.AppKey)
-            return new Result(new Verdict.NeedsPassword(PasswordNeed.Ssh), null);
+            return new Result(TakesPassword(answer.LoginWays) ? new Verdict.NeedsPassword(PasswordNeed.Ssh)
+                                                              : new Verdict.KeysOnly(KeysOnly(target.Host)), null);
         if (answer.Failure is { } failure)
             return new Result(new Verdict.Stop(Failed(target.Host, target.Port, target.User, failure, login, firstRun, policy)), null);
         if (Read(answer.Output) is not { } reading) return new Result(new Verdict.Stop(NoAnswer(target.Host)), null);
