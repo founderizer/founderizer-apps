@@ -72,12 +72,14 @@ struct CardBadge: TextAttribute {
         /// The room of the icon, where this line has it.
         let room: CGRect?
         var id: String { "\(badge)-\(line)" }
-        /// The size of the words of its line.
-        var em: CGFloat { frame.height / 1.3 }
         /// Where its icon stands, on the line that has the icon's room.
-        var icon: CGRect? {
-            room.map { CGRect(x: $0.minX + em * 0.3, y: frame.midY - em * 0.41, width: em * 0.82, height: em * 0.82) }
-        }
+        var icon: CGRect? { room.map { CardBadge.icon(room: $0, frame: frame) } }
+    }
+
+    /// Where a badge's icon stands in the room before its name, on the line that has the room.
+    static func icon(room: CGRect, frame: CGRect) -> CGRect {
+        let em = frame.height / 1.3
+        return CGRect(x: room.minX + em * 0.3, y: frame.midY - em * 0.41, width: em * 0.82, height: em * 0.82)
     }
 
     /// How far the badges' canvas reaches past the text on each side: a badge stands 6% of its line over the line and
@@ -91,26 +93,77 @@ struct CardBadge: TextAttribute {
         for (place, anchored) in layouts.enumerated() {
             let origin = proxy[anchored.origin]
             for (number, line) in anchored.layout.enumerated() {
-                var order: [Int] = [], frames: [Int: CGRect] = [:], rooms: [Int: CGRect] = [:]
-                var targets: [Int: CardNames.Target] = [:]
-                for run in line {
-                    guard let badge = run[CardBadge.self] else { continue }
-                    let frame = run.typographicBounds.rect.offsetBy(dx: origin.x, dy: origin.y)
-                    if let kept = frames[badge.index] { frames[badge.index] = kept.union(frame) } else {
-                        order.append(badge.index)
-                        frames[badge.index] = frame
-                        targets[badge.index] = badge.target
-                    }
-                    if badge.icon { rooms[badge.index] = frame }
-                }
-                for index in order {
-                    guard let frame = frames[index], let target = targets[index] else { continue }
-                    parts.append(Part(badge: "\(place)-\(index)", line: number, target: target,
-                                      frame: frame.insetBy(dx: 0, dy: -frame.height * 0.06), room: rooms[index]))
+                for badge in badges(of: line, offset: origin) {
+                    parts.append(Part(badge: "\(place)-\(badge.index)", line: number, target: badge.target,
+                                      frame: badge.frame, room: badge.room))
                 }
             }
         }
         return parts
+    }
+
+    /// The badges of one line of a text's layout, in their order: each one's frame on the line, 6% of the line over
+    /// and under it, and the room of its icon where the line has it, moved by `offset` (the text's place in a view).
+    /// The card's canvas reads them from the layout of its texts (`parts`).
+    static func badges(of line: Text.Layout.Line, offset: CGPoint)
+        -> [(index: Int, target: CardNames.Target, frame: CGRect, room: CGRect?)] {
+        var order: [Int] = [], frames: [Int: CGRect] = [:], rooms: [Int: CGRect] = [:]
+        var targets: [Int: CardNames.Target] = [:]
+        for run in line {
+            guard let badge = run[CardBadge.self] else { continue }
+            let frame = run.typographicBounds.rect.offsetBy(dx: offset.x, dy: offset.y)
+            if let kept = frames[badge.index] { frames[badge.index] = kept.union(frame) } else {
+                order.append(badge.index)
+                frames[badge.index] = frame
+                targets[badge.index] = badge.target
+            }
+            if badge.icon { rooms[badge.index] = frame }
+        }
+        return order.compactMap { index in
+            guard let frame = frames[index], let target = targets[index] else { return nil }
+            return (index, target, frame.insetBy(dx: 0, dy: -frame.height * 0.06), rooms[index])
+        }
+    }
+
+    /// What a badge shows in the room before its name, ready to draw: an agent's glyph in its colours, a symbol in the
+    /// link's colour, or a mark that is a view of its own (`CardBadgeIcon.isMark`), which the caller draws.
+    enum Room: Equatable {
+        case glyph(GlyphKind, light: Color, deep: Color)
+        case symbol(String)
+        case mark
+
+        /// An agent's glyph in its own colours, or in grey while the agent is not there (`AgentGlyph.absentLight`).
+        @MainActor static func agent(_ look: GlyphLook, absent: Bool) -> Room {
+            .glyph(look.kind, light: absent ? AgentGlyph.absentLight : look.light,
+                   deep: absent ? AgentGlyph.absentDeep : look.deep)
+        }
+    }
+
+    /// **One badge**, as the card's canvas (`CardBadges`) and a chat's (`ChatBadgeIcon.draw`) both draw it: a
+    /// soft violet fill with a violet edge in `frame` (violet is what he can press), a little more of both under the
+    /// pointer (`over`), and in `place`, the icon's place on the line that has its room, what `room` shows; `mark` draws
+    /// a mark there.
+    static func draw(_ frame: CGRect, over: Bool, room: Room?, at place: CGRect?, in context: inout GraphicsContext,
+                     mark: (inout GraphicsContext, CGRect) -> Void) {
+        let shape = RoundedRectangle(cornerRadius: frame.height / 1.3 * 0.36, style: .continuous)
+        context.fill(shape.path(in: frame), with: .color(FleetStyle.link.opacity(over ? 0.2 : 0.12)))
+        context.stroke(shape.path(in: frame.insetBy(dx: 0.5, dy: 0.5)),
+                       with: .color(FleetStyle.link.opacity(over ? 0.5 : 0.3)), lineWidth: 1)
+        guard let place, let room else { return }
+        switch room {
+        case .glyph(let kind, let light, let deep):
+            context.fill(GlyphOutline(kind: kind).path(in: place),
+                         with: .linearGradient(Gradient(colors: [light, deep]), startPoint: place.origin,
+                                               endPoint: CGPoint(x: place.maxX, y: place.maxY)))
+            context.fill(GlyphCore(kind: kind).path(in: place),
+                         with: .color(kind == .moon ? light : .white.opacity(GlyphLook.coreOpacity)))
+        case .symbol(let name):
+            let symbol = Text(Image(systemName: name))
+                .font(.system(size: place.width * 0.86, weight: .medium)).foregroundColor(FleetStyle.link)
+            context.draw(symbol, at: CGPoint(x: place.midX, y: place.midY), anchor: .center)
+        case .mark:
+            mark(&context, place)
+        }
     }
 }
 
@@ -226,32 +279,18 @@ private struct CardBadges: ViewModifier {
         .position(x: part.frame.midX, y: part.frame.midY)
     }
 
-    /// A badge: a soft violet fill with a violet edge (violet is what he can press), and its icon in the room before its
-    /// name (`CardBadgeIcon`).
+    /// A badge with its icon in the room before its name (`CardBadge.draw`, `CardBadgeIcon`): a mark that is a view of
+    /// its own is the canvas's symbol.
     private func draw(_ part: CardBadge.Part, icon: CardBadgeIcon?, look: [String: GlyphLook],
                       in context: inout GraphicsContext) {
-        let frame = part.frame
-        let shape = RoundedRectangle(cornerRadius: part.em * 0.36, style: .continuous)
-        let over = hovered == part.badge
-        context.fill(shape.path(in: frame), with: .color(FleetStyle.link.opacity(over ? 0.2 : 0.12)))
-        context.stroke(shape.path(in: frame.insetBy(dx: 0.5, dy: 0.5)),
-                       with: .color(FleetStyle.link.opacity(over ? 0.5 : 0.3)), lineWidth: 1)
-        guard let place = part.icon, let icon else { return }
-        switch icon {
-        case .glyph(let name):
-            guard let look = look[name] else { return }
-            let absent = presences[name] == .offline || presences[name] == .unknown
-            let light = absent ? AgentGlyph.absentLight : look.light, deep = absent ? AgentGlyph.absentDeep : look.deep
-            context.fill(GlyphOutline(kind: look.kind).path(in: place),
-                         with: .linearGradient(Gradient(colors: [light, deep]), startPoint: place.origin,
-                                               endPoint: CGPoint(x: place.maxX, y: place.maxY)))
-            context.fill(GlyphCore(kind: look.kind).path(in: place),
-                         with: .color(look.kind == .moon ? light : .white.opacity(GlyphLook.coreOpacity)))
-        case .symbol(let name):
-            let symbol = Text(Image(systemName: name))
-                .font(.system(size: place.width * 0.86, weight: .medium)).foregroundColor(FleetStyle.link)
-            context.draw(symbol, at: CGPoint(x: place.midX, y: place.midY), anchor: .center)
-        case .github, .service:
+        let room: CardBadge.Room? = switch icon {
+        case .glyph(let name)?:
+            look[name].map { .agent($0, absent: presences[name] == .offline || presences[name] == .unknown) }
+        case .symbol(let name)?: .symbol(name)
+        case .github?, .service?: .mark
+        case nil: nil
+        }
+        CardBadge.draw(part.frame, over: hovered == part.badge, room: room, at: part.icon, in: &context) { context, place in
             if let mark = context.resolveSymbol(id: part.id) { context.draw(mark, in: place) }
         }
     }

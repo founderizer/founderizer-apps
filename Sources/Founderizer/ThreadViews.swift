@@ -203,6 +203,10 @@ struct ManagerView: View {
                     let stamps = rows.indices.map { ChatStamp.time(times[$0], after: $0 > 0 ? times[$0 - 1] : nil) }
                     let stamped = stamps.map { $0 != nil }
                     let runs = ChatPart.replyRuns(in: rows, stamped: stamped)
+                    // **A name in the messages is a badge, as on a request's card** (`MessageText.chatNames`), by the
+                    // chat's own rules: one book, made again only when what it is made of changes
+                    // (`FleetStore.chatNames`).
+                    let book = store.chatNames
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         if let time = stamps[index] {
                             ChatStamp(time: time)
@@ -233,7 +237,7 @@ struct ManagerView: View {
                             }
                         case .entry(.message(let message)):
                             // The room under his message is counted to the row under it: a reply, or a card.
-                            messageRow(message).padding(.bottom, Self.gap(under: message, before: Self.entry(after: index, in: rows),
+                            messageRow(message, names: book).padding(.bottom, Self.gap(under: message, before: Self.entry(after: index, in: rows),
                                                                           keepsFiles: store.supportsKeptFiles))
                                 // **His message comes up from the composer** (`AnyTransition.sentMessage`): only the
                                 // one that he sends now, in the frame it goes, never a message of the reading.
@@ -245,7 +249,7 @@ struct ManagerView: View {
                         // of any reply of the run.
                         case .entry(.report(let report)):
                             reportRow(report, lastOfRun: ChatPart.endsReplies(at: index, in: rows, stamped: stamped),
-                                      run: runs[index].map { replyHover.place(row: row.id, run: $0) }).id(row.id)
+                                      run: runs[index].map { replyHover.place(row: row.id, run: $0) }, names: book).id(row.id)
                                 .transition(shownUpTo.map { report.id > $0 } == true
                                             ? ReplyArrival.transition(taking: lineShowing && places.atEnd.isEmpty ? lastWaiting : nil,
                                                                       agent: agent)
@@ -258,6 +262,9 @@ struct ManagerView: View {
                     Color.clear.frame(height: Self.endRoom)
                     Color.clear.frame(height: 1).id("latest")
                 }.threadRows(top: Self.topInset)
+                    // a badge of a message opens its page in this window (`FleetStore.openCardLink`), as on a card
+                    .environment(\.openURL, OpenURLAction { store.openCardLink($0) })
+                    .environment(\.cardServerSymbols, store.chatServerSymbols)
             }
             .keepsEnd($end, room: Self.endRoom)
             .knowsFarEnd($farFromEnd, room: Self.endRoom)
@@ -387,8 +394,8 @@ struct ManagerView: View {
         requestOnItsWay?.requestID.uuidString.lowercased() == message.request_id
     }
 
-    private func messageRow(_ message: OwnerMessage) -> some View {
-        SentMessageView(store: store, message: message).wordsSelectable(in: selection, row: "message-\(message.id)")
+    private func messageRow(_ message: OwnerMessage, names: ChatNames) -> some View {
+        SentMessageView(store: store, message: message, names: names).wordsSelectable(in: selection, row: "message-\(message.id)")
             .id("message-\(message.id)")
     }
 
@@ -416,8 +423,9 @@ struct ManagerView: View {
     /// A reply, with its delivery icons when it went to a channel. **A message that the agent wrote first
     /// (`message_owner`) looks like any other** (D-2, the owner's yes of 28 October 2026): its "Sent first" line said
     /// what the conversation already shows, a message under no question of his.
-    private func reportRow(_ report: ManagerReport, lastOfRun: Bool, run: ReplyRunHover.Place?) -> some View {
-        AgentReply(text: report.text, time: report.created, detail: reportDetail(report), lastOfRun: lastOfRun, run: run)
+    private func reportRow(_ report: ManagerReport, lastOfRun: Bool, run: ReplyRunHover.Place?, names: ChatNames) -> some View {
+        AgentReply(text: report.text, time: report.created, detail: reportDetail(report), lastOfRun: lastOfRun, run: run,
+                   names: names)
             .wordsSelectable(in: selection, row: "report-\(report.id)")
     }
 
@@ -483,6 +491,8 @@ extension FleetStore {
 private struct SentMessageView: View {
     @Bindable var store: FleetStore
     let message: OwnerMessage
+    /// The names that his words draw as badges (`MessageText.chatNames`).
+    let names: ChatNames
     @State private var hovered = false
     @State private var copied = false
     /// **Edit shows only where it can ever act** (the owner, 26 October 2026: "dont show the send button if it's not
@@ -502,7 +512,9 @@ private struct SentMessageView: View {
             // **The footer stands beside the bubble, on its last line** (T-20), and takes no height: under the
             // bubble it kept 26 points under every message he sent, so a reply stood 57 points from his question
             // and 29 from his next one. A message of files alone has no bubble, and keeps it under its files.
-            if !message.text.isEmpty { OwnerBubble(text: message.text, origin: message.origin, beside: AnyView(footer)) }
+            if !message.text.isEmpty {
+                OwnerBubble(text: message.text, origin: message.origin, beside: AnyView(footer), names: names)
+            }
             if let files = message.attachments, !files.isEmpty {
                 // 12 points under his bubble (the stack's spacing is 6), as under a reply
                 MessageFilesView(store: store, files: files).padding(.top, message.text.isEmpty ? 0 : 6)

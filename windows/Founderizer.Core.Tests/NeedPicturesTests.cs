@@ -115,7 +115,9 @@ public sealed class NeedPicturesTests
 
     private static async Task<(string Path, JsonElement Body)> FirstWrite(FakeHub hub)
     {
-        for (var i = 0; i < 40 && hub.Writes.IsEmpty; i++) await Task.Delay(100);
+        // The first write ends the wait; the cap of 20 s only makes a press that never goes fail here, in place of a
+        // hang. A cap of 4 s failed once on a Mac that built in the VM and ran other tests (21 November 2026).
+        for (var i = 0; i < 200 && hub.Writes.IsEmpty; i++) await Task.Delay(100);
         var write = hub.Writes.Single();
         return (write.Path, write.Body);
     }

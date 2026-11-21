@@ -122,9 +122,16 @@ public struct CardNames: Equatable, Sendable {
         let target: Target
         let rule: Rule
     }
-    /// The names by their first letter in small letters, each list the longest first: a text of a few hundred
-    /// characters is read against a book of hundreds of repositories.
-    private let names: [Character: [Name]]
+    /// The names by their first letter in small letters, then by their length, the longest first, then by their words
+    /// in small letters, each list in the book's order: a text of a few hundred characters is read against a book of
+    /// hundreds of repositories, which all begin with their owner's name, so a place in the text looks up the few lengths
+    /// of its first letter and does not read every name of it (a review of 21 November 2026: 300 repositories made a
+    /// chat of 200 messages open in 1,070 ms, 290 ms with no book).
+    private let names: [Character: [Bucket]]
+    private struct Bucket: Equatable, Sendable {
+        let length: Int
+        let byWords: [String: [Name]]
+    }
 
     /// agents: each agent's name and role (nil for none); repositories: owner/name; servers: their names; knowledge:
     /// the paths of the owner's knowledge files.
@@ -167,7 +174,10 @@ public struct CardNames: Equatable, Sendable {
         for (words, page) in Self.pages { add(words, anyCase: false, .page(page), .inFounderizer) }
         for path in Set(knowledge) where path.hasPrefix("knowledge/") { add(path, anyCase: false, .knowledge(path), .exact) }
         // the longest first, so that "Customer Support Lead" wins over "Customer Support" where both begin
-        self.names = Dictionary(grouping: names.sorted { $0.length > $1.length }, by: { Self.first($0.words) })
+        self.names = Dictionary(grouping: names, by: { Self.first($0.words) }).mapValues { names in
+            Dictionary(grouping: names, by: \.length).sorted { $0.key > $1.key }
+                .map { Bucket(length: $0.key, byWords: Dictionary(grouping: $0.value, by: { $0.words.lowercased() })) }
+        }
     }
 
     private static func first(_ text: some StringProtocol) -> Character {
@@ -248,14 +258,16 @@ public struct CardNames: Equatable, Sendable {
                 continue
             }
             var hit: Found?
-            for name in names[Self.first(text[index...])] ?? [] {
-                guard let end = text.index(index, offsetBy: name.length, limitedBy: text.endIndex) else { continue }
+            lengths: for bucket in names[Self.first(text[index...])] ?? [] {
+                guard let end = text.index(index, offsetBy: bucket.length, limitedBy: text.endIndex) else { continue }
                 let piece = text[index..<end]
-                let same = name.anyCase ? piece.compare(name.words, options: .caseInsensitive) == .orderedSame
-                                        : piece == name.words
-                if same, end == text.endIndex || !Self.joins(text, at: end), Self.stands(name.rule, in: text, index..<end) {
-                    hit = Found(range: index..<end, target: name.target)
-                    break
+                for name in bucket.byWords[piece.lowercased()] ?? [] {
+                    let same = name.anyCase ? piece.compare(name.words, options: .caseInsensitive) == .orderedSame
+                                            : piece == name.words
+                    if same, end == text.endIndex || !Self.joins(text, at: end), Self.stands(name.rule, in: text, index..<end) {
+                        hit = Found(range: index..<end, target: name.target)
+                        break lengths
+                    }
                 }
             }
             if let hit {

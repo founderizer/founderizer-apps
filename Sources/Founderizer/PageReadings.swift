@@ -18,6 +18,8 @@ import SwiftUI
         var value: Any?
         /// When it was kept.
         var at: ContinuousClock.Instant?
+        /// The same reading, which a view reads with no watch (`FleetStore.quietReading`).
+        @ObservationIgnored var quiet: (context: String, value: Any?) = ("", nil)
     }
 
     private var slots: [String: Slot] = [:]
@@ -42,6 +44,12 @@ import SwiftUI
         if slot.context != context { slot.context = context }
         slot.value = value
         slot.at = .now
+        slot.quiet = (context, value)
+    }
+
+    fileprivate func quietValue<Value>(_ name: String, in context: String) -> Value? {
+        guard let quiet = slots[name]?.quiet, quiet.context == context else { return nil }
+        return quiet.value as? Value
     }
 
     fileprivate func age(_ name: String, in context: String) -> Duration? {
@@ -82,6 +90,11 @@ extension FleetStore {
     /// What the page reading `name` read last on this hub generation, or nil before its first answer. A page draws
     /// this in its first frame and reads again at once: it never empties it when it opens.
     func reading<Value>(_ name: String) -> Value? { readings.value(name, in: readingContext) }
+
+    /// **The same reading, with no watch**: a view that reads it is not drawn again when the reading comes again. A
+    /// chat's badges read the Servers page's reading so, which the live round writes every 15 seconds
+    /// (`FleetStore.chatNames`).
+    func quietReading<Value>(_ name: String) -> Value? { readings.quietValue(name, in: readingContext) }
 
     /// Keeps a page's reading under its name, for this hub generation. A reading of the servers first moves what this
     /// Mac keeps under the name of a server that it lists under a new name (`followRenames`). The health and the

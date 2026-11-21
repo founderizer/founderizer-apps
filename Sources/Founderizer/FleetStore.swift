@@ -541,8 +541,8 @@ final class FleetStore {
     /// `closeAnsweredTakeOvers` closes once a reading shows that item answered or gone.
     @ObservationIgnored var takeOvers: [Int: ScreenSharingConnection] = [:]
     /// The lane "Give on a card": the names that requests' words link, with the key of what they were made of
-    /// (`cardNames(for:)`).
-    @ObservationIgnored var cardBook: (key: Int, book: CardNames)?
+    /// (`cardNames(for:)`), the same names by a chat's rules (`chatNames`), and the servers' symbols for its badges.
+    @ObservationIgnored var cardBook: (key: Int, book: CardNames, chat: ChatNames, symbols: [String: String])?
     /// build plan 04, S6: the hub's servers, read for a take-over's card, whose readings name a Linux agent's
     /// screen-sharing port (`readTakeOverServers`).
     var takeOverServers: [ServerEntry]?

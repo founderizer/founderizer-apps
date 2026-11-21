@@ -11,9 +11,23 @@ extension FleetStore {
     /// last reading. Nothing is read for it: a name that no kept reading holds stays plain words. One book serves every
     /// card, and it is made again only when what it is made of changes (`cardBook`): a card's words are drawn at each
     /// reading of the hub.
-    func cardNames(for need: OwnerNeed) -> CardNames {
-        let integrations: IntegrationsSnapshot? = reading("apps.integrations.fleet")
-        let servers: ServerList? = reading("servers.list")
+    var cardNames: CardNames { books(quiet: false).card }
+
+    /// **The book of a chat's messages** (`MessageText.chatNames`): the same names by the chat's stricter rules
+    /// (`ChatNames`), made again with the card's book. **A chat reads the pages' readings that it is made of with no
+    /// watch** (`quietReading`): the chat draws again at each reading of the hub, which brings what changed; the Servers
+    /// page's reading, which the live round writes every 15 seconds, drew the whole chat again each time (a review of
+    /// 21 November 2026: about 5 ms for 200 rows, also during a scroll).
+    var chatNames: ChatNames { books(quiet: true).chat }
+
+    /// The symbol of each server by its name, for its badge in a chat's message (`cardServerSymbols`), kept with the
+    /// chat's book and read as it is.
+    var chatServerSymbols: [String: String] { books(quiet: true).symbols }
+
+    private func books(quiet: Bool) -> (card: CardNames, chat: ChatNames, symbols: [String: String]) {
+        let integrations: IntegrationsSnapshot? = quiet ? quietReading("apps.integrations.fleet")
+                                                        : reading("apps.integrations.fleet")
+        let servers: ServerList? = quiet ? quietReading("servers.list") : reading("servers.list")
         let agents = (state?.agents ?? []).map { (name: $0.name, role: $0.title) }
         let repos = (integrations?.repositories ?? []) + (state?.needs ?? []).flatMap { $0.give?.repos ?? [] }
         let names = servers?.servers.map(\.name) ?? []
@@ -21,17 +35,25 @@ extension FleetStore {
         // agents' too, which the Knowledge page opens read-only (`HubState.internalKnowledge`)
         let files = (state?.knowledge ?? []).map(\.path)
             + (state?.readsInternalKnowledge == true ? (state?.internalKnowledge ?? []).map(\.path) : [])
+        let symbols = (servers?.servers ?? []).map { [$0.name, $0.symbol] }
         var hasher = Hasher()
         for agent in agents { hasher.combine(agent.name); hasher.combine(agent.role) }
         hasher.combine(repos)
         hasher.combine(names)
         hasher.combine(files)
+        hasher.combine(symbols)
         let key = hasher.finalize()
-        if let kept = cardBook, kept.key == key { return kept.book }
+        if let kept = cardBook, kept.key == key { return (kept.book, kept.chat, kept.symbols) }
         let book = CardNames(agents: agents, repositories: repos, servers: names, knowledge: files)
-        cardBook = (key, book)
-        return book
+        // a new book with the same names keeps what the old one read (`ChatNames.keeping`)
+        let chat = ChatNames(agents: agents, repositories: repos, servers: names, knowledge: files).keeping(cardBook?.chat)
+        let byName = Dictionary(symbols.map { ($0[0], $0[1]) }, uniquingKeysWith: { first, _ in first })
+        cardBook = (key, book, chat, byName)
+        return (book, chat, byName)
     }
+
+    /// The book of the names of a request's words: the one book (`cardNames`).
+    func cardNames(for need: OwnerNeed) -> CardNames { cardNames }
 
     /// The symbol of each server of the Servers page's last reading by its name, for its badge in a request's words: a
     /// Mac or a server rack (`ServerEntry.symbol`).

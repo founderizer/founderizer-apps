@@ -20,8 +20,13 @@ struct MessageText: View, Equatable {
     /// command, and no other, shows Run (`NeedRunTarget`).
     var run: NeedRunTarget? = nil
     /// **The names that a request's words link** (`CardNames`; the lane "Give on a card"): an agent, a repository, a
-    /// server and a page of the app, where a card draws the words. Nil everywhere else: a chat's words stay as written.
+    /// server and a page of the app, where a card draws the words. A chat's message takes `chatNames` instead.
     var names: CardNames? = nil
+    /// **The names that a chat's message draws as badges** (`AgentReply`, `OwnerBubble`; the owner, 20 November 2026:
+    /// "ok but use always the agent badges and icons!!"): the card's names by the chat's stricter rules (`ChatNames`),
+    /// drawn with the words in every row and pressed in the row under the pointer (`chatBadges`). A table's cells keep
+    /// their words, and so does every text with none: a task's thread and a conversation he reads.
+    var chatNames: ChatNames? = nil
     /// **Each block of the text, and each cell of a table, is a row of this selection** (a long file in the knowledge
     /// reader): only the row under the pointer and the row whose words he pressed last can be selected, as only two
     /// rows of a chat can (`ChatSelection`), and a block or a cell longer than `keepsFields` can always be selected.
@@ -109,9 +114,14 @@ struct MessageText: View, Equatable {
 
     /// A block's words with the names of `names` as links, an agent and a server as a badge (`CardBadgeText`), or as
     /// they are. The size is the words' own: a step's, the chat's (`ChatStyle.font`) or a form's (`FleetStyle.body`).
-    /// Each link of the words is a piece of its own, which `linkPresses` gives the hand (`LinkRun`).
-    private func linked(_ words: AttributedString) -> Text {
-        CardBadgeText.text(words, names: names, size: step ? SetupMetrics.text : chat ? ChatStyle.size : FleetStyle.bodySize)
+    /// Each link of the words is a piece of its own, which `linkPresses` gives the hand (`LinkRun`). In a chat's message,
+    /// the chat's book reads the words once (`ChatNames.words`), and `badges` are where its names stand, for their
+    /// drawing (`chatBadges`). **The text is the same in every row**: the pointer that comes onto the message or leaves
+    /// it makes none of its texts again (`ChatBadges`).
+    private func linked(_ block: Block) -> (text: Text, badges: [ChatBadgeMap.Entry], lead: CGFloat) {
+        let size = step ? SetupMetrics.text : chat ? ChatStyle.size : FleetStyle.bodySize
+        guard let chatNames else { return (CardBadgeText.text(block.formatted, names: names, size: size), [], 0) }
+        return ChatBadgeText.text(chatNames.words(block.formatted), links: block.links, size: size)
     }
 
     var body: some View {
@@ -123,23 +133,33 @@ struct MessageText: View, Equatable {
                 Group {
                 switch block.kind {
                 case .paragraph:
-                    linked(block.formatted).lineSpacing(lines).selectableWords().linkPresses(block.links, fold: fold, always: folded)
+                    let words = linked(block)
+                    ChatBadgeText.led(words.text, lead: words.lead).lineSpacing(lines).selectableWords()
+                        .chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
+                        .linkPresses(block.links, fold: fold, always: folded)
                 case .heading:
-                    linked(block.formatted)
+                    let words = linked(block)
+                    ChatBadgeText.led(words.text, lead: words.lead)
                         .font(step ? Font.system(size: SetupMetrics.text, weight: .semibold) : chat ? ChatStyle.heading : FormMetrics.title)
-                        .selectableWords().linkPresses(block.links, fold: fold, always: folded)
+                        .selectableWords().chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
+                        .linkPresses(block.links, fold: fold, always: folded)
                         .padding(.top, chat ? 0 : 3)
                 case .item:
                     // An item under another starts its mark where that item's words start: the mark's 12 and the 9
                     // after it, for each level.
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         Text(block.marker).selectableWords().frame(minWidth: 12, alignment: .trailing)
-                        linked(block.formatted).lineSpacing(lines).selectableWords().linkPresses(block.links, fold: fold, always: folded)
+                        let words = linked(block)
+                        ChatBadgeText.led(words.text, lead: words.lead).lineSpacing(lines).selectableWords()
+                            .chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
+                            .linkPresses(block.links, fold: fold, always: folded)
                     }.padding(.leading, 3 + CGFloat(block.level) * 21)
                 case .quote:
                     HStack(spacing: 10) {
                         Rectangle().fill(FleetStyle.muted.opacity(0.4)).frame(width: 2)
-                        linked(block.formatted).foregroundStyle(FleetStyle.muted).lineSpacing(lines).selectableWords()
+                        let words = linked(block)
+                        ChatBadgeText.led(words.text, lead: words.lead).foregroundStyle(FleetStyle.muted).lineSpacing(lines)
+                            .selectableWords().chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
                             .linkPresses(block.links, fold: fold, always: folded)
                     }
                 case .code: CodeBlock(text: block.text, font: chat ? ChatStyle.code : step && !script ? Self.stepCode : FormMetrics.code,
@@ -180,6 +200,8 @@ struct MessageText: View, Equatable {
         // an agent and a server in a card's words are badges, which a press opens (`CardBadges`); each block lays the
         // presses of its own links, where its words can be selected
         .cardBadges(names != nil, links: false)
+        // a chat's badges: one canvas behind them and one view with their presses, in the row under the pointer
+        .chatBadgeLayer(chatNames != nil, fold: fold)
         .font(step ? SetupMetrics.textFont : chat ? ChatStyle.font : FleetStyle.body)
             // A link's words in the link colour, which reads 4.5:1 and more (fix round 2): the accent drew them 3.4:1.
             .tint(FleetStyle.link)
@@ -208,7 +230,10 @@ private struct FoldedWords: ViewModifier {
     let folded: Bool
     @Environment(\.messageWordsSelectable) private var selectable
 
-    func body(content: Content) -> some View { content.environment(\.messageWordsSelectable, selectable && !folded) }
+    func body(content: Content) -> some View {
+        // a chat's badges keep their presses above the fold (`chatBadges`)
+        content.environment(\.messageWordsSelectable, selectable && !folded).environment(\.messageRowLive, selectable)
+    }
 }
 
 /// A text's selection where `messageWordsSelectable` says so. The modifier reads the value itself, so a message whose
@@ -411,6 +436,8 @@ struct OwnerBubble: View {
     /// of a chat that he only reads stands (`ReadBubble`): the filled bubble is always his own words. A task that an
     /// agent asked for opens with that agent's request so (`TaskRequest`).
     var theirs = false
+    /// The names that his words draw as badges, in an agent's chat (`MessageText.chatNames`).
+    var names: ChatNames? = nil
     @State private var expanded = false
     private var canCollapse: Bool { text.count > 420 || text.filter { $0 == "\n" }.count > 5 }
     /// A long message at rest: the height of its first six lines, the last of them fading into the bubble.
@@ -423,7 +450,7 @@ struct OwnerBubble: View {
             // **His words are drawn from their Markdown, as an agent's are** (3 November 2026: "chat messages dont
             // have any format... it is so plain"): his numbered list, his paragraphs and his bold read as the reply
             // under them reads, where the literal text ran them all together.
-            MessageText(text: text, chat: true, fold: folded ? Self.foldedHeight : nil).equatable()
+            MessageText(text: text, chat: true, chatNames: names, fold: folded ? Self.foldedHeight : nil).equatable()
                 .frame(maxHeight: folded ? Self.foldedHeight : nil, alignment: .top)
                 .mask {
                     VStack(spacing: 0) {
@@ -432,6 +459,11 @@ struct OwnerBubble: View {
                             LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: ChatStyle.line)
                         }
                     }
+                    // A badge's edge reaches over the first line and under the last (`CardBadge.bleed`): the mask cut
+                    // it. Not under a fold, which still ends where it fades.
+                    .padding(names == nil ? EdgeInsets() : EdgeInsets(top: -CardBadge.bleed, leading: -CardBadge.bleed,
+                                                                       bottom: folded ? 0 : -CardBadge.bleed,
+                                                                       trailing: -CardBadge.bleed))
                 }
             if canCollapse {
                 // The click reaches over and under the words (`IconMetrics.reach`); the bubble keeps its size.
@@ -544,6 +576,8 @@ struct AgentReply: View {
     /// In an agent's chat, this reply's place in its run: the pointer on any reply of the run shows the footer under its
     /// last one (`ReplyRunHover`). Nil in a task thread, where each reply has a hover of its own.
     var run: ReplyRunHover.Place?
+    /// The names that its words draw as badges, in an agent's chat (`MessageText.chatNames`).
+    var names: ChatNames? = nil
     @State private var hovered = false
     @State private var copied = false
 
@@ -555,7 +589,7 @@ struct AgentReply: View {
         // Only the reply that shows the footer reads its run's hover, so a change draws that reply again and no other.
         let shown = lastOfRun && (run?.shown ?? hovered)
         VStack(alignment: .leading, spacing: gap) {
-            MessageText(text: text, chat: true).equatable()
+            MessageText(text: text, chat: true, chatNames: names).equatable()
             if let detail { detail }
             if lastOfRun {
                 HStack(spacing: 10) {
