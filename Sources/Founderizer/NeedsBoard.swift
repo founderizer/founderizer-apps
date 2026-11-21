@@ -88,7 +88,10 @@ struct NeedsBoard: View {
         let now = state?.time ?? Date().timeIntervalSince1970
         let onWay = Dictionary(needs.compactMap { need in onItsWay(need).map { (need.id, $0) } }) { first, _ in first }
         // A request whose answer settles is still in the lane, at hand, until its moment ends (`hold`).
-        let lane = NeedsLane(needs, sent: Set(onWay.keys), held: settling.union(keySaves.filter(\.value.holds).keys), now: now)
+        // An answer that waits with Undo keeps its request at hand for its 5 seconds (his "Yes, Undo there too")
+        let waiting = Set(needs.filter { AnswerHolds.shared.held($0, in: store) != nil }.map(\.id))
+        let lane = NeedsLane(needs, sent: Set(onWay.keys), held: settling.union(keySaves.filter(\.value.holds).keys).union(waiting),
+                             now: now)
         let open = lane.open.map(\.id)
         // The request at hand, by the one rule of this pass and of what `settle` writes back (`NeedsLane.atHand`).
         let hand = NeedsLane.atHand(chosen: store.selectedNeed, order: order, open: open)
@@ -176,10 +179,14 @@ struct NeedsBoard: View {
         .accessibilityIdentifier("needs-board")
     }
 
-    /// His answer to `need` on its way: as the store says it (`WordsOnTheirWay`), else the one that the hub confirmed,
-    /// on this hub and generation, while the reading still has the request open.
+    /// His answer to `need` on its way: an answer that waits with Undo (`AnswerHolds`), as the store says it
+    /// (`WordsOnTheirWay`), else the one that the hub confirmed, on this hub and generation, while the reading still has
+    /// the request open. A held answer leaves the page as one on its way does, and its Undo is on its card in the chat.
     private func onItsWay(_ need: OwnerNeed) -> PendingRequest? {
+        if let held = AnswerHolds.shared.held(need, in: store) { return held.shown }
         if let request = store.answerOnItsWay(to: need, kept: sent[need.id]) { return request }
+        // the wait ended and its press runs: on its way already (`AnswerHolds.leaving`)
+        if let leaving = AnswerHolds.shared.leaving(need, in: store) { return leaving.shown }
         guard need.isOpen, let request = confirmed[need.id], request.hub == store.hub,
               request.database == store.state?.db else { return nil }
         return request
@@ -811,6 +818,7 @@ private struct NeedStep: View {
             if !keySave.showsForm(open: !ended) {
                 NeedAnswered(store: store, need: need, words: NeedRunAnswer.of(need, onItsWay: onItsWay)?.words ?? onItsWay?.text,
                              inWords: onItsWay?.answersInWords ?? need.answeredInWords, draws: settles,
+                             waits: AnswerHolds.shared.held(need, in: store) != nil,
                              symbol: NeedRunAnswer.of(need, onItsWay: onItsWay)?.symbol ?? "checkmark")
                     // His answer moves up from where he gave it, as the other answers go.
                     .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: answerTop)), removal: .opacity))
@@ -862,6 +870,9 @@ private struct NeedAnswered: View {
     var inWords = false
     /// He answered a moment ago, here: the check draws itself, white, and then goes quiet (`NeedsBoard.hold`).
     var draws = false
+    /// **His answer waits 5 seconds, with Undo at the end of its line and no check** (`AnswerHolds`; his "Yes, Undo
+    /// there too", 21 November 2026): the request stays at hand meanwhile, then leaves as before.
+    var waits = false
     /// The mark before his answer: a check, or a cross for a command that he ran and that ended with another exit
     /// status than 0 (owner feature `need_run`).
     var symbol = "checkmark"
@@ -889,7 +900,7 @@ private struct NeedAnswered: View {
         let answer = (words ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                if !inWords { check }
+                if !inWords && !waits { check }
                 if answer.isEmpty {
                     Text("Answered").font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text)
                 } else {
@@ -899,6 +910,16 @@ private struct NeedAnswered: View {
                         .font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text).tint(FleetStyle.link)
                         .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                         .cardBadges()
+                }
+                if waits {
+                    Spacer(minLength: 8)
+                    Button("Undo") {
+                        AnswerHolds.shared.undo(need, store: store)
+                        store.selectedNeed = need.id
+                    }
+                    .buttonStyle(.plain).font(SetupMetrics.textFont.weight(.medium)).foregroundStyle(FleetStyle.link)
+                    .pointerStyle(.link)
+                    .accessibilityIdentifier("need-undo-\(need.id)")
                 }
             }
             // the table's words, also for an answer of files alone, which says "Answered" once

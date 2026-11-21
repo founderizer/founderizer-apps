@@ -236,7 +236,11 @@ import SwiftUI
             if onScreen { panel.makeKeyAndOrderFront(nil) }
         }
 
-        func windowWillClose(_ notification: Notification) { NeedWindows.closed(key) }
+        func windowWillClose(_ notification: Notification) {
+            // an answer that waits with Undo goes at once: the window of its Undo closed (`AnswerHolds`)
+            AnswerHolds.shared.release(key.id)
+            NeedWindows.closed(key)
+        }
 
         func windowDidMove(_ notification: Notification) {
             if !placing, panel.isVisible, !closing { NeedWindows.keep(panel.frame) }

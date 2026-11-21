@@ -31,6 +31,9 @@ import Testing
                 features: features))
             store.destination = .needs
             store.selectedNeed = 9
+            // an answer waits with Undo first (`AnswerHolds`): a short wait here, so the press reaches its queue soon
+            AnswerHolds.shared.wait = .milliseconds(200)
+            defer { AnswerHolds.shared.wait = .seconds(5) }
             let window = ViewHost.window(store)
             defer { ViewHost.close(window) }
             let need = try #require(store.openNeeds.first)

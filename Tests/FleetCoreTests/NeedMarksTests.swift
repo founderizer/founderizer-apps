@@ -108,10 +108,11 @@ struct NeedMarksTests {
         let (waits, inWait) = try reading(answered, tasks: [task(41, "working", waitingOn: "manager")])
         let wait = try mark(inWait)
         #expect(waits.answeredMark(in: inWait) == .attention(symbol: wait.symbol, words: wait.words))
-        // his own pause is muted on its row: the check
+        // his own pause is gray on its row: its own gray mark (his "Gray pause, as the row")
         let paused: [String: Any] = ["id": 1, "task": 41, "kind": "pause", "state": "paused", "attempt": 1]
         let (rests, inPause) = try reading(answered, tasks: [task(41, "working")], holds: [paused])
-        #expect(rests.answeredMark(in: inPause) == .done(words: try mark(inPause).words))
+        let rest = try mark(inPause)
+        #expect(rests.answeredMark(in: inPause) == .paused(symbol: rest.symbol, words: rest.words))
         // a sign-in that the task waits for: orange, as its row
         let (signs, inSign) = try reading(answered, tasks: [task(41, "auth-required")])
         let sign = try mark(inSign)

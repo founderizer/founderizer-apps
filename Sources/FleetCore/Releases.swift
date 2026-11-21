@@ -26,6 +26,9 @@ public struct ReleaseRow: Codable, Equatable, Identifiable, Sendable {
     public let finished_at: Double?
     public let automatic: Bool
     public let applied: Bool
+    /// Why its run did not end done (owner API 1.293): one code of the hub's fixed list (`releases.CAUSES`), such as
+    /// `no_ipv4_route`, `memory` or `check`, or nil where the hub could not read one, and from a hub before that version.
+    public let cause: String?
 
     public var isRunning: Bool { state == "updating" }
     /// A run a person must act on: the release was not taken and the reason is not a hold.
@@ -245,10 +248,21 @@ public struct ReleaseState: Codable, Equatable, Sendable {
                                                                 : String(l10n: "It waits until no task runs."),
                          value: idle ? "" : waits, take: ready, waiting: !idle)
         }
+        // **The newest release's run says its cause** (owner API 1.293), in the app's own words, by its kind: a cause
+        // that the owner can act on is drawn in orange with "Did not finish", as a failed fetch was before; a release
+        // that did not pass its checks is no step of the owner's, so its value is the release the fleet runs. A
+        // cause of the fleet's own (a pressed Update that raced a turn, a developer's checkout) keeps the row as it was.
+        if let newest = releases.first, newest.state == "kept" || newest.state == "rolled_back",
+           let said = causeLine(newest) {
+            return Stand(says: said.says, value: said.warn ? String(l10n: "Did not finish")
+                                                           : current?.version ?? String(l10n: "Did not finish"),
+                         warn: said.warn)
+        }
         // **A newest release that this fleet's server could not download says so** (the owner's test fleet, 21 November
         // 2026): the server had no route to github.com, every release from 2026.11.714 to .732 stopped `kept` at the
         // fetch, and this row said only "Unknown" for days, or "runs the newest release" with an older one in view. In
         // the app's own words: the hub's line carries git's address and port, in English. A kept row is never `current`.
+        // A hub that gives no cause, and a fleet that takes no release by itself, keep this line.
         if let newest = releases.first, newest.state == "kept", newest.step == "fetch" {
             return Stand(says: String(l10n: "Your fleet could not download release \(newest.version): its server cannot reach the address it takes releases from."),
                          value: String(l10n: "Did not finish"), warn: true)
@@ -267,6 +281,28 @@ public struct ReleaseState: Codable, Equatable, Sendable {
                          working: true)
         }
         return stand
+    }
+
+    /// The row's sentence for the cause of a run that did not end done, and whether it is one to act on, by the kind of
+    /// that cause (the hub's `releases.KINDS`); nil for a cause of the fleet's own, for none, and for a code this app
+    /// does not know. A network cause says that the fleet tries again only where the fleet takes releases by itself:
+    /// the hub probes the address at each poll, and takes the release when it answers. It is said only of a run kept at
+    /// its fetch: a network cause at the push is the fleet's own repository, which the probe does not ask, and such a
+    /// release was downloaded.
+    private func causeLine(_ row: ReleaseRow) -> (says: String, warn: Bool)? {
+        switch row.cause {
+        case "no_ipv4_route", "dns", "connect", "tls", "http", "timeout":
+            guard automatic, row.state == "kept", row.step == "fetch" else { return nil }
+            return (String(l10n: "Your fleet could not download release \(row.version) because its server cannot reach the address it takes releases from; it tries again by itself and takes the release when its server reaches that address again."), true)
+        case "memory":
+            return (String(l10n: "Your fleet's server has too little memory for the checks of release \(row.version), so your fleet did not take it."), true)
+        case "disk":
+            return (String(l10n: "Your fleet's server has too little free disk space for release \(row.version), so your fleet did not take it."), true)
+        case "check", "conflict":
+            return (String(l10n: "Release \(row.version) did not pass its checks on your fleet, so your fleet stays on the release it runs."), false)
+        default:
+            return nil
+        }
     }
 
     /// Which of our releases this fleet runs, in the owner's own words. The revision under it is this app's

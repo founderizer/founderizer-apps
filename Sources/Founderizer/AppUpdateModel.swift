@@ -145,7 +145,9 @@ final class AppAutoUpdate {
               AppUpdatePolicy.shouldInstall(automatic: automatic, published: published, offered: true,
                                             awaySince: awaySince,
                                             // a card in its own window: the restart would take it away (`NeedWindows.anyOpen`)
-                                            busy: store.sending || store.pending != nil || setup || NeedWindows.anyOpen,
+                                            // and an answer that waits with Undo (`AnswerHolds`)
+                                            busy: store.sending || store.pending != nil || setup || NeedWindows.anyOpen
+                                                || AnswerHolds.shared.busy,
                                             now: now) else { return }
         working = true
         Task { await install(build) }

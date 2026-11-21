@@ -318,6 +318,71 @@ struct ReleaseTests {
                 + "dirección de la que obtiene las versiones.")
     }
 
+    /// A release whose newest run stopped at `step` with the hub's `cause` (owner API 1.293).
+    private static func stopped(_ id: Int, _ version: String, _ state: String, step: String, cause: String) -> String {
+        release(id, version, state).replacingOccurrences(of: "\"step\": null", with: "\"step\": \"\(step)\"")
+            .replacingOccurrences(of: "\"applied\": false", with: "\"applied\": false, \"cause\": \"\(cause)\"")
+    }
+
+    /// **The row says the cause of the newest run, by its kind** (the reliability plan of 21 November 2026, W20 part 1):
+    /// a network cause says that the fleet tries again by itself and takes the release when its server reaches the
+    /// address again, `memory` that the server has too little memory for the checks, both in orange with "Did not
+    /// finish"; a release that failed its checks is said as that, never as an address the server cannot reach, with
+    /// the release the fleet runs at the right. A fleet that takes no release by itself, and a hub that gives no cause,
+    /// keep the line of before.
+    @Test func theRowSaysTheCauseOfTheNewestRun() throws {
+        let offline = Self.stopped(732, "2026.11.732", "kept", step: "fetch", cause: "no_ipv4_route")
+        let unreachable = try state(["AUTO": "true", "ROWS": offline])
+        let network = unreachable.stand
+        #expect(network.says == "Your fleet could not download release 2026.11.732 because its server cannot reach "
+                + "the address it takes releases from; it tries again by itself and takes the release when its server "
+                + "reaches that address again.")
+        #expect(network.warn && network.value == "Did not finish" && network.take == nil)
+        #expect(try state(["AUTO": "false", "ROWS": offline]).stand.says == Self.unreached)
+        #expect(try state(["AUTO": "true", "ROWS": Self.unfetched(732, "2026.11.732")]).stand.says == Self.unreached)
+        let short = try state(["AUTO": "true", "ROWS": Self.stopped(733, "2026.11.733", "kept", step: "room",
+                                                                    cause: "memory")])
+        let memory = short.stand
+        #expect(memory.says == "Your fleet's server has too little memory for the checks of release 2026.11.733, so "
+                + "your fleet did not take it.")
+        #expect(memory.warn && memory.value == "Did not finish")
+        let failed = try state(["AUTO": "true", "ROWS": [Self.stopped(734, "2026.11.734", "rolled_back", step: "selftest",
+                                                                      cause: "check"),
+                                                         Self.release(713, "2026.11.713", "done")].joined(separator: ",")]).stand
+        #expect(failed.says == "Release 2026.11.734 did not pass its checks on your fleet, so your fleet stays on the "
+                + "release it runs.")
+        #expect(!failed.warn && failed.value == "2026.11.713")
+        let raced = try state(["AUTO": "true", "ROWS": Self.stopped(735, "2026.11.735", "kept", step: "hold",
+                                                                    cause: "busy")]).stand
+        #expect(!raced.warn && raced.value == "Unknown")
+        // A network cause at the push is the fleet's own repository: the release was downloaded, and the row says
+        // nothing of an address that the server cannot reach.
+        let pushed = try state(["AUTO": "true", "ROWS": [Self.stopped(736, "2026.11.736", "rolled_back", step: "push",
+                                                                      cause: "http"),
+                                                         Self.release(713, "2026.11.713", "done")].joined(separator: ",")]).stand
+        #expect(!pushed.says.contains("download") && !pushed.warn && pushed.value == "2026.11.713")
+        let full = try state(["AUTO": "true", "ROWS": Self.stopped(737, "2026.11.737", "rolled_back", step: "verify",
+                                                                   cause: "disk")])
+        #expect(full.stand.says == "Your fleet's server has too little free disk space for release 2026.11.737, so "
+                + "your fleet did not take it.")
+        #expect(full.stand.warn && full.stand.value == "Did not finish")
+        let failing = try state(["AUTO": "true", "ROWS": Self.stopped(734, "2026.11.734", "rolled_back", step: "selftest",
+                                                                      cause: "check")])
+        let spanish = try SpanishTable.run {
+            [unreachable.stand.says, short.stand.says, full.stand.says, failing.stand.says]
+        }
+        #expect(spanish == [
+            "Tu equipo no pudo descargar la versión 2026.11.732 porque su servidor no puede conectar con la dirección "
+                + "de la que obtiene las versiones; lo vuelve a intentar por sí solo e instalará la versión cuando su "
+                + "servidor vuelva a conectar con esa dirección.",
+            "El servidor de tu equipo tiene muy poca memoria para las comprobaciones de la versión 2026.11.733, así "
+                + "que tu equipo no la instaló.",
+            "El servidor de tu equipo tiene muy poco espacio libre en disco para la versión 2026.11.737, así que tu "
+                + "equipo no la instaló.",
+            "La versión 2026.11.734 no pasó sus comprobaciones en tu equipo, así que tu equipo sigue con la versión "
+                + "que usa."])
+    }
+
     /// **A run that stopped for a moment, which the sweep takes again, is no fault on the row** (the reviews of 21
     /// November 2026): a `kept` row at `hold`, from a pressed Update that raced a turn, names task codes, and a
     /// `rolled_back` row at `push` passed every check; drawn in orange they would show codes or false words.

@@ -183,4 +183,22 @@ final class FleetAppDelegate: NSObject, NSApplicationDelegate {
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationWillTerminate(_ notification: Notification) { ScreenSharingSession.shared.shutdown() }
+
+    /// **An answer that waits with Undo goes before the app ends** (`AnswerHolds`): a quit and an update's restart send
+    /// it at once, and the app ends once it is in the outbox, or once it can go no further in this run (`settle`).
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Self.ends(after: AnswerHolds.shared) { sender.reply(toApplicationShouldTerminate: true) }
+    }
+
+    /// The quit's rule, with its reply to AppKit given (a test gives its own): at once with nothing held, else once the
+    /// held answers went.
+    static func ends(after holds: AnswerHolds, reply: @escaping @MainActor () -> Void) -> NSApplication.TerminateReply {
+        guard holds.busy else { return .terminateNow }
+        holds.releaseAll()
+        Task { @MainActor in
+            await holds.settle()
+            reply()
+        }
+        return .terminateLater
+    }
 }

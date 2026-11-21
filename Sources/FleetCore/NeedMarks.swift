@@ -7,8 +7,9 @@ import Foundation
 /// record proves that work runs, the red mark of work that ended with no success, and **the orange mark of a task that
 /// needs him**: his "Orange mark" of 21 November 2026, in the record of "Card reply status" ("The same orange mark as
 /// the task's own row, which means 'needs you' everywhere in the app"), so where the task's row is orange the card is
-/// orange, with the row's own symbol and words, and the two never disagree. A task whose row is muted (queued, parked,
-/// his own pause) is the check with its state word (the area Needs-you and the manager, 21 November 2026). It moves only on such a record,
+/// orange, with the row's own symbol and words, and the two never disagree. A task whose row is muted (queued, parked)
+/// is the check with its state word (the area Needs-you and the manager, 21 November 2026), and **his own pause is the
+/// row's pause mark, gray** (his "Gray pause, as the row (Recommended)", 21 November 2026). It moves only on such a record,
 /// and it ends when that record ends. Its words are behind the mark only: on hover, and for VoiceOver.
 public enum AnsweredMark: Sendable, Equatable {
     /// Done, or nothing runs that the hub knows: the check, as before. For a task that waits, its state word.
@@ -20,6 +21,8 @@ public enum AnsweredMark: Sendable, Equatable {
     case failed(words: String)
     /// The task's row is orange: its own mark (`symbol`), orange, with the row's words.
     case attention(symbol: String, words: String)
+    /// His own pause holds the task: the row's own mark (`symbol`), gray as the row draws it, with the row's words.
+    case paused(symbol: String, words: String)
 
     /// `ui_features` of a hub that gives an item's `team_state`, `team_reason` and `task`.
     public static let feature = "need_marks"
@@ -27,7 +30,8 @@ public enum AnsweredMark: Sendable, Equatable {
     /// What the pointer and VoiceOver read for the mark.
     public var words: String {
         switch self {
-        case .done(let words), .working(let words, _, _), .failed(let words), .attention(_, let words): words
+        case .done(let words), .working(let words, _, _), .failed(let words), .attention(_, let words),
+             .paused(_, let words): words
         }
     }
 }
@@ -65,6 +69,10 @@ extension OwnerNeed {
         }
         if mark.inWork {
             return .working(words: "\(found.owner.agentLabel) · \(found.title)", agent: found.owner, title: found.title)
+        }
+        // his own pause, which the hub confirmed: the row's mark of it, gray
+        if state.holds?.contains(where: { $0.task == found.id && $0.kind == "pause" && $0.state == "paused" }) == true {
+            return .paused(symbol: mark.symbol, words: mark.words)
         }
         return .done(words: mark.words)
     }

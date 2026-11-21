@@ -715,6 +715,8 @@ struct AnsweredMarkView: View {
         case .failed: ("exclamationmark.circle.fill", .failed)
         // the task's own mark, as its row draws it (`FleetTask.mark`, which the phone's rows draw too), in orange
         case .attention(let symbol, _): (symbol, .attention)
+        // his own pause: the row's mark of it, in the line's own gray
+        case .paused(let symbol, _): (symbol, nil)
         }
     }
 

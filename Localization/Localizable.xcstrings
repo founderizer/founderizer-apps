@@ -15060,6 +15060,16 @@
         }
       }
     },
+    "Open the task" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir la tarea"
+          }
+        }
+      }
+    },
     "Open the view to watch this task." : {
       "localizations" : {
         "es" : {
@@ -16716,6 +16726,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rechazada"
+          }
+        }
+      }
+    },
+    "Release %@ did not pass its checks on your fleet, so your fleet stays on the release it runs." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La versión %@ no pasó sus comprobaciones en tu equipo, así que tu equipo sigue con la versión que usa."
           }
         }
       }
@@ -25830,6 +25850,16 @@
         }
       }
     },
+    "Undo" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deshacer"
+          }
+        }
+      }
+    },
     "Unexpected HTTP response." : {
       "localizations" : {
         "es" : {
@@ -28200,6 +28230,16 @@
         }
       }
     },
+    "Your fleet could not download release %@ because its server cannot reach the address it takes releases from; it tries again by itself and takes the release when its server reaches that address again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu equipo no pudo descargar la versión %@ porque su servidor no puede conectar con la dirección de la que obtiene las versiones; lo vuelve a intentar por sí solo e instalará la versión cuando su servidor vuelva a conectar con esa dirección."
+          }
+        }
+      }
+    },
     "Your fleet could not download release %@: its server cannot reach the address it takes releases from." : {
       "localizations" : {
         "es" : {
@@ -28286,6 +28326,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El servidor de tu equipo"
+          }
+        }
+      }
+    },
+    "Your fleet's server has too little free disk space for release %@, so your fleet did not take it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El servidor de tu equipo tiene muy poco espacio libre en disco para la versión %@, así que tu equipo no la instaló."
+          }
+        }
+      }
+    },
+    "Your fleet's server has too little memory for the checks of release %@, so your fleet did not take it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El servidor de tu equipo tiene muy poca memoria para las comprobaciones de la versión %@, así que tu equipo no la instaló."
           }
         }
       }

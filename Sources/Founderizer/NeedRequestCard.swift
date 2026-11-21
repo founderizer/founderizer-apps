@@ -270,7 +270,7 @@ struct NeedAnswerBox: View {
                 guard !(onStep && SecondClick.isNow) else { return }
                 let chosen = Array(ticked)
                 answered?(false, 0)
-                Task { await store.answer(need, choices: chosen) }
+                holdTicked(chosen)
             }.buttonStyle(FleetPrimaryButtonStyle()).disabled(ticked.isEmpty || !store.canWrite)
                 .accessibilityIdentifier("need-send-ticked-\(need.id)")
             // On a step it stands in the middle, as a step's one button does.
@@ -351,7 +351,7 @@ struct NeedAnswerBox: View {
                     guard !(onStep && SecondClick.isNow) else { return }
                     marked = nil
                     answered?(false, tops[index] ?? 0)
-                    AnswerWaits.shared.press(need, choice: index, store: store)
+                    holdOption(index)
                 } label: {
                     row(option, sendingSince: sending ? waiting?.since : nil).frame(maxHeight: .infinity)
                 }
@@ -449,7 +449,7 @@ struct NeedAnswerBox: View {
                             guard !(onStep && SecondClick.isNow) else { return }
                             marked = nil
                             answered?(false, tops[index] ?? 0)
-                            AnswerWaits.shared.press(need, choice: index, store: store)
+                            holdOption(index)
                         } label: {
                             row(option, sendingSince: sending ? waiting?.since : nil, gives: gives)
                         }
@@ -542,7 +542,12 @@ struct NeedAnswerBox: View {
         .background { if let keys { StepKeysBox(keys: keys, need: need.id, take: key) } }
         .task { if takesCursor { focused = true } }
         // owner feature need_clarify: his unsent message of this card, kept while he looked at another one
-        .onAppear { restoreClarifyDraft() }
+        .onAppear {
+            restoreClarifyDraft()
+            // the options that he had ticked, on a card whose answer he took back (`AnswerHolds.undo`)
+            let back = AnswerHolds.shared.restoredTicks(of: need.id)
+            if !back.isEmpty { ticked = back }
+        }
         // in the card's own window only: the window's keys wait for the field of Needs clarification (`holdWindowKeys`)
         .modifier(ClarifyWindowKeysPlace(keys: cardWindow == nil ? nil : windowKeys))
     }
@@ -589,11 +594,11 @@ struct NeedAnswerBox: View {
                 guard store.canWrite else { return true }
                 let chosen = Array(ticked)
                 answered?(false, 0)
-                Task { await store.answer(need, choices: chosen) }
+                holdTicked(chosen)
             } else if let option = marked, choices.indices.contains(option) {
                 marked = nil
                 answered?(false, tops[option] ?? 0)
-                AnswerWaits.shared.press(need, choice: option, store: store)
+                holdOption(option)
             } else {
                 focused = true
             }
@@ -626,10 +631,12 @@ struct NeedAnswerBox: View {
     /// The press that waits on this request, or nil.
     func press(of need: OwnerNeed) -> WaitingPresses.Press? { presses.press(of: need.id) }
 
-    func press(_ need: OwnerNeed, choice: Int, store: FleetStore) {
-        guard presses.press(choice, need: need.id, at: .now) else { return }
+    /// The task of the press, which a held answer awaits (`AnswerHolds`); nil where the request has a press already.
+    @discardableResult
+    func press(_ need: OwnerNeed, choice: Int, store: FleetStore) -> Task<Void, Never>? {
+        guard presses.press(choice, need: need.id, at: .now) else { return nil }
         let hub = store.hub, database = store.state?.db
-        Task { @MainActor in
+        return Task { @MainActor in
             // Its answer went, or it was dropped: the option's "Sending…" goes with it.
             defer { presses.end(need.id) }
             // The store's own pace for a write that waits for it (`FleetStore.save`).
@@ -694,7 +701,42 @@ extension NeedAnswerBox {
             return
         }
         answered?(true, tops[-1] ?? 0)
-        Task { await store.send(needID: need.id) }
+        guard let database = store.state?.db else { return }
+        let store = store, id = need.id, hub = store.hub
+        let shown = PendingRequest(hub: hub, database: database, client: store.installation, needID: id,
+                                   text: text.wrappedValue)
+        AnswerHolds.shared.hold(need, store: store, shown: shown) {
+            // **It waits while the hub cannot take it**, as a press does (review): another answer can be on its way
+            // when the wait ends, and a send then went nowhere
+            guard await store.writable(), store.hub == hub, store.state?.db == database else { return }
+            await store.send(needID: id)
+        }
+    }
+
+    /// **His press of an option waits 5 seconds, with Undo on the folded card** (`AnswerHolds`), and then goes as a
+    /// press went before: through `AnswerWaits`, with the signature of a door's call and the grant of a Give.
+    private func holdOption(_ index: Int) {
+        guard need.choices.indices.contains(index), let database = store.state?.db else { return }
+        let store = store, need = need
+        let shown = PendingRequest(hub: store.hub, database: database, client: store.installation, needID: need.id,
+                                   choice: index, text: need.choices[index])
+        AnswerHolds.shared.hold(need, store: store, shown: shown) {
+            await AnswerWaits.shared.press(need, choice: index, store: store)?.value
+        }
+    }
+
+    /// The options that he ticked wait as a press does (`holdOption`), and Undo ticks them again.
+    private func holdTicked(_ chosen: [Int]) {
+        let ticked = Array(Set(chosen)).sorted()
+        guard !ticked.isEmpty, ticked.allSatisfy(need.choices.indices.contains), let database = store.state?.db else { return }
+        let store = store, need = need, hub = store.hub
+        let shown = PendingRequest(hub: hub, database: database, client: store.installation, needID: need.id,
+                                   choices: ticked, text: ticked.map { need.choices[$0] }.joined(separator: "; "))
+        AnswerHolds.shared.hold(need, store: store, shown: shown, ticked: Set(ticked)) {
+            // it waits while the hub cannot take it, as a press does (`holdOption`)
+            guard await store.writable(), store.hub == hub, store.state?.db == database else { return }
+            await store.answer(need, choices: ticked)
+        }
     }
 
     /// One of the app's three replies, pressed: its words are the answer, with the files that wait in the box, and
@@ -704,12 +746,16 @@ extension NeedAnswerBox {
     /// words only stood in the box. Meanwhile they stand there, and they stay there for Return or Send when the press
     /// cannot go: a file still going up, another hub or hub generation, or words that he changed while it waited. The
     /// wait ends when the request leaves, as `AnswerWaits`' does: no clock ends it.
+    /// **It waits 5 seconds first, with Undo** (`AnswerHolds`), which puts his own words back in the box.
     private func sendQuickReply(_ reply: String, from index: Int) {
+        let draft = text.wrappedValue
         text.wrappedValue = reply
         guard !(composer.map(store.filesAreWaiting) ?? false) else { focused = true; return }
         answered?(false, tops[index] ?? 0)
         let store = store, id = need.id, hub = store.hub, database = store.state?.db
-        Task { @MainActor in
+        guard let database else { return }
+        let shown = PendingRequest(hub: hub, database: database, client: store.installation, needID: id, text: reply)
+        AnswerHolds.shared.hold(need, store: store, shown: shown, draft: draft) { @MainActor in
             // The store's own pace for a write that waits for it (`FleetStore.writable`).
             while !store.canWrite {
                 guard store.hub == hub, store.state?.db == database, store.storageError == nil,
@@ -1064,7 +1110,34 @@ struct NeedRequestCard: View {
     /// **His answer on its way: the card folds in the frame he sends it, with his words** (fix round 3, item 11), as it
     /// folds once the reading says it is answered. It folded only with that reading, a round trip after the hub's
     /// receipt.
-    private var onItsWay: PendingRequest? { store.answerOnItsWay(to: need, kept: sent) }
+    private var onItsWay: PendingRequest? {
+        holding?.shown ?? store.answerOnItsWay(to: need, kept: sent) ?? AnswerHolds.shared.leaving(need, in: store)?.shown
+    }
+    /// **His answer waits 5 seconds, with Undo** (`AnswerHolds`): the card stands folded as with an answer on its way,
+    /// and Undo stands where its mark will stand.
+    private var holding: AnswerHolds.Held? { AnswerHolds.shared.held(need, in: store) }
+    /// The task that his answer let go on, where the reading has it (owner feature `need_marks`).
+    private var answeredTask: FleetTask? { need.task.flatMap { id in store.state?.tasks.first { $0.id == id } } }
+    /// **The turning mark, the orange mark and the gray mark of his pause open the task** (his "Both (Recommended)",
+    /// "Yes, open task" and "Gray pause, as the row", 21 November 2026): its panel, with Resume, Stop and the guidance
+    /// box. The check and the red mark open nothing.
+    private var markOpensTask: Bool {
+        guard holding == nil, onItsWay == nil, answeredTask != nil else { return false }
+        switch need.answeredMark(in: store.state) {
+        case .working(_, let agent?, _): return !agent.isEmpty
+        case .attention, .paused: return true
+        default: return false
+        }
+    }
+    /// **Pause at the end of the answer line while the task works** (his "Both (Recommended)"): the Pause of the task's
+    /// panel (`TaskHoldControls`), on a task that the hub can pause and that no hold holds. After it the mark is the
+    /// orange paused mark of the task's row, and Pause goes.
+    private var pausable: FleetTask? {
+        guard markOpensTask, case .working = need.answeredMark(in: store.state), let task = answeredTask,
+              TaskHoldControls.shows(task, in: store.state),
+              !(store.state?.holds?.contains { $0.task == task.id && $0.state != "released" } ?? false) else { return nil }
+        return task
+    }
 
     /// What it needs from him. A secret request's is the hub's one sentence about its form, which is right below it, and
     /// an item that carries its grant has none: Give is its step (`OwnerNeed.give`).
@@ -1127,6 +1200,11 @@ struct NeedRequestCard: View {
                         .accessibilityLabel(Text("\(need.shownTitle), answered: \(answerWords)"))
                         .accessibilityValue(foldedMarkWords)
                         .accessibilityHint("Shows the whole request")
+                        .accessibilityActions {
+                            if holding != nil { Button("Undo") { undo() } }
+                            if pausable != nil { Button("Pause") { pause() } }
+                            if markOpensTask { Button("Open the task") { openTask() } }
+                        }
                         .accessibilityIdentifier("need-folded-\(need.id)")
                     if !files.isEmpty {
                         MessageFilesView(store: store, files: files, alignment: .leading)
@@ -1239,19 +1317,67 @@ struct NeedRequestCard: View {
                         Text(ran.words).lineLimit(1)
                     }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                 } else if !written.isEmpty {
-                    FoldedWords(words: written, names: names)
+                    HStack(alignment: .lastTextBaseline, spacing: 8) {
+                        FoldedWords(words: written, names: names).frame(maxWidth: .infinity, alignment: .leading)
+                        lineEnd.font(FormMetrics.detail)
+                    }
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         // owner feature need_marks: what came of his answer, in the check's place (`AnsweredMarkView`)
-                        if !inWords { AnsweredMarkView(mark: onItsWay == nil ? need.answeredMark(in: store.state) : nil,
-                                                       moves: store.marksMove, names: names) }
+                        if !inWords && holding == nil {
+                            AnsweredMarkView(mark: onItsWay == nil ? need.answeredMark(in: store.state) : nil,
+                                             moves: store.marksMove, names: names,
+                                             opens: markOpensTask ? { openTask() } : nil)
+                        }
                         CardBadgeText.text(MessageBlock.inline(answerWords), names: names, size: FormMetrics.detailSize)
                             .lineLimit(1).tint(FleetStyle.link)
+                        lineEnd
                     }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                         .cardBadges()
                 }
             }
         }
+    }
+
+    /// **The end of the folded card's answer line**: Undo while his answer waits (his "Yes, 5 seconds": "Undo at the end
+    /// of its answer line", with no words beside it and no count), else Pause while the task works. Each is its own
+    /// press inside the folded card's, which opens nothing.
+    @ViewBuilder private var lineEnd: some View {
+        if holding != nil {
+            Spacer(minLength: 8)
+            Button("Undo") { undo() }
+                .buttonStyle(.plain).font(FormMetrics.detail.weight(.medium)).foregroundStyle(FleetStyle.link)
+                .pointerStyle(.link)
+                .accessibilityIdentifier("need-undo-\(need.id)")
+        } else if pausable != nil {
+            Spacer(minLength: 8)
+            // the task panel's Pause, at the size of the line, so the card keeps its height when it comes and goes, and
+            // its press reaches nothing of the title's line over it (review)
+            IconButton(symbol: "pause", words: String(l10n: "Pause"), size: 10, side: 20, tint: FleetStyle.text) { pause() }
+                .disabled(!store.canWrite)
+                .accessibilityIdentifier("need-pause-\(need.id)")
+        }
+    }
+
+    /// Undo: his answer goes nowhere, and the card opens as it was (`AnswerHolds.undo`); on Needs you it comes to hand
+    /// again.
+    private func undo() {
+        AnswerHolds.shared.undo(need, store: store)
+        if store.destination == .needs { store.selectedNeed = need.id }
+    }
+
+    /// The task's Pause, as its panel sends it (`TaskHoldControls`).
+    private func pause() {
+        guard let task = pausable else { return }
+        Task { await store.command(.control(task: task.id, action: .pause)) }
+    }
+
+    /// The task opens as a task opens from a link of the app (`showLinked`); from the card's own window the main window
+    /// comes to the front with it (`NeedWindowLink.showMainWindow`).
+    private func openTask() {
+        guard let task = answeredTask else { return }
+        store.showLinked(.task(task.id))
+        cardWindow?.showMainWindow()
     }
 
     /// **A key request's card while his save runs, and folded once a saved key answered it**: its title and the mark at

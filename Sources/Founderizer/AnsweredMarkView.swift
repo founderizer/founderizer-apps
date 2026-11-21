@@ -24,7 +24,12 @@ struct AnsweredMarkView: View {
     var weight: Font.Weight = .semibold
     /// The names that the tag draws as badges: the card's own (`FleetStore.cardNames(for:)`).
     var names: CardNames?
+    /// **A press of the mark opens its task** (his "Both (Recommended)" and "Yes, open task", 21 November 2026): the
+    /// turning mark and the orange mark, with the hand and a soft fill under the pointer, his sign of a press. nil: the
+    /// mark is no press.
+    var opens: (() -> Void)? = nil
     @State private var hovering = false
+    @State private var pressHover = false
     @State private var shown = false
     @Environment(\.glyphTeam) private var team
     @Environment(\.glyphPresence) private var presences
@@ -32,7 +37,7 @@ struct AnsweredMarkView: View {
 
     var body: some View {
         if let mark, case .working(_, let agent?, _) = mark, !agent.isEmpty {
-            look(mark)
+            pressable(look(mark))
                 .background(HoverTagAnchor(shown: shown && !mark.words.isEmpty) { AnyView(tag(mark)) })
                 .onHover { inside in
                     hovering = inside
@@ -48,13 +53,32 @@ struct AnsweredMarkView: View {
                 }
                 .onDisappear { hovering = false; shown = false }
         } else if let mark {
-            look(mark).help(mark.words)
+            pressable(look(mark)).help(mark.words)
         } else {
             check
         }
     }
 
     private var check: some View { Image(systemName: "checkmark").font(IconMetrics.symbol(size, weight: weight)) }
+
+    /// The mark, as a press of its own where it opens its task: inside the folded card's press, which it takes the
+    /// click from.
+    @ViewBuilder private func pressable(_ content: some View) -> some View {
+        if let opens {
+            Button(action: opens) {
+                content.padding(3)
+                    .background(Circle().fill(FleetStyle.hairline(pressHover ? 0.16 : 0)))
+                    .padding(-3)
+                    .contentShape(Circle().inset(by: -3))
+            }
+            .buttonStyle(.plain)
+            .pointerStyle(.link)
+            .onHover { pressHover = $0 }
+            .accessibilityIdentifier("answered-mark-opens")
+        } else {
+            content
+        }
+    }
 
     @ViewBuilder private func look(_ mark: AnsweredMark) -> some View {
         switch mark {
@@ -65,6 +89,9 @@ struct AnsweredMarkView: View {
                 .foregroundStyle(FleetTask.MarkTint.failed.color)
         case .attention(let symbol, _):
             Image(systemName: symbol).font(IconMetrics.symbol(size)).foregroundStyle(FleetTask.MarkTint.attention.color)
+        case .paused(let symbol, _):
+            // his own pause, gray as the task's row draws it (his "Gray pause, as the row")
+            Image(systemName: symbol).font(IconMetrics.symbol(size))
         }
     }
 
