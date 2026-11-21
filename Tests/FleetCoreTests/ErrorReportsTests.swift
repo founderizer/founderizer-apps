@@ -577,7 +577,8 @@ struct ErrorReportsTests {
     }
 
     @Test func thePrivacyPageIsInTheLanguageOfTheAppsWords() throws {
-        let english = "https://founderizer.com/privacy#error-reports", spanish = "https://founderizer.com/es/privacy#error-reports"
+        let english = "https://platform.founderizer.com/privacy#error-reports"
+        let spanish = "https://platform.founderizer.com/es/privacy#error-reports"
         for language in ["es", "es-MX", "es_ES"] { #expect(ErrorReport.privacy(language: language).absoluteString == spanish) }
         for other in ["en", "en-GB", "et", "est", nil] { #expect(ErrorReport.privacy(language: other).absoluteString == english) }
         // The page of the words that the app shows: English here, Spanish with the Spanish table.

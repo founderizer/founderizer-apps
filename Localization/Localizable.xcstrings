@@ -9600,12 +9600,12 @@
         }
       }
     },
-    "Get it at founderizer.com/download." : {
+    "Get it at platform.founderizer.com/download." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Descárgalo en founderizer.com/download."
+            "value" : "Descárgalo en platform.founderizer.com/download."
           }
         }
       }

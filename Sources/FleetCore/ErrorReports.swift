@@ -382,8 +382,8 @@ extension ErrorReport {
     /// (`AgentPrompt.prompt(language:)`), English otherwise.
     public static func privacy(language: String?) -> URL {
         let spanish = language.map { $0 == "es" || $0.hasPrefix("es-") || $0.hasPrefix("es_") } == true
-        return URL(string: spanish ? "https://founderizer.com/es/privacy#error-reports"
-                                   : "https://founderizer.com/privacy#error-reports")!
+        return URL(string: spanish ? "https://platform.founderizer.com/es/privacy#error-reports"
+                                   : "https://platform.founderizer.com/privacy#error-reports")!
     }
 
     /// The privacy page for the words that the app shows now (`Localized.bundle`).

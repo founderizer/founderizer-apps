@@ -9,7 +9,7 @@ struct UpdateAskTests {
     private static func fleet(rows: [String], idle: Bool = true, automatic: Bool = true, tasks: String = "[]") throws -> ReleaseState {
         let body = """
         {"db": "d", "time": 1792267877, "revision": "aac4cb2196e5b72f1a5295f085780acb1c08cbc1", "branch": "config",
-         "channel": "https://founderizer.com", "upstream": "https://github.com/founderizer/founderizer.git",
+         "channel": "https://platform.founderizer.com", "upstream": "https://github.com/founderizer/founderizer.git",
          "automatic": \(automatic), "have_release_key": true, "idle": \(idle), "open_tasks": \(tasks), "running": false,
          "last_check": {"at": 1792267272, "says": null, "status": 200}, "releases": [\(rows.joined(separator: ","))]}
         """
@@ -29,7 +29,8 @@ struct UpdateAskTests {
     }
 
     private static let running = AppVersion(name: "0.1.258", build: 259)
-    private static let build = AppManifest(version: "0.1.259", build: 260, url: "https://founderizer.com/a.dmg",
+    private static let build = AppManifest(version: "0.1.259", build: 260,
+                                           url: "https://platform.founderizer.com/a.dmg",
                                            sha256: String(repeating: "a", count: 64), size: 1, minimumSystem: nil,
                                            notes: nil, hold: false, signature: "s")
     private static let offered = AppUpdateReading(status: 200, says: "Update available: 0.1.259", manifest: build,

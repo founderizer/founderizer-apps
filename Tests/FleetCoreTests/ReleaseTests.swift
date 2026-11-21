@@ -17,7 +17,8 @@ struct ReleaseTests {
     private func state(_ changes: [String: String] = [:]) throws -> ReleaseState {
         var body = """
         {"db": "d", "time": 1792267877, "revision": "aac4cb2196e5b72f1a5295f085780acb1c08cbc1", "branch": "config",
-         "channel": "https://founderizer.com", "upstream": "https://github.com/miguelpieras/founderizer-fleet.git",
+         "channel": "https://platform.founderizer.com",
+         "upstream": "https://github.com/miguelpieras/founderizer-fleet.git",
          "automatic": AUTO, "have_release_key": KEY, "idle": IDLE, "open_tasks": TASKS, "running": RUNNING,
          "last_check": CHECKED,
          "entitlement": ENTITLEMENT, "releases": [ROWS]}
@@ -90,7 +91,8 @@ struct ReleaseTests {
     private static func row(_ fields: String) -> String {
         """
         {"id": 3, "revision": "cccccccccccccccccccccccccccccccccccccccc", "version": "2026.10.3",
-         "notes": "https://founderizer.com/releases/2026.10.3", "minimum": null, "pinned": null, "reached": null,
+         "notes": "https://platform.founderizer.com/releases/2026.10.3", "minimum": null, "pinned": null,
+         "reached": null,
          "seen_at": 1792267272, "started_at": null, "finished_at": null, "automatic": false, "applied": false,
          \(fields)}
         """
@@ -115,7 +117,7 @@ struct ReleaseTests {
     @Test func theHubsOwnAnswerIsReadAsItIs() throws {
         let state = try fixture()
         #expect(state.revision?.hasPrefix("aac4cb21") == true)
-        #expect(state.channel == "https://founderizer.com")
+        #expect(state.channel == "https://platform.founderizer.com")
         #expect(state.releases.count == 3)
         #expect(state.offered?.version == "2026.10.3")
         #expect(state.current?.version == "2026.10.1")
@@ -495,12 +497,12 @@ struct ReleaseTests {
 
     @Test func onlyOurOwnNotesPageIsOpened() throws {
         let release = try #require(try state().releases.first)
-        #expect(release.notesLink(channel: "https://founderizer.com") != nil)
+        #expect(release.notesLink(channel: "https://platform.founderizer.com") != nil)
         #expect(release.notesLink(channel: "https://example.com") == nil)
         let elsewhere = try #require(try state(["ROWS": Self.offered.replacingOccurrences(
-            of: "https://founderizer.com/releases/2026.10.3",
-            with: "http://founderizer.com.evil.example/releases")]).releases.first)
-        #expect(elsewhere.notesLink(channel: "https://founderizer.com") == nil)
+            of: "https://platform.founderizer.com/releases/2026.10.3",
+            with: "http://platform.founderizer.com.evil.example/releases")]).releases.first)
+        #expect(elsewhere.notesLink(channel: "https://platform.founderizer.com") == nil)
     }
 
     // ---- the key of the website's link, which is traded with nothing on the screen (`ClaimFromLink`)
@@ -554,10 +556,11 @@ struct ReleaseTests {
     @Test func theClaimGoesOnlyToAnHTTPSChannel() async throws {
         await #expect(throws: ClaimError.notOurSite) {
             try await ClaimCall().claim(key: "FZ-7KMQ-2PRJ-4TVW", fleet: "0123456789abcdef",
-                                        channel: "http://founderizer.com")
+                                        channel: "http://platform.founderizer.com")
         }
         await #expect(throws: ClaimError.notAKey) {
-            try await ClaimCall().claim(key: "no", fleet: "0123456789abcdef", channel: "https://founderizer.com")
+            try await ClaimCall().claim(key: "no", fleet: "0123456789abcdef",
+                                        channel: "https://platform.founderizer.com")
         }
     }
 }

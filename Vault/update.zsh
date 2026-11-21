@@ -28,7 +28,7 @@
 # Contents/Resources, sealed by the vault's signature, and one with a higher `updater=` number than this file's
 # replaces this file for the next run. It puts the starter in place the same way (starter.zsh, with its `starter=`
 # number, and its daemon), on a Mac whose vault runs as the agents' user.
-updater=5
+updater=6
 set -eu
 umask 022
 
@@ -71,6 +71,24 @@ lock="$base/.update.lock"
 mkdir "$lock" 2>/dev/null || exit 0
 work=$(mktemp -d "${TMPDIR:-/private/var/tmp}/fleet-vault-update.XXXXXX")
 trap 'rm -rf "$work"; rmdir "$lock" 2>/dev/null || true' EXIT
+
+# founderizer.com is the marketing site, and no program reads from it (the owner, 21 November 2026: "confirm you read
+# only from platform"). Every update.json of before names it as the channel, and install.py writes the platform since
+# then: the updater moves its own file there once, only that exact value, and keeps the fleet and the track as they
+# are. As install.py writes the file: beside its place, root's and mode 644, then renamed into it, so that no reader
+# sees half of it. Every check below stays as it is.
+if [[ "$channel" == https://founderizer.com ]]; then
+    channel=https://platform.founderizer.com
+    staged="$base/.update.json.channel"         # a name of its own: install.py stages .update.json.new
+    rm -rf "$staged"
+    if cp "$base/update.json" "$staged" && plutil -replace channel -string "$channel" "$staged" \
+            && chmod 644 "$staged" && mv "$staged" "$base/update.json"; then
+        say "update.json names the channel $channel now"
+    else
+        rm -rf "$staged"
+        say "update.json could not be written; this run reads $channel all the same"
+    fi
+fi
 
 # Our vault, as install.py's verify() reads one: no build of anyone else's, and none signed for debugging.
 signed() {

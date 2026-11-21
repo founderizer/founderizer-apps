@@ -60,7 +60,7 @@ struct AppUpdateInstallTests {
     private func manifest(for zip: URL, version: String = "2026.11.1", build: Int = 42) throws -> AppManifest {
         let size = try #require(FileManager.default.attributesOfItem(atPath: zip.path)[.size] as? Int)
         return AppManifest(version: version, build: build,
-                           url: "https://founderizer.com/downloads/Founderizer.zip",
+                           url: "https://platform.founderizer.com/downloads/Founderizer.zip",
                            sha256: try AppUpdateInstaller.digest(of: zip), size: size,
                            minimumSystem: "15.0", notes: nil, hold: false, signature: "x")
     }
@@ -129,7 +129,7 @@ struct AppUpdateInstallTests {
         let digest = try AppUpdateInstaller.digest(of: file)
         #expect(digest == SHA256.hash(data: Data("the build".utf8)).map { String(format: "%02x", $0) }.joined())
 
-        let right = AppManifest(version: "1", build: 1, url: "https://founderizer.com/a.zip", sha256: digest,
+        let right = AppManifest(version: "1", build: 1, url: "https://platform.founderizer.com/a.zip", sha256: digest,
                                 size: 9, minimumSystem: nil, notes: nil, hold: false, signature: "x")
         try AppUpdateInstaller.checkBytes(of: file, against: right)
 
@@ -169,7 +169,7 @@ struct AppUpdateInstallTests {
         let installer = AppUpdateInstaller(bundle: work.appendingPathComponent("Here.app"),
                                            identifier: Self.identifier, team: nil,
                                            verifyCode: { _, _ in }, download: { _, _, _ in work })
-        let said = AppManifest(version: "2026.11.1", build: 42, url: "https://founderizer.com/a.zip",
+        let said = AppManifest(version: "2026.11.1", build: 42, url: "https://platform.founderizer.com/a.zip",
                                sha256: String(repeating: "a", count: 64), size: 1, minimumSystem: nil,
                                notes: nil, hold: false, signature: "x")
 

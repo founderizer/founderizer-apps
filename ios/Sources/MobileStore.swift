@@ -584,16 +584,20 @@ final class MobileStore {
 
     /// **The two forms of the Mac's code link** (the owner's choice of 13 November 2026: one picture that opens this app
     /// on a phone that has it, and the App Store on a phone that does not). `fleet://enroll?hub=…&code=…` is the form
-    /// of every Mac until then, and stays. `https://founderizer.com/enroll#hub=…&code=…` is the new one: the phone's
-    /// camera opens it here through the app's associated domain, and on a phone without the app in Safari, where the
-    /// website's `/enroll` sends it to the App Store. Its values ride in the fragment, which a browser never sends, so
-    /// a phone without the app gives the website no code and no hub address. nil for any other link.
+    /// of every Mac until then, and stays. `https://platform.founderizer.com/enroll#hub=…&code=…` is the new one: the
+    /// phone's camera opens it here through the app's associated domain, and on a phone without the app in Safari,
+    /// where the platform's `/enroll` sends it to the App Store. Its values ride in the fragment, which a browser never
+    /// sends, so a phone without the app gives the website no code and no hub address. founderizer.com is the marketing
+    /// site (the owner, 21 November 2026): the Macs make that form of the link until most phones have this build, so
+    /// it opens here too until founderizer.com's /enroll goes, and the build after that takes it out. nil for any other
+    /// link.
     nonisolated static func enrollItems(_ url: URL) -> [URLQueryItem]? {
         let scheme = url.scheme?.lowercased(), host = url.host()?.lowercased()
         if scheme == "fleet", host == "enroll" {
             return URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
         }
-        guard scheme == "https", host == "founderizer.com", url.path() == "/enroll",
+        guard scheme == "https", host == "platform.founderizer.com" || host == "founderizer.com",
+              url.path() == "/enroll",
               let fragment = url.fragment(percentEncoded: true), !fragment.isEmpty else { return nil }
         // The fragment carries what the query carries in the first form; `URLComponents(string:)` refuses a bad
         // one with nil, where its `percentEncodedQuery` setter would stop the app.

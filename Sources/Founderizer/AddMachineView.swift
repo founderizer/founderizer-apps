@@ -541,7 +541,7 @@ struct AddServerView: View {
     /// The one line that Apple's setup needs before anything else: a Mac with FileVault on has no automatic login.
     private var opening: some View {
         VStack(spacing: SetupMetrics.gap) {
-            Text("Get it at founderizer.com/download.").font(SetupMetrics.textFont).foregroundStyle(FleetStyle.muted)
+            Text("Get it at platform.founderizer.com/download.").font(SetupMetrics.textFont).foregroundStyle(FleetStyle.muted)
                 .textSelection(.enabled)
             Text("In Apple's setup, say no to FileVault.").font(SetupMetrics.textFont).foregroundStyle(FleetStyle.muted)
             Button("Next") { page = .machine }.buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)

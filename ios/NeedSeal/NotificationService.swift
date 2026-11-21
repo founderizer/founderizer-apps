@@ -1,7 +1,7 @@
 import Foundation
 import UserNotifications
 
-/// Opens a sealed ping (`UI-API.md` version 1.76, feature `sealed_push`). founderizer.com and Apple carry only "Needs
+/// Opens a sealed ping (`UI-API.md` version 1.76, feature `sealed_push`). The platform and Apple carry only "Needs
 /// you", the item's number and a part that the hub sealed with this phone's own key (`SealKey`). This extension opens
 /// that part and shows what the ping says, as a ping said it before the seal: the agent that asks over the item's
 /// title and, when the item has options, the category whose content extension (`NeedActions`) draws one button for

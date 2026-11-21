@@ -4,8 +4,8 @@ import Security
 import UserNotifications
 
 /// This phone's own key for what a ping says (`UI-API.md` version 1.76, feature `sealed_push`). Every hub sends its
-/// pings through founderizer.com, so the hub seals the agent's name, the item's title and its options with this key,
-/// and founderizer.com and Apple carry only "Needs you", the item's number and the sealed bytes. The app makes the key
+/// pings through the platform, so the hub seals the agent's name, the item's title and its options with this key,
+/// and the platform and Apple carry only "Needs you", the item's number and the sealed bytes. The app makes the key
 /// once and gives it to the hub with its push token; the notification service extension (`NeedSeal`) reads it to open
 /// a ping. So it is kept in a keychain group that both share, and readable after the first unlock since the phone
 /// started, because a ping arrives on a locked phone too. It opens pings and nothing else: it is no key to the hub.

@@ -229,7 +229,7 @@ class Updater(unittest.TestCase):
         """A vault older than updater 5 has the old writer, which deletes nothing: nothing starts it, and its LaunchAgent
         stays until a newer vault is in place."""
         plist = self.owner_s_mac()
-        for carried in (None, UPDATER - 1):
+        for carried in (None, 4):                   # update.zsh's writer_gone: updater 5 brought the new writer
             with self.subTest(carried=carried):
                 shutil.rmtree(self.app)
                 bundle(self.app, 2, updater=carried)
@@ -336,6 +336,42 @@ class Updater(unittest.TestCase):
                 done = self.run_updater()
                 self.assertUnchanged(done, 1)
                 self.assertEqual(self.calls("curl"), [])
+
+    def test_an_update_json_that_names_the_marketing_site_moves_to_the_platform(self):
+        """Each update.json of before 21 November 2026 names https://founderizer.com, the marketing site, whose machine
+        paths go away: the updater moves its own file to the platform, keeps the fleet and the track, and reads the
+        platform from that run on. Without it, a Mac's vault would never update again. Any other channel stays."""
+        platform = "https://platform.founderizer.com"
+        self.settings({"channel": "https://founderizer.com", "fleet": FLEET, "track": "early"})
+        (self.base / "update.json").chmod(0o600)            # the mode that install.py gives it is 644
+        self.channel(3, track="early", url=f"{platform}/downloads/Founderizer-0.1.39.zip")
+        done = self.run_updater()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(json.loads((self.base / "update.json").read_text()),
+                         {"channel": platform, "fleet": FLEET, "track": "early"})
+        self.assertEqual(os.stat(self.base / "update.json").st_mode & 0o777, 0o644)
+        self.assertFalse((self.base / ".update.json.channel").exists())
+        self.assertIn(f"update.json names the channel {platform} now", done.stdout)
+        self.assertEqual(self.calls("curl"), [f"{platform}/releases/app?track=early|Founderizer-Fleet: {FLEET}",
+                                              f"{platform}/downloads/Founderizer-0.1.39.zip|"])
+        self.assertEqual(self.installed(), "3")
+        before = json.dumps({"channel": CHANNEL, "fleet": FLEET})
+        self.settings(json.loads(before))
+        self.run_updater()
+        self.assertEqual((self.base / "update.json").read_text(), before)
+
+    def test_a_moved_updater_takes_no_build_whose_address_is_still_on_the_marketing_site(self):
+        """Until the release job moves the build's address too, the platform's manifest names a zip on founderizer.com:
+        the updater moves its file all the same and takes nothing, because every check stays (the Vault area's
+        condition). Its vault waits for the first build on the platform."""
+        platform = "https://platform.founderizer.com"
+        self.settings({"channel": "https://founderizer.com", "fleet": FLEET})
+        self.channel(3, url="https://founderizer.com/downloads/Founderizer-0.1.38.zip")
+        done = self.run_updater()
+        self.assertUnchanged(done, 1)
+        self.assertIn(f"the manifest names no build on {platform}; nothing changed", done.stdout)
+        self.assertEqual(json.loads((self.base / "update.json").read_text())["channel"], platform)
+        self.assertEqual(self.calls("curl"), [f"{platform}/releases/app|Founderizer-Fleet: {FLEET}"])
 
     def bundled(self, number):
         """The installed vault carries an updater with this `updater=` number."""
@@ -593,7 +629,7 @@ class Install(unittest.TestCase):
                     mock.patch.object(self.install.os, "geteuid", return_value=0), \
                     mock.patch.object(self.install, "install_updater") as updater:
                 self.install.main()
-            updater.assert_called_once_with(FLEET, "https://founderizer.com", track)
+            updater.assert_called_once_with(FLEET, "https://platform.founderizer.com", track)
         # The owner's Mac keeps its configuration of the old writer: its updater still goes in, because it is what takes
         # that writer away.
         self.install.CONFIG.write_text(json.dumps({"role": "owner", "region": "eu", "fleet_app": "/Applications/Founderizer.app",
@@ -602,7 +638,7 @@ class Install(unittest.TestCase):
                 mock.patch.object(self.install.os, "geteuid", return_value=0), \
                 mock.patch.object(self.install, "install_updater") as updater:
             self.install.main()
-        updater.assert_called_once_with(FLEET, "https://founderizer.com", "approved")
+        updater.assert_called_once_with(FLEET, "https://platform.founderizer.com", "approved")
 
     def test_a_worker_s_configuration_names_the_fleet_s_own_store_in_the_bytes_that_the_vault_reads(self):
         """The Mac vault's test `theConfigurationThatTheInstallerWritesLoadsAsBefore` loads these same bytes."""

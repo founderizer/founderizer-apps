@@ -27,7 +27,7 @@ TRACKS = ("approved", "early")                       # PRODUCT.md 4.3, "the two 
 UPDATE_LABEL = "com.agentfleet.vault.update"
 UPDATE_DAEMON = Path("/Library/LaunchDaemons") / (UPDATE_LABEL + ".plist")
 UPDATE_LOG = CONFIG.parent / "update.log"           # in the protected folder: /Library/Logs is the admin group's
-CHANNEL = "https://founderizer.com"
+CHANNEL = "https://platform.founderizer.com"
 # The owner's public keys in a worker Mac's configuration (--owner-keys-only): with them, the vault hands a login over
 # only to a key that the owner signed a pin of (Sources/FleetVaultCore/VaultOwnerPin.swift), as a Linux broker does with
 # the keys that `hubsetup.py vault --owner-key` gives it. The hub never writes them: a hub that is broken into could

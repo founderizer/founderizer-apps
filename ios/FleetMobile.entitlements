@@ -4,11 +4,13 @@
      Xcode signs a build to run with "development" and changes it to "production" when it exports for TestFlight,
      which is why PushRegistration.environment follows the build configuration.
      The keychain group is the one the app shares with NeedSeal, the extension that opens a sealed ping (SealKey).
-     The associated domain opens the Mac's code picture, https://founderizer.com/enroll#…, in this app; on a phone
-     without the app the website sends it to the App Store (MobileStore.enrollItems; the owner's choice of
-     13 November 2026). The site's /.well-known/apple-app-site-association names this app for /enroll only. -->
+     The associated domain opens the Mac's code picture, https://platform.founderizer.com/enroll#…, in this app; on a
+     phone without the app the platform sends it to the App Store (MobileStore.enrollItems; the owner's choice of
+     13 November 2026). The platform's /.well-known/apple-app-site-association names this app for /enroll only.
+     founderizer.com is the marketing site since 21 November 2026: its /enroll stays in this build only, for the
+     Macs that make that link until most phones have this build, and the build after its removal takes it out. -->
 <plist version="1.0"><dict>
 <key>aps-environment</key><string>development</string>
 <key>keychain-access-groups</key><array><string>$(AppIdentifierPrefix)com.founderizer.mobile.seal</string></array>
-<key>com.apple.developer.associated-domains</key><array><string>applinks:founderizer.com</string></array>
+<key>com.apple.developer.associated-domains</key><array><string>applinks:platform.founderizer.com</string><string>applinks:founderizer.com</string></array>
 </dict></plist>

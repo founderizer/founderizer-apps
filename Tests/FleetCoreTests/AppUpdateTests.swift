@@ -8,17 +8,17 @@ import Testing
 /// Every one of these makes its own Ed25519 pair and proves the whole path against it, so the key this build
 /// ships (`AppUpdate.shippedKey`) is checked in one test of its own and decides nothing else here.
 struct AppUpdateTests {
-    private static let channel = "https://founderizer.com"
+    private static let channel = "https://platform.founderizer.com"
 
     /// A build the channel could answer with, and the JSON it would answer with, signed by a key of this test's.
     private struct Build {
         var version = "2026.11.1"
         var build = 42
-        var url = "https://founderizer.com/downloads/Founderizer-2026.11.1.zip"
+        var url = "https://platform.founderizer.com/downloads/Founderizer-2026.11.1.zip"
         var sha256 = String(repeating: "a", count: 64)
         var size = 48_000_000
         var minimum: String? = "15.0"
-        var notes: String? = "https://founderizer.com/releases/2026.11.1"
+        var notes: String? = "https://platform.founderizer.com/releases/2026.11.1"
         var hold = false
 
         var manifest: AppManifest {
@@ -103,11 +103,11 @@ struct AppUpdateTests {
         founderizer-app-1
         2026.11.1
         42
-        https://founderizer.com/downloads/Founderizer-2026.11.1.zip
+        https://platform.founderizer.com/downloads/Founderizer-2026.11.1.zip
         aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         48000000
         15.0
-        https://founderizer.com/releases/2026.11.1
+        https://platform.founderizer.com/releases/2026.11.1
         false
 
         """)
@@ -142,7 +142,7 @@ struct AppUpdateTests {
         #expect(manifest.build == 42)
         #expect(manifest.hold == false)
         #expect(manifest.notesLink(channel: Self.channel)?.absoluteString
-                == "https://founderizer.com/releases/2026.11.1")
+                == "https://platform.founderizer.com/releases/2026.11.1")
     }
 
     @Test func withoutAKeyEveryBuildIsRefused() throws {
@@ -185,8 +185,8 @@ struct AppUpdateTests {
     @Test func oneFieldChangedOnTheWayIsRefused() throws {
         let changes: [[String: Any]] = [["hold": true], ["build": 99], ["version": "2026.99.9"], ["size": 1024],
                                         ["sha256": String(repeating: "b", count: 64)],
-                                        ["url": "https://founderizer.com/downloads/other.zip"],
-                                        ["notes": "https://founderizer.com/releases/other"],
+                                        ["url": "https://platform.founderizer.com/downloads/other.zip"],
+                                        ["notes": "https://platform.founderizer.com/releases/other"],
                                         ["minimum": "26.0"]]
         let (key, published) = pair()
         for change in changes {
@@ -209,10 +209,10 @@ struct AppUpdateTests {
     // ------------------------------------------------------------ what is read before the signature is computed
 
     @Test func anAnswerThatIsNotTheShapeIsNotRead() throws {
-        let changes: [[String: Any]] = [["url": "http://founderizer.com/a.zip"],
+        let changes: [[String: Any]] = [["url": "http://platform.founderizer.com/a.zip"],
                                         ["url": "https://example.com/a.zip"],
-                                        ["url": "https://user:pass@founderizer.com/a.zip"],
-                                        ["url": "https://founderizer.com/a.dmg"],
+                                        ["url": "https://user:pass@platform.founderizer.com/a.zip"],
+                                        ["url": "https://platform.founderizer.com/a.dmg"],
                                         ["notes": "https://example.com/notes"],
                                         ["build": "42"], ["build": 0], ["size": 0], ["size": 900_000_000],
                                         ["sha256": "not hex"], ["version": ""], ["version": "2026\n11"],
@@ -254,8 +254,8 @@ struct AppUpdateTests {
                 return (200, body)
             }.read(installed: AppVersion(name: "2026.10.1", build: 12), system: Self.sonoma)
         }
-        #expect(seen.urls.map(\.absoluteString) == ["https://founderizer.com/releases/app",
-                                                    "https://founderizer.com/releases/app?track=early"])
+        #expect(seen.urls.map(\.absoluteString) == ["https://platform.founderizer.com/releases/app",
+                                                    "https://platform.founderizer.com/releases/app?track=early"])
     }
 
     // ------------------------------------------------------------ what the channel's answer means for this Mac
@@ -450,7 +450,8 @@ struct AppUpdateTests {
 
     @Test func aChannelThatIsNotHTTPSIsNotAsked() async throws {
         let asked = Asked()
-        let reading = await AppUpdateChannel(channel: "http://founderizer.com", keys: [Data(repeating: 1, count: 32)],
+        let reading = await AppUpdateChannel(channel: "http://platform.founderizer.com",
+                                             keys: [Data(repeating: 1, count: 32)],
                                              fetch: { url, _ in asked.note(url); return (200, Data()) })
             .read(installed: AppVersion(name: "a", build: 1), system: Self.sonoma)
         #expect(asked.count == 0)
@@ -463,7 +464,7 @@ struct AppUpdateTests {
         _ = await channel(200, try Build().json(signedBy: key), fleet: "0123456789abcdef", key: published,
                           seen: { url, headers in asked.note(url, headers) })
             .read(installed: AppVersion(name: "a", build: 1), system: Self.sonoma)
-        #expect(asked.last?.url.absoluteString == "https://founderizer.com/releases/app")
+        #expect(asked.last?.url.absoluteString == "https://platform.founderizer.com/releases/app")
         #expect(asked.last?.url.query == nil)
         #expect(asked.last?.headers[AppUpdate.fleetHeader] == "0123456789abcdef")
     }

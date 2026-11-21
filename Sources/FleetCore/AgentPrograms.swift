@@ -114,9 +114,9 @@ public enum AgentPrograms {
 /// the page after the press). The address is the guide's page on the website, in both languages.
 public enum AgentPrompt {
     public static let english = "Install the Founderizer admin MCP, then guide me through my fleet setup. "
-        + "Follow the instructions here: https://founderizer.com/agent-install.md"
+        + "Follow the instructions here: https://platform.founderizer.com/agent-install.md"
     public static let spanish = "Instala el MCP de administración de Founderizer y guíame en la configuración de mi "
-        + "equipo. Sigue las instrucciones de aquí: https://founderizer.com/agent-install.md"
+        + "equipo. Sigue las instrucciones de aquí: https://platform.founderizer.com/agent-install.md"
 
     /// The prompt in the language that the app shows its words in (`Localized.bundle`): this is what is copied.
     public static var shown: String { prompt(language: language(of: Localized.bundle)) }

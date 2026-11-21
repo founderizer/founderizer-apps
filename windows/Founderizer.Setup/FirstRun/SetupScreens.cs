@@ -59,7 +59,7 @@ public static class SetupScreens
     public const string ReportsDetail = "Sends error codes, versions and counts to Founderizer. Never your work, names or keys.";
     public const string SendReports = "Send anonymous usage data", DontSend = "Don't send";
     public const string ReportsLater = "You can change this later in Settings › Help.", Privacy = "Privacy";
-    public static readonly Uri PrivacyPage = new("https://founderizer.com/privacy#error-reports");
+    public static readonly Uri PrivacyPage = new("https://platform.founderizer.com/privacy#error-reports");
     public const string NameTitle = "Name your manager", NameDetail = "It leads your team and is your main assistant.", NamePlaceholder = "Name";
     public const string Continue = "Continue";
     public const string ServersTitle = "Your fleet's servers", ServersDetail = "Fewer servers cost less. More servers keep your agents apart.";

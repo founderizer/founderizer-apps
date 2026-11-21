@@ -538,7 +538,7 @@ struct DeviceRecoveryKeyTests {
 }
 
 /// The Mac's code picture in its two forms (the owner's choice of 13 November 2026): the link of every Mac until then,
-/// and the founderizer.com link that opens this app or, on a phone without it, the App Store.
+/// and the platform's link that opens this app or, on a phone without it, the App Store.
 @Suite("The Mac's code link")
 struct EnrollLinkTests {
     private func values(_ link: String) -> [String: String]? {
@@ -550,20 +550,23 @@ struct EnrollLinkTests {
     @Test("Both forms give the same hub, code and bind")
     func bothForms() {
         let old = values("fleet://enroll?hub=http://100.96.10.20:8765&code=ABCD-EFGH&bind=b1nd")
-        let new = values("https://founderizer.com/enroll#hub=http://100.96.10.20:8765&code=ABCD-EFGH&bind=b1nd")
+        let new = values("https://platform.founderizer.com/enroll#hub=http://100.96.10.20:8765&code=ABCD-EFGH&bind=b1nd")
         #expect(old == ["hub": "http://100.96.10.20:8765", "code": "ABCD-EFGH", "bind": "b1nd"])
         #expect(new == old)
-        #expect(values("https://founderizer.com/enroll#hub=http%3A%2F%2F100.96.10.20%3A8765&code=ABCD-EFGH")?["hub"]
+        // The marketing site's form, which the Macs make until most phones have this build.
+        #expect(values("https://founderizer.com/enroll#hub=http://100.96.10.20:8765&code=ABCD-EFGH&bind=b1nd") == old)
+        #expect(values("https://platform.founderizer.com/enroll#hub=http%3A%2F%2F100.96.10.20%3A8765&code=ABCD-EFGH")?["hub"]
                 == "http://100.96.10.20:8765")
     }
 
     @Test("Any other link opens nothing")
     func otherLinks() {
-        #expect(values("https://founderizer.com/enroll") == nil)
-        #expect(values("https://founderizer.com/enroll#") == nil)
-        #expect(values("https://founderizer.com/download#code=ABCD-EFGH") == nil)
+        #expect(values("https://platform.founderizer.com/enroll") == nil)
+        #expect(values("https://platform.founderizer.com/enroll#") == nil)
+        #expect(values("https://platform.founderizer.com/download#code=ABCD-EFGH") == nil)
         #expect(values("https://example.com/enroll#code=ABCD-EFGH") == nil)
-        #expect(values("http://founderizer.com/enroll#code=ABCD-EFGH") == nil)
+        #expect(values("http://platform.founderizer.com/enroll#code=ABCD-EFGH") == nil)
+        #expect(values("https://www.founderizer.com/enroll#code=ABCD-EFGH") == nil)
         #expect(values("fleet://chat?code=ABCD-EFGH") == nil)
     }
 }

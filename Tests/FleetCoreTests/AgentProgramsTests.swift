@@ -177,7 +177,7 @@ struct AgentProgramsTests {
     // MARK: the prompt
 
     @Test func thePromptNamesTheGuidesAddressInBothLanguages() {
-        let address = "https://founderizer.com/agent-install.md"
+        let address = "https://platform.founderizer.com/agent-install.md"
         #expect(AgentPrompt.english == "Install the Founderizer admin MCP, then guide me through my fleet setup. "
                 + "Follow the instructions here: \(address)")
         #expect(AgentPrompt.spanish == "Instala el MCP de administración de Founderizer y guíame en la configuración de "
@@ -209,7 +209,7 @@ struct AgentProgramsTests {
             let shown = AgentPrompt.lines(prompt)
             let lines = shown.split(separator: "\n", omittingEmptySubsequences: false)
             #expect(lines.count == 2)
-            #expect(lines.last == "https://founderizer.com/agent-install.md")
+            #expect(lines.last == "https://platform.founderizer.com/agent-install.md")
             #expect(shown.replacingOccurrences(of: "\n", with: " ") == prompt)
             #expect(!prompt.contains("\n"))
             #expect(shown.unicodeScalars.allSatisfy { $0 == "\n" || $0.value >= 0x20 && !$0.properties.isDefaultIgnorableCodePoint })

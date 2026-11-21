@@ -10,13 +10,13 @@
 [![The latest release](https://img.shields.io/github/v/release/founderizer/founderizer-apps?label=release&color=blue)](https://github.com/founderizer/founderizer-apps/releases/latest)
 [![macOS 15 or later, iOS 18 or later](https://img.shields.io/badge/runs%20on-macOS%2015%2B%20%C2%B7%20iOS%2018%2B-blue)](#what-you-need)
 
-[Website](https://founderizer.com) · [Download&nbsp;for&nbsp;Mac&nbsp;and&nbsp;iPhone](https://founderizer.com/download) · [Source&nbsp;of&nbsp;the&nbsp;hub](https://github.com/founderizer/founderizer)
+[Website](https://founderizer.com) · [Download&nbsp;for&nbsp;Mac&nbsp;and&nbsp;iPhone](https://platform.founderizer.com/download) · [Source&nbsp;of&nbsp;the&nbsp;hub](https://github.com/founderizer/founderizer)
 
 </div>
 
 ## What you need
 
-The Mac app runs on macOS 15 or later, and the iPhone app on iOS 18 or later. [Download them](https://founderizer.com/download), or build them from this source:
+The Mac app runs on macOS 15 or later, and the iPhone app on iOS 18 or later. [Download them](https://platform.founderizer.com/download), or build them from this source:
 
 <details>
 <summary><b>Build the apps yourself</b></summary>

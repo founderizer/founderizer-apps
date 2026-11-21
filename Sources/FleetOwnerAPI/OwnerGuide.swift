@@ -139,7 +139,8 @@ public enum OwnerGuide {
         its window.
 
         If `~/.founderizer/cli` is not there, the app was never opened on this Mac. Ask the owner to open Founderizer from
-        Applications (the download is https://founderizer.com/download), and go on when they say that it is open.
+        Applications (the download is https://platform.founderizer.com/download), and go on when they say that it is
+        open.
 
         ## Step 1: where does the owner stand?
 
