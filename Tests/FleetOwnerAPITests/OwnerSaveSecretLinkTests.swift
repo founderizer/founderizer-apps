@@ -81,7 +81,7 @@ final class OwnerSaveSecretProgramTests {
         #expect(Fixture.table.tool(SaveSecret.name) == nil)
         let (status, out, _) = try run(["tools"], ValueLink())
         #expect(status == 0)
-        #expect(out.contains { $0.hasPrefix("write save_secret: Saves a new login or a new API key of the fleet into "
+        #expect(out.contains { $0.hasPrefix("write save_secret: Access: Saves a new login or a new API key of the fleet into "
                                             + "the fleet's central vault.") })
         #expect(out.filter { $0.hasPrefix("write save_secret") }.count == 1)
     }

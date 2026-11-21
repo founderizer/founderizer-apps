@@ -55,7 +55,8 @@ public enum SaveSecret {
         // One text in three groups: what the tool saves and the fields of each kind; the value and its three sources;
         // `request_id` and the answers.
         name: name, description: """
-            Saves a new login or a new API key of the fleet into the fleet's central vault. It gives the secret to no \
+            Access: Saves a new login or a new API key of the fleet into the fleet's central vault. It gives the \
+            secret to no \
             agent. It replaces nothing: a name that the fleet's list of secrets has already is refused. kind: login \
             or api_key. A login takes url (the address of its sign-in page) and username, and no env. An API key \
             takes env (its variable name: capital letters, digits and _, with _KEY, _TOKEN, _SECRET, _PASSWORD or \

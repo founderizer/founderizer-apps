@@ -16,7 +16,8 @@ public enum OwnerSetupTools {
 
     public static let tools: [OwnerTable.Tool] = [
         tool(state, """
-            Where the setup of the fleet stands in the Founderizer app on this Mac, as typed facts and fixed names, and \
+            Setup: Where the setup of the fleet stands in the Founderizer app on this Mac, as typed facts and fixed \
+            names, and \
             never a value of a field (no token, key, password, code, address or free text): the app's version and \
             build; the hub (none, set, or set and answering); the first run: whether it shows, its page by a fixed name \
             (welcome, paste, name, ai_provider, servers, vps, tailscale, tailscale_key, token, building, other_vps, machine, \
@@ -72,7 +73,8 @@ public enum OwnerSetupTools {
             no_change true. The app starts by itself when it does not run.
             """, properties: ["after": .object(["type": .string("integer"), "minimum": .int(0)])], required: []),
         tool(show, """
-            Asks macOS to bring the Founderizer app to the front, on one of its own pages. page: front (the app as it \
+            Setup: Asks macOS to bring the Founderizer app to the front, on one of its own pages. page: front (the app \
+            as it \
             is, with no change of page, from any page), or for a first run welcome (its first page) or name (the \
             setup's first page: "Help improve Founderizer", where the owner answers with a press of their own, and then \
             "Name your manager", where the owner goes on with Continue), or a place of the \
@@ -117,7 +119,8 @@ public enum OwnerSetupTools {
             """, properties: ["page": .object(["type": .string("string")]),
                               "seen": .object(["type": .string("string")])], required: ["page", "seen"]),
         tool(diagnosis, """
-            Why the hub does not answer, and where the Founderizer app's window stands, as fixed names, booleans and \
+            Setup: Why the hub does not answer, and where the Founderizer app's window stands, as fixed names, \
+            booleans and \
             whole numbers. It never gives an address, a name, a key or a line of a log. Read it first when the hub \
             does not answer or a setup stopped, then setup_state. \
             hub: none (the app has no hub's address), set (it has one, and its last read did not answer, or the \

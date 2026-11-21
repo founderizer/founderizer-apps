@@ -27,7 +27,8 @@ public enum PrepareReport {
 
     public static let tool = OwnerTable.Tool(
         name: name, description: """
-            Prepares a problem report for the makers of Founderizer in the Founderizer app's own form, and sends \
+            Setup: Prepares a problem report for the makers of Founderizer in the Founderizer app's own form, and \
+            sends \
             nothing. text: what went wrong, what you tried and what the tools answered, in plain words, in 20 to \
             4000 characters. Put no key, no token and no password in it, and nothing of the fleet's work (no task, no \
             message, no file). The app opens its window Report a problem with this text in its box, adds its own \

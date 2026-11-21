@@ -44,7 +44,8 @@ public enum GrantSecret {
 
     public static let tool = OwnerTable.Tool(
         name: name, description: """
-            Gives one secret of the fleet to one agent with the owner's signature, or takes it back, as Give and \
+            Access: Gives one secret of the fleet to one agent with the owner's signature, or takes it back, as Give \
+            and \
             Take back on the Founderizer app's Secrets page do. On a fleet with a central vault, the vault sends a \
             secret's value to a server only for a grant that the owner's key signed. This tool makes the Founderizer \
             app sign the grant with the owner's key on this Mac and send it, and then the hub writes the grant into \

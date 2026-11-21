@@ -411,8 +411,8 @@ struct OwnerShareSecretWordsTests {
         #expect(properties["max"] == .object(["type": .array([.string("string"), .string("null")]),
                                               "enum": .array([.string("use"), .string("read"), .null])]))
         #expect(tool.feature == nil && tool.route.isEmpty && !tool.requestIDFromArguments && tool.fields.isEmpty)
-        #expect(tool.firstSentence == "Sets who may give one secret of the fleet, with the owner's signature, as Who "
-                + "may give it on the Founderizer app's Secrets page does.")
+        #expect(tool.firstSentence == "Access: Sets who may give one secret of the fleet, with the owner's "
+                + "signature, as Who may give it on the Founderizer app's Secrets page does.")
         #expect(OwnerLinkTools.names.firstIndex(of: ShareSecret.name) == 4 && OwnerLinkTools.names.count == 6)
         #expect(OwnerLinkTools.names.filter { $0 == ShareSecret.name }.count == 1)
         #expect(OwnerLinkTools.tools.map(\.name) == OwnerLinkTools.names)
@@ -433,7 +433,7 @@ struct OwnerShareSecretWordsTests {
     @Test func theDescriptionSaysWhatItMust() {
         let words = ShareSecret.tool.description
         let sentences: [String] = [
-            "Sets who may give one secret of the fleet, with the owner's signature, as Who may give it on the "
+            "Access: Sets who may give one secret of the fleet, with the owner's signature, as Who may give it on the "
                 + "Founderizer app's Secrets page does.",
             "On a fleet with a central vault, the vault sends a secret's value to a server only for a grant that the "
                 + "owner's key signed, or for a secret that the owner's key signed into the grantable pool.",

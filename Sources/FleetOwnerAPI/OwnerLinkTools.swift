@@ -214,7 +214,8 @@ public enum SaveBotToken {
 
     public static let tool = OwnerTable.Tool(
         name: name, description: """
-            Saves the token of a Discord or Telegram bot of the fleet on the hub, or deletes it. account: the id of a \
+            People: Saves the token of a Discord or Telegram bot of the fleet on the hub, or deletes it. account: the \
+            id of a \
             Discord or Telegram chat account that the fleet has already (fleet_read page chat_apps); this tool does \
             not make the account. The token is never a field of this tool and never a word of a command line. You \
             never see it, type it or repeat it, and you never ask the owner to paste it into a chat. It comes from \

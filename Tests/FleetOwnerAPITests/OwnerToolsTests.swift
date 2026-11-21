@@ -19,12 +19,46 @@ struct OwnerTableTests {
         #expect(table.version.count == 64)
         let check = try #require(table.tool("check_machine"))
         #expect(check.kind == .plain && check.route == "/ui/machines/{agent}/check" && check.what == "the machine check")
-        #expect(check.firstSentence == "Have one machine take its reading now.")
+        #expect(check.firstSentence == "Servers: Have one machine take its reading now.")
         let goal = try #require(table.tool("goal_state"))
         #expect(goal.kind == .withRevision && goal.revisionPage == "goal" && goal.feature == "goals")
         #expect(table.tool("which_hub")?.kind == .absent && table.tool("save_profile")?.kind == .swift)
         #expect(table.pages["devices"]?.route == "/ui/owner/devices")
         #expect(table.instructions.contains("Do not ask the owner in the chat"))
+    }
+
+    /// **Each tool that the program lists starts with a category of the table, and the table's map names it once, in
+    /// the line of that category** (agent-own-rules-design-2026-11-20.md, slice 8a). A client with tool search loads
+    /// only the tool names and the instructions at its start: a tool of the program's own, such as `save_secret`, that
+    /// no line names is a tool that the client never learns of, and a name in the map that the program does not list
+    /// is a call that fails. `owner_mcp.py` makes the map, and only this program knows its own nine tools.
+    @Test func eachListedToolStartsWithItsCategoryAndTheMapNamesItOnce() throws {
+        let url = try #require(Bundle.module.url(forResource: "owner-tools", withExtension: "json",
+                                                 subdirectory: "Fixtures"))
+        let root = try #require(JSONValue.parse(try Data(contentsOf: url))?.object)
+        let categories = try #require(root["categories"]?.array).compactMap { pair -> (name: String, job: String)? in
+            guard let parts = pair.array, parts.count == 2, let name = parts[0].string, let job = parts[1].string
+            else { return nil }
+            return (name, job)
+        }
+        #expect(categories.count == 10)
+        var mapped: [String: [String]] = [:]
+        for line in Fixture.table.instructions.split(separator: "\n").map(String.init) {
+            for category in categories where line.hasPrefix("\(category.name) (\(category.job)): ") {
+                let names = line.dropFirst("\(category.name) (\(category.job)): ".count).dropLast()
+                mapped[category.name] = names.components(separatedBy: ", ").map {   // without the words of a gloss
+                    $0.replacingOccurrences(of: #" \(.*\)$"#, with: "", options: .regularExpression)
+                }
+            }
+        }
+        let listed = OwnerTools.programTable(Fixture.table).tools.filter(\.kind.listed)
+        #expect(listed.count > OwnerSetupTools.tools.count + OwnerLinkTools.tools.count)
+        for tool in listed {
+            let category = categories.first { tool.description.hasPrefix("\($0.name): ") }?.name
+            #expect(category != nil, "\(tool.name) has no category at the start of its words")
+            #expect(mapped[category ?? ""]?.filter { $0 == tool.name }.count == 1, "\(tool.name) is not in its line")
+        }
+        #expect(mapped.values.flatMap { $0 }.sorted() == listed.map(\.name).sorted())
     }
 
     @Test func aTableThatIsNotOneIsRefusedInWords() {

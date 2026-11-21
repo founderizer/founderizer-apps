@@ -53,7 +53,8 @@ public enum AnswerSecret {
 
     public static let tool = OwnerTable.Tool(
         name: name, description: """
-            Answers one request of an agent for a secret with a secret that the fleet's list has already, as Answer \
+            Needs you: Answers one request of an agent for a secret with a secret that the fleet's list has \
+            already, as Answer \
             with it does in the Founderizer app's form of that request on Needs you. First the app gives the secret \
             to each agent of give with the owner's signature, as grant_secret does. Then the hub answers the \
             request: the agent that asked gets the hub's own words, which name the secret, its reference and who \

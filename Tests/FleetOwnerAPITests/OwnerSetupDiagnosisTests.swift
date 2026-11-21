@@ -765,7 +765,7 @@ final class OwnerSetupDiagnosisProgramTests {
         #expect(link.requests.count == 1)
         #expect(link.fronts == 0)
         let (_, tools, _) = try run(["tools"], link: link)
-        #expect(tools.contains { $0.hasPrefix("call setup_diagnosis: Why the hub does not answer") })
+        #expect(tools.contains { $0.hasPrefix("call setup_diagnosis: Setup: Why the hub does not answer") })
     }
 
     @Test func theMCPFormListsItAsARead() async throws {

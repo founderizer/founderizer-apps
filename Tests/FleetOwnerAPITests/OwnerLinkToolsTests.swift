@@ -636,7 +636,7 @@ final class OwnerLinkProgramTests {
         #expect(OwnerLinkTools.tools.map(\.name) == OwnerLinkTools.names)
         #expect(Fixture.table.tool(SaveBotToken.name) == nil)
         let (status, out, _) = try run(["tools"], ValueLink())
-        #expect(status == 0 && out.contains { $0.hasPrefix("write save_bot_token: Saves the token of a Discord or Telegram bot") })
+        #expect(status == 0 && out.contains { $0.hasPrefix("write save_bot_token: People: Saves the token of a Discord or Telegram bot") })
     }
 
     @Test func writeTakesItAndSendsNoPath() throws {

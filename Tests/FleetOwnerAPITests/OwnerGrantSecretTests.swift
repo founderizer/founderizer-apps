@@ -444,8 +444,8 @@ struct OwnerGrantSecretWordsTests {
         #expect(properties["level"] == .object(["type": .array([.string("string"), .string("null")]),
                                                 "enum": .array([.string("use"), .string("read"), .null])]))
         #expect(tool.feature == nil && tool.route.isEmpty && !tool.requestIDFromArguments && tool.fields.isEmpty)
-        #expect(tool.firstSentence == "Gives one secret of the fleet to one agent with the owner's signature, or "
-                + "takes it back, as Give and Take back on the Founderizer app's Secrets page do.")
+        #expect(tool.firstSentence == "Access: Gives one secret of the fleet to one agent with the owner's "
+                + "signature, or takes it back, as Give and Take back on the Founderizer app's Secrets page do.")
         #expect(OwnerLinkTools.names == ["save_bot_token", "prepare_problem_report", "save_secret", "grant_secret",
                                          "share_secret", "answer_secret_request"])
         #expect(OwnerLinkTools.names.firstIndex(of: GrantSecret.name) == 3 && OwnerLinkTools.names.count == 6)
@@ -468,7 +468,7 @@ struct OwnerGrantSecretWordsTests {
     @Test func theDescriptionSaysWhatItMust() {
         let words = GrantSecret.tool.description
         let sentences: [String] = [
-            "Gives one secret of the fleet to one agent with the owner's signature, or takes it back, as Give and "
+            "Access: Gives one secret of the fleet to one agent with the owner's signature, or takes it back, as Give and "
                 + "Take back on the Founderizer app's Secrets page do.",
             "On a fleet with a central vault, the vault sends a secret's value to a server only for a grant that "
                 + "the owner's key signed.",

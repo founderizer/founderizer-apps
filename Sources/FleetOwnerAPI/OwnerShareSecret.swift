@@ -55,7 +55,8 @@ public enum ShareSecret {
 
     public static let tool = OwnerTable.Tool(
         name: name, description: """
-            Sets who may give one secret of the fleet, with the owner's signature, as Who may give it on the \
+            Access: Sets who may give one secret of the fleet, with the owner's signature, as Who may give it on \
+            the \
             Founderizer app's Secrets page does. On a fleet with a central vault, the vault sends a secret's value \
             to a server only for a grant that the owner's key signed, or for a secret that the owner's key signed \
             into the grantable pool. A give of the fleet manager has no signature: it brings the value to a server \

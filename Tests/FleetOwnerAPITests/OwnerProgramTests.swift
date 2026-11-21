@@ -171,7 +171,7 @@ final class OwnerCLITests {
         let executable = try program()
         let (status, out, _) = run(["tools"], executable: executable)
         #expect(status == 0 && out.count == 77)
-        #expect(out.contains("write check_machine: Have one machine take its reading now."))
+        #expect(out.contains("write check_machine: Servers: Have one machine take its reading now."))
         #expect(out.contains { $0.hasPrefix("call fleet_overview: ") })
         #expect(out.filter { $0.hasPrefix("call ") }.count == 7)
         let (one, full, _) = run(["tools", "goal_state"], executable: executable)

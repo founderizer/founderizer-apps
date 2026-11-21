@@ -813,7 +813,8 @@ struct OwnerSaveSecretWordsTests {
             #expect(!OwnerLinkTools.namedLikeAValue(name), "\(name)")
         }
         #expect(tool.feature == nil && tool.route.isEmpty && !tool.requestIDFromArguments)
-        #expect(tool.firstSentence == "Saves a new login or a new API key of the fleet into the fleet's central vault.")
+        #expect(tool.firstSentence == "Access: Saves a new login or a new API key of the fleet into the fleet's central "
+                + "vault.")
         #expect(SaveSecret.Kind.login.rawValue == LoginSecret.Kind.login.rawValue)
         #expect(SaveSecret.Kind.apiKey.rawValue == LoginSecret.Kind.apiKey.rawValue)
         #expect(OwnerLinkTools.names.firstIndex(of: SaveSecret.name) == 2 && OwnerLinkTools.names.count == 6)
@@ -851,7 +852,7 @@ struct OwnerSaveSecretWordsTests {
         }
         #expect(words.contains(neverInAChat + " " + neverSeen))
         let sentences = [
-            "Saves a new login or a new API key of the fleet into the fleet's central vault.",
+            "Access: Saves a new login or a new API key of the fleet into the fleet's central vault.",
             "It gives the secret to no agent.",
             "It replaces nothing: a name that the fleet's list of secrets has already is refused.",
             "kind: login or api_key.",

@@ -174,7 +174,7 @@ final class OwnerProblemReportTests {
         #expect(Fixture.table.tool(PrepareReport.name) == nil)
         #expect(tool.description.contains("sends nothing") && tool.description.contains("Only the owner sends it"))
         let (status, out, _) = try run(["tools"], ValueLink())
-        #expect(status == 0 && out.contains { $0.hasPrefix("write prepare_problem_report: Prepares a problem report") })
+        #expect(status == 0 && out.contains { $0.hasPrefix("write prepare_problem_report: Setup: Prepares a problem report") })
     }
 
     /// `write` sends the one field, with no white space at its ends and with no part after the line; `call` refuses

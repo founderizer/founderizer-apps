@@ -448,9 +448,9 @@ struct OwnerAnswerSecretWordsTests {
                                              "enum": .array([.string("use"), .string("read")])]),
         ]))
         #expect(tool.feature == nil && tool.route.isEmpty && !tool.requestIDFromArguments && tool.fields.isEmpty)
-        #expect(tool.firstSentence == "Answers one request of an agent for a secret with a secret that the fleet's "
-                + "list has already, as Answer with it does in the Founderizer app's form of that request on Needs "
-                + "you.")
+        #expect(tool.firstSentence == "Needs you: Answers one request of an agent for a secret with a secret that "
+                + "the fleet's list has already, as Answer with it does in the Founderizer app's form of that request "
+                + "on Needs you.")
         #expect(OwnerLinkTools.names == ["save_bot_token", "prepare_problem_report", "save_secret", "grant_secret",
                                          "share_secret", "answer_secret_request"])
         #expect(OwnerLinkTools.tools.map(\.name) == OwnerLinkTools.names)
