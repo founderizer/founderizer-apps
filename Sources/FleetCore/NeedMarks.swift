@@ -4,10 +4,12 @@ import Foundation
 /// owner, 21 November 2026, of three cards that he answered in the manager's chat: "shouldn't we show somehow that they
 /// are being done? nothing moved on the left sidebar and the cards just remained with a check", and his "Yes, as
 /// drawn" to its looks): the check while nothing runs that the hub knows, the turning green mark of work while a
-/// record proves that work runs, and the red mark of work that ended with no success. Exactly these three looks: a
-/// task that waits is look 1, "nothing runs that the hub knows", with its state word (the area Needs-you and the
-/// manager, 21 November 2026: a muted resting symbol would be a fourth look with no yes). It moves only on such a
-/// record, and it ends when that record ends. Its words are behind the mark only: on hover, and for VoiceOver.
+/// record proves that work runs, the red mark of work that ended with no success, and **the orange mark of a task that
+/// needs him**: his "Orange mark" of 21 November 2026, in the record of "Card reply status" ("The same orange mark as
+/// the task's own row, which means 'needs you' everywhere in the app"), so where the task's row is orange the card is
+/// orange, with the row's own symbol and words, and the two never disagree. A task whose row is muted (queued, parked,
+/// his own pause) is the check with its state word (the area Needs-you and the manager, 21 November 2026). It moves only on such a record,
+/// and it ends when that record ends. Its words are behind the mark only: on hover, and for VoiceOver.
 public enum AnsweredMark: Sendable, Equatable {
     /// Done, or nothing runs that the hub knows: the check, as before. For a task that waits, its state word.
     case done(words: String)
@@ -16,6 +18,8 @@ public enum AnsweredMark: Sendable, Equatable {
     case working(words: String, agent: String?, title: String?)
     /// The work ended with no success: the red mark.
     case failed(words: String)
+    /// The task's row is orange: its own mark (`symbol`), orange, with the row's words.
+    case attention(symbol: String, words: String)
 
     /// `ui_features` of a hub that gives an item's `team_state`, `team_reason` and `task`.
     public static let feature = "need_marks"
@@ -23,7 +27,7 @@ public enum AnsweredMark: Sendable, Equatable {
     /// What the pointer and VoiceOver read for the mark.
     public var words: String {
         switch self {
-        case .done(let words), .working(let words, _, _), .failed(let words): words
+        case .done(let words), .working(let words, _, _), .failed(let words), .attention(_, let words): words
         }
     }
 }
@@ -35,7 +39,8 @@ extension OwnerNeed {
     /// - Give that he pressed is made with his answer ("Given");
     /// - the task that his answer lets go on (a question's, a door card's or a take-over's): work now by its own mark
     ///   turns (`FleetTask.mark`), a result that the Tasks board badges red is the red mark, a checked result is the
-    ///   check ("Done"), and a task that waits, or whose result waits for its check, is the check with its state word;
+    ///   check ("Done"), a task whose row is orange (`FleetTask.tint`) is that orange mark with the row's words, and a
+    ///   task whose row is muted, or whose result waits for its check, is the check with its state word;
     /// - else, and on a hub before the feature, and for a task that the reading does not hold: the check, and the
     ///   agent that raised it has his answer.
     /// A card that he answered in words keeps no mark, and the key card and the Run card keep their own: the card
@@ -55,6 +60,7 @@ extension OwnerNeed {
         switch found.tint(in: state) {
         case .failed: return .failed(words: found.failedResult ?? mark.words)
         case .checked: return .done(words: String(l10n: "Done"))
+        case .attention: return .attention(symbol: mark.symbol, words: mark.words)
         default: break
         }
         if mark.inWork {
@@ -63,3 +69,4 @@ extension OwnerNeed {
         return .done(words: mark.words)
     }
 }
+

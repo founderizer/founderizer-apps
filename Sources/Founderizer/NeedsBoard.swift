@@ -903,6 +903,8 @@ private struct NeedAnswered: View {
             // the table's words, also for an answer of files alone, which says "Answered" once
             .accessibilityElement(children: .combine)
             .accessibilityLabel(answer.isEmpty ? Text("Answered") : Text("Answered: \(answer)"))
+            // what came of it, as the mark's tag says it (owner feature need_marks)
+            .accessibilityValue(inWords ? "" : answerMark?.words ?? "")
             if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .leading) }
         }
         .padding(.horizontal, 14).padding(.vertical, 11).frame(maxWidth: .infinity, minHeight: FormMetrics.row, alignment: .leading)
@@ -919,11 +921,23 @@ private struct NeedAnswered: View {
         }
     }
 
+    /// **What came of his answer, in the check's place, as on its card in a chat** (owner feature `need_marks`; the
+    /// owner's "Yes, same marks there", 21 November 2026: `AnsweredMarkView`), once the reading has his answer and a
+    /// check that he drew here went quiet; nil while his answer is on its way, and for a press of Run, which keeps its
+    /// own mark.
+    private var answerMark: AnsweredMark? {
+        guard symbol == "checkmark", words == nil, !draws || quiet else { return nil }
+        return need.answeredMark(in: store.state)
+    }
+
     /// The check before his answer. It keeps its place while it is not drawn yet, so the words do not move.
     @ViewBuilder private var check: some View {
         let mark = Image(systemName: symbol).font(IconMetrics.symbol(12, weight: .semibold))
             .foregroundStyle(draws && !quiet ? Color.white : FleetStyle.muted).accessibilityHidden(true)
-        if !draws {
+        if let answerMark {
+            AnsweredMarkView(mark: answerMark, moves: store.marksMove, size: 12, names: store.cardNames(for: need))
+                .foregroundStyle(FleetStyle.muted).accessibilityHidden(true)
+        } else if !draws {
             mark
         } else {
             mark.hidden().overlay { if drawn { mark.transition(.drawsOn) } }

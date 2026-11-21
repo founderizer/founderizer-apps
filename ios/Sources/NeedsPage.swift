@@ -692,8 +692,9 @@ private struct NeedAnswered: View {
 }
 
 /// **The mark of an answered card, in the place of its check** (owner feature `need_marks`; the owner's "Yes, as drawn"
-/// of 21 November 2026; the Mac's `AnsweredMarkView`): the check, the green mark of work, or the red mark of work that
-/// ended with no success (`OwnerNeed.answeredMark`), and no fourth look. They are the phone's own marks of a task's
+/// of 21 November 2026; the Mac's `AnsweredMarkView`): the check, the green mark of work, the red mark of work that
+/// ended with no success, or the orange mark of a task that needs him, where its row is orange (his "Orange mark" of
+/// the same day; `OwnerNeed.answeredMark`). They are the phone's own marks of a task's
 /// states: work is the green dotted circle, which stands still here as on Tasks and on the row of what he asked for in a
 /// chat (the phone has no turning mark of work, so it is the Mac's mark at rest, as under Reduce Motion), and a failure
 /// is the red filled exclamation of a failed task. Its words are VoiceOver's, as the folded card's value.
@@ -712,6 +713,8 @@ struct AnsweredMarkView: View {
         case .done: ("checkmark", nil)
         case .working: ("circle.dotted", .work)
         case .failed: ("exclamationmark.circle.fill", .failed)
+        // the task's own mark, as its row draws it (`FleetTask.mark`, which the phone's rows draw too), in orange
+        case .attention(let symbol, _): (symbol, .attention)
         }
     }
 

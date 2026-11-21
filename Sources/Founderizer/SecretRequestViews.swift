@@ -81,27 +81,52 @@ struct KeyHoldBanner: View {
     let hold: KeyHold
     /// The agent whose chat this is, which gets the secret's name after the save.
     let agent: String
+    /// **A narrow place** (a request card in its own window, `NeedWindows`): the two buttons stand on a line of their
+    /// own under the words, at the right. On one line there, the buttons took the width and the words stood as a column
+    /// of one or two letters to a line (a guest's check, 21 November 2026). A chat and a chat's card keep one line.
+    var narrow = false
     let save: () -> Void
     let goOn: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "key.horizontal").font(IconMetrics.symbol(13)).foregroundStyle(.orange).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(hold == .paste ? "That looks like a key, so it was not pasted." : "This message holds what looks like a key.")
-                    .font(FormMetrics.detailTitle).foregroundStyle(FleetStyle.text)
-                Text("In a message, \(agent.agentLabel) and its transcripts would have it. Saved as a secret, it goes straight into the vault, and \(agent.agentLabel) gets only its name.")
-                    .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
+        Group {
+            if narrow {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) { mark; words }
+                    HStack(spacing: 10) { Spacer(minLength: 0); buttons }
+                }
+            } else {
+                HStack(alignment: .center, spacing: 10) {
+                    mark
+                    words
+                    Spacer(minLength: 8)
+                    buttons
+                }
             }
-            Spacer(minLength: 8)
-            Button(hold == .paste ? "Paste it anyway" : "Keep it", action: goOn).buttonStyle(FleetOutlineButtonStyle())
-                .accessibilityIdentifier("key-hold-go-on")
-            Button("Save it as a secret", action: save).buttonStyle(FleetPrimaryButtonStyle())
-                .accessibilityIdentifier("key-hold-save")
         }
         .padding(10).background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: FormMetrics.radius))
         .overlay(RoundedRectangle(cornerRadius: FormMetrics.radius).strokeBorder(Color.orange.opacity(0.35), lineWidth: 0.5))
         .accessibilityElement(children: .contain).accessibilityIdentifier("key-hold")
+    }
+
+    private var mark: some View {
+        Image(systemName: "key.horizontal").font(IconMetrics.symbol(13)).foregroundStyle(.orange).accessibilityHidden(true)
+    }
+
+    private var words: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(hold == .paste ? "That looks like a key, so it was not pasted." : "This message holds what looks like a key.")
+                .font(FormMetrics.detailTitle).foregroundStyle(FleetStyle.text)
+            Text("In a message, \(agent.agentLabel) and its transcripts would have it. Saved as a secret, it goes straight into the vault, and \(agent.agentLabel) gets only its name.")
+                .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder private var buttons: some View {
+        Button(hold == .paste ? "Paste it anyway" : "Keep it", action: goOn).buttonStyle(FleetOutlineButtonStyle())
+            .accessibilityIdentifier("key-hold-go-on")
+        Button("Save it as a secret", action: save).buttonStyle(FleetPrimaryButtonStyle())
+            .accessibilityIdentifier("key-hold-save")
     }
 }
 
@@ -113,9 +138,12 @@ struct KeyPasteGuard: ViewModifier {
     /// The composer that the guard watches, or nil while its box does not have the keyboard.
     let composer: String?
     @State private var watch: Any?
+    /// Its window: a key of another window is not its key (`OwnWindow`; a request card can stand in two at once).
+    @State private var own = OwnWindow()
 
     func body(content: Content) -> some View {
         content
+            .ownWindow(own)
             .onAppear { start() }
             .onDisappear { stop() }
             .onChange(of: composer) { _, _ in stop(); start() }
@@ -123,11 +151,12 @@ struct KeyPasteGuard: ViewModifier {
 
     private func start() {
         guard watch == nil, let composer else { return }
-        let store = store
+        let store = store, own = own
         watch = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             // The monitor runs on the main thread, before the menu and the field see the key.
             let held = MainActor.assumeIsolated { () -> Bool in
                 guard !AppFront.holdsKeys else { return false }     // no key after a front from outside (`AppFront`)
+                guard own.takes(event) else { return false }        // a key of another window of the app
                 guard !event.inPreviewWindow else { return false }  // Cmd+V there is the preview window's
                 let keys = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .function, .numericPad])
                 guard keys == .command, !event.isARepeat, event.charactersIgnoringModifiers?.lowercased() == "v",

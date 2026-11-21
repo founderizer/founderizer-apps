@@ -123,6 +123,12 @@ struct NeedAnswerBox: View {
     @State private var clarifyHeld: [NSEvent] = []
     /// On a step, from the press of Needs clarification until the field's editor has the keys: the page's keys wait.
     @State private var awaitingClarifyCursor = false
+    /// **The card's own window, or nil in a chat** (`NeedWindows`): the chat's keys go to the field of the chat's card
+    /// only (`FleetStore.clarifying`), so a card in its own window neither takes them nor changes where they go.
+    @Environment(\.needWindow) private var cardWindow
+    /// In the card's own window: the watch of that window's keys while they wait for the field of Needs clarification
+    /// (`holdWindowKeys`). A card in a chat and a step have none.
+    @State private var windowKeys = ClarifyWindowKeys()
     /// The card takes his message under it (`OwnerNeed.clarifies`): the hub says so, and the item is open.
     private var clarifies: Bool { need.clarifies(features: store.state?.ui_features) }
     /// His talk over the answers of an open item in a chat's card (`OwnerNeed.shownTalk`). An answered chat card shows
@@ -332,7 +338,7 @@ struct NeedAnswerBox: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 if let held = store.heldKey, held.composer == guardKey {
-                    KeyHoldBanner(hold: held.hold, agent: need.by) { saveHeldKey(held, words: text) } goOn: {
+                    KeyHoldBanner(hold: held.hold, agent: need.by, narrow: cardWindow != nil) { saveHeldKey(held, words: text) } goOn: {
                         keepHeldKey(held, words: text, allowed: $keyAllowed)
                     }
                 }
@@ -409,6 +415,8 @@ struct NeedAnswerBox: View {
         .task { if takesCursor { focused = true } }
         // owner feature need_clarify: his unsent message of this card, kept while he looked at another one
         .onAppear { restoreClarifyDraft() }
+        // in the card's own window only: the window's keys wait for the field of Needs clarification (`holdWindowKeys`)
+        .modifier(ClarifyWindowKeysPlace(keys: cardWindow == nil ? nil : windowKeys))
     }
 
     /// **The keys of the request at hand**, while no field has the cursor (`PageKeys`): a number marks that option, and
@@ -587,13 +595,17 @@ extension NeedAnswerBox {
     }
 
     /// "Save it as a secret": the key goes into the secure form and out of his words (the answer, or his message under
-    /// the card). The agent that asked gets its name in its chat, when the owner has one with it.
+    /// the card). The agent that asked gets its name in its chat, when the owner has one with it. **From the card's own
+    /// window, the main window comes to the front with the app** (`NeedWindowLink.showMainWindow`): the secure form is
+    /// a card over the main window's page, which stands behind his browser while he works in the card's window, so
+    /// the press showed nothing there.
     private func saveHeldKey(_ held: HeldKey, words: Binding<String>) {
         store.heldKey = nil
         var key: String?
         if held.hold == .paste { key = KeyCut.onClipboard() }
         else if let cut = KeyCut.split(words.wrappedValue) { words.wrappedValue = cut.rest; key = cut.key }
         store.secretForm = SecretPreset(tell: store.canChat(with: need.by) ? need.by : nil, key: key)
+        cardWindow?.showMainWindow()
     }
 
     /// "Paste it anyway" or "Keep it": the owner's choice, and no second question while the key is in his words.
@@ -639,24 +651,42 @@ extension NeedAnswerBox {
         if let window = NSApp.keyWindow ?? NSApp.windows.first(where: \.isKeyWindow), window.firstResponder is NSTextView {
             window.makeFirstResponder(nil)
         }
-        if onStep { awaitClarifyCursor() } else { store.clarifying = (need.id, clarifyText) }
+        if onStep { awaitClarifyCursor() } else if cardWindow == nil { store.clarifying = (need.id, clarifyText) } else {
+            holdWindowKeys()
+        }
     }
 
-    /// The chat's open Needs clarification field is no longer this one (sent, closed, or gone from the chat).
+    /// **In the card's own window, its keys wait for the field as a step's keys do** (the owner, 21 November 2026, of
+    /// his first message under a card: "I clicked on discuss and typed, dont remember where"; in the window the keys that
+    /// came before the field took them were lost): from the press until the field's editor has the keys, at most 2 s,
+    /// each key of the card's window that types or edits words waits (`ClarifyWindowKeys`), and goes to the field in its
+    /// order once the field has the cursor (`awaitClarifyCursor`). A key of another window is not the card's, and a
+    /// shortcut, Escape, Return and Tab do what they did. The chat's route (`FleetStore.clarifying`) stays the chat card's.
+    private func holdWindowKeys() {
+        windowKeys.hold(while: { awaitingClarifyCursor }) { event in
+            clarifyHeld.append(event)
+            clarifyFocused = true
+        }
+        awaitClarifyCursor(in: windowKeys.window)
+    }
+
+    /// The chat's open Needs clarification field is no longer this one (sent, closed, or gone from the chat). Never
+    /// from the card's own window, whose field the chat's keys do not reach.
     private func leaveClarify() {
-        if store.clarifying?.need == need.id { store.clarifying = nil }
+        if cardWindow == nil, store.clarifying?.need == need.id { store.clarifying = nil }
     }
 
     /// **On a step, the page's keys wait for the field until its editor has the keys**, up to 2 s at the pace of a draw,
     /// as a chat's box waits for its field (`ComposerCaret`): then the keys that waited go to it, first in the queue and
     /// in their order, and the page leaves a key to a field that has the cursor (`PageKeys`). A field that never takes
-    /// the cursor drops them, so that no key of his words reaches the options.
-    private func awaitClarifyCursor() {
+    /// the cursor drops them, so that no key of his words reaches the options. `own`: the card's own window, whose field
+    /// it waits for while that window has the keyboard (`holdWindowKeys`); nil on a step, the key window.
+    private func awaitClarifyCursor(in own: NSWindow? = nil) {
         awaitingClarifyCursor = true
         Task { @MainActor in
             for _ in 0..<100 {
                 guard awaitingClarifyCursor else { return }
-                if let window = NSApp.keyWindow ?? NSApp.windows.first(where: \.isKeyWindow),
+                if let window = own ?? NSApp.keyWindow ?? NSApp.windows.first(where: \.isKeyWindow), window.isKeyWindow,
                    let editor = window.firstResponder as? NSTextView, editor.isFieldEditor {
                     awaitingClarifyCursor = false
                     let keys = clarifyHeld
@@ -677,7 +707,7 @@ extension NeedAnswerBox {
     private var clarifyBox: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let held = store.heldKey, held.composer == clarifyGuardKey {
-                KeyHoldBanner(hold: held.hold, agent: need.by) { saveHeldKey(held, words: $clarifyText) } goOn: {
+                KeyHoldBanner(hold: held.hold, agent: need.by, narrow: cardWindow != nil) { saveHeldKey(held, words: $clarifyText) } goOn: {
                     keepHeldKey(held, words: $clarifyText, allowed: $clarifyKeyAllowed)
                 }
             }
@@ -694,7 +724,7 @@ extension NeedAnswerBox {
                                    line: onStep ? Self.stepLine : ChatStyle.line)
                     .onChange(of: clarifyText) { _, now in
                         // the chat's box sends a key here once the field has these words (`FleetView.typeIntoBox`)
-                        if store.clarifying?.need == need.id { store.clarifying = (need.id, now) }
+                        if cardWindow == nil, store.clarifying?.need == need.id { store.clarifying = (need.id, now) }
                         // kept while the card is open, in memory: never words that look like a key
                         let kept = now.trimmingCharacters(in: .whitespacesAndNewlines)
                         Self.clarifyDrafts[clarifyDraftKey] = kept.isEmpty || KeyInText.contains(now) ? nil : now
@@ -727,7 +757,9 @@ extension NeedAnswerBox {
         // field, it could stay where it was.
         .task { if cursorToClarify { clarifyFocused = true; cursorToClarify = false } }
         // a key that the chat would have sent to its box (`FleetStore.clarifyKeys`): this field takes the keyboard
-        .onChange(of: store.clarifyKeys) { _, _ in if store.clarifying?.need == need.id { clarifyFocused = true } }
+        .onChange(of: store.clarifyKeys) { _, _ in
+            if cardWindow == nil, store.clarifying?.need == need.id { clarifyFocused = true }
+        }
         .onDisappear { leaveClarify(); clarifyHeld = []; awaitingClarifyCursor = false }
     }
 
@@ -813,44 +845,6 @@ extension FleetStore {
 
 /// What the owner answered: the words, and the files that went with them, because an answer may be files alone.
 /// The files are the ones on the message that answered this request.
-/// **The mark of an answered card, in the place of its check** (owner feature `need_marks`; the owner's "Yes, as drawn"
-/// of 21 November 2026): the check, the turning green mark of work, or the red mark of work that failed
-/// (`OwnerNeed.answeredMark`). Its words are on hover (`hover`) and for
-/// VoiceOver (the folded card's value, `foldedMarkWords`) only: the folded card is one button, so the mark holds no
-/// popover of its own (`StateMark`'s rule for a row that is already one button). `mark` nil: his answer is on its way,
-/// and the check stands as before.
-private struct AnsweredMarkView: View {
-    let mark: AnsweredMark?
-    let moves: Bool
-
-    var body: some View {
-        if let mark {
-            look(mark).help(hover(mark))
-        } else {
-            check
-        }
-    }
-
-    private var check: some View { Image(systemName: "checkmark").font(IconMetrics.symbol(10, weight: .semibold)) }
-
-    /// The words on hover. **Not yet for the work of a task**: his yes was to a hover with the agent's badge there, and
-    /// its look waits for his answer (the area Needs-you and the manager, 21 November 2026); VoiceOver reads its words.
-    private func hover(_ mark: AnsweredMark) -> String {
-        if case .working(_, let agent?, _) = mark, !agent.isEmpty { return "" }
-        return mark.words
-    }
-
-    @ViewBuilder private func look(_ mark: AnsweredMark) -> some View {
-        switch mark {
-        case .done: check
-        case .working: WorkMark(size: 10, moves: moves)
-        case .failed:
-            Image(systemName: "exclamationmark.circle.fill").font(IconMetrics.symbol(10))
-                .foregroundStyle(FleetTask.MarkTint.failed.color)
-        }
-    }
-}
-
 struct NeedAnswerGiven: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
@@ -914,7 +908,16 @@ struct NeedRequestCard: View {
     /// while the card waits, its head (`ChatAskHead`) names it and opens its task, and it has no row of its own. A card
     /// that folds has no head: the row stands under its reply again.
     var ask: ChatAskRow? = nil
-    @State private var expanded = false
+    /// **The card in a window of its own** (`NeedWindows`; the owner's "Yes, as drawn" of 21 November 2026), or nil in a
+    /// chat: there it has no icon to open a window, its long part is open from the start, the window's ground is its
+    /// fill and it draws no edge, its names open their pages through the window, and it tells the window its key save.
+    @Environment(\.needWindow) private var cardWindow
+    /// He opened or closed the card's long part, or nil for the card as it starts: closed in a chat, open in a window.
+    @State private var opened: Bool?
+    private var expanded: Bool {
+        get { opened ?? (cardWindow != nil) }
+        nonmutating set { opened = newValue }
+    }
     /// owner feature need_takeover: he pressed Take over on this card, so its error line may show
     @State private var pressedTakeOver = false
     /// His answer as the outbox saved it, kept from the frame it went until the reading says the request is answered
@@ -1013,11 +1016,12 @@ struct NeedRequestCard: View {
                 }
             }
         }
-        .background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.radius))
+        // in its own window, the window's ground is the card's fill, and the card draws none and no edge
+        .background(cardWindow == nil ? FleetStyle.surface : .clear, in: RoundedRectangle(cornerRadius: FormMetrics.radius))
         // **The edge of every card of a form** (fix round 3, item 58; T-41): with Increase Contrast a one-point edge that
         // reads 4:1, where the request card had none (1.11:1).
         .overlay(RoundedRectangle(cornerRadius: FormMetrics.radius)
-            .strokeBorder(FleetStyle.hairline(0.08), lineWidth: FleetStyle.edgeWidth(contrast)))
+            .strokeBorder(cardWindow == nil ? FleetStyle.hairline(0.08) : .clear, lineWidth: FleetStyle.edgeWidth(contrast)))
         // Owner feature attachments: a file dropped anywhere on an open request is staged in its answer, as a
         // file dropped anywhere in a conversation is staged in that chat's composer.
         .stageDroppedFiles(store: store,
@@ -1025,8 +1029,9 @@ struct NeedRequestCard: View {
                            mark: true)
         .frame(maxWidth: measure ?? .infinity, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // a name in its words opens its page in this window (`FleetStore.openCardLink`)
-        .environment(\.openURL, OpenURLAction { store.openCardLink($0) })
+        // a name in its words opens its page in this window (`FleetStore.openCardLink`); from the card's own window, in
+        // the main window, which comes to the front (`NeedWindowLink.open`)
+        .environment(\.openURL, OpenURLAction { cardWindow?.open($0) ?? store.openCardLink($0) })
         .environment(\.cardServerSymbols, store.cardServerSymbols)
         .onChange(of: store.pending?.requestID, initial: true) { _, _ in
             if let request = store.answerOnItsWay(to: need) {
@@ -1050,6 +1055,8 @@ struct NeedRequestCard: View {
             do { try await Task.sleep(for: KeySaveMark.settles) } catch { return }
             keySave.settle()
         }
+        // its own window closes once the hub has his answer and no save holds the card (`NeedWindowEnd`)
+        .onChange(of: keySave, initial: true) { _, now in cardWindow?.card(keySave: now) }
         // owner feature need_run: Run and its line read the store, and a command for a Mac of the fleet needs the
         // machines' readings for its Run to stand
         .environment(store)
@@ -1107,7 +1114,7 @@ struct NeedRequestCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         // owner feature need_marks: what came of his answer, in the check's place (`AnsweredMarkView`)
                         if !inWords { AnsweredMarkView(mark: onItsWay == nil ? need.answeredMark(in: store.state) : nil,
-                                                       moves: store.marksMove) }
+                                                       moves: store.marksMove, names: names) }
                         CardBadgeText.text(MessageBlock.inline(answerWords), names: names, size: FormMetrics.detailSize)
                             .lineLimit(1).tint(FleetStyle.link)
                     }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
@@ -1198,6 +1205,16 @@ struct NeedRequestCard: View {
                         Task { await store.takeOver(need); pressedTakeOver = true }
                     }
                 }
+                // **Open in its own window** (the owner's "Yes, as drawn" of 21 November 2026): on an open card whose
+                // answer is not on its way, at the end of the title's line, after Take over; never in the window itself
+                if need.isOpen, onItsWay == nil, cardWindow == nil {
+                    IconButton(symbol: "rectangle.inset.topright.filled", words: String(l10n: "Open in its own window"),
+                               size: 12, side: IconMetrics.small) { NeedWindows.open(store: store, need: need) }
+                        // its middle on the title's capitals, and no room of its own over and under the title's line
+                        .padding(.vertical, -3)
+                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
+                        .accessibilityIdentifier("need-window-\(need.id)")
+                }
             }
             if let way = takeOverWay { NeedTakeOverLine(connection: way, pressed: pressedTakeOver) }
 
@@ -1274,11 +1291,26 @@ struct NeedRequestCard: View {
             }
             NeedAnswerGiven(store: store, need: need)
             // Who asks, by the name the sidebar gives it and its glyph before it (D-8), and when: a clock time today
-            // (T-12).
-            AgentNamed(agent: need.by) {
-                Text("From \(need.by.agentLabel) · \(messageTime(need.raised))")
-            }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+            // (T-12). **Copy prompt at the right end of the line** (the owner's "Yes, as drawn" of 21 November 2026), on
+            // a request with steps for him outside the app while no answer of his is on its way (`NeedPrompt.offers`);
+            // every other card keeps its line as it was.
+            if NeedPrompt.offers(need) && onItsWay == nil {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    fromLine
+                    Spacer(minLength: 8)
+                    NeedPromptButton(need: need)
+                }
+            } else {
+                fromLine
+            }
         }
+    }
+
+    /// Who asks and when, in the card's last line.
+    private var fromLine: some View {
+        AgentNamed(agent: need.by) {
+            Text("From \(need.by.agentLabel) · \(messageTime(need.raised))")
+        }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
     }
 
 }

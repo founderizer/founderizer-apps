@@ -772,9 +772,12 @@ struct PasteAttachments: ViewModifier {
     /// composers — the open requests of Needs you — and the one that the owner writes in takes the paste.
     let composer: String?
     @State private var watch: Any?
+    /// Its window: a key of another window is not its key (`OwnWindow`; a request card can stand in two at once).
+    @State private var own = OwnWindow()
 
     func body(content: Content) -> some View {
         content
+            .ownWindow(own)
             .onAppear { start() }
             .onDisappear { stop() }
             .onChange(of: composer) { _, _ in stop(); start() }
@@ -782,11 +785,12 @@ struct PasteAttachments: ViewModifier {
 
     private func start() {
         guard watch == nil, let composer else { return }
-        let store = store
+        let store = store, own = own
         watch = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             // The monitor runs on the main thread, before the menu sees the key.
             let taken = MainActor.assumeIsolated { () -> Bool in
                 guard !AppFront.holdsKeys else { return false }     // no key after a front from outside (`AppFront`)
+                guard own.takes(event) else { return false }        // a key of another window of the app
                 // Cmd+V in the preview window over the app is that window's, never a file for the composer behind it.
                 guard !event.inPreviewWindow else { return false }
                 // Cmd+V alone. Caps Lock does not count, and Cmd+Shift+V (paste as text) stays the text field's.

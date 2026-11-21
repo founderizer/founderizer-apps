@@ -18,7 +18,9 @@ import Vision
 ///   It is the key window by its own word, so the app is never activated. Events go to it through `NSApp.sendEvent`,
 ///   which runs the app's own key monitors, never through the window server.
 /// - A test's body runs from the main run loop itself (`onMainLoop`), as AppKit runs the app's events, and gives back
-///   what it saw; the test checks it after. `Screen` says whether the owner's screen stayed his.
+///   what it saw; the test checks it after. `Screen` says whether the owner's screen stayed his. **Every test of the
+///   target makes its windows and sends its events inside such a body**, one body at a time: a test that does it on
+///   its own runs beside the others, and their windows mix.
 /// - The views draw English, whatever the Mac's language: in a test process `Localized.bundle` is the test program's
 ///   own bundle, which holds no table of the app's languages, so each word is its English key (`ready` checks it).
 ///   A test names a word as the app writes it (`String(l10n:)`), and Vision reads English (`middle`).
@@ -107,8 +109,41 @@ import Vision
     /// after the body; the test checks both after (an issue is a test's own, and the run loop's block is not in it).
     /// A body that has not ended in `limit` seconds fails the test, and ends no run (its result, if it comes later,
     /// is dropped).
+    ///
+    /// **One body at a time, in every suite of the target** (`Turnstile`): Swift Testing runs suites side by side, and
+    /// `.serialized` orders only the tests of one suite. A body that waits (`turn`) runs the main run loop, which would
+    /// run the next suite's body inside it: two windows of the app at once, and the keys of one test in the other's
+    /// window (the first ship run of the marks' hover tag, 21 November 2026).
     nonisolated static func onMainLoop<Seen: Sendable>(limit: Double = 50,
                                                        _ body: @escaping @MainActor () throws -> Seen) async throws
+        -> (seen: Seen, screen: Screen) {
+        await Turnstile.shared.enter()
+        // the turn ends when the body itself has ended on the main loop, not when the test stops waiting for it: a
+        // body that outlived its limit still runs, and the next one must not run inside it (review of 21 November
+        // 2026); a body whose block the main loop never runs keeps the turn, and the tests after it wait here until
+        // their suite's time limit ends them
+        return try await alone(limit: limit, body) { Task { await Turnstile.shared.leave() } }
+    }
+
+    /// The wait of the test bodies for their turn, in the order in which they came.
+    private actor Turnstile {
+        static let shared = Turnstile()
+        private var busy = false
+        private var waiting: [CheckedContinuation<Void, Never>] = []
+
+        func enter() async {
+            guard busy else { busy = true; return }
+            await withCheckedContinuation { waiting.append($0) }
+        }
+
+        func leave() {
+            if waiting.isEmpty { busy = false } else { waiting.removeFirst().resume() }
+        }
+    }
+
+    private nonisolated static func alone<Seen: Sendable>(limit: Double,
+                                                          _ body: @escaping @MainActor () throws -> Seen,
+                                                          ended: @escaping @Sendable () -> Void) async throws
         -> (seen: Seen, screen: Screen) {
         try await withCheckedThrowingContinuation { (waiting: CheckedContinuation<(seen: Seen, screen: Screen), Error>) in
             let once = Once(waiting)
@@ -123,7 +158,7 @@ import Vision
                     var cameActive = false
                     let watch = NotificationCenter.default.addObserver(
                         forName: NSApplication.didBecomeActiveNotification, object: nil, queue: nil) { _ in cameActive = true }
-                    defer { NotificationCenter.default.removeObserver(watch) }
+                    defer { NotificationCenter.default.removeObserver(watch); ended() }
                     do {
                         let seen = try body()
                         done.resume(returning: (seen, Screen(before: before, after: Screen.now, cameActive: cameActive)))
@@ -174,8 +209,12 @@ import Vision
 
     /// **The middle of these words where the window shows them, in the window's own points**, found as a person finds
     /// them: in the window's picture, by the Mac's own text recognition (Vision, on this Mac, with no network), in
-    /// English, as the views draw it here. A SwiftUI window makes no accessibility elements in a process that no
-    /// assistive app reads, so they cannot be asked. Give the words as the app writes them (`String(l10n:)`). It waits,
+    /// English, as the views draw it here. A SwiftUI window makes its accessibility elements only in a process that an
+    /// assistive app reads, or that sets it on its own app:
+    /// `NSApp.accessibilitySetValue(true, forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))`,
+    /// and sets it back to false at its end (found by the session "Task details modal and feedback", 21 November 2026);
+    /// this reads the picture, as a person does, with neither. Give the
+    /// words as the app writes them (`String(l10n:)`). It waits,
     /// up to `seconds`, until the window shows them.
     static func middle(of words: String, in window: NSWindow, seconds: Double = 20) throws -> NSPoint? {
         let end = Date().addingTimeInterval(seconds)

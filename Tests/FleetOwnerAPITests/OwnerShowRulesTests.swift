@@ -1091,13 +1091,16 @@ struct OwnerShowRulesTests {
                 found.append("\(file.lastPathComponent): \(events)")
             }
         }
-        // **The ten watches of the app's own events**, by file and by the events that each takes.
+        // **The eleven watches of the app's own events**, by file and by the events that each takes.
         #expect(found == [
+            // an answered mark's hover tag goes: it only draws, so it asks nothing, and a dropped click takes it too
+            "AnsweredMarkView.swift: [.scrollWheel, .leftMouseDown, .rightMouseDown, .keyDown]",
             "AttachmentViews.swift: .keyDown",                      // Command and V with a file: asks `holdsKeys`
             "ChatSelection.swift: [.leftMouseDown, .rightMouseDown, .otherMouseDown]",   // a chat's pressed row: asks `reaches`
             "FleetMenu.swift: kinds",                               // the app's menu while it is open (four, below)
             "FleetMenu.swift: [.rightMouseDown, .leftMouseDown]",   // a right click opens the app's menu: asks `reaches`
             "FleetView.swift: .keyDown",                            // ⌘1 to 9, the steps, ⌥⇧↓, typing: asks `holdsKeys`
+            "NeedWindow.swift: .keyDown",                           // a card window's keys that wait for its clarify field: asks `holdsKeys`
             "NeedsBoard.swift: .keyDown",                           // the page keys and Escape: ask `holdsKeys`
             "SecretRequestViews.swift: .keyDown",                   // Command and V with a key: asks `holdsKeys`
             "SetupChannel.swift: [.leftMouseDown, .rightMouseDown, .otherMouseDown]",   // the hold's own: `reaches`
@@ -1119,10 +1122,13 @@ struct OwnerShowRulesTests {
         }
         #expect(try Self.body(of: "private func leavesField(_ event: NSEvent) -> Bool {", in: needs)
             .trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(guardLine))
-        // The two paste watches: the guard is the first line of what the watch does on the main actor.
-        for path in ["Sources/Founderizer/AttachmentViews.swift", "Sources/Founderizer/SecretRequestViews.swift"] {
+        // The two paste watches, and the watch of a card's own window (`ClarifyWindowKeys`): the guard is the first line
+        // of what the watch does on the main actor.
+        for (path, head) in [("Sources/Founderizer/AttachmentViews.swift", "{ event in"),
+                             ("Sources/Founderizer/SecretRequestViews.swift", "{ event in"),
+                             ("Sources/Founderizer/NeedWindow.swift", "{ [weak self] event in")] {
             let text = try Self.source(path)
-            let watch = try #require(text.range(of: "NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in"))
+            let watch = try #require(text.range(of: "NSEvent.addLocalMonitorForEvents(matching: .keyDown) \(head)"))
             let block = try #require(text.range(of: "MainActor.assumeIsolated { () -> Bool in", range: watch.upperBound..<text.endIndex))
             #expect(text[block.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(guardLine), "\(path)")
         }

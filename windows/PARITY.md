@@ -156,3 +156,5 @@ Mac, and a device route is all that the PC reaches.
   (`BuildDownload`). The publisher check, the unpack, the launcher and the swap wait for the screens; the release job
   and the website wait (`~/dev/founderizer-plans/windows-app-release-design.md`).
 - **Pings while the app is closed**: not planned in step 1 (decision D4).
+- **A request card in a window of its own** (the Mac's `NeedWindows`, 21 November 2026): not planned: it is the
+  Mac's alone, an AppKit panel over every app, also over a full-screen one.

@@ -109,6 +109,9 @@ struct CardPageButton: View {
     /// when it is there, so a step with no page keeps its look.
     var top: CGFloat = 0
     var centred = false
+    /// The card's own window, when the button stands in one: the page opens in the main window, which stands behind
+    /// the other app then, so its press brings the main window to the front too (`NeedWindowLink.showMainWindow`).
+    @Environment(\.needWindow) private var cardWindow
 
     private var page: String? {
         guard need.isOpen, !task.isEmpty else { return nil }
@@ -118,7 +121,10 @@ struct CardPageButton: View {
 
     var body: some View {
         if let page, let words = FleetStore.cardPageWords(page), let place = FleetStore.cardPage(page) {
-            Button("Open \(words)") { store.destination = place }
+            Button("Open \(words)") {
+                store.destination = place
+                cardWindow?.showMainWindow()
+            }
                 .buttonStyle(FleetOutlineButtonStyle())
                 .accessibilityIdentifier("need-open-page-\(need.id)")
                 .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)

@@ -10,12 +10,12 @@ struct NeedMarksTests {
     private static let now = 1_791_903_600.0
 
     private func task(_ id: Int, _ state: String, title: String = "Move the shop", parked: Double? = nil,
-                      accepted: Int? = nil) -> [String: Any] {
+                      accepted: Int? = nil, nudged: Int = 0, waitingOn: String? = nil) -> [String: Any] {
         var row: [String: Any] = ["id": id, "title": title, "details": "", "done_when": "Checked", "needs": "none",
                                   "goal": "", "owner": "dev", "requester": "manager", "state": state,
                                   "created": Self.now - 600, "attempt": 1, "restarts": 0, "nudge_level": 0,
                                   "stop_sent": 0, "started": Self.now - 500, "last_activity": Self.now - 60]
-        row["parked_until"] = parked; row["accepted"] = accepted
+        row["parked_until"] = parked; row["accepted"] = accepted; row["nudge_level"] = nudged; row["waiting_on"] = waitingOn
         return row
     }
 
@@ -25,14 +25,15 @@ struct NeedMarksTests {
             .merging(extra) { _, new in new }
     }
 
-    private func reading(_ need: [String: Any], tasks: [[String: Any]] = [],
+    private func reading(_ need: [String: Any], tasks: [[String: Any]] = [], holds: [[String: Any]] = [],
+                         outcomes: [[String: Any]] = [],
                          features: [String] = [AnsweredMark.feature]) throws -> (OwnerNeed, HubState) {
         let agents: [[String: Any]] = ["manager", "dev"].map {
             ["name": $0, "role": $0 == "manager" ? "manager" : "worker", "runtime": "claude", "can": []]
         }
         let state = try HubState.decode(JSONSerialization.data(withJSONObject: [
-            "schema_version": 1, "db": "db", "time": Self.now, "agents": agents, "tasks": tasks, "holds": [],
-            "outcomes": [], "notes": [], "needs": [need], "permissions": [], "messages": [], "reports": [],
+            "schema_version": 1, "db": "db", "time": Self.now, "agents": agents, "tasks": tasks, "holds": holds,
+            "outcomes": outcomes, "notes": [], "needs": [need], "permissions": [], "messages": [], "reports": [],
             "ui_features": features] as [String: Any]))
         return (try #require(state.needs.first), state)
     }
@@ -78,6 +79,43 @@ struct NeedMarksTests {
         // a task that the reading does not hold: the check
         let (gone, inGone) = try reading(answered, tasks: [task(42, "working")])
         #expect(gone.answeredMark(in: inGone) == .done(words: "\("manager".agentLabel) has your answer"))
+    }
+
+    /// His "Orange mark" (21 November 2026: "The same orange mark as the task's own row"): where the task's row is
+    /// orange the card is orange, with the row's symbol and words, and a task whose row is muted (his own pause) is the
+    /// check with its state word. The row and the card never disagree.
+    @Test func whereTheTasksRowIsOrangeTheCardIsOrange() throws {
+        let answered = need(["task": 41])
+        func mark(_ state: HubState) throws -> (symbol: String, words: String) {
+            let row = try #require(state.tasks.first).mark(in: state)
+            return (row.symbol, row.words)
+        }
+        let (stalled, inStall) = try reading(answered, tasks: [task(41, "working", nudged: 1)])
+        let stall = try mark(inStall)
+        #expect(stalled.answeredMark(in: inStall) == .attention(symbol: stall.symbol, words: stall.words))
+        let unconfirmed: [String: Any] = ["id": 1, "task": 41, "kind": "pause", "state": "not_confirmed", "attempt": 1]
+        let (held, inHold) = try reading(answered, tasks: [task(41, "working")], holds: [unconfirmed])
+        let hold = try mark(inHold)
+        #expect(held.answeredMark(in: inHold) == .attention(symbol: hold.symbol, words: hold.words))
+        // an outcome that is not known, which a worker with no shell cannot check: his to check
+        let unknown: [String: Any] = ["id": 1, "task": 41, "attempt": 1, "title": "Charge the card", "kind": "payment",
+                                      "state": "unknown"]
+        let (checks, inCheck) = try reading(answered, tasks: [task(41, "working")], outcomes: [unknown])
+        let check = try mark(inCheck)
+        #expect(check.symbol == "questionmark.circle"
+                && checks.answeredMark(in: inCheck) == .attention(symbol: check.symbol, words: check.words))
+        // a wait on another agent is orange on its row, so on the card too
+        let (waits, inWait) = try reading(answered, tasks: [task(41, "working", waitingOn: "manager")])
+        let wait = try mark(inWait)
+        #expect(waits.answeredMark(in: inWait) == .attention(symbol: wait.symbol, words: wait.words))
+        // his own pause is muted on its row: the check
+        let paused: [String: Any] = ["id": 1, "task": 41, "kind": "pause", "state": "paused", "attempt": 1]
+        let (rests, inPause) = try reading(answered, tasks: [task(41, "working")], holds: [paused])
+        #expect(rests.answeredMark(in: inPause) == .done(words: try mark(inPause).words))
+        // a sign-in that the task waits for: orange, as its row
+        let (signs, inSign) = try reading(answered, tasks: [task(41, "auth-required")])
+        let sign = try mark(inSign)
+        #expect(signs.answeredMark(in: inSign) == .attention(symbol: sign.symbol, words: sign.words))
     }
 
     /// A press that waited for the store is dropped when the card changed under it (`signsTheSame`): the marks' fields

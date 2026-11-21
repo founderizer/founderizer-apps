@@ -559,6 +559,9 @@ struct MobileReadTests {
         let check = need.answeredMark(in: MobileStore.markReading(older, ended: [], of: need))
         #expect(check == .done(words: "\("manager".agentLabel) has your answer"))
         #expect(AnsweredMarkView.look(of: check).symbol == "checkmark" && AnsweredMarkView.look(of: check).tint == nil)
+        // a task that needs him: its own row's mark, in orange
+        let orange = AnsweredMarkView.look(of: .attention(symbol: "questionmark.circle", words: "Outcome not known: check it"))
+        #expect(orange.symbol == "questionmark.circle" && orange.tint == .attention)
     }
 }
 

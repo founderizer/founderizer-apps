@@ -143,7 +143,9 @@ final class AppAutoUpdate {
                                                wizardHolds: store.firstRunHolds)
         guard let build = waiting,
               AppUpdatePolicy.shouldInstall(automatic: automatic, published: published, offered: true,
-                                            awaySince: awaySince, busy: store.sending || store.pending != nil || setup,
+                                            awaySince: awaySince,
+                                            // a card in its own window: the restart would take it away (`NeedWindows.anyOpen`)
+                                            busy: store.sending || store.pending != nil || setup || NeedWindows.anyOpen,
                                             now: now) else { return }
         working = true
         Task { await install(build) }

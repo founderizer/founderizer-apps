@@ -6940,6 +6940,16 @@
         }
       }
     },
+    "Copy prompt" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar prompt"
+          }
+        }
+      }
+    },
     "Copy prompt to fix" : {
       "localizations" : {
         "es" : {
@@ -14936,6 +14946,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abrir el hilo hijo · Intento %lld"
+          }
+        }
+      }
+    },
+    "Open in its own window" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir en su propia ventana"
           }
         }
       }
