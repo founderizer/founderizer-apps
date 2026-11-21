@@ -14,6 +14,10 @@ import Foundation
 /// shape-checked here (the hub keeps only names of its own list), so the words that a wrong hub could still choose are
 /// a few lower-case letters in that one place. The app writes each line itself, and Report a problem shows every line
 /// before it sends anything.
+///
+/// **A stall** (UI-API.md 1.284) is said in the same rows as a fault, as "Stall at hub.py 5574, from hub.py 74318.
+/// Once.": the owner's "Yes, reports only" of 21 November 2026 to that picture of the "Last error" row. It raises no
+/// warning: the hub counts no stall in `hub_fault`. A hub before 1.284 sends no `stalls`, and the answer has none.
 public struct HubDiagnostics: Decodable, Sendable, Equatable {
     /// The hub feature that carries the route, in `ui_features`.
     public static let feature = "diagnostics"
@@ -60,12 +64,38 @@ public struct HubDiagnostics: Decodable, Sendable, Equatable {
         }
     }
 
+    /// A time when the hub's threads waited, with the places of the thread that held them; `kind` is one of
+    /// `stallKinds`, which the rows all say as "Stall".
+    public struct Stall: Decodable, Sendable, Equatable {
+        public let kind: String
+        public let frames: [Frame]
+        public let count: Int
+        public let first: Double
+        public let last: Double
+
+        public init(kind: String, frames: [Frame], count: Int, first: Double, last: Double) {
+            self.kind = kind; self.frames = frames; self.count = count; self.first = first; self.last = last
+        }
+    }
+
     public let faults: [Fault]
     public let refusals: [Refusal]
+    public let stalls: [Stall]
     public let db: String?
 
-    public init(faults: [Fault], refusals: [Refusal], db: String? = nil) {
-        self.faults = faults; self.refusals = refusals; self.db = db
+    public init(faults: [Fault], refusals: [Refusal], stalls: [Stall] = [], db: String? = nil) {
+        self.faults = faults; self.refusals = refusals; self.stalls = stalls; self.db = db
+    }
+
+    enum CodingKeys: String, CodingKey { case faults, refusals, stalls, db }
+
+    /// `stalls` may be missing (a hub before 1.284); a value of the wrong type drops the whole answer, as for the rest.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        faults = try values.decode([Fault].self, forKey: .faults)
+        refusals = try values.decode([Refusal].self, forKey: .refusals)
+        stalls = try values.decodeIfPresent([Stall].self, forKey: .stalls) ?? []
+        db = try values.decodeIfPresent(String.self, forKey: .db)
     }
 
     // ------------------------------------------------------------ shapes
@@ -107,6 +137,8 @@ public struct HubDiagnostics: Decodable, Sendable, Equatable {
         "RuntimeError", "SSLError", "StopIteration", "SubprocessError", "TimeoutError", "TimeoutExpired", "ToolError",
         "TypeError", "URLError", "UnboundLocalError", "UnicodeDecodeError", "UnicodeEncodeError", "UnicodeError",
         "ValueError", "ZeroDivisionError"]
+    /// The kinds of a stall that the hub names (diagnostics.STALLS). Another kind drops its stall: a kind is a word.
+    public static let stallKinds: Set<String> = ["busy", "hold", "collect", "paused"]
     /// A tool of the hub's list: lower-case words with "_", and `other`.
     static func isTool(_ text: String) -> Bool { matches(text, #"[a-z][a-z0-9_]{0,63}"#) }
     private static func isLine(_ line: Int) -> Bool { (0..<10_000_000).contains(line) }
@@ -132,7 +164,15 @@ public struct HubDiagnostics: Decodable, Sendable, Equatable {
             Self.files.contains($0.file) ? $0
                 : Refusal(tool: $0.tool, file: "lib", line: 0, count: $0.count, first: $0.first, last: $0.last)
         }
-        return HubDiagnostics(faults: Array(faults.prefix(20)), refusals: Array(refusals.prefix(20)), db: db)
+        let stalls = stalls.filter { stall in
+            Self.stallKinds.contains(stall.kind) && Self.isCount(stall.count) && (1...12).contains(stall.frames.count)
+                && stall.frames.allSatisfy { Self.isFile($0.file) && Self.isLine($0.line) && (!$0.isLibrary || $0.line == 0) }
+        }.map { stall in
+            Stall(kind: stall.kind, frames: stall.frames.map { Self.files.contains($0.file) ? $0 : Frame(file: "lib", line: 0) },
+                  count: stall.count, first: stall.first, last: stall.last)
+        }
+        return HubDiagnostics(faults: Array(faults.prefix(20)), refusals: Array(refusals.prefix(20)),
+                              stalls: Array(stalls.prefix(20)), db: db)
     }
 
     // ------------------------------------------------------------ the lines, which the app writes itself
@@ -148,6 +188,14 @@ public struct HubDiagnostics: Decodable, Sendable, Equatable {
         if let errno = fault.errno { return "\(fault.kind) errno \(errno)" }
         return fault.kind
     }
+
+    /// A stall as the rows say it: a fault named "Stall", with no errno and no HTTP status.
+    static func asFault(_ stall: Stall) -> Fault {
+        Fault(kind: "Stall", frames: stall.frames, count: stall.count, first: stall.first, last: stall.last)
+    }
+
+    /// What the rows say as errors: the hub's faults, then its stalls.
+    var errors: [Fault] { faults + stalls.map(Self.asFault) }
 
     /// The frames in the hub's code, the innermost first.
     static func places(_ fault: Fault) -> [Frame] { fault.frames.reversed().filter { !$0.isLibrary } }
@@ -178,7 +226,7 @@ public struct HubDiagnostics: Decodable, Sendable, Equatable {
     /// **E3, the "Hub errors" row:** "KeyError at hub.py 31761, 3 times. TimeoutError at hub.py 41190, once. Refused:
     /// send_message at hub.py 28470, 2 times." At most `mostWords` characters: what does not fit is counted.
     public var errorsLine: String? {
-        let faultItems = faults.map(Self.item)
+        let faultItems = errors.map(Self.item)
         let refusalItems = refusals.map(Self.item)
         guard !faultItems.isEmpty || !refusalItems.isEmpty else { return nil }
         var line = "", shown = 0
@@ -199,19 +247,20 @@ public struct HubDiagnostics: Decodable, Sendable, Equatable {
         return line + (more > 0 ? (line.isEmpty ? "" : "; ") + "+\(more) more." : ".")
     }
 
-    /// **Which row says it, so that one error never shows two times:** one fault and no refused call, while this Mac
-    /// has no error of its own, goes in "Last error" (C0); anything more goes in "Hub errors" (E3), as a list.
+    /// **Which row says it, so that one error never shows two times:** one fault or stall and no refused call, while
+    /// this Mac has no error of its own, goes in "Last error" (C0); anything more goes in "Hub errors" (E3), as a list.
     /// The warning kinds that Report a problem leaves out of its findings and its Checks line, because one of these
-    /// rows says the same faults: one error, said once.
-    public static func said(_ rows: (lastError: String?, hubErrors: String?)) -> Set<String> {
-        (rows.lastError ?? rows.hubErrors) == nil ? [] : ["hub_fault"]
+    /// rows says the same faults: one error, said once. Rows that say only stalls say no fault, and the hub counts no
+    /// stall in `hub_fault`, so its warning stays.
+    public func said(_ rows: (lastError: String?, hubErrors: String?)) -> Set<String> {
+        (rows.lastError ?? rows.hubErrors) == nil || faults.isEmpty && refusals.isEmpty ? [] : ["hub_fault"]
     }
 
     /// A line that looks like it holds a key is not shown and not sent: the shapes leave no room for one, and this is
     /// the last word (`KeyInText`, the guard of the chat's composer).
     public func rows(macHasItsOwnError: Bool) -> (lastError: String?, hubErrors: String?) {
         let safe = { (line: String?) in line.flatMap { KeyInText.contains($0) ? nil : $0 } }
-        if faults.count == 1, refusals.isEmpty, !macHasItsOwnError { return (safe(Self.lastError(faults[0])), nil) }
+        if errors.count == 1, refusals.isEmpty, !macHasItsOwnError { return (safe(Self.lastError(errors[0])), nil) }
         return (nil, safe(errorsLine))
     }
 }

@@ -278,7 +278,7 @@ final class ReportProblemModel {
         // Mac has no error of its own, is the "Last error"; more, or a refused call, is the "Hub errors" row. Where a
         // row says them, the hub's warning about them (E1) is no block and no Checks line here: one error, said once.
         let hubRows = diagnostics?.rows(macHasItsOwnError: macError != nil) ?? (lastError: nil, hubErrors: nil)
-        let said = HubDiagnostics.said(hubRows)
+        let said = diagnostics?.said(hubRows) ?? []
         let found = FleetTrouble.read(connectionError: store.connectionError, storageError: store.storageError,
                                       isFresh: store.isFresh, state: store.state, health: health,
                                       machines: machines, servers: servers, checklists: checklists,

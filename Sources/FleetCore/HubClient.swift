@@ -480,7 +480,8 @@ public final class HubClient: Sendable {
         parts.queryItems = [.init(name: "db", value: database)]
         let (data, _) = try await boundedArtifactRead(URLRequest(url: parts.url!), limit: 262_144)
         let result = try JSONDecoder().decode(HubDiagnostics.self, from: data)
-        guard result.db == database, result.faults.count <= 1000, result.refusals.count <= 1000 else {
+        guard result.db == database, result.faults.count <= 1000, result.refusals.count <= 1000,
+              result.stalls.count <= 1000 else {
             throw HubError.invalidResponse
         }
         return result.checked()

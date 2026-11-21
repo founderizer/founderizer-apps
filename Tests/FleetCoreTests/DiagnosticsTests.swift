@@ -107,6 +107,32 @@ struct DiagnosticsTests {
         #expect(answer.refusals.map(\.file) == ["lib"] && answer.refusals.map(\.line) == [0])
     }
 
+    // ------------------------------------------------------------ a stall (UI-API.md 1.284)
+
+    /// The owner's "Yes, reports only" of 21 November 2026, to the picture of the "Last error" row: a stall is said as
+    /// "Stall" in the rows of a fault; a kind that is not one of the hub's drops it; a hub before 1.284 sends none.
+    @Test func aStallIsSaidAsStallInTheRowsOfAFault() throws {
+        let json = #"""
+        {"faults": [], "refusals": [], "db": "abc",
+         "stalls": [{"kind": "busy", "frames": [{"file": "lib", "line": 0}, {"file": "hub.py", "line": 74318},
+           {"file": "hub.py", "line": 5574}], "count": 1, "first": 1731590000.5, "last": 1731590240.5},
+          {"kind": "Read the vault", "frames": [{"file": "hub.py", "line": 1}], "count": 1, "first": 1.0, "last": 2.0}]}
+        """#
+        let answer = try JSONDecoder().decode(HubDiagnostics.self, from: Data(json.utf8)).checked()
+        #expect(answer.stalls.map(\.kind) == ["busy"])
+        #expect(answer.rows(macHasItsOwnError: false).lastError == "Stall at hub.py 5574, from hub.py 74318. Once.")
+        let more = HubDiagnostics(faults: [fault()], refusals: [], stalls: answer.stalls)
+        #expect(more.rows(macHasItsOwnError: false).hubErrors
+                == "KeyError at hub.py 31761, 3 times. Stall at hub.py 5574, once.")
+        // Beside the Mac's own error it goes to "Hub errors"; one with no place in the code says no place.
+        #expect(answer.rows(macHasItsOwnError: true).hubErrors == "Stall at hub.py 5574, once.")
+        let nowhere = HubDiagnostics(faults: [], refusals: [], stalls: [.init(kind: "paused", frames: [.init(file: "lib",
+                                     line: 0)], count: 2, first: 1_731_590_000, last: 1_731_590_009)]).checked()
+        #expect(nowhere.rows(macHasItsOwnError: false).lastError == "Stall. 2 times.")
+        let older = try JSONDecoder().decode(HubDiagnostics.self, from: Data(#"{"faults": [], "refusals": []}"#.utf8))
+        #expect(older.stalls.isEmpty)
+    }
+
     // ------------------------------------------------------------ which row says it
 
     @Test func oneErrorShowsOnceNeverInTwoRows() {
@@ -128,9 +154,14 @@ struct DiagnosticsTests {
     }
 
     @Test func theHubsWarningIsLeftOutOnlyWhereARowSaysTheFaults() {
-        #expect(HubDiagnostics.said((lastError: nil, hubErrors: nil)).isEmpty)
-        #expect(HubDiagnostics.said((lastError: "KeyError at hub.py 1. Once.", hubErrors: nil)) == ["hub_fault"])
-        #expect(HubDiagnostics.said((lastError: nil, hubErrors: "KeyError at hub.py 1, once.")) == ["hub_fault"])
+        let faults = HubDiagnostics(faults: [fault()], refusals: [])
+        #expect(faults.said((lastError: nil, hubErrors: nil)).isEmpty)
+        #expect(faults.said((lastError: "KeyError at hub.py 1. Once.", hubErrors: nil)) == ["hub_fault"])
+        #expect(faults.said((lastError: nil, hubErrors: "KeyError at hub.py 1, once.")) == ["hub_fault"])
+        // Rows that say only a stall say no fault: the hub's warning, which counts no stall, stays in the findings.
+        let stall = HubDiagnostics(faults: [], refusals: [], stalls: [.init(kind: "hold", frames: [.init(file: "hub.py",
+                                   line: 5574)], count: 1, first: 1_731_590_000, last: 1_731_590_004)])
+        #expect(stall.said((lastError: "Stall at hub.py 5574. Once.", hubErrors: nil)).isEmpty)
     }
 
     @Test func aLineThatLooksLikeAKeyIsNeitherShownNorSent() {
