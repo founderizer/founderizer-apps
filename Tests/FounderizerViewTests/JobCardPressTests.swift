@@ -11,14 +11,7 @@ import Testing
 /// `AXPress`: `accessibilityPerformPress` on SwiftUI's element of the row, found by its identifier. SwiftUI makes its
 /// elements only in a process that an assistive app reads, so the test sets `AXEnhancedUserInterface` on its own app,
 /// as such an app sets it, and takes it away at its end.
-///
-/// **Held back** (21 November 2026): two view suites that run side by side run one test's body inside the other's
-/// `turn()`, and each window takes the keys, so beside this suite `NeedClarifyKeysTests` lost its typed words in every
-/// run. The cure is the area Release, ship and tests': `ViewHost.onMainLoop` lets one body run at a time, or ship runs
-/// the view tests one at a time. Its proof: this test and `NeedClarifyKeysTests` side by side, two runs, both pass.
-/// Then the trait `.disabled` goes. The test passes alone and with `--no-parallel`.
-@Suite(.serialized, .timeLimit(.minutes(1)),
-       .disabled("Held back: two view suites that run side by side run one test's body inside the other's turn(), and each window takes the keys. It comes back when ViewHost.onMainLoop lets one body run at a time, or when ship runs the view tests one at a time."))
+@Suite(.serialized, .timeLimit(.minutes(1)))
 struct JobCardPressTests {
     /// A job of two tasks of an example agent: task 2 follows task 1, so the board names the job "task 1".
     @MainActor private static func store() throws -> FleetStore {

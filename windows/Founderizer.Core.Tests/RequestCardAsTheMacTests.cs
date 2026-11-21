@@ -226,11 +226,11 @@ public sealed class RequestCardAsTheMacTests
     /// <summary>The Mac's AnsweredMark of a card whose answer lets a task go on (NeedMarksTests
     /// .aCardWithATaskTurnsOnlyWhileItWorksAndIsRedOnlyWhenItFailed): the turning mark only while the task is in work now,
     /// with "Role · title" for an assistive app and no hover yet (the badge's hover waits for the Mac); the red mark for a
-    /// result that is no success, with its word; the check with "Done" for a checked result; and else, with no fourth
-    /// look, the check with the task's state word ("Working" at rest, "Queued", "Waiting for Fleet Manager", a result that
-    /// waits for its check). A task that the reading does not hold: the agent that raised it has his answer. The work
-    /// mark turns only on a current reading. Breaks if the work mark follows the state alone, if a waiting task loses its
-    /// state word or a checked one its "Done", or if a task's work shows words on hover.</summary>
+    /// result that is no success, with its word; the check with "Done" for a checked result; the orange mark of a question
+    /// that waits for the manager, as its row; and else the check with the task's state word ("Working" at rest, "Queued",
+    /// a result that waits for its check). A task that the reading does not hold: the agent that raised it has his answer.
+    /// The work mark turns only on a current reading. Breaks if the work mark follows the state alone, if a task at rest
+    /// loses its state word or a checked one its "Done", or if a task's work shows words on hover.</summary>
     [TestMethod]
     public void AnAnsweredCardTurnsOnlyWhileItsTaskWorksAndIsRedOnlyWhenItFailed()
     {
@@ -240,10 +240,11 @@ public sealed class RequestCardAsTheMacTests
                                   "Answer today's support tickets");
         CollectionAssert.AreEqual(new[]
         {
-            work, Done("Working"), Done("Queued"), Done("Waiting for Fleet Manager"),
+            work, Done("Working"), Done("Queued"),
+            new AnswerMark(AnswerSymbol.Attention, "Waiting for Fleet Manager", Row: TaskSymbol.Question),
             new AnswerMark(AnswerSymbol.Failed, "Failed"), new AnswerMark(AnswerSymbol.Failed, "Not accepted"),
             Done("Done"), Done("Awaiting check"), Done("Fleet Manager has your answer"),
-        }, marks, "work, at rest, queued, waiting, failed, not accepted, checked, awaiting its check, not in the reading");
+        }, marks, "work, at rest, queued, a question, failed, not accepted, checked, awaiting its check, not in the reading");
         Assert.IsNull(marks[0].Hover, "no hover for a task's work until the Mac draws its badge there");
         Assert.AreEqual("Failed", marks[4].Hover);
         var s = Answered(true, Pressed(41, Marks(task: 11)));
@@ -251,6 +252,71 @@ public sealed class RequestCardAsTheMacTests
         Assert.IsTrue(Screens.Card(s, need, [], Clock, Utc).MarkMoves, "a current reading turns the work mark");
         var old = s with { LastRead = Clock.AddMinutes(-5) };
         Assert.IsFalse(Screens.Card(old, need, [], Clock, Utc).MarkMoves, "a last reading: the work mark rests");
+    }
+
+    /// <summary>His "Orange mark" (21 November 2026: "The same orange mark as the task's own row"), as the Mac's
+    /// NeedMarksTests.whereTheTasksRowIsOrangeTheCardIsOrange: where the task's row needs someone (a stall, a hold of his
+    /// that is not confirmed, an outcome that is not known, a wait on another agent, a sign-in), the card wears the
+    /// orange mark with the row's own symbol and words, under the pointer too; his own pause is muted on its row, so the
+    /// card is the check with its state word. In the Mac's order (FleetTask.tint): an outcome that is not known and the
+    /// owner's hold come before a red result and before work. Breaks if the card keeps the check where the row is
+    /// orange, takes another symbol or other words than the row, is red for a failed task that a hold or an outcome of
+    /// his holds, or turns for a held task.</summary>
+    [TestMethod]
+    public void WhereTheTasksRowIsOrangeTheCardIsOrange()
+    {
+        static JsonObject Hold(long id, long task, string state) =>
+            new() { ["id"] = id, ["task"] = task, ["kind"] = "pause", ["state"] = state, ["attempt"] = 1 };
+        static JsonObject Unknown(long id, long task) => new()
+        {
+            ["id"] = id, ["task"] = task, ["attempt"] = 1, ["title"] = "Charge the card", ["kind"] = "payment", ["state"] = "unknown",
+        };
+        var snapshot = Snapshot();
+        snapshot["ui_features"]!.AsArray().Add((JsonNode?)AnswerMark.Feature);
+        foreach (var node in snapshot["agents"]!.AsArray())
+        {
+            var agent = node!.AsObject();                           // DevOps' Shell box is off: an outcome is his to check
+            agent["can"] = agent["name"]!.GetValue<string>() == "pax" ? new JsonArray("web") : new JsonArray("shell", "web");
+        }
+        var stalled = Head(71, "Import the price list", "pax", "working", Now - 900, works: true);
+        stalled["nudge_level"] = 1;
+        var open = snapshot["tasks"]!.AsArray();
+        open.Add(stalled);
+        open.Add(Head(72, "Move the shop", "pax", "working", Now - 800, works: true));
+        open.Add(Head(73, "Charge the deposit", "pax", "working", Now - 700, works: true));
+        open.Add(Head(74, "Plan the launch", "pax", "working", Now - 600, waitingOn: "manager"));
+        open.Add(Head(75, "Back up the shop", "pax", "working", Now - 500, works: true));
+        open.Add(Head(76, "Read the bank's report", "pax", "auth-required", Now - 400));
+        var ended = snapshot["recent"]!.AsArray();
+        ended.Add(Head(77, "Close the old shop", "pax", "failed", Now - 300));
+        ended.Add(Head(78, "Renew the domain", "pax", "failed", Now - 200));
+        ended.Add(Head(79, "Refund the order", "pax", "failed", Now - 100));
+        snapshot["holds"] = new JsonArray(Hold(1, 72, "not_confirmed"), Hold(2, 75, "stopped"), Hold(3, 77, "not_confirmed"),
+                                          Hold(4, 78, "stopped"));
+        snapshot["outcomes"] = new JsonArray(Unknown(1, 73), Unknown(2, 79));
+        var ids = new long[] { 71, 72, 73, 74, 75, 76, 77, 78, 79 };
+        snapshot["answered_needs"] = new JsonArray(ids.Select((task, i) => (JsonNode?)Pressed(81 + i, Marks(task: task))).ToArray());
+        var s = State(Decode(snapshot), Clock);
+        var rows = Screens.Search(s, "", 0, Clock).Tasks.ToDictionary(t => t.Id, t => t.Mark);
+        var marks = s.Fleet!.AnsweredNeeds!.Select(n => Screens.Card(s, n, [], Clock, Utc).AnswerMark).ToArray();
+        AnswerMark Orange(long task) => new(AnswerSymbol.Attention, rows[task].Words, Row: rows[task].Symbol);
+
+        CollectionAssert.AreEqual(new[]
+        {
+            Orange(71), Orange(72), Orange(73), Orange(74), Done(rows[75].Words), Orange(76), Orange(77), Done(rows[78].Words),
+            Orange(79),
+        }, marks, "stalled, held and not confirmed, outcome not known, waiting, paused, sign-in, failed and held, failed " +
+                  "and paused, failed with an outcome not known");
+        CollectionAssert.AreEqual(new[]
+        {
+            TaskSymbol.Alert, TaskSymbol.Alert, TaskSymbol.Unknown, TaskSymbol.Limit, TaskSymbol.SignIn, TaskSymbol.Alert,
+            TaskSymbol.Unknown,
+        }, new[] { 71L, 72, 73, 74, 76, 77, 79 }.Select(t => rows[t].Symbol).ToArray(), "each orange row's own symbol");
+        Assert.IsTrue(new[] { 71L, 72, 73, 74, 76, 77, 79 }.All(t => rows[t].Attention), "each of those rows is orange");
+        Assert.AreEqual(("Outcome not known: check it", "Outcome not known: check it"), (marks[2].Words, marks[2].Hover),
+                        "what he must do, under the pointer and for an assistive app");
+        Assert.AreEqual((TaskSymbol.Paused, "Paused", false), (rows[78].Symbol, rows[78].Words, rows[78].Attention),
+                        "his own pause over a failed result: muted on its row");
     }
 
     /// <summary>No mark of his answer stands, only the plain check with no words, where the Mac draws no AnsweredMarkView

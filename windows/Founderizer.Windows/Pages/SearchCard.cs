@@ -181,22 +181,30 @@ internal sealed class SearchCard : Grid
         return Row(48, mark, names, index, agent.Label);
     }
 
+    /// <summary>The icon of a task's mark, as this card draws it: an answered card's orange mark takes the same one
+    /// (<see cref="AnswerMarkView"/>), so a task's row and the card never differ.</summary>
+    internal static Icon IconOf(TaskSymbol symbol) => symbol switch
+    {
+        TaskSymbol.Paused => Icons.PauseCircle,
+        TaskSymbol.Checked or TaskSymbol.Ended => Icons.Check,
+        TaskSymbol.Failed => Icons.Dismiss16,
+        // An outcome that the owner checks is the Mac's orange "?" (questionmark.circle), as a question is: both take
+        // this card's orange mark, with "Outcome not known: check it" under the pointer.
+        TaskSymbol.Unknown or TaskSymbol.Alert or TaskSymbol.Limit or TaskSymbol.Question or TaskSymbol.SignIn => Icons.Warning,
+        TaskSymbol.Reconnecting => Icons.Refresh,
+        _ => Icons.Hint,
+    };
+
     private UIElement TaskRow(SearchTaskRow task, int index)
     {
-        var (icon, tone) = task.Mark.Symbol switch
+        var tone = task.Mark.Symbol switch
         {
-            TaskSymbol.Working => (Icons.Hint, Look.Brush(Look.Rgb(0x30, 0xD1, 0x58))),
-            TaskSymbol.Paused => (Icons.PauseCircle, Look.Muted),
-            TaskSymbol.Checked or TaskSymbol.Ended => (Icons.Check, Look.Muted),
-            TaskSymbol.Failed => (Icons.Dismiss16, Look.Brush(Look.Rgb(0xFF, 0x45, 0x3A))),
-            // An outcome that the owner checks is the Mac's orange "?" (questionmark.circle), as a question is: both take
-            // this card's orange mark, with "Outcome not known: check it" under the pointer.
-            TaskSymbol.Unknown or TaskSymbol.Alert or TaskSymbol.Limit or TaskSymbol.Question or TaskSymbol.SignIn
-                => (Icons.Warning, Look.Orange),
-            TaskSymbol.Reconnecting => (Icons.Refresh, Look.Muted),
-            _ => (Icons.Hint, Look.Muted),
+            TaskSymbol.Working => Look.Brush(Look.Rgb(0x30, 0xD1, 0x58)),
+            TaskSymbol.Failed => Look.Brush(Look.Rgb(0xFF, 0x45, 0x3A)),
+            TaskSymbol.Unknown or TaskSymbol.Alert or TaskSymbol.Limit or TaskSymbol.Question or TaskSymbol.SignIn => Look.Orange,
+            _ => Look.Muted,
         };
-        var mark = Icons.Of(icon, tone);
+        var mark = Icons.Of(IconOf(task.Mark.Symbol), tone);
         mark.HorizontalAlignment = HorizontalAlignment.Center;
         mark.VerticalAlignment = VerticalAlignment.Center;
         ToolTipService.SetToolTip(mark, task.Mark.Words);

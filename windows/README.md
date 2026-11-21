@@ -142,9 +142,11 @@ renamed or removed without a word to the screens lane.
     In the check's place a card and the answered request at hand draw `RequestCard.AnswerMark` and
     `RequestStep.AnswerMark` (owner API 1.280, `need_marks`; `Screens.AnsweredMark`, the Mac's
     `OwnerNeed.answeredMark`): its `Symbol` is the check, the work mark (the search card's green circle_hint, turning
-    once in three seconds while `MarkMoves`, at rest on a last reading and where Windows' animation effects are off) or
-    the search card's red mark. `Hover` shows under the pointer (none for the work of a task: the Mac draws its badge
-    there first), and `Words` are its automation name. `AnswerMark.Plain`, the check with no words, stands for words
+    once in three seconds while `MarkMoves`, at rest on a last reading and where Windows' animation effects are off),
+    the search card's red mark, or, where the task's row needs him, the orange mark (`AnswerSymbol.Attention`): the
+    row's own symbol (`Row`, drawn with the search card's icon for it, `SearchCard.IconOf`, in its orange) and the row's
+    words, for example "Outcome not known: check it". `Hover` shows under the pointer (none for the work of a task: the
+    Mac draws its badge there first), and `Words` are its automation name. `AnswerMark.Plain`, the check with no words, stands for words
     that he wrote, a key that answered the request, and an answer on its way.
     A request raised before the chat's oldest item stands only while the PC holds the chat's whole history
     (`ChatPageState.Whole`: its first read gave fewer than `StoreState.ChatFirstPage` items);

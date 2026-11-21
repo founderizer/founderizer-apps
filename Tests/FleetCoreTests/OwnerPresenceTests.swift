@@ -16,6 +16,15 @@ struct OwnerPresenceTests {
         #expect(OwnerPresence.idle == AppUpdatePolicy.away)
     }
 
+    /// The bug that this stops: a card's own window over his browser has the keyboard, so `NSApp.isActive` is true,
+    /// and he counted as at the app: the hub held the phone's ping of a new request that he could not see.
+    @Test func theAppIsInFrontOnlyWhenItIsTheFrontmostApp() {
+        #expect(OwnerPresence.appInFront(isActive: true, frontmost: 41, own: 41))
+        #expect(!OwnerPresence.appInFront(isActive: true, frontmost: 77, own: 41))
+        #expect(!OwnerPresence.appInFront(isActive: true, frontmost: nil, own: 41))
+        #expect(!OwnerPresence.appInFront(isActive: false, frontmost: 41, own: 41))
+    }
+
     private func headers(present: Bool) async throws -> String {
         let hub = try OneAnswer(status: "200 OK") { _ in "{}" }
         _ = try? await HubClient(reads: HubReads()).stateReading(at: URL(string: "http://127.0.0.1:\(hub.port)/")!,

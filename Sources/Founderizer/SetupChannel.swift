@@ -684,7 +684,9 @@ final class SetupChannel {
     /// `over`: the app is the active app, and its main window, the fleet's, is on the screen, on the Space that
     /// shows, not in the Dock, and is AppKit's main window or key window of the app (`AppInFront.of`).
     static func inFront() -> Bool {
-        AppInFront.of(active: NSApp.isActive, windows: NSApp.windows.map { window in
+        // active and the frontmost app: a card's own window with the keyboard over another app makes the app active
+        // while the fleet's window stands behind that app (`OwnerPresenceProbe.inFront`)
+        AppInFront.of(active: OwnerPresenceProbe.inFront(), windows: NSApp.windows.map { window in
             AppInFront.Window(isFleet: window.identifier?.rawValue == fleetWindow, onScreen: window.isVisible,
                               onActiveSpace: window.isOnActiveSpace, miniaturized: window.isMiniaturized,
                               mainOrKey: window.isMainWindow || window.isKeyWindow)

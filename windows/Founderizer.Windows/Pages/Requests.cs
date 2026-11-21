@@ -459,16 +459,18 @@ internal sealed class AnswerParts
 /// as drawn" of 21 November 2026, and "Yes, same marks there" for the request at hand in Needs you), at the check's 12
 /// pixels: the muted check; the search card's mark of work (circle_hint in the green of work), which turns once in three
 /// seconds as the Mac's WorkMark does and rests, green, on a last reading and where Windows' animation effects are off;
-/// or the search card's red mark of a result that is no success. Its <see cref="AnswerMark.Hover"/> shows under the
-/// pointer (none for the work of a task, and none for the plain check), and an assistive app reads its
-/// <see cref="AnswerMark.Words"/> as its name (the Mac's value of the folded card). The compositor turns it, so the app
-/// does no work for a frame.</summary>
+/// the search card's red mark of a result that is no success; or, where the task's row needs him (his "Orange mark" of
+/// the same day), the search card's icon of the task's own mark (<see cref="AnswerMark.Row"/>, <see cref="SearchCard.IconOf"/>)
+/// in its orange. Its <see cref="AnswerMark.Hover"/> shows under the pointer as the system's tooltip (none for the work of
+/// a task, and none for the plain check), and an assistive app reads its <see cref="AnswerMark.Words"/> as its name (the
+/// Mac's value of the folded card). The compositor turns it, so the app does no work for a frame.</summary>
 internal sealed class AnswerMarkView : Grid
 {
     private static readonly UISettings Settings = new();
     private static readonly SolidColorBrush FailedTint = Look.Brush(Look.Rgb(0xFF, 0x45, 0x3A));
     private FrameworkElement? icon;
-    private AnswerSymbol? shown;
+    /// <summary>The look drawn now: the mark's symbol, and for the orange mark the task's own symbol.</summary>
+    private (AnswerSymbol, TaskSymbol?)? shown;
     private bool moves;
     private bool turning;
 
@@ -484,14 +486,15 @@ internal sealed class AnswerMarkView : Grid
 
     public void Show(AnswerMark mark, bool marksMove)
     {
-        if (mark.Symbol != shown)
+        if ((mark.Symbol, mark.Row) != shown)
         {
             Rest();
-            shown = mark.Symbol;
+            shown = (mark.Symbol, mark.Row);
             icon = mark.Symbol switch
             {
                 AnswerSymbol.Working => Icons.Of(Icons.Hint, Look.Green, 12),
                 AnswerSymbol.Failed => Icons.Of(Icons.Dismiss16, FailedTint, 12),
+                AnswerSymbol.Attention => Icons.Of(SearchCard.IconOf(mark.Row ?? TaskSymbol.Alert), Look.Orange, 12),
                 _ => Icons.Of(Icons.Check, Look.Muted, 12),
             };
             Children.Clear();
@@ -513,7 +516,7 @@ internal sealed class AnswerMarkView : Grid
 
     private void Turn()
     {
-        if (turning || shown != AnswerSymbol.Working || !moves || icon is null || !IsLoaded || !Settings.AnimationsEnabled) return;
+        if (turning || shown?.Item1 != AnswerSymbol.Working || !moves || icon is null || !IsLoaded || !Settings.AnimationsEnabled) return;
         var visual = ElementCompositionPreview.GetElementVisual(icon);
         var c = visual.Compositor;
         visual.CenterPoint = new Vector3(6, 6, 0);

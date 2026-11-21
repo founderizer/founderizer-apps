@@ -5,7 +5,8 @@ import FleetCore
 /// The three facts of `OwnerPresence`, read on this Mac at the moment of a state read. None of them asks for a macOS
 /// permission:
 ///
-/// - **The app is in front:** `NSApplication.isActive`, the app's own state (the fact that app updates read too).
+/// - **The app is in front:** `NSApplication.isActive` and the frontmost app is this one (`OwnerPresence.appInFront`,
+///   `inFront()`): a card's own window that has the keyboard over another app makes the app active, not in front.
 /// - **The screen is locked:** `CGSessionCopyCurrentDictionary`, the login session's own facts, which every process of
 ///   that session reads (`CGSSessionScreenIsLocked`).
 /// - **The last input:** `CGEventSource.secondsSinceLastEventType` for any input event, which gives only the time
@@ -20,7 +21,13 @@ enum OwnerPresenceProbe {
         let session = CGSessionCopyCurrentDictionary() as? [String: Any]
         let locked = session?["CGSSessionScreenIsLocked"] as? Bool ?? false
         let seconds = anyInput.map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }
-        return OwnerPresence.present(appActive: NSApplication.shared.isActive, screenLocked: locked,
-                                     secondsSinceInput: seconds)
+        return OwnerPresence.present(appActive: inFront(), screenLocked: locked, secondsSinceInput: seconds)
+    }
+
+    /// This app is active and the frontmost app (`OwnerPresence.appInFront`).
+    static func inFront() -> Bool {
+        OwnerPresence.appInFront(isActive: NSApplication.shared.isActive,
+                                 frontmost: NSWorkspace.shared.frontmostApplication?.processIdentifier,
+                                 own: ProcessInfo.processInfo.processIdentifier)
     }
 }
