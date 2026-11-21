@@ -269,7 +269,9 @@ public sealed class OutboxTests
     public async System.Threading.Tasks.Task AnOldOutboxWithAQuestionAboutARequestReadsAndItsQuestionIsDroppedWithNoWord()
     {
         // The record that a build before Discuss left the product (owner API 1.158) saved: a command of the kind
-        // need_talk. It reads, its file goes, and nothing is sent, retried or said.
+        // need_talk. It reads, its file goes, and nothing is sent, retried or said. This build's message under a card
+        // (need_clarify) is a kind of its own, which reads back whole after a start, so that it can go again: a record
+        // that no longer read blocked every write of the PC.
         var path = Path.Combine(folder, "outbox.json");
         var outbox = new Outbox(path);
         outbox.Save(PendingRequest.New(Hub, "db", "pc", "What does B cost?", command: OwnerCommand.Control(6, TaskControl.Pause)));
@@ -278,6 +280,12 @@ public sealed class OutboxTests
         File.WriteAllText(path, record.Replace("\"command\":\"control\"", "\"command\":\"need_talk\"").Replace("\"action\":\"pause\"", "\"action\":null"));
         Assert.IsNull(outbox.Load());
         Assert.IsFalse(File.Exists(path), "the old question is dropped");
+        var talk = PendingRequest.New(Hub, "db", "pc", "What does B cost?", command: OwnerCommand.Talk(6));
+        outbox.Save(talk);
+        var kept = outbox.Load()!;
+        Assert.AreEqual((talk.RequestId, (long?)6, "ui/needs/6/talk"), (kept.RequestId, kept.TalkNeed, kept.Route));
+        CollectionAssert.AreEqual(talk.Body(), kept.Body());
+        outbox.Clear(talk.RequestId);
         File.WriteAllText(path, record.Replace("\"command\":\"control\"", "\"command\":\"need_talk\""));
         await using var store = new OwnerStore(new StoreSettings { Folder = folder, Keys = new MemoryKeyStore("device-key-1") });
         var s = store.State;

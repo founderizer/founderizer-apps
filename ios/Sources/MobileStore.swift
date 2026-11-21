@@ -2009,6 +2009,9 @@ final class MobileStore {
         }
     }
 
+    /// A read of this file runs now (`load`): a second `load` returns at once, before its bytes are here.
+    func reads(_ file: MessageAttachment) -> Bool { fileReads.contains(FileKey(file)) }
+
     /// The owner pressed ↻ on a picture that did not come: its tile reads it again at once.
     func readAgain(_ file: MessageAttachment) async {
         notLoaded.remove(FileKey(file))
@@ -2076,10 +2079,12 @@ final class MobileStore {
 
     /// A press that waits: one of the item's own options, by its index, or the words that its agent recommends (owner
     /// feature `need_recommended`), which go as his answer in words, with the files of his answer that were up when he
-    /// pressed: a file that he adds while the press waits stops it.
+    /// pressed: a file that he adds while the press waits stops it. Or Send on the options that he ticked, on a card
+    /// of pictures whose options combine (`NeedPictures`).
     enum WaitingPress: Equatable, Sendable {
         case option(Int)
         case words(String, files: [Int])
+        case ticked([Int])
     }
 
     /// **The answers that the hub took, by item, until the item folds away** (polish pass: the receipt's jump): from
@@ -2110,6 +2115,12 @@ final class MobileStore {
     /// when he sends that one again, or when a read finds that the hub has it.
     func press(needID: Int, choice: Int) {
         press(needID: needID, .option(choice))
+    }
+
+    /// **Send on the options that he ticked**, on a card of pictures whose options combine (`NeedPictures`; owner
+    /// feature `need_pictures`): it waits and goes as a press on one option does, and the hub joins their words.
+    func press(needID: Int, choices: [Int]) {
+        press(needID: needID, .ticked(choices))
     }
 
     /// **A press on the words that an item's agent recommends** (owner feature `need_recommended`: the phone's row of
@@ -2180,6 +2191,7 @@ final class MobileStore {
         switch press {
         case .option(let choice): await send(needID: needID, choice: choice)
         case .words: await send(needID: needID)
+        case .ticked(let choices): await send(needID: needID, choices: choices)
         }
     }
 
@@ -2191,6 +2203,16 @@ final class MobileStore {
         else { return }
         await write(need.choices[choice], needID: needID, recipient: need.by, choice: choice,
                     approval: DeviceSigningKey().approval(for: need, choice: choice))
+    }
+
+    /// One answer by the options that he ticked, on an item whose options combine (`OwnerNeed.combines`), as the Mac
+    /// sends it: their indexes, each once, and their words joined with "; ", which the hub writes as the answer.
+    func send(needID: Int, choices: [Int]) async {
+        guard let need = snapshot?.needs.first(where: { $0.id == needID }), need.combines else { return }
+        let ticked = Array(Set(choices)).sorted()
+        guard !ticked.isEmpty, ticked.allSatisfy(need.choices.indices.contains) else { return }
+        await write(ticked.map { need.choices[$0] }.joined(separator: "; "), needID: needID, recipient: need.by,
+                    choices: ticked)
     }
 
     /// The last message that this phone sent in this chat: the one message that the phone offers to correct
@@ -2225,7 +2247,7 @@ final class MobileStore {
     /// hub hears anything, so a crash, a timeout or a force quit can never make a second message. The app makes no
     /// new number for a request that already exists (MOBILE-APP.md 5.4 and 10).
     private func write(_ value: String, needID: Int? = nil, recipient: String, replaces: String? = nil,
-                       files: [Int] = [], choice: Int? = nil,
+                       files: [Int] = [], choice: Int? = nil, choices: [Int]? = nil,
                        approval: (statement: String, signature: String)? = nil, clarifies: Bool = false) async {
         guard canWrite, let snapshot else { return }
         guard needID != nil || canChat(with: recipient) else { return }
@@ -2235,7 +2257,8 @@ final class MobileStore {
         guard !text.isEmpty || !files.isEmpty, text.count <= Self.textLimit else { return }
         if let needID, !openNeeds.contains(where: { $0.id == needID }) { return }
         let request = PendingRequest(hub: hub, database: snapshot.db, client: installation, needID: needID,
-                                     choice: choice, recipient: needID == nil && supportsDirectChat ? recipient : nil,
+                                     choice: choice, choices: choices,
+                                     recipient: needID == nil && supportsDirectChat ? recipient : nil,
                                      replacesRequestID: replaces, attachments: files, approval: approval,
                                      clarifies: clarifies, text: text)
         if let needID { answersTaken[needID] = nil }

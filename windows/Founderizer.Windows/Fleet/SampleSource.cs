@@ -36,6 +36,7 @@ public sealed partial class SampleSource : IFleetSource
     private readonly ImmutableDictionary<long, TaskPageState> tasks;
     private ImmutableDictionary<string, string> drafts = ImmutableDictionary<string, string>.Empty;
     private ImmutableDictionary<long, string> answerDrafts = ImmutableDictionary<long, string>.Empty;
+    private ImmutableDictionary<long, string> clarifyDrafts = ImmutableDictionary<long, string>.Empty;
     private MobileSnapshot fleet;
     private StoreState state;
     private long version;
@@ -124,6 +125,22 @@ public sealed partial class SampleSource : IFleetSource
     public Task<string?> ControlAsync(long task, TaskControl action) => Task.FromResult<string?>(null);
 
     public Task<string?> GuideAsync(long task, string text) => Task.FromResult<string?>(null);
+
+    /// <summary>The field of Needs clarification stands, as the store's does; the sample sends nothing.</summary>
+    public bool OpenClarify(long need)
+    {
+        lock (gate) if (!clarifyDrafts.ContainsKey(need)) clarifyDrafts = clarifyDrafts.SetItem(need, "");
+        Renew();
+        return true;
+    }
+
+    public void SetClarifyDraft(long need, string text)
+    {
+        lock (gate) if (clarifyDrafts.ContainsKey(need)) clarifyDrafts = clarifyDrafts.SetItem(need, text);
+        Renew();
+    }
+
+    public Task<string?> TalkAsync(long need) => Task.FromResult<string?>(null);
 
     public Task RefreshAsync() => Task.CompletedTask;
 
@@ -219,6 +236,7 @@ public sealed partial class SampleSource : IFleetSource
         Outputs = outputs,
         Drafts = drafts,
         AnswerDrafts = answerDrafts,
+        ClarifyDrafts = clarifyDrafts,
     }, at);
 
     private void Renew()

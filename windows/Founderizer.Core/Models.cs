@@ -252,7 +252,20 @@ public enum FileSymbol { Picture, Pdf, Zip, Text }
 /// <see cref="NeedSecret.From"/>. `replaced_by` (owner API 1.274) is the id of the item that took this one's place (the
 /// manager raised it again with `replaces`, or a new plan of team changes replaced it), whose answer is the hub's own
 /// words; null on every other item and from a hub before that version. No page draws a card for it
-/// (<see cref="Activity.Drawn"/>).</summary>
+/// (<see cref="Activity.Drawn"/>). `team_state`, `team_reason` and `task` (owner API 1.280, feature `need_marks`) say what
+/// an answered card's mark stands on (<see cref="AnswerMark"/>): where a team card's plan stands after his yes ("making",
+/// "made", "not_made", else null), the hub's words for a plan that it did not make, and the task that his answer lets go
+/// on. They are no words of the card: no check of a pressed card compares them, as none compares `recommended`. `give`
+/// (the lane "Give on a card") is the grant that the item's first option makes, read only for whether it is there
+/// (<see cref="Gives"/>).
+/// `pictures` (owner API 1.285, feature `need_pictures`): one picture for each option,
+/// in the order of `options`, as a file of a message is; null for an item with none and from a hub before that version.
+/// All or none: the hub gives null when the bytes of one picture are gone. A card draws them only as
+/// <see cref="NeedPictures.Drawn"/> says, and the answer does not change: a press of an option's words sends its
+/// index.
+/// `clarify` and `talk` (owner API 1.272, feature `need_clarify`): the card takes his message under it now
+/// (<see cref="Clarifies"/>), and his talk with the manager there, oldest first (<see cref="NeedMessage"/>); a hub with
+/// `need_talk` alone sends `talk` empty, and one before it none.</summary>
 public sealed record OwnerNeed(
     long Id,
     string Title,
@@ -277,10 +290,35 @@ public sealed record OwnerNeed(
     string? Details = null,
     bool? Multi = null,
     IReadOnlyList<long>? Chose = null,
-    long? ReplacedBy = null)
+    long? ReplacedBy = null,
+    string? TeamState = null,
+    string? TeamReason = null,
+    long? Task = null,
+    [property: JsonPropertyName("give")] JsonElement? RawGive = null,
+    IReadOnlyList<MessageAttachment>? Pictures = null,
+    bool? Clarify = null,
+    IReadOnlyList<NeedMessage>? Talk = null)
 {
     [JsonIgnore] public bool IsOpen => Answered is null && Answer is null;
+
+    /// <summary>The card takes his message under it now (OwnerNeed.clarifies): an open item that the hub says takes one
+    /// (`clarify`), on a hub that names <see cref="NeedClarify.Feature"/>. The hub says false for a key request, which
+    /// has its own Needs clarification, for a conversation's item, which is that person's question, and for an item
+    /// that another agent than the manager raised.</summary>
+    public bool Clarifies(MobileSnapshot? fleet) => IsOpen && Clarify == true && fleet?.Offers(NeedClarify.Feature) == true;
+
+    /// <summary>His talk under the card as the hub gives it (OwnerNeed.shownTalk): on a hub that names the feature, the
+    /// whole talk, open or answered, also where the card takes no more of it; none on a hub without it.</summary>
+    public IReadOnlyList<NeedMessage> ShownTalk(MobileSnapshot? fleet) =>
+        fleet?.Offers(NeedClarify.Feature) == true ? Talk ?? [] : [];
     [JsonIgnore] public NeedSecret? Secret => NeedSecret.From(RawSecret);
+    /// <summary>Its first option gives a grant (OwnerNeed.give): Give, whose press makes the grant with his answer.</summary>
+    [JsonIgnore] public bool Gives => RawGive is { ValueKind: JsonValueKind.Object };
+    /// <summary>A key that he saved answered this secret request (OwnerNeed.answeredWithKey), or he answered it in his own
+    /// words (Needs clarification, `clarified`), which the Mac counts as words (OwnerNeed.answeredInWords): neither card
+    /// has the mark of an answered card (<see cref="AnswerMark"/>).</summary>
+    [JsonIgnore] public bool AnsweredWithKeyOrWords =>
+        AsksForSecret && !IsOpen && Secret is { } secret && (secret.Saved is not null || secret.Clarified);
     [JsonIgnore] public bool AsksForSecret => Kind == "secret";
     [JsonIgnore] public bool TakesFiles => Conversation is null && !AsksForSecret;
 
@@ -291,7 +329,8 @@ public sealed record OwnerNeed(
     [JsonIgnore] public bool TaskInFront => Kind is null && DoorCall is null;
 
     /// <summary>The options as one answer each, or none (OwnerNeed.choices): fewer than two, an empty label, a control
-    /// character, or two that say the same thing make it no choice.</summary>
+    /// character, or two that say the same thing make it no choice. One option is a choice on an item with one picture
+    /// for it (owner API 1.285): one design to approve, whose no is his own words.</summary>
     [JsonIgnore]
     public IReadOnlyList<string> Choices
     {
@@ -299,7 +338,7 @@ public sealed record OwnerNeed(
         {
             var given = new List<string>();
             foreach (var option in Options ?? []) given.Add(option.Trim());
-            if (given.Count < 2) return [];
+            if (given.Count < (Pictures?.Count == given.Count ? 1 : 2)) return [];
             var seen = new HashSet<string>();
             foreach (var label in given)
             {
@@ -329,10 +368,40 @@ public sealed record OwnerNeed(
     }
 }
 
+/// <summary>**Needs clarification on every card** (owner feature `need_clarify`, owner API 1.272; FleetCore's NeedClarify;
+/// the owner, 20 November 2026: "a button link, that then shows the extra text input", and "Keep Your answer too"): under
+/// his answer a quiet link opens one field, and his message there goes to the manager while the item stays open
+/// (<see cref="OwnerCommand.Talk"/>). The manager's replies and his messages stand in the card over the answers
+/// (<see cref="OwnerNeed.Talk"/>). His answer still closes the item.</summary>
+public static class NeedClarify
+{
+    /// <summary>`ui_features` of a hub that takes his message under a card (`POST /ui/needs/&lt;id&gt;/talk`).</summary>
+    public const string Feature = "need_clarify";
+    /// <summary>The hub's most for one message (NEED_TALK_CHARS), as Python counts it: code points, not the characters
+    /// that he sees.</summary>
+    public const int Most = 2000;
+
+    /// <summary>The length of a message as the hub counts it: its code points.</summary>
+    public static int Length(string text)
+    {
+        var count = 0;
+        foreach (var _ in text.EnumerateRunes()) count++;
+        return count;
+    }
+}
+
+/// <summary>One message of the talk under a card (FleetCore's NeedMessage): `who` is `owner` or the agent that replied.
+/// The hub's receipt of his message carries the card's talk too.</summary>
+public sealed record NeedMessage(string Who, string Text, double Ts)
+{
+    [JsonIgnore] public bool FromOwner => Who == "owner";
+}
+
 /// <summary>What a secret request asks for (owner feature `secret_requests`). It names a secret and never holds a value.
-/// A field that does not read is left out rather than failing the read, as in Swift.</summary>
+/// A field that does not read is left out rather than failing the read, as in Swift. `clarified` (feature
+/// `need_clarify`): he answered the request in his own words, with no key.</summary>
 public sealed record NeedSecret(string Kind, string? Env, string? Site, IReadOnlyDictionary<string, string> Give,
-                                string? Saved)
+                                string? Saved, bool Clarified = false)
 {
     /// <summary>The secret of an item, or null. HubDecode refuses a `secret` that is neither an object nor null.</summary>
     public static NeedSecret? From(JsonElement? raw)
@@ -356,7 +425,8 @@ public sealed record NeedSecret(string Kind, string? Env, string? Site, IReadOnl
         }
         var saved = Text("saved");
         if (saved is not null && !Patterns.SecretReference().IsMatch(saved)) saved = null;
-        return new NeedSecret(kind, env, site, give, saved);
+        var clarified = value.TryGetProperty("clarified", out var words) && words.ValueKind == JsonValueKind.True;
+        return new NeedSecret(kind, env, site, give, saved, clarified);
     }
 
     private static bool IsAddress(string text) =>
@@ -440,7 +510,8 @@ public sealed record TaskSteer(long Id, long Task, long Attempt, string Text, do
 }
 
 /// <summary>The hub's receipt of an owner command (FleetCore's ControlReceipt), with the fields that the device's
-/// commands read: a task's control and its guidance.</summary>
+/// commands read: a task's control and its guidance, and his message under a card, whose receipt names the item and
+/// carries its talk with that message in it (`need`, `talk`).</summary>
 public sealed record ControlReceipt(
     bool Ok,
     string RequestId,
@@ -448,7 +519,9 @@ public sealed record ControlReceipt(
     bool Replayed,
     JsonElement? Changed = null,
     TaskSteer? Steer = null,
-    TaskHold? Hold = null)
+    TaskHold? Hold = null,
+    long? Need = null,
+    IReadOnlyList<NeedMessage>? Talk = null)
 {
     /// <summary>`changed` when the hub sent true or false; null for a list or nothing.</summary>
     [JsonIgnore]

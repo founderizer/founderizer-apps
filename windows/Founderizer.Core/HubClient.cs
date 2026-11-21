@@ -100,14 +100,26 @@ public sealed partial class HubClient : IDisposable
 
     // ---------------------------------------------------------------- the reads
 
+    /// <summary>The header of a read of the state that says what this build draws (owner API 1.285): the hub takes such a
+    /// thing on an item only while each app of the owner's said it, and a device's read with no such header takes that
+    /// device's word back.</summary>
+    public const string DrawsHeader = "X-Fleet-Draws";
+
+    /// <summary>What this build draws, by the hub's names (hub.py APP_DRAWS): pictures as the options of a request
+    /// (<see cref="NeedPictures"/>). A name goes in only with the build that draws it.</summary>
+    public static readonly IReadOnlyList<string> Draws = [NeedPictures.Feature];
+
     /// <summary>GET /ui/mobile, with the generation that the device holds and the ETag of its last body. Null when the
     /// hub answers 304: the fleet did not change and the device keeps what it has. A hub without the route answers 404,
-    /// which is <see cref="HubErrorKind.NoPhoneRoutes"/>.</summary>
+    /// which is <see cref="HubErrorKind.NoPhoneRoutes"/>. It is this app's one read of the state, as a device and as the
+    /// owner's computer, so it says what this build draws (<see cref="DrawsHeader"/>) each time; a hub before owner API
+    /// 1.285 ignores the header.</summary>
     public async Task<SnapshotReading?> SnapshotAsync(Uri hub, string? key, string? database, string? etag,
                                                       CancellationToken cancel = default)
     {
         using var request = Request(HttpMethod.Get, hub, "ui/mobile", key, database is null ? [] : [("db", database)]);
         if (etag is not null) request.Headers.TryAddWithoutValidation("If-None-Match", etag);
+        request.Headers.TryAddWithoutValidation(DrawsHeader, string.Join(",", Draws));
         Answer answer;
         try
         {

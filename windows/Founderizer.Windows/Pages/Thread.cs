@@ -18,11 +18,7 @@ internal interface IThreadContext : IAnswers
     /// <summary>"Earlier messages" over the first row: the chat shows more of its items.</summary>
     void ShowEarlier() { }
 
-    /// <summary>A file of a message: its picture once its bytes came (null until then; the row draws again then), a
-    /// press that opens it, and Read again.</summary>
-    Microsoft.UI.Xaml.Media.ImageSource? Picture(FileTile tile) => null;
-    void OpenFile(FileTile tile) { }
-    void ReadAgain(FileTile tile) { }
+    // A file of a message (Picture, OpenFile and ReadAgain) is a member of IAnswers: a request's pictures use it too.
 
     /// <summary>A press on a result's check: it opens, or folds again.</summary>
     void ToggleCheck() { }

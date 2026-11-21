@@ -57,6 +57,15 @@ public interface IFleetSource : IAsyncDisposable
     /// <summary>Guidance for a task.</summary>
     Task<string?> GuideAsync(long task, string text);
 
+    /// <summary>A press on a card's link Needs clarification: its field stands in the link's place. True when it stands.</summary>
+    bool OpenClarify(long need);
+
+    /// <summary>His words in a card's field of Needs clarification, kept as he types, in memory only.</summary>
+    void SetClarifyDraft(long need, string text);
+
+    /// <summary>His message under a card goes to its agent through the outbox; the card stays open.</summary>
+    Task<string?> TalkAsync(long need);
+
     /// <summary>A read now (the line's Try again, the request line's Refresh receipt).</summary>
     Task RefreshAsync();
 

@@ -139,6 +139,13 @@ renamed or removed without a word to the screens lane.
     option as no bubble; a card whose answer is his message folds to its title (`RequestCard.Spoken`,
     `ShowsAnswerLine`), and words that he wrote have no check (`RequestCard.ShowsCheck`, `RequestStep.ShowsCheck`;
     `RequestCard.FoldedWords` for an assistive app); an hour's or a day's mark counts a card at the time it was raised.
+    In the check's place a card and the answered request at hand draw `RequestCard.AnswerMark` and
+    `RequestStep.AnswerMark` (owner API 1.280, `need_marks`; `Screens.AnsweredMark`, the Mac's
+    `OwnerNeed.answeredMark`): its `Symbol` is the check, the work mark (the search card's green circle_hint, turning
+    once in three seconds while `MarkMoves`, at rest on a last reading and where Windows' animation effects are off) or
+    the search card's red mark. `Hover` shows under the pointer (none for the work of a task: the Mac draws its badge
+    there first), and `Words` are its automation name. `AnswerMark.Plain`, the check with no words, stands for words
+    that he wrote, a key that answered the request, and an answer on its way.
     A request raised before the chat's oldest item stands only while the PC holds the chat's whole history
     (`ChatPageState.Whole`: its first read gave fewer than `StoreState.ChatFirstPage` items);
   - the inline marks of a reply as runs: `InlineMarks.Runs(text)` gives each `InlineRun` (`Text`, `Bold`, `Italic`,
@@ -265,6 +272,51 @@ renamed or removed without a word to the screens lane.
     when the footer shows, with `Screens.MessageAge(row.Time, now, context)`.
   - The room over the composer is the window's own measure: the Mac's `ManagerView.endRoom`, 88 points under the last
     row, which "Latest" leaves out of its measure.
+- **Pictures as the options of a request** (owner feature `need_pictures`, owner API 1.285; the owner's "Yes, as shown"
+  of 21 November 2026 to `w4-windows-chat.png` and `w4-windows-needs.png` in
+  `~/dev/founderizer-plans/needs-you-picture-options-2026-11-20/`):
+  - `OwnerNeed.Pictures`: one picture for each option, in their order, each a file of a message; null for an item with
+    none. One option is a choice on an item with one picture for it.
+  - `RequestCard.Options` and `RequestStep.Options`: `OptionsModel.Pictures` holds one `FileTile` for each option
+    (`Screens.Tile`), only as `NeedPictures.Drawn` says: on a hub that names the feature, for an open item whose
+    pictures are as many as its options, each a picture. Else it is empty, and the card is the card of before.
+  - Draw them `NeedPictures.Columns` (three) in a row, a row more for each three more, each picture a square as wide as
+    its column with a card's corners, the option's row under it (the rows of one row of pictures take one height), 7
+    apart in a chat's card and 8 at hand, and "Your answer" under them. While its bytes come, the square keeps its size
+    with the tile's words in it ("Reading…", or "Not loaded" with Read again), as a picture of a message.
+  - A click goes through `OptionsModel.Click(index, onPicture)`: on a picture, `Open` with its `FileTile`, which opens
+    it as a file of a message opens (`FileAsync`, then the app that Windows gives its kind), and sends nothing; on the
+    words, `Press` with the option's index (`Press(need, index)`, `choice`), or `Tick` for options that combine, whose
+    ticks and "Send N" stay under the pictures.
+  - A page reads its pictures, a message's and an option's, through `PictureLoads<T>`: one read at a time, in the order
+    asked (a card asks in the order of its options); a failed read stays failed until Read again (`Again`), so a draw
+    after a failure starts no read; a picture is its id and its SHA-256, and `Generation` with the hub and its
+    generation forgets every picture of another one. `Mark` gives a tile "Reading…" while its read waits or runs.
+  - The read of the state says what this build draws: `GET /ui/mobile` carries `X-Fleet-Draws: need_pictures`
+    (`HubClient.DrawsHeader`, `HubClient.Draws`), as a device and as the owner's computer. The hub raises an item with
+    pictures only while each app of the owner's says it.
+  - The proofs' sample state `pictures` (`Fleet/SampleStates.cs`) adds Marketing's request of three banners, whose bytes
+    come from the folder that `FOUNDERIZER_SAMPLE_PICTURES` names.
+- **Needs clarification on every card** (owner feature `need_clarify`, owner API 1.272; the same two drawings, which put
+  the link under "Your answer"):
+  - `RequestCard.Talk` and `RequestStep.Talk`: his talk with the agent (`TalkLine`: `Own`, `Text`, the agent's `Mark`),
+    oldest first, from the reading or from the receipt of his last message (`StoreState.TalkOf`); only on a hub that
+    names the feature. Draw it over the options: his lines in his chat's bubble at the trailing side, 48 in from the
+    leading edge, and the agent's after its 16-pixel mark, 48 in from the trailing edge. A folded card has none; the
+    request at hand keeps it over his answer once it ended.
+  - `Clarify` (`ClarifyModel`), null where the card takes no message (`OwnerNeed.Clarifies`: an open item whose
+    `clarify` is true, on a hub that names the feature): `LinkWords` under "Your answer", or, while `Stands`, the
+    answer's box with no plus, `Placeholder` ("Message to" and the agent), `Draft`, and Send while `CanSend`. A press on
+    the link is `OpenClarify(need)`, his keys `SetClarifyDraft(need, text)` (in memory only), Send or Enter
+    `TalkAsync(need)`. The field goes back to its link once the outbox has his message; a refused one's Discard gives
+    its words back. `OpenClarify` is true when the field stands.
+  - Keep one `ClarifyField` for each view of a card: `Show(id, model, text)` says which words to put in the field (only
+    when it comes to stand, for another card, or for a new `ClarifyModel.Given`) and whether it takes the cursor now
+    (once, after `Opened(id)`, which the view calls when `OpenClarify` was true); `Typed(text)` gives the card of a
+    change that is his, and null for a change that the view made (a text box reports those too) or of a field that
+    does not stand.
+  - The proofs' sample state `clarify` puts the feature on the hub, `clarify` on the manager's cards, and a question and
+    a reply under the card about the email.
 - An element that needs a hub feature asks the model, which reads `ui_features` (`state.Offers(...)`): the
   task's controls (`task_controls`) and its guidance (`task_steering`), the plus of the files
   (`attachments`), the chat of an agent other than the manager (`direct_chat`).
@@ -598,6 +650,39 @@ FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`
   that the PC makes has a build record with its hub). The sentences that the Mac holds only in its view files are copied
   in `SetupScreens` and held to the Mac's string catalog (`app/Localization/Localizable.xcstrings`) by a test; the area
   "Setup, servers and owner tools" has queued a FleetCore `FirstRunWords` that the writer will then read.
+
+### The first run in the window (step 2, piece U1)
+
+How the window draws the library's first run, for the window pieces after it (U2, U3, U6 and on).
+
+- **The switch**: only a build with `-p:FounderizerWelcome=true` on its command line has the welcome page
+  (`Fleet/FirstRunSwitch.cs`, which `StoreSettings.Welcome` reads); an environment variable of that name turns it off,
+  and `release/build-release.ps1` passes `-p:FounderizerWelcome=false` to every build. No build that a person gets has
+  it before U3, U4 and U5 are in it (plan, section 13); without it a PC with no hub opens on Add this PC, as in step 1.
+- **The first page**: a window with the welcome page and no hub draws no page while the search of this PC's Tailscale
+  looks, then opens the welcome page (no Tailscale, or no hub on it) or Add this PC (a hub on it). While the welcome page
+  shows and no press was made, a hub that appears opens Add this PC. The first run fills the window: no pane, no Back,
+  Forward or Search in the title bar, one canvas (`MainWindow.Fill`).
+- **The store**: `StoreSource.FirstRun()` makes the library's `SetupStore` once, over the daily store and its secret box
+  (`%LOCALAPPDATA%\Founderizer\keys`, under Windows' protection of the user's data with a purpose of its own); its records,
+  the servers' host keys and the owner's kept answers (`FileChoices`) are in `%LOCALAPPDATA%\Founderizer\setup`.
+- **The frame** (`Pages/FirstRun/FirstRunHost.cs`): Back, the steps on Back's line, the page's step in the middle; Esc is
+  Back and Enter the page's way on (`IStepView.Enter`). It reads this PC's Tailscale once when it opens and every two
+  seconds on the network's page, and gives it to `SetupStore.ReadPc`.
+- **A page joins the first run through the registry**: a family's own file `Navigation/Routes.<Family>.cs` holds one
+  field, `internal static readonly Family X = Add(new Family { Can = [...], Steps = { [SetupPage.Key] = host => new
+  KeyPage(host) } });`, and edits no other file. `Can` is the hub's names of what the family can do, which
+  `StoreSettings.Can` sends the hub; `Steps` are the first run's pages that it draws. A page that no family draws shows
+  its frame alone. The parts of a step are in `Pages/FirstRun/StepParts.cs` (`StepColumn`, `StepControls`, `StepField`,
+  `StepMarks`, `Frames`), and the window's own words of the first run in `SetupViewWords.cs`, held to the Mac's catalog.
+- **Tailscale on this PC** (`Fleet/TailscaleSetup.cs`): Connect downloads Tailscale's MSI for this kind of PC from
+  `pkgs.tailscale.com` (no redirect, 200 only), holds the file open while `Publisher.SignedBy` checks it (the revocation
+  of the whole chain, the signer Tailscale Inc. of CA) and while `msiexec.exe /i <file> /passive /norestart` runs, and
+  removes it after; a file that fails the check is removed and nothing runs. Then Tailscale's own sign-in:
+  `tailscale up` with no setting of its own, whose link opens in the default browser only when it is
+  `https://login.tailscale.com/…`. `tailscale.exe` runs only after the same publisher check (`WindowsTailscale`).
+- **On the owner's computer**: Settings shows no Forget the key, and the line over a page says one sentence of the PC
+  for each refusal of the owner's key (`Fleet/OwnerKeyLine.cs`), until piece L6 repairs them by itself.
 
 ## Build and test
 

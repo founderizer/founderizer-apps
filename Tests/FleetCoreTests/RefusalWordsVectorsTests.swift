@@ -28,8 +28,9 @@ struct RefusalWordsVectorsTests {
     /// their Spanish since the owner's "Yes, all 29" of 19 November 2026, so the test below holds each of them to the
     /// hub's vector and to the catalog. A new code of the hub is named here until his yes to the Spanish of its slice.
     /// The five of a Drive folder waited from 20 November 2026 until his "Yes, ship them" of the same day.
-    private static let waiting: Set<String> = ["about_unreadable", "knowledge_unread", "profile_unread",
-                                                "signature_unchecked"]
+    /// `card_words_from_tool` (an AI session's words to a card that has its own answers, 20 November 2026) waits too.
+    private static let waiting: Set<String> = ["about_unreadable", "card_words_from_tool", "knowledge_unread",
+                                               "profile_unread", "signature_unchecked"]
 
     /// The codes that have a case: every code of the hub's table that is not waiting.
     private static func known(_ table: RefusalVectors.Table) -> [String] {

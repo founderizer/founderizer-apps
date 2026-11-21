@@ -1,13 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using Founderizer.Core;
 using Founderizer.Windows.Marks;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
+using Windows.UI.ViewManagement;
 
 namespace Founderizer.Windows.Pages;
 
@@ -30,13 +34,38 @@ internal interface IAnswers
     /// <summary>The request's open part: "more" (Show all, Details).</summary>
     bool IsOpen(long need, string part);
     void SetOpen(long need, string part, bool open);
+
+    /// <summary>A file of a message, or a picture of a request's option: its picture once its bytes came (null until
+    /// then; the page draws again then), a press that opens it, and Read again.</summary>
+    Microsoft.UI.Xaml.Media.ImageSource? Picture(FileTile tile) => null;
+    void OpenFile(FileTile tile) { }
+    void ReadAgain(FileTile tile) { }
+
+    /// <summary>Needs clarification (owner feature `need_clarify`): a press on its link, his words in its field, and its
+    /// Send (OwnerStore.OpenClarify, SetClarifyDraft, TalkAsync). OpenClarify is true when the field stands.</summary>
+    bool OpenClarify(long need) => false;
+    void TypeClarify(long need, string text) { }
+    void SendClarify(long need) { }
 }
 
 /// <summary>A request's options and its answer box, as the pictures draw them in a chat's card (rows of 14) and in the
 /// request at hand (rows of 15, 44 high). A press sends that option (OptionsKind.Press); a quick reply sends its words
 /// as his answer with the box's files, and they stand in the box while it waits for the store (OwnerStore.Reply); ticks
 /// (options that combine) mark each pressed row, and "Send N" sends them. An option whose press waits for the store
-/// says "Sending…" at its end after a second.</summary>
+/// says "Sending…" at its end after a second.
+///
+/// Pictures as the options (owner feature `need_pictures`; the owner's "Yes, as shown" of 21 November 2026 to
+/// w4-windows-chat.png and w4-windows-needs.png): three in a row and a row more for each three more, each picture
+/// square over its option's row, 7 apart in a chat's card and 8 at hand, "Your answer" under them. A click on a picture
+/// opens it as a file of a message opens, and answers nothing; a click on the row answers as a row of before does. The
+/// rows of one row of pictures take one height. The ticks and "Send N" stay as before, under the pictures.
+///
+/// Needs clarification (owner feature `need_clarify`; the owner's "Yes, as shown" of 21 November 2026 to the same two
+/// drawings, and his "Keep Your answer too" of 20 November for the Mac and the iPhone): his talk with the agent stands
+/// over the options (<see cref="Talk"/>), and under "Your answer" the quiet link "Needs clarification" (<see
+/// cref="Clarify"/>), small muted words at the leading side in a chat's card (12 on 16), muted words in the middle at
+/// hand (15 on 21, 8 under the box). A press puts its field in the link's place: the answer's box with no plus,
+/// "Message to" and the agent, Send with Enter. Once the outbox has his message the link comes back.</summary>
 internal sealed class AnswerParts
 {
     private readonly IAnswers answers;
@@ -47,10 +76,21 @@ internal sealed class AnswerParts
     private readonly TextBlock sendTicksWords;
     private readonly HashSet<int> ticked = new();
     private readonly List<(Border Square, FrameworkElement Check, TextBlock Sending)> rows = new();
+    private readonly List<OptionPictureView> pictures = new();
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer? sendingTimer;
     private long need;
     private OptionsModel shown = new();
     private bool filesWait;
+    // Needs clarification: the talk over the options, and the link or its field under the answer box
+    private readonly StackPanel talk = new() { Spacing = 6, Visibility = Visibility.Collapsed };
+    private readonly Grid clarifyPlace = new() { Visibility = Visibility.Collapsed };
+    private readonly Button clarifyLink;
+    private readonly Field clarifyBox;
+    private ValueList<TalkLine> shownTalk = ValueList<TalkLine>.Empty;
+    /// <summary>The card that the parts show now.</summary>
+    private long clarifyNeed;
+    /// <summary>Which words the field loads, which of its changes are his, and when it takes the cursor.</summary>
+    private readonly ClarifyField clarifyField = new();
     /// <summary>The pointer's press under the click that comes (its time in microseconds and its place), and the press
     /// of the last click that answered, for <see cref="SecondClick"/>.</summary>
     private (ulong At, global::Windows.Foundation.Point Place)? pressed, lastPress;
@@ -121,15 +161,124 @@ internal sealed class AnswerParts
             timer.IsRepeating = false;
             timer.Tick += (_, _) => DrawSending(true);
         }
+
+        // The drawings: "Needs clarification" in the muted grey, 12 on 16 at the leading side of a chat's card, 15 on
+        // 21 in the middle at hand, 8 under the box (a card's stack puts its own 10 there).
+        var linkWords = Look.Words("Needs clarification", step ? 15 : 12, step ? 21 : 16, Look.Muted, wrap: false);
+        clarifyLink = new Button
+        {
+            Style = (Style)Application.Current.Resources["QuietButtonStyle"],
+            HorizontalAlignment = step ? HorizontalAlignment.Center : HorizontalAlignment.Left,
+            Content = linkWords,
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(clarifyLink, linkWords.Text);
+        Watch(clarifyLink);
+        clarifyLink.Click += (_, _) =>
+        {
+            if (SecondClick()) return;
+            // the cursor only for a field that the store opened (ClarifyField.Opened)
+            var id = clarifyNeed;
+            if (answers.OpenClarify(id)) clarifyField.Opened(id);
+        };
+        clarifyBox = new Field(step ? 44 : 40, step ? 15 : 14, 16);
+        // a text box reports a text that this view set as a change too: only his own words go to the store
+        clarifyBox.Typed += text =>
+        {
+            if (clarifyField.Typed(text) is { } card) answers.TypeClarify(card, text);
+        };
+        Watch(clarifyBox.SendButton);
+        clarifyBox.Sent += () =>
+        {
+            if (SecondClick()) return;
+            answers.SendClarify(clarifyNeed);
+        };
+        clarifyPlace.Children.Add(clarifyLink);
+        clarifyPlace.Children.Add(clarifyBox);
+        if (step) clarifyPlace.Margin = new Thickness(0, 8, 0, 0);
     }
 
     public StackPanel Options => options;
     public Field Box => answerBox;
+    /// <summary>His talk with the agent, which stands over the options.</summary>
+    public StackPanel Talk => talk;
+    /// <summary>The link Needs clarification, or its field, which stands under the answer box.</summary>
+    public FrameworkElement Clarify => clarifyPlace;
+
+    /// <summary>The talk of the request <paramref name="id"/>, and its link or field (null: the card takes no message).
+    /// The field's words are loaded only as <see cref="ClarifyField.Show"/> says: when it comes to stand, when another
+    /// request comes, and when the store gave words of its own (Discard of a refused message); never on another draw,
+    /// which can come from a state older than his last key.</summary>
+    public void ShowClarify(long id, ValueList<TalkLine> lines, ClarifyModel? model)
+    {
+        if (!lines.Equals(shownTalk))
+        {
+            shownTalk = lines;
+            talk.Children.Clear();
+            foreach (var line in lines) talk.Children.Add(TalkRow(line));
+        }
+        talk.Visibility = lines.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        clarifyNeed = id;
+        clarifyPlace.Visibility = model is null ? Visibility.Collapsed : Visibility.Visible;
+        bool stands = model?.Stands == true;
+        var (load, cursor) = clarifyField.Show(id, model, clarifyBox.Box.Text);
+        if (load is not null) clarifyBox.Load(load);
+        clarifyLink.Visibility = model is not null && !stands ? Visibility.Visible : Visibility.Collapsed;
+        clarifyBox.Visibility = stands ? Visibility.Visible : Visibility.Collapsed;
+        if (model is null) return;
+        clarifyBox.Show(model.Placeholder, showsPlus: false, model.CanSend);
+        clarifyBox.Hovers(null, model.SendHover);
+        if (cursor)
+        {
+            // the cursor comes once the field stands, as the key card's field takes it
+            var box = clarifyBox.Box;
+            box.DispatcherQueue?.TryEnqueue(() =>
+            {
+                box.Focus(FocusState.Programmatic);
+                box.Select(box.Text.Length, 0);
+            });
+        }
+    }
+
+    /// <summary>One line of the talk (the Mac's NeedTalkLines): his message at the trailing side in his chat's bubble,
+    /// 48 in from the leading edge; the agent's reply at the leading side after its 16-pixel mark, 48 in from the
+    /// trailing edge. Plain text, which he can select.</summary>
+    private FrameworkElement TalkRow(TalkLine line)
+    {
+        var words = Blocks.Selectable(line.Text, size: step ? 15 : 14, lineHeight: step ? 21 : 20);
+        FrameworkElement row;
+        if (line.Own)
+        {
+            row = new Border
+            {
+                Background = Look.OwnBrush,
+                CornerRadius = new CornerRadius(16),
+                Padding = new Thickness(12, 7, 12, 7),
+                Margin = new Thickness(48, 0, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Child = words,
+            };
+        }
+        else
+        {
+            var mark = new AgentGlyph { Side = 16, Mark = line.Mark, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) };
+            var grid = new Grid { ColumnSpacing = 8, Margin = new Thickness(0, 0, 48, 0) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.Children.Add(mark);
+            Grid.SetColumn(words, 1);
+            grid.Children.Add(words);
+            row = grid;
+        }
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(row, line.Spoken);
+        return row;
+    }
 
     public void Show(long id, OptionsModel model, AnswerBoxModel box, bool canSend)
     {
-        bool same = id == need && model == shown;
-        if (id != need)
+        // The request that the parts showed: a picture's read keeps its rows in place only for that one.
+        bool sameNeed = id == need;
+        bool same = sameNeed && model == shown;
+        if (!sameNeed)
         {
             answerBox.Load(box.Draft);
             ticked.Clear();
@@ -144,45 +293,73 @@ internal sealed class AnswerParts
             DrawTicks();
             return;
         }
+        // Only a picture's read began or ended: its tile draws again in place, and the rows keep their hover and focus.
+        if (sameNeed && pictures.Count > 0 && model.Pictures.Count == pictures.Count && model with { Pictures = shown.Pictures } == shown)
+        {
+            shown = model;
+            for (int i = 0; i < pictures.Count; i++) pictures[i].Show(model.Pictures[i], answers.Picture(model.Pictures[i]));
+            DrawTicks();
+            return;
+        }
         var waitingBefore = shown.WaitingPress;
         shown = model;
         options.Children.Clear();
         rows.Clear();
+        pictures.Clear();
+        bool drawsPictures = model.Pictures.Count > 0 && model.Pictures.Count == model.Labels.Count;
+        var grid = drawsPictures ? PictureGrid(model.Labels.Count) : null;
         for (int i = 0; i < model.Labels.Count; i++)
         {
             int choice = i;
             string label = model.Labels[i];
-            var row = Row(label, model.Kind == OptionsKind.Ticks, model.SendingWords);
+            var row = Row(label, model.Kind == OptionsKind.Ticks, model.SendingWords, drawsPictures);
             Watch(row);
             row.Click += (_, _) =>
             {
-                switch (model.Kind)
+                var click = shown.Click(choice, onPicture: false);
+                switch (click.Kind)
                 {
-                    case OptionsKind.Press:
+                    case OptionClickKind.Press:
                         if (SecondClick()) break;
-                        answers.Press(need, choice);
+                        answers.Press(need, click.Index);
                         break;
-                    case OptionsKind.Ticks:
-                        if (!ticked.Remove(choice)) ticked.Add(choice);
+                    case OptionClickKind.Tick:
+                        if (!ticked.Remove(click.Index)) ticked.Add(click.Index);
                         DrawTicks();
                         break;
-                    case OptionsKind.QuickReplies:
+                    case OptionClickKind.Reply when click.Words is { } words:
                         // The owner, 18 November 2026: "If I click done, I want to send it directly! not paste it into
                         // the text input!".
                         if (SecondClick()) break;
-                        answerBox.Load(label);
-                        answers.Reply(need, label);
+                        answerBox.Load(words);
+                        answers.Reply(need, words);
                         // A file of the box still goes up: the words wait in the box for Enter or Send, with the caret.
                         if (filesWait)
                         {
                             answerBox.Box.Focus(FocusState.Programmatic);
-                            answerBox.Box.Select(label.Length, 0);
+                            answerBox.Box.Select(words.Length, 0);
                         }
                         break;
                 }
             };
-            options.Children.Add(row);
+            if (grid is null)
+            {
+                options.Children.Add(row);
+                continue;
+            }
+            // The picture over its option: a click opens it, as a file of a message opens, and sends nothing.
+            var picture = new OptionPictureView(() => shown.Click(choice, onPicture: true).Picture, answers.OpenFile, answers.ReadAgain);
+            picture.Show(model.Pictures[i], answers.Picture(model.Pictures[i]));
+            pictures.Add(picture);
+            int line = i / NeedPictures.Columns, column = i % NeedPictures.Columns;
+            Grid.SetRow(picture, line * 2);
+            Grid.SetColumn(picture, column);
+            grid.Children.Add(picture);
+            Grid.SetRow(row, line * 2 + 1);
+            Grid.SetColumn(row, column);
+            grid.Children.Add(row);
         }
+        if (grid is not null) options.Children.Add(grid);
         if (model.Kind == OptionsKind.Ticks) options.Children.Add(sendTicks);
         DrawTicks();
         if (model.WaitingPress != waitingBefore)
@@ -213,7 +390,20 @@ internal sealed class AnswerParts
             rows[i].Sending.Visibility = on && shown.WaitingPress == i ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private Button Row(string label, bool tick, string sendingWords)
+    /// <summary>The grid of pictures and their rows: three columns of one width, and for each row of pictures a row of
+    /// their options under it, whose height is its highest option's.</summary>
+    private Grid PictureGrid(int count)
+    {
+        double gap = step ? 8 : 7;
+        var grid = new Grid { ColumnSpacing = gap, RowSpacing = gap };
+        for (int c = 0; c < NeedPictures.Columns; c++)
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        int lines = (count + NeedPictures.Columns - 1) / NeedPictures.Columns;
+        for (int r = 0; r < lines * 2; r++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        return grid;
+    }
+
+    private Button Row(string label, bool tick, string sendingWords, bool underPicture = false)
     {
         var words = Look.Words(label, step ? 15 : 14, 20);
         var square = new Border
@@ -242,10 +432,13 @@ internal sealed class AnswerParts
         Grid.SetColumn(sending, 2);
         line.Children.Add(sending);
         rows.Add((square, check, sending));
+        // Under a picture, the words stand in the middle of a row as high as the highest of its line.
+        if (underPicture) line.VerticalAlignment = VerticalAlignment.Center;
         var button = new Button
         {
             Style = (Style)Application.Current.Resources["QuietButtonStyle"],
             HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = underPicture ? VerticalAlignment.Stretch : VerticalAlignment.Top,
             Content = new Border
             {
                 Background = Look.Brush(Look.White(0.05)),
@@ -262,10 +455,166 @@ internal sealed class AnswerParts
     }
 }
 
+/// <summary>The mark in the place of an answered card's check (owner API 1.280, <see cref="AnswerMark"/>; the owner's "Yes,
+/// as drawn" of 21 November 2026, and "Yes, same marks there" for the request at hand in Needs you), at the check's 12
+/// pixels: the muted check; the search card's mark of work (circle_hint in the green of work), which turns once in three
+/// seconds as the Mac's WorkMark does and rests, green, on a last reading and where Windows' animation effects are off;
+/// or the search card's red mark of a result that is no success. Its <see cref="AnswerMark.Hover"/> shows under the
+/// pointer (none for the work of a task, and none for the plain check), and an assistive app reads its
+/// <see cref="AnswerMark.Words"/> as its name (the Mac's value of the folded card). The compositor turns it, so the app
+/// does no work for a frame.</summary>
+internal sealed class AnswerMarkView : Grid
+{
+    private static readonly UISettings Settings = new();
+    private static readonly SolidColorBrush FailedTint = Look.Brush(Look.Rgb(0xFF, 0x45, 0x3A));
+    private FrameworkElement? icon;
+    private AnswerSymbol? shown;
+    private bool moves;
+    private bool turning;
+
+    public AnswerMarkView()
+    {
+        Width = Height = 12;
+        VerticalAlignment = VerticalAlignment.Center;
+        // A clear fill, so that the pointer finds the mark for its words (the icon itself takes no pointer).
+        Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(0, 0, 0, 0));
+        Loaded += (_, _) => { Settings.AnimationsEnabledChanged += AnimationsChanged; Turn(); };
+        Unloaded += (_, _) => { Settings.AnimationsEnabledChanged -= AnimationsChanged; Rest(); };
+    }
+
+    public void Show(AnswerMark mark, bool marksMove)
+    {
+        if (mark.Symbol != shown)
+        {
+            Rest();
+            shown = mark.Symbol;
+            icon = mark.Symbol switch
+            {
+                AnswerSymbol.Working => Icons.Of(Icons.Hint, Look.Green, 12),
+                AnswerSymbol.Failed => Icons.Of(Icons.Dismiss16, FailedTint, 12),
+                _ => Icons.Of(Icons.Check, Look.Muted, 12),
+            };
+            Children.Clear();
+            Children.Add(icon);
+        }
+        if (marksMove != moves)
+        {
+            moves = marksMove;
+            Rest();
+        }
+        Turn();
+        ToolTipService.SetToolTip(this, mark.Hover);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(this, mark.Words ?? "");
+    }
+
+    /// <summary>Windows' animation effects were turned on or off: the mark follows at once.</summary>
+    private void AnimationsChanged(UISettings sender, UISettingsAnimationsEnabledChangedEventArgs args) =>
+        DispatcherQueue?.TryEnqueue(() => { Rest(); Turn(); });
+
+    private void Turn()
+    {
+        if (turning || shown != AnswerSymbol.Working || !moves || icon is null || !IsLoaded || !Settings.AnimationsEnabled) return;
+        var visual = ElementCompositionPreview.GetElementVisual(icon);
+        var c = visual.Compositor;
+        visual.CenterPoint = new Vector3(6, 6, 0);
+        var turn = c.CreateScalarKeyFrameAnimation();
+        turn.InsertKeyFrame(0, 0);
+        turn.InsertKeyFrame(1, 360, c.CreateLinearEasingFunction());
+        turn.Duration = TimeSpan.FromSeconds(3);
+        turn.IterationBehavior = AnimationIterationBehavior.Forever;
+        visual.StartAnimation("RotationAngleInDegrees", turn);
+        turning = true;
+    }
+
+    private void Rest()
+    {
+        if (!turning || icon is null) return;
+        turning = false;
+        var visual = ElementCompositionPreview.GetElementVisual(icon);
+        visual.StopAnimation("RotationAngleInDegrees");
+        visual.RotationAngleInDegrees = 0;
+    }
+}
+
+/// <summary>The picture of a request's option (owner feature `need_pictures`): a square as wide as its column, from the
+/// first frame, with a card's corners. The picture stands in it whole, on the fill of a file's place; while its bytes
+/// come, the square keeps its size with "Reading…" in it, and a picture that did not come says "Not loaded" with Read
+/// again, as a picture of a message does (FileTileView). A click opens it, as a file of a message opens.</summary>
+internal sealed partial class OptionPictureView : Panel
+{
+    private readonly Button face;
+    private readonly Image image = new() { Stretch = Stretch.Uniform };
+    private readonly TextBlock words = Look.Words("", 12, 16, Look.Muted, wrap: false);
+    private readonly Button read;
+    private FileTile? tile;
+
+    /// <param name="current">The option's picture now (<see cref="OptionsModel.Click"/>): what a click opens.</param>
+    public OptionPictureView(Func<FileTile?> current, Action<FileTile> open, Action<FileTile> again)
+    {
+        words.HorizontalAlignment = HorizontalAlignment.Center;
+        words.VerticalAlignment = VerticalAlignment.Center;
+        read = Buttons.IconOnly(Icons.Refresh, "");
+        read.HorizontalAlignment = HorizontalAlignment.Center;
+        read.VerticalAlignment = VerticalAlignment.Bottom;
+        read.Margin = new Thickness(0, 0, 0, 16);
+        read.Click += (_, _) => { if (tile is { } t) again(t); };
+        face = new Button
+        {
+            Style = (Style)Application.Current.Resources["QuietButtonStyle"],
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            CornerRadius = new CornerRadius(8),
+            Content = new Grid
+            {
+                Children =
+                {
+                    // The picture with a card's corners, as FileTileView draws a picture of a message.
+                    new Border { CornerRadius = new CornerRadius(8), Background = Look.SelectBrush, Child = image },
+                    words,
+                    read,
+                },
+            },
+        };
+        face.Click += (_, _) => { if (current() is { } t) open(t); };
+        Children.Add(face);
+    }
+
+    public void Show(FileTile next, ImageSource? picture)
+    {
+        tile = next;
+        image.Source = picture;
+        image.Visibility = picture is null ? Visibility.Collapsed : Visibility.Visible;
+        words.Text = next.Reading ? next.ReadingWords : next.Words;
+        words.Foreground = next.WordsAreWarning ? Look.Orange : Look.Muted;
+        words.Visibility = picture is null ? Visibility.Visible : Visibility.Collapsed;
+        read.Visibility = picture is null && next.ShowsReadAgain ? Visibility.Visible : Visibility.Collapsed;
+        ToolTipService.SetToolTip(read, next.ReadAgainHover);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(read, next.ReadAgainHover);
+        ToolTipService.SetToolTip(face, next.Hover);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(face, next.Name);
+    }
+
+    /// <summary>A square as wide as the column gives.</summary>
+    protected override global::Windows.Foundation.Size MeasureOverride(global::Windows.Foundation.Size available)
+    {
+        double side = double.IsFinite(available.Width) ? available.Width : 0;
+        face.Measure(new global::Windows.Foundation.Size(side, side));
+        return new global::Windows.Foundation.Size(side, side);
+    }
+
+    protected override global::Windows.Foundation.Size ArrangeOverride(global::Windows.Foundation.Size final)
+    {
+        face.Arrange(new global::Windows.Foundation.Rect(0, 0, final.Width, final.Width));
+        return new global::Windows.Foundation.Size(final.Width, final.Width);
+    }
+}
+
 /// <summary>A request's card in a chat (NeedRequestCard), as pictures 1, 2a and 16 draw it: its title, its reason
 /// (three lines, or whole after Show all, with what it needs from him and its details), "Show all" or "Show less" alone
 /// on its row (Discuss left the product: the owner, 13 November 2026), who asks and when, the options and the answer
-/// box, his one reply. After his answer the card folds to its title and his answer with a check.</summary>
+/// box, his answer. Where the hub says that the card takes a message (owner feature `need_clarify`), his talk with the
+/// agent stands over the options and "Needs clarification" under the box (w4-windows-chat.png). After his answer the
+/// card folds to its title and his answer with a check.</summary>
 internal sealed class RequestCardView : Grid
 {
     private readonly IAnswers answers;
@@ -285,7 +634,7 @@ internal sealed class RequestCardView : Grid
     private readonly TextBlock fromWords = Look.Words("", 12, 16, Look.Muted, wrap: false);
     private readonly StackPanel answered = new() { Orientation = Orientation.Horizontal, Spacing = 5, Margin = new Thickness(0, -6, 0, 0) };
     private readonly TextBlock answeredWords = Look.Words("", 12, 16, Look.Muted, wrap: false);
-    private readonly FrameworkElement answeredCheck = Icons.Of(Icons.Check, Look.Muted, 12);
+    private readonly AnswerMarkView answeredMark = new();
     private readonly AnswerParts parts;
     private RequestCard? card;
     private bool canSend;
@@ -314,8 +663,7 @@ internal sealed class RequestCardView : Grid
         from.Children.Add(fromMark);
         from.Children.Add(fromWords);
         todoLabel.Margin = new Thickness(0, 2, 0, 0);
-        answeredCheck.VerticalAlignment = VerticalAlignment.Center;
-        answered.Children.Add(answeredCheck);
+        answered.Children.Add(answeredMark);
         answered.Children.Add(answeredWords);
 
         stack.Children.Add(title);
@@ -327,8 +675,10 @@ internal sealed class RequestCardView : Grid
         stack.Children.Add(todo);
         stack.Children.Add(links);
         stack.Children.Add(from);
+        stack.Children.Add(parts.Talk);
         stack.Children.Add(parts.Options);
         stack.Children.Add(parts.Box);
+        stack.Children.Add(parts.Clarify);
         Children.Add(new Border
         {
             Background = Look.SurfaceBrush,
@@ -349,7 +699,9 @@ internal sealed class RequestCardView : Grid
         // His answer in his own words is his message bubble (the Mac's rule of 14 November 2026): the card then folds to
         // its title, with no answer line and no check; a pressed option keeps both.
         answered.Visibility = folded && next.ShowsAnswerLine ? Visibility.Visible : Visibility.Collapsed;
-        answeredCheck.Visibility = next.ShowsCheck ? Visibility.Visible : Visibility.Collapsed;
+        // In the check's place, the mark of where the work of his answer stands (owner API 1.280).
+        answeredMark.Visibility = next.ShowsCheck ? Visibility.Visible : Visibility.Collapsed;
+        answeredMark.Show(next.AnswerMark, next.MarkMoves);
         answeredWords.Text = next.AnswerWords;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(this, folded ? next.FoldedWords : "");
         // The Mac's card of Founderizer 0.1.239 (NeedRequestCard; the owner, 15 November 2026: "the task itself need to
@@ -400,13 +752,17 @@ internal sealed class RequestCardView : Grid
         fromWords.Text = next.From;
         parts.Options.Visibility = parts.Box.Visibility = folded ? Visibility.Collapsed : Visibility.Visible;
         if (!folded) parts.Show(next.Id, next.Options, next.Answer, sendable);
+        // a folded card's model has no talk and no link
+        parts.ShowClarify(next.Id, next.Talk, next.Clarify);
     }
 }
 
 /// <summary>The request at hand in Needs you (NeedStep), as picture 3 and picture 2b of the second set draw it: the
 /// asking agent's mark at 48, who asks and how long ago with the orange hourglass while an agent's work waits on it, the
 /// title, the reason, "Details" with its chevron (opened: what it needs from him and its details, from the leading edge),
-/// the options and the answer box, his one reply, with nothing under it (Discuss left the product).</summary>
+/// the options and the answer box, his answer. Where the hub says that the request takes a message (owner feature
+/// `need_clarify`), "Needs clarification" stands in the middle under the box (w4-windows-needs.png), and his talk with
+/// the agent over the options, and over his answer once the request ended, where it keeps its place.</summary>
 internal sealed class RequestStepView : StackPanel
 {
     private readonly IAnswers answers;
@@ -422,7 +778,7 @@ internal sealed class RequestStepView : StackPanel
     private readonly StackPanel more = new() { Spacing = 12, Margin = new Thickness(0, 14, 0, 0) };
     private readonly StackPanel answered = new() { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 18, 0, 0) };
     private readonly TextBlock answeredWords = Look.Words("", 15, 20, Look.Muted, wrap: false);
-    private readonly FrameworkElement answeredCheck = Icons.Of(Icons.Check, Look.Muted, 12);
+    private readonly AnswerMarkView answeredMark = new();
     private readonly AnswerParts parts;
     private RequestStep? step;
     private bool canSend;
@@ -474,12 +830,14 @@ internal sealed class RequestStepView : StackPanel
         Children.Add(task);
         Children.Add(details);
         Children.Add(more);
-        answeredCheck.VerticalAlignment = VerticalAlignment.Center;
-        answered.Children.Add(answeredCheck);
+        parts.Talk.Margin = new Thickness(0, 24, 0, 0);
+        Children.Add(parts.Talk);
+        answered.Children.Add(answeredMark);
         answered.Children.Add(answeredWords);
         Children.Add(answered);
         Children.Add(parts.Options);
         Children.Add(parts.Box);
+        Children.Add(parts.Clarify);
     }
 
     public void Show(RequestStep next, bool sendable)
@@ -538,11 +896,19 @@ internal sealed class RequestStepView : StackPanel
             }
         }
         more.Visibility = more.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        // An ended request at hand (he chose it among the answered ones): his answer with a check, and nothing to press.
+        // An ended request at hand (he chose it among the answered ones): his answer, and nothing to press. In the check's
+        // place, the card's mark of where the work of his answer stands (owner API 1.280; his "Yes, same marks there").
         answered.Visibility = next.Ended ? Visibility.Visible : Visibility.Collapsed;
-        answeredCheck.Visibility = next.ShowsCheck ? Visibility.Visible : Visibility.Collapsed;
+        answeredMark.Visibility = next.ShowsCheck ? Visibility.Visible : Visibility.Collapsed;
+        answeredMark.Show(next.AnswerMark, next.MarkMoves);
         answeredWords.Text = next.AnswerWords;
         parts.Options.Visibility = parts.Box.Visibility = next.Ended ? Visibility.Collapsed : Visibility.Visible;
         if (!next.Ended) parts.Show(next.Id, next.Options, next.Answer, sendable);
+        // His talk keeps its place over the answers, and over his answer once it ended (the Mac's NeedStep.answers): what
+        // stands under it comes 10 under it, as the Mac's answers do.
+        parts.ShowClarify(next.Id, next.Talk, next.Clarify);
+        bool talks = next.Talk.Count > 0;
+        parts.Options.Margin = new Thickness(0, talks ? 10 : 24, 0, 0);
+        answered.Margin = new Thickness(0, talks ? 10 : 18, 0, 0);
     }
 }

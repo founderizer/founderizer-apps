@@ -1,7 +1,9 @@
 import FleetCore
 import Foundation
 import Network
+import SwiftUI
 import Testing
+import UIKit
 @testable import FleetMobile
 
 /// The sample fleet (`SampleFleet.swift`): what a phone with no hub can look at, read through the phone's own client
@@ -645,6 +647,346 @@ extension SampleFleetTests {
                 #expect(store.pending == nil && store.clarifyDraft(for: 7) == third)
                 #expect(store.draft(for: "manager") == chatDraft)
             }
+        }
+    }
+}
+
+/// **A hub with three requests of pictures** (owner feature `need_pictures`, owner API 1.285): request 7 has three options
+/// and a picture for each, request 8 three options and two pictures, request 9 three options that combine (`multi`) and
+/// a picture for each. It gives each picture's bytes and takes an answer to each request with the hub's receipt, and it
+/// keeps the body of each answer and the number of each picture that was read, in order. While `holdsPictures` is set,
+/// it holds the bytes of each picture, and while `holdsAnswers` is set its receipt of each answer, until `release`.
+private final class PictureHub: LoopbackHub, @unchecked Sendable {
+    /// Three small pictures, one colour each, drawn here: no photo, logo or name.
+    static let pictures: [Data] = [UIColor.brown, UIColor.orange, UIColor.systemTeal].map { colour in
+        UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).pngData { context in
+            colour.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+    }
+    static let ids = [71, 72, 73]
+    private var bodies: [(path: String, body: [String: Any])] = []
+    private var pictureReads: [Int] = []
+    private var picturesHeld = false
+    private var answersHeld = false
+    private var held: [(connection: NWConnection, reply: Data)] = []
+
+    init() { super.init(label: "founderizer.check.picture-hub") }
+
+    /// The answers that came, by route, in order.
+    var answers: [(path: String, body: [String: Any])] { lock.withLock { bodies } }
+    /// The number of each picture that the phone read, in the order that the reads came.
+    var reads: [Int] { lock.withLock { pictureReads } }
+    var holdsPictures: Bool {
+        get { lock.withLock { picturesHeld } }
+        set { lock.withLock { picturesHeld = newValue } }
+    }
+    var holdsAnswers: Bool {
+        get { lock.withLock { answersHeld } }
+        set { lock.withLock { answersHeld = newValue } }
+    }
+
+    /// The bytes and receipts that it holds go, and it holds nothing more.
+    func release() {
+        let going = lock.withLock { () -> [(connection: NWConnection, reply: Data)] in
+            picturesHeld = false
+            answersHeld = false
+            defer { held = [] }
+            return held
+        }
+        for (connection, reply) in going { send(reply, on: connection) }
+    }
+
+    override func answer(_ request: Request, on connection: NWConnection) {
+        note("\(request.method) \(request.path)")
+        switch (request.method, request.path) {
+        case ("GET", "/ui/mobile"):
+            send(Self.reply(200, Self.fleet), on: connection)
+        case ("GET", let path) where path.hasPrefix("/ui/attachments/"):
+            guard let id = Int(path.dropFirst("/ui/attachments/".count)), let index = Self.ids.firstIndex(of: id) else {
+                return send(Self.reply(404, #"{"error": "not found"}"#), on: connection)
+            }
+            let bytes = Self.pictures[index]
+            let head = "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: \(bytes.count)\r\n"
+                + "Connection: close\r\n\r\n"
+            let holds = lock.withLock { pictureReads.append(id); return picturesHeld }
+            reply(Data(head.utf8) + bytes, on: connection, holds: holds)
+        case ("POST", "/ui/needs/7"), ("POST", "/ui/needs/8"), ("POST", "/ui/needs/9"):
+            let fields = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            let holds = lock.withLock { bodies.append((request.path, fields)); return answersHeld }
+            let receipt: [String: Any] = ["ok": true, "request_id": fields["request_id"] as? String ?? "",
+                                          "client": request.headers["x-fleet-client"] ?? "", "event_id": 101,
+                                          "created": 1_800_000_100, "replayed": false]
+            let body = (try? JSONSerialization.data(withJSONObject: receipt)).map { String(decoding: $0, as: UTF8.self) }
+            reply(Self.reply(200, body ?? "{}"), on: connection, holds: holds)
+        default:
+            send(Self.reply(404, #"{"error": "not found"}"#), on: connection)
+        }
+    }
+
+    /// The reply goes now, or waits for `release`.
+    private func reply(_ data: Data, on connection: NWConnection, holds: Bool) {
+        let now = lock.withLock { () -> Bool in
+            // (a release between the hold's read and this line lets it go now)
+            guard holds, picturesHeld || answersHeld else { return true }
+            held.append((connection, data))
+            return false
+        }
+        if now { send(data, on: connection) }
+    }
+
+    /// One picture as the hub gives it with an item.
+    private static func picture(_ index: Int) -> [String: Any] {
+        ["id": ids[index], "name": "ad-\(index + 1).png", "mime": "image/png", "size": pictures[index].count,
+         "sha256": MessageAttachment.digest(pictures[index]), "created": 1_799_999_000, "kept": NSNull()]
+    }
+
+    /// The hub's compact read: requests 7, 8 and 9, all of the manager's.
+    private static let fleet: String = {
+        let options = ["Dark, the bottle", "Orange, big words", "Blue, the morning"]
+        func card(_ id: Int, pictures: [[String: Any]], multi: Bool = false) -> [String: Any] {
+            ["id": id, "by": "manager", "title": "Pick the ad for the launch", "why": "Three versions of the launch ad.",
+             "todo": "", "raised": 1_799_999_000 + id, "answer": NSNull(), "answered": NSNull(), "options": options,
+             "pictures": pictures, "multi": multi]
+        }
+        let fleet: [String: Any] = [
+            "schema_version": 1, "db": "gen-pictures", "time": 1_800_000_000,
+            "ui_features": ["mobile", "need_options", "need_pictures"], "agents": [],
+            "needs": [card(7, pictures: (0..<3).map(picture)), card(8, pictures: (0..<2).map(picture)),
+                      card(9, pictures: (0..<3).map(picture), multi: true)],
+            "tasks": [], "recent": [], "holds": [], "outcomes": [],
+        ]
+        return (try? JSONSerialization.data(withJSONObject: fleet)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+    }()
+}
+
+/// **A request's card of the app in a window of the check**, with each of its parts as VoiceOver finds it: the check
+/// presses a part as VoiceOver does (`accessibilityActivate`), which runs that part's own action, and reads which parts
+/// the card has by their identifiers, and their state by their traits. Each test closes its window (`close`).
+@MainActor private final class CardWindow {
+    let window: UIWindow
+
+    /// **SwiftUI gives its views' parts to an accessibility client only while accessibility is on**: in a test process
+    /// nothing turns it on, and the card had no part at all. The system's own switches for an automation client turn it
+    /// on (as KIF does) while a window of a check stands, and `close` turns them off again: a test host that ended
+    /// before its exit left them on in the simulator.
+    private static func accessibility(_ on: Bool) {
+        let root = ProcessInfo.processInfo.environment["IPHONE_SIMULATOR_ROOT"] ?? ""
+        guard let library = dlopen(root + "/usr/lib/libAccessibility.dylib", RTLD_NOW)
+                ?? dlopen("/usr/lib/libAccessibility.dylib", RTLD_NOW) else { return }
+        for name in ["_AXSSetAutomationEnabled", "_AXSApplicationAccessibilitySetEnabled"] {
+            if let set = dlsym(library, name) { unsafeBitCast(set, to: (@convention(c) (Int32) -> Void).self)(on ? 1 : 0) }
+        }
+    }
+
+    init(_ card: some View) {
+        Self.accessibility(true)
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 1600)
+        window.rootViewController = UIHostingController(rootView: card)
+        window.isHidden = false
+        window.layoutIfNeeded()
+    }
+
+    /// Every element under the window that names an identifier, by it.
+    var parts: [String: NSObject] {
+        var found: [String: NSObject] = [:]
+        var waiting: [NSObject] = [window]
+        var seen = Set<ObjectIdentifier>()
+        while let next = waiting.popLast() {
+            guard seen.insert(ObjectIdentifier(next)).inserted else { continue }
+            // (SwiftUI's parts answer the identifier's message, and are no UIAccessibilityIdentification)
+            let selector = NSSelectorFromString("accessibilityIdentifier")
+            let named = next.responds(to: selector) ? next.perform(selector)?.takeUnretainedValue() as? String : nil
+            if let id = named, !id.isEmpty { found[id] = next }
+            if let view = next as? UIView { waiting += view.subviews }
+            if let children = next.accessibilityElements as? [NSObject] {
+                waiting += children
+            } else {
+                let count = next.accessibilityElementCount()
+                if count != NSNotFound, count > 0 {
+                    waiting += (0..<count).compactMap { next.accessibilityElement(at: $0) as? NSObject }
+                }
+            }
+        }
+        return found
+    }
+
+    /// Presses the part with this identifier, as VoiceOver does: true when it took the press.
+    func press(_ id: String) -> Bool { parts[id]?.accessibilityActivate() == true }
+
+    /// The part with this identifier has this trait now (a tick `.selected`, a Send that takes no press `.notEnabled`).
+    func has(_ id: String, _ trait: UIAccessibilityTraits) -> Bool { parts[id]?.accessibilityTraits.contains(trait) == true }
+
+    /// The picture that a press opened stands at full screen over the card.
+    var opened: Bool { window.rootViewController?.presentedViewController != nil }
+
+    func close() {
+        window.rootViewController?.dismiss(animated: false)
+        window.isHidden = true
+        window.rootViewController = nil
+        Self.accessibility(false)
+    }
+}
+
+extension SampleFleetTests {
+    /// Runs `body` with a store that read the picture hub, and leaves nothing of it: no key, no reading, no request.
+    @MainActor private static func withPictureHub(_ body: (MobileStore, PictureHub) async throws -> Void) async throws {
+        try await withoutHub {
+            try await keepingReadings {
+                let hub = PictureHub()
+                defer { hub.stop() }
+                let address = try await hub.start()
+                let holder = DeviceKey(account: "device-key-picture-check")
+                try holder.remove()
+                defer { try? holder.remove() }
+                let store = MobileStore(deviceKey: holder)
+                try #require(store.pending == nil, "the simulator holds a request of its own")
+                defer {
+                    if let left = store.pending {
+                        try? Outbox(file: support.appendingPathComponent("pending.json")).clear(matching: left.requestID)
+                    }
+                    let opened = FileManager.default.temporaryDirectory.appendingPathComponent("attachments")
+                    for (id, number) in zip(PictureHub.ids, 1...) {
+                        try? FileManager.default.removeItem(at: opened.appendingPathComponent("\(id)-ad-\(number).png"))
+                    }
+                }
+                store.addressText = address
+                await store.connect()
+                try #require(store.canWrite && store.openNeeds.map(\.id).sorted() == [7, 8, 9])
+                // A press that still waits goes to this hub before the check cleans up: one that went after it stayed
+                // in the simulator's Outbox, and each later check of a store found a request there. A press's own task
+                // starts on the next turn of the main actor, so the check gives it that turn before it looks.
+                var failure: Error?
+                do { try await body(store, hub) } catch { failure = error }
+                hub.release()
+                try? await Task.sleep(for: .milliseconds(300))
+                for _ in 0..<60 where !store.waitingPresses.isEmpty || store.sending {
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+                if let failure { throw failure }
+            }
+        }
+    }
+
+    /// **A request whose pictures are not one for each option draws the card of before** (owner feature `need_pictures`):
+    /// no picture can be known to stand over its own option, so none stands, and the options are the rows of before. A
+    /// hub that does not name the feature gets the card of before too. The bug that this stops: two pictures over the
+    /// first two of three options, and he picks an ad by the picture of another.
+    @MainActor @Test("a request with three options and two pictures draws the card of before", .timeLimit(.minutes(1)))
+    func picturesThatAreNotOneForEachOptionDrawNone() async throws {
+        try await Self.withPictureHub { store, _ in
+            let three = try #require(store.openNeeds.first { $0.id == 7 })
+            let two = try #require(store.openNeeds.first { $0.id == 8 })
+            #expect(NeedPictures.drawn(three, features: store.features)?.map(\.id) == PictureHub.ids)
+            #expect(NeedPictures.drawn(two, features: store.features) == nil)
+            #expect(NeedPictures.drawn(three, features: store.features.subtracting(["need_pictures"])) == nil)
+
+            let window = CardWindow(NeedCard(store: store, need: two, header: true))
+            defer { window.close() }
+            try await Task.sleep(for: .milliseconds(300))
+            let parts = Set(window.parts.keys)
+            #expect(Set(parts.filter { $0.hasPrefix("need-option-8-") })
+                    == ["need-option-8-0", "need-option-8-1", "need-option-8-2"])
+            #expect(!parts.contains { $0.hasPrefix("need-picture-") })
+        }
+    }
+
+    /// **A press of the picture opens it at full screen and answers nothing; a press of its words is the answer**
+    /// (owner feature `need_pictures`): the words send `choice` with their option's index, as a press of an option does.
+    /// A press while the picture's own read runs opens it when its bytes come. The bugs that this stops: a look at a
+    /// picture answers the request, with an ad that he did not mean to pick; a press while the card reads the picture
+    /// opens nothing.
+    @MainActor @Test("a press of the picture answers nothing, and a press of its words sends that option",
+                     .timeLimit(.minutes(1)))
+    func aPictureOpensAndItsWordsAnswer() async throws {
+        try await Self.withPictureHub { store, hub in
+            let need = try #require(store.openNeeds.first { $0.id == 7 })
+            hub.holdsPictures = true
+            let window = CardWindow(NeedCard(store: store, need: need, header: true))
+            defer { window.close() }
+            try await Self.until { hub.reads == [71] }
+            try #require(hub.reads == [71], "the card did not read its first picture")
+            #expect(Set(window.parts.keys.filter { $0.hasPrefix("need-picture-7-") })
+                    == ["need-picture-7-0", "need-picture-7-1", "need-picture-7-2"])
+
+            // the first picture, while the card reads it: it opens when its bytes come, and no answer goes or waits
+            #expect(window.press("need-picture-7-0"))
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(!window.opened)
+            hub.release()
+            try await Self.until { window.opened }
+            #expect(window.opened, "the picture did not open")
+            try await Task.sleep(for: .milliseconds(500))
+            #expect(hub.answers.isEmpty && store.pending == nil && store.waitingPresses.isEmpty)
+            window.window.rootViewController?.dismiss(animated: false)
+
+            // the second option's words: the answer with that option's index, and nothing else
+            #expect(window.press("need-option-7-1"))
+            try await Self.until { !hub.answers.isEmpty }
+            let answer = try #require(hub.answers.first)
+            #expect(hub.answers.count == 1 && answer.path == "/ui/needs/7")
+            #expect(answer.body["choice"] as? Int == 1 && answer.body["answer"] == nil && answer.body["choices"] == nil)
+        }
+    }
+
+    /// **The ticked options go as one answer, each once, in their order, and they stay as they were while the Send
+    /// waits** (owner feature `need_pictures`, a request whose options combine): behind another answer on its way, his
+    /// Send waits; the ticks and Send take no press until it went, and the hub gets `choices` and no words. The bug that
+    /// this stops: he changes the ticks while the Send waits, the card shows the new ones, and the old ones go.
+    @MainActor @Test("ticked options go as one answer, and their ticks stay while the Send waits", .timeLimit(.minutes(1)))
+    func tickedOptionsGoAsOneAnswer() async throws {
+        try await Self.withPictureHub { store, hub in
+            let need = try #require(store.openNeeds.first { $0.id == 9 })
+            // another answer on its way, whose receipt the hub holds
+            hub.holdsAnswers = true
+            store.press(needID: 7, choice: 0)
+            try await Self.until { hub.answers.count == 1 }
+            try #require(hub.answers.first?.path == "/ui/needs/7" && store.sending)
+
+            let window = CardWindow(NeedCard(store: store, need: need, header: true))
+            defer { window.close() }
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(window.press("need-tick-9-2") && window.press("need-tick-9-0"))
+            try await Task.sleep(for: .milliseconds(200))
+            #expect(window.press("need-send-ticked-9"))
+            try await Task.sleep(for: .milliseconds(200))
+            try #require(store.waitingPresses[9] == .ticked([0, 2]), "the Send did not wait behind the other answer")
+
+            // while it waits: a press of another tick changes nothing, and Send takes no press
+            #expect(window.press("need-tick-9-1"))
+            try await Task.sleep(for: .milliseconds(200))
+            #expect(!window.has("need-tick-9-1", .selected), "a tick changed while the Send waited")
+            #expect(window.has("need-tick-9-0", .selected) && window.has("need-tick-9-2", .selected))
+            #expect(window.has("need-send-ticked-9", .notEnabled))
+
+            // the other answer's receipt: the Send goes, with the indexes of the ticked options
+            hub.release()
+            try await Self.until { hub.answers.count == 2 }
+            let answer = try #require(hub.answers.last)
+            #expect(answer.path == "/ui/needs/9")
+            #expect(answer.body["choices"] as? [Int] == [0, 2])
+            #expect(answer.body["answer"] == nil && answer.body["choice"] == nil)
+        }
+    }
+
+    /// **A card reads its pictures one after another, in the order of its options** (owner feature `need_pictures`):
+    /// each read has the client's limit of 15 seconds. The bug that this stops: six large pictures read at once on a slow
+    /// link, each ends "Not loaded", and he has no picture to choose by.
+    @MainActor @Test("a card reads its pictures one after another, in the order of its options", .timeLimit(.minutes(1)))
+    func aCardReadsItsPicturesInTurn() async throws {
+        try await Self.withPictureHub { store, hub in
+            let need = try #require(store.openNeeds.first { $0.id == 7 })
+            hub.holdsPictures = true
+            let window = CardWindow(NeedCard(store: store, need: need, header: true))
+            defer { window.close() }
+            try await Self.until { !hub.reads.isEmpty }
+            try await Task.sleep(for: .milliseconds(500))
+            #expect(hub.reads == [71], "the card read more than one picture at a time")
+            hub.release()
+            try await Self.until { hub.reads.count == 3 }
+            #expect(hub.reads == PictureHub.ids)
         }
     }
 }

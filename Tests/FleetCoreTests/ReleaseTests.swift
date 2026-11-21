@@ -280,6 +280,19 @@ struct ReleaseTests {
         #expect(passed.current?.version == "2026.11.494" && passed.stand.value == "2026.11.494")
     }
 
+    /// A release whose run stopped at the fetch, with the hub's own line.
+    private static func unfetched(_ id: Int, _ version: String) -> String {
+        release(id, version, "kept").replacingOccurrences(of: "\"step\": null, \"says\": null", with:
+            "\"step\": \"fetch\", \"says\": \"This server could not download release \(version) from github.com. The "
+            + "fetch of upstream failed: fatal: Failed to connect to github.com port 443\"")
+    }
+    private static let unreached = "Your fleet could not download release 2026.11.732: its server cannot reach the "
+        + "address it takes releases from."
+
+    /// **Only a release this fleet reached makes it up to date, and a newer one that it could not download says so** (the
+    /// owner's test fleet, 21 November 2026): its server had no route to github.com, every release from 2026.11.714 to
+    /// .732 stopped `kept` at the fetch, and the row said only "Unknown" for days; with an older release reached in
+    /// view, it said "Your fleet runs the newest release" while every newer one stopped.
     @Test func onlyAReleaseThisFleetReachedMakesItUpToDate() throws {
         let stand = try state(["ROWS": Self.started(state: "done", step: "follow", reached: true)]).stand
         #expect(stand.value == "2026.10.3")
@@ -289,6 +302,34 @@ struct ReleaseTests {
         let stray = try state(["ROWS": Self.row("\"hold\": false, \"state\": \"kept\", \"step\": null, \"says\": null")]).stand
         #expect(stray.says == "Your fleet has not taken one of our releases yet.")
         #expect(stray.value == "Unknown")
+        let none = try state(["ROWS": [Self.unfetched(732, "2026.11.732"),
+                                       Self.unfetched(731, "2026.11.731")].joined(separator: ",")]).stand
+        #expect(none.says == Self.unreached && none.warn && none.value == "Did not finish" && none.take == nil)
+        let behind = try state(["ROWS": [Self.unfetched(732, "2026.11.732"),
+                                         Self.release(713, "2026.11.713", "done")].joined(separator: ",")])
+        #expect(behind.stand.says == Self.unreached && behind.stand.warn && behind.current?.version == "2026.11.713")
+    }
+
+    /// The Spanish of that line is in the table.
+    @Test func aReleaseThisFleetCouldNotDownloadSaysSoInSpanish() throws {
+        let read = try state(["ROWS": Self.unfetched(732, "2026.11.732")])
+        let says = try SpanishTable.run { read.stand.says }
+        #expect(says == "Tu equipo no pudo descargar la versión 2026.11.732: su servidor no puede conectar con la "
+                + "dirección de la que obtiene las versiones.")
+    }
+
+    /// **A run that stopped for a moment, which the sweep takes again, is no fault on the row** (the reviews of 21
+    /// November 2026): a `kept` row at `hold`, from a pressed Update that raced a turn, names task codes, and a
+    /// `rolled_back` row at `push` passed every check; drawn in orange they would show codes or false words.
+    @Test func aRunTheSweepTakesAgainIsNoFaultOnTheRow() throws {
+        let raced = try state(["ROWS": Self.row("\"hold\": false, \"state\": \"kept\", \"step\": \"hold\", \"says\": "
+                                                + "\"This fleet started working before the update did: T-12\"")]).stand
+        #expect(!raced.warn && !raced.says.contains("T-12") && raced.value == "Unknown")
+        let pushed = try state(["ROWS": [Self.release(9, "2026.11.709", "rolled_back"),
+                                         Self.release(8, "2026.11.708", "done")].joined(separator: ",")
+                                    .replacingOccurrences(of: "\"state\": \"rolled_back\", \"step\": null",
+                                                          with: "\"state\": \"rolled_back\", \"step\": \"push\"")]).stand
+        #expect(!pushed.warn && pushed.value == "2026.11.708")
     }
 
     @Test func noLineOfTheUpdatesScreenNamesARevision() throws {

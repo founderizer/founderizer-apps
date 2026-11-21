@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Founderizer.Core;
+using Founderizer.Setup.FirstRun;
 using Founderizer.Windows.Fleet;
 using Founderizer.Windows.Marks;
 using Founderizer.Windows.Navigation;
 using Founderizer.Windows.Pages;
+using Founderizer.Windows.Pages.FirstRun;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
@@ -55,6 +57,14 @@ public sealed partial class MainWindow : Window
     private TaskbarCount? taskbar;
     /// <summary>The request that Needs you brings to hand when it opens from a task's orange line.</summary>
     private long? needToOpen;
+    /// <summary>**The window waits for the search of this PC's Tailscale before its first page** (plan 5.1): a window
+    /// that has the welcome page and no hub draws no page while the search looks, else a new owner would see Add this
+    /// PC for a moment before the welcome page.</summary>
+    private bool searching;
+    /// <summary>The first run fills the window (set 8: no pane, no Back, Forward or Search).</summary>
+    private bool fills;
+    private FirstRunHost? firstRun;
+    private TailscaleSetup? tailscaleSetup;
 
     public MainWindow(IFleetSource source, Page? asked)
     {
@@ -90,7 +100,7 @@ public sealed partial class MainWindow : Window
         Root.SizeChanged += (_, e) => Widths.For(e.NewSize.Width);
         Widths.Changed += () =>
         {
-            PaneColumn.Width = new GridLength(Widths.Pane);
+            PaneColumn.Width = new GridLength(fills ? 0 : Widths.Pane);
             Canvas.SetLeft(SearchButton, Widths.Pane - 48);
             Passthrough();
         };
@@ -100,6 +110,7 @@ public sealed partial class MainWindow : Window
         // The page it opens on: the one asked for (-openPage), else the library's first page (FleetStore.home).
         state = source.State;
         homeChosen = asked is not null || state.Fleet is not null;
+        searching = asked is null && Searching(state);
         history = new History(asked ?? Screens.FirstPage(state));
         history.Changed += ShowPage;
         ShowPane();
@@ -135,6 +146,7 @@ public sealed partial class MainWindow : Window
             if (await WindowsNotices.MarkFile(TitleMark, AppFolders.Root) is { } mark) notices.Header(mark);
         };
         Closed += (_, _) => notices.Stop();
+        Closed += (_, _) => tailscaleSetup?.Dispose();
         search = new SearchCard(() => state, Go, () =>
         {
             Passthrough();
@@ -231,6 +243,19 @@ public sealed partial class MainWindow : Window
     {
         var before = state;
         state = next;
+        // The search ended: the first page now (the welcome page, or Add this PC for a hub on this PC's network).
+        if (searching && !Searching(next))
+        {
+            searching = false;
+            homeChosen = true;
+            var first = Screens.FirstPage(next);
+            if (first == history.Current) ShowPage();
+            else history.Start(first);
+        }
+        // While the welcome page shows and no press was made, a hub that appears opens Add this PC (plan 5.1).
+        if (history.Current.Kind == PageKind.Welcome && !next.HasNoHub &&
+            (source as StoreSource)?.FirstRun() is not { State.Page: not SetupPage.Welcome })
+            history.Start(Screens.FirstPage(next));
         // A PC that took its key and read its fleet leaves Add this PC for its first page, as the iPhone's EnrollPage
         // closes: the launch's first page, with no way back to the code.
         if (history.Current.Kind == PageKind.AddThisPc && next.Key == KeyState.InHand && next.Fleet is not null &&
@@ -278,6 +303,7 @@ public sealed partial class MainWindow : Window
     {
         var next = Screens.Pane(state, history.Current, DateTimeOffset.UtcNow, ScreenContext.Local, reduceMotion: !settings.AnimationsEnabled);
         NeedsButton.Visibility = next.ShowsNeeds ? Visibility.Visible : Visibility.Collapsed;
+        if (fills) next = next with { ShowsSearch = false };
         var badge = Navigation.PaneMarks.NeedsBadge(next);
         NeedsCount.Text = badge ?? "";
         NeedsPill.Visibility = badge is null ? Visibility.Collapsed : Visibility.Visible;
@@ -339,6 +365,22 @@ public sealed partial class MainWindow : Window
         BackButton.IsEnabled = history.CanGoBack;
         ForwardButton.IsEnabled = history.CanGoForward;
         var current = history.Current;
+        // The first run, and the moment before it while the search looks, fill the window.
+        if (searching || current.Kind == PageKind.Welcome)
+        {
+            Fill(true);
+            source.OpenChat(null);
+            source.OpenTask(null);
+            page = null;
+            band = null;
+            bar = null;
+            var host = searching ? null : FirstRunPage();
+            PageHost.Content = (UIElement?)host ?? new Grid { Background = Look.CanvasBrush };
+            if (host is null) AutomationProperties.SetName(PageHost, SetupScreens.WelcomeTitle);
+            ShowPane();
+            return;
+        }
+        Fill(false);
         source.OpenChat(current.Kind == PageKind.Chat ? current.Agent : null);
         source.OpenTask(current.Kind == PageKind.Task ? current.Task : null);
         long? chosen = needToOpen;
@@ -375,6 +417,40 @@ public sealed partial class MainWindow : Window
         ShowPane();
     }
 
+    /// <summary>The search of this PC's Tailscale has not ended yet for a window that would open on the welcome page.</summary>
+    private static bool Searching(StoreState s) => s.HasWelcome && s.HasNoHub && s.Search is HubSearch.None or HubSearch.Looking;
+
+    /// <summary>The first run's frame over its store, made once; null where the PC can be no owner's computer.</summary>
+    private FirstRunHost? FirstRunPage()
+    {
+        if (source is not StoreSource store || store.FirstRun() is not { } setup || store.Tailscale is not { } pc) return null;
+        tailscaleSetup ??= new TailscaleSetup(pc);
+        return firstRun ??= new FirstRunHost(setup, pc, tailscaleSetup, () => Go(Page.AddThisPc), DispatcherQueue,
+                                             title => AutomationProperties.SetName(PageHost, title));
+    }
+
+    /// <summary>**The first run fills the window** (set 8; the Mac's <c>fillsWindow</c>): no pane, no Back, Forward or
+    /// Search in the title bar, the product's mark and name at its left, and one canvas under it with no band and no
+    /// rounded corner. Any other page has step 1's frame.</summary>
+    private void Fill(bool on)
+    {
+        if (fills == on) return;
+        fills = on;
+        var shown = on ? Visibility.Collapsed : Visibility.Visible;
+        Pane.Visibility = shown;
+        PaneColumn.Width = new GridLength(on ? 0 : Widths.Pane);
+        Grid.SetColumn(ContentArea, on ? 0 : 1);
+        Grid.SetColumnSpan(ContentArea, on ? 2 : 1);
+        ContentArea.Padding = on ? new Thickness(0) : new Thickness(1, 1, 0, 0);
+        ContentCorner.Visibility = shown;
+        Root.Background = on ? Look.CanvasBrush : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["RailBrush"];
+        BackButton.Visibility = ForwardButton.Visibility = shown;
+        if (on) SearchButton.Visibility = Visibility.Collapsed;
+        Microsoft.UI.Xaml.Controls.Canvas.SetLeft(TitleMark, on ? 16 : 96);
+        Microsoft.UI.Xaml.Controls.Canvas.SetLeft(TitleWords, on ? 44 : 124);
+        Passthrough();
+    }
+
     private bool WaitingPage(StoreState s) =>
         s.ReadsTheHub && history.Current.Kind is PageKind.Chat or PageKind.Needs or PageKind.Tasks or PageKind.Task;
 
@@ -383,7 +459,7 @@ public sealed partial class MainWindow : Window
     private void ShowLine()
     {
         var now = DateTimeOffset.UtcNow;
-        band?.Show(Screens.Line(state, now, history.Current));
+        band?.Show(OwnerKeyLine.Of(state, Screens.Line(state, now, history.Current)));
         bar?.Show(Screens.PendingBar(state, now));
     }
 

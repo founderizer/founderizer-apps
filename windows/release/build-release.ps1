@@ -60,7 +60,9 @@ Write-Output "signs with $($certificate.Subject) ($($certificate.Thumbprint))"
 
 $app = Join-Path $Source 'Founderizer.Windows\Founderizer.Windows.csproj'
 $launcher = Join-Path $Source 'Founderizer.Launcher\Founderizer.Launcher.csproj'
-$extra = @(if ($Proofs) { '-p:FounderizerProofs=true' })
+# No release has the first run's welcome page before pieces U3, U4 and U5 of step 2 (windows-app-plan-v2.md, section
+# 13): every build of a release says so on the command line (Founderizer.Windows/Fleet/FirstRunSwitch.cs).
+$extra = @('-p:FounderizerWelcome=false') + @(if ($Proofs) { '-p:FounderizerProofs=true' })
 $release = Join-Path $Out "$Version-$Build"
 New-Item -ItemType Directory -Force -Path $release | Out-Null
 

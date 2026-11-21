@@ -338,6 +338,8 @@ public static partial class Screens
             Folded = ended,
             AnswerWords = answer.Length == 0 ? "Answered" : answer,
             AnsweredInWords = inWords,
+            AnswerMark = AnsweredMark(s, need, inWords),
+            MarkMoves = s.ShowsCurrent(now),
             Spoken = spoken,
             Answered = !need.IsOpen,
             Why = need.Why,
@@ -353,20 +355,64 @@ public static partial class Screens
             From = $"From {s.Names.Label(need.By)} · {MessageTime(need.Raised, Unix(now), context)}",
             Agent = need.By,
             Mark = inHub ? MarkLook.Of(s.MarkOf(need.By), s.StatusOf(need.By, now).MarkState, moves: false) : null,
-            Options = Options(s, need),
+            Options = Options(s, need, now, ended),
             Answer = AnswerBox(s, need),
             AsksForSecret = need.AsksForSecret,
             AnswerFiles = ValueList.Of(items.LastOrDefault(i => i.AnswerTo == need.Id)?.Attachments ?? []),
             Body = BodyOf(need, step: false),
+            // owner feature need_clarify: the talk over the answers of an open card, and the link under them; a folded
+            // card in a chat shows neither (the Mac shows the talk only in an answered card that he opened)
+            Talk = ended ? ValueList<TalkLine>.Empty : Talk(s, need),
+            Clarify = ended ? null : Clarify(s, need, now),
         };
     }
+
+    /// <summary>**The talk under a card** (owner feature `need_clarify`, the Mac's NeedTalkLines): his messages at the
+    /// trailing side in his chat's bubble, the agent's replies at the leading side after its mark, oldest first, plain
+    /// text (<see cref="StoreState.TalkOf"/>).</summary>
+    private static ValueList<TalkLine> Talk(StoreState s, OwnerNeed need) =>
+        ValueList.Of(s.TalkOf(need).Select(m => m.FromOwner
+            ? new TalkLine(true, m.Text, "owner", "You", null)
+            : new TalkLine(false, m.Text, m.Who, s.Names.Label(m.Who), MarkLook.Of(s.MarkOf(m.Who), AgentState.Online, moves: false))));
+
+    /// <summary>**Needs clarification** under the answers, or null where the hub says that the card takes no message
+    /// (<see cref="OwnerNeed.Clarifies"/>): the link, or its field in the link's place once he pressed it, with his words
+    /// (<see cref="StoreState.ClarifyDrafts"/>). Send shows while the store can write and the field holds words within
+    /// the hub's most.</summary>
+    private static ClarifyModel? Clarify(StoreState s, OwnerNeed need, DateTimeOffset now)
+    {
+        if (!need.Clarifies(s.Fleet)) return null;
+        var stands = s.ClarifyDrafts.TryGetValue(need.Id, out var draft);
+        var words = (draft ?? "").Trim();
+        return new ClarifyModel
+        {
+            Stands = stands,
+            Draft = draft ?? "",
+            Given = s.ClarifyGiven.GetValueOrDefault(need.Id),
+            Placeholder = "Message to " + s.Names.Label(need.By),
+            CanSend = stands && s.CanWrite(now) && words.Length > 0 && NeedClarify.Length(words) <= NeedClarify.Most &&
+                      !s.AnswersTaken.ContainsKey(need.Id),
+        };
+    }
+
+    /// <summary>What stands in the check's place of an answered request (NeedRequestCard's AnsweredMarkView and
+    /// foldedMarkWords): its mark (<see cref="AnswerMark.Of"/>), or the plain check where none stands: an answer in his
+    /// own words, a request that a saved key answered (the Mac's key card), and a card that the hub has not answered in
+    /// a reading, whose answer is on its way. A press of Run is no option that he pressed, so it is in words here.</summary>
+    public static AnswerMark AnsweredMark(StoreState s, OwnerNeed need, bool inWords) =>
+        inWords || need.IsOpen || need.AnsweredWithKeyOrWords
+            ? AnswerMark.Plain
+            : AnswerMark.Of(need, s.Fleet, need.Task is null ? [] : s.AllTasks(), s.Names);
 
     /// <summary>NeedTalk.why: the most characters of a card's why that shows whole.</summary>
     public const int NeedTalkWhy = 240;
 
     private static int Characters(string text) => new StringInfo(text).LengthInTextElements;
 
-    private static OptionsModel Options(StoreState s, OwnerNeed need)
+    /// <summary>The options of a request; on a hub that names `need_pictures`, an open item with one picture for each
+    /// option has them over its options (<see cref="NeedPictures.Drawn"/>), each as a file of a message is
+    /// (<see cref="Tile"/>). An answered item, or one whose answer is on its way, draws as before.</summary>
+    private static OptionsModel Options(StoreState s, OwnerNeed need, DateTimeOffset now, bool ended)
     {
         var choices = need.Choices;
         var kind = choices.Count == 0 ? OptionsKind.QuickReplies : need.Combines ? OptionsKind.Ticks : OptionsKind.Press;
@@ -375,6 +421,7 @@ public static partial class Screens
             Kind = kind,
             Labels = ValueList.Of(kind == OptionsKind.QuickReplies ? ["Done", "Not now", "Tell me more"] : choices),
             WaitingPress = s.WaitingPresses.TryGetValue(need.Id, out var press) ? press : null,
+            Pictures = ended ? ValueList<FileTile>.Empty : ValueList.Of(NeedPictures.Drawn(s, need).Select(p => Tile(s, p, now))),
         };
     }
 
@@ -693,11 +740,17 @@ public static partial class Screens
             Ended = ended,
             AnswerWords = answer.Length == 0 ? "Answered" : answer,
             AnsweredInWords = inWords,
-            Options = Options(s, need),
+            AnswerMark = AnsweredMark(s, need, inWords),
+            MarkMoves = s.ShowsCurrent(now),
+            Options = Options(s, need, now, ended),
             Answer = AnswerBox(s, need),
             AsksForSecret = need.AsksForSecret,
             AnswerFiles = ValueList.Of(s.Items(need.By).LastOrDefault(i => i.AnswerTo == need.Id)?.Attachments ?? []),
             Body = BodyOf(need, step: true),
+            // owner feature need_clarify: the talk over the answers, and over his answer once the request ended, read
+            // only (the Mac's NeedStep.answers); the link under the answers while it is open
+            Talk = Talk(s, need),
+            Clarify = ended ? null : Clarify(s, need, now),
         };
     }
 
@@ -1449,6 +1502,61 @@ public sealed record OptionsModel
     public static string SendWords(int ticked) => $"Send {ticked}";
     /// <summary>Send of ticked options is on with one tick at least while the store can write.</summary>
     public static bool CanSendTicks(StoreState s, DateTimeOffset now, int ticked) => ticked > 0 && s.CanWrite(now);
+
+    /// <summary>One picture over each option, in their order (owner feature `need_pictures`), each as a file of a message
+    /// is: <see cref="NeedPictures.Columns"/> in a row, the option's words under each. Empty: the options of before.</summary>
+    public ValueList<FileTile> Pictures { get; init; } = ValueList<FileTile>.Empty;
+
+    /// <summary>What a click on option <paramref name="index"/> does, on its picture or on its words: the one command of
+    /// the window's options. A click on a picture opens it (<see cref="OptionClickKind.Open"/>) and answers nothing; a
+    /// click on the words answers with that option's index, ticks it, or sends a quick reply's words, as before.</summary>
+    public OptionClick Click(int index, bool onPicture)
+    {
+        if (index < 0 || index >= Labels.Count) return OptionClick.Nothing;
+        if (onPicture) return index < Pictures.Count ? new(OptionClickKind.Open, index, Picture: Pictures[index]) : OptionClick.Nothing;
+        return Kind switch
+        {
+            OptionsKind.Press => new(OptionClickKind.Press, index),
+            OptionsKind.Ticks => new(OptionClickKind.Tick, index),
+            _ => new(OptionClickKind.Reply, index, Labels[index]),
+        };
+    }
+}
+
+public enum OptionClickKind { Nothing, Press, Tick, Reply, Open }
+
+/// <summary>What a click on an option does (<see cref="OptionsModel.Click"/>): Press, the answer with the option's
+/// <see cref="Index"/> (OwnerStore.Press); Tick, its tick; Reply, a quick reply's <see cref="Words"/>
+/// (OwnerStore.Reply); Open, its <see cref="Picture"/> in the app that Windows gives its kind, as a file of a message
+/// opens; Nothing.</summary>
+public sealed record OptionClick(OptionClickKind Kind, int Index = -1, string? Words = null, FileTile? Picture = null)
+{
+    public static readonly OptionClick Nothing = new(OptionClickKind.Nothing);
+}
+
+/// <summary>Pictures as the options of a request (owner feature `need_pictures`, owner API 1.285; the owner, 20 November
+/// 2026: "the idea would be that Needs You shows multiple options as images too, so I can choose between different ads
+/// or designs for example without going to the chat"; his "Yes, as shown" of 21 November 2026 to the Windows drawings).
+/// The hub gives an item `pictures` only while each app of the owner's says that it draws them
+/// (<see cref="HubClient.DrawsHeader"/>).</summary>
+public static class NeedPictures
+{
+    /// <summary>The hub's name: what this build draws (hub.py APP_DRAWS), and the feature of a hub that gives them.</summary>
+    public const string Feature = "need_pictures";
+
+    /// <summary>Pictures in a row; a row more for each three more.</summary>
+    public const int Columns = 3;
+
+    /// <summary>The pictures that a request's card draws over its options, or none for the card of before: only on a
+    /// hub that names the feature, and only when the item has one picture for each of its options, in their order, each
+    /// a picture that an app may ask for. With fewer or more pictures than options, no picture stands over an option,
+    /// because none can be known to be its picture.</summary>
+    public static IReadOnlyList<MessageAttachment> Drawn(StoreState s, OwnerNeed need)
+    {
+        if (!s.Offers(Feature) || need.AsksForSecret || need.Pictures is not { Count: > 0 } pictures) return [];
+        if (pictures.Count != (need.Options ?? []).Count || pictures.Count != need.Choices.Count) return [];
+        return pictures.All(p => p.IsImage && p.IsValid) ? pictures : [];
+    }
 }
 
 public sealed record AnswerBoxModel
@@ -1489,6 +1597,13 @@ public sealed record RequestCard
     public bool ShowsAnswerLine => !(AnsweredInWords && Spoken);
     /// <summary>The check before the answer's words: only for an option that he pressed or ticked.</summary>
     public bool ShowsCheck => !AnsweredInWords;
+    /// <summary>What stands in the check's place (owner API 1.280, <see cref="Screens.AnsweredMark"/>): the check, the
+    /// turning green mark of work, or the red mark of work that ended with no success; its <see cref="AnswerMark.Hover"/>
+    /// under the pointer, and its <see cref="AnswerMark.Words"/> for an assistive app.</summary>
+    public AnswerMark AnswerMark { get; init; } = AnswerMark.Plain;
+    /// <summary>The work mark turns: the reading is current (the Mac's marksMove). On a last reading it rests, green, as
+    /// it does where Windows' animation effects are off.</summary>
+    public bool MarkMoves { get; init; }
     /// <summary>What an assistive app says for the folded card (NeedRequestCard).</summary>
     public string FoldedWords => AnsweredInWords && Spoken ? $"{Title}, answered" : $"{Title}, answered: {AnswerWords}";
     public bool Answered { get; init; }
@@ -1519,6 +1634,93 @@ public sealed record RequestCard
     /// <summary>The body as the Mac's card of Founderizer 0.1.239 draws it (<see cref="RequestBody"/>), beside the
     /// fields above, which keep the look of the approved pictures until the window draws this one.</summary>
     public RequestBody Body { get; init; } = new();
+    /// <summary>His talk with the agent under the card, over its answers (owner feature `need_clarify`); empty on a hub
+    /// without it and on a folded card.</summary>
+    public ValueList<TalkLine> Talk { get; init; } = ValueList<TalkLine>.Empty;
+    /// <summary>Needs clarification under "Your answer": its link or its field; null where the card takes no message.</summary>
+    public ClarifyModel? Clarify { get; init; }
+}
+
+/// <summary>One line of the talk under a card (the Mac's NeedTalkLines): his message (<see cref="Own"/>) in his chat's
+/// bubble at the trailing side, or the agent's reply at the leading side after its <see cref="Mark"/>.</summary>
+public sealed record TalkLine(bool Own, string Text, string Agent, string AgentLabel, MarkLook? Mark)
+{
+    /// <summary>What an assistive app reads: who wrote it, and its words.</summary>
+    public string Spoken => $"{AgentLabel}: {Text}";
+}
+
+/// <summary>**Needs clarification** under the answers of a card (owner feature `need_clarify`; the owner's "Yes, as
+/// shown" of 21 November 2026 to w4-windows-chat.png and w4-windows-needs.png): the quiet link, small muted words at the
+/// leading side in a chat's card and in the middle on the request at hand; a press puts its field in the link's place,
+/// the answer's box with no plus, "Message to" and the agent as its words, Send with Enter. His message goes to the
+/// agent and the card stays open (OwnerStore.TalkAsync).</summary>
+public sealed record ClarifyModel
+{
+    public string LinkWords => "Needs clarification";
+    /// <summary>The field stands in the link's place.</summary>
+    public bool Stands { get; init; }
+    /// <summary>The store's words of the field. A window loads them only as <see cref="ClarifyField"/> says.</summary>
+    public string Draft { get; init; } = "";
+    /// <summary>The store gave the field words of its own (<see cref="StoreState.ClarifyGiven"/>): a new number loads them.</summary>
+    public int Given { get; init; }
+    public string Placeholder { get; init; } = "";
+    /// <summary>Send shows: the store can write, and the field holds words within the hub's most.</summary>
+    public bool CanSend { get; init; }
+    public string SendHover => "Send this message";
+}
+
+/// <summary>**The field of Needs clarification as one view of a card keeps it** (the review of 21 November 2026): which
+/// words it loads, which of its text changes are his, and when it takes the cursor. A WinUI text box reports a text that
+/// code set as a change too, later and with the text that it has then, and a draw can come from a state older than his
+/// last key. So: the store's words go into the field only when it comes to stand, when the view shows another card, and
+/// when the store gave the field words of its own (<see cref="ClarifyModel.Given"/>); a change that the view made (a
+/// load, or the empty field of a card that folded) and a change of a field that does not stand are not his words, so
+/// the words that the store keeps for the card stay while it folds and opens again (the iPhone's round 1); and the field
+/// takes the cursor once, after a press on the link whose field the store opened, and only for that card, so a view that
+/// shows another card later takes none.</summary>
+public sealed class ClarifyField
+{
+    private long? need;
+    private bool stands;
+    private int given;
+    /// <summary>The text that the view put in the field: its change report is not his.</summary>
+    private string? set;
+    /// <summary>The card whose field the store opened at his press, until the field stands.</summary>
+    private long? cursorFor;
+
+    /// <summary>He pressed the link of card <paramref name="id"/>, and the store opened its field.</summary>
+    public void Opened(long id) => cursorFor = id;
+
+    /// <summary>A draw of card <paramref name="id"/>, whose field holds <paramref name="text"/> now: the words to put in
+    /// the field (null: leave it as it is), and whether the field takes the cursor now.</summary>
+    public (string? Load, bool Cursor) Show(long id, ClarifyModel? model, string text)
+    {
+        var now = model?.Stands == true;
+        string? load = null;
+        if (now && (!stands || need != id || model!.Given != given)) load = model!.Draft;
+        else if (!now && stands) load = "";
+        if (load == text) load = null;
+        if (load is not null) set = load;
+        need = id;
+        stands = now;
+        given = model?.Given ?? 0;
+        var cursor = now && cursorFor == id;
+        if (cursor || cursorFor != id) cursorFor = null;
+        return (load, cursor);
+    }
+
+    /// <summary>The field's text changed: the card whose words they are, or null for a change that the view made or of a
+    /// field that does not stand.</summary>
+    public long? Typed(string text)
+    {
+        if (set is not null && text == set)
+        {
+            set = null;
+            return null;
+        }
+        set = null;
+        return stands ? need : null;
+    }
 }
 
 /// <summary>The body of a request's card in a chat and of the request at hand as the Mac draws them since Founderizer
@@ -1633,6 +1835,11 @@ public sealed record RequestStep
     /// <summary>He answered in his own words: the answer under it has no check (NeedAnswered), as a press has.</summary>
     public bool AnsweredInWords { get; init; }
     public bool ShowsCheck => !AnsweredInWords;
+    /// <summary>What stands in the check's place, as on the card in a chat (<see cref="RequestCard.AnswerMark"/>; the
+    /// owner's "Yes, same marks there", 21 November 2026).</summary>
+    public AnswerMark AnswerMark { get; init; } = AnswerMark.Plain;
+    /// <summary>The work mark turns: the reading is current (<see cref="RequestCard.MarkMoves"/>).</summary>
+    public bool MarkMoves { get; init; }
     public OptionsModel Options { get; init; } = new();
     public AnswerBoxModel Answer { get; init; } = new();
     public bool AsksForSecret { get; init; }
@@ -1641,6 +1848,11 @@ public sealed record RequestStep
     /// <summary>The body as the Mac's request at hand of Founderizer 0.1.239 draws it (<see cref="RequestBody"/>),
     /// beside the fields above, which keep the look of the approved pictures until the window draws this one.</summary>
     public RequestBody Body { get; init; } = new();
+    /// <summary>His talk with the agent, over the answers, and over his answer once the request ended (owner feature
+    /// `need_clarify`).</summary>
+    public ValueList<TalkLine> Talk { get; init; } = ValueList<TalkLine>.Empty;
+    /// <summary>Needs clarification under "Your answer", in the middle; null where it takes no message or ended.</summary>
+    public ClarifyModel? Clarify { get; init; }
 }
 
 public sealed record Choice<T>(T Value, string Words);

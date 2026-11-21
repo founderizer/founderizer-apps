@@ -30,6 +30,7 @@
     "server_silent": "{server} sent no reading in the last 10 minutes: check that it is on",
     "server_no_service": "{server} has no server service: it did not join with a join code",
     "request_answered": "owner request is already answered",
+    "card_words_from_tool": "This card has its own answers: an AI session or a program answers it only with one of them, the one that the owner chose. Send other words to the agent as a message; the card stays open for the owner.",
     "request_unknown": "owner request does not exist",
     "request_unknown_ended": "owner request does not exist: a request whose task ended is gone with it",
     "not_owner_device": "{address} is not an owner device. See \"owner_devices\" in team.json.",

@@ -11,8 +11,7 @@ namespace Founderizer.Core;
 public enum TaskControl { Pause, Stop, Resume, ResumeCheck }
 
 /// <summary>The owner commands that a device may send (hub.py DEVICE_PATHS: POST /ui/tasks; DEVICE_NEED: POST
-/// /ui/needs/&lt;id&gt; and its /secret), as
-/// FleetCore's OwnerCommand writes them.</summary>
+/// /ui/needs/&lt;id&gt;, its /secret and its /talk), as FleetCore's OwnerCommand writes them.</summary>
 public sealed record OwnerCommand
 {
     public string Kind { get; }
@@ -32,10 +31,27 @@ public sealed record OwnerCommand
     public static OwnerCommand Steer(long task, long attempt) => new("steer", task, attempt);
     /// <summary>Pause, stop or resume a task: POST /ui/tasks/&lt;id&gt;/control.</summary>
     public static OwnerCommand Control(long task, TaskControl action) => new("control", task, control: action);
-    public string Route => Kind == "steer" ? $"ui/tasks/{Target}/steer" : $"ui/tasks/{Target}/control";
+    /// <summary>His message under one open card (Needs clarification, owner feature `need_clarify`, owner API 1.272),
+    /// which keeps the item open and goes to the manager: POST /ui/needs/&lt;id&gt;/talk (FleetCore's needTalk). Its kind
+    /// in this app's outbox is the feature's name: `need_talk` was a question of Discuss, which an old outbox may hold
+    /// (<see cref="Outbox.DroppedKind"/>).</summary>
+    public static OwnerCommand Talk(long need) => new(TalkKind, need);
+    internal const string TalkKind = "need_clarify";
+
+    public string Route => Kind switch
+    {
+        "steer" => $"ui/tasks/{Target}/steer",
+        TalkKind => $"ui/needs/{Target}/talk",
+        _ => $"ui/tasks/{Target}/control",
+    };
 
     /// <summary>The hub feature that this command needs.</summary>
-    public string RequiredFeature => Kind == "steer" ? "task_steering" : "task_controls";
+    public string RequiredFeature => Kind switch
+    {
+        "steer" => "task_steering",
+        TalkKind => NeedClarify.Feature,
+        _ => "task_controls",
+    };
 
     public string ActionName => Action switch
     {
@@ -49,6 +65,7 @@ public sealed record OwnerCommand
     {
         null => null,
         "steer" => Steer(target, attempt),
+        TalkKind => Talk(target),
         "control" => Control(target, action switch
         {
             "pause" => Core.TaskControl.Pause,
@@ -119,6 +136,10 @@ public sealed record PendingRequest
     /// that he pressed or ticked.</summary>
     public bool AnswersInWords => NeedId is not null && Command is null && Choice is null && Choices is null;
 
+    /// <summary>The item that this request is his message under (Needs clarification, <see cref="OwnerCommand.Talk"/>),
+    /// or null for every other request (PendingRequest.talkNeed). It is no answer: its NeedId is null.</summary>
+    public long? TalkNeed => Command is { Kind: OwnerCommand.TalkKind } talk ? talk.Target : null;
+
     public string Route => Command?.Route ?? (NeedId is { } need ? $"ui/needs/{need}" : "ui/messages");
 
     /// <summary>The body that goes, with its keys sorted as the Mac's: `request_id` and `db`, then the request's own.</summary>
@@ -139,6 +160,14 @@ public sealed record PendingRequest
                         throw new OutboxException(OutboxException.Problem.InvalidRecord);
                     fields["text"] = steer;
                     fields["expected_attempt"] = command.Attempt;
+                    break;
+                case OwnerCommand.TalkKind:
+                    // as the hub counts it (need_talk_read): 1 to NEED_TALK_CHARS code points, without white space at
+                    // the ends
+                    var words = NormalizedOwnerText(Text);
+                    if (command.Target <= 0 || words.Length == 0 || NeedClarify.Length(words) > NeedClarify.Most)
+                        throw new OutboxException(OutboxException.Problem.InvalidRecord);
+                    fields["text"] = words;
                     break;
                 default:
                     fields["action"] = command.ActionName;
@@ -182,6 +211,10 @@ public sealed record PendingRequest
                 return receipt.Steer is { } steer && steer.IsValid && steer.Task == command.Target &&
                        steer.Attempt == command.Attempt && steer.Client == Client &&
                        steer.RequestId.ToLowerInvariant() == RequestIdText && steer.Text == NormalizedOwnerText(Text);
+            case OwnerCommand.TalkKind:
+                // the item, and its talk with a message of his in it (ControlReceipt.matches): the hub took it, and the
+                // item stays open; an answer's receipt, which has no `need`, never confirms it
+                return receipt.Need == command.Target && (receipt.Talk ?? []).Any(m => m.FromOwner);
             default:
                 if (receipt.Hold is not { } hold || hold.Task != command.Target || hold.Id <= 0) return false;
                 if (command.Action is Core.TaskControl.Resume or Core.TaskControl.ResumeCheck)
@@ -313,8 +346,9 @@ public sealed class Outbox(string file)
             if (record.Command == DroppedKind)
             {
                 // A question about a request that a build saved before Discuss left the product (owner API 1.158). The
-                // hub serves that route again since owner API 1.272, but this app has no talk write and such a question
-                // is stale, so it is dropped here, with no word to the owner, and never goes again.
+                // hub serves that route again since owner API 1.272, and this app's message under a card is a command of
+                // its own kind (OwnerCommand.Talk); such a question is stale, so it is dropped here, with no word to the
+                // owner, and never goes again.
                 System.IO.File.Delete(File);
                 return null;
             }

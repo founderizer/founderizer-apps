@@ -56,6 +56,53 @@ internal static class Files
     }
 }
 
+/// <summary>The pictures of a page's files, a message's and a request option's (owner feature `need_pictures`), through
+/// the library's <see cref="PictureLoads{T}"/>: one read at a time, through the store (which keeps its "Not loaded"), in
+/// the order asked; a failed read waits for Read again; each picture kept by its id and SHA-256 for the hub's generation
+/// that the page shows. The page draws again when a read ended. A press opens a file in the app that Windows gives its
+/// kind.</summary>
+internal sealed class PictureReads
+{
+    private readonly IFleetSource source;
+    private readonly PictureLoads<ImageSource> loads;
+
+    public PictureReads(IFleetSource source, Action redraw)
+    {
+        this.source = source;
+        loads = new PictureLoads<ImageSource>(source.FileAsync, Files.Picture, redraw);
+    }
+
+    /// <summary>The hub and the generation that the page draws: a new one forgets every picture.</summary>
+    public void Keep(StoreState state) => loads.Generation(state.Hub is { } hub ? hub + " " + state.Fleet?.Db : null);
+
+    /// <summary>A picture's image once its bytes came; the first ask puts its read in line.</summary>
+    public ImageSource? Of(MessageAttachment file) => loads.Of(file);
+
+    /// <summary>A file's tile with "Reading…" while its read waits or runs: its row draws again when the read ended.</summary>
+    public FileTile Mark(FileTile tile) => loads.Mark(tile);
+
+    /// <summary>A request's options with their pictures marked as <see cref="Mark(FileTile)"/> marks one.</summary>
+    public OptionsModel Mark(OptionsModel options) => loads.Mark(options);
+
+    /// <summary>A press on a file or a picture: its bytes, checked, in the app that Windows gives its kind. Bytes that do
+    /// not come or are not the file's open nothing; the store keeps the file as not loaded.</summary>
+    public async void Open(FileTile tile)
+    {
+        try
+        {
+            Files.Open(tile.File, await source.FileAsync(tile.File));
+        }
+        catch (Exception e) when (e is HubException or AttachmentException or System.IO.IOException or UnauthorizedAccessException
+                                      or System.ComponentModel.Win32Exception)
+        {
+            Readings.Note("open file: " + e.Message);
+        }
+    }
+
+    /// <summary>Read again, after a read that failed: the one way that a failed picture is read once more.</summary>
+    public void Again(FileTile tile) => loads.Again(tile.File);
+}
+
 /// <summary>The widths of the pane and of the panel beside a chat or a task (picture 11 of the second set, the Mac's
 /// FleetStyle): 320 and 380 in a window of 1440 or wider; below it both give up width before the chat, down to 260 and
 /// 320 at the least window of 960, where the chat keeps its 380.</summary>

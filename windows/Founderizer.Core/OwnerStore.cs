@@ -57,6 +57,12 @@ public sealed class OwnerStore : IAsyncDisposable
     private long outputsOperation;
     private bool outputsWereFresh;
     private readonly Dictionary<long, CancellationTokenSource> pressWaits = new();
+    /// <summary>How many of his lines with a message's words its card showed when he sent it, by request (the iPhone's
+    /// talkLinesAtSend): only a reading with more of them has it (<see cref="ReplayTakenTalk"/>). A start of the app
+    /// forgets it, and then only his Try again sends it.</summary>
+    private readonly Dictionary<Guid, int> talkSends = new();
+    /// <summary>The message under a card that a read sent again because its card's talk had it: once.</summary>
+    private Guid? talkReplayed;
     /// <summary>The words of each quick reply that waits for the store (<see cref="Reply"/>).</summary>
     private readonly Dictionary<long, string> replyWaits = new();
     private string? key;
@@ -319,6 +325,7 @@ public sealed class OwnerStore : IAsyncDisposable
                 {
                     LastRead = clock.Now, ReadHeld = false, ReadError = null, ReadWasRefused = false, AuthProblem = null,
                 });
+                ReplayTakenTalk();
             }
             catch (HubException e)
             {
@@ -421,7 +428,17 @@ public sealed class OwnerStore : IAsyncDisposable
         keptDatabase = reading.Snapshot.Db;
         etag = reading.ETag;
         var now = clock.Now;
-        Update(x => x with { Fleet = reading.Snapshot, SnapshotAt = now });
+        Update(x => x with
+        {
+            Fleet = reading.Snapshot,
+            SnapshotAt = now,
+            // owner feature need_clarify: the field of a card that is no longer open goes with its words; the receipt's
+            // talk of a card goes once the reading has as many lines, or the card is no longer open (an item that
+            // another took the place of keeps no talk, which went to the new one)
+            ClarifyDrafts = x.ClarifyDrafts.RemoveRange(x.ClarifyDrafts.Keys.Where(id => !reading.Snapshot.Needs.Any(n => n.Id == id && n.IsOpen))),
+            TalkTaken = x.TalkTaken.RemoveRange(x.TalkTaken.Where(t => reading.Snapshot.Needs.FirstOrDefault(n => n.Id == t.Key && n.IsOpen)
+                is not { } open || (open.Talk ?? []).Count >= t.Value.Count).Select(t => t.Key)),
+        });
         Notify(requested, reading.Snapshot);
         Keep("snapshot.json", JsonSerializer.SerializeToUtf8Bytes(
             new KeptSnapshot(requested.ToString(), reading.ETag, now.ToUnixTimeMilliseconds() / 1000.0,
@@ -454,6 +471,11 @@ public sealed class OwnerStore : IAsyncDisposable
             TaskPages = ImmutableDictionary<long, TaskPageState>.Empty,
             Delivered = null,
             AnswersTaken = ImmutableDictionary<long, PendingRequest>.Empty,
+            // the words under a card belong to the card of that generation, and its talk too, which a new generation
+            // numbers anew
+            ClarifyDrafts = ImmutableDictionary<long, string>.Empty,
+            ClarifyGiven = ImmutableDictionary<long, int>.Empty,
+            TalkTaken = ImmutableDictionary<long, ValueList<NeedMessage>>.Empty,
         });
     }
 
@@ -1026,6 +1048,23 @@ public sealed class OwnerStore : IAsyncDisposable
         KeepDrafts();
     }
 
+    /// <summary>A press on a card's link Needs clarification: its field stands in the link's place, with the words that
+    /// he left there, while the card takes a message (owner feature `need_clarify`). True when the field stands now.</summary>
+    public bool OpenClarify(long need)
+    {
+        Update(x => x.ClarifyDrafts.ContainsKey(need) || x.Fleet?.Needs.FirstOrDefault(n => n.Id == need)?.Clarifies(x.Fleet) != true
+            ? x : x with { ClarifyDrafts = x.ClarifyDrafts.SetItem(need, "") });
+        return State.ClarifyDrafts.ContainsKey(need);
+    }
+
+    /// <summary>His words in a card's field of Needs clarification, kept as he types: in memory only, never in the
+    /// drafts' file (<see cref="StoreState.ClarifyDrafts"/>). The field stays when he empties it.</summary>
+    public void SetClarifyDraft(long need, string text)
+    {
+        Update(x => !x.ClarifyDrafts.ContainsKey(need) || x.ClarifyDrafts[need] == text
+            ? x : x with { ClarifyDrafts = x.ClarifyDrafts.SetItem(need, text) });
+    }
+
     /// <summary>Sends one file up for a composer ("agent:&lt;name&gt;" or "need:&lt;id&gt;"), before the message that
     /// carries it. Null when it went; else the owner's words.</summary>
     public async Task<string?> AddFileAsync(string composer, string name, byte[] bytes, string? mime = null)
@@ -1219,13 +1258,22 @@ public sealed class OwnerStore : IAsyncDisposable
     }
 
     /// <summary>A press on one of a request's options. It is never refused: while the store cannot write, the newest
-    /// press of the request waits, and goes when it can, unless the request, the hub or the generation changes.</summary>
+    /// press of the request waits, and goes when it can, unless the request, the hub or the generation changes.
+    /// **One exception: a press on a card whose own request waits unsent is dropped** (<see cref="StoreState.WaitsUnsent"/>,
+    /// the iPhone's rule of 20 November 2026), at the press or when that request's send stops: his message under the
+    /// card, or its answer, which only Try again or Discard moves. The press waited behind it with no end, with
+    /// "Sending…" at its option.</summary>
     public void Press(long need, int choice)
     {
         if (State.CanWrite(clock.Now))
         {
             Update(x => x with { WaitingPresses = x.WaitingPresses.Remove(need) });
             _ = SendChoiceAsync(need, choice);
+            return;
+        }
+        if (State.WaitsUnsent(need))
+        {
+            Update(x => x with { WaitingPresses = x.WaitingPresses.Remove(need) });
             return;
         }
         Update(x => x with { WaitingPresses = x.WaitingPresses.SetItem(need, choice) });
@@ -1241,7 +1289,7 @@ public sealed class OwnerStore : IAsyncDisposable
                 {
                     var s = State;
                     if (s.Hub != hub || s.Fleet?.Db != database || s.StorageError is not null ||
-                        s.Fleet?.Needs.Any(n => n.Id == need && n.IsOpen) != true ||
+                        s.Fleet?.Needs.Any(n => n.Id == need && n.IsOpen) != true || s.WaitsUnsent(need) ||
                         !s.WaitingPresses.TryGetValue(need, out var waiting))
                         break;
                     if (s.CanWrite(clock.Now))
@@ -1294,8 +1342,10 @@ public sealed class OwnerStore : IAsyncDisposable
             lock (replyWaits)
             {
                 var s = State;
+                // behind this card's own request that waits unsent the words only stand in the box (Press)
                 if (disposed || !replyWaits.TryGetValue(need, out words) || s.Hub != hub || s.Fleet?.Db != database ||
                     s.StorageError is not null || s.Fleet?.Needs.Any(n => n.Id == need && n.IsOpen) != true ||
+                    s.WaitsUnsent(need) ||
                     s.AnswerDrafts.GetValueOrDefault(need, "").Trim() != words || s.FilesWait("need:" + need))
                 {
                     replyWaits.Remove(need);
@@ -1347,6 +1397,19 @@ public sealed class OwnerStore : IAsyncDisposable
         return attempt > 0 ? WriteAsync(text, command: OwnerCommand.Steer(task, attempt), feature: "task_steering") : NoWrite;
     }
 
+    /// <summary>**His message under a card** (Needs clarification, owner feature `need_clarify`; the owner, 20 November
+    /// 2026: "a button link, that then shows the extra text input", and "Keep Your answer too"): the words of the card's
+    /// field go to the agent of the card, and the item stays open for his answer. It is saved and sent as every write is,
+    /// through the outbox and once, on its own route (<see cref="OwnerCommand.Talk"/>), so a failure sends the same
+    /// request again and never a second one. Once the outbox has it, the field goes back to its link; the message stands
+    /// in the card from the hub's receipt (<see cref="StoreState.TalkTaken"/>).</summary>
+    public Task<string?> TalkAsync(long need)
+    {
+        var words = State.ClarifyDrafts.GetValueOrDefault(need, "");
+        return WriteAsync(words, command: OwnerCommand.Talk(need), feature: NeedClarify.Feature,
+                          still: s => s.ClarifyDrafts.GetValueOrDefault(need, "").Trim() == words.Trim());
+    }
+
     private static readonly Task<string?> NoWrite = Task.FromResult<string?>(null);
 
     /// <summary>Sends the waiting write again, with the same number: the hub answers the first event again.</summary>
@@ -1371,6 +1434,22 @@ public sealed class OwnerStore : IAsyncDisposable
             return;
         }
         Update(x => x with { Pending = null, SendError = null });
+        if (pending.TalkNeed is { } card)
+        {
+            // His message under a card goes back to that card's field, never to a chat's: while the card takes a
+            // message on this hub and generation, and its field holds no words of his since (after a start of the app it
+            // holds none); the field stands again with them (the iPhone's giveBack), and the window loads them also into
+            // a field that stood empty (ClarifyGiven).
+            Update(x => pending.Text.Length == 0 || pending.Hub != x.Hub || pending.Database != x.Fleet?.Db ||
+                        x.Fleet?.Needs.FirstOrDefault(n => n.Id == card)?.Clarifies(x.Fleet) != true ||
+                        x.ClarifyDrafts.GetValueOrDefault(card, "").Length > 0
+                ? x : x with
+                {
+                    ClarifyDrafts = x.ClarifyDrafts.SetItem(card, pending.Text),
+                    ClarifyGiven = x.ClarifyGiven.SetItem(card, x.ClarifyGiven.GetValueOrDefault(card) + 1),
+                });
+            return;
+        }
         if (pending.NeedId is null && pending.Command is null && pending.Text.Length > 0)
         {
             var name = pending.Recipient ?? "manager";
@@ -1440,6 +1519,11 @@ public sealed class OwnerStore : IAsyncDisposable
         if (command is { Kind: "control" }) text = "";
         else if ((text.Length == 0 && files.Count == 0) || new StringInfo(text).LengthInTextElements > StoreState.TextLimit) return null;
         if (needId is { } n && !fleet.Needs.Any(x => x.Id == n && x.IsOpen)) return null;
+        // his message under a card: a card that takes one now, whose answer is not on its way, within the hub's most
+        if (command is { Kind: OwnerCommand.TalkKind } talk &&
+            (fleet.Needs.FirstOrDefault(x => x.Id == talk.Target)?.Clarifies(fleet) != true ||
+             s.AnswersTaken.ContainsKey(talk.Target) || NeedClarify.Length(text) > NeedClarify.Most))
+            return null;
         return PendingRequest.New(hub, fleet.Db, settings.ClientLabel, text, needId: needId, choice: choice,
                                   choices: choices, recipient: needId is null && command is null && s.Offers("direct_chat") ? recipient : null,
                                   command: command, attachments: files);
@@ -1472,6 +1556,13 @@ public sealed class OwnerStore : IAsyncDisposable
             return words;
         }
         var name = recipient ?? "manager";
+        if (request.TalkNeed is { } card)
+        {
+            // how many of his lines with these words the card shows now: only a reading with more of them has this
+            // message (ReplayTakenTalk)
+            var shown = State.Fleet?.Needs.FirstOrDefault(n => n.Id == card) is { } item ? State.TalkOf(item) : [];
+            lock (talkSends) talkSends[request.RequestId] = shown.Count(m => m.FromOwner && m.Text == request.Text);
+        }
         Update(x => x with
         {
             Pending = request,
@@ -1479,6 +1570,11 @@ public sealed class OwnerStore : IAsyncDisposable
             // The words leave the field as the request takes their place; words typed while it waited stay.
             Drafts = needId is null && command is null && x.Drafts.GetValueOrDefault(name, "").Trim() == request.Text
                 ? x.Drafts.Remove(name) : x.Drafts,
+            // **Gone from the card's field once the outbox has his message, and the link comes back** (the Mac's
+            // sendClarify): a request that the hub did not confirm goes again from the outbox, and words left in the
+            // field would go a second time with a second Send. A refused one gives them back at its Discard.
+            ClarifyDrafts = request.TalkNeed is { } talk && x.ClarifyDrafts.GetValueOrDefault(talk, "").Trim() == request.Text
+                ? x.ClarifyDrafts.Remove(talk) : x.ClarifyDrafts,
         });
         if (needId is null && command is null) KeepDrafts();
         await TransmitAsync(request);
@@ -1500,8 +1596,9 @@ public sealed class OwnerStore : IAsyncDisposable
                 }
                 else
                 {
-                    await client.CommandAsync(request, key);
-                    Finish(request, null);
+                    // a command's receipt; his message under a card's carries the card's talk
+                    var receipt = await client.CommandAsync(request, key);
+                    Finish(request, null, receipt.Talk);
                 }
             }
             catch (Exception e) when (e is HubException or IOException or OutboxException or UnauthorizedAccessException)
@@ -1517,6 +1614,7 @@ public sealed class OwnerStore : IAsyncDisposable
                             Pending = refused,
                             Drafts = ImmutableDictionary<string, string>.Empty,
                             AnswerDrafts = ImmutableDictionary<long, string>.Empty,
+                            ClarifyDrafts = ImmutableDictionary<long, string>.Empty,
                             SendError = "The hub refused registered login text. The text and the drafts are gone from this PC.",
                         });
                         KeepDrafts();
@@ -1563,15 +1661,26 @@ public sealed class OwnerStore : IAsyncDisposable
         }
     }
 
-    private void Finish(PendingRequest request, string? editedInPlace)
+    private void Finish(PendingRequest request, string? editedInPlace, IReadOnlyList<NeedMessage>? talk = null)
     {
         outbox.Clear(request.RequestId);
+        lock (talkSends) talkSends.Remove(request.RequestId);
         var before = State;
         Update(x =>
         {
             var name = request.Recipient ?? "manager";
             var y = x;
-            if (request.NeedId is { } need)
+            if (request.TalkNeed is { } card)
+            {
+                // **His message under a card**: it stands in the card's talk from the receipt, until a reading has it. It
+                // is no answer and no message of a chat: the card stays open, and no bubble waits for it anywhere. A
+                // receipt of another hub or generation changes none of this reading's cards: their numbers are others'.
+                // A late Try again gets the hub's first result, whose talk can be shorter than the reading's.
+                var read = (y.Fleet?.Needs ?? []).Concat(y.Fleet?.AnsweredNeeds ?? []).FirstOrDefault(n => n.Id == card)?.Talk ?? [];
+                if (request.Hub == y.Hub && request.Database == y.Fleet?.Db && talk is not null && talk.Count > read.Count)
+                    y = y with { TalkTaken = y.TalkTaken.SetItem(card, ValueList.Of(talk)) };
+            }
+            else if (request.NeedId is { } need)
             {
                 if (y.AnswerDrafts.GetValueOrDefault(need, "").Trim() == request.Text)
                     y = y with { AnswerDrafts = y.AnswerDrafts.Remove(need) };
@@ -1647,6 +1756,44 @@ public sealed class OwnerStore : IAsyncDisposable
         {
             Update(x => x with { StorageError = "Cannot clear the confirmed request. Sending is blocked.", StorageErrorDetail = e.Message });
         }
+    }
+
+    /// <summary>**His message under a card whose receipt never came, while the card's talk has it already** (the iPhone's
+    /// replayTakenTalk, review A of 20 November 2026): the hub took it and its answer was lost, so the card showed his
+    /// message in its talk while the request line said "Not sent", and every write of this PC waited behind it. The talk
+    /// names no request, so a read cannot finish it as it finishes a chat's message by its number
+    /// (<see cref="ConfirmPendingAsync"/>): the same request goes again, once, as his Try again would send it, and the hub
+    /// answers with its first result, which confirms it. Only a talk with more of his lines with those words than the card
+    /// showed at his send has it: an older message of his with the same words is no sign, and after a start of the app,
+    /// which forgets that number, only his Try again sends it. Never without this PC's key: the hub would refuse the PC
+    /// itself; a read after the key comes back sends it.</summary>
+    private void ReplayTakenTalk()
+    {
+        var s = State;
+        // (an answered card's too: he can answer it on another device before the next read, and its talk keeps his line)
+        if (s.Pending is not { Refusal: null, TalkNeed: { } card } request || request.Hub != s.Hub ||
+            s.Fleet is not { } fleet || request.Database != fleet.Db ||
+            fleet.Needs.Concat(fleet.AnsweredNeeds ?? []).FirstOrDefault(n => n.Id == card) is not { } item)
+            return;
+        int before;
+        lock (talkSends)
+        {
+            if (talkReplayed == request.RequestId || !talkSends.TryGetValue(request.RequestId, out before)) return;
+            if (item.ShownTalk(fleet).Count(m => m.FromOwner && m.Text == request.Text) <= before) return;
+            talkReplayed = request.RequestId;
+        }
+        _ = Task.Run(async () =>
+        {
+            // the read that a failed send makes at its end is the first to see it: the request goes once that send ended
+            while (State.Sending && !disposed) await clock.Delay(TimeSpan.FromMilliseconds(50), CancellationToken.None);
+            if (disposed || State.Pending?.RequestId != request.RequestId) return;
+            if (State.KeyIsHeldBack)
+            {
+                lock (talkSends) talkReplayed = null;
+                return;
+            }
+            await RetryAsync();
+        });
     }
 
     // ---------------------------------------------------------------- enrollment, Connect, the key, the device

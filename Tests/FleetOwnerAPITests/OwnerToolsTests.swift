@@ -119,6 +119,30 @@ final class OwnerRequestTests {
         #expect(hub.seen.first?.path == "/ui/state" && hub.seen.first?.header("X-Fleet-Client") == nil)
     }
 
+    /// The review of 20 November 2026, issue 4: a command names the AI session that runs this program, so that the
+    /// hub keeps it with the request (`request_hand`). The test sets the variable itself, so that it does not depend
+    /// on whether a Claude Code session runs the tests.
+    @Test func aCommandNamesTheAISessionThatRunsTheProgram() throws {
+        let saved = ProcessInfo.processInfo.environment["CLAUDE_CODE_SESSION_ID"]
+        setenv("CLAUDE_CODE_SESSION_ID", "test-session-1", 1)
+        defer {
+            if let saved { setenv("CLAUDE_CODE_SESSION_ID", saved, 1) } else { unsetenv("CLAUDE_CODE_SESSION_ID") }
+        }
+        let hub = StandInHub(features: Fixture.everyFeature)
+        let tools = Fixture.tools(hub, home: home)
+        _ = try tools.json("check_machine", ["agent": .string("a/b?c")])
+        let post = try #require(posted(hub).first)
+        #expect(post.header("X-Fleet-Session") == "claude-code/test-session-1")
+    }
+
+    @Test func theSessionLabelIsClaudeCodesSessionIdAndNothingElse() {
+        #expect(SessionLabel.current(["CLAUDE_CODE_SESSION_ID": "0d8aa41c-95ba"]) == "claude-code/0d8aa41c-95ba")
+        #expect(SessionLabel.current([:]) == nil)
+        #expect(SessionLabel.current(["CLAUDE_CODE_SESSION_ID": "  "]) == nil)
+        #expect(SessionLabel.current(["CLAUDE_CODE_SESSION_ID": "not a name"]) == nil)       // the hub would refuse it
+        #expect(SessionLabel.current(["CLAUDE_CODE_SESSION_ID": String(repeating: "a", count: 120)]) == nil)
+    }
+
     @Test func aPlainToolLeavesANullOutAndTakesTheAgentsRequestID() throws {
         let hub = StandInHub(features: Fixture.everyFeature)
         let tools = Fixture.tools(hub, home: home)

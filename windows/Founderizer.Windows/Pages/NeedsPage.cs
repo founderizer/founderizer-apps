@@ -23,6 +23,7 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
     private readonly Action<Page> go;
     private readonly LaneView lane;
     private readonly RequestStepView step;
+    private readonly PictureReads reads;
     private readonly ScrollViewer stage;
     private readonly EndedView ended;
     private readonly StackPanel empty = new() { Spacing = 12, Padding = new Thickness(0, 66, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
@@ -39,6 +40,7 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
         source = services.Source;
         go = services.Go;
         this.chosen = chosen;
+        reads = new PictureReads(source, () => Show(state, DateTimeOffset.UtcNow, reduceMotion));
         ended = new EndedView(OpenNeed);
         Padding = new Thickness(24, 0, 24, 0);
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -81,6 +83,8 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
         state = next;
         now = at;
         reduceMotion = reduce;
+        // A new hub or generation: its files' ids can name other files.
+        reads.Keep(next);
         var model = Screens.Needs(next, chosen, order, at, ScreenContext.Local);
         order = model.Order;
         lane.Show(model.LaneHeading, model.OpenCount, model.Cards.Select(LaneCard.Of).ToList());
@@ -90,7 +94,9 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
         if (model.AtHand is { } hand)
         {
             step.Visibility = Visibility.Visible;
-            step.Show(hand, AnswerBoxModel.CanSend(next, at, hand.Answer.Draft, hand.Answer.Files.Count));
+            // The pictures of its options, as a message's: the request draws again when one came.
+            step.Show(hand with { Options = reads.Mark(hand.Options) },
+                      AnswerBoxModel.CanSend(next, at, hand.Answer.Draft, hand.Answer.Files.Count));
         }
         else step.Visibility = Visibility.Collapsed;
         emptyWords.Text = model.EmptyWords;
@@ -118,6 +124,12 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
 
     public void Answer(long need) => _ = source.AnswerAsync(need);
 
+    public bool OpenClarify(long need) => source.OpenClarify(need);
+
+    public void TypeClarify(long need, string text) => source.SetClarifyDraft(need, text);
+
+    public void SendClarify(long need) => _ = source.TalkAsync(need);
+
     private readonly HashSet<(long, string)> openParts = new();
 
     public void Tick(long need, IReadOnlyCollection<int> choices) => _ = source.TickAsync(need, choices);
@@ -144,6 +156,12 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
         if (again) _ = source.UploadAsync("need:" + need, chip.File.RequestId);
         else source.RemoveFile("need:" + need, chip.File.RequestId);
     }
+
+    public Microsoft.UI.Xaml.Media.ImageSource? Picture(FileTile tile) => reads.Of(tile.File);
+
+    public void OpenFile(FileTile tile) => reads.Open(tile);
+
+    public void ReadAgain(FileTile tile) => reads.Again(tile);
 
     public bool IsOpen(long need, string part) => openParts.Contains((need, part));
 

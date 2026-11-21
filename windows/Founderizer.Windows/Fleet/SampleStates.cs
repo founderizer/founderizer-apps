@@ -228,6 +228,50 @@ public sealed partial class SampleSource
                 });
                 break;
             }
+            case "pictures":
+            {
+                // Pictures as the options of a request (owner feature need_pictures; w4-windows-chat.png and
+                // w4-windows-needs.png): Marketing asks which banner of the spring sale goes live, with a picture for
+                // each option, on a hub that names the feature.
+                mobile["ui_features"]!.AsArray().Add((JsonNode)NeedPictures.Feature);
+                var pictures = new JsonArray();
+                for (int i = 0; i < Banners.Length; i++)
+                {
+                    var bytes = SampleBanner(Banners[i]);
+                    pictures.Add(new JsonObject
+                    {
+                        ["id"] = 801 + i, ["name"] = Banners[i], ["mime"] = "image/png", ["size"] = bytes.Length,
+                        ["sha256"] = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)), ["created"] = now - 300,
+                    });
+                }
+                mobile["needs"]!.AsArray().Add(new JsonObject
+                {
+                    ["id"] = 7, ["by"] = "orla", ["title"] = "Pick the banner for the spring sale",
+                    ["why"] = "Three versions of the sale banner for the shop’s home page. The one you pick goes live on Monday.",
+                    ["todo"] = "", ["details"] = "Each banner is 1200 by 1200 pixels, for the home page and the email.",
+                    ["raised"] = now - 240, ["options"] = new JsonArray("Green, the flowers", "Yellow, big words", "Blue, the sky"),
+                    ["multi"] = false, ["talk"] = new JsonArray(), ["pictures"] = pictures,
+                });
+                break;
+            }
+            case "clarify":
+            {
+                // Needs clarification on every card (owner feature need_clarify; w4-windows-chat.png and
+                // w4-windows-needs.png): the manager's cards take his message, and the card about the email has his
+                // question and the manager's reply over its answers.
+                mobile["ui_features"]!.AsArray().Add((JsonNode)NeedClarify.Feature);
+                foreach (var n in mobile["needs"]!.AsArray())
+                {
+                    n!["clarify"] = true;
+                    if ((long?)n["id"] != 2) continue;
+                    n["talk"] = new JsonArray
+                    {
+                        new JsonObject { ["who"] = "owner", ["text"] = "Does it go to the people who left the list in March?", ["ts"] = now - 600 },
+                        new JsonObject { ["who"] = "manager", ["text"] = "No. The list leaves them out, so 4,800 people get it.", ["ts"] = now - 540 },
+                    };
+                }
+                break;
+            }
             case "door":
             {
                 // A door card that carries its script (raise_needs_you door_script): the hub's title with the server, its
@@ -602,8 +646,21 @@ public sealed partial class SampleSource
     };
 
     /// <summary>The bytes of a file of a message in a picture: the picture and the logo of picture 4, and the prices.</summary>
+    /// <summary>The three banners of the state "pictures", by their file names.</summary>
+    private static readonly string[] Banners = ["banner-green.png", "banner-yellow.png", "banner-blue.png"];
+
+    /// <summary>A banner's bytes: the file of that name in the folder that FOUNDERIZER_SAMPLE_PICTURES names (the
+    /// pictures' run puts the drawing's banners there), else a plain one.</summary>
+    private static byte[] SampleBanner(string name)
+    {
+        if (Proofs.Variable("FOUNDERIZER_SAMPLE_PICTURES") is { } folder && System.IO.File.Exists(System.IO.Path.Combine(folder, name)))
+            return System.IO.File.ReadAllBytes(System.IO.Path.Combine(folder, name));
+        return PlainPng(600, 600);
+    }
+
     private static byte[] SampleFile(MessageAttachment file)
     {
+        if (Array.IndexOf(Banners, file.Name) >= 0) return SampleBanner(file.Name);
         using var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("Founderizer.Windows.Sample." + file.Name);
         if (stream is null) return System.Text.Encoding.UTF8.GetBytes("item,price\nT-shirt,16\nCap,12\n");
         var memory = new System.IO.MemoryStream();

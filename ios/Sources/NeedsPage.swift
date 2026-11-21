@@ -436,12 +436,15 @@ struct NeedCard: View {
                 }
             } else {
                 // the options, and on an item with none the row of the words that its agent recommends; each row dims
-                // by itself beside the answer that he gave
-                if !need.phoneRows.isEmpty || NeedOptions.recommendedWords(need, store: store) != nil {
+                // by itself beside the answer that he gave. owner feature need_pictures: on a hub that names it, an
+                // item with one picture for each option draws them over their words; any other item, the rows of before
+                if let pictures = NeedPictures.drawn(need, features: store.features) {
+                    NeedPictures(store: store, need: need, pictures: pictures, given: answerGiven)
+                } else if !need.phoneRows.isEmpty || NeedOptions.recommendedWords(need, store: store) != nil {
                     NeedOptions(store: store, need: need, given: answerGiven)
                 }
                 NeedAnswerBox(store: store, need: need, sent: answerGiven?.words)
-                    .opacity(answerGiven?.option != nil ? NeedOptions.dimmed : 1)
+                    .opacity(answerGiven.map { $0.words == nil } == true ? NeedOptions.dimmed : 1)
                 // owner feature need_clarify: the quiet link Needs clarification under his answer, which stays (the
                 // owner's "Keep Your answer too"), where the hub says that the card takes his message; once he gave an
                 // answer it dims with the rows, and takes no touch, VoiceOver's neither
@@ -457,11 +460,13 @@ struct NeedCard: View {
 }
 
 extension MobileStore {
-    /// His answer to a request, as an item shows it while it goes: the option that he pressed, or his words.
+    /// His answer to a request, as an item shows it while it goes: the option that he pressed, the options that he
+    /// ticked (a card of pictures whose options combine, `NeedPictures`), or his words.
     enum GivenAnswer: Equatable, Sendable {
-        case option(Int), words(String)
+        case option(Int), options([Int]), words(String)
 
         var option: Int? { if case .option(let index) = self { index } else { nil } }
+        var options: [Int]? { if case .options(let indexes) = self { indexes } else { nil } }
         var words: String? { if case .words(let text) = self { text } else { nil } }
     }
 
@@ -472,7 +477,7 @@ extension MobileStore {
     func givenAnswer(to need: Int) -> GivenAnswer? {
         let going = pending.flatMap { Self.goes($0, to: need, of: hub, database: snapshot?.db, sending: sending) ? $0 : nil }
         guard let request = going ?? answersTaken[need]?.request else { return nil }
-        return request.choice.map(GivenAnswer.option) ?? .words(request.text)
+        return request.choice.map(GivenAnswer.option) ?? request.choices.map(GivenAnswer.options) ?? .words(request.text)
     }
 
     /// **A waiting request is his answer on its way only while a send carries it.** One that waits with no send is
@@ -887,6 +892,232 @@ struct NeedOptions: View {
     }
 }
 
+/// **The options of a request with a picture each** (owner feature `need_pictures`, API 1.285; the owner, 20 November
+/// 2026: "the idea would be that Needs You shows multiple options as images too, so I can choose between different ads
+/// or designs for example without going to the chat"; the drawing `w3.png` of the design): two pictures in a line, a
+/// line more for each two more, and each option's words under its picture. **A press of the picture opens it at full
+/// screen** (`AttachmentGallery.place`, as a file of a chat opens) **and answers nothing; a press of the words is the
+/// answer**, as a press of an option is (`MobileStore.press(needID:choice:)`): the same wait, the same "Sending…" and
+/// the same refusals. On an item whose options combine, a press of the words ticks them, and Send with their count
+/// sends the ones that he ticked. The answer that the agent recommends has its badge on its picture's top edge. At the
+/// accessibility sizes one picture stands in a line.
+///
+/// A picture is read with this phone's own read of a file (`MobileStore.load`): only its own file, of the hub's
+/// generation. Its square stands from the first frame, with the file's mark and, after a second, "Reading…" in it, so
+/// nothing moves when the picture comes; a picture that did not come says "Not loaded", and a press reads it again.
+struct NeedPictures: View {
+    let store: MobileStore
+    let need: OwnerNeed
+    /// One for each option, in their order (`drawn`).
+    let pictures: [MessageAttachment]
+    /// His answer, while it goes: the option that he pressed, or the ones that he ticked, keep their mark, and the
+    /// others dim.
+    var given: MobileStore.GivenAnswer? = nil
+    /// The options that he ticked, on an item whose options combine.
+    @State private var ticked: Set<Int> = []
+    /// The picture open at full screen.
+    @State private var opened: URL?
+    @ScaledMetric(relativeTo: .caption) private var badgeRoom: CGFloat = 10
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// From one picture to the next, and from a line to the next (`w3.png`).
+    static let gap: CGFloat = 10
+    /// A picture's corners and its words' corners: an option row's.
+    static let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
+    /// **The pictures that a request's card draws over its options, or nil for the card of before**: only on a hub that
+    /// names the feature, and only when the item has one picture for each of its options, which a phone presses, in
+    /// their order. With fewer or more pictures than options no picture stands over an option, because none can be
+    /// known to be its picture; and the hub gives all or none.
+    static func drawn(_ need: OwnerNeed, features: Set<String>) -> [MessageAttachment]? {
+        guard features.contains(MobileClient.pictureOptions), !need.asksForSecret, let pictures = need.pictures,
+              !pictures.isEmpty, pictures.count == (need.options ?? []).count, need.choices.count == pictures.count,
+              need.optionsOnlyOnAComputer.isEmpty, pictures.allSatisfy({ $0.isImage && (try? $0.validate()) != nil })
+        else { return nil }
+        return pictures
+    }
+
+    var body: some View {
+        let columns = typeSize.isAccessibilitySize ? 1 : 2
+        let recommended = need.recommendedRow(features: Array(store.features), replies: [])
+        let lines = stride(from: 0, to: pictures.count, by: columns).map { Array($0..<min($0 + columns, pictures.count)) }
+        VStack(alignment: .leading, spacing: Self.gap) {
+            ForEach(lines, id: \.self) { line in
+                // the words of one line take the height of its longest, so its pictures stand at one height
+                HStack(alignment: .top, spacing: Self.gap) {
+                    ForEach(line, id: \.self) { index in
+                        tile(index, recommended: recommended == .option(index))
+                    }
+                    if line.count < columns { Color.clear.frame(maxWidth: .infinity, maxHeight: 0) }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                // the room over a line for the badge's upper half, for each picture of that line
+                .padding(.top, line.contains { recommended == .option($0) } ? min(badgeRoom, RecommendedBadge.roomMost) : 0)
+            }
+            if need.combines { sendTicked }
+        }
+        .quickLookPreview($opened)
+        // **The card reads its pictures one after another, in the order of its options**: each read has the client's
+        // limit of 15 seconds, and six large pictures read at once could each end "Not loaded" on a slow link. A read
+        // that a press of a picture started, or that a new hub or generation must make again, is part of the same
+        // order: a picture whose bytes are here costs nothing.
+        .task(id: "\(store.filesGeneration) \(pictures.map(\.sha256))") {
+            for file in pictures where store.picture(of: file) == nil {
+                if Task.isCancelled { return }
+                await store.load(file)
+            }
+        }
+    }
+
+    /// **The options of his Send that waits for the hub** (a ticked Send behind another answer on its way): they stand
+    /// ticked, and the ticks and Send take no press until it went, as once his answer went. A change of the ticks then
+    /// changed the card and not the Send that waited, and the old ticks went.
+    private var waitingTicks: [Int]? {
+        if case .ticked(let indexes) = store.waitingPresses[need.id] { indexes } else { nil }
+    }
+
+    /// The ticks of his answer, from his Send on: on its way, or waiting to go.
+    private var sentTicks: [Int]? { given?.options ?? waitingTicks }
+
+    /// One option: its picture, and its words under it.
+    private func tile(_ index: Int, recommended marks: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // the picture takes its whole square first; the words take the rest of the line's height
+            picture(index)
+                .recommendedBadge(by: marks ? need.by : nil, makesRoom: false)
+                .layoutPriority(1)
+            words(index, recommended: marks)
+                .frame(maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity)
+        // it dims, with its badge, beside the answer that he gave: other options, or his words
+        .opacity(dims(index) ? NeedOptions.dimmed : 1)
+    }
+
+    /// The picture: a press opens it at full screen and answers nothing; one that did not come is read again.
+    private func picture(_ index: Int) -> some View {
+        let file = pictures[index]
+        let missing = store.didNotLoad(file)
+        return Button {
+            if missing { Task { await store.readAgain(file) } } else { open(file) }
+        } label: {
+            OptionPicture(store: store, file: file)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(missing ? Text("Read \(file.name) again") : Text("\(file.name), \(file.sizeWords)"))
+        .accessibilityIdentifier("need-picture-\(need.id)-\(index)")
+    }
+
+    /// The option's words: a press answers with that option, or, where options combine, ticks it.
+    private func words(_ index: Int, recommended marks: Bool) -> some View {
+        let combines = need.combines
+        let isTicked = combines && (sentTicks.map { $0.contains(index) } ?? ticked.contains(index))
+        return Button { press(index) } label: {
+            HStack(spacing: 8) {
+                if !combines && given == .option(index) { DrawnMark(symbol: "checkmark").fontWeight(.semibold) }
+                // The agent's words, drawn as a plain label: they are data, never markup.
+                Text(verbatim: need.choices[index])
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if combines {
+                    Image(systemName: isTicked ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isTicked ? Brand.accent : Brand.muted)
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity, alignment: .leading)
+            .background(Brand.bubble, in: Self.shape)
+            .contentShape(Self.shape)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.primary)
+        .accessibilityAddTraits(given?.option == index || isTicked ? .isSelected : [])
+        .accessibilityValue(marks ? Text("Recommended") : Text(verbatim: ""))
+        .accessibilityIdentifier(combines ? "need-tick-\(need.id)-\(index)" : "need-option-\(need.id)-\(index)")
+    }
+
+    /// Send with the count of the options that he ticked, at the trailing side under the pictures, as the Mac's card
+    /// has it; it takes no press while none is ticked, and from his Send on it keeps their count.
+    private var sendTicked: some View {
+        let went = sentTicks
+        let can = given == nil && went == nil && !ticked.isEmpty
+        return HStack {
+            Spacer(minLength: 0)
+            Button { store.press(needID: need.id, choices: ticked.sorted()) } label: {
+                Text("Send \(went?.count ?? ticked.count)")
+                    .font(.body.weight(.semibold))
+                    .padding(.horizontal, 18)
+                    .frame(minHeight: 44)
+                    .foregroundStyle(can ? Brand.surface : Brand.muted)
+                    .background(can ? Brand.accent : Brand.bubble, in: Capsule())
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(!can)
+            .accessibilityIdentifier("need-send-ticked-\(need.id)")
+        }
+    }
+
+    /// A press of the words: the answer with that option, or, where options combine, its tick, until his answer went.
+    private func press(_ index: Int) {
+        guard need.combines else { return store.press(needID: need.id, choice: index) }
+        guard given == nil, waitingTicks == nil else { return }
+        if ticked.contains(index) { ticked.remove(index) } else { ticked.insert(index) }
+    }
+
+    /// The option dims beside the answer that he gave: another option, other ticked ones, or his words.
+    private func dims(_ index: Int) -> Bool {
+        switch given {
+        case nil: false
+        case .option(let pressed): pressed != index
+        case .options(let went): !went.contains(index)
+        case .words: true
+        }
+    }
+
+    private func open(_ file: MessageAttachment) {
+        Task { if let place = await AttachmentGallery.place(of: file, store: store) { opened = place } }
+    }
+}
+
+/// **One option's picture, in its square from the first frame**: the picture whole on the quiet fill of an option, the
+/// file's mark and "Reading…" after a second while it comes, and "Not loaded" when it did not. Its card reads it
+/// (`NeedPictures`), in the order of the options, and again after a new hub or generation, which empties the store's
+/// files (as `PictureTile`).
+private struct OptionPicture: View {
+    let store: MobileStore
+    let file: MessageAttachment
+
+    var body: some View {
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .background(Brand.bubble)
+            .overlay {
+                if let picture = store.picture(of: file) {
+                    Image(decorative: picture, scale: 1).resizable().aspectRatio(contentMode: .fit)
+                } else if store.didNotLoad(file) {
+                    VStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise").font(.title3).foregroundStyle(Brand.warning)
+                        Text("Not loaded").font(.footnote).foregroundStyle(Brand.warning)
+                    }
+                } else {
+                    VStack(spacing: 6) {
+                        Image(systemName: file.symbol).font(.title3).foregroundStyle(.secondary)
+                        // the words' room from the first frame, so the mark stands where it will stand
+                        ZStack {
+                            Text("Reading…").font(.footnote).hidden()
+                            Held { Text("Reading…").font(.footnote).foregroundStyle(Brand.muted) }
+                        }
+                    }
+                }
+            }
+            .clipShape(NeedPictures.shape)
+    }
+}
+
 /// **The badge of the answer that the agent recommends** (owner feature `need_recommended`, API 1.269; the owner's pick
 /// "B: badge on the edge" of three pictures, 20 November 2026, whose words said that the word shows on the iPhone too,
 /// where there is no hover): the Mac's `RecommendedBadge`, a capsule on the top edge of that answer's row, at its
@@ -953,6 +1184,9 @@ struct RecommendedBadge: View {
 /// so a read that brings the badge keeps the row's own state.
 private struct RecommendedPlace: ViewModifier {
     let agent: String?
+    /// The row makes the room over it for the badge's upper half: false where its line of pictures makes it for the
+    /// line's every picture (`NeedPictures`), so the pictures of one line stand at one height.
+    var makesRoom = true
     @ScaledMetric(relativeTo: .caption) private var room: CGFloat = 10
 
     func body(content: Content) -> some View {
@@ -965,13 +1199,16 @@ private struct RecommendedPlace: ViewModifier {
                 .alignmentGuide(.top) { $0[VerticalAlignment.center] }
                 .padding(.trailing, 12)
             }
-            .padding(.top, agent == nil ? 0 : min(room, RecommendedBadge.roomMost))
+            .padding(.top, agent == nil || !makesRoom ? 0 : min(room, RecommendedBadge.roomMost))
     }
 }
 
 extension View {
-    /// The badge of the answer that `agent` recommends on this row (`RecommendedBadge`); nothing for nil.
-    func recommendedBadge(by agent: String?) -> some View { modifier(RecommendedPlace(agent: agent)) }
+    /// The badge of the answer that `agent` recommends on this row (`RecommendedBadge`); nothing for nil. `makesRoom`
+    /// false: the room over the row is the caller's.
+    func recommendedBadge(by agent: String?, makesRoom: Bool = true) -> some View {
+        modifier(RecommendedPlace(agent: agent, makesRoom: makesRoom))
+    }
 }
 
 /// **The answer of one item in words or files, in the chat composer's look** (fix round 2, item 78): one capsule with
@@ -997,7 +1234,7 @@ struct NeedAnswerBox: View {
         // emptied at the receipt, and a longer answer's field shrank one read before the fold. A press on an option
         // wrote nothing in the field, so its field stays as it is.
         let taken = store.answersTaken[need.id]
-        let typed = taken.flatMap { $0.request.choice == nil ? $0.request.text : nil }
+        let typed = taken.flatMap { $0.request.choice == nil && $0.request.choices == nil ? $0.request.text : nil }
         let text = Binding(get: { sent ?? typed ?? store.answerDraft(for: need.id) },
                            set: { store.setAnswerDraft($0, for: need.id) })
         let trimmed = text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)

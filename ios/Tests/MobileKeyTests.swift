@@ -46,6 +46,24 @@ struct MobileKeyTests {
         #expect(next.value(forHTTPHeaderField: "Authorization") == "Bearer a-key")
     }
 
+    /// **The read of the state says what this build draws, with this phone's own key only** (owner API 1.285,
+    /// `X-Fleet-Draws`): the hub puts pictures on a request only while each app of the owner's said `need_pictures`, and
+    /// a device's read with no such header takes the phone's word back. A phone with no key of its own (the simulator)
+    /// reads with the Mac's owner key, so its header would be the word of the owner's computer. The bugs that this
+    /// stops: the build draws pictures and the hub never learns it; or the simulator says it for a Mac that does not
+    /// draw them, and the hub raises pictures that the Mac shows as words.
+    @Test("the state read says that this build draws pictures as options, only with this phone's own key")
+    func theReadSaysWhatThisBuildDraws() {
+        for etag in [nil, "\"abc\""] {
+            let keyed = MobileClient.snapshotRequest(hub: hub, key: "a-key", database: "gen-1", etag: etag)
+            #expect(keyed.value(forHTTPHeaderField: "X-Fleet-Draws") == "need_pictures")
+            for key in [nil, ""] as [String?] {
+                let unkeyed = MobileClient.snapshotRequest(hub: hub, key: key, database: "gen-1", etag: etag)
+                #expect(unkeyed.value(forHTTPHeaderField: "X-Fleet-Draws") == nil)
+            }
+        }
+    }
+
     @Test("Each refusal of this device says something different and names a next step")
     func eachRefusalHasItsOwnWords() {
         let reasons = ["device_not_enrolled", "device_key_required", "device_key_mismatch", "device_not_allowed",

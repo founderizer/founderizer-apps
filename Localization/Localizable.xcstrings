@@ -28250,6 +28250,16 @@
         }
       }
     },
+    "Your fleet could not download release %@: its server cannot reach the address it takes releases from." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu equipo no pudo descargar la versión %@: su servidor no puede conectar con la dirección de la que obtiene las versiones."
+          }
+        }
+      }
+    },
     "Your fleet has not asked our channel yet." : {
       "localizations" : {
         "es" : {

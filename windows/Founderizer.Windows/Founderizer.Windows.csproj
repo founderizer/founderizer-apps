@@ -31,6 +31,15 @@
     <DefineConstants>$(DefineConstants);PROOFS</DefineConstants>
   </PropertyGroup>
 
+  <!-- The welcome page of the first run (windows-app-plan-v2.md, piece U1, and section 13): only a build with
+       -p:FounderizerWelcome=true has it (FirstRunSwitch.cs). No build that a person gets has the welcome page before
+       the pieces U3, U4 and U5 are in it; until then a build without the switch opens on Add this PC, as step 1 does.
+       MSBuild would also fill the property from an environment variable of that name, which a build script never
+       sees: a build with such a variable has no welcome page, so only the command line turns it on. -->
+  <PropertyGroup Condition="'$(FounderizerWelcome)' == 'true' And '$([System.Environment]::GetEnvironmentVariable(`FounderizerWelcome`))' == ''">
+    <DefineConstants>$(DefineConstants);WELCOME</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Only the WinUI part of the Windows App SDK, not its AI, ML, search and widget parts. -->
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
@@ -41,8 +50,12 @@
     <EmbeddedResource Include="Sample/*.png" LogicalName="Founderizer.Windows.Sample.%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!-- The four libraries (windows-app-plan-v2.md, section 6): the window names all of them. -->
   <ItemGroup>
     <ProjectReference Include="../Founderizer.Core/Founderizer.Core.csproj" />
+    <ProjectReference Include="../Founderizer.Owner/Founderizer.Owner.csproj" />
+    <ProjectReference Include="../Founderizer.Remote/Founderizer.Remote.csproj" />
+    <ProjectReference Include="../Founderizer.Setup/Founderizer.Setup.csproj" />
     <ProjectReference Include="../Founderizer.Install/Founderizer.Install.csproj" />
   </ItemGroup>
 

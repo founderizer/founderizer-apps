@@ -1,0 +1,64 @@
+{
+  "about": "Picture set 8 (the first run, pictures 1 to 7) as elements: each picture's words of the table in ~/dev/founderizer-plans/windows-app-pictures-8/windows-app-pictures-8.md, and each control's measures in effective pixels of the 1440 by 900 window, from that table and the set's source (make.py: .back, .prog, .st, .cho, .pc, .fld, .pri, .sld). x and cx are the left edge and the middle; tol is how far a measure may be from it. elements.py checks a dump of elements.ps1 against one picture.",
+  "common": {
+    "steps": {"names": ["Manager", "AI provider", "Servers", "Network", "VPS", "Build"], "top": 99, "step": [92, 96], "tol": 3},
+    "back": {"match": {"id": "setup-back"}, "text": {"name": "Back", "x": 47, "y": 72, "h": 20, "tol": 3}}
+  },
+  "pictures": {
+    "01-welcome": {
+      "back": false, "steps": false,
+      "words": ["Your own team of AI agents", "Set it up yourself", "Step by step", "Add this PC"],
+      "boxes": [
+        {"match": {"id": "first-run-set-up", "type": "Button"}, "w": 263, "h": 126, "cx": 720, "tol": 2},
+        {"match": {"id": "first-run-add-this-pc", "type": "Button"}, "cx": 720, "tol": 2}
+      ]
+    },
+    "02-help-improve": {
+      "steps": false,
+      "words": ["Help improve Founderizer", "Sends error codes, versions and counts to Founderizer. Never your work, names or keys.",
+                "Send anonymous usage data", "Don't send", "You can change this later in Settings › Help.", "Privacy"],
+      "boxes": [
+        {"match": {"id": "first-run-reports-send", "type": "Button"}, "x": 370, "w": 343, "h": 58, "tol": 1.5},
+        {"match": {"id": "first-run-reports-none", "type": "Button"}, "x": 727, "w": 343, "h": 58, "tol": 1.5}
+      ]
+    },
+    "03-name-your-manager": {
+      "at": 0,
+      "words": ["Name your manager", "It leads your team and is your main assistant.", "Continue"],
+      "boxes": [
+        {"match": {"id": "first-run-name", "type": "Edit"}, "x": 541, "w": 358, "tol": 2},
+        {"match": {"id": "first-run-name-continue", "type": "Button"}, "h": 32, "cx": 720, "tol": 1.5}
+      ],
+      "absent": [{"type": "Button", "name": "Clear"}, {"id": "DeleteButton"}]
+    },
+    "04-ai-provider": {
+      "at": 1,
+      "words": ["Juno's AI provider", "The AI that Juno works with. You sign in with your own account.", "Codex", "Claude Code"],
+      "boxes": [
+        {"match": {"id": "first-run-ai-codex", "type": "Button"}, "x": 490, "w": 223, "h": 66, "tol": 1.5},
+        {"match": {"id": "first-run-ai-claude", "type": "Button"}, "x": 727, "w": 223, "h": 66, "tol": 1.5}
+      ]
+    },
+    "05-servers": {
+      "at": 2,
+      "words": ["Your fleet's servers", "Fewer servers cost less. More servers keep your agents apart.", "Lower cost", "More secure",
+                "1 server", "2 servers", "1 per agent", "The hub and its keys have a server of their own.", "Server", "Hub", "Juno",
+                "Agent", "An agent that breaks out of its account can reach the other agents, but not those keys.", "Continue"],
+      "boxes": [
+        {"match": {"id": "first-run-servers-slider"}, "x": 450, "w": 540, "h": 84, "tol": 1.5},
+        {"match": {"id": "first-run-servers-continue", "type": "Button"}, "h": 32, "cx": 720, "tol": 1.5}
+      ]
+    },
+    "06-connect-tailscale": {
+      "at": 3,
+      "words": ["Connect Tailscale", "Connect"],
+      "boxes": [{"match": {"id": "first-run-network-connect", "type": "Button"}, "h": 32, "cx": 720, "tol": 1.5}]
+    },
+    "07-waiting-for-tailscale": {
+      "at": 3,
+      "words": ["Waiting for Tailscale", "Open Tailscale again"],
+      "boxes": [{"match": {"id": "first-run-network-again", "type": "Button"}, "cx": 720, "tol": 2}],
+      "absent": [{"id": "first-run-network-connect"}]
+    }
+  }
+}

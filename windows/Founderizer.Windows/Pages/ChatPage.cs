@@ -61,8 +61,7 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
     private readonly string agent;
     private readonly IFleetSource source;
     private readonly PageServices services;
-    private readonly Dictionary<long, ImageSource?> pictures = new();
-    private readonly HashSet<long> reading = new();
+    private readonly PictureReads reads;
     private readonly Dictionary<(string, long), ImageSource?> thumbs = new();
     private readonly LineBand band;
     private readonly PendingBarView bar;
@@ -90,6 +89,7 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
         this.agent = agent;
         this.services = services;
         source = services.Source;
+        reads = new PictureReads(source, () => Show(state, DateTimeOffset.UtcNow, false));
         band = new LineBand(services);
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -199,6 +199,8 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
     {
         state = next;
         now = at;
+        // A new hub or generation: its files' ids can name other files.
+        reads.Keep(next);
         var model = Screens.Chat(next, agent, at, ScreenContext.Local, reduceMotion, shown);
         bar.Show(Screens.PendingBar(next, at));
         voidMark.Visibility = model.Empty ? Visibility.Visible : Visibility.Collapsed;
@@ -253,14 +255,14 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
             {
                 case ChatRowKind.Stamp: Add(row.Key, RowKind.Stamp, row); break;
                 case ChatRowKind.Message:
-                    Add(row.Key, RowKind.Own, new OwnRow(row, ValueList.Of(row.Files.Select(f => Screens.Tile(s, f, at) with
-                    {
-                        // A picture whose bytes came draws whole: the row draws again then.
-                        Reading = !pictures.ContainsKey(f.Id) && reading.Contains(f.Id),
-                    }))));
+                    // A picture whose bytes came draws whole: the row draws again then.
+                    Add(row.Key, RowKind.Own, new OwnRow(row, ValueList.Of(row.Files.Select(f => reads.Mark(Screens.Tile(s, f, at))))));
                     break;
                 case ChatRowKind.Reply: Add(row.Key, RowKind.Reply, row); break;
-                case ChatRowKind.Request when row.Request is not null: Add(row.Key, RowKind.Request, row); break;
+                case ChatRowKind.Request when row.Request is { } card:
+                    // The pictures of its options, as a message's: the card draws again when one came.
+                    Add(row.Key, RowKind.Request, row with { Request = card with { Options = reads.Mark(card.Options) } });
+                    break;
             }
         }
         if (model.Waiting is { Shows: true } waiting)
@@ -273,51 +275,16 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
     {
         if (!chip.IsPicture) return null;
         if (thumbs.TryGetValue((chip.File.Name, chip.File.Size), out var picked)) return picked;
-        if (chip.File.File is not { } file) return null;
-        if (pictures.TryGetValue(file.Id, out var image)) return image;
-        if (reading.Add(file.Id)) _ = LoadAsync(file);
-        return null;
+        return chip.File.File is { } file ? reads.Of(file) : null;
     }
 
-    /// <summary>A picture of a message: its image once its bytes came; the first ask starts its read.</summary>
-    public ImageSource? Picture(FileTile tile)
-    {
-        if (pictures.TryGetValue(tile.File.Id, out var image)) return image;
-        if (tile.IsPicture && reading.Add(tile.File.Id)) _ = LoadAsync(tile.File);
-        return null;
-    }
+    /// <summary>A picture of a message or of a request's option: its image once its bytes came; the first ask starts its
+    /// read.</summary>
+    public ImageSource? Picture(FileTile tile) => reads.Of(tile.File);
 
-    private async System.Threading.Tasks.Task LoadAsync(MessageAttachment file)
-    {
-        try
-        {
-            pictures[file.Id] = await Files.Picture(await source.FileAsync(file));
-        }
-        catch (Exception e) when (e is HubException or System.IO.IOException or System.Runtime.InteropServices.COMException)
-        {
-            // The store keeps it as not loaded (state.FilesUnloaded): its tile says so, with Read again.
-        }
-        reading.Remove(file.Id);
-        Show(state, DateTimeOffset.UtcNow, false);
-    }
+    public void OpenFile(FileTile tile) => reads.Open(tile);
 
-    public async void OpenFile(FileTile tile)
-    {
-        try
-        {
-            Files.Open(tile.File, await source.FileAsync(tile.File));
-        }
-        catch (Exception e) when (e is HubException or System.IO.IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
-        {
-            Readings.Note("open file: " + e.Message);
-        }
-    }
-
-    public void ReadAgain(FileTile tile)
-    {
-        pictures.Remove(tile.File.Id);
-        if (reading.Add(tile.File.Id)) _ = LoadAsync(tile.File);
-    }
+    public void ReadAgain(FileTile tile) => reads.Again(tile);
 
     /// <summary>The plus: Windows' picker, and each file goes to the composer (the store sends it up).</summary>
     private async void AddFiles()
@@ -369,6 +336,12 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
     public void Type(long need, string text) => source.SetAnswerDraft(need, text);
 
     public void Answer(long need) => _ = source.AnswerAsync(need);
+
+    public bool OpenClarify(long need) => source.OpenClarify(need);
+
+    public void TypeClarify(long need, string text) => source.SetClarifyDraft(need, text);
+
+    public void SendClarify(long need) => _ = source.TalkAsync(need);
 
     private readonly HashSet<(long, string)> openParts = new();
 

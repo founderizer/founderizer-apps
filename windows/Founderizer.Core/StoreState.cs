@@ -327,6 +327,20 @@ public sealed record StoreState
     /// <summary>One draft for each agent, and one for each open request.</summary>
     public ImmutableDictionary<string, string> Drafts { get; init; } = ImmutableDictionary<string, string>.Empty;
     public ImmutableDictionary<long, string> AnswerDrafts { get; init; } = ImmutableDictionary<long, string>.Empty;
+    /// <summary>**The field of Needs clarification of each card where it stands, with his words, in memory only**
+    /// (owner feature `need_clarify`; the Mac's clarifyDrafts, the iPhone's clarifyDrafts): a press on the link puts the
+    /// field there, and it stays while the card takes a message, also when he empties it; it goes back to its link when
+    /// the outbox has his message. The same on Needs you and in the agent's chat. Never in a file, because a key pasted
+    /// there by mistake must not stay on this PC's disk; they go when the hub refuses registered login text, with the
+    /// generation, and at each read for a card that is no longer open.</summary>
+    public ImmutableDictionary<long, string> ClarifyDrafts { get; init; } = ImmutableDictionary<long, string>.Empty;
+    /// <summary>How many times the store itself put words into the field of each card while it may stand (the Discard
+    /// of a refused message gives its words back): the window loads the store's words then, and when the field comes to
+    /// stand, never on another draw (<see cref="ClarifyField"/>).</summary>
+    public ImmutableDictionary<long, int> ClarifyGiven { get; init; } = ImmutableDictionary<long, int>.Empty;
+    /// <summary>**The talk of each card as the hub's receipt of his last message under it gave it**, by item, until a
+    /// reading has as many lines (the iPhone's talkTaken): his message stands in the card from the receipt.</summary>
+    public ImmutableDictionary<long, ValueList<NeedMessage>> TalkTaken { get; init; } = ImmutableDictionary<long, ValueList<NeedMessage>>.Empty;
     /// <summary>The files picked for a composer ("agent:&lt;name&gt;", "need:&lt;id&gt;"), in the order he picked them,
     /// kept between starts.</summary>
     public ImmutableDictionary<string, ValueList<StagedFile>> Staged { get; init; } = ImmutableDictionary<string, ValueList<StagedFile>>.Empty;
@@ -393,6 +407,23 @@ public sealed record StoreState
     /// <summary>A write that waited while the hub or its generation changed (the Mac's "Not saved. The hub connection
     /// changed.").</summary>
     public const string ConnectionChanged = "Not sent. The hub connection changed.";
+
+    /// <summary>**This card's own request waits in the outbox and no send carries it** (the iPhone's waitsUnsent): its
+    /// answer, or his message under it, of this hub and generation, which an error stopped, the hub refused, or the app
+    /// started with. Only Try again, or Discard of a refused one, moves it, so a press on the card's options is dropped
+    /// and does not wait behind it with no end (OwnerStore.Press).</summary>
+    public bool WaitsUnsent(long need) =>
+        Pending is { } p && !Sending && (p.NeedId == need || p.TalkNeed == need) && p.Hub == Hub && p.Database == Fleet?.Db;
+
+    /// <summary>**The talk under a card, as the card shows it** (the iPhone's talk(of:)): his messages and the agent's
+    /// replies, oldest first, open or answered, on a hub that names `need_clarify`; the receipt's while the reading does
+    /// not have his last message yet (<see cref="TalkTaken"/>).</summary>
+    public IReadOnlyList<NeedMessage> TalkOf(OwnerNeed need)
+    {
+        var read = need.ShownTalk(Fleet);
+        return Offers(NeedClarify.Feature) && TalkTaken.TryGetValue(need.Id, out var taken) && taken.Count > read.Count
+            ? taken : read;
+    }
 
     public bool CanRetry(DateTimeOffset now) =>
         Pending is { } p && AnswersWrites(now) && !Sending && StorageError is null && p.Refusal is null &&
@@ -507,6 +538,10 @@ public sealed record StoreState
         null => null,
         { NeedId: { } need } => $"Answer to item {need}",
         { ReplacesRequestId: not null } p => "Correction to " + Names.Label(p.Recipient ?? "manager"),
+        // his message under a card goes to the agent that raised it, which only a reading of its own hub and generation
+        // names: another one's item of that number is another card
+        { TalkNeed: { } talk } p => "Message to " + Names.Label(
+            (p.Hub == Hub && p.Database == Fleet?.Db ? Fleet?.Needs.FirstOrDefault(n => n.Id == talk)?.By : null) ?? "manager"),
         { Command: { } command } => command.Kind switch
         {
             "steer" => "Guidance to a task",
@@ -663,10 +698,15 @@ public sealed record StoreChange
         }
         foreach (var id in after.AnswerDrafts.Keys.Concat(before.AnswerDrafts.Keys)
                      .Concat(after.AnswersTaken.Keys).Concat(before.AnswersTaken.Keys)
-                     .Concat(after.WaitingPresses.Keys).Concat(before.WaitingPresses.Keys))
+                     .Concat(after.WaitingPresses.Keys).Concat(before.WaitingPresses.Keys)
+                     .Concat(after.ClarifyDrafts.Keys).Concat(before.ClarifyDrafts.Keys)
+                     .Concat(after.TalkTaken.Keys).Concat(before.TalkTaken.Keys))
             if (after.AnswerDrafts.GetValueOrDefault(id) != before.AnswerDrafts.GetValueOrDefault(id) ||
                 !Equals(after.AnswersTaken.GetValueOrDefault(id), before.AnswersTaken.GetValueOrDefault(id)) ||
-                after.WaitingPresses.GetValueOrDefault(id, -1) != before.WaitingPresses.GetValueOrDefault(id, -1))
+                after.WaitingPresses.GetValueOrDefault(id, -1) != before.WaitingPresses.GetValueOrDefault(id, -1) ||
+                after.ClarifyDrafts.GetValueOrDefault(id) != before.ClarifyDrafts.GetValueOrDefault(id) ||
+                after.ClarifyDrafts.ContainsKey(id) != before.ClarifyDrafts.ContainsKey(id) ||
+                !Equals(after.TalkTaken.GetValueOrDefault(id), before.TalkTaken.GetValueOrDefault(id)))
                 needs.Add(id);
         var pages = new HashSet<long>();
         foreach (var (id, page) in after.TaskPages)
@@ -680,6 +720,7 @@ public sealed record StoreChange
             {
                 if (request is null) continue;
                 if (request.NeedId is { } need) needs.Add(need);
+                else if (request.TalkNeed is { } card) needs.Add(card);
                 else if (request.Command is { } command) pages.Add(command.Target);
                 else chats.Add(request.Recipient ?? "manager");
             }

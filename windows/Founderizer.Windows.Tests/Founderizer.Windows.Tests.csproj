@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The tests of the screens' own parts that call no WinUI: the sample fleet as the store's state, read by the
-       library's models, and the window's history. They need no window; the plan runs them on Windows. -->
+       library's models, the window's history, the publisher check, Tailscale's install and sign-in link, and the first
+       run's own parts. They need no window; the plan runs them on Windows. -->
   <PropertyGroup>
     <!-- Windows' target: the Windows parts of the key and of Tailscale are tested on Windows. -->
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -17,6 +18,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Founderizer.Core/Founderizer.Core.csproj" />
+    <ProjectReference Include="../Founderizer.Setup/Founderizer.Setup.csproj" />
     <ProjectReference Include="../Founderizer.Install/Founderizer.Install.csproj" />
   </ItemGroup>
   <ItemGroup>
@@ -25,11 +27,18 @@
     <Compile Include="../Founderizer.Windows/Fleet/SampleStates.cs" Link="Linked/SampleStates.cs" />
     <Compile Include="../Founderizer.Windows/Proofs.cs" Link="Linked/Proofs.cs" />
     <Compile Include="../Founderizer.Windows/Fleet/WindowsParts.cs" Link="Linked/WindowsParts.cs" />
+    <Compile Include="../Founderizer.Windows/Fleet/TailscaleSetup.cs" Link="Linked/TailscaleSetup.cs" />
+    <Compile Include="../Founderizer.Windows/Fleet/FileChoices.cs" Link="Linked/FileChoices.cs" />
+    <Compile Include="../Founderizer.Windows/Fleet/OwnerKeyLine.cs" Link="Linked/OwnerKeyLine.cs" />
+    <Compile Include="../Founderizer.Windows/Pages/FirstRun/WelcomePlan.cs" Link="Linked/WelcomePlan.cs" />
+    <Compile Include="../Founderizer.Windows/Pages/FirstRun/SetupViewWords.cs" Link="Linked/SetupViewWords.cs" />
     <Compile Include="../Founderizer.Windows/Navigation/History.cs" Link="Linked/History.cs" />
     <Compile Include="../Founderizer.Windows/Navigation/PaneMarks.cs" Link="Linked/PaneMarks.cs" />
     <Compile Include="../Founderizer.Windows/Pages/EndedRows.cs" Link="Linked/EndedRows.cs" />
     <Compile Include="../Founderizer.Windows/Pages/ThreadRows.cs" Link="Linked/ThreadRows.cs" />
     <Compile Include="../Founderizer.Windows/Update/ReleaseChannel.cs" Link="Linked/ReleaseChannel.cs" />
     <EmbeddedResource Include="../Founderizer.Windows/Sample/SampleFleet.json" LogicalName="Founderizer.Windows.Sample.SampleFleet.json" />
+    <!-- The Mac's string catalog: the window's own words of the first run are held to it (FirstRunWordsTests). -->
+    <None Include="../../Localization/Localizable.xcstrings" Link="catalog/Localizable.xcstrings" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

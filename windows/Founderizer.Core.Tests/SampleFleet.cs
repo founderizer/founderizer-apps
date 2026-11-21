@@ -166,8 +166,10 @@ internal sealed class FakeHub : IDisposable
         {
             Interlocked.Increment(ref MobileReads);
             HoldReads?.Wait(TimeSpan.FromSeconds(20));
-            if (seen.Header("If-None-Match") == ETag) return LoopbackHub.Raw(304, [], ("ETag", ETag));
-            return LoopbackHub.Json(200, Snapshot.ToJsonString(), ("ETag", ETag));
+            string tag, json;
+            lock (talks) (tag, json) = (ETag, Snapshot.ToJsonString());      // a message under a card changes it
+            if (seen.Header("If-None-Match") == tag) return LoopbackHub.Raw(304, [], ("ETag", tag));
+            return LoopbackHub.Json(200, json, ("ETag", tag));
         }
         if (path == "/ui/mobile/ended" && Blocks is { } blocks)
         {
@@ -255,6 +257,8 @@ internal sealed class FakeHub : IDisposable
             if (Silent) return null;
             if (Refuse is { } refusal) return LoopbackHub.Json(refusal.Status, refusal.Body);
             var id = body.GetProperty("request_id").GetString()!;
+            if (path.EndsWith("/talk", StringComparison.Ordinal))
+                return Talk(long.Parse(path.Split('/')[3]), body.GetProperty("text").GetString()!, id, seen.Header("X-Fleet-Client"));
             var replayed = !RequestIds.TryAdd(id, path);
             var recipient = body.TryGetProperty("recipient", out var r) ? $"\"{r.GetString()}\"" : "null";
             var files = body.TryGetProperty("attachments", out var a) ? a.GetRawText() : "[]";
@@ -283,6 +287,43 @@ internal sealed class FakeHub : IDisposable
             return LoopbackHub.Json(200, $$"""{"ok":true,"request_id":"{{id}}","event_id":{{Interlocked.Increment(ref NextEvent)}},"created":{{SampleFleet.Now}},"replayed":{{(replayed ? "true" : "false")}},"client":"{{seen.Header("X-Fleet-Client")}}","recipient":{{recipient}},"attachments":{{files}},"read_at":null}""");
         }
         return LoopbackHub.Json(404, """{"error":"not here"}""");
+    }
+
+    /// <summary>The message under a card (POST /ui/needs/&lt;id&gt;/talk, owner feature need_clarify), as command_run
+    /// answers it: the card's talk with his message, in a command's receipt, and a repeat of the same request gets its
+    /// first result. <see cref="TalkCut"/> "before": the send ends before the hub takes it; "after": the hub takes it and
+    /// its first answer is lost (502, which no app takes as a refusal). The reading has the card's talk only while
+    /// <see cref="TalkInReading"/>.</summary>
+    public string TalkCut = "";
+    public bool TalkInReading;
+    private readonly Dictionary<long, JsonArray> talks = new();
+    private readonly Dictionary<string, JsonObject> talkResults = new();
+
+    private byte[] Talk(long need, string text, string id, string? client)
+    {
+        if (TalkCut == "before") return LoopbackHub.Json(502, """{"error":"bad gateway"}""");
+        JsonObject result;
+        bool first;
+        lock (talks)
+        {
+            first = !talkResults.TryGetValue(id, out result!);
+            if (first)
+            {
+                var talk = talks.TryGetValue(need, out var held) ? held : talks[need] = new JsonArray();
+                talk.Add(new JsonObject { ["who"] = "owner", ["text"] = text, ["ts"] = SampleFleet.Now });
+                if (TalkInReading)
+                    Snapshot["needs"]!.AsArray().Concat(Snapshot["answered_needs"]!.AsArray())
+                        .Single(n => n!["id"]!.GetValue<long>() == need)!["talk"] = talk.DeepClone();
+                result = talkResults[id] = new JsonObject
+                {
+                    ["ok"] = true, ["request_id"] = id, ["client"] = client, ["need"] = need, ["talk"] = talk.DeepClone(),
+                };
+            }
+        }
+        if (first && TalkCut == "after") return LoopbackHub.Json(502, """{"error":"bad gateway"}""");
+        var answer = (JsonObject)result.DeepClone();
+        answer["replayed"] = !first;
+        return LoopbackHub.Json(200, answer.ToJsonString());
     }
 
     public void Dispose() => Server.Dispose();

@@ -245,6 +245,14 @@ public struct ReleaseState: Codable, Equatable, Sendable {
                                                                 : String(l10n: "It waits until no task runs."),
                          value: idle ? "" : waits, take: ready, waiting: !idle)
         }
+        // **A newest release that this fleet's server could not download says so** (the owner's test fleet, 21 November
+        // 2026): the server had no route to github.com, every release from 2026.11.714 to .732 stopped `kept` at the
+        // fetch, and this row said only "Unknown" for days, or "runs the newest release" with an older one in view. In
+        // the app's own words: the hub's line carries git's address and port, in English. A kept row is never `current`.
+        if let newest = releases.first, newest.state == "kept", newest.step == "fetch" {
+            return Stand(says: String(l10n: "Your fleet could not download release \(newest.version): its server cannot reach the address it takes releases from."),
+                         value: String(l10n: "Did not finish"), warn: true)
+        }
         if let current { return Stand(says: String(l10n: "Your fleet runs the newest release. \(checkedLine)"), value: current.version) }
         return Stand(says: runs, value: String(l10n: "Unknown"))
     }

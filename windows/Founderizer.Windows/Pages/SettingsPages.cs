@@ -304,7 +304,8 @@ internal sealed class SettingsPage : IPageView
             addressDetail.Text = line.Detail;
             addressAge.Text = line.Value;
         }
-        forget.Visibility = forgetRule.Visibility = model.ShowsForget ? Visibility.Visible : Visibility.Collapsed;
+        // On the owner's computer of its hub, Forget the key takes nothing off (plan 5.1, piece U1): no such row there.
+        forget.Visibility = forgetRule.Visibility = model.ShowsForget && state.Role != HubRole.Owner ? Visibility.Visible : Visibility.Collapsed;
         if (model.Credit is { } c)
         {
             creditWords.Text = c.Words;

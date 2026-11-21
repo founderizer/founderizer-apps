@@ -31,6 +31,11 @@ public sealed class ProductMark : Grid
     public static ProductMark Muted(double side) =>
         new(Color.FromArgb(13, 255, 255, 255), Color.FromArgb(33, 255, 255, 255)) { Width = side, Height = side, IsHitTestVisible = true, named = true };
 
+    /// <summary>The hub's mark in the boxes of "Your fleet's servers" (the Mac's <c>HubTile</c>): the product's chevrons on a
+    /// tile, the plate white at 7 % and the chevrons grey at 82 %.</summary>
+    public static ProductMark Hub(double side) =>
+        new(Color.FromArgb(18, 255, 255, 255), Color.FromArgb(255, 0xD1, 0xD1, 0xD1)) { Width = side, Height = side };
+
     // The mark of an empty chat says its words to an assistive app (ChatModel.EmptyWords); the title bar's mark is
     // decoration.
     private bool named;

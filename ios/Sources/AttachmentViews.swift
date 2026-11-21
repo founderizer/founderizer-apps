@@ -378,16 +378,31 @@ struct AttachmentGallery: View {
     /// The system's viewer opens a file, never an address: the bytes come from the hub, checked, and are written
     /// where only this app can read them.
     private func open(_ file: MessageAttachment) {
-        Task {
-            await store.load(file)
-            guard let data = store.heldBytes(of: file) else { return }
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("attachments", isDirectory: true)
-            let place = folder.appendingPathComponent("\(file.id)-\(file.name)")
-            do {
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                try data.write(to: place, options: [.atomic, .completeFileProtection])
-                opened = place
-            } catch { store.fileFailed(String(l10n: "This file did not open on the phone."), detail: error.localizedDescription) }
+        Task { if let place = await Self.place(of: file, store: store) { opened = place } }
+    }
+
+    /// **Where the system's viewer opens a file of the hub, at full screen** (`quickLookPreview`): its bytes, read with
+    /// this phone's own read and checked, written where only this app reads them; nil when they did not come or did
+    /// not write. A file of a message and a picture of a request's option (`NeedPictures`) open the same way. **A press
+    /// while the file's own read runs (its tile's) waits for that read**, and opens the file when it came: `load`
+    /// returns at once then, and the press opened nothing. A read that failed says so where it says it for any read:
+    /// a picture's tile "Not loaded", the line under a composer for another file.
+    static func place(of file: MessageAttachment, store: MobileStore) async -> URL? {
+        await store.load(file)
+        // the read that ran before the press: it ends with the bytes or with its failure, within the read's own limit
+        while store.heldBytes(of: file) == nil, store.reads(file), !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        guard let data = store.heldBytes(of: file) else { return nil }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("attachments", isDirectory: true)
+        let place = folder.appendingPathComponent("\(file.id)-\(file.name)")
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: place, options: [.atomic, .completeFileProtection])
+            return place
+        } catch {
+            store.fileFailed(String(l10n: "This file did not open on the phone."), detail: error.localizedDescription)
+            return nil
         }
     }
 }

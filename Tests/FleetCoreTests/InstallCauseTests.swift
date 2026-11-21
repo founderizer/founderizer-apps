@@ -237,7 +237,8 @@ struct InstallCauseTests {
                       "could not be opened", "has no valid signature", "chrome did not start",
                       "remote login did not turn on", "screen sharing did not turn on", "power settings did not change",
                       "this mac did not join your fleet", "not your hub's own join line",
-                      "this installer has no setup step", "could not save the order", "needs your password to go on"]
+                      "this installer has no setup step", "could not save the order", "needs your password to go on",
+                      "gives no address of the releases", "where the hub takes its releases"]
         var used = Set<String>()
         for (file, list) in sentences {
             for sentence in list where InstallCause.of(sentence: sentence) == .other {

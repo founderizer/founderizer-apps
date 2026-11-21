@@ -7,16 +7,23 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Founderizer.Core;
+using Founderizer.Install;
 
 namespace Founderizer.Windows.Fleet;
 
-/// <summary>Where this PC keeps what the app holds: the store's folder, and the device key's file beside it (outside the
-/// folder, which holds no key), in the user's own LocalAppData.</summary>
+/// <summary>Where this PC keeps what the app holds, in the user's own LocalAppData: the store's folder, the device key's
+/// file beside it (outside the folder, which holds no key), the secret box's folder (<c>keys</c>), the first run's own
+/// folder (<c>setup</c>: its records, the servers' host keys and the owner's kept answers, none of them a secret), and
+/// the folder of a download that waits for its check (<c>downloads</c>).</summary>
 internal static class AppFolders
 {
     public static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Founderizer");
     public static string Store => Path.Combine(Root, "store");
     public static string KeyFile => Path.Combine(Root, "device-key");
+    /// <summary>The secret box (<see cref="FileSecretBox"/>): one protected file for each secret, never a plain one.</summary>
+    public static string Keys => Path.Combine(Root, "keys");
+    public static string Setup => Path.Combine(Root, "setup");
+    public static string Downloads => Path.Combine(Root, "downloads");
 
     /// <summary>This installation's own id, made once: the client of each write is founderizer-windows/1/&lt;id&gt;.</summary>
     public static string InstallationId()
@@ -37,19 +44,27 @@ internal static class AppFolders
     }
 }
 
-/// <summary>The device key's protection: Windows' own protection of the signed-in user's data (DPAPI, CryptProtectData
-/// for the current user). Only this Windows user, on this PC, can unprotect it; the file holds no key that can be read
-/// as text. The TPM is a later choice (app/windows/vm/README.md).</summary>
-internal sealed class UserKeyProtection : IKeyProtection
+/// <summary>A key's protection: Windows' own protection of the signed-in user's data (DPAPI, CryptProtectData for the
+/// current user). Only this Windows user, on this PC, can unprotect it; the file holds no key that can be read as text.
+/// The TPM is a later choice (app/windows/vm/README.md). **Each use has its own purpose** (the device key, the secret
+/// box): data that another program, or another use of this one, protects for the same user does not open here.</summary>
+internal sealed class UserKeyProtection(string purpose) : IKeyProtection
 {
-    // Ties the protected key to this use: data that another program protects for the same user does not open here.
-    private static readonly byte[] Purpose = Encoding.UTF8.GetBytes("Founderizer for Windows: device key");
+    public const string DeviceKey = "Founderizer for Windows: device key";
+    public const string SecretBox = "Founderizer for Windows: secret box";
+
+    /// <summary>The device key's protection, as step 1 made it.</summary>
+    public UserKeyProtection() : this(DeviceKey)
+    {
+    }
+
+    private readonly byte[] Purpose = Encoding.UTF8.GetBytes(purpose);
 
     public byte[] Protect(byte[] key) => Crypt(key, protect: true);
 
     public byte[] Unprotect(byte[] stored) => Crypt(stored, protect: false);
 
-    private static byte[] Crypt(byte[] data, bool protect)
+    private byte[] Crypt(byte[] data, bool protect)
     {
         var input = GCHandle.Alloc(data, GCHandleType.Pinned);
         var entropy = GCHandle.Alloc(Purpose, GCHandleType.Pinned);
@@ -140,86 +155,43 @@ internal sealed class WindowsTailscale : ITailscaleStatus
         }
     }
 
-    /// <summary>The program is Tailscale's: its signature is valid for Windows (WinVerifyTrust, with the chain to a
-    /// trusted root) and its signer is the organisation Tailscale Inc. Checked again when the file changes.</summary>
-    private bool IsTailscales()
+    /// <summary>The program is Tailscale's (<see cref="Publisher.SignedBy(string, string, string)"/>: Windows finds its
+    /// signature valid with the revocation check of the whole chain, and its signer is Tailscale Inc. of CA, as for
+    /// Tailscale's installer). A pass holds while the file does not change; a refusal is checked again after 30 seconds,
+    /// so that a check that failed for a moment (a file in use, the network) does not hide Tailscale until the next
+    /// start.</summary>
+    public bool IsTailscales()
     {
-        var write = File.GetLastWriteTimeUtc(Program);
-        if (write == checkedWrite) return trusted;
-        checkedWrite = write;
-        trusted = SignatureIsValid(Program) && SignerIsTailscale(Program);
-        return trusted;
-    }
-
-    internal static bool SignerIsTailscale(string path)
-    {
-        try
+        DateTime write;
+        try { write = File.GetLastWriteTimeUtc(Program); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+        lock (gate)
         {
-#pragma warning disable SYSLIB0057 // The loader of .NET 9 reads no Authenticode signature; this call reads the signer of a signed file.
-            using var signer = new X509Certificate2(X509Certificate.CreateFromSignedFile(path));
-#pragma warning restore SYSLIB0057
-            return signer.GetNameInfo(X509NameType.SimpleName, false) == "Tailscale Inc." &&
-                   signer.Subject.Contains("O=Tailscale Inc.", StringComparison.Ordinal);
+            if (write == checkedWrite && (trusted || DateTime.UtcNow - checkedAt < TimeSpan.FromSeconds(30))) return trusted;
         }
-        catch (System.Security.Cryptography.CryptographicException)
+        bool now;
+        try { now = Publisher.SignedBy(Program, Signer.Organisation, Signer.Country); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         {
-            return false;
+            now = false;
         }
-    }
-
-    internal static bool SignatureIsValid(string path)
-    {
-        var file = new TrustFile { Size = Marshal.SizeOf<TrustFile>(), Path = Marshal.StringToHGlobalUni(path) };
-        var fileHandle = GCHandle.Alloc(file, GCHandleType.Pinned);
-        try
+        lock (gate)
         {
-            var data = new TrustData
-            {
-                Size = Marshal.SizeOf<TrustData>(),
-                UiChoice = 2,          // WTD_UI_NONE
-                RevocationChecks = 0,  // WTD_REVOKE_NONE: the chain, not a network check of revocation
-                UnionChoice = 1,       // WTD_CHOICE_FILE
-                File = fileHandle.AddrOfPinnedObject(),
-                StateAction = 0,
-                ProvFlags = 0x10,      // WTD_REVOCATION_CHECK_NONE
-            };
-            var action = new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE"); // WINTRUST_ACTION_GENERIC_VERIFY_V2
-            return WinVerifyTrust(new IntPtr(-1), ref action, ref data) == 0;
+            checkedWrite = write;
+            checkedAt = DateTime.UtcNow;
+            trusted = now;
         }
-        finally
-        {
-            fileHandle.Free();
-            Marshal.FreeHGlobal(file.Path);
-        }
+        return now;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct TrustFile
-    {
-        public int Size;
-        public IntPtr Path;
-        public IntPtr Handle;
-        public IntPtr KnownSubject;
-    }
+    private readonly object gate = new();
+    private DateTime checkedAt;
+}
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct TrustData
-    {
-        public int Size;
-        public IntPtr PolicyCallbackData;
-        public IntPtr SipClientData;
-        public int UiChoice;
-        public int RevocationChecks;
-        public int UnionChoice;
-        public IntPtr File;
-        public int StateAction;
-        public IntPtr StateData;
-        public IntPtr UrlReference;
-        public int ProvFlags;
-        public int UiContext;
-        public IntPtr SignatureSettings;
-    }
-
-    [DllImport("wintrust.dll", CharSet = CharSet.Unicode)]
-    private static extern int WinVerifyTrust(IntPtr window, ref Guid action, ref TrustData data);
+/// <summary>Who signs Tailscale's programs and its installer (windows-app-plan-v2.md, section 8.2, measured in the VM on 13
+/// November 2026; the library's <c>PcNetwork.InstallerOrganisation</c> and <c>InstallerCountry</c>).</summary>
+internal static class Signer
+{
+    public const string Organisation = Founderizer.Setup.Network.PcNetwork.InstallerOrganisation;
+    public const string Country = Founderizer.Setup.Network.PcNetwork.InstallerCountry;
 }

@@ -177,15 +177,20 @@ public sealed class StoreTests
     [TestMethod]
     public async Task RegisteredLoginTextTakesTheWordsAndTheDraftsOffThePc()
     {
+        // (and the words of a field of Needs clarification, which the hub does not name either)
+        hub.Snapshot["ui_features"]!.AsArray().Add((System.Text.Json.Nodes.JsonNode)NeedClarify.Feature);
+        hub.Snapshot["needs"]![0]!["clarify"] = true;
         await using var store = await Store();
         hub.Refuse = (422, """{"error":"text matches a registered login"}""");
         store.SetDraft("manager", "the password is hunter2");
         store.SetAnswerDraft(1, "and hunter2");
+        store.OpenClarify(1);
+        store.SetClarifyDraft(1, "or hunter2");
         await store.SendMessageAsync("manager");
         var s = store.State;
         Assert.AreEqual("", s.Pending!.Text);
         Assert.IsNotNull(s.Pending.Refusal);
-        Assert.AreEqual(0, s.Drafts.Count + s.AnswerDrafts.Count);
+        Assert.AreEqual(0, s.Drafts.Count + s.AnswerDrafts.Count + s.ClarifyDrafts.Count);
         Assert.IsFalse(File.ReadAllText(Path.Combine(folder, "outbox.json")).Contains("hunter2"));
         Assert.IsFalse(File.ReadAllText(Path.Combine(folder, "drafts.json")).Contains("hunter2"));
     }

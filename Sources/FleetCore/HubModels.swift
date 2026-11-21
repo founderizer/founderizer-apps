@@ -693,6 +693,12 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// Owner feature `need_marks`: the task that his answer lets go on (a question's, a door card's or a take-over's),
     /// or nil; the hub writes it with the item, and it never changes. Not in `signsTheSame`.
     public let task: Int?
+    /// Owner feature `need_pictures` (API 1.285): one picture for each option, in the order of `options`, or nil for an
+    /// item with none and from a hub before that version. All or none: the hub gives nil when the bytes of one picture
+    /// are gone. An app draws them only on a hub that names the feature, and only when there are as many as `options`.
+    /// The answer does not change: a press of an option's words sends its index. Not in `signsTheSame`, as
+    /// `recommended`.
+    public var pictures: [MessageAttachment]? = nil
     /// **The options that only Founderizer on a Mac or a PC can press, by their index in `choices`** (the lane "Give on
     /// the iPhone": the owner's "Line to the Mac" of 19 November 2026 to the phone's picture, and his "Yes, add it" of
     /// the same day for the door's card). The hub refuses them from a phone: Give, the first option of an item that
@@ -800,10 +806,12 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// wraps. So there is no second limit here and no truncation — a limit of the app's own would quietly drop an
     /// answer that the hub accepted. What the app still refuses is what is not one answer to press: fewer than two
     /// (one option is not a choice), a label that is empty, one with a control character in it, and two that say
-    /// the same thing. An item that offers none leaves the app's own quick replies in their place.
+    /// the same thing. An item that offers none leaves the app's own quick replies in their place. **One option is a
+    /// choice on an item with one picture for it** (owner feature `need_pictures`, API 1.285): one design to approve,
+    /// whose no is his own words.
     public var choices: [String] {
         let given = (options ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard given.count >= 2,
+        guard given.count >= (pictures?.count == given.count ? 1 : 2),
               given.allSatisfy({ !$0.isEmpty && $0.unicodeScalars.allSatisfy { $0.value >= 32 && $0.value != 127 } }),
               Set(given.map { $0.lowercased() }).count == given.count else { return [] }
         return given

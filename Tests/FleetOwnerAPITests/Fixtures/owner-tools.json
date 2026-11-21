@@ -799,7 +799,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Needs you: Answer one Needs-you item: the words, or choice, the index of one option the item offers, or choices, the indexes of the options it lets the owner tick together (its multi). Not for a secret's value, which never goes through a tool. When the item has pictures, see each one with read_attachment before you choose. Words that ask something back are an answer too: the item closes, and the manager replies with a new item. A yes of a team card (the manager's plan) changes the team: it adds or removes an agent, or changes a profile, the reporting lines or an owner file. attachments: at most four ids from attach_file. They go with an answer in words, or alone, as in the Founderizer app. A choice or choices carries no file. An item whose answer goes into a conversation takes none.",
+   "description": "Needs you: Answer one Needs-you item: words only for an item with no options (the hub refuses an AI session's words to an item that has them), or choice, the index of one option the item offers, or choices, the indexes of the options it lets the owner tick together (its multi). Not for a secret's value, which never goes through a tool. When the item has pictures, see each one with read_attachment before you choose. Words that ask something back are an answer too: the item closes, and the manager replies with a new item. A yes of a team card (the manager's plan) changes the team: it adds or removes an agent, or changes a profile, the reporting lines or an owner file. attachments: at most four ids from attach_file. They go with an answer in words, or alone, as in the Founderizer app. A choice or choices carries no file. An item whose answer goes into a conversation takes none.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -841,7 +841,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Needs you: Send the owner's message to the manager under one open Needs-you item, before answering it: more context, or a question about it (Needs clarification). The item stays open, and the manager's reply joins its talk. fleet_read(page=\"state\") gives each item's talk and clarify in needs: an item whose clarify is false takes no message. text: 1 to 2000 characters, only the owner's own words: the manager reads them as the owner's. To answer the item, use answer_needs_you.",
+   "description": "Needs you: Send the owner's message to the manager under one open Needs-you item, before answering it: more context, or a question about it (Needs clarification). The item stays open, and the manager's reply joins its talk. fleet_read(page=\"state\") gives each item's talk and clarify in needs: an item whose clarify is false takes no message. text: 1 to 2000 characters, only the owner's own words: the manager reads that an AI session sent them for the owner. To answer the item, use answer_needs_you.",
    "feature": "need_clarify",
    "fields": [
     "text"
@@ -3671,5 +3671,5 @@
    "whole": []
   }
  ],
- "version": "8d6e7948a4e5d82d0731c91530f45a338867e6925fe6f790188ee0edbe366fb3"
+ "version": "eabcf8c93a7fc86dcd1a5fa9c438311a9ac419586622cacecdeceaf269a31269"
 }

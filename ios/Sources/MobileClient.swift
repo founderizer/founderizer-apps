@@ -260,13 +260,27 @@ final class MobileClient: Sendable {
     // MARK: The reads
 
     /// The compact read, with the generation that the phone holds and the tag of its last body. The tag is the whole
-    /// point on a phone: an unchanged fleet answers 304 with no body at all.
+    /// point on a phone: an unchanged fleet answers 304 with no body at all. **It says what this build draws**
+    /// (`X-Fleet-Draws`, owner API 1.285): the hub takes such a thing on an item only while each app of the owner's said
+    /// it, and a read of a device with no such header takes this phone's word back. So each read of the state says it,
+    /// the share extension's and a ping's too, which make their read here. **Only with this phone's own key**: a phone
+    /// with none (in the simulator) reads with the Mac's owner key (`hubData`), and the hub keeps a header that comes
+    /// with that key as the word of the owner's computer, which draws its own cards and not this phone's.
     static func snapshotRequest(hub: URL, key: String?, database: String?, etag: String?) -> URLRequest {
         var request = Self.request("ui/mobile", hub: hub, key: key,
                                    query: database.map { [URLQueryItem(name: "db", value: $0)] } ?? [])
         if let etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
+        if let key, !key.isEmpty { request.setValue(draws.joined(separator: ","), forHTTPHeaderField: "X-Fleet-Draws") }
         return request
     }
+
+    /// **What this build of the phone draws, by the hub's names** (`hub.APP_DRAWS`): pictures as the options of a
+    /// request (`NeedPictures` in the app). A name goes in only with the build that draws it. Here, and not on the
+    /// view, because the share extension compiles this file and none of the app's pages.
+    static let draws = [pictureOptions]
+    /// The hub's name for pictures as the options of a request: what this build draws, and the feature of a hub that
+    /// gives them (`ui_features`).
+    static let pictureOptions = "need_pictures"
 
     /// `GET /ui/mobile`. `etag` is the tag of the last body; nil comes back when the hub answers 304, which means
     /// that the fleet did not change and the phone keeps what it has. The body comes back too, as the hub sent it, so

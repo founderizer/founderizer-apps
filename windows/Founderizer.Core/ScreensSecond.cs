@@ -45,7 +45,9 @@ public static partial class Screens
         if (p.Command is not { } command) return p.Text;
         string? title = null;
         if (p.Hub == s.Hub && s.Fleet is { } fleet && fleet.Db == p.Database)
-            title = Activity.AllTasks(fleet, s.EndedTasks).FirstOrDefault(t => t.Id == command.Target)?.Title;
+            title = p.TalkNeed is { } card
+                ? fleet.Needs.Concat(fleet.AnsweredNeeds ?? []).FirstOrDefault(n => n.Id == card)?.Title
+                : Activity.AllTasks(fleet, s.EndedTasks).FirstOrDefault(t => t.Id == command.Target)?.Title;
         return CommandWords.Name(command, title);
     }
 

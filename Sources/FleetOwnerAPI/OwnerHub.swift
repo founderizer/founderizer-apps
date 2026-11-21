@@ -442,11 +442,13 @@ public final class OwnerHub: @unchecked Sendable {
             request.httpBody = file.data
             request.setValue(file.mime, forHTTPHeaderField: "Content-Type")
             request.setValue(clientLabel(), forHTTPHeaderField: "X-Fleet-Client")
+            if let session = SessionLabel.current() { request.setValue(session, forHTTPHeaderField: "X-Fleet-Session") }
             for (name, value) in file.headers { request.setValue(value, forHTTPHeaderField: name) }
         } else if let body {
             request.httpBody = Data(body.dumps().utf8)
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue(clientLabel(), forHTTPHeaderField: "X-Fleet-Client")
+            if let session = SessionLabel.current() { request.setValue(session, forHTTPHeaderField: "X-Fleet-Session") }
         }
         // This Mac's key for this hub, when it has one. A hub from before the key, and a hub whose owner's Mac
         // registered none, refuses a bearer on an owner route before it does anything (403, `key_not_expected`): the
@@ -685,6 +687,22 @@ public final class OwnerHub: @unchecked Sendable {
             }
         }
         return out
+    }
+}
+
+/// **The AI session that sends a command**, for `X-Fleet-Session`: `claude-code/<session id>` from the environment that
+/// Claude Code gives the processes that it starts (this program's MCP form and its shell form alike), as
+/// `owner_mcp.py`'s `session_label`. The hub keeps it with the request and marks the request as an AI session's
+/// (`request_hand`; the review of 20 November 2026, issue 4: the hub could not tell an AI session's answer to the
+/// owner's card from the owner's own). Nil outside such a session, or for an id that is no name.
+public enum SessionLabel {
+    public static func current(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+        guard let id = environment["CLAUDE_CODE_SESSION_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !id.isEmpty else { return nil }
+        let label = "claude-code/" + id
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:/-")
+        guard label.count <= 128, label.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
+        return label
     }
 }
 

@@ -17,30 +17,109 @@ public static partial class Publisher
 {
     /// <summary>Windows finds the file's signature valid. No revocation check (WTD_REVOCATION_CHECK_NONE): the test
     /// certificate has no revocation list, and the signer is compared by its bytes after this.</summary>
-    public static bool SignatureIsValid(string path)
+    public static bool SignatureIsValid(string path) => Verify(path, null, wholeChainRevocation: false, out _) == 0;
+
+    /// <summary>**A program of another company, before it runs, or before an administrator's install runs it**
+    /// (windows-app-plan-v2.md, section 8.2; Tailscale's installer and its <c>tailscale.exe</c>): Windows finds the
+    /// file's Authenticode signature valid with the revocation check of the whole chain (WTD_REVOKE_WHOLECHAIN), in a
+    /// chain to a root that this PC trusts for code signing (WINTRUST_ACTION_GENERIC_VERIFY_V2), and the signer that
+    /// Windows checked names exactly one organisation and one country, equal to these. Not a fingerprint: a code
+    /// signing certificate lives about a year, and a renewal would stop every install. False for anything else. What
+    /// Windows does when it cannot reach a certificate's revocation list or responder is Windows' own policy of that
+    /// check, which this app does not set and which is not measured here.</summary>
+    public static bool SignedBy(string path, string organisation, string country)
     {
-        var file = new TrustFile { Size = Marshal.SizeOf<TrustFile>(), Path = Marshal.StringToHGlobalUni(path) };
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return SignedBy(file, organisation, country);
+    }
+
+    /// <summary>The same check of a file that the caller holds open, so that nobody can write it between the check and
+    /// its use: open it with <see cref="FileShare.Read"/>, check it, and keep it open while the program that reads it
+    /// runs.</summary>
+    public static bool SignedBy(FileStream file, string organisation, string country)
+    {
+        if (Verify(file.Name, file.SafeFileHandle, wholeChainRevocation: true, out var signer) != 0) return false;
+        using (signer) return signer is not null && Names(signer, organisation, country);
+    }
+
+    /// <summary>The X.500 attribute types id-at-organizationName and id-at-countryName (RFC 5280, A.1): the arcs 2, 5, 4
+    /// with 10 and with 6, written by their arcs, as their dotted form reads like a network address.</summary>
+    private static readonly string OrganizationName = string.Join('.', 2, 5, 4, 10), CountryName = string.Join('.', 2, 5, 4, 6);
+
+    /// <summary>The signer names exactly one organisation (O) and one country (C), and they are these, letter for letter.</summary>
+    public static bool Names(X509Certificate2 signer, string organisation, string country)
+    {
+        string? o = null, c = null;
+        int os = 0, cs = 0;
+        foreach (var part in signer.SubjectName.EnumerateRelativeDistinguishedNames())
+        {
+            if (part.HasMultipleElements) return false;
+            var type = part.GetSingleElementType().Value;
+            if (type == OrganizationName) { os++; o = part.GetSingleElementValue(); }
+            else if (type == CountryName) { cs++; c = part.GetSingleElementValue(); }
+        }
+        return os == 1 && cs == 1 && string.Equals(o, organisation, StringComparison.Ordinal) && string.Equals(c, country, StringComparison.Ordinal);
+    }
+
+    /// <summary>**The one Windows call of the publisher checks** (WinVerifyTrust): 0 when Windows finds the signature
+    /// valid. With <paramref name="handle"/>, Windows reads the file through that handle. With
+    /// <paramref name="wholeChainRevocation"/>, the revocation of every certificate of the chain is checked, and the
+    /// certificate of the signer that Windows checked comes back in <paramref name="signer"/>; else no revocation is
+    /// checked and no signer comes back.</summary>
+    private static int Verify(string path, SafeHandle? handle, bool wholeChainRevocation, out X509Certificate2? signer)
+    {
+        signer = null;
+        bool added = false;
+        handle?.DangerousAddRef(ref added);
+        var file = new TrustFile
+        {
+            Size = Marshal.SizeOf<TrustFile>(),
+            Path = Marshal.StringToHGlobalUni(path),
+            Handle = added ? handle!.DangerousGetHandle() : IntPtr.Zero,
+        };
         var pinned = GCHandle.Alloc(file, GCHandleType.Pinned);
+        var action = new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE"); // WINTRUST_ACTION_GENERIC_VERIFY_V2
+        var data = new TrustData
+        {
+            Size = Marshal.SizeOf<TrustData>(),
+            UiChoice = 2,                                           // WTD_UI_NONE
+            RevocationChecks = wholeChainRevocation ? 1 : 0,        // WTD_REVOKE_WHOLECHAIN, or WTD_REVOKE_NONE
+            UnionChoice = 1,                                        // WTD_CHOICE_FILE
+            File = pinned.AddrOfPinnedObject(),
+            StateAction = wholeChainRevocation ? 1 : 0,             // WTD_STATEACTION_VERIFY keeps the state for the signer
+            ProvFlags = wholeChainRevocation ? 0x40 : 0x10,         // WTD_REVOCATION_CHECK_CHAIN, or WTD_REVOCATION_CHECK_NONE
+        };
         try
         {
-            var data = new TrustData
-            {
-                Size = Marshal.SizeOf<TrustData>(),
-                UiChoice = 2,          // WTD_UI_NONE
-                RevocationChecks = 0,  // WTD_REVOKE_NONE
-                UnionChoice = 1,       // WTD_CHOICE_FILE
-                File = pinned.AddrOfPinnedObject(),
-                StateAction = 0,
-                ProvFlags = 0x10,      // WTD_REVOCATION_CHECK_NONE
-            };
-            var action = new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE"); // WINTRUST_ACTION_GENERIC_VERIFY_V2
-            return WinVerifyTrust(new IntPtr(-1), ref action, ref data) == 0;
+            var result = WinVerifyTrust(new IntPtr(-1), ref action, ref data);
+            if (result == 0 && wholeChainRevocation) signer = SignerOf(data.StateData);
+            return result == 0 && wholeChainRevocation && signer is null ? -1 : result;
         }
         finally
         {
+            if (wholeChainRevocation && data.StateData != IntPtr.Zero)
+            {
+                data.StateAction = 2; // WTD_STATEACTION_CLOSE
+                WinVerifyTrust(new IntPtr(-1), ref action, ref data);
+            }
             pinned.Free();
             Marshal.FreeHGlobal(file.Path);
+            if (added) handle!.DangerousRelease();
         }
+    }
+
+    /// <summary>The certificate of the first signer of a checked file, from the state of the check (a copy).</summary>
+    private static X509Certificate2? SignerOf(IntPtr state)
+    {
+        var provider = WTHelperProvDataFromStateData(state);
+        if (provider == IntPtr.Zero) return null;
+        var signer = WTHelperGetProvSignerFromChain(provider, 0, 0, 0);
+        if (signer == IntPtr.Zero) return null;
+        var certificate = WTHelperGetProvCertFromChain(signer, 0);
+        if (certificate == IntPtr.Zero) return null;
+        // CRYPT_PROVIDER_CERT: a DWORD, then the PCCERT_CONTEXT at the next pointer's place.
+        var context = Marshal.ReadIntPtr(certificate, IntPtr.Size);
+        return context == IntPtr.Zero ? null : new X509Certificate2(context);
     }
 
     /// <summary>The certificate that signed the file, when Windows finds its signature valid; else null.</summary>
@@ -113,4 +192,13 @@ public static partial class Publisher
 
     [LibraryImport("wintrust.dll")]
     private static partial int WinVerifyTrust(IntPtr window, ref Guid action, ref TrustData data);
+
+    [LibraryImport("wintrust.dll")]
+    private static partial IntPtr WTHelperProvDataFromStateData(IntPtr state);
+
+    [LibraryImport("wintrust.dll")]
+    private static partial IntPtr WTHelperGetProvSignerFromChain(IntPtr provider, uint signer, int counterSigner, uint counterSignerIndex);
+
+    [LibraryImport("wintrust.dll")]
+    private static partial IntPtr WTHelperGetProvCertFromChain(IntPtr signer, uint certificate);
 }

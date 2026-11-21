@@ -862,6 +862,9 @@ public static class CommandWords
     {
         ("steer", _, null) => "Guide the task",
         ("steer", _, { } t) => $"Guide \u201c{t}\u201d",
+        // his message under a card (the Mac's label of needTalk), with the item's title
+        (OwnerCommand.TalkKind, _, null) => "Ask about a request",
+        (OwnerCommand.TalkKind, _, { } t) => $"Ask about \u201c{t}\u201d",
         ("control", TaskControl.Pause, null) => "Pause the task",
         ("control", TaskControl.Pause, { } t) => $"Pause \u201c{t}\u201d",
         ("control", TaskControl.Stop, null) => "Stop the task",

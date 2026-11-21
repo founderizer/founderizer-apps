@@ -114,6 +114,62 @@ public sealed record TaskMark(TaskSymbol Symbol, string Words, bool Attention, b
     }
 }
 
+/// <summary>The mark in the place of an answered card's check (FleetCore's AnsweredMark; owner API 1.280, feature
+/// `need_marks`; the owner's "Yes, as drawn" of 21 November 2026 to the marks on an answered Needs-you card in the chats,
+/// and his "Yes, same marks there" to the answered request at hand in Needs you): the check while nothing runs that the
+/// hub knows, the turning green mark of work while a record proves that work runs, and the red mark of work that ended
+/// with no success. Exactly these three looks: a task that waits is the check with its state word. <see cref="Words"/>
+/// are what an assistive app reads for the mark, and <see cref="Hover"/> what shows under the pointer. <see cref="Plain"/>
+/// is the check with no words, where no mark of his answer stands: a written answer, a request that a saved key answered,
+/// an answer on its way, and an open card.</summary>
+public sealed record AnswerMark(AnswerSymbol Symbol, string? Words = null, string? Agent = null, string? Title = null)
+{
+    public static readonly AnswerMark Plain = new(AnswerSymbol.Check);
+
+    /// <summary>`ui_features` of a hub that gives an item's `team_state`, `team_reason` and `task`.</summary>
+    public const string Feature = "need_marks";
+
+    /// <summary>The words under the pointer. Not yet for the work of a task: his yes is to a hover with the agent's badge
+    /// there, which the Mac draws first (AnsweredMarkView.hover); an assistive app reads its <see cref="Words"/>. Null
+    /// where there are no words, so that no empty tip shows.</summary>
+    public string? Hover =>
+        string.IsNullOrEmpty(Words) || Symbol == AnswerSymbol.Working && !string.IsNullOrEmpty(Agent) ? null : Words;
+
+    /// <summary>The mark of <paramref name="need"/> once he answered it with an option (OwnerNeed.answeredMark), from the
+    /// reading: a team card says where its plan stands (`team_state`: "The hub makes the change", "Changed", or the hub's
+    /// own `team_reason`); Give that he pressed is "Given"; the task that his answer lets go on (`task`), as
+    /// <see cref="TaskMark"/> marks it: the red mark for a result that is no success, with its word ("Failed",
+    /// "Rejected", "Canceled", "Not accepted"), the check with "Done" for a checked result, work while it is in work now
+    /// (its agent and its title), and else the check with its state word ("Queued", or "Waiting for" and a role); else,
+    /// from a hub before the feature, and for a task that the reading does not hold, the check, and the agent that raised
+    /// it has his answer. The caller leaves out the cards that keep no mark (<see cref="Screens.AnsweredMark"/>).</summary>
+    public static AnswerMark Of(OwnerNeed need, MobileSnapshot? fleet, IReadOnlyList<MobileTaskHead> tasks, AgentBook names)
+    {
+        var received = new AnswerMark(AnswerSymbol.Check, $"{names.Label(need.By)} has your answer");
+        if (fleet is null || !fleet.Offers(Feature)) return received;
+        switch (need.TeamState)
+        {
+            case "making": return new(AnswerSymbol.Working, "The hub makes the change");
+            case "not_made": return new(AnswerSymbol.Failed, need.TeamReason ?? "");
+            case "made": return new(AnswerSymbol.Check, "Changed");
+        }
+        if (need.Gives && need.Chosen == 0) return new(AnswerSymbol.Check, "Given");
+        if (need.Task is not { } id || tasks.FirstOrDefault(t => t.Id == id) is not { } task) return received;
+        var mark = TaskMark.Of(task, fleet.Holds, names, fleet.Agents.Any(a => a.Name == task.Owner && a.Limit is not null),
+                               outcomeUnknown: Activity.OutcomeUnknown(fleet, task));
+        // The task's tint (FleetTask.tint): a filled red or green result only for a task that is over with no hold, as
+        // TaskMark draws them.
+        if (mark.Symbol == TaskSymbol.Failed) return new(AnswerSymbol.Failed, task.FailedResult() ?? mark.Words);
+        if (mark.Symbol == TaskSymbol.Checked) return new(AnswerSymbol.Check, "Done");
+        if (mark.InWork) return new(AnswerSymbol.Working, $"{names.Label(task.Owner)} · {task.Title}", task.Owner, task.Title);
+        return new(AnswerSymbol.Check, mark.Words);
+    }
+}
+
+/// <summary>The three looks of an answered card's mark: the check, the turning green mark of work (as the search card's
+/// <see cref="TaskSymbol.Working"/>), and the red mark of a result that is no success (its <see cref="TaskSymbol.Failed"/>).</summary>
+public enum AnswerSymbol { Check, Working, Failed }
+
 /// <summary>The meaning of a task's mark. The Mac and the iPhone draw them as SF Symbols: Unknown questionmark.circle,
 /// Alert exclamationmark.circle, Paused pause.circle, Checked checkmark.circle.fill, Failed exclamationmark.circle.fill,
 /// Ended circle, Limit hourglass, Reconnecting arrow.triangle.2.circlepath, Question questionmark.circle, SignIn key,

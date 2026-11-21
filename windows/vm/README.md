@@ -193,10 +193,20 @@ the variables below, for the proofs in this VM only; the release build (`C:\fz\o
 | `FOUNDERIZER_TIMING_LOG` | a file for the app's timing lines (see "Readings"), and the answer of each Connect and each code (`connect: …`, `enroll: …`), whose lines on the screen wait for their pictures |
 | `FOUNDERIZER_READING` | `changes`: the sample changes one line every 3 seconds; `block-ui`: the UI thread sleeps 4 seconds, 5 seconds after the start; `long-chat`: Customer Support's chat has 2,000 messages and replies, and 5 seconds after it opens, the scroll reading runs (see "Readings") |
 | `FOUNDERIZER_DEBUG_LOG` | a file for an exception that nothing caught |
+| `FOUNDERIZER_TAILSCALE_STATUS` | a file whose text stands for this PC's `tailscale status --json` in the store's search and in the first run (`Fleet/TailscaleSetup.cs`, `PcTailscale`), read again at each read; `none` is a PC with no Tailscale. With it the app runs no program of Tailscale's (no `tailscale up`), so the first run's pages are proved without the VM's own network, which is the owner's (plan v2, 8.15); Connect still downloads, checks and starts Tailscale's real installer, whose administrator's question the proof answers No |
 | `FOUNDERIZER_THREAD_TRACE` | `1`: each measure of a chat's or a task's view, its rests, its changes (inertial or not) and his hand, into the debug log (how the end of a long thread was measured on 14 November 2026) |
 
 The argument `-openPage needs|tasks|activity|settings|agent.<name>|task.<id>` opens that page first, as the Mac app's
 does.
+
+**The first run (step 2, piece U1)** is only in a build with `-p:FounderizerWelcome=true` (`Fleet/FirstRunSwitch.cs`;
+no build that a person gets has it before pieces U3, U4 and U5, plan v2 section 13). A clean start of such a build with
+no Tailscale running, or none with a hub on it, opens the welcome page. Take the VM's Tailscale down first
+(`tailscale down`), and up again after with the settings of "The owner's private network" below: a step-2 proof never
+uses the owner's network. `pictures/rest.ps1` brings the window to the front with one click on its title bar's empty
+middle and leaves the pointer there (`-NoClick`: only the pointer), and `pictures/click.ps1 -X <x> -Y <y>` clicks one
+point (the slider of "Your fleet's servers"); both take the screen's 96-DPI points (1440 by 900), so a point of a
+picture is half its pixel.
 
 ### Pictures
 
@@ -230,6 +240,18 @@ python3 -I app/windows/vm/pictures/motion.py frames motion.png       # with the 
   whole code sends itself, and an Enter would press what holds the focus on the next page.
 - `motion.py` counts, for each agent of the sample, the frames in which its mark and its line changed; `changes.py`
   counts the frames in which any part of the screen changed.
+- **A page by its elements** (piece U1, after its first review: a page can be near a picture by its pixels and still
+  have a card of the wrong width or a missing line): `elements.ps1` prints every element of the window as UI
+  Automation sees it (its type, its automation id, its rectangle in the screen's pixels, its words), and `elements.py`
+  checks that dump against a set's list of each picture's words and measures (`set8-elements.json` for the first
+  run's pictures 1 to 7: each word of the set's table, each card's and field's place and size, Back's place, the
+  steps on Back's line, and what must not be there, such as Windows' clear button in a field):
+
+```
+app/windows/vm/vm.sh desktop '& C:\fz\setup\elements.ps1 -Out C:\fz\page.tsv'
+app/windows/vm/vm.sh copy vm:C:/fz/page.tsv page.tsv
+python3 -I app/windows/vm/pictures/elements.py app/windows/vm/pictures/set8-elements.json 02-help-improve page.tsv
+```
 
 ### The store against a scratch hub
 

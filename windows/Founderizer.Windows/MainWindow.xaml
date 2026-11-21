@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   The frame of the approved pictures (windows-app-pictures.md, "The frame"): the title bar, the pane of 320 and the
-  content area. Each element and word here is one of that list; an element that no picture shows is not here.
+  content area. Each element and word here is one of that list; an element that no picture shows is not here. The
+  first run fills the window (set 8): no pane, no Back, Forward or Search, the mark and the name at the title bar's
+  left, and one canvas under them (MainWindow.Fill).
 -->
 <Window
     x:Class="Founderizer.Windows.MainWindow"
@@ -40,7 +42,7 @@
                 <FontIcon Glyph="&#xE72A;" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Button>
             <marks:ProductMark x:Name="TitleMark" Canvas.Left="96" Canvas.Top="16" Width="16" Height="16" />
-            <TextBlock Canvas.Left="124" Canvas.Top="16" Text="Founderizer" FontSize="12" LineHeight="16"
+            <TextBlock x:Name="TitleWords" Canvas.Left="124" Canvas.Top="16" Text="Founderizer" FontSize="12" LineHeight="16"
                        LineStackingStrategy="BlockLineHeight" Foreground="{StaticResource TextBrush}" IsHitTestVisible="False" />
             <!-- The taskbar's count, drawn here out of sight and given to Windows as the button's overlay (TaskbarCount). -->
             <Grid x:Name="CountBadge" Canvas.Left="-200" Canvas.Top="0" Width="16" Height="16" IsHitTestVisible="False">
@@ -163,7 +165,7 @@
         <!-- Its rounded corner and its edge (W4), drawn over the page. A border with a rounded corner clips what it
              holds, and with Windows drawing in software, a clipped page is drawn whole again at each frame of a mark
              that moves in it (19 % of a core in the build VM). -->
-        <Grid Grid.Row="1" Grid.Column="1" IsHitTestVisible="False">
+        <Grid x:Name="ContentCorner" Grid.Row="1" Grid.Column="1" IsHitTestVisible="False">
             <Path Data="M0,0 L8,0 A8,8 0 0 0 0,8 Z" Fill="{StaticResource RailBrush}" HorizontalAlignment="Left" VerticalAlignment="Top" />
             <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="1,1,0,0" CornerRadius="8,0,0,0" />
         </Grid>
