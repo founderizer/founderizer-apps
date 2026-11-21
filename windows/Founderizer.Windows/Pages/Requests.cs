@@ -21,8 +21,9 @@ namespace Founderizer.Windows.Pages;
 internal interface IAnswers
 {
     void Press(long need, int choice);
-    /// <summary>A quick reply ("Done", "Not now", "Tell me more"): its words are his answer, sent at once (OwnerStore.Reply).</summary>
-    void Reply(long need, string words);
+    /// <summary>A quick reply ("Done", "Not now", "Tell me more"): its words are his answer (OwnerStore.Hold). The words that
+    /// the box shows now where the store put them into its draft (a reply that waits for nothing); else null.</summary>
+    string? Reply(long need, string words);
     void Tick(long need, IReadOnlyCollection<int> choices);
     void Type(long need, string text);
     void Answer(long need);
@@ -46,6 +47,14 @@ internal interface IAnswers
     bool OpenClarify(long need) => false;
     void TypeClarify(long need, string text) { }
     void SendClarify(long need) { }
+
+    /// <summary>Undo at the end of a folded card's answer line while his answer waits (OwnerStore.Undo), the mark that
+    /// opens its task's page, and the task's Pause at the end of the line (OwnerStore.ControlAsync).</summary>
+    void Undo(long need) { }
+    void OpenTask(long task) { }
+    void Pause(long task) { }
+    /// <summary>The view showed the ticks that Undo <paramref name="number"/> gave back (OwnerStore.TicksShown).</summary>
+    void TicksShown(long need, long number) { }
 }
 
 /// <summary>A request's options and its answer box, as the pictures draw them in a chat's card (rows of 14) and in the
@@ -81,6 +90,8 @@ internal sealed class AnswerParts
     private long need;
     private OptionsModel shown = new();
     private bool filesWait;
+    /// <summary>What the box and the ticks take at a draw: another card's draft and ticks, and what an Undo gave back.</summary>
+    private readonly AnswerBoxLoad boxLoad = new();
     // Needs clarification: the talk over the options, and the link or its field under the answer box
     private readonly StackPanel talk = new() { Spacing = 6, Visibility = Visibility.Collapsed };
     private readonly Grid clarifyPlace = new() { Visibility = Visibility.Collapsed };
@@ -278,10 +289,15 @@ internal sealed class AnswerParts
         // The request that the parts showed: a picture's read keeps its rows in place only for that one.
         bool sameNeed = id == need;
         bool same = sameNeed && model == shown;
-        if (!sameNeed)
+        // Another card (a row that the list uses again, the next request at hand), or his Undo: the store's words and the
+        // ticks that an Undo gave back, which this view takes for every view (AnswerBoxLoad).
+        var (load, ticks) = boxLoad.Show(id, model, box);
+        if (load is not null) answerBox.Load(load);
+        if (ticks is not null)
         {
-            answerBox.Load(box.Draft);
             ticked.Clear();
+            ticked.UnionWith(ticks);
+            if (ticks.Count > 0) answers.TicksShown(id, box.Given);
         }
         need = id;
         filesWait = box.FilesWait;
@@ -331,13 +347,18 @@ internal sealed class AnswerParts
                         // The owner, 18 November 2026: "If I click done, I want to send it directly! not paste it into
                         // the text input!".
                         if (SecondClick()) break;
-                        answerBox.Load(words);
-                        answers.Reply(need, words);
-                        // A file of the box still goes up: the words wait in the box for Enter or Send, with the caret.
-                        if (filesWait)
+                        // Held, the words wait 5 seconds on the folded card with Undo (OwnerStore.Hold), and his own words
+                        // stay in the box for Undo. Not held (a key request, a card whose own request waits unsent, a file
+                        // of the box that goes up), they stand in the store's draft, and so in the box; while a file goes
+                        // up they wait there for Enter or Send, with the caret.
+                        if (answers.Reply(need, words) is { } standing)
                         {
-                            answerBox.Box.Focus(FocusState.Programmatic);
-                            answerBox.Box.Select(words.Length, 0);
+                            answerBox.Load(standing);
+                            if (filesWait)
+                            {
+                                answerBox.Box.Focus(FocusState.Programmatic);
+                                answerBox.Box.Select(standing.Length, 0);
+                            }
                         }
                         break;
                 }
@@ -823,7 +844,14 @@ internal sealed partial class OptionPictureView : Panel
 /// on its row (Discuss left the product: the owner, 13 November 2026), who asks and when, the options and the answer
 /// box, his answer. Where the hub says that the card takes a message (owner feature `need_clarify`), his talk with the
 /// agent stands over the options and "Needs clarification" under the box (w4-windows-chat.png). After his answer the
-/// card folds to its title and his answer with a check.</summary>
+/// card folds to its title and his answer with a check.
+///
+/// His answer waits 5 seconds with Undo (the owner's "Yes, 5 seconds (Recommended)", 21 November 2026;
+/// <see cref="RequestCard.Holds"/>): the folded card shows his answer with "Undo" at the end of its line, in the link's
+/// colour, and no mark. While his answer's task works, the task's Pause icon stands there (his "Both (Recommended)";
+/// <see cref="RequestCard.Pause"/>), 20 square, so the line keeps its height; and the turning mark, the orange mark and
+/// the gray mark of his pause open the task's page (his "Yes, open task"; <see cref="RequestCard.OpensTask"/>,
+/// <see cref="MarkPress"/>).</summary>
 internal sealed class RequestCardView : Grid
 {
     private readonly IAnswers answers;
@@ -841,9 +869,14 @@ internal sealed class RequestCardView : Grid
     private readonly StackPanel from = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
     private readonly AgentGlyph fromMark = new() { Side = 16, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock fromWords = Look.Words("", 12, 16, Look.Muted, wrap: false);
-    private readonly StackPanel answered = new() { Orientation = Orientation.Horizontal, Spacing = 5, Margin = new Thickness(0, -6, 0, 0) };
+    /// <summary>The folded card's answer line: the mark (or the press that holds it), his answer, and at its end Undo or
+    /// Pause.</summary>
+    private readonly Grid answered = new() { Margin = new Thickness(0, -6, 0, 0) };
     private readonly TextBlock answeredWords = Look.Words("", 12, 16, Look.Muted, wrap: false);
     private readonly AnswerMarkView answeredMark = new();
+    private readonly MarkPress markPress = new();
+    private readonly Button undo;
+    private readonly Button pause;
     private readonly AnswerParts parts;
     private RequestCard? card;
     private bool canSend;
@@ -872,8 +905,26 @@ internal sealed class RequestCardView : Grid
         from.Children.Add(fromMark);
         from.Children.Add(fromWords);
         todoLabel.Margin = new Thickness(0, 2, 0, 0);
+        answered.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        answered.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        answered.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        answeredWords.TextTrimming = TextTrimming.CharacterEllipsis;
+        answeredWords.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(answeredWords, 1);
         answered.Children.Add(answeredMark);
         answered.Children.Add(answeredWords);
+        markPress.Click += (_, _) => { if (card?.OpensTask is { } t) answers.OpenTask(t); };
+        // At the end of the line, 8 after his answer (the Mac's Spacer(minLength: 8)): Undo, or the task's Pause.
+        undo = LinkPress("Undo", 12, 16);
+        undo.Margin = new Thickness(8, 0, 0, 0);
+        undo.Click += (_, _) => { if (card is { Holds: true } c) answers.Undo(c.Id); };
+        pause = Buttons.IconOnly(Icons.Pause, "Pause", side: 20, size: 12, face: false);
+        // its 20 stand over the line of 16 and do not make it taller: the card keeps its height when Pause comes and goes
+        pause.Margin = new Thickness(8, -2, 0, -2);
+        pause.Click += (_, _) => { if (card?.Pause is { } t) answers.Pause(t); };
+        var end = new Grid { VerticalAlignment = VerticalAlignment.Center, Children = { undo, pause } };
+        Grid.SetColumn(end, 2);
+        answered.Children.Add(end);
 
         stack.Children.Add(title);
         stack.Children.Add(answered);
@@ -908,10 +959,21 @@ internal sealed class RequestCardView : Grid
         // His answer in his own words is his message bubble (the Mac's rule of 14 November 2026): the card then folds to
         // its title, with no answer line and no check; a pressed option keeps both.
         answered.Visibility = folded && next.ShowsAnswerLine ? Visibility.Visible : Visibility.Collapsed;
-        // In the check's place, the mark of where the work of his answer stands (owner API 1.280).
+        // In the check's place, the mark of where the work of his answer stands (owner API 1.280); none while his
+        // answer waits with Undo. A mark of a task's work, of a task that needs him, or of his pause opens the task.
+        PlaceMark(next.OpensTask is not null);
+        (next.OpensTask is null ? (FrameworkElement)answeredMark : markPress).Visibility =
+            next.ShowsCheck ? Visibility.Visible : Visibility.Collapsed;
         answeredMark.Visibility = next.ShowsCheck ? Visibility.Visible : Visibility.Collapsed;
         answeredMark.Show(next.AnswerMark, next.MarkMoves);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(markPress, next.AnswerMark.Words ?? "");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(markPress, next.OpenWords);
         answeredWords.Text = next.AnswerWords;
+        // 5 after the mark, as before; at the leading edge where no mark stands (his words, an answer that waits)
+        answeredWords.Margin = new Thickness(next.ShowsCheck ? 5 : 0, 0, 0, 0);
+        undo.Visibility = next.Holds ? Visibility.Visible : Visibility.Collapsed;
+        pause.Visibility = next.Pause is not null && !next.Holds ? Visibility.Visible : Visibility.Collapsed;
+        pause.IsEnabled = next.PauseEnabled;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(this, folded ? next.FoldedWords : "");
         // The Mac's card of Founderizer 0.1.239 (NeedRequestCard; the owner, 15 November 2026: "the task itself need to
         // be very clear and also formatted like the chat messages (links, code format etc)"): the reason and the task are
@@ -964,6 +1026,71 @@ internal sealed class RequestCardView : Grid
         // a folded card's model has no talk and no link
         parts.ShowClarify(next.Id, next.Talk, next.Clarify);
     }
+
+    /// <summary>The mark stands in its press while it opens a task, else alone, as before: a mark that opens nothing has
+    /// no hand, no fill and no place in the keyboard's order.</summary>
+    private void PlaceMark(bool opens)
+    {
+        bool inPress = ReferenceEquals(markPress.Content, answeredMark);
+        if (opens == inPress) return;
+        if (opens)
+        {
+            answered.Children.Remove(answeredMark);
+            markPress.Content = answeredMark;
+            answered.Children.Insert(0, markPress);
+        }
+        else
+        {
+            markPress.Content = null;
+            answered.Children.Remove(markPress);
+            answered.Children.Insert(0, answeredMark);
+        }
+    }
+
+    /// <summary>A press in words in the link's colour, with the hand, as Undo (the Mac's Undo with its link pointer).</summary>
+    internal static Button LinkPress(string words, double size, double lineHeight)
+    {
+        var label = Look.Words(words, size, lineHeight, Look.Link, wrap: false);
+        var button = new HandButton
+        {
+            Style = (Style)Application.Current.Resources["QuietButtonStyle"],
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            Content = label,
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, words);
+        return button;
+    }
+}
+
+/// <summary>A button with the hand under the pointer.</summary>
+internal class HandButton : Button
+{
+    public HandButton() => ProtectedCursor = Microsoft.UI.Input.InputSystemCursor.Create(Microsoft.UI.Input.InputSystemCursorShape.Hand);
+}
+
+/// <summary>**A press of an answered card's mark opens its task** (the owner's "Both (Recommended)" and "Yes, open task"
+/// of 21 November 2026; the Mac's AnsweredMarkView.pressable): the mark in it at its own place, the hand and a soft fill,
+/// a circle 3 wider than the mark, under the pointer (his sign of a press), the system's focus frame, and Enter or Space
+/// from the keyboard. The mark's own words and its tag under the pointer stay.</summary>
+internal sealed class MarkPress : HandButton
+{
+    private static readonly SolidColorBrush Fill = Look.Brush(Look.White(0.16));
+    private static readonly SolidColorBrush Clear = new(global::Windows.UI.Color.FromArgb(0, 0, 0, 0));
+
+    public MarkPress()
+    {
+        Style = (Style)Application.Current.Resources["ChipKeyStyle"];
+        Width = Height = 18;
+        Margin = new Thickness(-3);
+        CornerRadius = new CornerRadius(9);
+        VerticalAlignment = VerticalAlignment.Center;
+        Background = Clear;
+        PointerEntered += (_, _) => Background = Fill;
+        PointerExited += (_, _) => Background = Clear;
+        PointerCanceled += (_, _) => Background = Clear;
+        PointerCaptureLost += (_, _) => Background = Clear;
+    }
 }
 
 /// <summary>The request at hand in Needs you (NeedStep), as picture 3 and picture 2b of the second set draw it: the
@@ -988,6 +1115,7 @@ internal sealed class RequestStepView : StackPanel
     private readonly StackPanel answered = new() { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 18, 0, 0) };
     private readonly TextBlock answeredWords = Look.Words("", 15, 20, Look.Muted, wrap: false);
     private readonly AnswerMarkView answeredMark = new();
+    private readonly Button undo;
     private readonly AnswerParts parts;
     private RequestStep? step;
     private bool canSend;
@@ -1043,6 +1171,11 @@ internal sealed class RequestStepView : StackPanel
         Children.Add(parts.Talk);
         answered.Children.Add(answeredMark);
         answered.Children.Add(answeredWords);
+        // His answer waits 5 seconds with Undo at the end of its line (his "Yes, Undo there too"; RequestStep.Holds).
+        undo = RequestCardView.LinkPress("Undo", 15, 20);
+        undo.Margin = new Thickness(4, 0, 0, 0);
+        undo.Click += (_, _) => { if (step is { Holds: true } s) answers.Undo(s.Id); };
+        answered.Children.Add(undo);
         Children.Add(answered);
         Children.Add(parts.Options);
         Children.Add(parts.Box);
@@ -1111,6 +1244,7 @@ internal sealed class RequestStepView : StackPanel
         answeredMark.Visibility = next.ShowsCheck ? Visibility.Visible : Visibility.Collapsed;
         answeredMark.Show(next.AnswerMark, next.MarkMoves);
         answeredWords.Text = next.AnswerWords;
+        undo.Visibility = next.Holds ? Visibility.Visible : Visibility.Collapsed;
         parts.Options.Visibility = parts.Box.Visibility = next.Ended ? Visibility.Collapsed : Visibility.Visible;
         if (!next.Ended) parts.Show(next.Id, next.Options, next.Answer, sendable);
         // His talk keeps its place over the answers, and over his answer once it ended (the Mac's NeedStep.answers): what

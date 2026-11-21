@@ -321,6 +321,11 @@ public sealed record StoreState
     public ImmutableDictionary<long, PendingRequest> AnswersTaken { get; init; } = ImmutableDictionary<long, PendingRequest>.Empty;
     /// <summary>The presses that wait for the store to write, by request: the option's index.</summary>
     public ImmutableDictionary<long, int> WaitingPresses { get; init; } = ImmutableDictionary<long, int>.Empty;
+    /// <summary>**His answers that wait 5 seconds on their cards, with Undo, before they go** (<see cref="OwnerStore.Hold"/>),
+    /// by request, in memory only: nothing of one is in the outbox or at the hub until its wait ends.</summary>
+    public ImmutableDictionary<long, HeldAnswer> HeldAnswers { get; init; } = ImmutableDictionary<long, HeldAnswer>.Empty;
+    /// <summary>What his last Undo gave back to each card (<see cref="OwnerStore.Undo"/>), in memory only.</summary>
+    public ImmutableDictionary<long, UndoneAnswer> Undone { get; init; } = ImmutableDictionary<long, UndoneAnswer>.Empty;
     /// <summary>The time of the newest reply that the owner saw, by agent, for one hub and generation.</summary>
     public ImmutableDictionary<string, double> Seen { get; init; } = ImmutableDictionary<string, double>.Empty;
     public string? SeenContext { get; init; }
@@ -414,6 +419,13 @@ public sealed record StoreState
     /// and does not wait behind it with no end (OwnerStore.Press).</summary>
     public bool WaitsUnsent(long need) =>
         Pending is { } p && !Sending && (p.NeedId == need || p.TalkNeed == need) && p.Hub == Hub && p.Database == Fleet?.Db;
+
+    /// <summary>His answer that waits on <paramref name="need"/> (<see cref="HeldAnswers"/>), on the hub and generation
+    /// that the store reads and while the request is open there; null where none does. A hold of another hub or
+    /// generation, or of a request that closed meanwhile, shows nowhere, and its press finds that when it goes.</summary>
+    public HeldAnswer? HeldOn(long need) =>
+        HeldAnswers.TryGetValue(need, out var held) && held.Hub == Hub && Fleet is { } fleet && held.Database == fleet.Db &&
+        fleet.Needs.Any(n => n.Id == need && n.IsOpen) ? held : null;
 
     /// <summary>**The talk under a card, as the card shows it** (the iPhone's talk(of:)): his messages and the agent's
     /// replies, oldest first, open or answered, on a hub that names `need_clarify`; the receipt's while the reading does
@@ -700,8 +712,12 @@ public sealed record StoreChange
                      .Concat(after.AnswersTaken.Keys).Concat(before.AnswersTaken.Keys)
                      .Concat(after.WaitingPresses.Keys).Concat(before.WaitingPresses.Keys)
                      .Concat(after.ClarifyDrafts.Keys).Concat(before.ClarifyDrafts.Keys)
-                     .Concat(after.TalkTaken.Keys).Concat(before.TalkTaken.Keys))
+                     .Concat(after.TalkTaken.Keys).Concat(before.TalkTaken.Keys)
+                     .Concat(after.HeldAnswers.Keys).Concat(before.HeldAnswers.Keys)
+                     .Concat(after.Undone.Keys).Concat(before.Undone.Keys))
             if (after.AnswerDrafts.GetValueOrDefault(id) != before.AnswerDrafts.GetValueOrDefault(id) ||
+                !Equals(after.HeldAnswers.GetValueOrDefault(id), before.HeldAnswers.GetValueOrDefault(id)) ||
+                !Equals(after.Undone.GetValueOrDefault(id), before.Undone.GetValueOrDefault(id)) ||
                 !Equals(after.AnswersTaken.GetValueOrDefault(id), before.AnswersTaken.GetValueOrDefault(id)) ||
                 after.WaitingPresses.GetValueOrDefault(id, -1) != before.WaitingPresses.GetValueOrDefault(id, -1) ||
                 after.ClarifyDrafts.GetValueOrDefault(id) != before.ClarifyDrafts.GetValueOrDefault(id) ||

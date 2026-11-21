@@ -875,6 +875,24 @@ struct MobileChatTests {
         #expect(ReplyText.onlyLink(MessageBlock.inline("No link here.")) == nil)
     }
 
+    /// **A value's chip copies exactly what the agent put in inline code, and the card's words gain and lose no
+    /// character** (`CardValueText.pieces`; the owner's "Yes, as drawn" of 21 November 2026 to a chip with a copy icon
+    /// on each value): the room of the chip and its icon are kerns. Code in a link and code of spaces only are no
+    /// value. The bugs that this stops: a press copies a key with its last character cut, or with a space that the
+    /// chip's room added, and what he pastes does not work.
+    @Test("A value's chip copies the inline code exactly, and the card's words keep every character")
+    func aValueChipCopiesTheCodeExactly() {
+        let text = "`ssh-ed25519 AAAAC3Nza key@example` is the key. Open [the `page`](https://example.com/a), "
+            + "skip `   ` and run `fleet doctor --fix`"
+        let words = MessageBlock.inline(text)
+        let pieces = CardValueText.pieces(words, size: 15)
+        #expect(pieces.map { String($0.words.characters) }.joined() == String(words.characters))
+        let values = pieces.compactMap(\.value)
+        #expect(values.map(\.words) == ["ssh-ed25519 AAAAC3Nza key@example", "fleet doctor --fix"])
+        #expect(values.map(\.words) == CardValues.values(in: words, names: nil))
+        #expect(values.map(\.index) == [0, 1])
+    }
+
     @Test("Send's arrow is white where white reads 3:1, and near-black on the lighter colours, as on the Mac")
     func theArrowOnSend() {
         // White where it reads 3:1 (blue, orchid), near-black on the lighter colours (lime), as on the Mac.

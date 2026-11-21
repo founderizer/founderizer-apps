@@ -123,19 +123,31 @@ private func names(_ text: String) -> [String: CardNames.Target] {
     #expect(book.pieces(AttributedString("No name here.")).map(\.badge) == [nil])
 }
 
-/// The names of a chat (`ChatNames`): the same agents, repositories and servers as a card's.
+/// The names of a chat (`ChatNames`): the same agents, repositories, servers and secrets as a card's.
 private let chat = ChatNames(
     agents: [("leo", "Web Lead"), ("mia", "Web Developer"), ("nova", "Customer Support Lead"), ("kai", "Marketing"),
              ("bo", "Sales"), ("iris", "SEO & AI Search")],
-    repositories: ["acme/web", "acme/shop-api"], servers: ["m4", "app-1"])
+    repositories: ["acme/web", "acme/shop-api"], servers: ["m4", "app-1"],
+    secrets: [(name: "EXAMPLE_API_KEY", key: true), (name: "Backup2", key: false), (name: "Stripe", key: false)])
+
+/// `words` as the whole of one inline code, as an agent writes a key's name or a path.
+private func coded(_ words: String) -> AttributedString {
+    var text = AttributedString(words)
+    text.inlinePresentationIntent = .code
+    return text
+}
 
 /// **A chat's message badges only what names one thing in free words** (the owner, 20 November 2026: "ok but use
 /// always the agent badges and icons!!"; the review of 21 November 2026): an agent's name with a capital and its whole
 /// role, a role of one word right after a word, a server and a repository as written, a possessive with "'s" as words
-/// after its badge. A role of one word after anything but a word (a line's start, punctuation, a quote, a bracket, a
-/// digit, an emoji, an arrow), the start of a role, a server or a repository in other capitals and a page of the app
-/// stay words with no link, where a card's rules found them; and every character stays as written, in its order. What
-/// the book keeps of a text that it read is the text's alone, its marks too.
+/// after its badge, and a secret's name as a card shows it (the owner, 21 November 2026: "task cards in both agents chat
+/// and needs you sohuld also have a badge for specific Credentials", and "Yes, both"): a name with an underscore or a
+/// digit in words and as the whole of an inline code, a name of letters only ("Stripe") only as the whole of one. A role
+/// of one word after anything but a word (a line's start, punctuation, a quote, a bracket, a digit, an emoji, an arrow),
+/// the start of a role, a server or a repository in other capitals, a page of the app, a secret's name in other
+/// capitals or inside a longer word or code, and a name of letters only in free words stay words with no link, where a
+/// card's rules found them; and every character stays as written, in its order. What the book keeps of a text that it
+/// read is the text's alone, its marks too.
 @Test func aChatMessageBadgesOnlyWhatNamesOneThingInFreeWords() {
     func words(_ text: String) -> [String] { chat.pieces(AttributedString(text)).map { String($0.words.characters) } }
     func badges(_ text: String) -> [CardNames.Target?] { chat.pieces(AttributedString(text)).map(\.badge) }
@@ -153,6 +165,16 @@ private let chat = ChatNames(
     code.inlinePresentationIntent = .code
     #expect(chat.words(AttributedString("Leo")).badges.map(\.target) == [.agent("leo")])
     #expect(chat.words(code).badges.isEmpty)
+    // a secret of the fleet's, with its kind for its mark
+    #expect(badges("Leo put the new value in EXAMPLE_API_KEY and Backup2.") ==
+            [.agent("leo"), nil, .secret("EXAMPLE_API_KEY", key: true), nil, .secret("Backup2", key: false), nil])
+    for (name, key) in [("EXAMPLE_API_KEY", true), ("Backup2", false), ("Stripe", false)] {
+        let words = chat.words(AttributedString("Check ") + coded(name) + AttributedString(" now."))
+        #expect(words.badges.map(\.target) == [.secret(name, key: key)], "\(name)")
+        #expect(String(words.text.characters) == "Check \(name) now.")
+    }
+    #expect(chat.words(coded("export EXAMPLE_API_KEY=1")).badges.isEmpty)
+    #expect(chat.words(coded("Stripe key")).badges.isEmpty)
     // a role of one word inside a sentence
     #expect(words("I asked Marketing to check it.") == ["I asked ", "Marketing", " to check it."])
     #expect(badges("I asked Marketing to check it.") == [nil, .agent("kai"), nil])
@@ -165,7 +187,9 @@ private let chat = ChatNames(
                      "✅ Sales grew 5%.", "→ Sales grew 5%.", "a) Sales grew 5%", "(1) Sales grew 5%.",
                      "SEO & content updates come next.",
                      "Customer Support answers first.", "Buy an M4 Mac mini.", "Push it to Acme/Web.",
-                     "In Founderizer, see an Agents page and a Help page."] {
+                     "In Founderizer, see an Agents page and a Help page.",
+                     "Open the Stripe dashboard.", "Rotate EXAMPLE_API_KEY_OLD and MY_EXAMPLE_API_KEY.",
+                     "Set example_api_key and Backup23.", "Open EXAMPLE_API_KEY.txt now."] {
         let pieces = chat.pieces(AttributedString(sentence))
         #expect(pieces.count == 1 && pieces[0].badge == nil, "\(sentence)")
         #expect(pieces[0].words.runs.allSatisfy { $0.link == nil }, "\(sentence)")
@@ -201,9 +225,14 @@ private let chat = ChatNames(
 /// "שאלתי את Nova" drew the icon on the next word), the end of a badge is a kern on the character after the name,
 /// whose side the layout gives.
 @Test func aChatsDrawnWordsAreTheMessagesAndKeepARoomOnlyAfterACharacterOfTheirLine() {
-    for text in ["app-1 restarts at 22:00.", "We restart app-1 tonight.", "We restart\napp-1 tonight."] {
+    for text in ["app-1 restarts at 22:00.", "We restart app-1 tonight.", "We restart\napp-1 tonight.",
+                 "EXAMPLE_API_KEY expired at 22:00.", "We put it in\nEXAMPLE_API_KEY tonight."] {
         #expect(String(chat.words(AttributedString(text)).text.characters) == text)
     }
+    // a key's name from inline code: the badge's look, and the message's characters
+    let key = chat.words(AttributedString("Put it in ") + coded("EXAMPLE_API_KEY") + AttributedString(" tonight."))
+    #expect(String(key.text.characters) == "Put it in EXAMPLE_API_KEY tonight.")
+    #expect(key.text.runs.allSatisfy { $0.inlinePresentationIntent?.contains(.code) != true })
     // each name's room, and the character whose kern ends its badge, by its offset from the name's start
     func rooms(_ text: String, in book: ChatNames = chat) -> [String] {
         book.words(AttributedString(text)).badges.map {
@@ -214,6 +243,8 @@ private let chat = ChatNames(
     #expect(rooms("app-1 restarts at 22:00.\nThe logs stay.") == ["none end 4"])
     #expect(rooms("We restart app-1 tonight.") == ["kern end 4"])
     #expect(rooms("We restart\napp-1 tonight.") == ["none end 4"])
+    #expect(rooms("EXAMPLE_API_KEY expired at 22:00.") == ["leads end 14"])
+    #expect(rooms("We put it in\nEXAMPLE_API_KEY tonight.") == ["none end 14"])
     let hebrew = ChatNames(agents: [("נובה", nil), ("nova", nil)])
     #expect(rooms("נובה בודקת את זה.", in: hebrew) == ["none end 4 after"])
     #expect(rooms("שאלתי את נובה לבדוק.", in: hebrew) == ["kern end 4 after"])

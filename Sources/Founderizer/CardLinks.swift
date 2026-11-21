@@ -53,7 +53,8 @@ extension FleetStore {
         if let kept = cardBook, kept.key == key { return (kept.book, kept.chat, kept.symbols) }
         let book = CardNames(agents: agents, repositories: repos, servers: names, knowledge: files, secrets: secrets)
         // a new book with the same names keeps what the old one read (`ChatNames.keeping`)
-        let chat = ChatNames(agents: agents, repositories: repos, servers: names, knowledge: files).keeping(cardBook?.chat)
+        let chat = ChatNames(agents: agents, repositories: repos, servers: names, knowledge: files, secrets: secrets)
+            .keeping(cardBook?.chat)
         let byName = Dictionary(symbols.map { ($0[0], $0[1]) }, uniquingKeysWith: { first, _ in first })
         cardBook = (key, book, chat, byName)
         return (book, chat, byName)

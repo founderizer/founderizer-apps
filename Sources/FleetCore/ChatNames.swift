@@ -14,6 +14,10 @@ import Synchronization
 ///   "Marketing" named its agent often, and every wrong one of the reviews stood so;
 /// - a server or a repository as it is written, in its own capitals ("app-1", "acme/web");
 /// - a knowledge file by its path, as a card does;
+/// - a secret of the fleet's by its name, as a card does (`CardNames`: word for word, in words only when it has a
+///   character that is no letter and no space, and a name of letters only only as the whole of an inline code; the
+///   owner, 21 November 2026: "task cards in both agents chat and needs you sohuld also have a badge for specific
+///   Credentials", and "Yes, both");
 /// - no page of the app.
 /// A possessive keeps the name as the badge and "'s" as words after it ("Mia's duty"). **An agent's whole role right
 /// beside its own name is no second badge** (the owner, 21 November 2026, of a card that drew an agent's name and its
@@ -49,12 +53,13 @@ public struct ChatNames: Equatable, Sendable {
 
     /// The same names as the card's book (`CardNames.init`).
     public init(agents: [(name: String, role: String?)], repositories: [String] = [], servers: [String] = [],
-                knowledge: [String] = []) {
+                knowledge: [String] = [], secrets: [(name: String, key: Bool)] = []) {
         let agents = agents.map { agent in
             (name: agent.name, role: agent.role.map { $0.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
                 .flatMap { $0.isEmpty ? nil : $0 })
         }
-        book = CardNames(agents: agents, repositories: repositories, servers: servers, knowledge: knowledge)
+        book = CardNames(agents: agents, repositories: repositories, servers: servers, knowledge: knowledge,
+                         secrets: secrets)
         agentWords = Set(agents.map { $0.name.capitalized } + agents.compactMap(\.role))
         oneWord = Set(agents.compactMap(\.role).filter { !$0.contains(" ") })
             .subtracting(agents.map { $0.name.capitalized })
@@ -113,9 +118,10 @@ public struct ChatNames: Equatable, Sendable {
         switch target {
         case .agent: agentWords.contains(words)
         case .server, .repository: written.contains(words)
-        case .knowledge: true
-        // the chat's book has no secrets yet: the badge of a secret in a chat's message is the area Chat and files'
-        case .page, .secret: false
+        // the card's book finds a secret only word for word, and a name of letters only only as the whole of an inline
+        // code: free words name no product's secret
+        case .knowledge, .secret: true
+        case .page: false
         }
     }
 }

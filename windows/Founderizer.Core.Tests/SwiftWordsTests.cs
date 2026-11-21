@@ -30,6 +30,18 @@ public sealed class SwiftWordsTests
         Assert.AreEqual(Literal("NeedRequestCard.swift", "Sending…"), new OptionsModel().SendingWords);
     }
 
+    /// <summary>An answer that waits ends its line with the Mac's "Undo", the task's Pause there says "Pause", and an
+    /// assistive app hears the Mac's "Open the task" for the mark that opens it (NeedRequestCard.lineEnd and its
+    /// actions): a Windows word of its own would be a word that the owner did not approve.</summary>
+    [TestMethod]
+    public void AnAnswerThatWaitsSaysUndoAsTheMacsCard()
+    {
+        var card = new RequestCard();
+        Assert.AreEqual((Literal("NeedRequestCard.swift", "Undo"), Literal("NeedRequestCard.swift", "Pause"),
+                         Literal("NeedRequestCard.swift", "Open the task")), (card.UndoWords, card.PauseWords, card.OpenWords));
+        Assert.AreEqual(card.UndoWords, new RequestStep().UndoWords, "the same word on Needs you");
+    }
+
     [TestMethod]
     public void TheComposersPlusHasTheAttachButtonsHover()
     {

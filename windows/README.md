@@ -63,7 +63,13 @@ renamed or removed without a word to the screens lane.
   square of 100 (`GlyphPaths.Outline(kind)`, `GlyphPaths.Core(kind)`), and its motion (`GlyphLook.Moves()`).
 - **The writes**: `SetDraft` and `SendMessageAsync(agent)`; `SetAnswerDraft` and `AnswerAsync(need)`; `Press(need,
   option)` (never refused: it waits while the store cannot write); `Reply(need, words)` (a quick reply: its words are
-  the answer with the box's files, sent at once by `AnswerAsync`'s path, or as `Press` waits); `TickAsync(need, options)`; `ControlAsync(task, action)`; `GuideAsync(task, text)`; `RetryAsync()`; `DiscardRefused()`;
+  the answer with the box's files, sent at once by `AnswerAsync`'s path, or as `Press` waits); `TickAsync(need, options)`;
+  `Hold(need, answer)`, `Undo(need)` and `TicksShown(need, number)` (each answer that a card sends, `CardAnswer.Option`,
+  `Ticked`, `Reply` or `Typed`, waits 5 seconds with Undo in `StoreState.HeldAnswers` and then takes the path of the four
+  above, the ticks and the typed words when the store can write; `Hold` gives the words that a quick reply that waits for
+  nothing put in the box; `AnswerBoxLoad` says what a box and its ticks take at a draw; the screens call it in
+  their place, and `RequestCard.Holds`, `RequestStep.Holds`, `RequestCard.Pause` and `RequestCard.OpensTask` say what the
+  folded card shows); `ControlAsync(task, action)`; `GuideAsync(task, text)`; `RetryAsync()`; `DiscardRefused()`;
   `AddFileAsync(composer, name, bytes)`, `UploadAsync(composer, requestId)` (a file that did not go goes again) and
   `RemoveFile(composer, requestId)` (composers `agent:<name>` and `need:<id>`); `FileAsync(file)`; `EnrollAsync(code)`;
   `ConnectAsync(address)`; `ForgetKey()`; `ReadDeviceAsync()`; `Unlock()`; `FindHubAsync()`. A write that returns

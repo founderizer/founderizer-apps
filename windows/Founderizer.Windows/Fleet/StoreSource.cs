@@ -142,6 +142,12 @@ public sealed class StoreSource : IFleetSource
 
     public void Reply(long need, string words) => store.Reply(need, words);
 
+    public string? Hold(long need, CardAnswer answer) => store.Hold(need, answer);
+
+    public void Undo(long need) => store.Undo(need);
+
+    public void TicksShown(long need, long number) => store.TicksShown(need, number);
+
     public Task<string?> ControlAsync(long task, TaskControl action) => store.ControlAsync(task, action);
 
     public Task<string?> GuideAsync(long task, string text) => store.GuideAsync(task, text);

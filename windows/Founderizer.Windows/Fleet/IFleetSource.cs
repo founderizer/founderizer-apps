@@ -51,6 +51,17 @@ public interface IFleetSource : IAsyncDisposable
     /// once through the outbox, or when the store can write.</summary>
     void Reply(long need, string words);
 
+    /// <summary>An answer that a card sends: it waits 5 seconds with Undo on the card, then goes as the press, the ticks,
+    /// the quick reply or the typed answer above (OwnerStore.Hold). The words that the card's box shows now, where the
+    /// store put a quick reply that waits for nothing into its draft; else null.</summary>
+    string? Hold(long need, CardAnswer answer);
+
+    /// <summary>Undo of the answer that waits on a card: it goes nowhere, and the card opens as it was.</summary>
+    void Undo(long need);
+
+    /// <summary>A view showed the ticks that an Undo gave back to a card: no other view ticks them again.</summary>
+    void TicksShown(long need, long number);
+
     /// <summary>Pause, Stop or Resume of a task.</summary>
     Task<string?> ControlAsync(long task, TaskControl action);
 

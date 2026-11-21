@@ -116,13 +116,25 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
         Show(state, DateTimeOffset.UtcNow, reduceMotion);
     }
 
-    public void Press(long need, int choice) => source.Press(need, choice);
+    // Each answer of the request at hand waits 5 seconds with Undo, and the request stays at hand meanwhile
+    // (OwnerStore.Hold; his "Yes, Undo there too").
+    public void Press(long need, int choice) => source.Hold(need, CardAnswer.Option(choice));
 
-    public void Reply(long need, string words) => source.Reply(need, words);
+    public string? Reply(long need, string words) => source.Hold(need, CardAnswer.Reply(words));
+
+    public void TicksShown(long need, long number) => source.TicksShown(need, number);
 
     public void Type(long need, string text) => source.SetAnswerDraft(need, text);
 
-    public void Answer(long need) => _ = source.AnswerAsync(need);
+    public void Answer(long need) => source.Hold(need, CardAnswer.Typed);
+
+    /// <summary>Undo: the answer goes nowhere, and the request is at hand again, opened as it was; the store's change
+    /// draws it.</summary>
+    public void Undo(long need)
+    {
+        chosen = need;
+        source.Undo(need);
+    }
 
     public bool OpenClarify(long need) => source.OpenClarify(need);
 
@@ -132,7 +144,7 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
 
     private readonly HashSet<(long, string)> openParts = new();
 
-    public void Tick(long need, IReadOnlyCollection<int> choices) => _ = source.TickAsync(need, choices);
+    public void Tick(long need, IReadOnlyCollection<int> choices) => source.Hold(need, CardAnswer.Ticked(choices));
 
 
 

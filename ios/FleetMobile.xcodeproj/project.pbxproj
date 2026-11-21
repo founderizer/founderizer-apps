@@ -47,6 +47,7 @@
 		AC00000000000000000061 /* HubBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000061 /* HubBanner.swift */; };
 		AC000000000000000000A0 /* SampleFleet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000A0 /* SampleFleet.swift */; };
 		AC000000000000000000A1 /* SampleFleetData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000A1 /* SampleFleetData.swift */; };
+		AC000000000000000000C0 /* CardValueChips.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000C0 /* CardValueChips.swift */; };
 		AC000000000000000000A2 /* SampleFleetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000A2 /* SampleFleetTests.swift */; };
 		AC000000000000000000A3 /* MobileRefusalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000A3 /* MobileRefusalTests.swift */; };
 		AC000000000000000000B1 /* MobileRecommendedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000B1 /* MobileRecommendedTests.swift */; };
@@ -126,6 +127,7 @@
 		AB00000000000000000061 /* HubBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HubBanner.swift; sourceTree = "<group>"; };
 		AB000000000000000000A0 /* SampleFleet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleFleet.swift; sourceTree = "<group>"; };
 		AB000000000000000000A1 /* SampleFleetData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleFleetData.swift; sourceTree = "<group>"; };
+		AB000000000000000000C0 /* CardValueChips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardValueChips.swift; sourceTree = "<group>"; };
 		AB000000000000000000A2 /* SampleFleetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleFleetTests.swift; sourceTree = "<group>"; };
 		AB000000000000000000A3 /* MobileRefusalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileRefusalTests.swift; sourceTree = "<group>"; };
 		AB000000000000000000B1 /* MobileRecommendedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileRecommendedTests.swift; sourceTree = "<group>"; };
@@ -252,6 +254,7 @@
 				AB00000000000000000061 /* HubBanner.swift */,
 				AB000000000000000000A0 /* SampleFleet.swift */,
 				AB000000000000000000A1 /* SampleFleetData.swift */,
+				AB000000000000000000C0 /* CardValueChips.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -564,6 +567,7 @@
 				AC00000000000000000061 /* HubBanner.swift in Sources */,
 				AC000000000000000000A0 /* SampleFleet.swift in Sources */,
 				AC000000000000000000A1 /* SampleFleetData.swift in Sources */,
+				AC000000000000000000C0 /* CardValueChips.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -792,14 +792,32 @@ private final class PictureHub: LoopbackHub, @unchecked Sendable {
     /// Every element under the window that names an identifier, by it.
     var parts: [String: NSObject] {
         var found: [String: NSObject] = [:]
-        var waiting: [NSObject] = [window]
-        var seen = Set<ObjectIdentifier>()
-        while let next = waiting.popLast() {
-            guard seen.insert(ObjectIdentifier(next)).inserted else { continue }
+        for next in elements {
             // (SwiftUI's parts answer the identifier's message, and are no UIAccessibilityIdentification)
             let selector = NSSelectorFromString("accessibilityIdentifier")
             let named = next.responds(to: selector) ? next.perform(selector)?.takeUnretainedValue() as? String : nil
             if let id = named, !id.isEmpty { found[id] = next }
+        }
+        return found
+    }
+
+    /// The actions "Copy …" of each element under the window that has one, in each element's order: VoiceOver's copy
+    /// of a request's values (`CardValueWords`).
+    var copies: [[UIAccessibilityCustomAction]] {
+        elements.compactMap { element in
+            let copies = (element.accessibilityCustomActions ?? []).filter { $0.name.hasPrefix("Copy ") }
+            return copies.isEmpty ? nil : copies
+        }
+    }
+
+    /// Every element under the window, the window first.
+    private var elements: [NSObject] {
+        var found: [NSObject] = []
+        var waiting: [NSObject] = [window]
+        var seen = Set<ObjectIdentifier>()
+        while let next = waiting.popLast() {
+            guard seen.insert(ObjectIdentifier(next)).inserted else { continue }
+            found.append(next)
             if let view = next as? UIView { waiting += view.subviews }
             if let children = next.accessibilityElements as? [NSObject] {
                 waiting += children
@@ -815,6 +833,14 @@ private final class PictureHub: LoopbackHub, @unchecked Sendable {
 
     /// Presses the part with this identifier, as VoiceOver does: true when it took the press.
     func press(_ id: String) -> Bool { parts[id]?.accessibilityActivate() == true }
+
+    /// Runs an action of an element as VoiceOver does: true when it took it.
+    static func perform(_ action: UIAccessibilityCustomAction) -> Bool {
+        if let handler = action.actionHandler { return handler(action) }
+        guard let target = action.target as? NSObject else { return false }
+        _ = target.perform(action.selector, with: action)
+        return true
+    }
 
     /// The part with this identifier has this trait now (a tick `.selected`, a Send that takes no press `.notEnabled`).
     func has(_ id: String, _ trait: UIAccessibilityTraits) -> Bool { parts[id]?.accessibilityTraits.contains(trait) == true }
@@ -987,6 +1013,71 @@ extension SampleFleetTests {
             hub.release()
             try await Self.until { hub.reads.count == 3 }
             #expect(hub.reads == PictureHub.ids)
+        }
+    }
+}
+
+extension SampleFleetTests {
+    /// **Each value that the agent put in inline code on a request's card has VoiceOver's "Copy <value>", which copies
+    /// the value exactly; the door's script, his own answer and a chat's message have none** (`NeedWords`,
+    /// `CardValueWords`; the owner's "Yes, as drawn" of 21 November 2026 to a chip with a copy icon on each value). The
+    /// action is the chip's own copy, as VoiceOver gives it. The bugs that this stops: a chip in the script that the
+    /// phone signs, which shows its words as the agent's values; a chip on his own words; a chip in every message of a
+    /// chat; and a copy with a character added or cut.
+    @MainActor @Test("a card's values copy exactly, and the door's script, his answer and a chat have no copy",
+                     .timeLimit(.minutes(1)))
+    func aCardsValuesCopyExactly() async throws {
+        try await Self.withoutHub {
+            let store = MobileStore()
+            func need(_ fields: [String: Any]) throws -> OwnerNeed {
+                try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: fields))
+            }
+            let script = "echo `hostname`\nsystemctl reload nginx\n"
+            let call = DoorCall.hash(target: "web-1", action: DoorCall.run, arguments: [], content: Data(script.utf8))
+            let door = try need([
+                "id": 7, "by": "manager", "title": DoorCall.title(host: "web-1"), "raised": 20, "todo": "",
+                "why": "The certificate of `web-1` ends on Friday.", "options": DoorCall.answers(host: "web-1"),
+                "door_call": call, "door_fleet": "fleet-1", "door_host": "web-1", "door_script": script,
+                "details": DoorCall.details(script: script),
+            ])
+            let words = try need(["id": 8, "by": "manager", "title": "Paste the key", "raised": 21,
+                                  "why": "The shop's mail key ends today.",
+                                  "todo": "Paste `ABCD-1234-EFGH` into the box and tap `Save key`."])
+            let answered = try need(["id": 9, "by": "manager", "title": "Which server?", "raised": 22, "todo": "",
+                                     "why": "Pick the server for `the-shop`.", "options": ["Yes", "No"],
+                                     "answer": "Use `staging-2` instead.", "answered": 30])
+            try #require(NeedScript.text(door) != nil && NeedOptions.asksInWords(words) && !answered.isOpen)
+
+            /// The names of the copies in a window of `view`, by element, after a press of `opening` when it is set.
+            @MainActor func copies(_ view: some View, opening: String? = nil) async throws -> [[String]] {
+                let window = CardWindow(view)
+                defer { window.close() }
+                try await Task.sleep(for: .milliseconds(300))
+                if let opening {
+                    #expect(window.press(opening))
+                    try await Task.sleep(for: .milliseconds(300))
+                }
+                return window.copies.map { $0.map { $0.name } }
+            }
+            #expect(try await copies(NeedCard(store: store, need: door, header: true)) == [["Copy web-1"]])
+            #expect(try await copies(NeedCard(store: store, need: answered, header: true), opening: "need-folded-9")
+                    == [["Copy the-shop"]])
+            #expect(try await copies(ReplyText(text: "Run `fleet doctor` first.")).isEmpty)
+
+            // the two values of What it wants, in their order; the first's copy puts its characters, and only them, on
+            // the system's pasteboard
+            let window = CardWindow(NeedCard(store: store, need: words, header: true))
+            defer {
+                window.close()
+                UIPasteboard.general.items = []
+            }
+            try await Task.sleep(for: .milliseconds(300))
+            let found = window.copies
+            try #require(found.map { $0.map { $0.name } } == [["Copy ABCD-1234-EFGH", "Copy Save key"]])
+            UIPasteboard.general.string = "nothing copied"
+            #expect(CardWindow.perform(found[0][0]))
+            try await Task.sleep(for: .milliseconds(100))
+            #expect(UIPasteboard.general.string == "ABCD-1234-EFGH")
         }
     }
 }

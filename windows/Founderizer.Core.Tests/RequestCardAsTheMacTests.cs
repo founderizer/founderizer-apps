@@ -219,6 +219,9 @@ public sealed class RequestCardAsTheMacTests
             Done("Fleet Manager has your answer"),
         }, MarksOf(true, cards));
         Assert.AreEqual("The hub makes the change", MarksOf(true, cards)[0].Hover, "the plan's work has its words on hover");
+        var plans = Answered(true, cards);
+        Assert.IsTrue(plans.Fleet!.AnsweredNeeds!.Select(n => Screens.Card(plans, n, [], Clock, Utc)).All(c => c.OpensTask is null && c.Pause is null),
+                      "the hub's change of a plan is no task: its mark opens nothing, and it has no Pause");
         CollectionAssert.AreEqual(Enumerable.Repeat(Done("Fleet Manager has your answer"), 5).ToArray(), MarksOf(false, cards),
                                   "a hub before need_marks: the check, also for a value that it could not have sent");
     }
@@ -234,7 +237,9 @@ public sealed class RequestCardAsTheMacTests
     /// its words under the pointer, with no badge. The work mark turns only on a current reading. Breaks if the work mark
     /// follows the state alone, if a task at rest loses its state word or a checked one its "Done", if a task's work has
     /// no badge, the badge of the agent that raised the card, a mark that moves, or plain words on hover, or if another
-    /// mark gets a badge or loses its words.</summary>
+    /// mark gets a badge or loses its words; and if a mark opens another task than its card's, or a check or a red mark
+    /// opens one, or Pause stands on another task, on no work, or on a hub that takes no task controls (the owner's
+    /// "Both (Recommended)" and "Yes, open task" of 21 November 2026).</summary>
     [TestMethod]
     public void AnAnsweredCardTurnsOnlyWhileItsTaskWorksAndIsRedOnlyWhenItFailed()
     {
@@ -258,6 +263,17 @@ public sealed class RequestCardAsTheMacTests
                         "a task's work: its tag under the pointer, the agent's badge and the task's title, and no plain words");
         Assert.IsTrue(marks.Skip(1).All(m => m.Badge is null && m.Hover == m.Words && !string.IsNullOrEmpty(m.Words)),
                       "every other mark keeps its words under the pointer, with no badge");
+        // His "Both (Recommended)" and "Yes, open task" (21 November 2026; the Mac's markOpensTask and pausable): the
+        // turning mark and the orange mark open their own card's task, and the task's Pause stands only on its work.
+        var cards = answered.Fleet!.AnsweredNeeds!.Select(n => Screens.Card(answered, n, [], Clock, Utc)).ToArray();
+        CollectionAssert.AreEqual(new long?[] { 11, null, null, 13, null, null, null, null, null },
+                                  cards.Select(c => c.OpensTask).ToArray(), "work and a question open their own task; no other mark opens one");
+        CollectionAssert.AreEqual(new long?[] { 11, null, null, null, null, null, null, null, null },
+                                  cards.Select(c => c.Pause).ToArray(), "Pause only on the task's work, for that task");
+        var noControls = answered with { Fleet = answered.Fleet with { UiFeatures = answered.Fleet.UiFeatures!.Where(f => f != "task_controls").ToList() } };
+        var bare = Screens.Card(noControls, noControls.Fleet!.AnsweredNeeds![0], [], Clock, Utc);
+        Assert.AreEqual(((long?)11, (long?)null), (bare.OpensTask, bare.Pause),
+                        "a hub that takes no task controls: the mark opens the task, and no Pause stands");
         var s = Answered(true, Pressed(41, Marks(task: 11)));
         var need = s.Fleet!.AnsweredNeeds![0];
         Assert.IsTrue(Screens.Card(s, need, [], Clock, Utc).MarkMoves, "a current reading turns the work mark");
@@ -276,7 +292,9 @@ public sealed class RequestCardAsTheMacTests
     /// result and before work, so a failed task that his pause holds is the gray pause, not red. Breaks if the card keeps
     /// the check where the row is orange or where his confirmed pause holds the task, takes another symbol or other words
     /// than the row, is red for a failed task that a hold or an outcome of his holds, turns for a held task, or draws the
-    /// gray pause for a hold that is not confirmed, for a pause that waits, or for a stop.</summary>
+    /// gray pause for a hold that is not confirmed, for a pause that waits, or for a stop; and if an orange or gray mark
+    /// opens no task or another one, or Pause stands on a task that a hold holds (a pause that waits still says
+    /// "working").</summary>
     [TestMethod]
     public void WhereTheTasksRowIsOrangeTheCardIsOrange()
     {
@@ -338,6 +356,13 @@ public sealed class RequestCardAsTheMacTests
                         "what he must do, under the pointer and for an assistive app");
         Assert.AreEqual((TaskSymbol.Paused, "Paused", false), (rows[78].Symbol, rows[78].Words, rows[78].Attention),
                         "his own pause over a failed result: muted on its row");
+        // Every orange mark and the gray mark of his pause open their own card's task (his "Yes, open task", "Gray pause,
+        // as the row"); the check of a pause that waits and of a stop opens nothing; a held task, also one that still says
+        // "working", has no Pause.
+        var cards = s.Fleet!.AnsweredNeeds!.Select(n => Screens.Card(s, n, [], Clock, Utc)).ToArray();
+        CollectionAssert.AreEqual(new long?[] { 71, 72, 73, 74, 75, 76, 77, 78, 79, null, null },
+                                  cards.Select(c => c.OpensTask).ToArray(), "the orange and gray marks open their task");
+        Assert.IsTrue(cards.All(c => c.Pause is null), "no Pause on a task that a hold holds or that needs him");
     }
 
     /// <summary>No mark of his answer stands, only the plain check with no words, where the Mac draws no AnsweredMarkView

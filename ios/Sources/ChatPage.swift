@@ -1197,9 +1197,14 @@ struct ChatWaitingLine: View {
 /// `.headline`, list marks, a quote behind a 2-point bar, code as 13-point monospaced text on the bubble's inset fill in
 /// a strip that scrolls sideways and never wraps (`CodeStrip`), a table as a grid that scrolls the same way, and bold,
 /// italic, inline code and links inside them. The phone drew every mark as typed: `**`, `#`, `>`, the fences and `|---|`. It adds no
-/// control: a code block's Copy waits for the owner's word on it.
+/// control but the chip of a request's value (`values`): a code block's Copy waits for the owner's word on it.
 struct ReplyText: View {
     let text: String
+    /// **Each value that the agent put in inline code is a chip with a copy icon** (`CardValueWords`; the owner's "Yes,
+    /// as drawn" of 21 November 2026): only in the words of a request's card (`NeedWords`), in a paragraph,
+    /// a heading, a list item and a quote. A chat's messages, a table's cells and code in a link keep inline code's flat
+    /// fill.
+    var values = false
 
     var body: some View {
         let blocks = Self.drawn(text)
@@ -1223,22 +1228,22 @@ struct ReplyText: View {
                 }
                 .padding(.vertical, -12)
             } else {
-                Text(block.formatted)
+                words(block.formatted)
             }
         case .heading:
-            Text(block.formatted).font(.headline)
+            words(block.formatted).font(.headline)
         case .item:
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 // Digits of one width (margins pass, fault 10): "1." was 2.6 points narrower than "2.", so the
                 // first item's words started to the left of the others'.
                 Text(block.marker).monospacedDigit()
-                Text(block.formatted)
+                words(block.formatted)
             }
             // An item under another starts where that item's words start, as on the Mac.
             .padding(.leading, CGFloat(block.level) * 16)
         case .quote:
             // The bar is the quote's own height, whatever the words wrap to.
-            Text(block.formatted).foregroundStyle(Brand.muted)
+            words(block.formatted).foregroundStyle(Brand.muted)
                 .padding(.leading, 10)
                 .overlay(alignment: .leading) { Capsule().fill(.secondary.opacity(0.6)).frame(width: 2) }
         case .code:
@@ -1259,6 +1264,12 @@ struct ReplyText: View {
                 }
             }
         }
+    }
+
+    /// A block's words: with their values as chips where this text draws them (`values`) and the words hold one, else
+    /// the `Text` that they were.
+    @ViewBuilder private func words(_ formatted: AttributedString) -> some View {
+        if values, !CardValues.runs(in: formatted).isEmpty { CardValueWords(words: formatted) } else { Text(formatted) }
     }
 
     /// The address of a paragraph that is one link and nothing else, or nil.

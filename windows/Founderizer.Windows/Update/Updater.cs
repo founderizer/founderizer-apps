@@ -318,9 +318,12 @@ internal sealed class Updater
             return;
         }
         var state = source.State;
-        if (state.Sending || state.Pending is not null)
+        // An answer that waits on its card with Undo is a write on its way too (OwnerStore.Hold): it goes, or he takes it
+        // back, within 5 seconds, and its change asks again.
+        if (state.Sending || state.Pending is not null || !state.HeldAnswers.IsEmpty)
         {
-            Readings.Note($"update: build {build} waits for a write on its way (sending {state.Sending}, a request {state.Pending is not null})");
+            Readings.Note($"update: build {build} waits for a write on its way (sending {state.Sending}, a request {state.Pending is not null}, " +
+                          $"answers that wait {state.HeldAnswers.Count})");
             return;
         }
         Swap(build, DateTimeOffset.UtcNow - since);

@@ -323,7 +323,9 @@ public static partial class Screens
                                    ScreenContext context, bool spoken = false)
     {
         var taken = s.AnswersTaken.GetValueOrDefault(need.Id);
-        var onItsWay = s.Pending is { NeedId: { } id } p && id == need.Id && p.Refusal is null ? p : taken;
+        // his answer that waits with Undo shows as an answer on its way (OwnerStore.Hold)
+        var held = s.HeldOn(need.Id);
+        var onItsWay = held?.Shown ?? (s.Pending is { NeedId: { } id } p && id == need.Id && p.Refusal is null ? p : taken);
         var inWords = onItsWay?.AnswersInWords ?? need.AnsweredInWords;
         var ended = !need.IsOpen || onItsWay is not null;
         var todo = need.AsksForSecret ? "" : need.Todo;
@@ -331,6 +333,8 @@ public static partial class Screens
         var hasMore = need.Details is not null || !isShort || todo.Length > 0;
         var answer = (onItsWay?.Text ?? need.Answer ?? "").Trim();
         var inHub = s.Agent(need.By) is not null;
+        var mark = AnsweredMark(s, need, inWords, now);
+        var opens = onItsWay is null ? MarkOpens(need, mark) : null;
         return new RequestCard
         {
             Id = need.Id,
@@ -338,8 +342,12 @@ public static partial class Screens
             Folded = ended,
             AnswerWords = answer.Length == 0 ? "Answered" : answer,
             AnsweredInWords = inWords,
-            AnswerMark = AnsweredMark(s, need, inWords, now),
+            AnswerMark = mark,
             MarkMoves = s.ShowsCurrent(now),
+            Holds = held is { Leaving: false },
+            OpensTask = opens,
+            Pause = Pausable(s, mark, opens),
+            PauseEnabled = s.CanWrite(now),
             Spoken = spoken,
             Answered = !need.IsOpen,
             Why = need.Why,
@@ -409,6 +417,30 @@ public static partial class Screens
             : mark;
     }
 
+    /// <summary>**The task that a click on an answered card's mark opens** (the owner's "Both (Recommended)", "Yes, open
+    /// task" and "Gray pause, as the row" of 21 November 2026; the Mac's NeedRequestCard.markOpensTask): the turning mark
+    /// of a task's work, the orange mark of a task that needs him, and the gray mark of his own pause open the task that
+    /// his answer let go on (<see cref="OwnerNeed.Task"/>), its page with Resume, Stop and the guidance box. The check, the
+    /// red mark and the work of "The hub makes the change" open nothing; nor does a mark of a task that the reading does
+    /// not hold, which <see cref="AnswerMark.Of"/> draws as the check.</summary>
+    private static long? MarkOpens(OwnerNeed need, AnswerMark mark) => mark switch
+    {
+        { Symbol: AnswerSymbol.Working, Agent.Length: > 0 } or { Symbol: AnswerSymbol.Attention or AnswerSymbol.Paused } => need.Task,
+        _ => null,
+    };
+
+    /// <summary>**The task whose Pause stands at the end of the answer line** (the owner's "Both (Recommended)": "The Pause
+    /// icon of the task's panel stands at the end of the answer line while the task runs"; the Mac's
+    /// NeedRequestCard.pausable): only while the mark is the work of that task, on a hub that takes the task's controls,
+    /// for a task that is not over and that no hold of the owner holds (the task page's Pause, <see cref="ControlsModel"/>).
+    /// After his pause the mark is the row's pause mark, and Pause goes.</summary>
+    private static long? Pausable(StoreState s, AnswerMark mark, long? opens)
+    {
+        if (opens is not { } task || mark.Symbol != AnswerSymbol.Working || !s.Offers("task_controls")) return null;
+        if (s.AllTasks().FirstOrDefault(t => t.Id == task) is not { IsTerminal: false }) return null;
+        return (s.Fleet?.Holds ?? []).Any(h => h.Task == task && h.State != "released") ? null : task;
+    }
+
     /// <summary>NeedTalk.why: the most characters of a card's why that shows whole.</summary>
     public const int NeedTalkWhy = 240;
 
@@ -427,6 +459,7 @@ public static partial class Screens
             Labels = ValueList.Of(kind == OptionsKind.QuickReplies ? ["Done", "Not now", "Tell me more"] : choices),
             WaitingPress = s.WaitingPresses.TryGetValue(need.Id, out var press) ? press : null,
             Pictures = ended ? ValueList<FileTile>.Empty : ValueList.Of(NeedPictures.Drawn(s, need).Select(p => Tile(s, p, now))),
+            Ticked = s.Undone.GetValueOrDefault(need.Id)?.Ticks ?? ValueList<int>.Empty,
         };
     }
 
@@ -446,6 +479,7 @@ public static partial class Screens
         {
             Placeholder = "Your answer",
             Draft = draft,
+            Given = s.Undone.GetValueOrDefault(need.Id)?.Number ?? 0,
             ShowsPlus = s.Offers("attachments") && need.TakesFiles,
             Files = Unsent(s, s.Staged.GetValueOrDefault(composer)),
             Chips = ValueList.Of(Unsent(s, s.Staged.GetValueOrDefault(composer)).Select(f => Chip(s, f))),
@@ -646,6 +680,9 @@ public static partial class Screens
         var sent = new HashSet<long>();
         if (s.Pending is { NeedId: { } p, Refusal: null }) sent.Add(p);
         foreach (var id in s.AnswersTaken.Keys) sent.Add(id);
+        // His answer that waits with Undo keeps its request open and at hand for its 5 seconds (his "Yes, Undo there
+        // too"); once its wait ended it leaves as an answer on its way does.
+        foreach (var id in s.HeldAnswers.Keys) if (s.HeldOn(id) is { Leaving: true }) sent.Add(id);
         var all = (fleet?.Needs ?? []).Concat((fleet?.AnsweredNeeds ?? []).Where(a => fleet!.Needs.All(n => n.Id != a.Id))).ToList();
         var lane = new NeedsLane(all, hubNow, context, sent);
         var openIds = lane.Open.Select(n => n.Id).ToList();
@@ -715,7 +752,8 @@ public static partial class Screens
     {
         var hubNow = s.Fleet?.Time ?? s.HubNow(now);
         var taken = s.AnswersTaken.GetValueOrDefault(need.Id);
-        var onItsWay = s.Pending is { NeedId: { } id } p && id == need.Id && p.Refusal is null ? p : taken;
+        var held = s.HeldOn(need.Id);
+        var onItsWay = held?.Shown ?? (s.Pending is { NeedId: { } id } p && id == need.Id && p.Refusal is null ? p : taken);
         var ended = !need.IsOpen || onItsWay is not null;
         var todo = need.AsksForSecret ? "" : need.Todo;
         var isShort = need.Details is not null || Characters(need.Why) <= NeedTalkWhy;
@@ -747,6 +785,7 @@ public static partial class Screens
             AnsweredInWords = inWords,
             AnswerMark = AnsweredMark(s, need, inWords, now),
             MarkMoves = s.ShowsCurrent(now),
+            Holds = held is { Leaving: false },
             Options = Options(s, need, now, ended),
             Answer = AnswerBox(s, need),
             AsksForSecret = need.AsksForSecret,
@@ -1521,6 +1560,10 @@ public sealed record OptionsModel
     /// is: <see cref="NeedPictures.Columns"/> in a row, the option's words under each. Empty: the options of before.</summary>
     public ValueList<FileTile> Pictures { get; init; } = ValueList<FileTile>.Empty;
 
+    /// <summary>The options that he had ticked when he took his answer back with Undo (<see cref="StoreState.Undone"/>):
+    /// the card ticks them again, once for each Undo (<see cref="AnswerBoxModel.Given"/>).</summary>
+    public ValueList<int> Ticked { get; init; } = ValueList<int>.Empty;
+
     /// <summary>What a click on option <paramref name="index"/> does, on its picture or on its words: the one command of
     /// the window's options. A click on a picture opens it (<see cref="OptionClickKind.Open"/>) and answers nothing; a
     /// click on the words answers with that option's index, ticks it, or sends a quick reply's words, as before.</summary>
@@ -1577,6 +1620,10 @@ public sealed record AnswerBoxModel
 {
     public string Placeholder { get; init; } = "";
     public string Draft { get; init; } = "";
+    /// <summary>The number of his last Undo of this card (<see cref="UndoneAnswer.Number"/>), 0 for none: when it
+    /// changes, the box loads <see cref="Draft"/> again and ticks <see cref="OptionsModel.Ticked"/> again, so the card
+    /// opens as it was; at no other draw.</summary>
+    public long Given { get; init; }
     public bool ShowsPlus { get; init; }
     public string PlusHover { get; init; } = "";
     public ValueList<StagedFile> Files { get; init; } = ValueList<StagedFile>.Empty;
@@ -1609,8 +1656,9 @@ public sealed record RequestCard
     public bool Spoken { get; init; }
     /// <summary>The folded card's second line, the answer's words: not while his own message in the chat says them.</summary>
     public bool ShowsAnswerLine => !(AnsweredInWords && Spoken);
-    /// <summary>The check before the answer's words: only for an option that he pressed or ticked.</summary>
-    public bool ShowsCheck => !AnsweredInWords;
+    /// <summary>The check before the answer's words: only for an option that he pressed or ticked, and not while his
+    /// answer waits with Undo.</summary>
+    public bool ShowsCheck => !AnsweredInWords && !Holds;
     /// <summary>What stands in the check's place (owner API 1.280, <see cref="Screens.AnsweredMark"/>): the check, the
     /// turning green mark of work, the red mark of work that ended with no success, the orange mark of a task that
     /// needs him, or the gray mark of his own pause (each of the last two with its row's symbol); its <see cref="AnswerMark.Hover"/> under the pointer (for the work of a task, its
@@ -1620,6 +1668,22 @@ public sealed record RequestCard
     /// <summary>The work mark turns: the reading is current (the Mac's marksMove). On a last reading it rests, green, as
     /// it does where Windows' animation effects are off.</summary>
     public bool MarkMoves { get; init; }
+    /// <summary>**His answer waits 5 seconds, with Undo** (<see cref="StoreState.HeldAnswers"/>; the owner's "Yes, 5
+    /// seconds (Recommended)", 21 November 2026): the card stands folded with his answer, no mark, and
+    /// <see cref="UndoWords"/> at the end of the answer line, with no words beside it and no count.</summary>
+    public bool Holds { get; init; }
+    public string UndoWords => "Undo";
+    /// <summary>The task that a click on the mark opens, with the hand and a hover fill, and Enter or Space (the turning
+    /// mark, the orange mark and the gray mark of his pause; <see cref="Screens.Card"/>); null: the mark is no press.</summary>
+    public long? OpensTask { get; init; }
+    /// <summary>The task whose Pause stands at the end of the answer line while the mark is its work, with no hold;
+    /// null for none. It sends the task page's Pause (<see cref="OwnerStore.ControlAsync"/>).</summary>
+    public long? Pause { get; init; }
+    /// <summary>Pause is on while the store can write, as the task page's controls are.</summary>
+    public bool PauseEnabled { get; init; }
+    public string PauseWords => "Pause";
+    /// <summary>What an assistive app says that the mark does, as the Mac's card action.</summary>
+    public string OpenWords => "Open the task";
     /// <summary>What an assistive app says for the folded card (NeedRequestCard).</summary>
     public string FoldedWords => AnsweredInWords && Spoken ? $"{Title}, answered" : $"{Title}, answered: {AnswerWords}";
     public bool Answered { get; init; }
@@ -1858,10 +1922,15 @@ public sealed record RequestStep
     public string AnswerWords { get; init; } = "";
     /// <summary>He answered in his own words: the answer under it has no check (NeedAnswered), as a press has.</summary>
     public bool AnsweredInWords { get; init; }
-    public bool ShowsCheck => !AnsweredInWords;
+    public bool ShowsCheck => !AnsweredInWords && !Holds;
     /// <summary>What stands in the check's place, as on the card in a chat (<see cref="RequestCard.AnswerMark"/>; the
     /// owner's "Yes, same marks there", 21 November 2026).</summary>
     public AnswerMark AnswerMark { get; init; } = AnswerMark.Plain;
+    /// <summary>**His answer waits 5 seconds, with Undo at the end of its line and no check** (the owner's "Yes, Undo
+    /// there too", 21 November 2026; the Mac's NeedAnswered.waits): the request stays at hand meanwhile, then leaves as
+    /// before (<see cref="RequestCard.Holds"/>).</summary>
+    public bool Holds { get; init; }
+    public string UndoWords => "Undo";
     /// <summary>The work mark turns: the reading is current (<see cref="RequestCard.MarkMoves"/>).</summary>
     public bool MarkMoves { get; init; }
     public OptionsModel Options { get; init; } = new();

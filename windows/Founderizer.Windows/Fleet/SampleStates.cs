@@ -72,6 +72,13 @@ public sealed partial class SampleSource
                     },
                     Sending = false,
                 };
+            case "undo":
+            {
+                // His press "Send it on Monday" on the request about the email waits with Undo (OwnerStore.Hold): the card
+                // in the manager's chat stands folded with Undo at the end of its answer line, for as long as the picture.
+                var held = PendingRequest.New(s.Hub!, s.Fleet!.Db, "PC", "Send it on Monday", needId: 2, choice: 0);
+                return s with { HeldAnswers = s.HeldAnswers.SetItem(2, new HeldAnswer(2, s.Hub!, s.Fleet.Db, CardAnswer.Option(0), held, 1)) };
+            }
             default:
                 return s;
         }

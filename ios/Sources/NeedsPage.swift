@@ -413,7 +413,7 @@ struct NeedCard: View {
         VStack(alignment: .leading, spacing: 12) {
             if !need.why.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 RowLine()
-                FieldRow(title: String(l10n: "Why"), value: need.why)
+                NeedWords(title: String(l10n: "Why"), words: need.why)
             }
             if NeedScript.text(need) != nil {
                 RowLine()
@@ -421,7 +421,7 @@ struct NeedCard: View {
             }
             if NeedOptions.asksInWords(need) {
                 RowLine()
-                FieldRow(title: String(l10n: "What it wants"), value: need.todo)
+                NeedWords(title: String(l10n: "What it wants"), words: need.todo)
             }
             RowLine()
             // owner feature need_clarify: his talk with the agent under the card, over its answers, also where the
@@ -456,6 +456,26 @@ struct NeedCard: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: answerGiven)
+    }
+}
+
+/// **The agent's words of a request** (its Why and its What it wants, open and answered; never his answer, nor the
+/// door's script): a row as `FieldRow` draws one, whose words are drawn from their Markdown as a chat's reply is, with
+/// each value that the agent put in inline code a chip with a copy icon (`ReplyText(values:)`, `CardValueWords`; the
+/// owner's "Yes, as drawn" of 21 November 2026). The phone drew them as typed, backticks included.
+struct NeedWords: View {
+    let title: String
+    let words: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.caption).foregroundStyle(Brand.muted)
+            ReplyText(text: words, values: true)
+                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .wholePoints()
     }
 }
 
@@ -641,11 +661,11 @@ private struct NeedAnswered: View {
             .accessibilityIdentifier("need-fold-\(need.id)")
             if !need.why.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 RowLine()
-                FieldRow(title: String(l10n: "Why"), value: need.why)
+                NeedWords(title: String(l10n: "Why"), words: need.why)
             }
             if NeedOptions.asksInWords(need) {
                 RowLine()
-                FieldRow(title: String(l10n: "What it wants"), value: need.todo)
+                NeedWords(title: String(l10n: "What it wants"), words: need.todo)
             }
             // owner feature need_clarify: **an answered card keeps his talk with the agent, read only**, before his
             // answer, as the Mac's card keeps it: no link and no field
@@ -687,6 +707,9 @@ private struct NeedAnswered: View {
         .accessibilityValue(Text(verbatim: mark?.words ?? ""))
         .accessibilityHint("Shows the whole request")
         .accessibilityAddTraits(.isButton)
+        // the press of the element that VoiceOver reads: it had none of its own, so a press there was the system's tap
+        // at its middle, which a check cannot give
+        .accessibilityAction { expanded = true }
         .accessibilityIdentifier("need-folded-\(need.id)")
     }
 }

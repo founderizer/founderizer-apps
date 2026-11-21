@@ -329,13 +329,23 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
     public bool CanSendAnswer(RequestCard card) =>
         AnswerBoxModel.CanSend(state, now, card.Answer.Draft, card.Answer.Files.Count);
 
-    public void Press(long need, int choice) => source.Press(need, choice);
+    // Each answer of a card waits 5 seconds with Undo, then goes (OwnerStore.Hold).
+    public void Press(long need, int choice) => source.Hold(need, CardAnswer.Option(choice));
 
-    public void Reply(long need, string words) => source.Reply(need, words);
+    public string? Reply(long need, string words) => source.Hold(need, CardAnswer.Reply(words));
+
+    public void TicksShown(long need, long number) => source.TicksShown(need, number);
 
     public void Type(long need, string text) => source.SetAnswerDraft(need, text);
 
-    public void Answer(long need) => _ = source.AnswerAsync(need);
+    public void Answer(long need) => source.Hold(need, CardAnswer.Typed);
+
+    public void Undo(long need) => source.Undo(need);
+
+    /// <summary>The mark of an answered card opens its task's page, as a task opens from the board.</summary>
+    public void OpenTask(long task) => services.Go(Founderizer.Core.Page.OfTask(task));
+
+    public void Pause(long task) => _ = source.ControlAsync(task, TaskControl.Pause);
 
     public bool OpenClarify(long need) => source.OpenClarify(need);
 
@@ -345,7 +355,7 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
 
     private readonly HashSet<(long, string)> openParts = new();
 
-    public void Tick(long need, IReadOnlyCollection<int> choices) => _ = source.TickAsync(need, choices);
+    public void Tick(long need, IReadOnlyCollection<int> choices) => source.Hold(need, CardAnswer.Ticked(choices));
 
 
 

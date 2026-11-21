@@ -20,7 +20,7 @@ namespace Founderizer.Core;
 /// <see cref="Changed"/> is raised in order, never twice for one state, on the thread that changed the store (a pool
 /// thread for a read), and only when a model of a screen changed: a screen moves to its own
 /// thread. Every method may be called from any thread.</summary>
-public sealed class OwnerStore : IAsyncDisposable
+public sealed partial class OwnerStore : IAsyncDisposable
 {
     private readonly StoreSettings settings;
     private readonly HubClient client;
@@ -56,7 +56,8 @@ public sealed class OwnerStore : IAsyncDisposable
     private CancellationTokenSource? outputsCancel;
     private long outputsOperation;
     private bool outputsWereFresh;
-    private readonly Dictionary<long, CancellationTokenSource> pressWaits = new();
+    /// <summary>The wait of each press that waits for the store (<see cref="Press"/>): its cancel, and its end.</summary>
+    private readonly Dictionary<long, (CancellationTokenSource Cancel, Task Done)> pressWaits = new();
     /// <summary>How many of his lines with a message's words its card showed when he sent it, by request (the iPhone's
     /// talkLinesAtSend): only a reading with more of them has it (<see cref="ReplayTakenTalk"/>). A start of the app
     /// forgets it, and then only his Try again sends it.</summary>
@@ -476,6 +477,8 @@ public sealed class OwnerStore : IAsyncDisposable
             ClarifyDrafts = ImmutableDictionary<long, string>.Empty,
             ClarifyGiven = ImmutableDictionary<long, int>.Empty,
             TalkTaken = ImmutableDictionary<long, ValueList<NeedMessage>>.Empty,
+            // what an Undo gave back belongs to that generation's card too
+            Undone = ImmutableDictionary<long, UndoneAnswer>.Empty,
         });
     }
 
@@ -1044,6 +1047,15 @@ public sealed class OwnerStore : IAsyncDisposable
 
     public void SetAnswerDraft(long need, string text)
     {
+        // **While his answer waits on its card (Hold), the draft is the store's**: its box is folded, and the one change
+        // that comes is the view's own (the box that empties at his Send), so his typed words stay in the draft and in
+        // its file until the outbox has them.
+        if (State.HeldOn(need) is not null) return;
+        WriteDraft(need, text);
+    }
+
+    private void WriteDraft(long need, string text)
+    {
         Update(x => x with { AnswerDrafts = text.Length == 0 ? x.AnswerDrafts.Remove(need) : x.AnswerDrafts.SetItem(need, text) });
         KeepDrafts();
     }
@@ -1263,49 +1275,74 @@ public sealed class OwnerStore : IAsyncDisposable
     /// the iPhone's rule of 20 November 2026), at the press or when that request's send stops: his message under the
     /// card, or its answer, which only Try again or Discard moves. The press waited behind it with no end, with
     /// "Sending…" at its option.</summary>
-    public void Press(long need, int choice)
+    public void Press(long need, int choice) => _ = PressAsync(need, choice);
+
+    /// <summary><see cref="Press"/>, which ends when the press went or was dropped (a held answer's press,
+    /// <see cref="Hold"/>).</summary>
+    private Task PressAsync(long need, int choice)
     {
         if (State.CanWrite(clock.Now))
         {
             Update(x => x with { WaitingPresses = x.WaitingPresses.Remove(need) });
-            _ = SendChoiceAsync(need, choice);
-            return;
+            return SendChoiceAsync(need, choice);
         }
         if (State.WaitsUnsent(need))
         {
             Update(x => x with { WaitingPresses = x.WaitingPresses.Remove(need) });
-            return;
+            return Task.CompletedTask;
         }
         Update(x => x with { WaitingPresses = x.WaitingPresses.SetItem(need, choice) });
-        lock (pressWaits) if (pressWaits.ContainsKey(need)) return;
         var cancel = new CancellationTokenSource();
-        lock (pressWaits) pressWaits[need] = cancel;
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (pressWaits)
+        {
+            // the wait that runs takes the newest press of the request
+            if (pressWaits.TryGetValue(need, out var running)) return running.Done;
+            pressWaits[need] = (cancel, done.Task);
+        }
         var (hub, database) = (State.Hub, State.Fleet?.Db);
+        // Only the wait whose entry it is cleans up: a held answer (Hold) takes the entry and the press away at once.
+        bool Mine()
+        {
+            lock (pressWaits)
+            {
+                if (!pressWaits.TryGetValue(need, out var entry) || entry.Cancel != cancel) return false;
+                pressWaits.Remove(need);
+                return true;
+            }
+        }
         _ = Task.Run(async () =>
         {
             try
             {
-                while (!cancel.IsCancellationRequested)
+                try
                 {
-                    var s = State;
-                    if (s.Hub != hub || s.Fleet?.Db != database || s.StorageError is not null ||
-                        s.Fleet?.Needs.Any(n => n.Id == need && n.IsOpen) != true || s.WaitsUnsent(need) ||
-                        !s.WaitingPresses.TryGetValue(need, out var waiting))
-                        break;
-                    if (s.CanWrite(clock.Now))
+                    while (!cancel.IsCancellationRequested)
                     {
-                        Update(x => x with { WaitingPresses = x.WaitingPresses.Remove(need) });
-                        lock (pressWaits) pressWaits.Remove(need);
-                        await SendChoiceAsync(need, waiting);
-                        return;
+                        var s = State;
+                        if (s.Hub != hub || s.Fleet?.Db != database || s.StorageError is not null ||
+                            s.Fleet?.Needs.Any(n => n.Id == need && n.IsOpen) != true || s.WaitsUnsent(need) ||
+                            !s.WaitingPresses.TryGetValue(need, out var waiting))
+                            break;
+                        if (s.CanWrite(clock.Now))
+                        {
+                            if (!Mine()) return;
+                            Update(x => x with { WaitingPresses = x.WaitingPresses.Remove(need) });
+                            await SendChoiceAsync(need, waiting);
+                            return;
+                        }
+                        await clock.Delay(TimeSpan.FromMilliseconds(250), cancel.Token);
                     }
-                    await clock.Delay(TimeSpan.FromMilliseconds(250), cancel.Token);
                 }
+                catch (OperationCanceledException) { }
+                if (Mine()) Update(x => x with { WaitingPresses = x.WaitingPresses.Remove(need) });
             }
-            catch (OperationCanceledException) { }
-            Update(x => x with { WaitingPresses = x.WaitingPresses.Remove(need) });
-            lock (pressWaits) pressWaits.Remove(need);
+            finally
+            {
+                done.TrySetResult();
+            }
         });
+        return done.Task;
     }
 
     /// <summary>A press on one of the app's three replies of a request with no options of its own ("Done", "Not now",
@@ -1316,10 +1353,15 @@ public sealed class OwnerStore : IAsyncDisposable
     /// can; the words stand in the box meanwhile, and stay there with nothing sent while a file of the box waits, when
     /// the hub or its generation changes, or when he changed them while it waited. The wait ends when the request
     /// leaves: no clock ends it. A newer press of the same request takes the place of the one that waits.</summary>
-    public void Reply(long need, string words)
+    public void Reply(long need, string words) => _ = ReplyGoes(need, words);
+
+    /// <summary><see cref="Reply"/>, which ends when its words went or stayed in the box (a held answer's reply,
+    /// <see cref="Hold"/>); at once where a wait of the same request runs already and takes the words.</summary>
+    private Task ReplyGoes(long need, string words)
     {
         words = words.Trim();
-        SetAnswerDraft(need, words);
+        // (also at the end of a hold, which keeps the view's changes out of the draft)
+        WriteDraft(need, words);
         bool waits;
         // The newest words and the question whether a wait runs, in one step with the wait's own check (ReplyAsync):
         // a press never finds a wait that ends without it.
@@ -1328,7 +1370,7 @@ public sealed class OwnerStore : IAsyncDisposable
             waits = replyWaits.ContainsKey(need);
             replyWaits[need] = words;
         }
-        if (!waits) _ = ReplyAsync(need, State.Hub, State.Fleet?.Db);
+        return waits ? Task.CompletedTask : ReplyAsync(need, State.Hub, State.Fleet?.Db);
     }
 
     /// <summary>The wait of a quick reply: its first turn runs in the press, so a reply that can go goes at once, in the
@@ -2324,6 +2366,8 @@ public sealed class OwnerStore : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // His answers that wait on their cards go now, before anything of the store ends (ReleaseHeld).
+        ReleaseHeld();
         disposed = true;
         ageWatch?.Cancel();
         frontLoop?.Cancel();
@@ -2331,7 +2375,8 @@ public sealed class OwnerStore : IAsyncDisposable
         StopEvents();
         EndOutputs(null);
         StopWatching();
-        lock (pressWaits) foreach (var wait in pressWaits.Values) wait.Cancel();
+        lock (pressWaits) foreach (var wait in pressWaits.Values) wait.Cancel.Cancel();
+        lock (answerWaits) foreach (var wait in answerWaits.Values) wait.Cancel.Cancel();
         if (chatsReading is not null) { try { await chatsReading; } catch (Exception) { } }
         client.Dispose();
     }
