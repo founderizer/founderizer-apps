@@ -963,6 +963,21 @@ struct DoorAccessTests {
         #expect(!admin.contains("IdentitiesOnly=yes") && admin.contains("admin@100.64.1.1"))
         #expect(admin.last == "sudo -n -i -- /bin/sh -c 'true'")
         #expect(DoorAccess.sshArguments(kept: nil, address: "100.64.1.1; reboot", program: "true") == nil)
+        // The app's own key in a kept connection: app mode once a run with it alone got in, at the device's address and
+        // the kept port. A device with no kept connection stays the owner's, even with the app's key as its one more
+        // key and that account in app mode: its keys are the files of his configuration (bug: `-F /dev/null` there,
+        // so those files are not offered and the round is refused).
+        let ledger = SSHKeyLedger(folder: home.appendingPathComponent("ledger")), app = AppSSHKey.path()
+        ledger.recordPlain(SSHKeyLedger.Account(address: "100.96.20.60", user: "root", port: 2222), now: 1_794_000_000)
+        let appKept = InstallTarget(host: "203.0.113.163", user: "root", port: 2222, identityFile: app)
+        let confined = try #require(DoorAccess.sshArguments(kept: appKept, address: "100.96.20.60", program: "true",
+                                                            ledger: ledger))
+        #expect(Array(confined.prefix(8)) == ["-F", "/dev/null", "-a", "-x", "-o", "IdentitiesOnly=yes", "-i", app])
+        #expect(Self.after("-p", in: confined) == ["2222"] && Array(confined.suffix(2)) == ["root@100.96.20.60", "true"])
+        let owners = try #require(DoorAccess.sshArguments(kept: nil, address: "100.96.20.60", program: "true", key: app,
+                                                          port: 2222, ledger: ledger))
+        #expect(!owners.contains("-F") && Array(owners.prefix(2)) == ["-o", "IdentitiesOnly=yes"])
+        #expect(Self.after("-i", in: owners) == [app] && Self.after("-p", in: owners) == ["2222"])
     }
 
     /// A server that refused this Mac's login gets no try in the next rounds: it is tried again an hour later, or at once

@@ -57,8 +57,8 @@ final class OwnerAccessModel {
             guard step != .inPlace, tries[mark].map({ $0.isDue(at: now) }) ?? true, store.hub == hub else { continue }
             do {
                 let target = try await Self.connection(to: server, hub: hub, records: records)
-                let answer = try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(
-                    target: target, program: OwnerAccess.install(key)), timeout: 60)
+                let answer = try await SSHRun.run(CentralVaultRemote.arguments(
+                    target: target, program: OwnerAccess.install(key)), to: target, timeout: 60)
                 guard OwnerAccess.isInPlace(answer.output) else { throw NotInPlace() }
                 Self.keep(key.fingerprint, for: server, hub: hub)
                 tries[mark] = nil
@@ -164,8 +164,8 @@ final class ServerHardeningModel {
                 seenBefore: seen.contains(name), now: Date().timeIntervalSince1970,
                 connection: { try await OwnerAccessModel.connection(to: server, hub: hub, records: records) },
                 run: { target in
-                    try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(
-                        target: target, program: ServerHardening.program()), timeout: 120).output
+                    try await SSHRun.run(CentralVaultRemote.arguments(
+                        target: target, program: ServerHardening.program()), to: target, timeout: 120).output
                 })
             unreached[name] = tries
             if turn.seen { seenNow.insert(name) }
@@ -186,8 +186,9 @@ final class ServerHardeningModel {
                 settledLine: "its system libraries need nothing more",
                 connection: { try await OwnerAccessModel.connection(to: server, hub: hub, records: records) },
                 run: { target in
-                    try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(
-                        target: target, program: ServerLibraries.program()), timeout: ServerLibraries.runTime).output
+                    try await SSHRun.run(CentralVaultRemote.arguments(
+                        target: target, program: ServerLibraries.program()), to: target,
+                                         timeout: ServerLibraries.runTime).output
                 })
             unreached[librariesName] = librariesTries
             librariesRuns[librariesName] = libraries
@@ -211,8 +212,8 @@ final class ServerHardeningModel {
                     started: part.started, outcome: part.outcome, settledLine: part.settled,
                     connection: { try await OwnerAccessModel.connection(to: server, hub: hub, records: records) },
                     run: { target in
-                        try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(
-                            target: target, program: program), timeout: 120).output
+                        try await SSHRun.run(CentralVaultRemote.arguments(
+                            target: target, program: program), to: target, timeout: 120).output
                     })
                 unreached[partName] = partTries
                 if partTurn.seen { seenNow.insert(partName) }
@@ -234,8 +235,8 @@ final class ServerHardeningModel {
                 now: Date().timeIntervalSince1970,
                 connection: { try await OwnerAccessModel.connection(to: server, hub: hub, records: records) },
                 run: { target, program in
-                    try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(
-                        target: target, program: program), timeout: 120).output
+                    try await SSHRun.run(CentralVaultRemote.arguments(
+                        target: target, program: program), to: target, timeout: 120).output
                 })
             unreached[browserName] = browserTries
             if browserTurn.seen, let seenKey { seenNow.insert(seenKey) }
@@ -243,8 +244,35 @@ final class ServerHardeningModel {
                 Self.log.notice("\(server.name, privacy: .public): browser: \(line, privacy: .public)")
             }
             if browser != keptBrowser { Self.keepBrowser(browser, for: name) }
+            // The public SSH check (`PublicSSHCheck`), once a day: it reads, logs one line and changes nothing.
+            guard store.hub == hub else { return }
+            let now = Date().timeIntervalSince1970
+            if PublicSSHCheck.due(next: Self.publicCheckDue(name), now: now) {
+                let check = await PublicSSHCheck.check(
+                    connection: { try await OwnerAccessModel.connection(to: server, hub: hub, records: records) },
+                    run: { target, program in
+                        try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target,
+                                             timeout: 60).output
+                    })
+                Self.log.notice("\(server.name, privacy: .public): public SSH: \(check.line, privacy: .public)")
+                Self.keepPublicCheck(PublicSSHCheck.next(read: check.read, now: now), for: name)
+            }
         }
         seen = seenNow
+    }
+
+    /// When the next public SSH check of each server is due (`PublicSSHCheck.next`), by `memoryName`. Its result is
+    /// the round's log line, and nothing else keeps it.
+    private static let publicCheckKey = "publicSSHCheck"
+
+    static func publicCheckDue(_ name: String, defaults: UserDefaults = .standard) -> Double? {
+        (defaults.dictionary(forKey: publicCheckKey) as? [String: Double])?[name]
+    }
+
+    static func keepPublicCheck(_ next: Double, for name: String, defaults: UserDefaults = .standard) {
+        var all = (defaults.dictionary(forKey: publicCheckKey) as? [String: Double]) ?? [:]
+        all[name] = next
+        defaults.set(all, forKey: publicCheckKey)
     }
 
     /// The mark of the system packages' turn (`ServerLibraries`) in `seen`, `unreached` and `librariesRuns`.

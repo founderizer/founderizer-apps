@@ -405,8 +405,8 @@ final class CentralVaultModel {
                 machine = CentralVault.hubMachine(in: try await HubClient().machines(hub: hub, database: database).machines)
             }
             let target = try await self.target(machine, database: database, record: reading?.hub?.reach)
-            return try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target, program: program),
-                                            timeout: 900).output
+            return try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target,
+                                        timeout: 900).output
         }
     }
 
@@ -427,8 +427,8 @@ final class CentralVaultModel {
             machine = CentralVault.hubMachine(in: try await HubClient().machines(hub: hub, database: database).machines)
         }
         let target = try await self.target(machine, database: database, record: reading?.hub?.reach)
-        return try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target, program: program),
-                                        timeout: 900)
+        return try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target,
+                                    timeout: 900)
     }
 
     // MARK: the key swap's own step (Part B, app patch 2)
@@ -482,8 +482,8 @@ final class CentralVaultModel {
             guard await MacNetwork.device(of: target.host) == row.name else {
                 throw Stop(String(l10n: "This Mac's Tailscale does not say that \(target.host) is \(row.name). Founderizer pinned nothing."))
             }
-            let output = try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target, program: program),
-                                                  timeout: 600)
+            let output = try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target,
+                                              timeout: 600)
             if output.lines.contains(where: { $0.contains("Host key verification failed") }) {
                 throw Stop(Self.unread(output, machine: row.name, what: ""))
             }
@@ -523,9 +523,9 @@ final class CentralVaultModel {
         guard let fleet = reading?.fleetID, let address = hub.host,
               let target = try? await self.target(machine, database: database, record: reading?.hub?.reach),
               await MacNetwork.device(of: target.host) == machine, await MacNetwork.device(of: address) == machine,
-              let answer = try? await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target,
-                                                                                                   program: KeySwapRemote.central),
-                                                     timeout: 120),
+              let answer = try? await SSHRun.run(CentralVaultRemote.arguments(target: target,
+                                                                              program: KeySwapRemote.central),
+                                                 to: target, timeout: 120),
               let central = KeySwapRemote.central(in: answer.output), central.fleet == fleet else { return nil }
         return central
     }
@@ -589,7 +589,7 @@ final class CentralVaultModel {
                 machine = CentralVault.hubMachine(in: try await HubClient().machines(hub: hub, database: database).machines)
             }
             let target = try await self.target(machine, database: database, record: reading.hub?.reach)
-            let answer = try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target, program: program), timeout: 900)
+            let answer = try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target, timeout: 900)
             let recipient: String
             switch CentralVaultRemote.installed(answer.output) {
             case .installed(let vaultKey, let printed)?:
@@ -658,8 +658,8 @@ final class CentralVaultModel {
             let mac = try await HubClient().servers(hub: hub, database: database).servers.first(where: { $0.name == name })?.kind == "mac"
             if mac { target.becomeRoot = false }
             let program = mac ? CentralVaultRemote.readMacVaultKey : CentralVaultRemote.readBrokerKey
-            let answer = try await LocalShell.run("/usr/bin/ssh", CentralVaultRemote.arguments(target: target, program: program),
-                                                  timeout: 120)
+            let answer = try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target,
+                                              timeout: 120)
             guard let found = CentralVaultRemote.brokerKey(in: answer.output) else {
                 throw Stop(Self.unread(answer, machine: name, what: String(l10n: "its vault key")))
             }

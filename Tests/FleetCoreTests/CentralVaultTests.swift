@@ -420,15 +420,33 @@ struct CentralVaultTests {
 
     // MARK: over SSH
 
+    /// The owner's key gets today's arguments whole. The app's own key, once a run with it alone got in to the account
+    /// (`SSHKeyLedger`), goes with no configuration (`-F /dev/null`) and keeps the strict host key. Bugs: app mode
+    /// takes the install's `accept-new`, so a pin is read from a machine that this Mac never met; an app-mode call
+    /// with no `-F /dev/null` lets `Host *` keys in beside the app's.
     @Test func theVaultsStepsCheckTheHostKeyStrictly() {
         let target = InstallTarget(host: "100.80.1.2", user: "sam", port: 2222, identityFile: "/Users/owner/.ssh/id_ed25519", becomeRoot: true)
         let arguments = CentralVaultRemote.arguments(target: target, program: "echo 'hi'")
-        #expect(arguments.contains("StrictHostKeyChecking=yes") && !arguments.contains(where: { $0.contains("accept-new") }))
-        #expect(arguments.contains("BatchMode=yes") && arguments.contains("2222") && arguments.contains("/Users/owner/.ssh/id_ed25519"))
-        #expect(arguments.suffix(2) == ["sam@100.80.1.2", #"sudo -n -i -- /bin/sh -c 'echo '\''hi'\'''"#])
-        #expect(Array(arguments.prefix(6)) == ["-a", "-x", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no"])
+        let remote = #"sudo -n -i -- /bin/sh -c 'echo '\''hi'\'''"#
+        #expect(arguments == ["-a", "-x", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no",
+                              "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=20",
+                              "-o", "ServerAliveInterval=30", "-o", "NumberOfPasswordPrompts=0", "-p", "2222",
+                              "-o", "IdentitiesOnly=yes", "-i", "/Users/owner/.ssh/id_ed25519", "sam@100.80.1.2", remote])
         let root = InstallTarget(host: "100.80.1.2")
         #expect(CentralVaultRemote.arguments(target: root, program: "echo hi").suffix(2) == ["root@100.80.1.2", "echo hi"])
+
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("ssh-ledger-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let ledger = SSHKeyLedger(folder: folder), app = AppSSHKey.path()
+        var own = target
+        own.identityFile = app
+        #expect(!CentralVaultRemote.arguments(target: own, program: "echo 'hi'", ledger: ledger).contains("/dev/null"))
+        ledger.recordPlain(SSHKeyLedger.Account(address: "100.80.1.2", user: "sam", port: 2222), now: 1_794_000_000)
+        let confined = CentralVaultRemote.arguments(target: own, program: "echo 'hi'", ledger: ledger)
+        #expect(Array(confined.prefix(8)) == ["-F", "/dev/null", "-a", "-x", "-o", "IdentitiesOnly=yes", "-i", app])
+        #expect(confined.contains("StrictHostKeyChecking=yes") && !confined.contains(where: { $0.contains("accept-new") }))
+        #expect(confined.filter { $0 == "-a" || $0 == "ClearAllForwardings=yes" }.count == 2)
+        #expect(confined.suffix(4) == ["-p", "2222", "sam@100.80.1.2", remote])
     }
 
     /// DevOps plan V2: the install runs from root's own clone at its one fixed place, never from a path that the hub

@@ -200,17 +200,20 @@ public struct ScreenSharingConnection: Codable, Hashable, Sendable {
         agent.map { $0.range(of: "^[a-z0-9][a-z0-9_-]{0,63}$", options: .regularExpression) != nil } != false
     }
 
-    public func masterArguments(controlPath: String) -> [String]? {
+    /// The arguments of the tunnel's connection master, laid out by the one builder (`SSHCall`): today's, or app mode
+    /// for a record with the app's own key once a run with it alone got in to that account (`ledger`, which the
+    /// tunnels' service reads).
+    public func masterArguments(controlPath: String, ledger: SSHKeyLedger = .shared) -> [String]? {
         guard isValid else { return nil }
-        return ["-N", "-n", "-T", "-S", controlPath,
-                "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-                "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=10",
-                "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
-                "-o", "PermitLocalCommand=no", "-o", "RemoteCommand=none",
-                "-o", "ClearAllForwardings=yes", "-o", "ForwardAgent=no", "-o", "ForwardX11=no",
-                "-o", "ControlMaster=yes", "-o", "ControlPersist=no", "-o", "ForkAfterAuthentication=no"]
-            + (identityFile.map { ["-o", "IdentitiesOnly=yes", "-i", $0] } ?? [])
-            + ["-p", String(port), "-l", user, address]
+        let call = SSHCall(host: address, user: user, port: port, identityFile: identityFile, options: [
+            "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+            "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=10",
+            "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
+            "-o", "PermitLocalCommand=no", "-o", "RemoteCommand=none",
+            "-o", "ClearAllForwardings=yes", "-o", "ForwardAgent=no", "-o", "ForwardX11=no",
+            "-o", "ControlMaster=yes", "-o", "ControlPersist=no", "-o", "ForkAfterAuthentication=no",
+        ], shape: .master(controlPath: controlPath))
+        return call.arguments(SSHCall.key(identityFile: identityFile, host: address, user: user, port: port, ledger: ledger))
     }
 
     public func forwardArguments(controlPath: String, localPort: Int) -> [String]? {

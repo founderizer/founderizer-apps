@@ -258,6 +258,51 @@ struct MachineInstallTests {
         #expect(arguments.contains("NumberOfPasswordPrompts=0"))
     }
 
+    /// **One builder of `ssh`'s arguments, in two modes** (the build spec of the app's SSH key, step 2). A server whose
+    /// `Host` entry gives its address, user, port and the app's own key is read into the target through `ssh -G`
+    /// (`InstallTarget.named`), so a call with `-F /dev/null` still goes to that address, user and port. Bugs: an
+    /// app-mode call with no `-F /dev/null` offers the keys of `Host *` beside the app's, so a proof of the app's key
+    /// is false; an account that no run with the app's key alone got in to, or one with the owner's own key, gets
+    /// `-F /dev/null`, loses what his configuration gives it, and stops working.
+    @Test func theAppsKeyGoesAloneOnceItGotInAndEveryOtherCallKeepsTodaysArguments() {
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("ssh-ledger-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let ledger = SSHKeyLedger(folder: folder), app = AppSSHKey.path()
+        let general = SSHOptions(hostname: "x.invalid", user: "me", port: 22, identityFiles: ["~/.ssh/id_ed25519"])
+        func entry(_ key: String) -> InstallTarget {
+            InstallTarget.named("shop-app", options: SSHOptions(hostname: "100.84.1.2", user: "deploy", port: 2222,
+                                                                identityFiles: [key, "~/.ssh/id_ed25519"]),
+                                general: general, localUser: "me", home: NSHomeDirectory(), exists: { _ in true })
+        }
+        func today(_ key: String) -> [String] {
+            ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=20",
+             "-o", "ServerAliveInterval=30", "-o", "NumberOfPasswordPrompts=0", "-p", "2222",
+             "-o", "IdentitiesOnly=yes", "-i", key, "deploy@100.84.1.2", "/bin/sh -s"]
+        }
+        func arguments(_ target: InstallTarget, _ ledger: SSHKeyLedger, runs: InstallPlan.Runs = .login) -> [String] {
+            InstallPlan(job: .join, target: target, steps: [], redactions: []).arguments(for: "/bin/sh -s", runs: runs,
+                                                                                         ledger: ledger)
+        }
+        let target = entry("~/.ssh/founderizer_ed25519")
+        #expect(target == InstallTarget(host: "100.84.1.2", user: "deploy", port: 2222, identityFile: app, becomeRoot: true))
+        // no run with the app's key alone got in yet, or a ledger with no file: today's arguments
+        #expect(arguments(target, ledger) == today(app) && arguments(target, SSHKeyLedger()) == today(app))
+        #expect(ledger.recordPlain(SSHKeyLedger.Account(address: "100.84.1.2", user: "deploy", port: 2222), now: 1_794_000_000))
+        #expect(arguments(target, ledger) == [
+            "-F", "/dev/null", "-a", "-x", "-o", "IdentitiesOnly=yes", "-i", app,
+            "-o", "PreferredAuthentications=publickey", "-o", "BatchMode=yes", "-o", "NumberOfPasswordPrompts=0",
+            "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no",
+            "-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "ProxyCommand=none",
+            "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=30",
+            "-p", "2222", "deploy@100.84.1.2", "/bin/sh -s"])
+        #expect(arguments(target, ledger, runs: .root).last == "sudo -n -i -- /bin/sh -c '/bin/sh -s'")
+        // the owner's own key of the same entry, and the app's key at another port of that server: today's arguments
+        #expect(arguments(entry("~/.ssh/shop_deploy"), ledger) == today(NSHomeDirectory() + "/.ssh/shop_deploy"))
+        var other = target
+        other.port = 22
+        #expect(!arguments(other, ledger).contains("-F"))
+    }
+
     @Test func aMachineThatIsNotRootStopsBeforeAnythingIsChanged() async throws {
         let standIn = try StandInSSH("""
         case "$program" in

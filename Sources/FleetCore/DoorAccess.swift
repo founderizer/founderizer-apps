@@ -878,14 +878,28 @@ public enum DoorAccess {
     /// "maximum authentication attempts exceeded" each round, until its fail2ban shut this Mac out for an hour. `key`:
     /// one more key file for a device with no kept connection, offered before those files (`LoginKeys`). `port`: the
     /// port of that device's SSH, where this Mac's SSH configuration names one (`configured`).
+    ///
+    /// **The one builder lays them out** (`SSHCall`): a kept connection with the app's own key is in app mode once a
+    /// run with that key alone got in to it (`SSHKeyLedger`; `ledger` only for a test). A device with no kept
+    /// connection is always the owner's: its keys are the files that his configuration names, so its arguments are
+    /// today's.
     public static func sshArguments(kept: InstallTarget?, address: String, program: String, key: String? = nil,
-                                    port: Int = 22) -> [String]? {
+                                    port: Int = 22, ledger: SSHKeyLedger = .shared) -> [String]? {
+        guard let target = sshTarget(kept: kept, address: address, key: key, port: port) else { return nil }
+        guard kept == nil else { return CentralVaultRemote.arguments(target: target, program: program, ledger: ledger) }
+        var call = CentralVaultRemote.call(target: target, program: program, runs: .root)
+        call.options = ["-o", "IdentitiesOnly=yes"] + call.options
+        return call.arguments(.owner)
+    }
+
+    /// **The connection of the round's `ssh` to a device** (`sshArguments`): the kept one at the device's address, else
+    /// root there with `key` at `port`. nil when `ssh` cannot take it.
+    public static func sshTarget(kept: InstallTarget?, address: String, key: String? = nil,
+                                 port: Int = 22) -> InstallTarget? {
         var target = kept ?? InstallTarget(host: address, user: "root", port: port, identityFile: key)
         target.host = address
         target.becomeRoot = target.user != "root"
-        guard target.isValid else { return nil }
-        let arguments = CentralVaultRemote.arguments(target: target, program: program)
-        return kept == nil ? ["-o", "IdentitiesOnly=yes"] + arguments : arguments
+        return target.isValid ? target : nil
     }
 
     /// **What this Mac's SSH configuration gives the round's root login on a device with no kept connection**

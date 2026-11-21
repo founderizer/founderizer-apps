@@ -702,11 +702,10 @@ public enum OwnerMacKeyRegistration {
     /// forwarding (`CentralVaultRemote.arguments`). `asRoot` false: as the user that this Mac logs in as, which is
     /// enough when that user owns the file, and all that a login with no `sudo` can do. True: as root, through
     /// `sudo -n` for a user that is not root.
-    public static func arguments(target: InstallTarget, program: String, asRoot: Bool) -> [String] {
-        if asRoot { return CentralVaultRemote.arguments(target: target, program: program) }
-        return ["-a", "-x", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no"]
-            + InstallPlan(job: .join, target: target, steps: [], redactions: []).arguments(for: program, runs: .login)
-            .map { $0 == "StrictHostKeyChecking=accept-new" ? "StrictHostKeyChecking=yes" : $0 }
+    public static func arguments(target: InstallTarget, program: String, asRoot: Bool,
+                                 ledger: SSHKeyLedger = .shared) -> [String] {
+        CentralVaultRemote.call(target: target, program: program, runs: asRoot ? .root : .login)
+            .arguments(SSHCall.key(for: target, ledger: ledger))
     }
     #endif
 

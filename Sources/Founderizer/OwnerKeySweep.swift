@@ -82,11 +82,11 @@ final class OwnerKeyModel {
                 read: { program in
                     // As the user that this Mac logs in as, which is enough when that user runs the hub. Else as
                     // root, which reads the file as its owner (`OwnerMacKeyRegistration.program`).
-                    let own = try? await LocalShell.run("/usr/bin/ssh", OwnerMacKeyRegistration.arguments(
-                        target: target, program: program, asRoot: false), timeout: 60).output
+                    let own = try? await SSHRun.run(OwnerMacKeyRegistration.arguments(
+                        target: target, program: program, asRoot: false), to: target, timeout: 60).output
                     if let own, OwnerMacKeyRegistration.value(own) != nil || !target.becomeRoot { return own }
-                    return try await LocalShell.run("/usr/bin/ssh", OwnerMacKeyRegistration.arguments(
-                        target: target, program: program, asRoot: true), timeout: 60).output
+                    return try await SSHRun.run(OwnerMacKeyRegistration.arguments(
+                        target: target, program: program, asRoot: true), to: target, timeout: 60).output
                 })
             tries = nil
             cannot = false

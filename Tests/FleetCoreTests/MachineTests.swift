@@ -14,6 +14,21 @@ struct MachineTests {
         #expect(!master.contains("-F")) // Keep the owner's configured identity and known hosts.
         #expect(!master.contains("-L"))
         #expect(Array(master.suffix(5)) == ["-p", "2222", "-l", "sam", "100.96.100.4"])
+        // A record with the app's own key, once a run with it alone got in to that account: no configuration, and the
+        // master keeps its control socket (bug: the app's rules for one command, `ControlMaster=no` or
+        // `ControlPath=none`, reach the master, and no forward can be asked of it).
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("ssh-ledger-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let ledger = SSHKeyLedger(folder: folder), app = AppSSHKey.path()
+        let keyed = ScreenSharingConnection(address: "100.96.100.4", user: "sam", port: 2222, identityFile: app)
+        #expect(!(keyed.masterArguments(controlPath: "/tmp/c", ledger: ledger) ?? []).contains("-F"))
+        ledger.recordPlain(SSHKeyLedger.Account(address: "100.96.100.4", user: "sam", port: 2222), now: 1_794_000_000)
+        let confined = try #require(keyed.masterArguments(controlPath: "/tmp/c", ledger: ledger))
+        #expect(Array(confined.prefix(13)) == ["-F", "/dev/null", "-N", "-n", "-T", "-a", "-x", "-S", "/tmp/c",
+                                               "-o", "IdentitiesOnly=yes", "-i", app])
+        #expect(confined.contains("ControlMaster=yes") && !confined.contains("ControlMaster=no")
+                && !confined.contains("ControlPath=none") && confined.contains("StrictHostKeyChecking=yes"))
+        #expect(Array(confined.suffix(5)) == ["-p", "2222", "-l", "sam", "100.96.100.4"])
         let forward = try #require(connection.forwardArguments(controlPath: "/private/tmp/fleet-vnc-test/c", localPort: 49152))
         #expect(Array(forward.prefix(8)) == ["-F", "/dev/null", "-S", "/private/tmp/fleet-vnc-test/c", "-O", "forward", "-L", "127.0.0.1:49152:127.0.0.1:5900"])
         #expect(connection.forwardArguments(controlPath: "/tmp/c", localPort: 22) == nil)

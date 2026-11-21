@@ -17,25 +17,25 @@ struct FleetBuildTests {
     }
 
     /// The provider's build: 75 seconds before the install's 850 make 16 minutes; a server that starts has 30 seconds
-    /// before a join's 555, 10 minutes.
+    /// before a join's 495, 9 minutes (the join's own step is 360 seconds since its checks run once, 21 November 2026).
     @Test func aServerThatItsProviderMakesHasTheBuildsWordsAndMinutes() {
         let making = FleetBuildRow.building(joining: false, plan: hub)
         #expect(making.words == "Making your server" && making.minutes == 16 && making.parts == [0.2, 0, 0, 0])
         #expect(!making.ownersTurn)
         let starting = FleetBuildRow.building(joining: true, plan: join)
-        #expect(starting.words == "Starting your server" && starting.minutes == 10 && starting.parts == [0.6, 0, 0, 0])
+        #expect(starting.words == "Starting your server" && starting.minutes == 9 && starting.parts == [0.6, 0, 0, 0])
     }
 
     @Test func theManagersServerWaitsForTheHubWithItsJoinsMinutes() {
         let row = FleetBuildRow.waitsForHub(plan: join)
-        #expect(row.words == "Waiting for your hub" && row.minutes == 10 && row.parts == [0.6, 0, 0, 0] && !row.ownersTurn)
+        #expect(row.words == "Waiting for your hub" && row.minutes == 9 && row.parts == [0.6, 0, 0, 0] && !row.ownersTurn)
     }
 
     /// A join says what its long step does and checks the server by its agent's name; the hub's own install keeps the
     /// hub's words; an install that ended has no words and no minutes.
     @Test func eachInstallSaysWhatRunsWithItsMinutesAndParts() throws {
         let updates = FleetBuildRow.installing(try #require(InstallPhases(steps: steps(join, done: 2), planned: join,
-                                                                          runningFor: 210)), joinFor: "Juno")
+                                                                          runningFor: 180)), joinFor: "Juno")
         #expect(updates.words == "Installing security updates" && updates.parts == [1, 1, 0.5, 0] && updates.minutes == 5)
         let checks = FleetBuildRow.installing(try #require(InstallPhases(steps: steps(join, done: 3), planned: join)),
                                               joinFor: "Juno")

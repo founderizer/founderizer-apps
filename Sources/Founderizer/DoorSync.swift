@@ -596,9 +596,12 @@ final class DoorSyncModel {
         let extra = kept == nil ? DoorAccess.LoginKeys.read(hub: hub).key(
             for: device, candidates: DoorAccess.LoginKeys.candidates(configured: configured?.key,
                                                                      kept: InstallTargets.rootKeys(hub: hub))) : nil
+        // a kept connection with the app's own key gets the gate of its app mode first (`SSHRun`); a device with none
+        // is the owner's own, with today's arguments
+        let reached = kept.flatMap { DoorAccess.sshTarget(kept: $0, address: address) }
         guard let arguments = DoorAccess.sshArguments(kept: kept, address: address, program: program, key: extra,
                                                       port: configured?.port ?? 22),
-              let answer = try? await LocalShell.run("/usr/bin/ssh", arguments, stdin: stdin, timeout: 120) else { return nil }
+              let answer = try? await SSHRun.run(arguments, to: reached, stdin: stdin, timeout: 120) else { return nil }
         let refused = DoorAccess.loginRefused(status: answer.status, output: answer.output)
         if refused, let extra {
             var keys = DoorAccess.LoginKeys.read(hub: hub)

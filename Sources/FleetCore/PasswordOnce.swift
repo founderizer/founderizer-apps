@@ -127,6 +127,10 @@ public enum PasswordOnce {
         guard works || need == .sudo else {
             return .refused(String(l10n: "\(target.host) still asks for a password with this Mac's key in \(target.user)'s authorized_keys, so its SSH server reads keys from elsewhere."))
         }
+        // The proof above still lets `ssh` offer the keys of the owner's configuration beside the app's: the gate of
+        // app mode proves the app's key alone, so that the steps after it are in app mode at once (`SSHRun.prove`).
+        // The key is in that account again, so the gate's earlier refusals there count no more (`added`).
+        if works { await SSHRun.prove(keyed, appKey: AppSSHKey.path(in: keys), ssh: ssh, run: run, added: true) }
         keeps = sudo == "password"
         return .ready(works ? keyed : target, keepsPassword: keeps)
     }

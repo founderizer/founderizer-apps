@@ -14,7 +14,8 @@ private struct KnowledgeCardID: Identifiable { let id: String }
 /// its +, and Delete. It was nine agent chips and a Delete under every file: 47 controls on one page.
 ///
 /// It is the same relation an agent's own Knowledge shows from its end, and it writes the same thing: the "Knowledge
-/// files" section of that agent's profile. Internal knowledge files stay internal: the state has only the owner's.
+/// files" section of that agent's profile. No list here shows an internal knowledge file; a badge in a request's words
+/// opens one read-only, on a hub that gives the app one (`internalOpened`, owner API 1.278).
 ///
 /// **An agent's own Knowledge is a group of its Can use** (`grouped`, D-5: one editor for each kind): the files that
 /// agent reads, in the same rows, each of which opens the same card, with a − that takes it back from that agent, the +

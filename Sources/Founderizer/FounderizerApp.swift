@@ -9,6 +9,8 @@ import SwiftUI
 enum FounderizerStart {
     @MainActor static func main() {
         if AppHome.settle(runsThere: { runs(at: $0) }) { exit(0) }
+        // The ledger of the accounts of the app's own SSH key: its folder only, nothing is read or written here.
+        SSHKeyLedger.shared.open()
         // The link `~/.founderizer/cli` to this app's program for the owner's AI agent, off the main thread (`ProgramLink`).
         ProgramLink.keep()
         // The link on which that program asks the running app (`SetupChannel`), off the main thread too.

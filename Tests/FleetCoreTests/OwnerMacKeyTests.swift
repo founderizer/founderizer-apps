@@ -426,6 +426,19 @@ struct OwnerMacKeyTests {
         let own = OwnerMacKeyRegistration.arguments(target: target, program: program, asRoot: false)
         #expect(own.last == program)                                    // as the login user: no sudo around it
         #expect(own.contains("StrictHostKeyChecking=yes") && own.contains("ClearAllForwardings=yes"))
+        // The same two reads with the app's own key, once a run with it alone got in: no configuration, the login
+        // read still as the login user, the root read still through sudo (bug: app mode puts sudo around the login
+        // read, or drops it from the root read).
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("ssh-ledger-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let ledger = SSHKeyLedger(folder: folder)
+        ledger.recordPlain(SSHKeyLedger.Account(address: "100.64.0.9", user: "admin", port: 22), now: 1_794_000_000)
+        var keyed = target
+        keyed.identityFile = AppSSHKey.path()
+        let login = OwnerMacKeyRegistration.arguments(target: keyed, program: program, asRoot: false, ledger: ledger)
+        let asRoot = OwnerMacKeyRegistration.arguments(target: keyed, program: program, asRoot: true, ledger: ledger)
+        #expect(login.prefix(2) == ["-F", "/dev/null"] && login.last == program && login.contains("StrictHostKeyChecking=yes"))
+        #expect(asRoot.prefix(2) == ["-F", "/dev/null"] && asRoot.last == root.last)
     }
 
     @Test func onlyAValueOfTheRightShapeAfterTheMarkGoesBackToTheHub() {

@@ -10,6 +10,9 @@ final class ScreenSharingTunnels: @unchecked Sendable {
         let process: Process; let port: Int; let folder: URL; let inner: Int; let relay: ScreenRelay?
     }
     private var connections: [ScreenSharingConnection: Connection] = [:]
+    /// The app's ledger of its SSH accounts (`SSHKeyLedger`), which this service only reads: a record with the app's
+    /// own key gets the master in app mode once the app's gate got in to that account.
+    private static let ledger = SSHKeyLedger(folder: SSHKeyLedger.folder)
 
     // XPC reply blocks are delivered on this private queue only.
     private struct Reply: @unchecked Sendable { let call: (Int, String) -> Void }
@@ -32,7 +35,7 @@ final class ScreenSharingTunnels: @unchecked Sendable {
             let folder = FileManager.default.temporaryDirectory.appendingPathComponent("fleet-vnc-" + String(UUID().uuidString.prefix(8)))
             let control = folder.appendingPathComponent("c").path
             guard control.utf8.count < 104, let port = self.availablePort(),
-                  let arguments = request.masterArguments(controlPath: control),
+                  let arguments = request.masterArguments(controlPath: control, ledger: Self.ledger),
                   let forward = request.forwardArguments(controlPath: control, localPort: port) else {
                 reply.call(0, "A local Screen Sharing connection could not be opened."); return
             }

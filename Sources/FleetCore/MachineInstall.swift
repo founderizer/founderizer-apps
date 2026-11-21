@@ -676,6 +676,8 @@ public struct InstallPlan: Equatable, Sendable {
     /// The arguments of `ssh` for one remote program: the owner's own connection, nothing interactive, and no
     /// password anywhere. A host this Mac has never met is accepted once and kept, as a person typing `yes` does.
     /// `reaching` is where an install reaches the machine now (`MachineInstaller.reached`); else the plan's target.
+    /// The one builder lays them out (`SSHCall`): today's arguments, or app mode for the app's own key once a run with
+    /// it alone got in to that account.
     public func arguments(for program: String, reaching: InstallTarget? = nil) -> [String] {
         arguments(for: program, reaching: reaching, runs: .root)
     }
@@ -693,20 +695,30 @@ public struct InstallPlan: Equatable, Sendable {
         case rootWithPassword
     }
 
-    func arguments(for program: String, reaching: InstallTarget? = nil, runs: Runs) -> [String] {
+    /// `ledger`: whether an account of the app's own key is in app mode (`SSHCall.key`), which only a test gives.
+    func arguments(for program: String, reaching: InstallTarget? = nil, runs: Runs,
+                   ledger: SSHKeyLedger = .shared) -> [String] {
         let target = reaching ?? target
-        var values = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=20",
-                      "-o", "ServerAliveInterval=30", "-o", "NumberOfPasswordPrompts=0", "-p", String(target.port)]
-        if let key = target.identityFile { values += ["-o", "IdentitiesOnly=yes", "-i", key] }
-        values.append(target.destination)
+        return call(for: program, reaching: target, runs: runs).arguments(SSHCall.key(for: target, ledger: ledger))
+    }
+
+    /// **The parts of one call** (`SSHCall`): the install's own options of today, the host key rule (`strict`) and any
+    /// options of the caller's before them (`before`), and the program as whom `runs` says.
+    func call(for program: String, reaching: InstallTarget? = nil, runs: Runs, strict: String = "accept-new",
+              before: [String] = []) -> SSHCall {
+        let target = reaching ?? target
+        let options = before + ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=\(strict)", "-o", "ConnectTimeout=20",
+                                "-o", "ServerAliveInterval=30", "-o", "NumberOfPasswordPrompts=0"]
+        let remote: String
         switch runs {
         case .root where target.becomeRoot:
-            values.append("sudo -n -i -- /bin/sh -c \(InstallPlan.quote(InstallPlan.throughSudo(program)))")
+            remote = "sudo -n -i -- /bin/sh -c \(InstallPlan.quote(InstallPlan.throughSudo(program)))"
         case .rootWithPassword where target.becomeRoot:
-            values.append("sudo -S -k -p '' -i -- /bin/sh -c \(InstallPlan.quote(InstallPlan.throughSudo(program)))")
-        default: values.append(program)
+            remote = "sudo -S -k -p '' -i -- /bin/sh -c \(InstallPlan.quote(InstallPlan.throughSudo(program)))"
+        default: remote = program
         }
-        return values
+        return SSHCall(host: target.host, user: target.user, port: target.port, identityFile: target.identityFile,
+                       options: options, shape: .command(remote))
     }
 
     /// **A root program in words that reach `/bin/sh` unchanged through `sudo -i`.** `sudo -i` joins the command and

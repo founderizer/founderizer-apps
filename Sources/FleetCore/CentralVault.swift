@@ -449,13 +449,20 @@ public enum CentralVaultRemote {
     /// Where a server's own vault keeps its configuration (`vault.py`), whose `age_key` names its key file.
     public static let brokerConfig = "/etc/fleet-vault/vault.json"
 
-    /// The arguments of `ssh` for one program on `target`: the installer's, with the host key checked strictly.
-    public static func arguments(target: InstallTarget, program: String) -> [String] {
-        // No forwarding of any kind: the trust step runs on a schedule, also into the account of a Mac's agents, and
-        // an SSH agent, an X display or a port of this Mac is nothing that a vault step needs there.
-        ["-a", "-x", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no"]
-            + InstallPlan(job: .join, target: target, steps: [], redactions: []).arguments(for: program)
-            .map { $0 == "StrictHostKeyChecking=accept-new" ? "StrictHostKeyChecking=yes" : $0 }
+    /// The arguments of `ssh` for one program on `target`: the installer's, with the host key checked strictly, laid
+    /// out by the one builder (`SSHCall`; `ledger` only for a test).
+    public static func arguments(target: InstallTarget, program: String, ledger: SSHKeyLedger = .shared) -> [String] {
+        call(target: target, program: program, runs: .root).arguments(SSHCall.key(for: target, ledger: ledger))
+    }
+
+    /// No forwarding of any kind: the trust step runs on a schedule, also into the account of a Mac's agents, and an
+    /// SSH agent, an X display or a port of this Mac is nothing that a vault step needs there.
+    static let noForwarding = ["-a", "-x", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no"]
+
+    /// The parts of one call (`SSHCall`): the installer's, with the host key checked strictly and no forwarding.
+    static func call(target: InstallTarget, program: String, runs: InstallPlan.Runs) -> SSHCall {
+        InstallPlan(job: .join, target: target, steps: [], redactions: [])
+            .call(for: program, runs: runs, strict: "yes", before: noForwarding)
     }
 
     /// **Root's own clone of the published repository on the hub's machine** (DevOps plan V2), at the revision of a
