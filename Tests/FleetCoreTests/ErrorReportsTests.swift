@@ -30,9 +30,7 @@ struct ErrorReportsTests {
     /// its check mark. A press while a call runs is the owner's newer answer, and it still waits after that call. A
     /// first run that starts again ends the wait with no send, and the check mark stays.
     @Test func theFirstRunsAnswerWaitsUntilAHubTookIt() async throws {
-        let suite = "FirstRunReportsTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = TestDefaults("FirstRunReportsTests")
         #expect(FirstRunReports.chosen(in: defaults) == nil)
         #expect(await !FirstRunReports.deliver(offered: true, in: defaults) { _ in Issue.record("no answer, no call") })
 

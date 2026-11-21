@@ -284,7 +284,7 @@ struct ConnectGateTests {
 
     /// A turn that runs is kept for its hub, so that a quit shows its row at the next launch; its end takes it away.
     @Test func aTurnThatAQuitCutOffIsKeptForItsHub() throws {
-        let defaults = try #require(UserDefaults(suiteName: "connect-gate-tests-\(UUID().uuidString)"))
+        let defaults = TestDefaults("connect-gate-tests")
         let hub = try #require(URL(string: "http://100.64.0.2:8765")), other = try #require(URL(string: "http://100.64.0.3:8765"))
         #expect(ConnectGate.kept(hub, in: defaults) == nil)
         ConnectGate.keep(.off, for: hub, in: defaults)

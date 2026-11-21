@@ -98,7 +98,9 @@ final class OwnerRequestTests {
         #expect(tools.refused("control_task", ["task": .int(7), "action": .string("pause"),
                                                "request_id": .string("not-one")])
                 == "request_id must be a UUID, or absent so that this server makes one.")
-        #expect(tools.refused("check_machine") == "check_machine could not be sent: 'agent'")
+        #expect(tools.refused("check_machine") == "give agent: this tool's route needs it, so the command was not sent.")
+        #expect(tools.refused("check_machine", ["agent": .null]) == "give agent: this tool's route needs it, so the "
+                + "command was not sent.")
     }
 
     @Test func aToolWithBaseCarriesTheSHA256OfTeamJSONReadJustBefore() throws {
@@ -154,12 +156,26 @@ final class OwnerReadTests {
     @Test func fleetReadPutsTheSubjectInThePathAndTheWordsInTheQuery() throws {
         let hub = StandInHub(features: Fixture.everyFeature)
         let tools = Fixture.tools(hub, home: home)
-        _ = try tools.json("fleet_read", ["page": .string("notes"), "agent": .string("a b"), "limit": .int(5)])
-        _ = try tools.json("fleet_read", ["page": .string("trigger"), "id": .int(2), "after": .int(9)])
+        _ = try tools.json("fleet_read", ["page": .string("notes"), "agent": .string("a b")])
+        _ = try tools.json("fleet_read", ["page": .string("trigger"), "id": .int(2), "before": .int(9), "limit": .int(5)])
         _ = try tools.json("fleet_read", ["page": .string("knowledge"), "path": .string("a/b.md")])
         let reads = hub.seen.filter { $0.path != "/ui/state" }.map { "\($0.path)?\($0.query ?? "")" }
-        #expect(reads == ["/ui/notes/a%20b?db=g1&limit=5", "/ui/triggers/2?db=g1&after=9",
+        #expect(reads == ["/ui/notes/a%20b?db=g1", "/ui/triggers/2?db=g1&before=9&limit=5",
                           "/ui/knowledge?db=g1&path=a%2Fb.md"])
+        // A word that the page's route does not read is refused before any request (owner_mcp.py PAGE_TAKES): the
+        // hub would give the whole page, and the agent would take it for the narrowed one.
+        let before = hub.seen.count
+        #expect(tools.refused("fleet_read", ["page": .string("notes"), "agent": .string("a b"), "limit": .int(5)])
+                == "the page notes takes no limit, so nothing was read: it needs agent.")
+        #expect(tools.refused("fleet_read", ["page": .string("machines"), "agent": .string("w"), "id": .int(3)])
+                == "the page machines takes no id or agent, so nothing was read: it takes only page, and gives all "
+                   + "of it in one answer.")
+        // A word that the schema does not have either (an older list's since), before the check of a whole number
+        // that this program cannot carry and before a hub, as owner_mcp.py refuses it.
+        #expect(tools.refused("fleet_read", ["page": .string("events"), "id": .int(5), "since": .int(100),
+                                             "limit": .bigInt("100000000000000000000")])
+                == "the page events takes no since, so nothing was read: it needs id, and takes after and limit.")
+        #expect(hub.seen.count == before)
         #expect(tools.refused("fleet_read", ["page": .string("nothing")])?.hasPrefix("page must be one of: agent_messages, ") == true)
         #expect(tools.refused("fleet_read", ["page": .string("goal")]) == "the page goal is about one thing: give its id.")
         #expect(tools.refused("fleet_read", ["page": .string("goal"), "id": .bool(true)])

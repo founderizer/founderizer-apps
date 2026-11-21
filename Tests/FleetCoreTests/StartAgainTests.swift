@@ -657,8 +657,7 @@ struct StartAgainTests {
         // A claim line that the owner pastes gives the same hub.
         #expect(try ClaimCode.hubAddress(in: server).map(HubClient.address) == claimed)
         // So the first run's records are this hub's own, and nothing of another server's.
-        let (defaults, name) = scratch()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = scratch()
         MadeServers.note("worker-1", id: "101", hub: future, in: defaults)
         var record = BuildRecord(provider: .hetzner, use: .hub, hub: nil, name: "worker-1", launch: "now", at: time(0))
         record.made(id: "101", type: "cx23", at: time(8))
@@ -701,9 +700,8 @@ struct StartAgainTests {
 
     // MARK: - What the app keeps of one hub
 
-    private func scratch() -> (defaults: UserDefaults, name: String) {
-        let name = "start-again-\(UUID().uuidString)"
-        return (UserDefaults(suiteName: name)!, name)
+    private func scratch() -> UserDefaults {
+        TestDefaults("start-again")
     }
 
     /// Every value that the app keeps by a hub's address, written for this hub and for one whose address only starts
@@ -755,8 +753,7 @@ struct StartAgainTests {
     }
 
     @Test func onlyThisHubsKeptValuesAreClearedAndNeverTheOthers() {
-        let (defaults, name) = scratch()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = scratch()
         fill(defaults)
         let mine = hub.absoluteString, theirs = other.absoluteString
         StartAgain.forgetKept(hub: hub, hubServerDeleted: true, in: defaults)
@@ -795,8 +792,7 @@ struct StartAgainTests {
     }
 
     @Test func aHubThatStaysAliveKeepsWhatALaterConnectNeeds() {
-        let (defaults, name) = scratch()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = scratch()
         fill(defaults)
         let mine = hub.absoluteString
         StartAgain.forgetKept(hub: hub, hubServerDeleted: false, in: defaults)
@@ -813,8 +809,7 @@ struct StartAgainTests {
     }
 
     @Test func aKeptAddressOfAnotherHubStays() {
-        let (defaults, name) = scratch()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = scratch()
         defaults.set(other.absoluteString, forKey: "hubAddress")
         defaults.set(["context": "\(other.absoluteString)\ndb9", "seen": ["manager": 1]], forKey: "chatRepliesSeen")
         StartAgain.forgetKept(hub: hub, hubServerDeleted: true, in: defaults)
@@ -836,8 +831,7 @@ struct StartAgainTests {
     // MARK: - A hub that a run left alive
 
     @Test func aHubThatARunLeftIsPassedOverUntilTheOwnerConnectsToIt() {
-        let (defaults, name) = scratch()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = scratch()
         #expect(!StartAgain.LeftHubs.holds(hub, in: defaults))
         StartAgain.LeftHubs.note(URL(string: "http://Hub-1.example.ts.net:8765/")!, also: [hub], in: defaults)
         // The first run asks each device at its address with no last slash: the same hub.
@@ -862,8 +856,7 @@ struct StartAgainTests {
         let devices = FleetOnTailscale.devices(in: status), names = StartAgain.LeftHubs.dnsNames(in: status)
         #expect(names["100.64.0.1"] == "hub-1.example.ts.net" && names["100.64.0.10"] == "worker-2.example.ts.net")
         func passed(_ kept: String...) -> Set<String> {
-            let (defaults, name) = scratch()
-            defer { defaults.removePersistentDomain(forName: name) }
+            let defaults = scratch()
             for address in kept { StartAgain.LeftHubs.note(URL(string: address)!, in: defaults) }
             return StartAgain.LeftHubs.addresses(among: devices, dnsNames: names, in: defaults)
         }

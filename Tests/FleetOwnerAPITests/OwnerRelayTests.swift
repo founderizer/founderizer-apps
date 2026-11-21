@@ -80,7 +80,7 @@ final class OwnerRelayTests {
         let t = Fixture.table
         return OwnerTable(tools: t.tools.compactMap { $0.name == name ? change($0) : $0 }, instructions: t.instructions,
                           protocolVersion: t.protocolVersion, supported: t.supported, pages: t.pages,
-                          pageQuery: t.pageQuery, pageWords: t.pageWords, pageInPath: t.pageInPath,
+                          pageQuery: t.pageQuery, pageTakes: t.pageTakes, pageWords: t.pageWords, pageInPath: t.pageInPath,
                           historyWords: t.historyWords, costsWords: t.costsWords, mediaTypes: t.mediaTypes,
                           version: t.version)
     }
@@ -120,9 +120,9 @@ final class OwnerRelayTests {
         let release = try #require(base.tool("take_release"))
         #expect(overview.annotations["readOnlyHint"] == .bool(true) && release.annotations["readOnlyHint"] != .bool(true))
         let cases: [(OwnerTable, String, String)] = [
-            (table("fleet_overview") { self.tool($0, inputSchema: .object(["type": .string("object"), "properties":
-                .object(["agent": .object(["type": .string("string")])])])) },     // what the client sends
-             "fleet_overview", OwnerTools.changed("fleet_overview", path: Self.path)),
+            (table("take_release") { self.tool($0, inputSchema: .object(["type": .string("object"), "properties":
+                .object(["track": .object(["type": .string("string")])])])) },     // what the client sends to a write
+             "take_release", OwnerTools.changed("take_release", path: Self.path)),
             (table("fleet_overview") { self.tool($0, annotations: .object(["readOnlyHint": .bool(false)])) },
              "fleet_overview", OwnerTools.changed("fleet_overview", path: Self.path)),   // a read became a write
             (table("take_release") { self.tool($0, description: $0.description + " It also signs a press.") },
@@ -141,11 +141,16 @@ final class OwnerRelayTests {
                     == words)
             #expect(hub.seen.count == before)                                   // nothing reached the hub
         }
-        // A read's words carry no effect: a read whose words changed still goes.
+        // A read changes nothing, and the new program checks its own fields: a read whose words or fields changed still
+        // goes (fleet_read's fields changed in 4 of 148 builds in 7 days, and each change ended it in every session).
         let words = table("fleet_overview") { self.tool($0, description: $0.description + " More words.") }
-        let old = Fixture.tools(hub, home: home, ownBuild: 215, started: { 216 },
-                                relay: relay(build: Value(216), newTools: { Fixture.tools(hub, home: home, table: words) }))
-        #expect(try old.json("fleet_overview") == (try Fixture.tools(hub, home: home).json("fleet_overview")))
+        let fields = table("fleet_overview") { self.tool($0, inputSchema: .object(["type": .string("object"),
+            "properties": .object(["agent": .object(["type": .string("string")])])])) }
+        for newTable in [words, fields] {
+            let old = Fixture.tools(hub, home: home, ownBuild: 215, started: { 216 },
+                                    relay: relay(build: Value(216), newTools: { Fixture.tools(hub, home: home, table: newTable) }))
+            #expect(try old.json("fleet_overview") == (try Fixture.tools(hub, home: home).json("fleet_overview")))
+        }
     }
 
     @Test func aNewProgramThatDoesNotTakeTheCallSaysThatNothingWasDone() {

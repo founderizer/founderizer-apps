@@ -928,10 +928,12 @@ public final class HubClient: Sendable {
         return receipt
     }
 
-    /// `POST /ui/team/logins`: the title of one login reference in the catalog. A title gives no access.
+    /// `POST /ui/team/logins`: the title of one login reference in the catalog, and with `note` the owner's words for
+    /// its note (`""` takes it away; `SecretCommand.title`). A title gives no access.
     public func saveLoginTitle(hub: URL, database: String, client: String, requestID: UUID = UUID(), sha256: String, login: String,
-                               title: String) async throws -> SecretReceipt {
-        let body = try SecretCommand.title(requestID: requestID, database: database, sha256: sha256, login: login, title: title)
+                               title: String, note: String? = nil) async throws -> SecretReceipt {
+        let body = try SecretCommand.title(requestID: requestID, database: database, sha256: sha256, login: login, title: title,
+                                           note: note)
         let receipt = try await secretCommand("ui/team/logins", hub: hub, client: client, body: body)
         guard receipt.matches(requestID: requestID, client: client, login: login), receipt.deleted != true,
               receipt.sha256?.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else { throw HubError.invalidResponse }

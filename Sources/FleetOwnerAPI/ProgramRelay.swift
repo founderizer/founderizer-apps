@@ -14,10 +14,11 @@ import Security
 /// whole, so the call does what it does in a new session.
 ///
 /// **No call that the client's list is old for**: the relay compares the tool's entry in the child's `tools/list` with
-/// this program's own, which is the client's: its input schema and its marks (what the client sends, and whether it
-/// asked first), and, for a tool that is not marked as a read, its words, which can say what a call does (a door card's
-/// press is in `answer_needs_you`'s words only). A tool that differs, or that the child does not have, is refused, and
-/// nothing is sent.
+/// this program's own, which is the client's: its marks (whether it asks first), and, for a tool that is not marked as
+/// a read, its input schema (what the client sends) and its words, which can say what a call does (a door card's press
+/// is in `answer_needs_you`'s words only). A read's fields are the new program's to check (`entry`). A tool that
+/// differs, or that the child does not have, is refused, and nothing is sent. The comparison runs in the old program,
+/// so a session that started on a build before this rule still compares a read's fields.
 ///
 /// **Never a call twice**: a child that ended before a call took none of it (its input could not be written), so a new
 /// child takes it, once; a child that took the call and gave no answer, or one past its deadline, may have carried it
@@ -97,11 +98,17 @@ public final class ProgramRelay: @unchecked Sendable {
         self.callWait = callWait
     }
 
-    /// The parts of a tool's entry that the relay compares: what the client sends and whether it asks first, and the
-    /// words of a tool that is not marked as a read.
+    /// The parts of a tool's entry that the relay compares: whether it asks first (its marks), and for a tool that is
+    /// not marked as a read also what the client sends and its words. A read changes nothing, and the new program checks
+    /// its own fields (`fleet_read` refuses each word that its page does not take), so a read whose fields changed still
+    /// goes: `fleet_read`'s changed in 4 of 148 builds in 7 days (a validator's check of 20 November 2026), and each
+    /// change ended the main read of every running session until it started again.
     public static func entry(description: String, inputSchema: JSONValue, annotations: JSONValue) -> JSONValue {
-        var parts: [String: JSONValue] = ["inputSchema": inputSchema, "annotations": annotations]
-        if annotations["readOnlyHint"] != .bool(true) { parts["description"] = .string(description) }
+        var parts: [String: JSONValue] = ["annotations": annotations]
+        if annotations["readOnlyHint"] != .bool(true) {
+            parts["description"] = .string(description)
+            parts["inputSchema"] = inputSchema
+        }
         return .object(parts)
     }
 

@@ -7,11 +7,11 @@ import SwiftUI
 /// then for example a subheader with 4 tasks working - 1 waiting - 3 done that can be expanded", and "Yes, build it" to
 /// its picture). From the top:
 ///
-/// - **Its name**, which its agent wrote for him, and at the top right **how long ago it began**, or for a card of Done
-///   how long ago it ended, in the words and the place of a card of Needs you ("20 min ago"; the owner, 19 November
-///   2026: "show how long they've been sitting in a column since they started", then "make the times be like on the
-///   Needs you page"). The time is whole, and the name gives way; in a lane under `EndedRow.narrow` the time stands
-///   under the name, which would keep a few letters a line beside it.
+/// - **Its name**, which its agent wrote for him, and at the top right **how long it has stood in its column** ("for
+///   2 h"; the owner, 19 November 2026: "show how long they've been sitting in a column since they started", then
+///   "something like "for X hours" or "for Y minutes"", `Job.columnSince`), or for a card of Done how long ago it ended,
+///   in the place of a card of Needs you ("20 min ago"). The time is whole, and the name gives way; in a lane under
+///   `EndedRow.narrow` the time stands under the name, which would keep a few letters a line beside it.
 /// - **What it needs from him, in orange** ("Needs you: " and the request's title, or the words of an outcome, a stop
 ///   or a sign-in): a click on a request's line opens that request on Needs you.
 /// - **In Done, its result in plain words**, at most three lines (`Job.result`): he reads the answer on the card and
@@ -21,7 +21,7 @@ import SwiftUI
 ///   work took over is in no group), only for a job of two tasks or more: a click opens its tasks in the card, in the
 ///   order that they began, each with its mark, its title, its agent's glyph and name, and how long ago it came into
 ///   its state, or the time until which it is parked; a click on one opens that task.
-/// - **Its agent**, and at the end of that line why it waits ("Until 10:00", "Waiting for Fleet Manager"), or the red
+/// - **Its agent**, and at the end of that line why it waits ("Resumes at 10:00", "Waiting for Fleet Manager"), or the red
 ///   word of a result that did not succeed.
 ///
 /// The whole card opens the task of the job that matters now (`Job.lead`), as the card of a task did.
@@ -60,8 +60,11 @@ struct JobCard: View {
         return wait.words
     }
 
-    /// How long ago it began, or for a card of Done how long ago it ended: the words of a card of Needs you.
-    private var age: String { activityAge(ended ? job.endedAt : job.began, now: state.time) }
+    /// How long it has stood in its column ("for 2 h"), or for a card of Done how long ago it ended ("20 min ago").
+    private var age: String {
+        ended ? activityAge(job.endedAt, now: state.time)
+            : activityFor(JobColumns.shared.times.since(job, hub: state.db), now: state.time)
+    }
 
     /// The narrowest lane in which a task's row keeps its title, its agent's glyph and name and its time on one line:
     /// a title of about 25 characters beside "Shop DevOps Manager · 49 min ago" (a render of the owner's board at 560
@@ -80,7 +83,7 @@ struct JobCard: View {
     /// What a task's row says at its end: until when its agent parked it while nothing else holds it and it does not
     /// wait for him, else how long ago it came into its state.
     private func when(_ task: FleetTask, waits: Bool) -> String {
-        (waits ? nil : task.parkedUntil(in: state)).map { String(l10n: "Until \(fleetComingTime($0, now: state.time))") }
+        (waits ? nil : task.parkedUntil(in: state)).map { fleetResumes($0, now: state.time) }
             ?? activityAge(task.stateSince, now: state.time)
     }
 
@@ -257,3 +260,15 @@ struct JobCard: View {
     private static let mark: CGFloat = 13
     private static let rowHeight: CGFloat = 26
 }
+
+/// The kept column times of the cards (`ColumnTimes`), which the store writes at each reading of the hub and each card
+/// reads.
+@MainActor @Observable final class JobColumns {
+    static let shared = JobColumns()
+    private(set) var times = ColumnTimes()
+
+    func note(_ state: HubState?) {
+        if let state { times.note(state) }
+    }
+}
+

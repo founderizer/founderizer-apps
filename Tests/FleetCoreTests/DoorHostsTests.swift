@@ -78,7 +78,7 @@ struct DoorHostsTests {
     }
 
     @Test func theStateIsKeptForEachHubAndDatabase() throws {
-        let defaults = try #require(UserDefaults(suiteName: "door-hosts-\(UUID().uuidString)"))
+        let defaults = TestDefaults("door-hosts")
         let hub = URL(string: "http://100.64.0.2:8765")!
         var state = DoorHosts.State()
         state.hosts["ci-1"] = "passed"
@@ -93,7 +93,7 @@ struct DoorHostsTests {
     @Test func aStateStoredBeforeTheCountDecodesWithItsHostsAndItsStop() throws {
         // what an app before API 1.241 saved, with no `waiting`: a decode that failed would give an empty state, and
         // the next new server would be installed as a canary again, past the manager's door_rollout
-        let defaults = try #require(UserDefaults(suiteName: "door-hosts-\(UUID().uuidString)"))
+        let defaults = TestDefaults("door-hosts")
         let hub = URL(string: "http://100.64.0.2:8765")!
         let old = #"{"hosts":{"ci-1":"passed","ci-2":"installed"},"stop":{"host":"ci-3","reason":"the door's check failed: no TTY","app":"142","door":"aaaa"}}"#
         defaults.set(Data(old.utf8), forKey: DoorHosts.State.key(hub: hub, database: "g1"))

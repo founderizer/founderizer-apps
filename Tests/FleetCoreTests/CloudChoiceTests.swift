@@ -221,9 +221,7 @@ struct CloudChoiceTests {
     }
 
     @Test func thisMacKeepsTheServersThatItMadeByTheirHubAndByTheProvidersId() throws {
-        let name = "cloud-choice-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: name))
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = TestDefaults("cloud-choice")
         let one = try #require(URL(string: "http://100.64.0.1:8765")), other = try #require(URL(string: "http://100.64.0.2:8765"))
         #expect(MadeServers.kept(hub: one, in: defaults).isEmpty)
         // Before its provider answers, a server is kept by its name; then with the provider's id.
@@ -250,9 +248,7 @@ struct CloudChoiceTests {
     }
 
     @Test func thisMacKeepsTheInstallsThatItSawEnd() throws {
-        let name = "install-ends-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: name))
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = TestDefaults("install-ends")
         let one = try #require(URL(string: "http://100.64.0.1:8765")), other = try #require(URL(string: "http://100.64.0.2:8765"))
         InstallEnds.note("Worker-2", address: "100.64.0.9", hub: one, in: defaults)
         InstallEnds.note("worker-2", address: "100.64.0.7", hub: other, in: defaults)

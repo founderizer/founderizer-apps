@@ -334,9 +334,9 @@ struct AgentStatusPanel: View {
     /// One thing that he asked for: its mark, its name on one line, and under it one muted line that says where it
     /// stands. The row opens the request that it waits on, on Needs you, else its task. **One that only waits says
     /// why as its row in the chat says it** (`ChatAskLine`): until when its work is parked, in the Tasks board's words
-    /// ("Until 15:00"), else its task's state word.
+    /// ("Resumes at 15:00"), else its task's state word.
     private func askedRow(_ row: AskedCard.Row) -> some View {
-        let line = row.until.map { String(l10n: "Until \(fleetComingTime($0, now: time))") } ?? row.line
+        let line = row.until.map { fleetResumes($0, now: time) } ?? row.line
         let words = row.until == nil ? row.words : line
         return Button {
             if let request = row.request { store.selectedNeed = request; store.destination = .needs }

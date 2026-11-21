@@ -35,7 +35,7 @@ public struct ChatAskRow: Identifiable, Sendable, Equatable {
     /// moved last.
     public let task: Int?
     /// **Until when its agent parked its work** (`parked_until`), for a row that waits and that no hold or usage limit
-    /// stops: the app writes it as the Tasks board does ("Until 15:00") in place of `line`.
+    /// stops: the app writes it as the Tasks board does ("Resumes at 15:00") in place of `line`.
     public let until: Double?
 
     /// `agent`: the agent of the chat. `state`: the reading that `ask` came from, for the holds and the usage limits

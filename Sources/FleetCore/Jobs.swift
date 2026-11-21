@@ -26,6 +26,11 @@ struct JobStanding {
     let ends: [FleetTask]
     /// When its last word was said: the latest activity, delivery or check of its tasks; nil for no task.
     let said: Double?
+    /// **Since when it stands in its column, while it is open** (`Job.columnSince`): in In progress since its open work
+    /// first started, so a stall, a nudge or a lost session moves nothing, nor the return of a lead's task after its
+    /// subtask; in Waiting since the oldest of what waits for him (a task's wait, or the request that names it), else
+    /// since the open task that has waited longest, so a task that joins it later sets nothing back. nil once it ended.
+    let openSince: Double?
     /// **The tasks of it that later work took over**: a task that a task follows (through tasks that somebody
     /// canceled), each task under a top task that is put right, a rejection that its requester accepted while a task
     /// of it made after the rejection went on, which nobody canceled, and, on the board of one agent, each task of its
@@ -103,6 +108,15 @@ struct JobStanding {
         ends = column == .done
             ? tasks.filter { top[$0.id] == $0.id && $0.state != "canceled" && !putRight.contains($0.id) } : []
         said = tasks.map { max($0.activityTime, $0.delivered ?? 0, $0.checked_at ?? 0) }.max()
+        switch column {
+        case .inProgress:
+            openSince = open.compactMap(\.started).min() ?? open.map(\.created).min()
+        case .waiting:
+            let owner = tasks.filter { waits[$0.id] != nil }.map(\.stateSince) + (request.map { [$0.raised] } ?? [])
+            openSince = owner.min() ?? open.map(\.stateSince).min()
+        default:
+            openSince = nil
+        }
         until = open.compactMap(\.parked_until).min()
         replaced = followed.union(tasks.filter { top[$0.id].map(putRight.contains) == true }.map(\.id))
     }
@@ -174,11 +188,15 @@ public struct Job: Identifiable, Sendable {
     public let canceled: Bool
     /// When its last word was said: the latest activity, delivery or check of its tasks.
     public let endedAt: Double
-    /// **When it began**: his message, for what he asked for; else when its first task was made. Its card says how
-    /// long ago in Working and Waiting, and stands there by it (the owner, 19 November 2026: "do not reorder the tasks
+    /// **When it began**: his message, for what he asked for; else when its first task was made. Its card stands by
+    /// it in Working and Waiting (the owner, 19 November 2026: "do not reorder the tasks
     /// in the same column, keep them in their position", and "show how long they've been sitting in a column since
     /// they started ... the card is still not done so it should show 34 minutes").
     public let began: Double
+    /// **Since when it stands in its column**, for its card while it is open (the owner, 19 November 2026: "here the
+    /// time should be something like "for X hours" or "for Y minutes", in the sense of "working for x hours on this
+    /// task""): `JobStanding.openSince`, and in Done its last word. `began` keeps its place in the column.
+    public let columnSince: Double
     /// The tasks of it that later work took over (`JobStanding.replaced`): one of them that ended badly is in no count,
     /// and its row's mark is muted; one that succeeded counts as done, with its own mark.
     public let replaced: Set<Int>
@@ -234,6 +252,8 @@ public struct Job: Identifiable, Sendable {
         canceled = standing.canceled
         endedAt = standing.said ?? created
         began = created
+        // a Done job that waits only for the check of his ask's result stands in Waiting since its last word
+        columnSince = column == .done ? endedAt : standing.openSince ?? endedAt
         replaced = standing.replaced
         let last = standing.failed ?? standing.ends.max { ($0.activityTime, $0.id) < ($1.activityTime, $1.id) }
         result = standing.column == .done ? Self.words(last?.plain) ?? Self.words(last?.what) : nil
@@ -270,6 +290,7 @@ public struct Job: Identifiable, Sendable {
         canceled = task.state == "canceled"
         endedAt = max(task.activityTime, task.delivered ?? 0, task.checked_at ?? 0)
         began = task.created
+        columnSince = endedAt
         replaced = []
         result = Self.words(task.plain) ?? Self.words(task.what)
         counts = Counts(working: 0, waiting: 0, done: task.state == "canceled" || task.endedBadly ? 0 : 1,
@@ -464,5 +485,53 @@ extension HubState {
             sorted[.waiting] = lane.filter { $0.wait != nil } + lane.filter { $0.wait == nil }
         }
         return sorted
+    }
+}
+
+/// **How long each card has stood in its column, kept while it stays there** (a job card's "for 2 h"; the reviews of 20
+/// November 2026): the hub's times of a task move when its session starts again or a wait of it ends inside one
+/// attempt, while the card does not move. So this Mac notes every job at each reading of the hub, whatever page is
+/// open, and a card keeps its time while its column stays the same: the guess from its tasks (`Job.columnSince`) when
+/// a reading first has it, and after a change of column the later of that guess and the last reading that saw it in
+/// its old column, so a gap in the readings (another hub, sleep) takes the hub's own facts. A job that a reading no
+/// longer has is forgotten, and so is all of it at a quit.
+public struct ColumnTimes: Sendable {
+    private struct Kept: Sendable { let column: ActivityColumn; let since: Double; var seen: Double }
+    private var kept: [String: Kept] = [:]
+
+    public init() {}
+
+    /// Every job of one reading of the hub `hub` (its database), at the hub's time `now`.
+    public mutating func note(_ jobs: [Job], hub: String, now: Double) {
+        var next: [String: Kept] = [:]
+        for job in jobs {
+            let key = hub + "/" + job.id
+            if let old = kept[key], old.column == job.column {
+                next[key] = Kept(column: old.column, since: old.since, seen: now)
+            } else if let old = kept[key] {
+                next[key] = Kept(column: job.column, since: max(job.columnSince, old.seen), seen: now)
+            } else {
+                next[key] = Kept(column: job.column, since: job.columnSince, seen: now)
+            }
+        }
+        kept = next
+    }
+
+    /// Every card of one reading: the board of all agents, and each agent's own board with its parts of other agents'
+    /// jobs (`HubState.jobs(of:)` names such a part apart), for each agent with an open task (the fourth review of 20
+    /// November 2026: the parts were never noted, so an agent's own board lost their kept times).
+    public mutating func note(_ state: HubState) {
+        var jobs = Array(state.board(period: .all).values.joined())
+        for agent in Set(state.tasks.filter { !$0.isTerminal }.map(\.owner)).sorted() {
+            jobs += state.board(period: .all, agent: agent).values.joined()
+        }
+        note(jobs, hub: state.db, now: state.time)
+    }
+
+    /// Since when this job of hub `hub` stands in its column: the kept time while its column is the one kept, else its
+    /// own guess.
+    public func since(_ job: Job, hub: String) -> Double {
+        guard let old = kept[hub + "/" + job.id], old.column == job.column else { return job.columnSince }
+        return old.since
     }
 }

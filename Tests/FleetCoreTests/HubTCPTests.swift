@@ -112,9 +112,8 @@ struct HubTCPTests {
         }.joined(separator: " ")
     }
 
-    private func scratch() throws -> (UserDefaults, String) {
-        let suite = "founderizer-test-\(UUID().uuidString)"
-        return (try #require(UserDefaults(suiteName: suite)), suite)
+    private func scratch() -> UserDefaults {
+        TestDefaults("founderizer-test")
     }
 
     private func isSet(_ folder: URL) -> Bool {
@@ -146,8 +145,7 @@ struct HubTCPTests {
     @Test func aHubWithoutTheValueGetsTheStepOnce() throws {
         let folder = try clone()
         defer { try? FileManager.default.removeItem(at: folder) }
-        let (defaults, suite) = try scratch()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = scratch()
         #expect(HubTCP.isDue(hub: Self.hub, fleet: Self.fleet, db: Self.db, tries: nil, now: Self.now, in: defaults))
 
         let first = try run(folder)
@@ -195,8 +193,7 @@ struct HubTCPTests {
             #expect(HubTCP.hasStep(release: unknown) == nil, "\(unknown ?? "nil")")
         }
 
-        let (defaults, suite) = try scratch()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = scratch()
         let reading = try JSONDecoder().decode(VaultReading.self, from: Data(
             #"{"db": "gen-1", "fleet": "89abcdef01234567", "machines": [], "held": {}}"#.utf8))
         let gated = await HubTCP.round(reading, hub: Self.hub, release: "2026.11.292", tries: nil, now: { Self.now },
@@ -235,8 +232,7 @@ struct HubTCPTests {
     /// A part of the run that fails stops it: no part after it runs, nothing is set, and the hub is not done. The
     /// failure is one try of this step alone, and it changes the record of no other hub.
     @Test func aPartThatFailsStopsTheRunAndChangesNothingElse() throws {
-        let (defaults, suite) = try scratch()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = scratch()
         let other = URL(string: "http://100.64.0.9:8765")!
         _ = HubTCP.keep(.done, hub: other, fleet: Self.fleet, db: Self.db, after: nil, at: Self.now, in: defaults)
 
@@ -327,8 +323,7 @@ struct HubTCPTests {
     /// same address and another address are, a reading with no fleet is never, and 6 failed tries in a row end the
     /// tries.
     @Test func theRunIsOnceForEachHubFleetAndGeneration() throws {
-        let (defaults, suite) = try scratch()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = scratch()
         #expect(!HubTCP.isDue(hub: Self.hub, fleet: nil, db: Self.db, tries: nil, now: Self.now, in: defaults))
         #expect(!HubTCP.isDue(hub: Self.hub, fleet: "not-a-fleet", db: Self.db, tries: nil, now: Self.now, in: defaults))
         #expect(!HubTCP.isDue(hub: Self.hub, fleet: Self.fleet, db: "", tries: nil, now: Self.now, in: defaults))
@@ -387,8 +382,7 @@ struct HubTCPTests {
     /// while the step is due, with the step's own program. A run that could not be made is one try with its words; a
     /// done run is kept, and no run comes after it. No reading, or a reading with no fleet, gets no run.
     @Test func aRoundRunsTheStepOnlyWhileItIsDue() async throws {
-        let (defaults, suite) = try scratch()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = scratch()
         let runs = Runs()
         func reading(_ fleet: String?) throws -> VaultReading {
             let named = fleet.map { #", "fleet": "\#($0)""# } ?? ""

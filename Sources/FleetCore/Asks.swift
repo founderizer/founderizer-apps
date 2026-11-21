@@ -124,7 +124,7 @@ public struct AskedCard: Sendable, Equatable {
         /// For a row of an ask that ended: when its last word was said (`Ask.endedAt`). nil for an open ask.
         public let end: Double?
         /// For a row that only waits: until when its agent parked the work, which the app writes as the Tasks board
-        /// does ("Until 15:00") in place of its line; nil when a hold or a usage limit stops it, or no time does.
+        /// does ("Resumes at 15:00") in place of its line; nil when a hold or a usage limit stops it, or no time does.
         public let until: Double?
 
         /// **The row's one muted line**: that it waits for him; the agent that works on it now, by its role, and what
@@ -155,7 +155,7 @@ public struct AskedCard: Sendable, Equatable {
     public let rows: [Row]
     /// **The open things of this agent that only wait** — for a time, for another agent, for their turn — in the order
     /// in which he asked, the newest first, each with the mark and the words of its row in the chat (`ChatAskRow`):
-    /// muted, in the Tasks board's words ("Until 15:00", "Waiting for Shop Developer", "Queued"), and its click opens
+    /// muted, in the Tasks board's words ("Resumes at 15:00", "Waiting for Shop Developer", "Queued"), and its click opens
     /// the task whose wait the line says.
     public let waits: [Row]
     /// How many open things of this agent only wait.

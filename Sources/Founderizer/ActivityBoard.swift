@@ -228,7 +228,7 @@ struct ActivityBoard: View {
     private func why(_ task: FleetTask, holds: [TaskHold], limited: Bool, subtasks: [String]?, now: Double) -> String {
         // A parked task that also waits on a question or on something says that wait (`parkedOnly`).
         if task.parkedOnly, let until = task.parked_until, !holds.contains(where: { $0.task == task.id }), !limited {
-            return String(l10n: "Until \(fleetComingTime(until, now: now))")
+            return fleetResumes(until, now: now)
         }
         let word = task.stateWord(holds: holds, limited: limited)
         if let subtasks, word == TaskWords.working { return HubState.subtaskWords(subtasks) }
@@ -364,7 +364,7 @@ struct ActivityBoard: View {
 
 /// One open task on the board: its title, and under it its agent. **A task that waits for the owner says what for in
 /// orange** (the request's title, or the words of an outcome or a stop), and a click on a request's line opens that
-/// request on Needs you; any other waiting task says why at the end of its agent's line, muted ("Until 10:00"). On an
+/// request on Needs you; any other waiting task says why at the end of its agent's line, muted ("Resumes at 10:00"). On an
 /// agent's own board every card is that agent's, so no card names it (`owner` nil). **The same card stands in the lane
 /// of Needs you** for a task that only the owner can move (`NeedsBoard`).
 struct ActivityCard: View {

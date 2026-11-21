@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The first run and what the owner's computer sets up (windows-app-plan-v2.md, section 6): Tailscale's API, the
        cloud providers, the install, the claim, the agent setup and the root jobs, with no Windows call. It names
-       Founderizer.Core and Founderizer.Owner, and Founderizer.Remote (piece L1) once that project is on main: the
-       first piece here that calls SSH adds its reference. -->
+       Founderizer.Core, Founderizer.Owner and Founderizer.Remote (piece L1, SSH; piece L3 added the reference). -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Founderizer.Setup</RootNamespace>
@@ -13,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="../Founderizer.Core/Founderizer.Core.csproj" />
     <ProjectReference Include="../Founderizer.Owner/Founderizer.Owner.csproj" />
+    <ProjectReference Include="../Founderizer.Remote/Founderizer.Remote.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Founderizer.Setup.Tests" />

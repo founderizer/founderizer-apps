@@ -319,7 +319,7 @@ struct OwnerDeviceTests {
         let link = URLComponents(string: OwnerDevices.enrollPayload(hub: hub, code: "ABCD-2345", bind: fresh))
         let parts = URLComponents(string: "fleet://enroll?" + (link?.percentEncodedFragment ?? ""))
         #expect(parts?.queryItems?.first { $0.name == "bind" }?.value == fresh)
-        let defaults = try #require(UserDefaults(suiteName: "founderizer-test-\(UUID().uuidString)"))
+        let defaults = TestDefaults("founderizer-test")
         DeviceBinds.remember(bind, until: 2_000, in: defaults)
         DeviceBinds.remember(fresh, until: 1_000, in: defaults)
         #expect(DeviceBinds.all(now: 1_500, in: defaults) == [bind])

@@ -166,7 +166,7 @@ struct TaskPanel: View {
                 if mark.inWork && store.isFresh { WorkMark(size: Self.mark, moves: store.marksMove) }
                 else { Image(systemName: mark.symbol).font(IconMetrics.symbol(Self.mark)).foregroundStyle(tint.color) }
             }.accessibilityHidden(true)
-            Text(until.map { String(l10n: "Until \(fleetComingTime($0, now: state?.time ?? Date().timeIntervalSince1970))") } ?? mark.words)
+            Text(until.map { fleetResumes($0, now: state?.time ?? Date().timeIntervalSince1970) } ?? mark.words)
                 .font(FormMetrics.text).foregroundStyle(FleetStyle.text).lineLimit(1)
             Spacer(minLength: 8)
             if TaskHoldControls.shows(task, in: state) {

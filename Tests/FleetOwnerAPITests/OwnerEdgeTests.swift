@@ -77,7 +77,7 @@ final class OwnerEdgeTests {
         hub.raw = { $0.path == "/ui/health" ? (200, "text/plain", Data("all well".utf8)) : nil }
         #expect(tools.call("fleet_read", .object(["page": .string("health")])) == (OwnerTools.dataMark + "\nnull", false))
         hub.raw = { $0.path == "/ui/health" ? (200, "application/json", Data(count: SessionTransport.readMax + 1)) : nil }
-        #expect(tools.refused("fleet_read", ["page": .string("health")]) == "The hub's answer is larger than this server reads.")
+        #expect(tools.refused("fleet_read", ["page": .string("health")]) == "The hub's answer is larger than this server reads, so it was not read. Read less at a time: one item by its " + "id, or a page with a word that narrows it.")
         hub.raw = { $0.method == "POST" ? (502, "text/html", Data("<html>Bad gateway</html>".utf8)) : nil }
         #expect(tools.refused("take_release") == "The hub refused the update (502): <html>Bad gateway</html>")
     }

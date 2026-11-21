@@ -144,11 +144,8 @@ private func receiptRow(_ request: PendingRequest) -> [String: Any] {
 @Test func secretRefusalRemovesCanaryFromAllSavedDraftsAndPendingText() throws {
     let id = UUID().uuidString
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(id)
-    let defaults = try #require(UserDefaults(suiteName: "fleet-test-\(id)"))
-    defer {
-        try? FileManager.default.removeItem(at: directory)
-        defaults.removePersistentDomain(forName: "fleet-test-\(id)")
-    }
+    let defaults = TestDefaults("fleet-test")
+    defer { try? FileManager.default.removeItem(at: directory) }
     let canary = "SYNTHETIC-REJECTED-CANARY-\(id)"
     let pending = PendingRequest(hub: try HubClient.address("http://127.0.0.1:8765"), database: "test-db",
                                  client: "test", text: "A message with \(canary)")

@@ -289,7 +289,7 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     public let accepted: Int?
     public let live_path: String?
     /// The time until which its agent parked the task with a reminder, or nil: it does no work until then, so the
-    /// board shows it in Waiting with "Until 10:00". nil on a hub that does not send it, where a parked task still
+    /// board shows it in Waiting with "Resumes at 10:00". nil on a hub that does not send it, where a parked task still
     /// shows as work.
     public let parked_until: Double?
     /// **Since when an open task is in the state that its mark shows** (owner API 1.237), from the hub's own records: a

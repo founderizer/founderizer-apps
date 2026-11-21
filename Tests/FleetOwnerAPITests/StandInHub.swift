@@ -244,7 +244,7 @@ enum Fixture {
         let t = table
         return OwnerTable(tools: t.tools.map { $0.name == name ? change($0) : $0 }, instructions: t.instructions,
                           protocolVersion: t.protocolVersion, supported: t.supported, pages: t.pages,
-                          pageQuery: t.pageQuery, pageWords: t.pageWords, pageInPath: t.pageInPath,
+                          pageQuery: t.pageQuery, pageTakes: t.pageTakes, pageWords: t.pageWords, pageInPath: t.pageInPath,
                           historyWords: t.historyWords, costsWords: t.costsWords, mediaTypes: t.mediaTypes, version: t.version)
     }
 }

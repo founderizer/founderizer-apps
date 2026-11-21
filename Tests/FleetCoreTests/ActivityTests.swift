@@ -354,6 +354,10 @@ struct ActivityTests {
     @Test func theAgeIsShortAndRelative() {
         let now = Self.now, britain = Locale(identifier: "en_GB")
         #expect(activityAge(now - 30, now: now) == "Just now")
+        // how long a job has stood in its column, on its card (the owner, 19 November 2026: "for X hours")
+        #expect([activityFor(now - 30, now: now), activityFor(now - 1800, now: now), activityFor(now - 7200, now: now),
+                 activityFor(now - 86_400, now: now), activityFor(now - 3 * 86_400, now: now)]
+                == ["Just now", "for 30 min", "for 2 h", "for 1 day", "for 3 days"])
         #expect(activityAge(now + 120, now: now) == "Just now")              // a hub clock that is behind the task's
         #expect(activityAge(now - 5 * 60 - 59, now: now) == "5 min ago")
         #expect(activityAge(now - 3 * 3600, now: now) == "3 h ago")

@@ -94,6 +94,7 @@
         }
       }
     },
+    "%@ +%lld" : {},
     "%@ Copy report and mail it to support@founderizer.com." : {
       "localizations" : {
         "es" : {
@@ -670,6 +671,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ para %@"
+          }
+        }
+      }
+    },
+    "%@ for %@: %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ para %@: %@"
           }
         }
       }
@@ -2673,6 +2684,16 @@
         }
       }
     },
+    "%lld secrets stay, because agents have them." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld secretos se quedan, porque hay agentes que los tienen."
+          }
+        }
+      }
+    },
     "%lld security update is installed and waiting for a restart." : {
       "localizations" : {
         "es" : {
@@ -2699,6 +2720,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld actualizaciones de seguridad están en espera."
+          }
+        }
+      }
+    },
+    "%lld selected" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld seleccionados"
           }
         }
       }
@@ -3021,6 +3052,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1 secreto importado"
+          }
+        }
+      }
+    },
+    "1 secret stays, because an agent has it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 secreto se queda, porque un agente lo tiene."
+          }
+        }
+      }
+    },
+    "1 selected" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 seleccionado"
           }
         }
       }
@@ -4549,6 +4600,16 @@
         }
       }
     },
+    "An agent" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un agente"
+          }
+        }
+      }
+    },
     "An agent is not answering" : {
       "localizations" : {
         "es" : {
@@ -5669,6 +5730,16 @@
         }
       }
     },
+    "Changing" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiando"
+          }
+        }
+      }
+    },
     "Channels" : {
       "localizations" : {
         "es" : {
@@ -6295,6 +6366,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Claude hace el trabajo. ChatGPT añade el control de la pantalla."
+          }
+        }
+      }
+    },
+    "Clear the selection" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar la selección"
           }
         }
       }
@@ -7389,6 +7470,16 @@
         }
       }
     },
+    "Deleting %lld of %lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminando %lld de %lld"
+          }
+        }
+      }
+    },
     "Deleting a file" : {
       "localizations" : {
         "es" : {
@@ -8265,6 +8356,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Archivos de knowledge/ que lee primero."
+          }
+        }
+      }
+    },
+    "Filter" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtrar"
           }
         }
       }
@@ -9629,6 +9730,66 @@
         }
       }
     },
+    "Give %lld secrets" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dar %lld secretos"
+          }
+        }
+      }
+    },
+    "Give %lld secrets to %lld agents" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dar %lld secretos a %lld agentes"
+          }
+        }
+      }
+    },
+    "Give %lld secrets to 1 agent" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dar %lld secretos a 1 agente"
+          }
+        }
+      }
+    },
+    "Give 1 secret" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dar 1 secreto"
+          }
+        }
+      }
+    },
+    "Give 1 secret to %lld agents" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dar 1 secreto a %lld agentes"
+          }
+        }
+      }
+    },
+    "Give 1 secret to 1 agent" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dar 1 secreto a 1 agente"
+          }
+        }
+      }
+    },
     "Give a label of 1 to 40 characters on one line." : {
       "localizations" : {
         "es" : {
@@ -9655,6 +9816,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Escribe un nombre de variable de 1 a %lld caracteres: las letras de la A a la Z, los dígitos y _, con una letra al principio."
+          }
+        }
+      }
+    },
+    "Give access" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dar acceso"
           }
         }
       }
@@ -9765,6 +9936,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dando a %@ el servidor %@…"
+          }
+        }
+      }
+    },
+    "Giving %lld of %lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dando %lld de %lld"
           }
         }
       }
@@ -13349,6 +13530,16 @@
         }
       }
     },
+    "No secret matches the filter." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ningún secreto coincide con el filtro."
+          }
+        }
+      }
+    },
     "No secrets" : {
       "localizations" : {
         "es" : {
@@ -16679,6 +16870,16 @@
         }
       }
     },
+    "Removed %lld secrets from Founderizer. Their values stay in the vaults." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se quitaron %lld secretos de Founderizer. Sus valores siguen en las bóvedas."
+          }
+        }
+      }
+    },
     "Removed from the Founderizer app" : {
       "localizations" : {
         "es" : {
@@ -17225,6 +17426,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Reanudar «%@»"
+          }
+        }
+      }
+    },
+    "Resumes %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sigue el %@"
+          }
+        }
+      }
+    },
+    "Resumes at %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sigue a las %@"
           }
         }
       }
@@ -17895,6 +18116,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Semilla"
+          }
+        }
+      }
+    },
+    "Select %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seleccionar %@"
           }
         }
       }
@@ -19859,6 +20090,76 @@
         }
       }
     },
+    "Take %lld secrets" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirar %lld secretos"
+          }
+        }
+      }
+    },
+    "Take %lld secrets from %lld agents" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirar %lld secretos a %lld agentes"
+          }
+        }
+      }
+    },
+    "Take %lld secrets from 1 agent" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirar %lld secretos a 1 agente"
+          }
+        }
+      }
+    },
+    "Take 1 secret" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirar 1 secreto"
+          }
+        }
+      }
+    },
+    "Take 1 secret from %lld agents" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirar 1 secreto a %lld agentes"
+          }
+        }
+      }
+    },
+    "Take 1 secret from 1 agent" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirar 1 secreto a 1 agente"
+          }
+        }
+      }
+    },
+    "Take access" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirar acceso"
+          }
+        }
+      }
+    },
     "Take back" : {
       "localizations" : {
         "es" : {
@@ -19915,6 +20216,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hecha el %@ · equipo %@ · %@ · %@"
+          }
+        }
+      }
+    },
+    "Taking %lld of %lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirando %lld de %lld"
           }
         }
       }
@@ -28595,6 +28906,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "caducado"
+          }
+        }
+      }
+    },
+    "for %lld days" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "desde hace %lld días"
+          }
+        }
+      }
+    },
+    "for %lld h" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "desde hace %lld h"
+          }
+        }
+      }
+    },
+    "for %lld min" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "desde hace %lld min"
+          }
+        }
+      }
+    },
+    "for 1 day" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "desde hace 1 día"
           }
         }
       }

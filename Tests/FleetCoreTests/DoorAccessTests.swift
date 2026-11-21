@@ -996,7 +996,7 @@ struct DoorAccessTests {
                                 now: start.addingTimeInterval(300)))
 
         // the record outlives the app's run, for each hub
-        let defaults = try #require(UserDefaults(suiteName: "door-refusals-\(UUID().uuidString)"))
+        let defaults = TestDefaults("door-refusals")
         let hub = URL(string: "http://100.64.0.2:8765")!
         refusals.save(hub: hub, in: defaults)
         #expect(DoorAccess.Refusals.read(hub: hub, in: defaults).waits(server, now: start.addingTimeInterval(300)))

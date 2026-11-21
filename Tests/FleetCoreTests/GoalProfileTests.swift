@@ -35,9 +35,7 @@ struct GoalProfileTests {
         let outbox = Outbox(file: directory.appendingPathComponent("pending.json"))
         try outbox.save(request)
         #expect(try outbox.load()?.body() == request.body())
-        let suite = "fleet.profile.test.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = TestDefaults("fleet.profile.test")
         defaults.set(["vps": "Local \(canary)"], forKey: "agentDrafts")
         _ = try outbox.rejectSecret(matching: request.requestID, drafts: defaults)
         let loaded = try #require(try outbox.load())

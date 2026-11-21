@@ -114,6 +114,49 @@ struct FleetSelect<Value: Hashable, Label: View>: View {
     }
 }
 
+/// **A menu of several ticks behind the caller's label** (`FleetMenu.Ticks`; the Secrets page's agent filter, its Give
+/// access and its Take access): a choice ticks its row or takes its tick away and the list stays open, and `changed`
+/// gets each change at once. With `button`, a white button under the rows acts on the ticked rows (`press`) and closes
+/// the list. The button style around it draws the trigger, as a `FleetSelect` of actions.
+struct FleetTicks<Value: Hashable, Label: View>: View {
+    private let title: String
+    private let options: [FleetOption<Value>]
+    private let ticked: Set<Value>
+    private let changed: (Set<Value>) -> Void
+    private let button: ((Set<Value>) -> (words: String, acts: Bool))?
+    private let press: (Set<Value>) -> Void
+    private let label: Label
+    @Environment(\.viewZoom) private var zoom
+    @State private var anchor = FleetMenuAnchor.Spot()
+
+    init(_ title: String, options: [FleetOption<Value>], ticked: Set<Value>, changed: @escaping (Set<Value>) -> Void = { _ in },
+         button: ((Set<Value>) -> (words: String, acts: Bool))? = nil, press: @escaping (Set<Value>) -> Void = { _ in },
+         @ViewBuilder label: () -> Label) {
+        self.title = title; self.options = options; self.ticked = ticked; self.changed = changed; self.button = button
+        self.press = press; self.label = label()
+    }
+
+    var body: some View {
+        Button { open() } label: { label }
+            .background(FleetMenuAnchor(spot: anchor))
+            .accessibilityLabel(title)
+    }
+
+    private func open() {
+        guard let view = anchor.view, let window = view.window else { return }
+        let values = options.map(\.value)
+        let items = options.map { FleetMenuItem(title: $0.title, subtitle: $0.subtitle, detail: $0.detail, mark: $0.mark, section: $0.section) }
+        func chosen(_ rows: Set<Int>) -> Set<Value> { Set(rows.compactMap { values.indices.contains($0) ? values[$0] : nil }) }
+        let changed = changed, press = press, button = button
+        let ticks = FleetMenu.Ticks(ticked: Set(values.indices.filter { ticked.contains(values[$0]) }),
+                                    changed: { changed(chosen($0)) },
+                                    button: button.map { words in { words(chosen($0)) } },
+                                    press: { press(chosen($0)) })
+        FleetMenu.show(items, filters: options.count > 8, at: .under(window.convertToScreen(view.convert(view.bounds, to: nil))),
+                       over: window, zoom: zoom, owner: view, ticks: ticks) { _ in }
+    }
+}
+
 extension FleetSelect where Label == FleetSelectLabel {
     /// A dropdown for one value. A value that no row has shows the placeholder in the muted color.
     @_disfavoredOverload

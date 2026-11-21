@@ -8,12 +8,12 @@ import Testing
 struct DoorKeyReferenceTests {
     static let hub = URL(string: "http://100.64.0.1:8765")!
 
-    static func defaults() throws -> UserDefaults {
-        try #require(UserDefaults(suiteName: "door-key-reference-test-\(UUID().uuidString)"))
+    static func defaults() -> UserDefaults {
+        TestDefaults("door-key-reference-test")
     }
 
     @Test func aRoundThatFailedTriesAgainUnderTheSameReference() throws {
-        let defaults = try Self.defaults()
+        let defaults = Self.defaults()
         let first = DoorKeyReference.take(hub: Self.hub, database: "db1", app: "123", in: defaults)
         #expect(LoginSecret.isReference(first))
         for _ in 1...48 {
@@ -28,7 +28,7 @@ struct DoorKeyReferenceTests {
     }
 
     @Test func theReferenceGoesOnceTheDoorsFileNamesTheApp() throws {
-        let defaults = try Self.defaults()
+        let defaults = Self.defaults()
         let first = DoorKeyReference.take(hub: Self.hub, database: "db1", app: "123", in: defaults)
         let other = DoorKeyReference.take(hub: Self.hub, database: "db1", app: "456", in: defaults)
         DoorKeyReference.done(hub: Self.hub, database: "db1", app: "123", in: defaults)
@@ -38,7 +38,7 @@ struct DoorKeyReferenceTests {
     }
 
     @Test func aKeptValueThatIsNoReferenceIsReplaced() throws {
-        let defaults = try Self.defaults()
+        let defaults = Self.defaults()
         defaults.set("not a reference", forKey: DoorKeyReference.key(hub: Self.hub, database: "db1", app: "123"))
         let made = DoorKeyReference.take(hub: Self.hub, database: "db1", app: "123", in: defaults)
         #expect(LoginSecret.isReference(made))

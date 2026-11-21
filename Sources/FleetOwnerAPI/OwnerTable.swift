@@ -73,6 +73,9 @@ public struct OwnerTable: Sendable {
     /// `fleet_read`'s pages: each name with its route and its words.
     public let pages: [String: (route: String, what: String)]
     public let pageQuery: [String]
+    /// The words of `pageQuery` that each page's route reads (`owner_mcp.py` PAGE_TAKES); a page that is not here
+    /// reads none of them.
+    public let pageTakes: [String: [String]]
     public let pageWords: [String]
     public let pageInPath: [String]
     public let historyWords: [String]
@@ -83,6 +86,16 @@ public struct OwnerTable: Sendable {
     public let version: String
 
     public func tool(_ name: String) -> Tool? { tools.first { $0.name == name } }
+
+    /// The words that one page needs (`owner_mcp.py` `page_needs`): its id, and the subject in its path.
+    public func needs(of page: String) -> [String] {
+        guard let route = pages[page]?.route else { return [] }
+        return (route.contains("{id}") ? ["id"] : []) + pageInPath.filter { route.contains($0) }.map { String($0.dropFirst().dropLast()) }
+    }
+
+    /// The words that `fleet_read` takes for one page, in the order of its route (`owner_mcp.py` `page_words`): the ones
+    /// it needs, then the words of its query.
+    public func words(of page: String) -> [String] { needs(of: page) + (pageTakes[page] ?? []) }
 
     /// This table, with each tool of the kind `swift` that is not in `written` made a tool of a later version: a
     /// newer `owner_mcp.py` can write a table with a tool that this program's code does not have yet.
@@ -95,8 +108,8 @@ public struct OwnerTable: Sendable {
                         requestIDFromArguments: tool.requestIDFromArguments, feature: tool.feature, whole: tool.whole,
                         nulls: tool.nulls)
         }, instructions: instructions, protocolVersion: protocolVersion, supported: supported, pages: pages,
-           pageQuery: pageQuery, pageWords: pageWords, pageInPath: pageInPath, historyWords: historyWords,
-           costsWords: costsWords, mediaTypes: mediaTypes, version: version)
+           pageQuery: pageQuery, pageTakes: pageTakes, pageWords: pageWords, pageInPath: pageInPath,
+           historyWords: historyWords, costsWords: costsWords, mediaTypes: mediaTypes, version: version)
     }
 
     /// Why a table could not be read, in words for an agent.
@@ -166,9 +179,15 @@ public struct OwnerTable: Sendable {
             else { throw broken }
             pages[name] = (route, what)
         }
+        guard let takesMap = root["PAGE_TAKES"]?.object else { throw broken }
+        var takes: [String: [String]] = [:]
+        for (name, value) in takesMap {
+            guard let items = value.array else { throw broken }
+            takes[name] = try items.map { guard let text = $0.string else { throw broken }; return text }
+        }
         return OwnerTable(tools: tools, instructions: instructions, protocolVersion: protocolVersion,
                           supported: try words("supported"), pages: pages, pageQuery: try words("PAGE_QUERY"),
-                          pageWords: try words("PAGE_WORDS"), pageInPath: try words("PAGE_IN_PATH"),
+                          pageTakes: takes, pageWords: try words("PAGE_WORDS"), pageInPath: try words("PAGE_IN_PATH"),
                           historyWords: try words("HISTORY_WORDS"), costsWords: try words("COSTS_WORDS"), mediaTypes: types,
                           version: version)
     }

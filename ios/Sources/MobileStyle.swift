@@ -844,6 +844,14 @@ func requestHead(by agent: String, raised: Double, now: Date = .now) -> String {
 
 /// **A time to come, as the Mac writes it** (`fleetComingTime` there; the lead's call on item 32): the time today, the
 /// weekday and the time in the next week, else the day and the month.
+/// The line of a parked task: when its agent goes on with it, as the Mac writes it (`fleetResumes`): "Resumes at
+/// 23:11" today, "Resumes Thu 12:12" on another day. A usage limit's end keeps "Until".
+func resumesTime(_ timestamp: Double, now: Double, calendar: Calendar = .current) -> String {
+    let today = calendar.isDate(Date(timeIntervalSince1970: timestamp), inSameDayAs: Date(timeIntervalSince1970: now))
+    let when = comingTime(timestamp, now: now, calendar: calendar)
+    return today ? String(l10n: "Resumes at \(when)") : String(l10n: "Resumes \(when)")
+}
+
 func comingTime(_ timestamp: Double, now: Double, calendar: Calendar = .current) -> String {
     let date = Date(timeIntervalSince1970: timestamp)
     let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: Date(timeIntervalSince1970: now)),

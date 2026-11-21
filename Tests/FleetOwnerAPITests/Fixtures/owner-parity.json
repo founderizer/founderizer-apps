@@ -4523,6 +4523,9 @@
      "query": {
       "db": [
        "g1"
+      ],
+      "limit": [
+       "1"
       ]
      }
     },
@@ -4716,6 +4719,9 @@
      "query": {
       "db": [
        "g1"
+      ],
+      "limit": [
+       "1"
       ]
      }
     },
@@ -5243,7 +5249,51 @@
    "name": "plain: a part that the arguments do not give",
    "older_hub": 0,
    "outcome": {
-    "refusal": "check_machine could not be sent: 'agent'"
+    "refusal": "give agent: this tool's route needs it, so the command was not sent."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "check_machine"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "agent": null
+   },
+   "name": "plain: a part that is null",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "give agent: this tool's route needs it, so the command was not sent."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "check_machine"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "agent": ""
+   },
+   "name": "plain: a part that is empty",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "give agent: this tool's route needs it, so the command was not sent."
    },
    "requests": [],
    "setup": {
@@ -5405,7 +5455,7 @@
    "name": "with_base: a part that the arguments do not give",
    "older_hub": 0,
    "outcome": {
-    "refusal": "activate_agent could not be sent: 'agent'"
+    "refusal": "give agent: this tool's route needs it, so the command was not sent."
    },
    "requests": [
     {
@@ -5758,7 +5808,7 @@
    "name": "with_base: the client's base and a part that the arguments do not give",
    "older_hub": 0,
    "outcome": {
-    "refusal": "rename_agent could not be sent: 'agent'"
+    "refusal": "give agent: this tool's route needs it, so the command was not sent."
    },
    "requests": [],
    "setup": {
@@ -7151,22 +7201,7 @@
     "files": {},
     "folders": []
    },
-   "answers": [
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
-     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
-     "text": "{\"page\": \"/ui/notes/a%20b\"}"
-    }
-   ],
+   "answers": [],
    "arguments": {
     "agent": "a b",
     "limit": 5,
@@ -7175,54 +7210,9 @@
    "name": "fleet_read: {\"agent\": \"a b\", \"limit\": 5, \"page\": \"notes\"}",
    "older_hub": 0,
    "outcome": {
-    "result": {
-     "page": "/ui/notes/a%20b"
-    }
+    "refusal": "the page notes takes no limit, so nothing was read: it needs agent."
    },
-   "requests": [
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/state",
-     "query": {
-      "head": [
-       "1"
-      ],
-      "tasks": [
-       "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/notes/a%20b",
-     "query": {
-      "db": [
-       "g1"
-      ],
-      "limit": [
-       "5"
-      ]
-     }
-    }
-   ],
+   "requests": [],
    "setup": {
     "files": {},
     "folders": [],
@@ -7235,22 +7225,7 @@
     "files": {},
     "folders": []
    },
-   "answers": [
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
-     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
-    },
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
-     "text": "{\"trigger\": {\"id\": 2, \"revision\": 12}}"
-    }
-   ],
+   "answers": [],
    "arguments": {
     "after": 9,
     "id": 2,
@@ -7259,57 +7234,9 @@
    "name": "fleet_read: {\"after\": 9, \"id\": 2, \"page\": \"trigger\"}",
    "older_hub": 0,
    "outcome": {
-    "result": {
-     "trigger": {
-      "id": 2,
-      "revision": 12
-     }
-    }
+    "refusal": "the page trigger takes no after, so nothing was read: it needs id, and takes before and limit."
    },
-   "requests": [
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/state",
-     "query": {
-      "head": [
-       "1"
-      ],
-      "tasks": [
-       "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/triggers/2",
-     "query": {
-      "after": [
-       "9"
-      ],
-      "db": [
-       "g1"
-      ]
-     }
-    }
-   ],
+   "requests": [],
    "setup": {
     "files": {},
     "folders": [],
@@ -7538,6 +7465,214 @@
    "older_hub": 0,
    "outcome": {
     "refusal": "the page notes is about one thing: give agent."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "fleet_read"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "agent": "worker-1",
+    "id": 3,
+    "page": "machines"
+   },
+   "name": "fleet_read: {\"agent\": \"worker-1\", \"id\": 3, \"page\": \"machines\"}",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "the page machines takes no id or agent, so nothing was read: it takes only page, and gives all of it in one answer."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "fleet_read"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"mobile\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"page\": \"/ui/standing\"}"
+    }
+   ],
+   "arguments": {
+    "agent": "a b",
+    "limit": 5,
+    "page": "standing"
+   },
+   "name": "fleet_read: {\"agent\": \"a b\", \"limit\": 5, \"page\": \"standing\"}",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "page": "/ui/standing"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/standing",
+     "query": {
+      "agent": [
+       "a b"
+      ],
+      "db": [
+       "g1"
+      ],
+      "limit": [
+       "5"
+      ]
+     }
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "fleet_read"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "agent": null,
+    "limit": 0,
+    "page": "machines"
+   },
+   "name": "fleet_read: {\"agent\": null, \"limit\": 0, \"page\": \"machines\"}",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "the page machines takes no limit, so nothing was read: it takes only page, and gives all of it in one answer."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "fleet_read"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "limit": false,
+    "page": "machines"
+   },
+   "name": "fleet_read: {\"limit\": false, \"page\": \"machines\"}",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "the page machines takes no limit, so nothing was read: it takes only page, and gives all of it in one answer."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "fleet_read"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "agent": "x",
+    "name": "wa 1",
+    "page": "chat_link"
+   },
+   "name": "fleet_read: {\"agent\": \"x\", \"name\": \"wa 1\", \"page\": \"chat_link\"}",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "the page chat_link takes no agent, so nothing was read: it needs name."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "fleet_read"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "after": 2,
+    "id": 5,
+    "machine": null,
+    "page": "events",
+    "since": 100
+   },
+   "name": "fleet_read: {\"after\": 2, \"id\": 5, \"machine\": null, \"page\": \"events\", \"since\": 100}",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "the page events takes no since, so nothing was read: it needs id, and takes after and limit."
    },
    "requests": [],
    "setup": {

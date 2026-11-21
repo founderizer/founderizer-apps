@@ -105,7 +105,7 @@ import Testing
         #expect(StepWords.running(in: timeline, attempt: 3) == nil)
     }
 
-    /// "Until 02:30" only while nothing else holds the task: a hold of his that is not released and its agent's usage
+    /// "Resumes at 02:30" only while nothing else holds the task: a hold of his that is not released and its agent's usage
     /// limit say their own words, and a hold that he released does not. The rule of an ask's row and of the task's panel;
     /// fails when the rule counts a released hold, or says "Until" over a pause.
     @Test func aParkedTaskSaysUntilOnlyWhileNothingElseHoldsIt() throws {

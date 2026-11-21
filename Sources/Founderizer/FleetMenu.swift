@@ -92,10 +92,25 @@ struct FleetMenuItem {
     var choose: (Int) -> Void = { _ in }
     /// The words typed to jump to an item of a menu that does not filter, and when the last letter came.
     private var typed = "", typedAt = Date.distantPast
+    /// **A list of several ticks** (`FleetMenu.Ticks`): a choice ticks its row or takes its tick away, and the list
+    /// stays open.
+    let ticks: Bool
+    /// The rows ticked now, in a list of several ticks.
+    @Published var ticked: Set<Int>
+    /// The words of the white button under a list of several ticks, for the rows ticked now, and whether it can act;
+    /// nil: the list has no button.
+    let button: ((Set<Int>) -> (words: String, acts: Bool))?
+    /// The button's frame in the panel's own points, for the pointer.
+    var buttonFrame: CGRect?
+    var press: () -> Void = {}
 
-    init(items: [FleetMenuItem], filters: Bool, highlighted: Int?, maxHeight: CGFloat) {
+    init(items: [FleetMenuItem], filters: Bool, highlighted: Int?, maxHeight: CGFloat, ticks: FleetMenu.Ticks? = nil) {
         self.items = items; self.filters = filters; self.highlighted = highlighted; self.maxHeight = maxHeight
+        self.ticks = ticks != nil; ticked = ticks?.ticked ?? []; button = ticks?.button
     }
+
+    /// Whether a row has its check mark: a list of several ticks says it by `ticked`, any other list by its item.
+    func checked(_ index: Int) -> Bool { ticks ? ticked.contains(index) : items[index].checked }
 
     /// The rows that show, as indices of `items`.
     var shown: [Int] {
@@ -108,8 +123,8 @@ struct FleetMenuItem {
 
     /// Whether any row has a mark: then every row keeps the mark's column, so their words begin at one place.
     var marks: Bool { items.contains { !$0.mark.isNone } }
-    /// Whether any row has the check mark: then every row keeps its column.
-    var checks: Bool { items.contains(where: \.checked) }
+    /// Whether any row has the check mark: then every row keeps its column, as a list of several ticks always does.
+    var checks: Bool { ticks || items.contains(where: \.checked) }
 
     /// The shown row under a point of the panel, in its own points, only where the rows show.
     func row(at point: CGPoint) -> Int? {
@@ -203,6 +218,7 @@ struct FleetMenuList: View {
                 .onChange(of: model.scrolledTo) { _, index in if let index { proxy.scrollTo(index) } }
                 .onAppear { if let highlighted = model.highlighted { proxy.scrollTo(highlighted, anchor: .center) } }
             }
+            if let button = model.button { action(button(model.ticked)) }
         }
         .frame(minWidth: FleetMenuMetrics.minWidth, maxWidth: FleetMenuMetrics.maxWidth, alignment: .leading)
         .frame(width: model.width)
@@ -226,6 +242,20 @@ struct FleetMenuList: View {
         .font(FleetMenuMetrics.font)
         .padding(.horizontal, FleetMenuMetrics.inset + FleetMenuMetrics.lead).frame(height: 38)
         .accessibilityElement(children: .combine)
+    }
+
+    /// **The white button under a list of several ticks** ("Give 4 secrets to 2 agents"), under a line, the panel's
+    /// width less its inset; dimmed while it cannot act. The surface takes its click by its frame, as it takes a row's.
+    private func action(_ look: (words: String, acts: Bool)) -> some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(FleetStyle.hairline(0.1)).frame(height: 0.5).accessibilityHidden(true)
+            Button(look.words) {}.buttonStyle(FleetPrimaryButtonStyle()).disabled(!look.acts)
+                .frame(maxWidth: .infinity)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { model.buttonFrame = $0 }
+                .allowsHitTesting(false)
+                .accessibilityAction { if look.acts { model.press() } }
+                .padding(FleetMenuMetrics.inset + FleetMenuMetrics.lead / 2)
+        }
     }
 
     /// A group's heading, or, for a section of spaces alone, the line between two groups.
@@ -261,7 +291,7 @@ struct FleetMenuList: View {
             Spacer(minLength: 12)
             if model.checks {
                 Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(FleetStyle.text)
-                    .opacity(item.checked ? 1 : 0).accessibilityHidden(true)
+                    .opacity(model.checked(index) ? 1 : 0).accessibilityHidden(true)
             }
         }
         .padding(.leading, FleetMenuMetrics.lead).padding(.trailing, FleetMenuMetrics.trail)
@@ -274,7 +304,7 @@ struct FleetMenuList: View {
         // A row is a button for assistive apps, and their press chooses it as a click or Return does.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([item.title, item.detail, item.mark.presence?.label, item.subtitle].compactMap { $0 }.joined(separator: ", "))
-        .accessibilityAddTraits(item.checked ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAddTraits(model.checked(index) ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { if item.enabled { model.choose(index) } }
         // An item that cannot act is dimmed for VoiceOver, as the system's menu says it.
         .disabled(!item.enabled)
@@ -388,6 +418,7 @@ private final class FleetMenuSurface: NSView {
     override func rightMouseUp(with event: NSEvent) { release(at: event.locationInWindow) }
 
     func release(at point: NSPoint) {
+        if let button = model.buttonFrame, button.contains(self.point(atWindowPoint: point)) { model.press(); return }
         guard let index = row(atWindowPoint: point), model.items[index].enabled else { return }
         model.choose(index)
     }
@@ -405,6 +436,21 @@ private final class FleetMenuPanel: NSPanel {
 /// **The one menu that is open**, and its watches: a click anywhere else, the scroll wheel elsewhere, another app and
 /// a move of the window under it close it; its keys are the arrows, Return, Space, Esc and a filter's letters.
 @MainActor enum FleetMenu {
+    /// **A list of several ticks** (the Secrets page's agent filter, its Give access and its Take access; the owner's
+    /// "yes as drawn" of 20 November 2026): a choice ticks its row or takes its tick away, and the list stays open, so
+    /// that he ticks several rows in one visit. With `button`, a white button under the rows acts on the rows ticked
+    /// then, and closes the list. Esc, a click elsewhere and the other ways out close it as they close any list.
+    struct Ticks {
+        /// The rows ticked as it opens.
+        var ticked: Set<Int>
+        /// Each change of the ticks, as it comes.
+        var changed: (Set<Int>) -> Void = { _ in }
+        /// The button's words for the rows ticked now, and whether it can act; nil: no button.
+        var button: ((Set<Int>) -> (words: String, acts: Bool))?
+        /// What the button does with the rows ticked.
+        var press: (Set<Int>) -> Void = { _ in }
+    }
+
     enum Place {
         /// A right-click's menu, at the pointer (screen points).
         case pointer(NSPoint)
@@ -425,13 +471,17 @@ private final class FleetMenuPanel: NSPanel {
         let start: NSPoint
         let choose: (Int) -> Void
         let closed: () -> Void
+        /// A list of several ticks, with what its changes and its button do.
+        let ticks: Ticks?
         var watches: [Any] = []
         var observers: [NSObjectProtocol] = []
 
         init(panel: FleetMenuPanel, model: FleetMenuModel, surface: FleetMenuSurface, host: NSWindow?, owner: AnyObject?,
-             place: Place, screen: NSRect, opened: TimeInterval, choose: @escaping (Int) -> Void, closed: @escaping () -> Void) {
+             place: Place, screen: NSRect, opened: TimeInterval, ticks: Ticks?, choose: @escaping (Int) -> Void,
+             closed: @escaping () -> Void) {
             self.panel = panel; self.model = model; self.surface = surface; self.host = host; self.owner = owner
-            self.place = place; self.screen = screen; self.opened = opened; self.choose = choose; self.closed = closed
+            self.place = place; self.screen = screen; self.opened = opened; self.ticks = ticks; self.choose = choose
+            self.closed = closed
             start = NSEvent.mouseLocation
         }
     }
@@ -441,10 +491,11 @@ private final class FleetMenuPanel: NSPanel {
     static var isOpen: Bool { shown != nil }
 
     /// Opens the menu, in place of the one that is open. `choose` gets the index of the chosen item after the menu
-    /// closed, and `closed` comes whenever it closes.
+    /// closed, and `closed` comes whenever it closes. With `ticks`, a choice ticks its row and the menu stays open
+    /// (`Ticks`).
     static func show(_ items: [FleetMenuItem], highlighted: Int? = nil, filters: Bool = false, at place: Place,
                      over host: NSWindow?, zoom: CGFloat, owner: AnyObject? = nil, opened: TimeInterval? = nil,
-                     choose: @escaping (Int) -> Void, closed: @escaping () -> Void = {}) {
+                     ticks: Ticks? = nil, choose: @escaping (Int) -> Void, closed: @escaping () -> Void = {}) {
         close()
         guard !items.isEmpty else { closed(); return }
         let point: NSPoint
@@ -462,7 +513,10 @@ private final class FleetMenuPanel: NSPanel {
         // The rows' most height, less the panel's inset and a filter's field, at the zoom it is drawn at.
         let maxHeight = max(FleetMenuMetrics.row * 3,
                             min(FleetMenuMetrics.maxHeight, room / zoom - FleetMenuMetrics.inset * 2 - (filters ? 39 : 0)))
-        let model = FleetMenuModel(items: items, filters: filters, highlighted: highlighted, maxHeight: maxHeight)
+        // A button under the rows takes its own room from the rows' most height.
+        let model = FleetMenuModel(items: items, filters: filters, highlighted: highlighted,
+                                   maxHeight: ticks?.button == nil ? maxHeight : max(FleetMenuMetrics.row * 3, maxHeight - 50),
+                                   ticks: ticks)
         // Drawn at the zoom of the window it opens from (View › Bigger), as the window's own content is.
         let hosting = NSHostingView(rootView: FleetMenuList(model: model).fixedSize()
             .zoomedAsItsWindow().environment(\.viewZoom, zoom)
@@ -487,8 +541,9 @@ private final class FleetMenuPanel: NSPanel {
         panel.keyable = NSWorkspace.shared.isVoiceOverEnabled && NSApp.isActive
         panel.contentView = surface
         let open = Shown(panel: panel, model: model, surface: surface, host: host, owner: owner, place: place, screen: screen,
-                         opened: opened ?? NSApp.currentEvent?.timestamp ?? 0, choose: choose, closed: closed)
+                         opened: opened ?? NSApp.currentEvent?.timestamp ?? 0, ticks: ticks, choose: choose, closed: closed)
         model.choose = { index in FleetMenu.choose(index) }
+        model.press = { FleetMenu.press() }
         shown = open
         hosting.layoutSubtreeIfNeeded()
         panel.setFrame(frame(for: hosting.fittingSize, open), display: true)
@@ -540,8 +595,22 @@ private final class FleetMenuPanel: NSPanel {
 
     private static func choose(_ index: Int) {
         guard let open = shown, open.model.items.indices.contains(index), open.model.items[index].enabled else { return }
+        // A list of several ticks stays open: the row's tick goes on or off, and the change goes at once.
+        if let ticks = open.ticks {
+            if open.model.ticked.contains(index) { open.model.ticked.remove(index) } else { open.model.ticked.insert(index) }
+            ticks.changed(open.model.ticked)
+            return
+        }
         close()
         open.choose(index)
+    }
+
+    /// The white button of a list of several ticks: it closes the list, then acts on the rows ticked.
+    private static func press() {
+        guard let open = shown, let ticks = open.ticks, let button = ticks.button, button(open.model.ticked).acts else { return }
+        let rows = open.model.ticked
+        close()
+        ticks.press(rows)
     }
 
     /// The panel's frame for the size its list asks: at the pointer or under the control, on the screen.
@@ -643,7 +712,8 @@ private final class FleetMenuPanel: NSPanel {
         case .downArrow?: model.step(1)
         case .upArrow?: model.step(-1)
         case .carriageReturn?, .enter?, .newline?:
-            if let highlighted = model.highlighted { choose(highlighted) }
+            // In a list of several ticks with a button, Return presses the button and Space ticks the row.
+            if open.ticks?.button != nil { press() } else if let highlighted = model.highlighted { choose(highlighted) }
         case .delete?, .backspace?:
             if model.filters, !model.query.isEmpty { model.query.removeLast() }
         case .some: break
@@ -651,7 +721,9 @@ private final class FleetMenuPanel: NSPanel {
             guard let letters = event.characters, !letters.isEmpty, event.modifierFlags.isDisjoint(with: [.control]),
                   letters.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) && $0.value < 0xF700 })
             else { break }
-            if model.filters {
+            if letters == " ", open.ticks != nil, let highlighted = model.highlighted {
+                choose(highlighted)
+            } else if model.filters {
                 model.query += letters
             } else if letters == " " {
                 if let highlighted = model.highlighted { choose(highlighted) }

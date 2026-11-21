@@ -17,10 +17,10 @@ struct ChatAskLine: View {
     /// The widest that the row stands, as in the picture he said yes to.
     static let width: CGFloat = 430
 
-    /// The row's line: until when its work is parked, in the Tasks board's words ("Until 15:00"), else its own.
+    /// The row's line: until when its work is parked, in the Tasks board's words ("Resumes at 15:00"), else its own.
     private var line: String {
         guard let until = row.until else { return row.line }
-        return String(l10n: "Until \(fleetComingTime(until, now: store.state?.time ?? Date().timeIntervalSince1970))")
+        return fleetResumes(until, now: store.state?.time ?? Date().timeIntervalSince1970)
     }
     /// What the pointer and VoiceOver read under the title.
     private var words: String { row.until == nil ? row.words : line }

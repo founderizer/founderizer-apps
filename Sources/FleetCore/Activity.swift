@@ -438,6 +438,18 @@ public struct EndedTasks: Sendable {
     }
 }
 
+/// **How long something has stood where it stands**, in a few words: "Just now", "for 5 min", "for 3 h", "for 2 days"
+/// (the owner, 19 November 2026, of a job card's time: "something like "for X hours" or "for Y minutes"").
+public func activityFor(_ since: Double, now: Double) -> String {
+    let seconds = max(0, now - since)
+    switch seconds {
+    case ..<60: return String(l10n: "Just now")
+    case ..<3600: return String(l10n: "for \(Int(seconds / 60)) min")
+    case ..<86_400: return String(l10n: "for \(Int(seconds / 3600)) h")
+    default: return Int(seconds / 86_400) == 1 ? String(l10n: "for 1 day") : String(l10n: "for \(Int(seconds / 86_400)) days")
+    }
+}
+
 /// How long ago, in a few words: "Just now", "5 min ago", "3 h ago", "2 days ago", and from seven days the date.
 public func activityAge(_ time: Double, now: Double, calendar: Calendar = .current, locale: Locale = .current) -> String {
     let seconds = max(0, now - time)

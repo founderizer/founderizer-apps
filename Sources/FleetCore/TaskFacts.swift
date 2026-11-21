@@ -4,7 +4,7 @@ extension FleetTask {
     /// **Until when its agent parked it, while nothing else holds it**: it waits on nothing else (`parkedOnly`: parked,
     /// `working`, no question or thing that it waits on), no hold of the owner's that is not released, and no usage
     /// limit of its agent; nil for every other task, which says its own wait. The rule of the row of an ask in a chat
-    /// (`ChatAskRow`) and of the task's own panel (`TaskPanel`), which say "Until 02:30"; the Tasks board's words
+    /// (`ChatAskRow`) and of the task's own panel (`TaskPanel`), which say "Resumes at 02:30"; the Tasks board's words
     /// (`ActivityBoard.why`) keep the same rule on their own list of the holds that are not released.
     public func parkedUntil(in state: HubState?) -> Double? {
         guard parkedOnly, let until = parked_until,

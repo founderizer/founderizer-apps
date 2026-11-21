@@ -1341,10 +1341,10 @@ private struct AskLine: View {
     @ScaledMetric(relativeTo: .title3) private var markWidth: CGFloat = 22
     @Environment(\.dynamicTypeSize) private var typeSize
 
-    /// Until when its work is parked, in the words of a task's page ("Until 15:00"), else its own line.
+    /// Until when its work is parked, in the words of a task's page ("Resumes at 15:00"), else its own line.
     private var line: String {
         guard let until = row.until else { return row.line }
-        return String(l10n: "Until \(comingTime(until, now: store.hubNow))")
+        return resumesTime(until, now: store.hubNow)
     }
     /// What VoiceOver reads under the title.
     private var words: String { row.until == nil ? row.words : line }

@@ -152,6 +152,66 @@ struct JobsTests {
         #expect(working.map(\.began) == [Self.now - 1200, Self.now - 3600, Self.now - 5400, Self.now - 7200])
     }
 
+    /// The owner, 19 November 2026, of a job card's time: "something like "for X hours" or "for Y minutes", in the
+    /// sense of "working for x hours on this task"". The bugs that this catches: a card that says how old its job is
+    /// ("2 h ago"); a time that a stall of its machine, or a task that joins the job later, sets back (a review of 20
+    /// November 2026).
+    @Test func aCardSaysHowLongItsJobHasStoodInItsColumn() throws {
+        let later = Self.now + 3600
+        let state = try hub([
+            // in work since now-3 h, stalled since now-2 min: the hub's `since` moves, the card's time does not
+            task(1, "working", ["created": Self.now - 4 * 3600, "started": Self.now - 3 * 3600,
+                                "since": Self.now - 120, "works": true]),
+            task(2, "working", ["job": 1, "created": Self.now - 600, "started": Self.now - 300, "works": true]),
+            // waiting, parked since now-40 min, and a task that joined it a minute ago
+            task(3, "working", ["created": Self.now - 7200, "started": Self.now - 7200, "since": Self.now - 2400,
+                                "parked_until": later, "works": false]),
+            task(4, "submitted", ["job": 3, "created": Self.now - 60]),
+            // waiting for his sign-in since now-15 min
+            task(5, "auth-required", ["created": Self.now - 7200, "since": Self.now - 900]),
+        ])
+        let board = state.board(period: .all, calendar: Self.utc)
+        #expect(board[.inProgress]?.map(\.columnSince) == [Self.now - 3 * 3600])
+        #expect(Set(board[.waiting]?.map(\.columnSince) ?? []) == [Self.now - 2400, Self.now - 900])
+        // Kept while a card stays in its column, at every reading: a restart of its session (a new `started`) sets
+        // nothing back; a change of column takes the later of its guess and the last reading that saw it before, so a
+        // gap in the readings takes the hub's facts (the reviews of 20 November 2026)
+        var times = ColumnTimes()
+        let job = try #require(board[.inProgress]?.first)
+        times.note([job], hub: "h", now: Self.now)
+        #expect(times.since(job, hub: "h") == Self.now - 3 * 3600)
+        let restarted = try hub([task(1, "working", ["created": Self.now - 4 * 3600, "started": Self.now - 10, "works": true]),
+                                 task(2, "working", ["job": 1, "created": Self.now - 600, "started": Self.now - 300,
+                                                     "works": true])])
+        let again = try #require(restarted.board(period: .all, calendar: Self.utc)[.inProgress]?.first)
+        times.note([again], hub: "h", now: Self.now + 5)
+        #expect(times.since(again, hub: "h") == Self.now - 3 * 3600)
+        #expect(times.since(again, hub: "another hub") == again.columnSince)       // a time is one hub's
+        let waits = try hub([task(1, "working", ["created": Self.now - 4 * 3600, "started": Self.now - 3 * 3600,
+                                                 "since": Self.now + 300, "parked_until": later, "works": false])])
+        let parked = try #require(waits.board(period: .all, calendar: Self.utc)[.waiting]?.first)
+        times.note([parked], hub: "h", now: Self.now + 2 * 3600)                    // two hours with no reading
+        #expect(times.since(parked, hub: "h") == Self.now + 300)
+        // an agent's own board names its part of another agent's job apart: a reading notes that card by its own id
+        // too, so a restart of its session sets nothing back on that agent's board
+        let reading = { (started: Double) in
+            try self.hub([task(1, "working", owner: "lead", last: Self.now - 10, ["created": Self.now - 7200,
+                                                                                "started": Self.now - 60, "works": true]),
+                          task(2, "working", last: Self.now - 300, ["job": 1, "created": Self.now - 3600,
+                                                                     "started": started, "works": true])])
+        }
+        times = ColumnTimes()
+        let first = try reading(Self.now - 3600)
+        times.note(first)
+        let before = try #require(first.board(period: .all, agent: "dev", calendar: Self.utc)[.inProgress]?.first)
+        let second = try reading(Self.now - 5)
+        times.note(second)
+        let after = try #require(second.board(period: .all, agent: "dev", calendar: Self.utc)[.inProgress]?.first)
+        #expect(after.id == before.id && after.id.hasSuffix(" of dev"))                 // a part of the lead's job,
+        #expect(after.columnSince != before.columnSince)                                // its guess moved,
+        #expect(times.since(after, hub: second.db) == before.columnSince)              // the kept time did not
+    }
+
     /// The bug that this catches: red "failed" on a card whose failure later work took over, and "Rejected" on a job
     /// whose work was done, while a failure that nothing took over must stay red (on the owner's fleet, 19 November
     /// 2026, the release of a fix followed the fix and not the rejected hand-over, and the card in Done said

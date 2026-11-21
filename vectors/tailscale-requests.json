@@ -1,0 +1,4134 @@
+{
+  "about" : "Tailscale's API as FleetCore's TailscaleFleetKey calls it: for each case the stand-in's answers (by method and path, in order, the last one again for each later request, and 404 for a path that has none; status -1 is a connection that fails), each request sent (its secrets by name), what it gave or threw, and what it kept. Then the policy file's rules (FleetPolicy), this Mac's own Tailscale (MacNetwork.reading, device(of:in:), FleetOnTailscale), FleetReach.keeps, and the English words.",
+  "cases" : [
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":false,\"devicesApprovalOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kFLEET1234CNTRL\",\"key\":\"tskey-client-kFLEET1234CNTRL-notarealsecret\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : null,
+      "held" : null,
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A file that lets everything through gets the tag alone, and the key is made",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson",
+            "If-Match" : "\"v1\""
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\"description\":\"Founderizer fleet\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : {
+        "asks" : null,
+        "key_made" : true,
+        "lines_to_add" : null,
+        "place" : "tailscale",
+        "wrote_policy" : true
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":false,\"devicesApprovalOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "{\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\"tag:server\": [\"owner@example.com\"]},\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kFLEET1234CNTRL\",\"key\":\"tskey-client-kFLEET1234CNTRL-notarealsecret\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "  tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000\n"
+      },
+      "error" : null,
+      "held" : null,
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A file that lets less through gets the tag and the two grants",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:server\": [\"owner@example.com\"]},\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        },
+        {
+          "body" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:server\": [\"owner@example.com\"]},\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson",
+            "If-Match" : "\"v1\""
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\"description\":\"Founderizer fleet\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : {
+        "asks" : null,
+        "key_made" : true,
+        "lines_to_add" : null,
+        "place" : "tailscale",
+        "wrote_policy" : true
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":true,\"aclsExternalLink\":\"https://github.com/example/tailnet-policy/blob/main/policy.hujson?x=1\",\"devicesApprovalOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "{\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\"tag:server\": [\"owner@example.com\"]},\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kFLEET1234CNTRL\",\"key\":\"tskey-client-kFLEET1234CNTRL-notarealsecret\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : null,
+      "held" : null,
+      "kept" : null,
+      "name" : "A file that another tool keeps, with no tag: one line is asked and nothing is written",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        }
+      ],
+      "result" : {
+        "asks" : "Your Tailscale policy has no tag:founderizer. Add this line to tagOwners in github.com/example/tailnet-policy/blob/main/policy.hujson, then paste a key again.",
+        "key_made" : false,
+        "lines_to_add" : "\"tag:founderizer\": [\"autogroup:admin\"],",
+        "place" : "tool https://github.com/example/tailnet-policy/blob/main/policy.hujson?x=1",
+        "wrote_policy" : false
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":true,\"devicesApprovalOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "{\n\t\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]},\n\t\"acls\": [{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"*:22\"]}],\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kFLEET1234CNTRL\",\"key\":\"tskey-client-kFLEET1234CNTRL-notarealsecret\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : null,
+      "held" : null,
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A file that another tool keeps, with the tag: the key, and no write",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\"description\":\"Founderizer fleet\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : {
+        "asks" : null,
+        "key_made" : true,
+        "lines_to_add" : null,
+        "place" : "tool",
+        "wrote_policy" : false
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":false,\"devicesApprovalOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "{\n\t\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]},\n\t\"acls\": [{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"*:22\"]}],\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kFLEET1234CNTRL\",\"key\":\"tskey-client-kFLEET1234CNTRL-notarealsecret\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : null,
+      "held" : null,
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A file with the tag that Tailscale keeps gets the grants where they go",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]},\n\t\"acls\": [{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"*:22\"]}],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        },
+        {
+          "body" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]},\n\t\"acls\": [{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"*:22\"]}],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson",
+            "If-Match" : "\"v1\""
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\"description\":\"Founderizer fleet\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : {
+        "asks" : null,
+        "key_made" : true,
+        "lines_to_add" : null,
+        "place" : "tailscale",
+        "wrote_policy" : true
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}\n// changed\n",
+          "headers" : {
+            "ETag" : "\"v2\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{\"message\":\"precondition failed\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 412
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kFLEET1234CNTRL\",\"key\":\"tskey-client-kFLEET1234CNTRL-notarealsecret\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : null,
+      "held" : null,
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A file that changed meanwhile is read once more and written against its new version",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson",
+            "If-Match" : "\"v1\""
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}\n// changed\n",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}\n// changed\n",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson",
+            "If-Match" : "\"v2\""
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\"description\":\"Founderizer fleet\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : {
+        "asks" : null,
+        "key_made" : true,
+        "lines_to_add" : null,
+        "place" : "tailscale",
+        "wrote_policy" : true
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{\"message\":\"precondition failed\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 412
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : {
+        "case" : "policy_changed_meanwhile",
+        "words" : "Your Tailscale policy file changed while this app was adding to it. Try again."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "A file that changes twice while it is written stops the step",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson",
+            "If-Match" : "\"v1\""
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson",
+            "If-Match" : "\"v1\""
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "{\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\"tag:server\": [\"owner@example.com\"]},\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"message\":\"test(s) failed\",\"data\":[{\"user\":\"owner@example.com\",\"errors\":[\"owner@example.com cannot reach tag:founderizer:22\"]}]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kFLEET1234CNTRL\",\"key\":\"tskey-client-kFLEET1234CNTRL-notarealsecret\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : null,
+      "held" : null,
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A file whose own tests refuse the grants gets the tag alone",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:server\": [\"owner@example.com\"]},\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        },
+        {
+          "body" : "{\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:server\": [\"owner@example.com\"]},\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        },
+        {
+          "body" : "{\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:server\": [\"owner@example.com\"]},\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson",
+            "If-Match" : "\"v1\""
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\"description\":\"Founderizer fleet\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : {
+        "asks" : null,
+        "key_made" : true,
+        "lines_to_add" : null,
+        "place" : "tailscale",
+        "wrote_policy" : true
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"message\":\"warnings\",\"data\":[{\"warnings\":[\"a rule is unused\"]}]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kFLEET1234CNTRL\",\"key\":\"tskey-client-kFLEET1234CNTRL-notarealsecret\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : null,
+      "held" : null,
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "Warnings alone are no refusal of the file",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson",
+            "If-Match" : "\"v1\""
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\"description\":\"Founderizer fleet\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : {
+        "asks" : null,
+        "key_made" : true,
+        "lines_to_add" : null,
+        "place" : "tailscale",
+        "wrote_policy" : true
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"message\":\"parse error\",\"data\":[{\"errors\":[\"line 3: unknown tag owner autogroup:admin\"]}]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : {
+        "case" : "refused",
+        "says" : "parse error: line 3: unknown tag owner autogroup:admin",
+        "words" : "Tailscale refused: parse error: line 3: unknown tag owner autogroup:admin"
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "A check that refuses the tag's line too is said in Tailscale's words",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":true,\"devicesApprovalOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "{\n\t\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]},\n\t\"acls\": [{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"*:22\"]}],\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kFLEET1234CNTRL\",\"key\":\"tskey-client-kFLEET1234CNTRL-notarealsecret\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        },
+        {
+          "body" : "",
+          "headers" : {
+
+          },
+          "method" : "DELETE",
+          "path" : "/api/v2/tailnet/-/keys/kOLDKEY123CNTRL",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : null,
+      "held" : "kOLDKEY123CNTRL\ntskey-client-kOLDKEY123CNTRL-notarealoldsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A fleet key held before is replaced, and ended in Tailscale",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\"description\":\"Founderizer fleet\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "DELETE",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys/kOLDKEY123CNTRL"
+        }
+      ],
+      "result" : {
+        "asks" : null,
+        "key_made" : true,
+        "lines_to_add" : null,
+        "place" : "tool",
+        "wrote_policy" : false
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":true,\"devicesApprovalOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "{\n\t\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]},\n\t\"acls\": [{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"*:22\"]}],\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kFLEET1234CNTRL\",\"key\":\"tskey-client-kFLEET1234CNTRL-notarealsecret\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        },
+        {
+          "body" : "",
+          "headers" : {
+
+          },
+          "method" : "DELETE",
+          "path" : "/api/v2/tailnet/-/keys/kFLEET1234CNTRL",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : {
+        "case" : "kept_nowhere"
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "A fleet key that cannot be kept is ended at once",
+      "refuses" : true,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\"description\":\"Founderizer fleet\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "DELETE",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys/kFLEET1234CNTRL"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"message\":\"API token invalid\"}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 401
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : {
+        "case" : "token_not_accepted",
+        "words" : "Tailscale did not accept this access token: it has expired or it was revoked. Make a new one on Tailscale's Keys page and paste it."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "A token that Tailscale does not take",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":false,\"devicesApprovalOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "{\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\"tag:server\": [\"owner@example.com\"]},\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kFLEET1234CNTRL\",\"key\":\"tskey-client-kFLEET1234CNTRL-notarealsecret\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        },
+        {
+          "body" : "{\"message\":\"forbidden\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 403
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : {
+        "case" : "role_cannot_write",
+        "words" : "Your role in Tailscale cannot make this change. Use an access token of an Owner or an Admin of the tailnet."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "A role that may not write the file",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:server\": [\"owner@example.com\"]},\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl/validate"
+        },
+        {
+          "body" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:server\": [\"owner@example.com\"]},\n}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/hujson",
+            "If-Match" : "\"v1\""
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"message\":\"token tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000 failed\\non two lines\"}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 500
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : {
+        "case" : "refused",
+        "says" : "token (not shown) failed on two lines",
+        "words" : "Tailscale refused: token (not shown) failed on two lines"
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "A refusal in Tailscale's words, with the token taken out",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 502
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : {
+        "case" : "refused",
+        "says" : "it answered 502 and said nothing.",
+        "words" : "Tailscale refused: it answered 502 and said nothing."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "A refusal with no words",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":true}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "{\"message\":\"rate limited\"}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 429
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : {
+        "case" : "rate_limited",
+        "words" : "Tailscale asks this Mac to wait. Try again in a minute."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "Tailscale asks to wait",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : -1
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : {
+        "case" : "unreachable",
+        "words" : "Tailscale could not be reached. Check this Mac's connection to the internet."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "Tailscale cannot be reached",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "not json",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : {
+        "case" : "not_understood",
+        "words" : "Tailscale answered something this app does not understand."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "An answer that this app does not understand",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"aclsExternallyManagedOn\":true,\"devicesApprovalOn\":false}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/settings",
+          "status" : 200
+        },
+        {
+          "body" : "{\n\t\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]},\n\t\"acls\": [{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"*:22\"]}],\n}",
+          "headers" : {
+            "ETag" : "\"v1\""
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl/validate",
+          "status" : 200
+        },
+        {
+          "body" : "{}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/acl",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kNEW1234CNTRL\",\"key\":\"not a client secret\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        },
+        {
+          "body" : "",
+          "headers" : {
+
+          },
+          "method" : "DELETE",
+          "path" : "/api/v2/tailnet/-/keys/kNEW1234CNTRL",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      "error" : {
+        "case" : "not_understood",
+        "words" : "Tailscale answered something this app does not understand."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "A fleet key whose secret is not one is ended and not kept",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/settings"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/hujson",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/acl"
+        },
+        {
+          "body" : "{\"description\":\"Founderizer fleet\",\"keyType\":\"client\",\"scopes\":[\"auth_keys\",\"devices:core\"],\"tags\":[\"tag:founderizer\"]}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {access token}"
+          },
+          "method" : "DELETE",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys/kNEW1234CNTRL"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : ""
+      },
+      "error" : {
+        "case" : "not_an_access_token",
+        "words" : "This is not a Tailscale API access token. Make one on Tailscale's Keys page: it starts with tskey-api-."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "Not an access token: ",
+      "refuses" : false,
+      "requests" : [
+
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-auth-kAbc1234CNTRL-xyz"
+      },
+      "error" : {
+        "case" : "not_an_access_token",
+        "words" : "This is not a Tailscale API access token. Make one on Tailscale's Keys page: it starts with tskey-api-."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "Not an access token: tskey-auth-kAbc1234CNTRL",
+      "refuses" : false,
+      "requests" : [
+
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-client-kAbc1234CNTRL-xyz"
+      },
+      "error" : {
+        "case" : "not_an_access_token",
+        "words" : "This is not a Tailscale API access token. Make one on Tailscale's Keys page: it starts with tskey-api-."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "Not an access token: tskey-client-kAbc1234CNT",
+      "refuses" : false,
+      "requests" : [
+
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-has space"
+      },
+      "error" : {
+        "case" : "not_an_access_token",
+        "words" : "This is not a Tailscale API access token. Make one on Tailscale's Keys page: it starts with tskey-api-."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "Not an access token: tskey-api-has space",
+      "refuses" : false,
+      "requests" : [
+
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+
+      ],
+      "call" : {
+        "do" : "connect",
+        "token" : "tskey-api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "error" : {
+        "case" : "not_an_access_token",
+        "words" : "This is not a Tailscale API access token. Make one on Tailscale's Keys page: it starts with tskey-api-."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "Not an access token: tskey-api-aaaaaaaaaaaaaa",
+      "refuses" : false,
+      "requests" : [
+
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"id\":\"kKEY1CNTRL\",\"key\":\"tskey-auth-kAUTH1234CNTRL-notarealkey\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "mint",
+        "hostname" : "worker-3",
+        "life" : 3600
+      },
+      "error" : null,
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "One key for one machine, for an hour",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "{\"capabilities\":{\"devices\":{\"create\":{\"ephemeral\":false,\"preauthorized\":true,\"reusable\":false,\"tags\":[\"tag:founderizer\"]}}},\"description\":\"Founderizer worker-3\",\"expirySeconds\":3600}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : {
+        "key" : "tskey-auth-kAUTH1234CNTRL-notarealkey"
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"key\":\"tskey-auth-kAUTH1234CNTRL-notarealkey\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "mint",
+        "hostname" : "a-very-long-server-name_with.dots-and-more-0123456789",
+        "life" : 900
+      },
+      "error" : null,
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A machine's name in the key's description, cut to Tailscale's length",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "{\"capabilities\":{\"devices\":{\"create\":{\"ephemeral\":false,\"preauthorized\":true,\"reusable\":false,\"tags\":[\"tag:founderizer\"]}}},\"description\":\"Founderizer a-very-long-server-namewithdots-and-mo\",\"expirySeconds\":900}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : {
+        "key" : "tskey-auth-kAUTH1234CNTRL-notarealkey"
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"key\":\"tskey-api-wrong\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "mint",
+        "hostname" : "hub-1",
+        "life" : 900
+      },
+      "error" : {
+        "case" : "not_understood",
+        "words" : "Tailscale answered something this app does not understand."
+      },
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "An answer that is no auth key",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "{\"capabilities\":{\"devices\":{\"create\":{\"ephemeral\":false,\"preauthorized\":true,\"reusable\":false,\"tags\":[\"tag:founderizer\"]}}},\"description\":\"Founderizer hub-1\",\"expirySeconds\":900}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"error\":\"invalid_client\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 400
+        }
+      ],
+      "call" : {
+        "do" : "mint",
+        "hostname" : "hub-1",
+        "life" : 900
+      },
+      "error" : {
+        "case" : "fleet_key_ended",
+        "words" : "Tailscale no longer accepts this Mac's key to your network: it was ended in Tailscale. Connect Tailscale again."
+      },
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A fleet key that Tailscale ended (400)",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"error\":\"invalid_client\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 401
+        }
+      ],
+      "call" : {
+        "do" : "mint",
+        "hostname" : "hub-1",
+        "life" : 900
+      },
+      "error" : {
+        "case" : "fleet_key_ended",
+        "words" : "Tailscale no longer accepts this Mac's key to your network: it was ended in Tailscale. Connect Tailscale again."
+      },
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A fleet key that Tailscale ended (401)",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"error_description\":\"try later\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 503
+        }
+      ],
+      "call" : {
+        "do" : "mint",
+        "hostname" : "hub-1",
+        "life" : 900
+      },
+      "error" : {
+        "case" : "refused",
+        "says" : "try later",
+        "words" : "Tailscale refused: try later"
+      },
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A Tailscale that is down says nothing about the fleet key",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"message\":\"unauthorized\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 401
+        }
+      ],
+      "call" : {
+        "do" : "mint",
+        "hostname" : "hub-1",
+        "life" : 900
+      },
+      "error" : {
+        "case" : "fleet_key_ended",
+        "words" : "Tailscale no longer accepts this Mac's key to your network: it was ended in Tailscale. Connect Tailscale again."
+      },
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A key refused with 401 after the access token: the fleet key ended",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "{\"capabilities\":{\"devices\":{\"create\":{\"ephemeral\":false,\"preauthorized\":true,\"reusable\":false,\"tags\":[\"tag:founderizer\"]}}},\"description\":\"Founderizer hub-1\",\"expirySeconds\":900}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"message\":\"tags are invalid\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/tailnet/-/keys",
+          "status" : 400
+        }
+      ],
+      "call" : {
+        "do" : "mint",
+        "hostname" : "hub-1",
+        "life" : 900
+      },
+      "error" : {
+        "case" : "refused",
+        "says" : "tags are invalid",
+        "words" : "Tailscale refused: tags are invalid"
+      },
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A key refused in Tailscale's words",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "{\"capabilities\":{\"devices\":{\"create\":{\"ephemeral\":false,\"preauthorized\":true,\"reusable\":false,\"tags\":[\"tag:founderizer\"]}}},\"description\":\"Founderizer hub-1\",\"expirySeconds\":900}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}",
+            "Content-Type" : "application/json"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"two\\nlines\"}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "mint",
+        "hostname" : "hub-1",
+        "life" : 900
+      },
+      "error" : {
+        "case" : "not_understood",
+        "words" : "Tailscale answered something this app does not understand."
+      },
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "An access token on two lines is not one",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+
+      ],
+      "call" : {
+        "do" : "mint",
+        "hostname" : "hub-1",
+        "life" : 900
+      },
+      "error" : {
+        "case" : "no_fleet_key",
+        "words" : "This Mac has no key to your Tailscale network yet. Connect Tailscale first."
+      },
+      "held" : null,
+      "kept" : null,
+      "name" : "No fleet key held",
+      "refuses" : false,
+      "requests" : [
+
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+
+      ],
+      "call" : {
+        "do" : "mint",
+        "hostname" : "hub-1",
+        "life" : 900
+      },
+      "error" : {
+        "case" : "no_fleet_key",
+        "words" : "This Mac has no key to your Tailscale network yet. Connect Tailscale first."
+      },
+      "held" : "only one line",
+      "kept" : "only one line",
+      "name" : "A held value that is not a fleet key",
+      "refuses" : false,
+      "requests" : [
+
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"devices\":[\n{\"id\":\"1001\",\"nodeId\":\"nAAAA1CNTRL\",\"hostname\":\"worker-3\",\"name\":\"worker-3.tail1234.ts.net.\",\"addresses\":[\"100.64.0.20\",\"fd7a:115c:a1e0::30\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T09:00:00Z\",\"isExternal\":false,\"connectedToControl\":false},\n{\"id\":\"1002\",\"nodeId\":\"nBBBB2CNTRL\",\"hostname\":\"Worker-3\",\"name\":\"worker-3-1.tail1234.ts.net\",\"addresses\":[\"100.64.0.31\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T10:00:00.123456Z\",\"isExternal\":false,\"connectedToControl\":true,\"tailnetLockError\":\"\"},\n{\"id\":\"1003\",\"hostname\":\"worker-3\",\"name\":\"worker-3-2.tail1234.ts.net.\",\"addresses\":[\"100.64.0.32\"],\"tags\":[],\"authorized\":true,\"created\":\"2026-11-13T11:00:00Z\"},\n{\"id\":\"1004\",\"hostname\":\"worker-3\",\"name\":\"worker-3-3.tail1234.ts.net.\",\"addresses\":[\"100.64.0.41\"],\"tags\":[\"tag:founderizer\"],\"authorized\":false,\"created\":\"2026-11-13T12:00:00Z\"},\n{\"id\":\"1005\",\"hostname\":\"worker-4\",\"name\":\"worker-4.tail1234.ts.net.\",\"addresses\":[\"100.64.0.40\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T10:30:00Z\",\"tailnetLockError\":\"not signed\"},\n{\"id\":\"bad id!\",\"hostname\":\"shared\",\"name\":\"shared.example.ts.net.\",\"addresses\":[\"100.64.1.4\"],\"tags\":[],\"created\":\"not a time\",\"isExternal\":true},\n{\"nodeId\":\"nCCCC3CNTRL\",\"hostname\":\"laptop\",\"name\":\"laptop.tail1234.ts.net.\",\"addresses\":[\"100.64.1.6\"],\"created\":\"2026-01-01T00:00:00Z\",\"connectedToControl\":true}\n]}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/devices",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "joined",
+        "hostname" : "worker-3",
+        "since" : 1794560000
+      },
+      "error" : null,
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "The newest tagged device of the name, made since the server was",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/devices"
+        }
+      ],
+      "result" : {
+        "addresses" : [
+          "100.64.0.31"
+        ],
+        "locked" : false,
+        "name" : "worker-3-1.tail1234.ts.net"
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"devices\":[\n{\"id\":\"1001\",\"nodeId\":\"nAAAA1CNTRL\",\"hostname\":\"worker-3\",\"name\":\"worker-3.tail1234.ts.net.\",\"addresses\":[\"100.64.0.20\",\"fd7a:115c:a1e0::30\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T09:00:00Z\",\"isExternal\":false,\"connectedToControl\":false},\n{\"id\":\"1002\",\"nodeId\":\"nBBBB2CNTRL\",\"hostname\":\"Worker-3\",\"name\":\"worker-3-1.tail1234.ts.net\",\"addresses\":[\"100.64.0.31\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T10:00:00.123456Z\",\"isExternal\":false,\"connectedToControl\":true,\"tailnetLockError\":\"\"},\n{\"id\":\"1003\",\"hostname\":\"worker-3\",\"name\":\"worker-3-2.tail1234.ts.net.\",\"addresses\":[\"100.64.0.32\"],\"tags\":[],\"authorized\":true,\"created\":\"2026-11-13T11:00:00Z\"},\n{\"id\":\"1004\",\"hostname\":\"worker-3\",\"name\":\"worker-3-3.tail1234.ts.net.\",\"addresses\":[\"100.64.0.41\"],\"tags\":[\"tag:founderizer\"],\"authorized\":false,\"created\":\"2026-11-13T12:00:00Z\"},\n{\"id\":\"1005\",\"hostname\":\"worker-4\",\"name\":\"worker-4.tail1234.ts.net.\",\"addresses\":[\"100.64.0.40\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T10:30:00Z\",\"tailnetLockError\":\"not signed\"},\n{\"id\":\"bad id!\",\"hostname\":\"shared\",\"name\":\"shared.example.ts.net.\",\"addresses\":[\"100.64.1.4\"],\"tags\":[],\"created\":\"not a time\",\"isExternal\":true},\n{\"nodeId\":\"nCCCC3CNTRL\",\"hostname\":\"laptop\",\"name\":\"laptop.tail1234.ts.net.\",\"addresses\":[\"100.64.1.6\"],\"created\":\"2026-01-01T00:00:00Z\",\"connectedToControl\":true}\n]}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/devices",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "joined",
+        "hostname" : "WORKER-4",
+        "since" : 1794560000
+      },
+      "error" : null,
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A device that Tailnet Lock keeps out",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/devices"
+        }
+      ],
+      "result" : {
+        "addresses" : [
+          "100.64.0.40"
+        ],
+        "locked" : true,
+        "name" : "worker-4.tail1234.ts.net"
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"devices\":[\n{\"id\":\"1001\",\"nodeId\":\"nAAAA1CNTRL\",\"hostname\":\"worker-3\",\"name\":\"worker-3.tail1234.ts.net.\",\"addresses\":[\"100.64.0.20\",\"fd7a:115c:a1e0::30\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T09:00:00Z\",\"isExternal\":false,\"connectedToControl\":false},\n{\"id\":\"1002\",\"nodeId\":\"nBBBB2CNTRL\",\"hostname\":\"Worker-3\",\"name\":\"worker-3-1.tail1234.ts.net\",\"addresses\":[\"100.64.0.31\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T10:00:00.123456Z\",\"isExternal\":false,\"connectedToControl\":true,\"tailnetLockError\":\"\"},\n{\"id\":\"1003\",\"hostname\":\"worker-3\",\"name\":\"worker-3-2.tail1234.ts.net.\",\"addresses\":[\"100.64.0.32\"],\"tags\":[],\"authorized\":true,\"created\":\"2026-11-13T11:00:00Z\"},\n{\"id\":\"1004\",\"hostname\":\"worker-3\",\"name\":\"worker-3-3.tail1234.ts.net.\",\"addresses\":[\"100.64.0.41\"],\"tags\":[\"tag:founderizer\"],\"authorized\":false,\"created\":\"2026-11-13T12:00:00Z\"},\n{\"id\":\"1005\",\"hostname\":\"worker-4\",\"name\":\"worker-4.tail1234.ts.net.\",\"addresses\":[\"100.64.0.40\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T10:30:00Z\",\"tailnetLockError\":\"not signed\"},\n{\"id\":\"bad id!\",\"hostname\":\"shared\",\"name\":\"shared.example.ts.net.\",\"addresses\":[\"100.64.1.4\"],\"tags\":[],\"created\":\"not a time\",\"isExternal\":true},\n{\"nodeId\":\"nCCCC3CNTRL\",\"hostname\":\"laptop\",\"name\":\"laptop.tail1234.ts.net.\",\"addresses\":[\"100.64.1.6\"],\"created\":\"2026-01-01T00:00:00Z\",\"connectedToControl\":true}\n]}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/devices",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "joined",
+        "hostname" : "worker-3",
+        "since" : 1794564100
+      },
+      "error" : null,
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A device made a little before the server, by a clock that is off, is it",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/devices"
+        }
+      ],
+      "result" : {
+        "addresses" : [
+          "100.64.0.31"
+        ],
+        "locked" : false,
+        "name" : "worker-3-1.tail1234.ts.net"
+      }
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"devices\":[\n{\"id\":\"1001\",\"nodeId\":\"nAAAA1CNTRL\",\"hostname\":\"worker-3\",\"name\":\"worker-3.tail1234.ts.net.\",\"addresses\":[\"100.64.0.20\",\"fd7a:115c:a1e0::30\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T09:00:00Z\",\"isExternal\":false,\"connectedToControl\":false},\n{\"id\":\"1002\",\"nodeId\":\"nBBBB2CNTRL\",\"hostname\":\"Worker-3\",\"name\":\"worker-3-1.tail1234.ts.net\",\"addresses\":[\"100.64.0.31\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T10:00:00.123456Z\",\"isExternal\":false,\"connectedToControl\":true,\"tailnetLockError\":\"\"},\n{\"id\":\"1003\",\"hostname\":\"worker-3\",\"name\":\"worker-3-2.tail1234.ts.net.\",\"addresses\":[\"100.64.0.32\"],\"tags\":[],\"authorized\":true,\"created\":\"2026-11-13T11:00:00Z\"},\n{\"id\":\"1004\",\"hostname\":\"worker-3\",\"name\":\"worker-3-3.tail1234.ts.net.\",\"addresses\":[\"100.64.0.41\"],\"tags\":[\"tag:founderizer\"],\"authorized\":false,\"created\":\"2026-11-13T12:00:00Z\"},\n{\"id\":\"1005\",\"hostname\":\"worker-4\",\"name\":\"worker-4.tail1234.ts.net.\",\"addresses\":[\"100.64.0.40\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T10:30:00Z\",\"tailnetLockError\":\"not signed\"},\n{\"id\":\"bad id!\",\"hostname\":\"shared\",\"name\":\"shared.example.ts.net.\",\"addresses\":[\"100.64.1.4\"],\"tags\":[],\"created\":\"not a time\",\"isExternal\":true},\n{\"nodeId\":\"nCCCC3CNTRL\",\"hostname\":\"laptop\",\"name\":\"laptop.tail1234.ts.net.\",\"addresses\":[\"100.64.1.6\"],\"created\":\"2026-01-01T00:00:00Z\",\"connectedToControl\":true}\n]}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/devices",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "joined",
+        "hostname" : "worker-3",
+        "since" : 1794600000
+      },
+      "error" : null,
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A device older than the server is not it",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/devices"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"devices\":[\n{\"id\":\"1001\",\"nodeId\":\"nAAAA1CNTRL\",\"hostname\":\"worker-3\",\"name\":\"worker-3.tail1234.ts.net.\",\"addresses\":[\"100.64.0.20\",\"fd7a:115c:a1e0::30\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T09:00:00Z\",\"isExternal\":false,\"connectedToControl\":false},\n{\"id\":\"1002\",\"nodeId\":\"nBBBB2CNTRL\",\"hostname\":\"Worker-3\",\"name\":\"worker-3-1.tail1234.ts.net\",\"addresses\":[\"100.64.0.31\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T10:00:00.123456Z\",\"isExternal\":false,\"connectedToControl\":true,\"tailnetLockError\":\"\"},\n{\"id\":\"1003\",\"hostname\":\"worker-3\",\"name\":\"worker-3-2.tail1234.ts.net.\",\"addresses\":[\"100.64.0.32\"],\"tags\":[],\"authorized\":true,\"created\":\"2026-11-13T11:00:00Z\"},\n{\"id\":\"1004\",\"hostname\":\"worker-3\",\"name\":\"worker-3-3.tail1234.ts.net.\",\"addresses\":[\"100.64.0.41\"],\"tags\":[\"tag:founderizer\"],\"authorized\":false,\"created\":\"2026-11-13T12:00:00Z\"},\n{\"id\":\"1005\",\"hostname\":\"worker-4\",\"name\":\"worker-4.tail1234.ts.net.\",\"addresses\":[\"100.64.0.40\"],\"tags\":[\"tag:founderizer\"],\"authorized\":true,\"created\":\"2026-11-13T10:30:00Z\",\"tailnetLockError\":\"not signed\"},\n{\"id\":\"bad id!\",\"hostname\":\"shared\",\"name\":\"shared.example.ts.net.\",\"addresses\":[\"100.64.1.4\"],\"tags\":[],\"created\":\"not a time\",\"isExternal\":true},\n{\"nodeId\":\"nCCCC3CNTRL\",\"hostname\":\"laptop\",\"name\":\"laptop.tail1234.ts.net.\",\"addresses\":[\"100.64.1.6\"],\"created\":\"2026-01-01T00:00:00Z\",\"connectedToControl\":true}\n]}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/devices",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "devices"
+      },
+      "error" : null,
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "The tailnet's devices, each by its id",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/devices"
+        }
+      ],
+      "result" : [
+        {
+          "addresses" : [
+            "100.64.0.20",
+            "fd7a:115c:a1e0::30"
+          ],
+          "authorized" : true,
+          "connected" : false,
+          "created" : 1794560400,
+          "external" : false,
+          "hostname" : "worker-3",
+          "id" : "nAAAA1CNTRL",
+          "name" : "worker-3.tail1234.ts.net",
+          "tags" : [
+            "tag:founderizer"
+          ]
+        },
+        {
+          "addresses" : [
+            "100.64.0.31"
+          ],
+          "authorized" : true,
+          "connected" : true,
+          "created" : 1794564000.1229999,
+          "external" : false,
+          "hostname" : "Worker-3",
+          "id" : "nBBBB2CNTRL",
+          "name" : "worker-3-1.tail1234.ts.net",
+          "tags" : [
+            "tag:founderizer"
+          ]
+        },
+        {
+          "addresses" : [
+            "100.64.0.32"
+          ],
+          "authorized" : true,
+          "connected" : false,
+          "created" : 1794567600,
+          "external" : false,
+          "hostname" : "worker-3",
+          "id" : "1003",
+          "name" : "worker-3-2.tail1234.ts.net",
+          "tags" : [
+
+          ]
+        },
+        {
+          "addresses" : [
+            "100.64.0.41"
+          ],
+          "authorized" : false,
+          "connected" : false,
+          "created" : 1794571200,
+          "external" : false,
+          "hostname" : "worker-3",
+          "id" : "1004",
+          "name" : "worker-3-3.tail1234.ts.net",
+          "tags" : [
+            "tag:founderizer"
+          ]
+        },
+        {
+          "addresses" : [
+            "100.64.0.40"
+          ],
+          "authorized" : true,
+          "connected" : false,
+          "created" : 1794565800,
+          "external" : false,
+          "hostname" : "worker-4",
+          "id" : "1005",
+          "name" : "worker-4.tail1234.ts.net",
+          "tags" : [
+            "tag:founderizer"
+          ]
+        },
+        {
+          "addresses" : [
+            "100.64.1.6"
+          ],
+          "authorized" : true,
+          "connected" : true,
+          "created" : 1767225600,
+          "external" : false,
+          "hostname" : "laptop",
+          "id" : "nCCCC3CNTRL",
+          "name" : "laptop.tail1234.ts.net",
+          "tags" : [
+
+          ]
+        }
+      ]
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"devices\":\"no list\"}",
+          "headers" : {
+
+          },
+          "method" : "GET",
+          "path" : "/api/v2/tailnet/-/devices",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "devices"
+      },
+      "error" : {
+        "case" : "not_understood",
+        "words" : "Tailscale answered something this app does not understand."
+      },
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A list of devices that is no list",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}"
+          },
+          "method" : "GET",
+          "url" : "https://api.tailscale.com/api/v2/tailnet/-/devices"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "",
+          "headers" : {
+
+          },
+          "method" : "DELETE",
+          "path" : "/api/v2/device/nBBBB2CNTRL",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "delete_device",
+        "id" : "nBBBB2CNTRL"
+      },
+      "error" : null,
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "One device removed by its id",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}"
+          },
+          "method" : "DELETE",
+          "url" : "https://api.tailscale.com/api/v2/device/nBBBB2CNTRL"
+        }
+      ],
+      "result" : "removed"
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"message\":\"not found\"}",
+          "headers" : {
+
+          },
+          "method" : "DELETE",
+          "path" : "/api/v2/device/nBBBB2CNTRL",
+          "status" : 404
+        }
+      ],
+      "call" : {
+        "do" : "delete_device",
+        "id" : "nBBBB2CNTRL"
+      },
+      "error" : null,
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A device that Tailscale no longer has is removed already",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}"
+          },
+          "method" : "DELETE",
+          "url" : "https://api.tailscale.com/api/v2/device/nBBBB2CNTRL"
+        }
+      ],
+      "result" : "removed"
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        },
+        {
+          "body" : "{\"message\":\"cannot delete\"}",
+          "headers" : {
+
+          },
+          "method" : "DELETE",
+          "path" : "/api/v2/device/nBBBB2CNTRL",
+          "status" : 403
+        }
+      ],
+      "call" : {
+        "do" : "delete_device",
+        "id" : "nBBBB2CNTRL"
+      },
+      "error" : {
+        "case" : "refused",
+        "says" : "cannot delete",
+        "words" : "Tailscale refused: cannot delete"
+      },
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "A removal that Tailscale refuses",
+      "refuses" : false,
+      "requests" : [
+        {
+          "body" : "grant_type=client_credentials&client_id=kFLEET1234CNTRL&client_secret={fleet secret}",
+          "headers" : {
+            "Accept" : "application/json",
+            "Content-Type" : "application/x-www-form-urlencoded"
+          },
+          "method" : "POST",
+          "url" : "https://api.tailscale.com/api/v2/oauth/token"
+        },
+        {
+          "body" : "",
+          "headers" : {
+            "Accept" : "application/json",
+            "Authorization" : "Bearer {fleet access}"
+          },
+          "method" : "DELETE",
+          "url" : "https://api.tailscale.com/api/v2/device/nBBBB2CNTRL"
+        }
+      ],
+      "result" : null
+    },
+    {
+      "answers" : [
+        {
+          "body" : "{\"access_token\":\"notarealaccesstoken-0123456789abcdef\",\"token_type\":\"Bearer\",\"expires_in\":3600}",
+          "headers" : {
+
+          },
+          "method" : "POST",
+          "path" : "/api/v2/oauth/token",
+          "status" : 200
+        }
+      ],
+      "call" : {
+        "do" : "delete_device",
+        "id" : "../keys"
+      },
+      "error" : {
+        "case" : "not_understood",
+        "words" : "Tailscale answered something this app does not understand."
+      },
+      "held" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "kept" : "kFLEET1234CNTRL\ntskey-client-kFLEET1234CNTRL-notarealsecret",
+      "name" : "An id that may not stand in a path",
+      "refuses" : false,
+      "requests" : [
+
+      ],
+      "result" : null
+    }
+  ],
+  "made_by" : "app/Tests/FleetCoreTests/TailscaleVectorsTests.swift",
+  "network" : [
+    {
+      "address" : null,
+      "device_of" : {
+        "" : null,
+        "[100.96.10.20]" : null,
+        "100.96.10.20" : null,
+        "100.101.100.180" : null,
+        "nothing" : null,
+        "owner-pc" : null,
+        "twin" : null,
+        "worker-1" : null,
+        "worker-2" : null,
+        "worker-2-1" : null,
+        "WORKER-2-1.tail1234.ts.net" : null
+      },
+      "devices" : [
+
+      ],
+      "live" : null,
+      "own_name" : null,
+      "says" : null,
+      "status" : "",
+      "step" : "notSignedIn",
+      "tailnet" : null
+    },
+    {
+      "address" : null,
+      "device_of" : {
+        "" : null,
+        "[100.96.10.20]" : null,
+        "100.96.10.20" : null,
+        "100.101.100.180" : null,
+        "nothing" : null,
+        "owner-pc" : null,
+        "twin" : null,
+        "worker-1" : null,
+        "worker-2" : null,
+        "worker-2-1" : null,
+        "WORKER-2-1.tail1234.ts.net" : null
+      },
+      "devices" : [
+
+      ],
+      "live" : null,
+      "own_name" : null,
+      "says" : null,
+      "status" : "not json",
+      "step" : "notSignedIn",
+      "tailnet" : null
+    },
+    {
+      "address" : null,
+      "device_of" : {
+        "" : null,
+        "[100.96.10.20]" : null,
+        "100.96.10.20" : null,
+        "100.101.100.180" : null,
+        "nothing" : null,
+        "owner-pc" : null,
+        "twin" : null,
+        "worker-1" : null,
+        "worker-2" : null,
+        "worker-2-1" : null,
+        "WORKER-2-1.tail1234.ts.net" : null
+      },
+      "devices" : [
+
+      ],
+      "live" : null,
+      "own_name" : null,
+      "says" : null,
+      "status" : "{}",
+      "step" : "notSignedIn",
+      "tailnet" : null
+    },
+    {
+      "address" : null,
+      "device_of" : {
+        "" : null,
+        "[100.96.10.20]" : null,
+        "100.96.10.20" : null,
+        "100.101.100.180" : null,
+        "nothing" : null,
+        "owner-pc" : null,
+        "twin" : null,
+        "worker-1" : null,
+        "worker-2" : null,
+        "worker-2-1" : null,
+        "WORKER-2-1.tail1234.ts.net" : null
+      },
+      "devices" : [
+
+      ],
+      "live" : null,
+      "own_name" : null,
+      "says" : "NeedsLogin",
+      "status" : "{\"BackendState\": \"NeedsLogin\"}",
+      "step" : "notSignedIn",
+      "tailnet" : null
+    },
+    {
+      "address" : null,
+      "device_of" : {
+        "" : null,
+        "[100.96.10.20]" : null,
+        "100.96.10.20" : null,
+        "100.101.100.180" : null,
+        "nothing" : null,
+        "owner-pc" : null,
+        "twin" : null,
+        "worker-1" : null,
+        "worker-2" : null,
+        "worker-2-1" : null,
+        "WORKER-2-1.tail1234.ts.net" : null
+      },
+      "devices" : [
+
+      ],
+      "live" : null,
+      "own_name" : null,
+      "says" : "NoState",
+      "status" : "{\"BackendState\": \"NoState\"}",
+      "step" : "notSignedIn",
+      "tailnet" : null
+    },
+    {
+      "address" : "100.101.100.180",
+      "device_of" : {
+        "" : null,
+        "[100.96.10.20]" : null,
+        "100.96.10.20" : null,
+        "100.101.100.180" : null,
+        "nothing" : null,
+        "owner-pc" : null,
+        "twin" : null,
+        "worker-1" : null,
+        "worker-2" : null,
+        "worker-2-1" : null,
+        "WORKER-2-1.tail1234.ts.net" : null
+      },
+      "devices" : [
+
+      ],
+      "live" : null,
+      "own_name" : null,
+      "says" : "Stopped",
+      "status" : "{\"BackendState\": \"Stopped\", \"Self\": {\"TailscaleIPs\": [\"100.101.100.180\"]}}",
+      "step" : "notConnected",
+      "tailnet" : null
+    },
+    {
+      "address" : null,
+      "device_of" : {
+        "" : null,
+        "[100.96.10.20]" : null,
+        "100.96.10.20" : null,
+        "100.101.100.180" : null,
+        "nothing" : null,
+        "owner-pc" : null,
+        "twin" : null,
+        "worker-1" : null,
+        "worker-2" : null,
+        "worker-2-1" : null,
+        "WORKER-2-1.tail1234.ts.net" : null
+      },
+      "devices" : [
+
+      ],
+      "live" : null,
+      "own_name" : null,
+      "says" : "Starting",
+      "status" : "{\"BackendState\": \"Starting\"}",
+      "step" : "notConnected",
+      "tailnet" : null
+    },
+    {
+      "address" : null,
+      "device_of" : {
+        "" : null,
+        "[100.96.10.20]" : null,
+        "100.96.10.20" : null,
+        "100.101.100.180" : null,
+        "nothing" : null,
+        "owner-pc" : null,
+        "twin" : null,
+        "worker-1" : null,
+        "worker-2" : null,
+        "worker-2-1" : null,
+        "WORKER-2-1.tail1234.ts.net" : null
+      },
+      "devices" : [
+
+      ],
+      "live" : null,
+      "own_name" : null,
+      "says" : "Running",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"TailscaleIPs\": [\"fd7a:115c:a1e0::1\"]}}",
+      "step" : "notConnected",
+      "tailnet" : null
+    },
+    {
+      "address" : "100.101.100.180",
+      "device_of" : {
+        "" : null,
+        "[100.96.10.20]" : "worker-2-1",
+        "100.96.10.20" : "worker-2-1",
+        "100.101.100.180" : "owner-pc",
+        "nothing" : null,
+        "owner-pc" : "owner-pc",
+        "twin" : "twin",
+        "worker-1" : "worker-1",
+        "worker-2" : null,
+        "worker-2-1" : "worker-2-1",
+        "WORKER-2-1.tail1234.ts.net" : "worker-2-1"
+      },
+      "devices" : [
+        {
+          "address" : "100.101.100.90",
+          "host" : "",
+          "name" : "iphone",
+          "online" : true
+        },
+        {
+          "address" : "100.64.1.7",
+          "host" : "",
+          "name" : "twin",
+          "online" : false
+        },
+        {
+          "address" : "100.64.1.9",
+          "host" : "",
+          "name" : "twin-2",
+          "online" : false
+        },
+        {
+          "address" : "100.96.100.130",
+          "host" : "worker-1",
+          "name" : "worker-1",
+          "online" : false
+        },
+        {
+          "address" : "100.96.10.20",
+          "host" : "worker-2",
+          "name" : "worker-2-1",
+          "online" : true
+        }
+      ],
+      "live" : [
+        "iphone",
+        "twin",
+        "twin-2",
+        "worker-1",
+        "worker-2-1"
+      ],
+      "own_name" : "owner-pc",
+      "says" : "Running",
+      "status" : "{\"BackendState\": \"Running\", \"CurrentTailnet\": {\"Name\": \"owner@example.com\"},\n \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"HostName\": \"Owner-PC\", \"TailscaleIPs\": [\"fd7a:115c:a1e0::1\", \"100.101.100.180\"], \"Online\": true},\n \"Peer\": {\n   \"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"HostName\": \"worker-1\", \"TailscaleIPs\": [\"100.96.100.130\"], \"Online\": false},\n   \"b\": {\"DNSName\": \"worker-2-1.tail1234.ts.net.\", \"HostName\": \"Worker-2\", \"TailscaleIPs\": [\"fd7a:115c:a1e0::2\", \"100.96.10.20\"], \"Online\": true},\n   \"c\": {\"DNSName\": \"iphone.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.101.100.90\"], \"Online\": true},\n   \"d\": {\"DNSName\": \"\", \"TailscaleIPs\": [\"100.64.0.9\"], \"Online\": true},\n   \"e\": {\"DNSName\": \"twin.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.64.1.7\"]},\n   \"f\": {\"DNSName\": \"twin-2.example.ts.net.\", \"TailscaleIPs\": [\"100.64.1.9\"]}\n }}",
+      "step" : "connected",
+      "tailnet" : "owner@example.com"
+    },
+    {
+      "address" : "100.64.0.2",
+      "device_of" : {
+        "" : null,
+        "[100.96.10.20]" : null,
+        "100.96.10.20" : null,
+        "100.101.100.180" : null,
+        "nothing" : null,
+        "owner-pc" : null,
+        "twin" : null,
+        "worker-1" : null,
+        "worker-2" : null,
+        "worker-2-1" : null,
+        "WORKER-2-1.tail1234.ts.net" : null
+      },
+      "devices" : [
+
+      ],
+      "live" : null,
+      "own_name" : null,
+      "says" : "Running",
+      "status" : "{\"BackendState\": \"Running\", \"CurrentTailnet\": {\"Name\": \"\"}, \"Self\": {\"TailscaleIPs\": [\"100.64.0.2\"], \"Online\": false}}",
+      "step" : "connected",
+      "tailnet" : null
+    },
+    {
+      "address" : null,
+      "device_of" : {
+        "" : null,
+        "[100.96.10.20]" : null,
+        "100.96.10.20" : null,
+        "100.101.100.180" : null,
+        "nothing" : null,
+        "owner-pc" : null,
+        "twin" : null,
+        "worker-1" : null,
+        "worker-2" : null,
+        "worker-2-1" : null,
+        "WORKER-2-1.tail1234.ts.net" : null
+      },
+      "devices" : [
+
+      ],
+      "live" : [
+
+      ],
+      "own_name" : null,
+      "says" : null,
+      "status" : "warning: a newer version is out\n{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true}, \"Peer\": {}}",
+      "step" : "notSignedIn",
+      "tailnet" : null
+    }
+  ],
+  "policies" : [
+    {
+      "needs" : {
+        "grants" : [
+
+        ],
+        "tag" : true
+      },
+      "text" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+      "written" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+      "written_all" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}",
+      "written_tag" : "// The owner's own rules. This comment must still be here afterwards.\n{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t\t\"tag:server\": [\"owner@example.com\"],\n\t},\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"]},\n\t],\n}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : true
+      },
+      "text" : "{\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\"tag:server\": [\"owner@example.com\"]},\n}",
+      "written" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:server\": [\"owner@example.com\"]},\n}",
+      "written_all" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:server\": [\"owner@example.com\"]},\n}",
+      "written_tag" : "{\n\t// Only my laptop reaches my servers.\n\t\"acls\": [\n\t\t{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"tag:server:22\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:server\": [\"owner@example.com\"]},\n}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : false
+      },
+      "text" : "{\n\t\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]},\n\t\"acls\": [{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"*:22\"]}],\n}",
+      "written" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t\"tagOwners\": {\"tag:founderizer\": [\"autogroup:admin\"]},\n\t\"acls\": [{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"*:22\"]}],\n}",
+      "written_all" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:founderizer\": [\"autogroup:admin\"]},\n\t\"acls\": [{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"*:22\"]}],\n}",
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:founderizer\": [\"autogroup:admin\"]},\n\t\"acls\": [{\"action\": \"accept\", \"src\": [\"owner@example.com\"], \"dst\": [\"*:22\"]}],\n}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+
+        ],
+        "tag" : true
+      },
+      "text" : "{}",
+      "written" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},}",
+      "written_all" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],}",
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},}"
+    },
+    {
+      "needs" : null,
+      "text" : "",
+      "written" : null,
+      "written_all" : null,
+      "written_tag" : null
+    },
+    {
+      "needs" : null,
+      "text" : "not json at all",
+      "written" : null,
+      "written_all" : null,
+      "written_tag" : null
+    },
+    {
+      "needs" : {
+        "grants" : [
+
+        ],
+        "tag" : false
+      },
+      "text" : "{\"tagOwners\": {\"tag:founderizer\": []}}",
+      "written" : null,
+      "written_all" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:founderizer\": []}}",
+      "written_tag" : "{\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:founderizer\": []}}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+
+        ],
+        "tag" : true
+      },
+      "text" : "{\n\t// \"tagOwners\": {}\n\t\"note\": \"grants tagOwners\",\n}",
+      "written" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t// \"tagOwners\": {}\n\t\"note\": \"grants tagOwners\",\n}",
+      "written_all" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t// \"tagOwners\": {}\n\t\"note\": \"grants tagOwners\",\n}",
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t// \"tagOwners\": {}\n\t\"note\": \"grants tagOwners\",\n}"
+    },
+    {
+      "needs" : null,
+      "text" : "{\"tagOwners\": {}, \"TagOwners\": {\"tag:x\": []}}",
+      "written" : null,
+      "written_all" : null,
+      "written_tag" : null
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : true
+      },
+      "text" : "{\"grants\": [], \"Grants\": []}",
+      "written" : null,
+      "written_all" : null,
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"grants\": [], \"Grants\": []}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : true
+      },
+      "text" : "{\"tagOwners\": [], \"acls\": []}",
+      "written" : null,
+      "written_all" : null,
+      "written_tag" : null
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : true
+      },
+      "text" : "{\"grants\": {}, \"acls\": []}",
+      "written" : null,
+      "written_all" : null,
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"grants\": {}, \"acls\": []}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : false
+      },
+      "text" : "{\n\t/* the owner's */ \"TAGOWNERS\": {\"Tag:Founderizer\": [\"autogroup:admin\",],},\n\t\"ACLs\": [],\n}",
+      "written" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t/* the owner's */ \"TAGOWNERS\": {\"Tag:Founderizer\": [\"autogroup:admin\",],},\n\t\"ACLs\": [],\n}",
+      "written_all" : "{\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t/* the owner's */ \"TAGOWNERS\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"Tag:Founderizer\": [\"autogroup:admin\",],},\n\t\"ACLs\": [],\n}",
+      "written_tag" : "{\n\t/* the owner's */ \"TAGOWNERS\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"Tag:Founderizer\": [\"autogroup:admin\",],},\n\t\"ACLs\": [],\n}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+
+        ],
+        "tag" : false
+      },
+      "text" : "{\"tagOwners\": {\"tag:founderizer\": []}, \"grants\": [{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"*\"]}, {\"src\": [\"*\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:*\"]}]}",
+      "written" : null,
+      "written_all" : "{\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:founderizer\": []}, \"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"*\"]}, {\"src\": [\"*\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:*\"]}]}",
+      "written_tag" : "{\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\"tag:founderizer\": []}, \"grants\": [{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"*\"]}, {\"src\": [\"*\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:*\"]}]}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : true
+      },
+      "text" : "{\"grants\": [{\"src\": [\"autogroup:owner\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"22\", \"8765\", \"9418\"]}]}",
+      "written" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},{\"src\": [\"autogroup:owner\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"22\", \"8765\", \"9418\"]}]}",
+      "written_all" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},{\"src\": [\"autogroup:owner\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"22\", \"8765\", \"9418\"]}]}",
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"grants\": [{\"src\": [\"autogroup:owner\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"22\", \"8765\", \"9418\"]}]}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+
+        ],
+        "tag" : true
+      },
+      "text" : "{\"grants\": [{\"src\": [\"*\"], \"dst\": [\"*\"], \"ip\": [\"*\"]}]}",
+      "written" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"grants\": [{\"src\": [\"*\"], \"dst\": [\"*\"], \"ip\": [\"*\"]}]}",
+      "written_all" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},{\"src\": [\"*\"], \"dst\": [\"*\"], \"ip\": [\"*\"]}]}",
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"grants\": [{\"src\": [\"*\"], \"dst\": [\"*\"], \"ip\": [\"*\"]}]}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : true
+      },
+      "text" : "{\"grants\": [{\"src\": [\"*\"], \"dst\": [\"*\"], \"ip\": [\"*\"], \"srcPosture\": [\"posture:x\"]}]}",
+      "written" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},{\"src\": [\"*\"], \"dst\": [\"*\"], \"ip\": [\"*\"], \"srcPosture\": [\"posture:x\"]}]}",
+      "written_all" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},{\"src\": [\"*\"], \"dst\": [\"*\"], \"ip\": [\"*\"], \"srcPosture\": [\"posture:x\"]}]}",
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"grants\": [{\"src\": [\"*\"], \"dst\": [\"*\"], \"ip\": [\"*\"], \"srcPosture\": [\"posture:x\"]}]}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+
+        ],
+        "tag" : true
+      },
+      "text" : "{\"acls\": [{\"action\": \"accept\", \"users\": [\"*\"], \"ports\": [\"*:*\"]}]}",
+      "written" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"acls\": [{\"action\": \"accept\", \"users\": [\"*\"], \"ports\": [\"*:*\"]}]}",
+      "written_all" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\"acls\": [{\"action\": \"accept\", \"users\": [\"*\"], \"ports\": [\"*:*\"]}]}",
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"acls\": [{\"action\": \"accept\", \"users\": [\"*\"], \"ports\": [\"*:*\"]}]}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : true
+      },
+      "text" : "{\"acls\": [{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"], \"proto\": \"tcp\"}]}",
+      "written" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\"acls\": [{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"], \"proto\": \"tcp\"}]}",
+      "written_all" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\"acls\": [{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"], \"proto\": \"tcp\"}]}",
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"acls\": [{\"action\": \"accept\", \"src\": [\"*\"], \"dst\": [\"*:*\"], \"proto\": \"tcp\"}]}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+
+        ],
+        "tag" : true
+      },
+      "text" : "{\"acls\": null, \"grants\": null}",
+      "written" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"acls\": null, \"grants\": null}",
+      "written_all" : null,
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"acls\": null, \"grants\": null}"
+    },
+    {
+      "needs" : null,
+      "text" : "{\"tagOwners\": {\"tag:x\": [\"a]}",
+      "written" : null,
+      "written_all" : null,
+      "written_tag" : null
+    },
+    {
+      "needs" : null,
+      "text" : "{/* never ends",
+      "written" : null,
+      "written_all" : null,
+      "written_tag" : null
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : true
+      },
+      "text" : "{\"note\": \"a \\\"quoted\\\" grants\", \"acls\": []}",
+      "written" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\"note\": \"a \\\"quoted\\\" grants\", \"acls\": []}",
+      "written_all" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\"note\": \"a \\\"quoted\\\" grants\", \"acls\": []}",
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"note\": \"a \\\"quoted\\\" grants\", \"acls\": []}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : true
+      },
+      "text" : "{\n\t// Café, naïve: the owner's words\n\t\"acls\": [],\n}",
+      "written" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t// Café, naïve: the owner's words\n\t\"acls\": [],\n}",
+      "written_all" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\n\t// Café, naïve: the owner's words\n\t\"acls\": [],\n}",
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t// Café, naïve: the owner's words\n\t\"acls\": [],\n}"
+    },
+    {
+      "needs" : {
+        "grants" : [
+          0,
+          1
+        ],
+        "tag" : true
+      },
+      "text" : "{\"acls\": [],, }",
+      "written" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\"acls\": [],, }",
+      "written_all" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\n\t\"grants\": [\n\t\t{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]},\n\t\t{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]},\n\t],\"acls\": [],, }",
+      "written_tag" : "{\n\t\"tagOwners\": {\n\t\t\"tag:founderizer\": [\"autogroup:admin\"],\n\t},\"acls\": [],, }"
+    },
+    {
+      "needs" : null,
+      "text" : "[]",
+      "written" : null,
+      "written_all" : null,
+      "written_tag" : null
+    }
+  ],
+  "reach" : [
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : true,
+      "locked" : false,
+      "name" : "worker-3.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.99"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-1.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.96.100.130"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-9.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-3.tail0.ts.net",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : true,
+      "name" : "worker-3.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-3",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-3.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Stopped\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.99"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-1.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Stopped\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.96.100.130"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-9.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Stopped\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-3.tail0.ts.net",
+      "status" : "{\"BackendState\": \"Stopped\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : true,
+      "name" : "worker-3.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Stopped\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "",
+      "status" : "{\"BackendState\": \"Stopped\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-3",
+      "status" : "{\"BackendState\": \"Stopped\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": true},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-3.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": false},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.99"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-1.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": false},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.96.100.130"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-9.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": false},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-3.tail0.ts.net",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": false},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : true,
+      "name" : "worker-3.tail1234.ts.net",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": false},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": false},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-3",
+      "status" : "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"owner-pc.tail1234.ts.net.\", \"Online\": false},\n \"Peer\": {\"a\": {\"DNSName\": \"worker-1.tail1234.ts.net.\", \"TailscaleIPs\": [\"100.96.100.130\"]}}}"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-3.tail1234.ts.net",
+      "status" : "not json"
+    },
+    {
+      "addresses" : [
+        "100.64.0.99"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-1.tail1234.ts.net",
+      "status" : "not json"
+    },
+    {
+      "addresses" : [
+        "100.96.100.130"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-9.tail1234.ts.net",
+      "status" : "not json"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-3.tail0.ts.net",
+      "status" : "not json"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : true,
+      "name" : "worker-3.tail1234.ts.net",
+      "status" : "not json"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "",
+      "status" : "not json"
+    },
+    {
+      "addresses" : [
+        "100.64.0.31"
+      ],
+      "keeps" : false,
+      "locked" : false,
+      "name" : "worker-3",
+      "status" : "not json"
+    }
+  ],
+  "secrets" : {
+    "{access token}" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000",
+    "{fleet access}" : "notarealaccesstoken-0123456789abcdef",
+    "{fleet secret}" : "tskey-client-kFLEET1234CNTRL-notarealsecret",
+    "{old fleet secret}" : "tskey-client-kOLDKEY123CNTRL-notarealoldsecret"
+  },
+  "words" : {
+    "auth_keys" : [
+      {
+        "is" : true,
+        "key" : "tskey-auth-kAUTH1234CNTRL-notarealkey"
+      },
+      {
+        "is" : true,
+        "key" : "tskey-auth-"
+      },
+      {
+        "is" : false,
+        "key" : "tskey-auth-x y"
+      },
+      {
+        "is" : false,
+        "key" : "tskey-client-x"
+      },
+      {
+        "is" : false,
+        "key" : "tskey-auth-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "constants" : {
+      "client_description" : "Founderizer fleet",
+      "grants" : [
+        "{\"src\": [\"autogroup:owner\", \"autogroup:admin\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:22\", \"tcp:8765\", \"tcp:9418\"]}",
+        "{\"src\": [\"tag:founderizer\"], \"dst\": [\"tag:founderizer\"], \"ip\": [\"tcp:8765\", \"tcp:9418\"]}"
+      ],
+      "hub_ports" : [
+        "tcp:8765",
+        "tcp:9418"
+      ],
+      "join_key_life" : 3600,
+      "key_life_seconds" : 900,
+      "keys_page" : "https://login.tailscale.com/admin/settings/keys",
+      "owners" : [
+        "autogroup:owner",
+        "autogroup:admin"
+      ],
+      "ports" : [
+        "tcp:22",
+        "tcp:8765",
+        "tcp:9418"
+      ],
+      "scopes" : [
+        "auth_keys",
+        "devices:core"
+      ],
+      "tag" : "tag:founderizer",
+      "tag_line" : "\"tag:founderizer\": [\"autogroup:admin\"]"
+    },
+    "descriptions" : [
+      {
+        "description" : "Founderizer worker-3",
+        "hostname" : "worker-3"
+      },
+      {
+        "description" : "Founderizer server",
+        "hostname" : ""
+      },
+      {
+        "description" : "Founderizer milex",
+        "hostname" : "émile_é.x"
+      },
+      {
+        "description" : "Founderizer a-very-long-server-name-with-more-than",
+        "hostname" : "a-very-long-server-name-with-more-than-fifty-characters-in-it"
+      }
+    ],
+    "device_ids" : [
+      {
+        "id" : "nBBBB2CNTRL",
+        "is" : true
+      },
+      {
+        "id" : "1002",
+        "is" : true
+      },
+      {
+        "id" : "",
+        "is" : false
+      },
+      {
+        "id" : "../keys",
+        "is" : false
+      },
+      {
+        "id" : "a b",
+        "is" : false
+      },
+      {
+        "id" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "is" : true
+      },
+      {
+        "id" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "is" : false
+      },
+      {
+        "id" : "ünicode",
+        "is" : false
+      }
+    ],
+    "errors" : [
+      {
+        "case" : "not_an_access_token",
+        "words" : "This is not a Tailscale API access token. Make one on Tailscale's Keys page: it starts with tskey-api-."
+      },
+      {
+        "case" : "token_not_accepted",
+        "words" : "Tailscale did not accept this access token: it has expired or it was revoked. Make a new one on Tailscale's Keys page and paste it."
+      },
+      {
+        "case" : "role_cannot_write",
+        "words" : "Your role in Tailscale cannot make this change. Use an access token of an Owner or an Admin of the tailnet."
+      },
+      {
+        "case" : "rate_limited",
+        "words" : "Tailscale asks this Mac to wait. Try again in a minute."
+      },
+      {
+        "case" : "unreachable",
+        "words" : "Tailscale could not be reached. Check this Mac's connection to the internet."
+      },
+      {
+        "case" : "refused",
+        "says" : "an example refusal",
+        "words" : "Tailscale refused: an example refusal"
+      },
+      {
+        "case" : "not_understood",
+        "words" : "Tailscale answered something this app does not understand."
+      },
+      {
+        "case" : "policy_changed_meanwhile",
+        "words" : "Your Tailscale policy file changed while this app was adding to it. Try again."
+      },
+      {
+        "case" : "no_fleet_key",
+        "words" : "This Mac has no key to your Tailscale network yet. Connect Tailscale first."
+      },
+      {
+        "case" : "fleet_key_ended",
+        "words" : "Tailscale no longer accepts this Mac's key to your network: it was ended in Tailscale. Connect Tailscale again."
+      }
+    ],
+    "places" : [
+      {
+        "address" : null,
+        "hidden" : "worker-3 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy so that this Mac reaches tag:founderizer on tcp:22.",
+        "hidden_hub" : "hub-1 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy so that this Mac reaches tag:founderizer on tcp:22, tcp:8765.",
+        "place" : "none",
+        "tag_ask" : null,
+        "unreached" : "worker-3 did not answer SSH on port 22. Check that the server is on, and that your Tailscale policy lets this Mac reach it on tcp:22."
+      },
+      {
+        "address" : null,
+        "hidden" : "worker-3 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy so that this Mac reaches tag:founderizer on tcp:22.",
+        "hidden_hub" : "hub-1 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy so that this Mac reaches tag:founderizer on tcp:22, tcp:8765.",
+        "place" : "tailscale",
+        "tag_ask" : "Your Tailscale policy has no tag:founderizer. Add this line to tagOwners on the Access controls page of Tailscale, then paste a key again.",
+        "unreached" : "worker-3 did not answer SSH on port 22. Check that the server is on, and that your Tailscale policy lets this Mac reach it on tcp:22."
+      },
+      {
+        "address" : null,
+        "hidden" : "worker-3 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy, which another tool keeps, so that this Mac reaches tag:founderizer on tcp:22.",
+        "hidden_hub" : "hub-1 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy, which another tool keeps, so that this Mac reaches tag:founderizer on tcp:22, tcp:8765.",
+        "place" : "tool",
+        "tag_ask" : "Your Tailscale policy has no tag:founderizer. Add this line to tagOwners in the file of the tool that keeps your policy, then paste a key again.",
+        "unreached" : "worker-3 did not answer SSH on port 22. Check that the server is on, and that your Tailscale policy, which another tool keeps, lets this Mac reach it on tcp:22."
+      },
+      {
+        "address" : "github.com/example/tailnet-policy",
+        "hidden" : "worker-3 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy in github.com/example/tailnet-policy so that this Mac reaches tag:founderizer on tcp:22.",
+        "hidden_hub" : "hub-1 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy in github.com/example/tailnet-policy so that this Mac reaches tag:founderizer on tcp:22, tcp:8765.",
+        "place" : "tool https://github.com/example/tailnet-policy/",
+        "tag_ask" : "Your Tailscale policy has no tag:founderizer. Add this line to tagOwners in github.com/example/tailnet-policy, then paste a key again.",
+        "unreached" : "worker-3 did not answer SSH on port 22. Check that the server is on, and that your Tailscale policy in github.com/example/tailnet-policy lets this Mac reach it on tcp:22."
+      },
+      {
+        "address" : "git.example.com:8443/a/b.hujson",
+        "hidden" : "worker-3 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy in git.example.com:8443/a/b.hujson so that this Mac reaches tag:founderizer on tcp:22.",
+        "hidden_hub" : "hub-1 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy in git.example.com:8443/a/b.hujson so that this Mac reaches tag:founderizer on tcp:22, tcp:8765.",
+        "place" : "tool https://user:pw@git.example.com:8443/a/b.hujson?x=1#y",
+        "tag_ask" : "Your Tailscale policy has no tag:founderizer. Add this line to tagOwners in git.example.com:8443/a/b.hujson, then paste a key again.",
+        "unreached" : "worker-3 did not answer SSH on port 22. Check that the server is on, and that your Tailscale policy in git.example.com:8443/a/b.hujson lets this Mac reach it on tcp:22."
+      },
+      {
+        "address" : null,
+        "hidden" : "worker-3 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy, which another tool keeps, so that this Mac reaches tag:founderizer on tcp:22.",
+        "hidden_hub" : "hub-1 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy, which another tool keeps, so that this Mac reaches tag:founderizer on tcp:22, tcp:8765.",
+        "place" : "tool https://example.com/a%20b",
+        "tag_ask" : "Your Tailscale policy has no tag:founderizer. Add this line to tagOwners in the file of the tool that keeps your policy, then paste a key again.",
+        "unreached" : "worker-3 did not answer SSH on port 22. Check that the server is on, and that your Tailscale policy, which another tool keeps, lets this Mac reach it on tcp:22."
+      },
+      {
+        "address" : null,
+        "hidden" : "worker-3 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy, which another tool keeps, so that this Mac reaches tag:founderizer on tcp:22.",
+        "hidden_hub" : "hub-1 is on your Tailscale network, but this Mac cannot reach it. Change your Tailscale policy, which another tool keeps, so that this Mac reaches tag:founderizer on tcp:22, tcp:8765.",
+        "place" : "tool https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tag_ask" : "Your Tailscale policy has no tag:founderizer. Add this line to tagOwners in the file of the tool that keeps your policy, then paste a key again.",
+        "unreached" : "worker-3 did not answer SSH on port 22. Check that the server is on, and that your Tailscale policy, which another tool keeps, lets this Mac reach it on tcp:22."
+      }
+    ],
+    "tokens" : [
+      {
+        "pasted" : "",
+        "token" : null
+      },
+      {
+        "pasted" : "  tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000\n",
+        "token" : "tskey-api-kEXAMPLE1CNTRL-notarealsecretvalue0000"
+      },
+      {
+        "pasted" : "tskey-api-has space",
+        "token" : null
+      },
+      {
+        "pasted" : "tskey-auth-kAbc1234CNTRL-xyz",
+        "token" : null
+      },
+      {
+        "pasted" : "tskey-api-a",
+        "token" : "tskey-api-a"
+      },
+      {
+        "pasted" : "tskey-api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "token" : "tskey-api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "pasted" : "tskey-api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab",
+        "token" : null
+      }
+    ],
+    "unseen" : "worker-3 is on your Tailscale network, but Tailscale on this Mac does not show it online. Check that Tailscale on this Mac is connected to the same network."
+  }
+}

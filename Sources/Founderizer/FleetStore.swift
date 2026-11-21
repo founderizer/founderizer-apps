@@ -344,6 +344,7 @@ final class FleetStore {
             closeAnsweredTakeOvers()        // owner feature need_takeover: the way in closes at his answer
             forgetFilesOfAnotherFleet()     // a new hub or database numbers its files from 1 again
             dropUnsendableGuidanceFiles()   // a task's box that can send no more keeps no file
+            JobColumns.shared.note(state)   // each job card's time in its column, at every reading (ColumnTimes)
         }
     }
     /// **What he asked for (`HubState.asks`), read once for each reading**: an agent's chat reads it at each of its

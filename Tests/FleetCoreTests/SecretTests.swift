@@ -287,6 +287,20 @@ struct SecretTests {
                                    ("short", reference, "Shop admin"), (hex, "bws://not-a-reference", "Shop admin")] {
             #expect(throws: HubError.self) { try SecretCommand.title(requestID: id, database: "db", sha256: sha, login: login, title: text) }
         }
+        // The note of the detail (UI-API 1.249) goes with the title, which the hub's route asks for, and "" takes it
+        // away: a body that dropped an empty note could never take one away. A note of more than the hub's 200 by its
+        // count, or of two lines, does not go.
+        for words in ["Main shop account, for refunds", ""] {
+            let sent = try SecretCommand.title(requestID: id, database: "db", sha256: hex, login: reference, title: "Shop admin", note: " \(words) ")
+            let noted = try #require(try JSONSerialization.jsonObject(with: sent) as? [String: String])
+            #expect(noted["note"] == words && noted["title"] == "Shop admin")
+        }
+        #expect(title["note"] == nil)                                                    // no note: the note stays as it is
+        for words in [String(repeating: "n", count: NeedSecret.noteMost + 1), String(repeating: "…", count: 67), "two\nlines"] {
+            #expect(throws: HubError.self) {
+                try SecretCommand.title(requestID: id, database: "db", sha256: hex, login: reference, title: "Shop admin", note: words)
+            }
+        }
         // Remove: the reference leaves the catalog on the team.json that the page read; no title and no value.
         let removed = try #require(try JSONSerialization.jsonObject(with: SecretCommand.removal(
             requestID: id, database: "db", sha256: hex, login: reference)) as? [String: Any])

@@ -66,9 +66,7 @@ struct CentralVaultTests {
     /// The vault keeps a grant statement only when it is newer than the one it holds, so two changes in one second
     /// are two seconds apart here, for each fleet on its own.
     @Test func eachGrantStatementOfAFleetIsLaterThanTheLast() throws {
-        let suite = "founderizer-test-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = TestDefaults("founderizer-test")
         #expect(GrantClock.next(fleet: Self.fleet, now: 1_761_300_000, in: defaults) == 1_761_300_000)
         #expect(GrantClock.next(fleet: Self.fleet, now: 1_761_300_000, in: defaults) == 1_761_300_001)
         #expect(GrantClock.next(fleet: Self.fleet, now: 1_761_299_000, in: defaults) == 1_761_300_002)    // a clock set back
@@ -81,9 +79,7 @@ struct CentralVaultTests {
     /// from a clock that ran ahead once is not followed, and the next statement is dated now (the vault manager's
     /// choice C50).
     @Test func aGrantStatementIsNeverDatedMoreThanAheadOfThisMac() throws {
-        let suite = "founderizer-test-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = TestDefaults("founderizer-test")
         let ahead = GrantClock.ahead, ran = 1_761_400_000
         #expect(ahead == 86400 - 3600)
         #expect(GrantClock.next(fleet: Self.fleet, now: ran, in: defaults) == ran)                   // the clock ran ahead
@@ -413,9 +409,7 @@ struct CentralVaultTests {
     }
 
     @Test func thePinOfTheVaultsKeyIsKeptByHubAndFleet() throws {
-        let suite = "central-vault-tests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = TestDefaults("central-vault-tests")
         let hub = try HubClient.address("http://100.80.1.2:8765"), other = try HubClient.address("http://100.80.1.3:8765")
         #expect(CentralVaultPins.recipient(hub: hub, fleet: Self.fleet, in: defaults) == nil)
         CentralVaultPins.pin(Self.recipient, hub: hub, fleet: Self.fleet, in: defaults)

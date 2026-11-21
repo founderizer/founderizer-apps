@@ -140,7 +140,7 @@ public final class OwnerTools: @unchecked Sendable {
                             + OwnerSetupTools.tools + OwnerLinkTools.tools,
                           instructions: written.instructions, protocolVersion: written.protocolVersion,
                           supported: written.supported, pages: written.pages, pageQuery: written.pageQuery,
-                          pageWords: written.pageWords, pageInPath: written.pageInPath,
+                          pageTakes: written.pageTakes, pageWords: written.pageWords, pageInPath: written.pageInPath,
                           historyWords: written.historyWords, costsWords: written.costsWords,
                           mediaTypes: written.mediaTypes, version: written.version)
     }
@@ -295,6 +295,8 @@ public final class OwnerTools: @unchecked Sendable {
             return ("\(name) could not be sent: its arguments must be an object of its fields, not \(arguments.dumps()).",
                     true)
         }
+        // `owner_mcp.py`'s `read_page` refuses a page and its words before any other check, also before a hub.
+        if tool.name == "fleet_read", let refused = pageRefusal(arguments?.object ?? [:]) { return (refused, true) }
         let carried = arguments?.object.map { map in
             JSONValue.object(map.filter { !Self.wholeNumberFields(tool).contains($0.key) })
         }
@@ -321,7 +323,8 @@ public final class OwnerTools: @unchecked Sendable {
                 return context.appLink.call(tool: AnswerDoor.name, fields: press)
             }
             let result = try run(tool, args, on: hub)
-            return (Self.dataMark + "\n" + (result ?? .null).dumps(indent: 1), false)
+            // With no indent, as `owner_mcp.py`'s `call_tool`: about a fifth fewer characters, and the same answer.
+            return (Self.dataMark + "\n" + (result ?? .null).dumps(), false)
         } catch let refusal as OwnerRefusal {
             return (refusal.text, true)
         } catch let notSent as NotSent {
@@ -465,7 +468,11 @@ public final class OwnerTools: @unchecked Sendable {
         case .withRevision:
             let read = tool.revisionPage ?? ""
             let number = try Self.wholeNumber(args, "id")
-            let page = try readPage(["page": .string(read), "id": .int(number)], on: hub)
+            // Its revision is the one number that this read needs: one item of a page that takes `limit`, as
+            // `owner_mcp.py`'s `with_revision` reads it.
+            var asked: [String: JSONValue] = ["page": .string(read), "id": .int(number)]
+            if table.words(of: read).contains("limit") { asked["limit"] = .int(1) }
+            let page = try readPage(asked, on: hub)
             var body = Self.body(tool, args)
             let revision = page?[read]?["revision"]
             body["base_revision"] = revision ?? .null
@@ -571,12 +578,21 @@ public final class OwnerTools: @unchecked Sendable {
             out += rest[..<open]
             guard let close = rest[open...].firstIndex(of: "}") else { break }
             let word = String(rest[rest.index(after: open)..<close])
-            guard let value = args[word] else { throw NotSent(reason: "'\(word)'") }
+            // null was the part "None", and "" a route with no part there
+            guard let value = args[word], !value.isNull, value.pythonText != "" else { throw OwnerRefusal(routeNeeds(word)) }
             try onePart(word, value.pythonText)
             out += OwnerHub.quote(value.pythonText, safe: "")
             rest = rest[rest.index(after: close)...]
         }
         return out + rest
+    }
+
+    /// A part of a route that the arguments do not give (`owner_mcp.py`'s `route_needs`).
+    static func routeNeeds(_ word: String) -> String { "give \(word): this tool's route needs it, so the command was not sent." }
+
+    /// "a", "a and b", "a, b and c"; after "no", "a or b" (`owner_mcp.py`'s `and_list`).
+    static func andList(_ words: [String], last: String = "and") -> String {
+        words.count == 1 ? words[0] : words.dropLast().joined(separator: ", ") + " \(last) " + (words.last ?? "")
     }
 
     /// A part of a route from an argument is never "." or "..": `quote` leaves both as they are, and a path with one of
@@ -623,13 +639,37 @@ public final class OwnerTools: @unchecked Sendable {
 
     // ------------------------------------------------------------ the four reads, as owner_mcp.py writes them
 
+    /// **What `fleet_read` refuses before any request**, in `owner_mcp.py`'s `read_page`'s order: a page that is not
+    /// one, then each word of the call that the page does not take, the known ones in their order and then, sorted, the
+    /// ones that the schema does not have (an older list's `since`, a word of the agent's own), with what it takes.
+    func pageRefusal(_ args: [String: JSONValue]) -> String? {
+        guard let page = args["page"]?.string, table.pages[page] != nil else {
+            return "page must be one of: " + table.pages.keys.sorted(by: JSONValue.pythonOrder).joined(separator: ", ")
+        }
+        let takes = table.words(of: page)
+        var known: [String] = []
+        for word in ["id"] + table.pageInPath.map({ String($0.dropFirst().dropLast()) }) + table.pageQuery
+            where !known.contains(word) { known.append(word) }
+        var extra = known.filter { word in !takes.contains(word) && args[word].map { !$0.isNull } == true }
+        extra += args.filter { $0.key != "page" && !known.contains($0.key) && !$0.value.isNull }.map(\.key)
+            .sorted(by: JSONValue.pythonOrder)
+        guard !extra.isEmpty else { return nil }
+        return "the page \(page) takes no \(Self.andList(extra, last: "or")), so nothing was read: \(Self.takes(table, page))"
+    }
+
+    /// What one page takes, in the words of a refusal (`owner_mcp.py`'s `page_takes`).
+    static func takes(_ table: OwnerTable, _ page: String) -> String {
+        let needs = table.needs(of: page), takes = table.pageTakes[page] ?? []
+        if needs.isEmpty && takes.isEmpty { return "it takes only page, and gives all of it in one answer." }
+        return "it " + ((needs.isEmpty ? [] : ["needs " + andList(needs)]) + (takes.isEmpty ? [] : ["takes " + andList(takes)]))
+            .joined(separator: ", and ") + "."
+    }
+
     /// `fleet_read`: one page of the owner API, by name.
     func readPage(_ arguments: [String: JSONValue], on hub: OwnerHub) throws -> JSONValue? {
         var args = arguments
-        guard let page = args["page"]?.string, let found = table.pages[page] else {
-            throw OwnerRefusal("page must be one of: " + table.pages.keys.sorted(by: JSONValue.pythonOrder)
-                .joined(separator: ", "))
-        }
+        if let refused = pageRefusal(args) { throw OwnerRefusal(refused) }
+        guard let page = args["page"]?.string, let found = table.pages[page] else { throw OwnerRefusal("no page") }
         var route = found.route
         if route.contains("{id}") {
             guard case .int(let number)? = args["id"], number >= 1 else {
@@ -648,7 +688,11 @@ public final class OwnerTools: @unchecked Sendable {
             args[word] = nil
         }
         let query = table.pageQuery.compactMap { key in args[key].flatMap { $0.isNull ? nil : (key, $0) } }
-        return try hub.get(route, found.what, query: query).data
+        do {
+            return try hub.get(route, found.what, query: query).data
+        } catch let refusal as OwnerRefusal where refusal.text == OwnerHub.larger {
+            throw OwnerRefusal(OwnerHub.largerPage)         // a page can be read in smaller parts
+        }
     }
 
     /// `search_history`: `GET /ui/history`, with the route's own words.

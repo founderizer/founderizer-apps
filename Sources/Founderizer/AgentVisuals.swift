@@ -364,6 +364,16 @@ private final class TurningSymbolView: NSView {
 }
 
 /// A coming time in few characters: the time today, the weekday and time in the next week, else the day and month.
+/// **The line of a parked task: when its agent goes on with it** ("Resumes at 23:11", "Resumes Thu 12:12", "Resumes
+/// 26 Nov"; the owner, 20 November 2026, of "Until 23:11": "what does Until xXx mean? it is confusing"). Today's time
+/// takes "at"; a day does not. A usage limit's end keeps "Until".
+func fleetResumes(_ timestamp: Double, now: Double) -> String {
+    let calendar = Calendar.current
+    let today = calendar.isDate(Date(timeIntervalSince1970: timestamp), inSameDayAs: Date(timeIntervalSince1970: now))
+    let when = fleetComingTime(timestamp, now: now)
+    return today ? String(l10n: "Resumes at \(when)") : String(l10n: "Resumes \(when)")
+}
+
 func fleetComingTime(_ timestamp: Double, now: Double) -> String {
     let date = Date(timeIntervalSince1970: timestamp), calendar = Calendar.current
     let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: Date(timeIntervalSince1970: now)), to: calendar.startOfDay(for: date)).day ?? 0

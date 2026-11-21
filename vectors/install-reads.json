@@ -1,0 +1,4160 @@
+{
+  "about" : "Example outputs of a server, a log or an installer, and what the Mac's FleetCore reads from them; and the words of an install's stops, with \"Mac\" where the Windows app says \"PC\".",
+  "causes" : [
+    "needs_root",
+    "system_not_supported",
+    "no_systemd",
+    "hub_no_answer",
+    "code_not_fetched",
+    "join_code_refused",
+    "join_code_expired",
+    "server_name_refused",
+    "server_name_unread",
+    "hub_busy",
+    "private_network",
+    "firewall",
+    "agent_users",
+    "vault",
+    "updates",
+    "packages",
+    "service",
+    "hub_claim",
+    "agent_program",
+    "homebrew",
+    "wrong_mac_user",
+    "other"
+  ],
+  "claim_code" : {
+    "alphabet" : "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
+    "found" : [
+      {
+        "claim" : "http://100.64.0.7:8765/claim",
+        "code" : "ABCDEFGHJKLM",
+        "log" : "FLEET_CLAIM=ABCD-EFGH-JKLM sh -c \"$(curl -fsS http://100.64.0.7:8765/claim)\""
+      },
+      {
+        "claim" : "http://100.99.1.2:8765/claim",
+        "code" : "ABCDEFGHJKLM",
+        "log" : "Founderizer step 12: the owner claim\nFLEET_CLAIM=abcd-efgh-jklm sh -c \"$(curl -fsS http://100.99.1.2:8765/claim)\"\nwaiting"
+      },
+      {
+        "claim" : "http://100.64.0.10:8765/claim",
+        "code" : "MNPQRSTUVWXY",
+        "log" : "FLEET_CLAIM=ABCD-EFGH-JKLM sh -c \"$(curl -fsS http://100.64.0.7:8765/claim)\"\nFLEET_CLAIM=MNPQ-RSTU-VWXY sh -c \"$(curl -fsS http://100.64.0.10:8765/claim)\""
+      },
+      {
+        "claim" : "http://100.64.0.10:8765/claim",
+        "code" : "MNPQRSTUVWXY",
+        "log" : "FLEET_CLAIM=MNPQ-RSTU-VWXY sh -c \"$(curl -fsS http://100.64.0.10:8765/claim)\"\nFLEET_CLAIM=ABCD-EFGH-JKLM sh -c \"$(curl -fsS http://203.0.113.9:8765/claim)\""
+      },
+      {
+        "claim" : null,
+        "code" : null,
+        "log" : "FLEET_CLAIM=ABCD-EFGH-IJKO sh -c \"$(curl -fsS http://100.64.0.7:8765/claim)\""
+      },
+      {
+        "claim" : null,
+        "code" : null,
+        "log" : "FLEET_CLAIM=ABCD-EFGH-JKLM sh -c \"$(curl -fsS https://100.64.0.7:8765/claim)\""
+      },
+      {
+        "claim" : null,
+        "code" : null,
+        "log" : "FLEET_CLAIM=ABCD-EFGH-JKLM sh -c \"$(curl -fsS http://100.128.0.1:8765/claim)\""
+      },
+      {
+        "claim" : "http://100.64.0.7:8765/claim",
+        "code" : "ABCDEFGHJKLM",
+        "log" : "FLEET_CLAIM=ABCD-EFGH-JKLM sh -c \"$(curl -fsS http://100.64.0.7:8765/claim/more)\""
+      },
+      {
+        "claim" : null,
+        "code" : null,
+        "log" : "FLEET_CLAIM=ABCD-EFGH-JKLM sh -c \"$(curl -fsS http://100.64.0.7:123456/claim)\""
+      },
+      {
+        "claim" : null,
+        "code" : null,
+        "log" : "this hub belongs to the Mac at 100.64.0.2 already, so no code was made"
+      },
+      {
+        "claim" : null,
+        "code" : null,
+        "log" : ""
+      }
+    ],
+    "grouped" : [
+      {
+        "code" : "7KMQ2PRJ4TVW",
+        "grouped" : "7KMQ-2PRJ-4TVW"
+      }
+    ],
+    "log_mark" : "FLEET_CLAIM=",
+    "private" : [
+      {
+        "host" : "100.64.0.1",
+        "private" : true
+      },
+      {
+        "host" : "100.127.255.255",
+        "private" : true
+      },
+      {
+        "host" : "100.128.0.1",
+        "private" : false
+      },
+      {
+        "host" : "10.0.0.1",
+        "private" : false
+      },
+      {
+        "host" : "100.64.0",
+        "private" : false
+      },
+      {
+        "host" : "fd7a::1",
+        "private" : false
+      },
+      {
+        "host" : "100.64.0.1.5",
+        "private" : false
+      },
+      {
+        "host" : "a.b.c.d",
+        "private" : false
+      },
+      {
+        "host" : "100.064.0.1",
+        "private" : true
+      }
+    ],
+    "read" : [
+      {
+        "code" : "ABCDEFGHJKLM",
+        "given" : "abcd efgh jklm"
+      },
+      {
+        "code" : "ABCDEFGHJKLM",
+        "given" : "ABCD-EFGH-JKLM"
+      },
+      {
+        "code" : null,
+        "given" : "ABCDEFGHJKL"
+      },
+      {
+        "code" : null,
+        "given" : "ABCDEFGHJKLMN"
+      },
+      {
+        "code" : "ABCDEFGHJKLM",
+        "given" : " abcd-efgh-jklm\n"
+      },
+      {
+        "code" : null,
+        "given" : "IIII-OOOO-1111"
+      },
+      {
+        "code" : null,
+        "given" : "abcd-efgh-jkl0"
+      }
+    ]
+  },
+  "install_cause" : [
+    {
+      "cause" : "service",
+      "sentence" : "Founderizer the server service did not start here."
+    },
+    {
+      "cause" : "hub_claim",
+      "sentence" : "Founderizer did not answer, so the owner claim here."
+    },
+    {
+      "cause" : "wrong_mac_user",
+      "sentence" : "Founderizer as the mac user that will run the agents here."
+    },
+    {
+      "cause" : "needs_root",
+      "sentence" : "Founderizer run the line as root here."
+    },
+    {
+      "cause" : "system_not_supported",
+      "sentence" : "Founderizer this system is  here."
+    },
+    {
+      "cause" : "system_not_supported",
+      "sentence" : "Founderizer this system has no /etc/os-release here."
+    },
+    {
+      "cause" : "system_not_supported",
+      "sentence" : "Founderizer  is too old. use macos here."
+    },
+    {
+      "cause" : "no_systemd",
+      "sentence" : "Founderizer systemd is required here."
+    },
+    {
+      "cause" : "homebrew",
+      "sentence" : "Founderizer homebrew is not installed here."
+    },
+    {
+      "cause" : "homebrew",
+      "sentence" : "Founderizer homebrew could not install here."
+    },
+    {
+      "cause" : "homebrew",
+      "sentence" : "Founderizer homebrew could not be downloaded here."
+    },
+    {
+      "cause" : "homebrew",
+      "sentence" : "Founderizer homebrew's package has no valid signature here."
+    },
+    {
+      "cause" : "homebrew",
+      "sentence" : "Founderizer homebrew did not install here."
+    },
+    {
+      "cause" : "hub_claim",
+      "sentence" : "Founderizer the owner claim did not finish here."
+    },
+    {
+      "cause" : "hub_claim",
+      "sentence" : "Founderizer before the option --manager-name here."
+    },
+    {
+      "cause" : "hub_no_answer",
+      "sentence" : "Founderizer cannot reach the founderizer hub at here."
+    },
+    {
+      "cause" : "hub_no_answer",
+      "sentence" : "Founderizer hub did not answer here."
+    },
+    {
+      "cause" : "hub_no_answer",
+      "sentence" : "Founderizer urlopen error here."
+    },
+    {
+      "cause" : "hub_no_answer",
+      "sentence" : "Founderizer remote end closed connection here."
+    },
+    {
+      "cause" : "hub_no_answer",
+      "sentence" : "timed out"
+    },
+    {
+      "cause" : "code_not_fetched",
+      "sentence" : "Founderizer could not get the founderizer repository here."
+    },
+    {
+      "cause" : "code_not_fetched",
+      "sentence" : "Founderizer could not clone the founderizer repository here."
+    },
+    {
+      "cause" : "code_not_fetched",
+      "sentence" : "Founderizer could not be cloned from git:// here."
+    },
+    {
+      "cause" : "join_code_refused",
+      "sentence" : "Founderizer join code is not valid here."
+    },
+    {
+      "cause" : "join_code_refused",
+      "sentence" : "Founderizer join code was already used here."
+    },
+    {
+      "cause" : "join_code_refused",
+      "sentence" : "Founderizer a newer join code replaced here."
+    },
+    {
+      "cause" : "join_code_expired",
+      "sentence" : "Founderizer join code expired here."
+    },
+    {
+      "cause" : "join_code_refused",
+      "sentence" : "Founderizer too many wrong join codes here."
+    },
+    {
+      "cause" : "server_name_refused",
+      "sentence" : "Founderizer this server is in your fleet already here."
+    },
+    {
+      "cause" : "server_name_unread",
+      "sentence" : "Founderizer could not read this server's name in tailscale here."
+    },
+    {
+      "cause" : "server_name_refused",
+      "sentence" : "Founderizer and a server's name in fleet has here."
+    },
+    {
+      "cause" : "server_name_refused",
+      "sentence" : "Founderizer your fleet has a server named here."
+    },
+    {
+      "cause" : "server_name_refused",
+      "sentence" : "Founderizer keeps that name for itself here."
+    },
+    {
+      "cause" : "hub_busy",
+      "sentence" : "Founderizer the hub cannot save the new server now here."
+    },
+    {
+      "cause" : "private_network",
+      "sentence" : "Founderizer could not install tailscale here."
+    },
+    {
+      "cause" : "private_network",
+      "sentence" : "Founderizer no tailscale auth key here."
+    },
+    {
+      "cause" : "private_network",
+      "sentence" : "Founderizer tailscale did not join here."
+    },
+    {
+      "cause" : "private_network",
+      "sentence" : "Founderizer tailscale gave no address here."
+    },
+    {
+      "cause" : "private_network",
+      "sentence" : "Founderizer tailscale's service did not start here."
+    },
+    {
+      "cause" : "private_network",
+      "sentence" : "Founderizer this mac is not on your private network here."
+    },
+    {
+      "cause" : "packages",
+      "sentence" : "Founderizer package lists could not be updated here."
+    },
+    {
+      "cause" : "packages",
+      "sentence" : "Founderizer the packages of this system could not be installed here."
+    },
+    {
+      "cause" : "firewall",
+      "sentence" : "Founderizer firewall of this here."
+    },
+    {
+      "cause" : "firewall",
+      "sentence" : "Founderizer the firewall did not turn on here."
+    },
+    {
+      "cause" : "agent_users",
+      "sentence" : "Founderizer the root helpers of this machine's agent users here."
+    },
+    {
+      "cause" : "agent_users",
+      "sentence" : "Founderizer os users of this machine's agents here."
+    },
+    {
+      "cause" : "agent_users",
+      "sentence" : "Founderizer the os user  here."
+    },
+    {
+      "cause" : "agent_users",
+      "sentence" : "Founderizer the user services of  here."
+    },
+    {
+      "cause" : "agent_users",
+      "sentence" : "Founderizer the agents of this machine could not be read here."
+    },
+    {
+      "cause" : "vault",
+      "sentence" : "Founderizer vault of this here."
+    },
+    {
+      "cause" : "vault",
+      "sentence" : "Founderizer its vault did not install here."
+    },
+    {
+      "cause" : "updates",
+      "sentence" : "Founderizer fleet patch policy could not be written here."
+    },
+    {
+      "cause" : "service",
+      "sentence" : "Founderizer the server service of this server could not be made here."
+    },
+    {
+      "cause" : "service",
+      "sentence" : "Founderizer could not write the fleet- here."
+    },
+    {
+      "cause" : "service",
+      "sentence" : "Founderizer did not start. look at here."
+    },
+    {
+      "cause" : "service",
+      "sentence" : "Founderizer fleet-hub is not running here."
+    },
+    {
+      "cause" : "service",
+      "sentence" : "Founderizer the hub is installed but it does not answer here."
+    },
+    {
+      "cause" : "agent_program",
+      "sentence" : "Founderizer did not install for  here."
+    },
+    {
+      "cause" : "agent_program",
+      "sentence" : "Founderizer claude code did not install here."
+    },
+    {
+      "cause" : "agent_program",
+      "sentence" : "Founderizer codex did not install here."
+    },
+    {
+      "cause" : "hub_no_answer",
+      "sentence" : "Timed out"
+    },
+    {
+      "cause" : "hub_no_answer",
+      "sentence" : "  timed out \n"
+    },
+    {
+      "cause" : "other",
+      "sentence" : "The hub timed out at noon."
+    },
+    {
+      "cause" : "other",
+      "sentence" : "Something we do not know."
+    },
+    {
+      "cause" : "other",
+      "sentence" : ""
+    },
+    {
+      "cause" : "code_not_fetched",
+      "sentence" : "Could not clone the Founderizer repository from its address: git did not finish."
+    },
+    {
+      "cause" : "packages",
+      "sentence" : "The packages of this system could not be installed: apt-get did not finish."
+    },
+    {
+      "cause" : "agent_users",
+      "sentence" : "The OS user fleet-wren could not be made."
+    },
+    {
+      "cause" : "system_not_supported",
+      "sentence" : "This system is Fedora 40."
+    }
+  ],
+  "install_errors" : [
+    {
+      "cause" : "code_not_fetched",
+      "description" : "The plan: Founderizer install stopped: Could not clone the Founderizer repository from its address: git did not finish. Check the address, then run the line again.",
+      "kept_words" : null,
+      "name" : "an installer's stop",
+      "plain" : "Could not clone the Founderizer repository from its address: git did not finish. Check the address, then run the line again.",
+      "plain_with_no_host" : "Could not clone the Founderizer repository from its address: git did not finish. Check the address, then run the line again.",
+      "stop" : "installer_stopped"
+    },
+    {
+      "cause" : "join_code_expired",
+      "description" : "Join the fleet: Fleet join stopped:   the join code expired.",
+      "kept_words" : null,
+      "name" : "a join's stop in the old brand",
+      "plain" : "The join code expired.",
+      "plain_with_no_host" : "The join code expired.",
+      "stop" : "installer_stopped"
+    },
+    {
+      "cause" : null,
+      "description" : "Join the fleet: Founderizer join stopped:",
+      "kept_words" : "It stopped at “Join the fleet”.",
+      "name" : "a stop mark with no reason",
+      "plain" : "It stopped at “Join the fleet”.",
+      "plain_with_no_host" : "It stopped at “Join the fleet”.",
+      "stop" : "step_failed"
+    },
+    {
+      "cause" : null,
+      "description" : "Wait for the link code: Your hub answered, and it does not serve its pages to this Mac.",
+      "kept_words" : "Your hub answered, and it does not serve its pages to this Mac.",
+      "name" : "a hub that serves another computer",
+      "plain" : "Your hub answered, and it does not serve its pages to this Mac.",
+      "plain_with_no_host" : "Your hub answered, and it does not serve its pages to this Mac.",
+      "stop" : "hub_not_ours"
+    },
+    {
+      "cause" : null,
+      "description" : "Read the server: It did not answer which user this is.",
+      "kept_words" : "It did not answer which user this is.",
+      "name" : "a server that printed no user",
+      "plain" : "It did not answer which user this is.",
+      "plain_with_no_host" : "It did not answer which user this is.",
+      "stop" : "step_failed"
+    },
+    {
+      "cause" : null,
+      "description" : "Claim the hub: The installer printed an address that is not on your own network.",
+      "kept_words" : "The installer printed an address that is not on your own network.",
+      "name" : "an address off the network",
+      "plain" : "The installer printed an address that is not on your own network.",
+      "plain_with_no_host" : "The installer printed an address that is not on your own network.",
+      "stop" : "step_failed"
+    },
+    {
+      "cause" : null,
+      "description" : "Claim the hub: The hub refused the link code.",
+      "kept_words" : "The hub refused the link code.",
+      "name" : "a refused code",
+      "plain" : "The hub refused the link code.",
+      "plain_with_no_host" : "The hub refused the link code.",
+      "stop" : "step_failed"
+    },
+    {
+      "cause" : null,
+      "description" : "The private network: The link was not approved in time.",
+      "kept_words" : "The link was not approved in time.",
+      "name" : "a link not approved",
+      "plain" : "The link was not approved in time.",
+      "plain_with_no_host" : "The link was not approved in time.",
+      "stop" : "step_failed"
+    },
+    {
+      "cause" : null,
+      "description" : "The private network: Tailscale did not start on this server.",
+      "kept_words" : "Tailscale did not start on this server.",
+      "name" : "Tailscale not started",
+      "plain" : "Tailscale did not start on this server.",
+      "plain_with_no_host" : "Tailscale did not start on this server.",
+      "stop" : "step_failed"
+    },
+    {
+      "cause" : null,
+      "description" : "Join the fleet: The join did not reach the checks of this server.",
+      "kept_words" : "The join did not reach the checks of this server.",
+      "name" : "a join that did not reach the checks",
+      "plain" : "The join did not reach the checks of this server.",
+      "plain_with_no_host" : "The join did not reach the checks of this server.",
+      "stop" : "step_failed"
+    },
+    {
+      "cause" : null,
+      "description" : "Read the server: This install needs Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13.",
+      "kept_words" : "This install needs Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13.",
+      "name" : "the systems of an install",
+      "plain" : "This install needs Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13.",
+      "plain_with_no_host" : "This install needs Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13.",
+      "stop" : "step_failed"
+    },
+    {
+      "cause" : null,
+      "description" : "The Founderizer code: fatal: unable to access 'https://github.com/': timed out",
+      "kept_words" : "It stopped at “The Founderizer code”.",
+      "name" : "a program's own words",
+      "plain" : "It stopped at “The Founderizer code”.",
+      "plain_with_no_host" : "It stopped at “The Founderizer code”.",
+      "stop" : "step_failed"
+    },
+    {
+      "cause" : null,
+      "description" : "The plan: The server answered 2.",
+      "kept_words" : "It stopped at “The plan”.",
+      "name" : "a status with no words",
+      "plain" : "It stopped at “The plan”.",
+      "plain_with_no_host" : "It stopped at “The plan”.",
+      "stop" : "step_failed"
+    },
+    {
+      "cause" : null,
+      "description" : "The user ada is not root on that server. Give a user that is root, or that can become root.",
+      "kept_words" : "The user ada is not root on that server. Give a user that is root, or that can become root.",
+      "name" : "not root",
+      "plain" : "The user ada is not root on that server. Give a user that is root, or that can become root.",
+      "plain_with_no_host" : "The user ada is not root on that server. Give a user that is root, or that can become root.",
+      "stop" : "not_root"
+    },
+    {
+      "cause" : null,
+      "description" : "Wait for the link code took too long. The server is still working, or it cannot be reached.",
+      "kept_words" : "Wait for the link code took too long. The server is still working, or it cannot be reached.",
+      "name" : "too long",
+      "plain" : "Wait for the link code took too long. The server is still working, or it cannot be reached.",
+      "plain_with_no_host" : "Wait for the link code took too long. The server is still working, or it cannot be reached.",
+      "stop" : "timed_out"
+    },
+    {
+      "cause" : null,
+      "description" : "The installer did not print a link code for this Mac. Read its log on the server.",
+      "kept_words" : "The installer did not print a link code for this Mac. Read its log on the server.",
+      "name" : "no link code",
+      "plain" : "The installer did not print a link code for this Mac. Read its log on the server.",
+      "plain_with_no_host" : "The installer did not print a link code for this Mac. Read its log on the server.",
+      "stop" : "no_claim_code"
+    },
+    {
+      "cause" : null,
+      "description" : "The server did not answer its checks. Nothing was installed twice.",
+      "kept_words" : "The server did not answer its checks. Nothing was installed twice.",
+      "name" : "no checklist",
+      "plain" : "The server did not answer its checks. Nothing was installed twice.",
+      "plain_with_no_host" : "The server did not answer its checks. Nothing was installed twice.",
+      "stop" : "no_checklist"
+    },
+    {
+      "cause" : null,
+      "description" : "This server does not run systemd, and this install needs a full VPS that does.",
+      "kept_words" : "This server does not run systemd, and this install needs a full VPS that does.",
+      "name" : "the check stopped",
+      "plain" : "This server does not run systemd, and this install needs a full VPS that does.",
+      "plain_with_no_host" : "This server does not run systemd, and this install needs a full VPS that does.",
+      "stop" : "check_stopped"
+    },
+    {
+      "cause" : null,
+      "description" : "sudo on that server asks for a password.",
+      "kept_words" : "sudo on that server asks for a password.",
+      "name" : "a sudo password",
+      "plain" : "sudo on that server asks for a password.",
+      "plain_with_no_host" : "sudo on that server asks for a password.",
+      "stop" : "needs_sudo_password"
+    },
+    {
+      "cause" : null,
+      "description" : "That server takes none of this Mac's SSH keys, and asks for a password.",
+      "kept_words" : "That server takes none of this Mac's SSH keys, and asks for a password.",
+      "name" : "an SSH password",
+      "plain" : "That server takes none of this Mac's SSH keys, and asks for a password.",
+      "plain_with_no_host" : "That server takes none of this Mac's SSH keys, and asks for a password.",
+      "stop" : "needs_ssh_password"
+    },
+    {
+      "cause" : null,
+      "description" : "The hub gave no join line.",
+      "kept_words" : "The hub gave no join line.",
+      "name" : "a step that cannot start",
+      "plain" : "The hub gave no join line.",
+      "plain_with_no_host" : "The hub gave no join line.",
+      "stop" : "cannot_start"
+    }
+  ],
+  "install_phases" : {
+    "cases" : [
+      {
+        "name" : "nothing reported yet",
+        "phases" : {
+          "current" : 0,
+          "minutes_left" : 15,
+          "parts" : [
+            0,
+            0,
+            0,
+            0
+          ],
+          "status" : "Starting your server",
+          "step" : "read"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "code",
+          "plan",
+          "start",
+          "wait_claim",
+          "claim",
+          "wait_ready",
+          "verify"
+        ],
+        "reported" : [
+
+        ],
+        "running_for" : 0
+      },
+      {
+        "name" : "the network runs",
+        "phases" : {
+          "current" : 1,
+          "minutes_left" : 14,
+          "parts" : [
+            1,
+            0.44444444444444442,
+            0,
+            0
+          ],
+          "status" : "Joining your private network",
+          "step" : "network"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "code",
+          "plan",
+          "start",
+          "wait_claim",
+          "claim",
+          "wait_ready",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "running",
+            "step" : "network"
+          }
+        ],
+        "running_for" : 20
+      },
+      {
+        "name" : "the wait for the code",
+        "phases" : {
+          "current" : 2,
+          "minutes_left" : 13,
+          "parts" : [
+            1,
+            1,
+            0.048951048951048952,
+            0
+          ],
+          "status" : "Starting your hub",
+          "step" : "wait_claim"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "code",
+          "plan",
+          "start",
+          "wait_claim",
+          "claim",
+          "wait_ready",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "code"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "plan"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "start"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "running",
+            "step" : "wait_claim"
+          }
+        ],
+        "running_for" : 10
+      },
+      {
+        "name" : "the security updates",
+        "phases" : {
+          "current" : 2,
+          "minutes_left" : 8,
+          "parts" : [
+            1,
+            1,
+            0.51048951048951052,
+            0
+          ],
+          "status" : "Installing security updates",
+          "step" : "wait_ready"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "code",
+          "plan",
+          "start",
+          "wait_claim",
+          "claim",
+          "wait_ready",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "code"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "plan"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "start"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "wait_claim"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "claim"
+          },
+          {
+            "lines" : [
+              "Founderizer step 13: the firewall",
+              "Founderizer step 14: security updates"
+            ],
+            "state" : "running",
+            "step" : "wait_ready"
+          }
+        ],
+        "running_for" : 300
+      },
+      {
+        "name" : "the installer's own checks",
+        "phases" : {
+          "current" : 2,
+          "minutes_left" : 2,
+          "parts" : [
+            1,
+            1,
+            1,
+            0
+          ],
+          "status" : "Checking your hub",
+          "step" : "wait_ready"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "code",
+          "plan",
+          "start",
+          "wait_claim",
+          "claim",
+          "wait_ready",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "code"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "plan"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "start"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "wait_claim"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "claim"
+          },
+          {
+            "lines" : [
+              "Founderizer step 15: verify the hub"
+            ],
+            "state" : "running",
+            "step" : "wait_ready"
+          }
+        ],
+        "running_for" : 700
+      },
+      {
+        "name" : "the wait with no step yet",
+        "phases" : {
+          "current" : 2,
+          "minutes_left" : 13,
+          "parts" : [
+            1,
+            1,
+            0.090909090909090912,
+            0
+          ],
+          "status" : "Starting your hub",
+          "step" : "wait_ready"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "code",
+          "plan",
+          "start",
+          "wait_claim",
+          "claim",
+          "wait_ready",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "code"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "plan"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "start"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "wait_claim"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "claim"
+          },
+          {
+            "lines" : [
+              "apt says something"
+            ],
+            "state" : "running",
+            "step" : "wait_ready"
+          }
+        ],
+        "running_for" : 0
+      },
+      {
+        "name" : "the claim runs",
+        "phases" : {
+          "current" : 2,
+          "minutes_left" : 13,
+          "parts" : [
+            1,
+            1,
+            0.082517482517482518,
+            0
+          ],
+          "status" : "Linking your hub to this Mac",
+          "step" : "claim"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "code",
+          "plan",
+          "start",
+          "wait_claim",
+          "claim",
+          "wait_ready",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "code"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "plan"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "start"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "wait_claim"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "running",
+            "step" : "claim"
+          }
+        ],
+        "running_for" : 4
+      },
+      {
+        "name" : "the checks run",
+        "phases" : {
+          "current" : 3,
+          "minutes_left" : 1,
+          "parts" : [
+            1,
+            1,
+            1,
+            0.40000000000000002
+          ],
+          "status" : "Checking your hub",
+          "step" : "verify"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "code",
+          "plan",
+          "start",
+          "wait_claim",
+          "claim",
+          "wait_ready",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "code"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "plan"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "start"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "wait_claim"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "claim"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "wait_ready"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "running",
+            "step" : "verify"
+          }
+        ],
+        "running_for" : 30
+      },
+      {
+        "name" : "every step done",
+        "phases" : {
+          "current" : 4,
+          "minutes_left" : 0,
+          "parts" : [
+            1,
+            1,
+            1,
+            1
+          ],
+          "status" : null,
+          "step" : null
+        },
+        "planned" : [
+          "read",
+          "network",
+          "code",
+          "plan",
+          "start",
+          "wait_claim",
+          "claim",
+          "wait_ready",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "code"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "plan"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "start"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "wait_claim"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "claim"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "wait_ready"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "verify"
+          }
+        ],
+        "running_for" : 0
+      },
+      {
+        "name" : "a join past its estimate",
+        "phases" : {
+          "current" : 2,
+          "minutes_left" : 2,
+          "parts" : [
+            1,
+            1,
+            1,
+            0
+          ],
+          "status" : null,
+          "step" : "join"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "join",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "running",
+            "step" : "join"
+          }
+        ],
+        "running_for" : 500
+      },
+      {
+        "name" : "a step that failed",
+        "phases" : {
+          "current" : 1,
+          "minutes_left" : 8,
+          "parts" : [
+            1,
+            0,
+            0,
+            0
+          ],
+          "status" : "Joining your private network",
+          "step" : "network"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "join",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "failed",
+            "step" : "network"
+          }
+        ],
+        "running_for" : 50
+      },
+      {
+        "name" : "a negative time",
+        "phases" : {
+          "current" : 0,
+          "minutes_left" : 9,
+          "parts" : [
+            0,
+            0,
+            0,
+            0
+          ],
+          "status" : "Starting your server",
+          "step" : "read"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "join",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "running",
+            "step" : "read"
+          }
+        ],
+        "running_for" : -5
+      },
+      {
+        "name" : "a step that the plan does not know",
+        "phases" : {
+          "current" : 2,
+          "minutes_left" : 8,
+          "parts" : [
+            1,
+            1,
+            0.02564102564102564,
+            0
+          ],
+          "status" : null,
+          "step" : "other"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "join",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "running",
+            "step" : "other"
+          }
+        ],
+        "running_for" : 10
+      },
+      {
+        "name" : "a restart has no network step",
+        "phases" : null,
+        "planned" : [
+          "mark",
+          "restart",
+          "back",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "mark"
+          }
+        ],
+        "running_for" : 0
+      }
+    ],
+    "installer_step" : [
+      {
+        "line" : "Founderizer step 14: security updates",
+        "words" : "security updates"
+      },
+      {
+        "line" : "Founderizer step 3:   the code  ",
+        "words" : "the code"
+      },
+      {
+        "line" : "Founderizer step 4:",
+        "words" : null
+      },
+      {
+        "line" : "Founderizer step x: no",
+        "words" : null
+      },
+      {
+        "line" : "  Founderizer step 5: indented",
+        "words" : null
+      },
+      {
+        "line" : "Founderizer step 15: verify",
+        "words" : "verify"
+      }
+    ],
+    "names" : [
+      "VPS",
+      "Network",
+      "Install",
+      "Checks"
+    ],
+    "other_step" : 30,
+    "seconds" : {
+      "claim" : 10,
+      "code" : 15,
+      "join" : 360,
+      "network" : 45,
+      "plan" : 5,
+      "read" : 15,
+      "start" : 5,
+      "verify" : 75,
+      "wait_claim" : 30,
+      "wait_ready" : 650
+    }
+  },
+  "install_retry" : {
+    "code_left_at_least" : 600,
+    "decisions" : [
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "needs_root",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "system_not_supported",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "no_systemd",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "hub_no_answer",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "code_not_fetched",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "join_code_refused",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "join_code_expired",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "server_name_refused",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "server_name_unread",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "hub_busy",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "private_network",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "firewall",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "agent_users",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "vault",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "updates",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "packages",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "service",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "hub_claim",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "agent_program",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "homebrew",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "wrong_mac_user",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "other",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : null,
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "read",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "network",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "code",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "plan",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "start",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "wait_claim",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "verify",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "cannot_start",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "login_refused",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "step_failed",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "hub_not_ours",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "not_root",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "timed_out",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "no_claim_code",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "no_checklist",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "check_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "needs_sudo_password",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "needs_ssh_password",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "network_key_refused",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "hub_refused",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "hub_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "mac_refused",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "mac_unreachable",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "mac_unreadable",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "other",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "needs_root",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "system_not_supported",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "no_systemd",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "hub_no_answer",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "count" : 20,
+            "kind" : "reads",
+            "until_answer" : true
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "code_not_fetched",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "join_code_refused",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "join_code_expired",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : true,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "server_name_refused",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "server_name_unread",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "count" : 4,
+            "kind" : "reads",
+            "until_answer" : false
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "hub_busy",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "count" : 8,
+            "kind" : "reads",
+            "until_answer" : false
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "private_network",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "firewall",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "agent_users",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "vault",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "updates",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "packages",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "service",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "hub_claim",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "agent_program",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "homebrew",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "wrong_mac_user",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "other",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : null,
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "read",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "network",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "code",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "kind" : "nothing"
+          }
+        },
+        "step" : "plan",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "start",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "wait_claim",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "verify",
+        "stop" : "server_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "cannot_start",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "login_refused",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "step_failed",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "hub_not_ours",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "not_root",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "timed_out",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "no_claim_code",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "no_checklist",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "check_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "needs_sudo_password",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "needs_ssh_password",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "network_key_refused",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "hub_refused",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "count" : 20,
+            "kind" : "reads",
+            "until_answer" : true
+          }
+        },
+        "step" : "code",
+        "stop" : "hub_unreached",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "mac_refused",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "mac_unreachable",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "mac_unreadable",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : null,
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "other",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "hub_busy",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : {
+          "fresh_code" : false,
+          "wait" : {
+            "count" : 8,
+            "kind" : "reads",
+            "until_answer" : false
+          }
+        },
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 2,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "hub_busy",
+        "job" : "join",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "join",
+        "stop" : "installer_stopped",
+        "tries" : 3,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "private_network",
+        "job" : "join",
+        "needs_network_key" : true,
+        "retry" : null,
+        "step" : "network",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : false
+      },
+      {
+        "cause" : "packages",
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "installer_stopped",
+        "tries" : 1,
+        "used_sudo_password" : true
+      },
+      {
+        "cause" : null,
+        "job" : "hub",
+        "needs_network_key" : false,
+        "retry" : null,
+        "step" : "code",
+        "stop" : "server_unreached",
+        "tries" : 3,
+        "used_sudo_password" : false
+      }
+    ],
+    "keeps_code" : [
+      {
+        "expires_at" : 1000,
+        "keeps" : true,
+        "now" : 400
+      },
+      {
+        "expires_at" : 1000,
+        "keeps" : false,
+        "now" : 401
+      },
+      {
+        "expires_at" : 1000,
+        "keeps" : true,
+        "now" : 399
+      },
+      {
+        "expires_at" : 1000,
+        "keeps" : false,
+        "now" : 1000
+      },
+      {
+        "expires_at" : 500,
+        "keeps" : false,
+        "now" : 0
+      }
+    ],
+    "most" : 2,
+    "read_every" : 15
+  },
+  "made_by" : "app/Tests/FleetCoreTests/RemoteInstallVectorsTests.swift",
+  "network_sign_in" : {
+    "read" : [
+      {
+        "lines" : [
+          "fleet-machine-name=web-1",
+          "To authenticate, visit:",
+          "https://login.tailscale.com/a/abc123def456"
+        ],
+        "reading" : {
+          "state" : "waiting",
+          "url" : "https://login.tailscale.com/a/abc123def456"
+        },
+        "server" : "web-1",
+        "url" : "https://login.tailscale.com/a/abc123def456"
+      },
+      {
+        "lines" : [
+          "fleet-machine-name=Web_1",
+          "https://login.tailscale.com/a/abc123def456"
+        ],
+        "reading" : {
+          "state" : "waiting",
+          "url" : "https://login.tailscale.com/a/abc123def456"
+        },
+        "server" : null,
+        "url" : "https://login.tailscale.com/a/abc123def456"
+      },
+      {
+        "lines" : [
+          "fleet-machine-name=web-1",
+          "https://login.tailscale.com/a/abc"
+        ],
+        "reading" : {
+          "state" : "waiting",
+          "url" : null
+        },
+        "server" : null,
+        "url" : null
+      },
+      {
+        "lines" : [
+          "fleet-machine-name=web-1",
+          "https://evil.example/a/abc123def456"
+        ],
+        "reading" : {
+          "state" : "waiting",
+          "url" : null
+        },
+        "server" : null,
+        "url" : null
+      },
+      {
+        "lines" : [
+          "fleet-machine-name=web-1",
+          "https://login.tailscale.com/a/abc123def456",
+          "https://login.tailscale.com/a/zzz999yyy888"
+        ],
+        "reading" : {
+          "state" : "waiting",
+          "url" : "https://login.tailscale.com/a/zzz999yyy888"
+        },
+        "server" : "web-1",
+        "url" : "https://login.tailscale.com/a/zzz999yyy888"
+      },
+      {
+        "lines" : [
+          "fleet-machine-name=web-1",
+          "fleet-on-network",
+          "100.64.0.9"
+        ],
+        "reading" : {
+          "state" : "on"
+        },
+        "server" : null,
+        "url" : null
+      },
+      {
+        "lines" : [
+          "fleet-machine-name=web-1",
+          "fleet-sign-in-ended 0"
+        ],
+        "reading" : {
+          "state" : "waiting",
+          "url" : null
+        },
+        "server" : null,
+        "url" : null
+      },
+      {
+        "lines" : [
+          "fleet-machine-name=web-1",
+          "timeout waiting for Tailscale service to enter a Running state",
+          "fleet-sign-in-ended 1"
+        ],
+        "reading" : {
+          "says" : "The link was not approved in time.",
+          "state" : "ended"
+        },
+        "server" : null,
+        "url" : null
+      },
+      {
+        "lines" : [
+          "fleet-machine-name=web-1",
+          "requested tags [tag:founderizer] are invalid or not permitted",
+          "fleet-sign-in-ended 1"
+        ],
+        "reading" : {
+          "says" : "This machine is not on your private network. Give the Tailscale key of your fleet.",
+          "state" : "ended"
+        },
+        "server" : null,
+        "url" : null
+      },
+      {
+        "lines" : [
+          "fleet-machine-name=web-1",
+          "backend error: something",
+          "fleet-sign-in-ended 1"
+        ],
+        "reading" : {
+          "says" : "Tailscale did not start on this server.",
+          "state" : "ended"
+        },
+        "server" : null,
+        "url" : null
+      },
+      {
+        "lines" : [
+          "fleet-machine-name=web-1"
+        ],
+        "reading" : {
+          "state" : "waiting",
+          "url" : null
+        },
+        "server" : null,
+        "url" : null
+      },
+      {
+        "lines" : [
+
+        ],
+        "reading" : {
+          "state" : "waiting",
+          "url" : null
+        },
+        "server" : null,
+        "url" : null
+      }
+    ],
+    "tags" : [
+      {
+        "line" : "command -v tailscale >/dev/null || { curl -fsSL https://tailscale.com/install.sh | sh; }; tailscale status >/dev/null 2>&1 || tailscale up --advertise-tags=tag:founderizer --accept-dns=false; { curl -fsS http://100.64.0.1:8765/join || { echo Founderizer join stopped: This machine cannot reach the Founderizer hub at http://100.64.0.1:8765. Check that Tailscale is connected, and run the line again. >&2; echo; echo exit 1; }; } | FLEET_JOIN=7KMQ2PRJ4TVW sh",
+        "tags" : [
+          "tag:founderizer"
+        ]
+      },
+      {
+        "line" : "command -v tailscale >/dev/null || { curl -fsSL https://tailscale.com/install.sh | sh; }; tailscale status >/dev/null 2>&1 || tailscale up --advertise-tags=tag:founderizer,tag:web --accept-dns=false; { curl -fsS http://100.64.0.1:8765/join || { echo Founderizer join stopped: This machine cannot reach the Founderizer hub at http://100.64.0.1:8765. Check that Tailscale is connected, and run the line again. >&2; echo; echo exit 1; }; } | FLEET_JOIN=7KMQ2PRJ4TVW sh",
+        "tags" : [
+          "tag:founderizer",
+          "tag:web"
+        ]
+      },
+      {
+        "line" : "command -v tailscale >/dev/null || { curl -fsSL https://tailscale.com/install.sh | sh; }; tailscale status >/dev/null 2>&1 || tailscale up --accept-dns=false; { curl -fsS http://100.64.0.1:8765/join || { echo Founderizer join stopped: This machine cannot reach the Founderizer hub at http://100.64.0.1:8765. Check that Tailscale is connected, and run the line again. >&2; echo; echo exit 1; }; } | FLEET_JOIN=7KMQ2PRJ4TVW sh",
+        "tags" : [
+
+        ]
+      },
+      {
+        "line" : "command -v tailscale >/dev/null || { curl -fsSL https://tailscale.com/install.sh | sh; }; tailscale status >/dev/null 2>&1 || tailscale up --advertise-tags=tag:Bad --accept-dns=false; { curl -fsS http://100.64.0.1:8765/join || { echo Founderizer join stopped: This machine cannot reach the Founderizer hub at http://100.64.0.1:8765. Check that Tailscale is connected, and run the line again. >&2; echo; echo exit 1; }; } | FLEET_JOIN=7KMQ2PRJ4TVW sh",
+        "tags" : [
+
+        ]
+      },
+      {
+        "line" : "command -v tailscale >/dev/null || { curl -fsSL https://tailscale.com/install.sh | sh; }; tailscale status >/dev/null 2>&1 || tailscale up --advertise-tags=tag:a;rm --accept-dns=false; { curl -fsS http://100.64.0.1:8765/join || { echo Founderizer join stopped: This machine cannot reach the Founderizer hub at http://100.64.0.1:8765. Check that Tailscale is connected, and run the line again. >&2; echo; echo exit 1; }; } | FLEET_JOIN=7KMQ2PRJ4TVW sh",
+        "tags" : [
+          "tag:a"
+        ]
+      },
+      {
+        "line" : "tailscale up --advertise-tags=tag:x,tag:y-2",
+        "tags" : [
+          "tag:x",
+          "tag:y-2"
+        ]
+      },
+      {
+        "line" : "tailscale up --advertise-tags=",
+        "tags" : [
+
+        ]
+      }
+    ],
+    "words" : {
+      "not_approved" : "The link was not approved in time.",
+      "not_on_network" : "This machine is not on your private network. Give the Tailscale key of your fleet.",
+      "not_started" : "Tailscale did not start on this server."
+    }
+  },
+  "plan" : {
+    "hub_systems" : "This install needs Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13.",
+    "join_systems" : "This install needs Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13.",
+    "needs_network_key" : [
+      {
+        "needs" : true,
+        "says" : "This machine is not on your private network. Give the Tailscale key of your fleet."
+      },
+      {
+        "needs" : true,
+        "says" : "Founderizer install stopped: No Tailscale auth key came in."
+      },
+      {
+        "needs" : true,
+        "says" : "Founderizer join stopped: Tailscale did not join with that auth key."
+      },
+      {
+        "needs" : false,
+        "says" : "Founderizer join stopped: The join code expired."
+      },
+      {
+        "needs" : false,
+        "says" : ""
+      }
+    ],
+    "private_address" : [
+      {
+        "address" : "100.64.0.9",
+        "lines" : [
+          "Tailscale is up",
+          "100.64.0.9"
+        ]
+      },
+      {
+        "address" : "100.64.0.10",
+        "lines" : [
+          "100.64.0.9",
+          "100.64.0.10"
+        ]
+      },
+      {
+        "address" : null,
+        "lines" : [
+          "203.0.113.9"
+        ]
+      },
+      {
+        "address" : null,
+        "lines" : [
+          "100.64.0.9 ",
+          "fd7a:115c:a1e0::9"
+        ]
+      },
+      {
+        "address" : null,
+        "lines" : [
+
+        ]
+      },
+      {
+        "address" : null,
+        "lines" : [
+          "100.128.0.1"
+        ]
+      }
+    ],
+    "stop_line" : [
+      {
+        "line" : "Founderizer install stopped: Could not clone.",
+        "lines" : [
+          "a",
+          "Founderizer install stopped: Could not clone."
+        ]
+      },
+      {
+        "line" : "Fleet join stopped: x",
+        "lines" : [
+          "Fleet join stopped: x",
+          "b"
+        ]
+      },
+      {
+        "line" : "Fleet install stopped: one",
+        "lines" : [
+          "Fleet install stopped: one",
+          "Founderizer join stopped: two"
+        ]
+      },
+      {
+        "line" : null,
+        "lines" : [
+          "nothing",
+          "here"
+        ]
+      },
+      {
+        "line" : null,
+        "lines" : [
+
+        ]
+      }
+    ],
+    "stop_marks" : [
+      "Founderizer install stopped:",
+      "Fleet install stopped:",
+      "Founderizer join stopped:",
+      "Fleet join stopped:"
+    ]
+  },
+  "server_check" : {
+    "hosts" : [
+      "github.com",
+      "tailscale.com",
+      "claude.ai",
+      "chatgpt.com"
+    ],
+    "readings" : [
+      {
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes",
+        "reading" : {
+          "arch" : "x86_64",
+          "cloud_init" : "done",
+          "disk_free_mb" : 70000,
+          "dpkg_lock" : false,
+          "firewall" : "inactive",
+          "ipv4_route" : true,
+          "listeners" : [
+            {
+              "port" : 22,
+              "process" : "sshd",
+              "proto" : "tcp"
+            },
+            {
+              "port" : 443,
+              "process" : "caddy",
+              "proto" : "tcp"
+            }
+          ],
+          "memory_mb" : 3911,
+          "reach" : {
+            "chatgpt.com" : "yes",
+            "claude.ai" : "yes",
+            "github.com" : "yes",
+            "tailscale.com" : "yes"
+          },
+          "sudo" : "root",
+          "system" : "ubuntu",
+          "system_name" : "Ubuntu",
+          "systemd" : true,
+          "tailnet" : null,
+          "tailscale" : "none",
+          "uid" : 0,
+          "user" : "root",
+          "version" : "24.04"
+        }
+      },
+      {
+        "output" : "user=root\r\nuid=0\r\nsudo=root\r\nos_id=ubuntu\r\nos_version=24.04\r\nos_name=Ubuntu\r\narch=x86_64\r\nmemory_mb=3911\r\ndisk_free_mb=70000\r\nsystemd=yes\r\nipv4_route=yes\r\nreach=github.com yes\r\nreach=tailscale.com yes\r\nreach=claude.ai yes\r\nreach=chatgpt.com yes\r\ncloud_init=done\r\ndpkg_lock=no\r\nlisten=tcp/22/sshd\r\nlisten=tcp/443/caddy\r\nufw=inactive\r\ntailscale=running\r\nend=yes\r\nlisten=tcp/80/nginx\r\nlisten=tcp/80/nginx\r\nlisten=udp/41641/-\r\nlisten=tcp/x/y\r\nlisten=tcp/0/z\r\nlisten=sctp/9/a\r\nlisten=tcp/8080/\r\nreach=evil.example yes\r\nreach=github.com maybe\r\nsudo: a password is required\r\ntailnet=owner@example.com\r\n=novalue\r\nuser=second",
+        "reading" : {
+          "arch" : "x86_64",
+          "cloud_init" : "done",
+          "disk_free_mb" : 70000,
+          "dpkg_lock" : false,
+          "firewall" : "inactive",
+          "ipv4_route" : true,
+          "listeners" : [
+            {
+              "port" : 22,
+              "process" : "sshd",
+              "proto" : "tcp"
+            },
+            {
+              "port" : 80,
+              "process" : "nginx",
+              "proto" : "tcp"
+            },
+            {
+              "port" : 443,
+              "process" : "caddy",
+              "proto" : "tcp"
+            },
+            {
+              "port" : 8080,
+              "process" : "-",
+              "proto" : "tcp"
+            },
+            {
+              "port" : 41641,
+              "process" : "-",
+              "proto" : "udp"
+            }
+          ],
+          "memory_mb" : 3911,
+          "reach" : {
+            "chatgpt.com" : "yes",
+            "claude.ai" : "yes",
+            "github.com" : "yes",
+            "tailscale.com" : "yes"
+          },
+          "sudo" : "root",
+          "system" : "ubuntu",
+          "system_name" : "Ubuntu",
+          "systemd" : true,
+          "tailnet" : "owner@example.com",
+          "tailscale" : "running",
+          "uid" : 0,
+          "user" : "root",
+          "version" : "24.04"
+        }
+      },
+      {
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\nend=yes\ntailscale=running\ntailnet=",
+        "reading" : {
+          "arch" : "x86_64",
+          "cloud_init" : "done",
+          "disk_free_mb" : 70000,
+          "dpkg_lock" : false,
+          "firewall" : "inactive",
+          "ipv4_route" : true,
+          "listeners" : [
+            {
+              "port" : 22,
+              "process" : "sshd",
+              "proto" : "tcp"
+            },
+            {
+              "port" : 443,
+              "process" : "caddy",
+              "proto" : "tcp"
+            }
+          ],
+          "memory_mb" : 3911,
+          "reach" : {
+            "chatgpt.com" : "yes",
+            "claude.ai" : "yes",
+            "github.com" : "yes",
+            "tailscale.com" : "yes"
+          },
+          "sudo" : "root",
+          "system" : "ubuntu",
+          "system_name" : "Ubuntu",
+          "systemd" : true,
+          "tailnet" : null,
+          "tailscale" : "running",
+          "uid" : 0,
+          "user" : "root",
+          "version" : "24.04"
+        }
+      },
+      {
+        "output" : "os_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\nend=yes\ntailscale=loggedout\nsudo=password\nuid=1000\nuser=admin\nmemory_mb=\ndisk_free_mb=x",
+        "reading" : {
+          "arch" : "x86_64",
+          "cloud_init" : "done",
+          "disk_free_mb" : null,
+          "dpkg_lock" : false,
+          "firewall" : "inactive",
+          "ipv4_route" : true,
+          "listeners" : [
+            {
+              "port" : 22,
+              "process" : "sshd",
+              "proto" : "tcp"
+            },
+            {
+              "port" : 443,
+              "process" : "caddy",
+              "proto" : "tcp"
+            }
+          ],
+          "memory_mb" : null,
+          "reach" : {
+            "chatgpt.com" : "yes",
+            "claude.ai" : "yes",
+            "github.com" : "yes",
+            "tailscale.com" : "yes"
+          },
+          "sudo" : "password",
+          "system" : "ubuntu",
+          "system_name" : "Ubuntu",
+          "systemd" : true,
+          "tailnet" : null,
+          "tailscale" : "loggedout",
+          "uid" : 1000,
+          "user" : "admin",
+          "version" : "24.04"
+        }
+      },
+      {
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\ntailscale=none\nend=yes\ncloud_init=weird\nufw=active\ndpkg_lock=yes\nsystemd=no\nipv4_route=no",
+        "reading" : {
+          "arch" : "x86_64",
+          "cloud_init" : "none",
+          "disk_free_mb" : 70000,
+          "dpkg_lock" : true,
+          "firewall" : "active",
+          "ipv4_route" : false,
+          "listeners" : [
+            {
+              "port" : 22,
+              "process" : "sshd",
+              "proto" : "tcp"
+            },
+            {
+              "port" : 443,
+              "process" : "caddy",
+              "proto" : "tcp"
+            }
+          ],
+          "memory_mb" : 3911,
+          "reach" : {
+            "chatgpt.com" : "yes",
+            "claude.ai" : "yes",
+            "github.com" : "yes",
+            "tailscale.com" : "yes"
+          },
+          "sudo" : "root",
+          "system" : "ubuntu",
+          "system_name" : "Ubuntu",
+          "systemd" : false,
+          "tailnet" : null,
+          "tailscale" : "none",
+          "uid" : 0,
+          "user" : "root",
+          "version" : "24.04"
+        }
+      },
+      {
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none",
+        "reading" : null
+      },
+      {
+        "output" : "user=root\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nuid=zero",
+        "reading" : null
+      },
+      {
+        "output" : "uid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nuser=",
+        "reading" : null
+      },
+      {
+        "output" : "  user=root  \n uid=0\nend=yes",
+        "reading" : {
+          "arch" : "",
+          "cloud_init" : "none",
+          "disk_free_mb" : null,
+          "dpkg_lock" : false,
+          "firewall" : "absent",
+          "ipv4_route" : false,
+          "listeners" : [
+
+          ],
+          "memory_mb" : null,
+          "reach" : {
+
+          },
+          "sudo" : "none",
+          "system" : "",
+          "system_name" : "",
+          "systemd" : false,
+          "tailnet" : null,
+          "tailscale" : "none",
+          "uid" : 0,
+          "user" : "root",
+          "version" : ""
+        }
+      },
+      {
+        "output" : "",
+        "reading" : null
+      }
+    ],
+    "script_keys_sample" : [
+      "user=root",
+      "uid=0",
+      "sudo=root",
+      "os_id=ubuntu",
+      "os_version=24.04",
+      "os_name=Ubuntu",
+      "arch=x86_64",
+      "memory_mb=3911",
+      "disk_free_mb=70000",
+      "systemd=yes",
+      "ipv4_route=yes",
+      "reach=github.com yes",
+      "reach=tailscale.com yes",
+      "reach=claude.ai yes",
+      "reach=chatgpt.com yes",
+      "cloud_init=done",
+      "dpkg_lock=no",
+      "listen=tcp/22/sshd",
+      "listen=tcp/443/caddy",
+      "ufw=inactive",
+      "tailscale=none",
+      "end=yes"
+    ],
+    "unreached" : [
+      {
+        "kind" : "refused",
+        "said" : "ssh: connect to host 203.0.113.9 port 22: connection refused",
+        "server" : "203.0.113.9",
+        "words" : "203.0.113.9 refused SSH on port 22. Check that SSH runs on that port and lets this Mac in."
+      },
+      {
+        "kind" : "no_answer",
+        "said" : "ssh: connect to host 203.0.113.9 port 2222: operation timed out",
+        "server" : "203.0.113.9",
+        "words" : "203.0.113.9 did not answer SSH on port 2222. Check that the server is on and that its firewall lets SSH in."
+      },
+      {
+        "kind" : "not_found",
+        "said" : "ssh: could not resolve hostname vps.example: nodename nor servname provided",
+        "server" : "203.0.113.9",
+        "words" : "This Mac could not find 203.0.113.9. Check its address."
+      },
+      {
+        "kind" : "closed",
+        "said" : "kex_exchange_identification: connection closed by remote host",
+        "server" : "203.0.113.9",
+        "words" : "203.0.113.9 closed the SSH connection before any login. Check that it lets this Mac in."
+      },
+      {
+        "kind" : "closed",
+        "said" : "connection reset by 203.0.113.9 port 22",
+        "server" : "203.0.113.9",
+        "words" : "203.0.113.9 closed the SSH connection before any login. Check that it lets this Mac in."
+      },
+      {
+        "kind" : "other",
+        "said" : "something else",
+        "server" : "203.0.113.9",
+        "words" : "This Mac could not reach 203.0.113.9 over SSH."
+      }
+    ],
+    "verdicts" : [
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "ready for a join",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "hub",
+        "name" : "ready for a hub",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "Debian 13",
+        "output" : "user=root\nuid=0\nsudo=root\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nos_id=debian\nos_version=13\nos_name=Debian GNU/Linux",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Debian 13 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "hub",
+        "name" : "another system, hub",
+        "output" : "user=root\nuid=0\nsudo=root\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nos_id=centos\nos_version=9",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This install needs Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "another system, join",
+        "output" : "user=root\nuid=0\nsudo=root\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nos_id=ubuntu\nos_version=20.04",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This install needs Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "a 32-bit Arm",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\narch=armv7l",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This server is a armv7l machine, and this install needs a 64-bit x86 or Arm server."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "an unknown kind",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\narch=",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This server is of an unknown kind, and this install needs a 64-bit x86 or Arm server."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "Arm",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\narch=aarch64\nmemory_mb=7900",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 8 GB · Arm"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "no systemd",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nsystemd=no",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This server does not run systemd, and this install needs a full VPS that does."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "a user with no sudo",
+        "output" : "os_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nuser=ada\nuid=1000\nsudo=none",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "The user ada is not root on that server. Give a user that is root, or that can become root."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "hub",
+        "name" : "a small hub",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nmemory_mb=640",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This server has 640 MB of memory, and the hub needs about 1 GB. Choose a plan with more memory."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "a small server for agents",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nmemory_mb=950",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This server has 950 MB of memory, and a server for agents needs about 2 GB. Choose a plan with more memory."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "hub",
+        "name" : "enough for a hub",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nmemory_mb=950",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 1 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "a small disk",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\ndisk_free_mb=900",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This server has 900 MB of free disk, and the install needs about 10 GB. Free some space, or choose a bigger disk."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "no IPv4 route",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nipv4_route=no",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This server has no IPv4 route, and GitHub answers over IPv4 only. Give it a public IPv4 address at your provider."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "hub",
+        "name" : "no GitHub",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nreach=github.com no",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This server cannot reach github.com over HTTPS. Let it make outgoing HTTPS connections."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "no GitHub and no Tailscale",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nreach=github.com no\nreach=tailscale.com no",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This server cannot reach github.com or tailscale.com over HTTPS. Let it make outgoing HTTPS connections."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "no AI for a join",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nreach=claude.ai no\nreach=chatgpt.com no",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This server cannot reach claude.ai or chatgpt.com over HTTPS. Let it make outgoing HTTPS connections."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "hub",
+        "name" : "no AI for a hub",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nreach=claude.ai no\nreach=chatgpt.com no",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "one AI for a join",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nreach=claude.ai no",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "nothing to fetch with",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nreach=github.com none\nreach=tailscale.com none",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "another tailnet",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\nend=yes\ntailscale=running\ntailnet=other.example",
+        "ssh_port" : 22,
+        "tailnet" : "fleet.example",
+        "verdict" : {
+          "kind" : "stop",
+          "says" : "This server is on another Tailscale network, other.example. Run tailscale logout on it, then check again."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "the same tailnet",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\nend=yes\ntailscale=running\ntailnet=Fleet.Example",
+        "ssh_port" : 22,
+        "tailnet" : "fleet.example",
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "a tailnet with no name of ours",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\nend=yes\ntailscale=running\ntailnet=other.example",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "a sudo that asks",
+        "output" : "os_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nuser=admin\nuid=1000\nsudo=password",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "needs_password",
+          "need" : "sudo"
+        }
+      },
+      {
+        "holds_sudo_password" : true,
+        "job" : "join",
+        "name" : "a sudo that asks, with its password",
+        "output" : "os_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nuser=admin\nuid=1000\nsudo=password",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "a sudo that asks nothing",
+        "output" : "os_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nuser=admin\nuid=1000\nsudo=nopasswd",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "still starting",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\ncloud_init=running",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "wait",
+          "says" : "The server is still setting itself up after its first start."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "installing updates",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\ndpkg_lock=yes",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "wait",
+          "says" : "The server is installing its updates."
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "a sudo that asks while starting",
+        "output" : "os_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nuser=admin\nuid=1000\nsudo=password\ncloud_init=running",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "kind" : "needs_password",
+          "need" : "sudo"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "ports that stay open",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nufw=inactive\ntailscale=none\nend=yes\nlisten=tcp/80/nginx\nlisten=tcp/443/caddy\nlisten=tcp/2222/sshd\nlisten=udp/53/dns\nlisten=tcp/9000/ssh",
+        "ssh_port" : 2222,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Ports 80 and 443 stay open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "SSH on another port",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nufw=inactive\ntailscale=none\nend=yes\nlisten=tcp/2222/-",
+        "ssh_port" : 2222,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "no port but SSH",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\nmemory_mb=3911\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nufw=inactive\ntailscale=none\nend=yes\nlisten=tcp/22/sshd",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 4 GB · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "join",
+        "name" : "memory not read",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nmemory_mb=",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · memory not read · x86"
+        }
+      },
+      {
+        "holds_sudo_password" : false,
+        "job" : "hub",
+        "name" : "a plan sold as 1 GB",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nmemory_mb=957",
+        "ssh_port" : 22,
+        "tailnet" : null,
+        "verdict" : {
+          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
+          "kind" : "ready",
+          "summary" : "Ubuntu 24.04 · 1 GB · x86"
+        }
+      }
+    ],
+    "words" : {
+      "dropped_on_the_private_network" : "100.64.0.9 did not answer SSH on port 22. Check that the server is on, and that your Tailscale policy lets this Mac reach it on tcp:22.",
+      "host_key_changed" : "203.0.113.9 answers with another host key than this Mac knows. If the server was rebuilt, run ssh-keygen -R 203.0.113.9 on this Mac, then check again.",
+      "key_refused" : "203.0.113.9 did not take your SSH key. Choose its key.",
+      "no_answer" : "203.0.113.9 did not answer the check. Give a user that can run commands there.",
+      "not_root" : "The user ada is not root on that server. Give a user that is root, or that can become root.",
+      "title" : "Read the server",
+      "unreached" : "This Mac could not reach 203.0.113.9 over SSH."
+    }
+  },
+  "step_ids" : [
+    "read",
+    "network",
+    "code",
+    "plan",
+    "start",
+    "wait_claim",
+    "claim",
+    "wait_ready",
+    "verify",
+    "join",
+    "order",
+    "other"
+  ],
+  "stops" : [
+    "cannot_start",
+    "installer_stopped",
+    "server_unreached",
+    "login_refused",
+    "step_failed",
+    "hub_not_ours",
+    "not_root",
+    "timed_out",
+    "no_claim_code",
+    "no_checklist",
+    "check_stopped",
+    "needs_sudo_password",
+    "needs_ssh_password",
+    "network_key_refused",
+    "hub_refused",
+    "hub_unreached",
+    "mac_refused",
+    "mac_unreachable",
+    "mac_unreadable",
+    "other"
+  ],
+  "verify_checklist" : {
+    "ids" : [
+      "services",
+      "hub_answers",
+      "owner_claimed",
+      "tailnet",
+      "firewall",
+      "clock",
+      "disk",
+      "runtime_installed",
+      "runtime_signed_in",
+      "desktop",
+      "selftest",
+      "version",
+      "team"
+    ],
+    "outputs" : [
+      {
+        "holds_list" : true,
+        "output" : "Founderizer step 15: verify\n[\n  {\"check\": \"services\", \"state\": \"ok\", \"says\": \"Running.\"},\n  {\"check\": \"runtime_signed_in\", \"state\": \"fail\", \"says\": \"Not signed in.\", \"fix\": \"Sign in.\"}\n]\nNOT READY: runtime_signed_in",
+        "read" : {
+          "commands" : [
+            null,
+            null
+          ],
+          "fixes" : [
+            null,
+            "Sign in."
+          ],
+          "ids" : [
+            "services",
+            "runtime_signed_in"
+          ],
+          "line" : "NOT READY: runtime_signed_in",
+          "only_needs_sign_in" : true,
+          "our_own_passed" : 0,
+          "ready" : false,
+          "said" : [
+            "runtime_signed_in",
+            "services"
+          ],
+          "summary" : "This server is in your fleet. It is not signed in to your provider yet, which is your own next step: no installer can do it for you."
+        }
+      },
+      {
+        "holds_list" : true,
+        "output" : "[{\"check\": \"services\", \"state\": \"ok\", \"says\": \"Running.\"}, {\"check\": \"team\", \"state\": \"ok\", \"says\": \"Read.\"}, {\"check\": \"new_check\", \"state\": \"ok\", \"says\": \"New.\"}]",
+        "read" : {
+          "commands" : [
+            null,
+            null,
+            null
+          ],
+          "fixes" : [
+            null,
+            null,
+            null
+          ],
+          "ids" : [
+            "services",
+            "team",
+            "new_check"
+          ],
+          "line" : "READY",
+          "only_needs_sign_in" : false,
+          "our_own_passed" : 2,
+          "ready" : true,
+          "said" : [
+            "services"
+          ],
+          "summary" : "Ready. Every check of this server passed."
+        }
+      },
+      {
+        "holds_list" : true,
+        "output" : "[{\"check\": \"new_check\", \"state\": \"ok\", \"says\": \"New.\"}, {\"check\": \"firewall\", \"state\": \"fail\", \"says\": \"Off.\", \"fix\": \"Turn it on.\", \"command\": \"ufw enable\"}, {\"check\": \"services\", \"state\": \"ok\", \"says\": \"Running.\"}]\nREADY",
+        "read" : {
+          "commands" : [
+            null,
+            "ufw enable",
+            null
+          ],
+          "fixes" : [
+            null,
+            "Turn it on.",
+            null
+          ],
+          "ids" : [
+            "services",
+            "firewall",
+            "new_check"
+          ],
+          "line" : "NOT READY: firewall",
+          "only_needs_sign_in" : false,
+          "our_own_passed" : 1,
+          "ready" : false,
+          "said" : [
+            "firewall",
+            "services"
+          ],
+          "summary" : "Firewall failed. Its fix is below."
+        }
+      },
+      {
+        "holds_list" : true,
+        "output" : "[{\"check\": \"firewall\", \"state\": \"fail\", \"says\": \"Off.\", \"fix\": \"Turn it on.\", \"command\": \"ufw enable\"}, {\"check\": \"clock\", \"state\": \"fail\", \"says\": \"Behind.\", \"fix\": \"Sync it.\"}]",
+        "read" : {
+          "commands" : [
+            "ufw enable",
+            null
+          ],
+          "fixes" : [
+            "Turn it on.",
+            "Sync it."
+          ],
+          "ids" : [
+            "firewall",
+            "clock"
+          ],
+          "line" : "NOT READY: firewall, clock",
+          "only_needs_sign_in" : false,
+          "our_own_passed" : 0,
+          "ready" : false,
+          "said" : [
+            "firewall",
+            "clock"
+          ],
+          "summary" : "2 checks failed: Firewall, Clock."
+        }
+      },
+      {
+        "holds_list" : true,
+        "output" : "[{\"check\": \"services\", \"state\": \"ok\", \"says\": \"Running.\"}, {\"check\": \"disk\", \"state\": \"warn\", \"says\": \"80% full.\", \"fix\": \"Free some space.\"}]",
+        "read" : {
+          "commands" : [
+            null,
+            null
+          ],
+          "fixes" : [
+            null,
+            "Free some space."
+          ],
+          "ids" : [
+            "services",
+            "disk"
+          ],
+          "line" : "READY",
+          "only_needs_sign_in" : false,
+          "our_own_passed" : 0,
+          "ready" : true,
+          "said" : [
+            "disk",
+            "services"
+          ],
+          "summary" : "Ready, with 1 warning."
+        }
+      },
+      {
+        "holds_list" : true,
+        "output" : "[{\"check\": \"services\", \"state\": \"ok\", \"says\": \"Running.\"}, {\"check\": \"disk\", \"state\": \"warn\", \"says\": \"80% full.\", \"fix\": \"Free some space.\"}, {\"check\": \"tailnet\", \"state\": \"warn\", \"says\": \"Slow.\", \"fix\": \"Look.\"}]",
+        "read" : {
+          "commands" : [
+            null,
+            null,
+            null
+          ],
+          "fixes" : [
+            null,
+            "Look.",
+            "Free some space."
+          ],
+          "ids" : [
+            "services",
+            "tailnet",
+            "disk"
+          ],
+          "line" : "READY",
+          "only_needs_sign_in" : false,
+          "our_own_passed" : 0,
+          "ready" : true,
+          "said" : [
+            "tailnet",
+            "disk",
+            "services"
+          ],
+          "summary" : "Ready, with 2 warnings."
+        }
+      },
+      {
+        "holds_list" : true,
+        "output" : "[]",
+        "read" : {
+          "commands" : [
+
+          ],
+          "fixes" : [
+
+          ],
+          "ids" : [
+
+          ],
+          "line" : "Not checked",
+          "only_needs_sign_in" : false,
+          "our_own_passed" : 0,
+          "ready" : false,
+          "said" : [
+
+          ],
+          "summary" : "This server has not been checked yet."
+        }
+      },
+      {
+        "holds_list" : true,
+        "output" : "[{\"check\": \"services\", \"state\": \"ok\", \"says\": \"Running.\"}, {\"check\": \"clock\", \"state\": \"maybe\", \"says\": \"x\"}]",
+        "read" : null
+      },
+      {
+        "holds_list" : true,
+        "output" : "[{\"check\": \"services\", \"state\": \"ok\", \"says\": \"Running.\"}, {\"check\": \"services\", \"state\": \"ok\", \"says\": \"Running.\"}]",
+        "read" : null
+      },
+      {
+        "holds_list" : true,
+        "output" : "[{\"check\": \"services\", \"state\": \"ok\", \"says\": \"Running.\", \"fix\": \"none\"}]",
+        "read" : null
+      },
+      {
+        "holds_list" : true,
+        "output" : "[{\"check\": \"Services\", \"state\": \"ok\", \"says\": \"Running.\"}]",
+        "read" : null
+      },
+      {
+        "holds_list" : false,
+        "output" : "Traceback (most recent call last):\n  File \"fleet.py\", line 3, in <module>\n    x = [a for a in b]\nNameError: name 'b' is not defined",
+        "read" : null
+      },
+      {
+        "holds_list" : false,
+        "output" : "printed \"check\" with [1, 2] and no list",
+        "read" : null
+      },
+      {
+        "holds_list" : true,
+        "output" : "[[{\"check\": \"services\", \"state\": \"ok\", \"says\": \"Running.\"}]]",
+        "read" : null
+      },
+      {
+        "holds_list" : true,
+        "output" : "start [ { not json } ] then [{\"check\": \"services\", \"state\": \"ok\", \"says\": \"Running.\"}]",
+        "read" : {
+          "commands" : [
+            null
+          ],
+          "fixes" : [
+            null
+          ],
+          "ids" : [
+            "services"
+          ],
+          "line" : "READY",
+          "only_needs_sign_in" : false,
+          "our_own_passed" : 0,
+          "ready" : true,
+          "said" : [
+            "services"
+          ],
+          "summary" : "Ready. Every check of this server passed."
+        }
+      },
+      {
+        "holds_list" : false,
+        "output" : "",
+        "read" : null
+      }
+    ],
+    "ready_line" : "READY",
+    "titles" : [
+      {
+        "id" : "services",
+        "title" : "Services"
+      },
+      {
+        "id" : "hub_answers",
+        "title" : "The hub answers"
+      },
+      {
+        "id" : "owner_claimed",
+        "title" : "Your own address"
+      },
+      {
+        "id" : "tailnet",
+        "title" : "Private network"
+      },
+      {
+        "id" : "firewall",
+        "title" : "Firewall"
+      },
+      {
+        "id" : "clock",
+        "title" : "Clock"
+      },
+      {
+        "id" : "disk",
+        "title" : "Disk space"
+      },
+      {
+        "id" : "runtime_installed",
+        "title" : "Provider installed"
+      },
+      {
+        "id" : "runtime_signed_in",
+        "title" : "Signed in"
+      },
+      {
+        "id" : "desktop",
+        "title" : "This Mac's desktop"
+      },
+      {
+        "id" : "selftest",
+        "title" : "Self-test"
+      },
+      {
+        "id" : "version",
+        "title" : "Revision"
+      },
+      {
+        "id" : "team",
+        "title" : "The team file"
+      },
+      {
+        "id" : "new_check",
+        "title" : "New Check"
+      },
+      {
+        "id" : "a_b",
+        "title" : "A B"
+      }
+    ]
+  }
+}

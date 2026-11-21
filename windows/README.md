@@ -17,6 +17,7 @@ seven pictures that the owner approved (`windows-app-pictures.md` in the plans f
 | `Founderizer.Owner/`, `Founderizer.Setup/` | step 2 (`windows-app-plan-v2.md`, section 6): the owner's pages, and the first run with what the owner's computer sets up; each with its tests in `Founderizer.Owner.Tests/` and `Founderizer.Setup.Tests/` | any OS |
 | `Founderizer.Remote/` | SSH from the owner's PC (step 2, piece L1): `IRemote` and `SshRemote`, the host key record, the app's own SSH key. The only project that names SSH.NET; it names no other project. `net10.0`, no Windows call | any OS |
 | `Founderizer.Remote.Tests/` | MSTest: against a scratch `sshd` of this machine, and an `sshd` in a Docker container for the password and `sudo -S` | macOS, Linux |
+| `Founderizer.Setup/Install/` | the install of a server and the claim of a new hub from the owner's PC (step 2, piece L3): the Mac's `InstallPlan`, `MachineInstaller`, `ServerCheck` and their reads, over `IRemote`; held to `../vectors/remote-install.json` and `install-reads.json` | any OS |
 | `Founderizer.SelfCheck/` | a small program that runs the vectors, published with Native AOT: the proof that the library and BouncyCastle work with no JIT | any OS |
 | `PARITY.md`, `parity.py` | each feature name of the hub and its state on Windows, and the script that prints each name with no line | |
 | `../vectors/` | the shared test vectors and `make_vectors.py`, which makes them with the hub's own code | |
@@ -305,6 +306,39 @@ renamed or removed without a word to the screens lane.
     `POST /ui/owner/computer` with exactly `{"can": [...], "kind": "windows"}` by itself after a claim, a new key, a
     start and a new generation (`SayComputerAsync`, true when the hub keeps a PC). An answer, a refusal among them, ends
     the tries until the next of those; no answer, or a fault of the hub, is tried again at the next read.
+- **Tailscale's API and the cloud providers (step 2, piece L2; `windows-app-plan-v2.md`, sections 5.4, 5.6 and piece
+  L2)**: `Founderizer.Setup/Network` and `Founderizer.Setup/Cloud`, with no Windows call. All HTTP of both goes through
+  the `HttpMessageHandler` that the caller gives: the window gives `ProviderHandler.Create()` (no redirect followed, no
+  cookie, the system's proxy). Every request carries one fixed User-Agent, `Founderizer/<version> (Windows)`, and a
+  provider's ids are read as 64-bit numbers, as Swift's `Int` reads them (Hetzner's pass 32 bits). Each request, each reading of an answer and each word is the Mac's, held so by
+  `app/vectors/tailscale-requests.json` and `cloud-requests.json`, which FleetCore's own code writes.
+  - **The fleet key**: `new TailscaleApi(handler, box)`. `MakeFleetClientAsync(accessToken)` takes the token that the
+    owner pastes once (`TailscaleApi.KeysPage`), adds `tag:founderizer` and the fleet's two grants to a policy file
+    that Tailscale keeps (inserted bytes only, checked by Tailscale first, set against the version read), never writes
+    a file that another tool keeps, and keeps the OAuth client in the box (`TailscaleApi.ClientName`); the token is
+    kept nowhere. Its `FleetKeySetup` says whether the key was made, whether the file was written, and, when the tag is
+    missing from a file that the PC may not write, the one line to add (`LinesToAdd`) and the page's line over it
+    (`Asks`, by `PolicyPlace`). `IsHeld`; `AuthKeyAsync(hostname, life)`: one key for one machine, single-use,
+    pre-authorized, tagged, not ephemeral (the Mac's `mintAuthKey`; the fleet key gives only its one tag, so the call
+    takes no tags); `JoinedAsync(hostname, since)`, `DevicesAsync()`, `DeleteDeviceAsync(id)`. A stop is a
+    `FleetKeyException` (`Failure`, `Says`, and the Mac's sentence with "PC" as `Message`).
+  - **This PC on the network**: `PcNetwork.State(statusJson, installed)` gives the `Standing` (`Step`, `Address`,
+    `Tailnet`, `Says`, `Mark`) from the text of `tailscale status --json`; `Devices`, `Live`, `OwnName`, `DeviceOf`,
+    `Online`. `PcNetwork.InstallerFor(PcNetwork.Arch(RuntimeInformation.OSArchitecture), json)` picks Tailscale's MSI
+    from `PcNetwork.Packages`: the window downloads it, checks `InstallerOrganisation` and `InstallerCountry` with the
+    revocation check (section 8.2), and starts Windows' installer. `FleetReach.Keeps`, `Hidden`, `Unseen` and
+    `Unreached` say why a server that joined is out of this PC's sight.
+  - **A provider**: `CloudServers.For(provider, handler, box, zone, pause)` gives an `ICloud`: `CheckTokenAsync`
+    (the token checked by a read and by writes that make nothing, then kept in the box under
+    `provider.BoxName()`), `OffersAsync(use, except)` (each type that fits, at its cheapest and nearest place; a
+    `CloudOffer` with its words `Size`, `Choice`, `Row`, `Brief`, `Pick`, `Amount`), `ServersAsync()` (a
+    `CloudExisting` with its `Summary`), `MakeAsync(new CloudOrder(name, use, publicKey, authKey, offer))` (behind a
+    firewall that lets nothing in, on the network from its first boot; a step that fails takes back what it made, or
+    says what is left), `DeleteAsync(id, accepted)`, `FirewallsAsync`, `DeleteFirewallsAsync`, `DeleteFirewallAsync`,
+    `DeleteKeyAsync`. A stop is a `CloudException`; `CloudStop` says whether it asks for the token again or reads the
+    list again. `CloudJoin.WaitAsync` waits for a new server on the network for its key's hour. The page's link for a
+    token is `provider.TokenPage()`. The rules of the list that need the install's systems, the hub's list or this
+    PC's build records (the Mac's `unfit`, `reuse`, `hubAgain`) come with pieces L3 and L4.
 
 ```csharp
 var store = new OwnerStore(new StoreSettings { Folder = folder, Keys = keys, ClientLabel = label });
@@ -377,12 +411,85 @@ no answer (about 90 s); SSH.NET's keep-alive asks for no answer, so the call end
 keep-alive that waits (not measured on Windows), and at the latest at its `Limit`, as on the Mac. A server that ends
 the connection is `Dropped` at once on both.
 
+### The install and the claim: `Founderizer.Setup/Install` (step 2, piece L3)
+
+For piece L4 (the first run and the agent setup, as models) and the window's build pages. The Mac's
+`MachineInstall.swift`, `MachineInstaller.swift`, `ServerCheck.swift`, `InstallCause.swift`, `InstallRetry.swift`,
+`InstallPhases.swift`, `InstallRecord.swift`, `VerifyChecklist.swift` and `BuildRecord.swift`, with the same steps, the
+same programs and the same readings: `../vectors/remote-install.json` and `install-reads.json` hold them, made by
+FleetCore's own code (`Tests/FleetCoreTests/RemoteInstallVectorsTests.swift`), and `InstallVectorTests` holds the C#
+equal to them. A sentence is the Mac's with "PC" for "Mac" (rule 14). Namespace `Founderizer.Setup.Install`. These
+names stay.
+
+- **The plans**: `InstallPlan.Hub(target, source, authKey, managerName, oneServer, shape, runtime)`,
+  `.Join(target, line, code, authKey)`, `.Check(target, machine)`, `.Restart(target, machine)`,
+  `.Update(target, machine, agent, label)`. `InstallTarget(Host, User = "root", Port = 22, BecomeRoot = false)`, with
+  `Problem` (the Mac's three sentences) and `Remote` (the `RemoteTarget`). `ServersStep { One, Two, Each }` and
+  `ManagerName.AgentName(typed)` (the Mac's FleetShape and ManagerName: L4 takes them from here). A plan's `Steps` are
+  `InstallStep(Id, Title, Says, Action)`, and `Redactions` the auth key and the join code; its text names neither.
+  `InstallPlan.Command(program, reaching, runs)` is the command that the server gets (the last word of the Mac's
+  `ssh` arguments, after `throughSudo`); `plan.Redact(line)` takes the secrets out of a line. The join step sends
+  `InstallPlan.VerifyLater` before the hub's line, so that join.sh leaves its checks to the plan's own last step.
+- **The installer**: `Installer.For(plan, hubClient, box, authKey, sudoPassword, firstRun, policy)`, or `new
+  Installer(plan, authKey, sudoPassword, claim, readHub, clock, verifyPause, firstRun, policy)`; `firstRun` and
+  `policy` choose the words of a failure once, for each step's detail and its error's line alike; then `RunAsync(IRemote, Action<InstallProgress>, CancellationToken)` gives the
+  server's `VerifyChecklist`, or throws an `InstallError`. `Installer.RunAsync(plan, remote, progress, cancel)` runs a
+  plan with no claim. `Reached` is where the install reaches the server (its private address after the network step),
+  `ClaimedHub` the hub that the claim step claimed (`http://100.x.y.z:8765/`), which the first run then gives
+  `OwnerStore.ConnectOwnerAsync`. Every call logs in with the app's own key under `HostKeyRule.TakeNew` (the Mac's
+  `accept-new`), with the Mac's time limit of its step (`RemoteCall.Limit`: the check 120 s, a program 1800 s, the join
+  3600 s, the network key 3000 s, a read of a wait 120 s). The installer clears the sudo password's array when it ends.
+- **`InstallProgress(Step, Title, Says, State, Lines, Detail)`**, as the Mac's: each step as it starts and as it ends,
+  its last 12 lines with no secret in them (the auth key, the join code, the link code of a new hub's claim, and the
+  sudo password), and a wait's lines as the installer's own steps come.
+- **`InstallError`**: `Kind` (`CannotStart`, `Step`, `NotRoot`, `TimedOut`, `NoClaimCode`, `NoChecklist`,
+  `CheckStopped`, `NeedsPassword`), `Title`, `Says`, `Failure` (the way IRemote did not run the step's program),
+  `Description` (the Mac's `errorDescription`), and `Plain(host)`, the stop row's one line (the Mac's `plain`), whose
+  words of a failure take the error's own `FirstRun` and `Policy`. `InstallStops.Of(error)` gives its kind (`InstallStop`, the Mac's names by `.Name()`), and
+  `InstallCauses.Of(error)` the installer's cause (`InstallCause`).
+- **The check of a server before an install**: `ServerCheck.RunAsync(remote, target, job, login, holdsSudoPassword,
+  tailnet, firstRun, policy)` gives `Result(Verdict, Reading)`; `Verdict` is `Ready(Summary, Changes)`, `Wait(Says)`,
+  `NeedsPassword(Need)` or `Stop(Says)`. The app's own key refused asks for the password once
+  (`NeedsPassword(PasswordNeed.Ssh)`); the password's own call then says when the server takes keys only. `Read`,
+  `VerdictOf` and the words are the Mac's.
+- **The words of a call that failed**: `ServerCheck.Failed(server, port, user, failure, login, firstRun, policy)`, with
+  `Unreached(server, port, failure, policy)` for the four ways of not reaching a server (the Mac's
+  `ServerCheck.unreached(_:said:)`, and `FleetReach.dropped` for a silent server on the private network; `policy` is
+  where the Tailscale policy is kept, which the piece of Tailscale's API knows). **Two sentences are the PC's own, new
+  words for set 8:** `ServerCheck.HostKeyChanged(server, firstRun)` ("If the server was rebuilt, start again." in the
+  first run, "remove it and add it again." after it: the Mac's sentence names `ssh-keygen -R`) and
+  `ServerCheck.KeyRefused(server)` (the Mac's says "Choose its key", and the PC has none to choose); and
+  `ServerCheck.HostKeyUnknown(server, firstRun)` (a server with no key on record, under `Known`), the description of
+  `NeedsPassword(Ssh)` ("That server does not take this PC's SSH key, and asks for a password.") and of `NoClaimCode`
+  ("… for this PC. Try again.": the Mac's sends the owner to the server's log).
+- **The claim**: `Claim.SendAsync(hubClient, box, claim, code)` sends only to `Claim.IsTarget` (HTTP, a number of
+  100.64.0.0/10, the path `/claim`, nothing else) through L0's `OwnerPcKey.ClaimAsync`. The plan's contract said
+  `Claim.SendAsync(http, claim, code, keySha256)`: the key's SHA-256 is made from the box there, so the box comes in
+  its place. `Claim.ReadHubAsync(hubClient, box, hub)` is the wait's read of the hub (`HubRead`). `ClaimCode` reads the
+  installer's line (`Found`, `Read`, `Grouped`, `IsPrivateAddress`).
+- **The reads**: `NetworkSignIn.Found(lines)` and `Tags(line)`; `InstallPhases.Of(reported, planned, runningFor)` (the
+  four steps, the minutes left, the status line, the parts of the bar); `InstallRetry.Decision(...)`, `StoppedBy`,
+  `WaitAsync`, `FailedStep`, `KeepsCode`; `VerifyChecklist.Read(output)`, `Decode`, `HoldsList`, `Title`, `Summary`.
+- **The records**: `InstallRecord` and `InstallLog` (the record of the install that runs: `Hide`, `Place`, `Note`,
+  `Done`, `Stop`, `Retry`, `Cancel`; `InstallRecord.WordsOf(error, host)`), and `BuildRecord` (`Begin`, `Made`,
+  `CallEnded(AtProvider)`, `Joined`, `End`, `IsUnjoined`, `NamesInUse(records, now, life)`). Which `AtProvider` a
+  provider's error leaves is the providers' piece (L2), and so is the life of a join key in `NamesInUse`.
+- **Not here**: the records' store and file form (the Mac's `KeptRecords`) come with piece L4, which keeps them; the
+  password once and the app's key onto a server (`PasswordOnce`), the report of a stop (`InstallReport`) and the
+  prompt to fix one (`InstallFixPrompt`) come with their pages.
+
 ## Build and test
 
 You need the .NET 10 SDK (`dotnet --version` says 10.0.x; `global.json` takes any 10.0 SDK).
 
 ```bash
 dotnet test app/windows/Founderizer.Core.Tests/Founderizer.Core.Tests.csproj
+```
+
+The first run's library (step 2), which reaches no network and no provider: every request goes to a stand-in.
+
+```bash
+dotnet test app/windows/Founderizer.Setup.Tests/Founderizer.Setup.Tests.csproj
 ```
 
 The tests of the decode twin are inconclusive (skipped) there: they run against a scratch hub, which
@@ -411,6 +518,13 @@ The run of 30 minutes (a line every 20 s on one connection, across the server's 
 
 ```bash
 FOUNDERIZER_REMOTE_LONG=1 dotnet test app/windows/Founderizer.Remote.Tests/Founderizer.Remote.Tests.csproj --filter "TestCategory=Long"
+```
+
+The tests of `Founderizer.Setup` (the install and the claim over a stand-in server, and the two install vector
+files), with no server and no network:
+
+```bash
+dotnet test app/windows/Founderizer.Setup.Tests/Founderizer.Setup.Tests.csproj
 ```
 
 The self-check, published with Native AOT (on this Mac `osx-arm64`; on a PC `win-x64` or `win-arm64`):
@@ -480,6 +594,15 @@ process at a time.
   `hold` must be JSON true or false (Swift also takes 0 and 1), and its `build` and `size` JSON whole numbers (Swift
   also reads true as 1).
 - **Keys** are software keys behind `IOwnerKey`. The key in the TPM is a later slice (1.5), on Windows.
+- **The install (piece L3)** differs from the Mac's where the PC has no `ssh` and no console. A step that IRemote did
+  not run stops with the way it failed, where the Mac reads `ssh`'s words; a connection that broke while a program ran
+  is `server_unreached` (the Mac's own words do not say it, and its retry of the code and the plan steps is for a
+  server that SSH lost), a program that a signal ended fails its step with its last line (with no line, the connection
+  broke), and a call past its limit is the Mac's `timedOut`. The link code that a new hub's installer
+  prints is in no line of a step once it is read (the Mac shows the installer's line, and its report then cleans it).
+  `ClaimCode.IsPrivateAddress` reads exactly four numbers of one byte each (Swift's drops a part that is no number).
+  The check of a server tries the app's own key alone, and its refusal asks for the password once: the PC has no key
+  files of the owner's, so neither the Mac's key files nor its count of tries (`KeyTries`) are here.
 
 ## Before the first release
 

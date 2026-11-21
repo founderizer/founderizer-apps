@@ -127,9 +127,13 @@ public actor VaultBroker {
                 try await hub.protect(login, job: job, as: caller)
                 switch request.operation {
                 case .signin:
-                    let authenticator = try await VaultBrowser.signIn(login)
-                    response = ["ok": true, "v": 2, "job": job.id, "origin": login.origin,
-                                "label": login.label, "authenticator": authenticator]
+                    let signed = try await VaultBrowser.signIn(login)
+                    // `left`: the tab left the login's site or closed after the login went, which is no failure: the
+                    // helper says that the login went, and the agent looks at the page (the spec, section C).
+                    var reply: [String: Any] = ["ok": true, "v": 2, "job": job.id, "origin": login.origin,
+                                                "label": login.label, "authenticator": signed.code]
+                    if signed.left { reply["left"] = true }
+                    response = reply
                 case .handover:
                     let stamp = VaultProvenance.stamp(job: job.id, project: job.project, source: source)
                     let ciphertext = try identity.seal(login.sealedPayload(provenance: stamp), recipient: job.recipient!)

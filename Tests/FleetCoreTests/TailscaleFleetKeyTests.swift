@@ -802,9 +802,7 @@ struct TailscaleFleetKeyTests {
     }
 
     @Test func thePlaceOfThePolicyIsKeptForALaterInstall() throws {
-        let name = "FleetKeyTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: name))
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = TestDefaults("FleetKeyTests")
         #expect(PolicyPlace.kept(in: defaults) == nil)
         let link = URL(string: "https://github.com/example/tailnet-policy?ref=main")
         for place in [PolicyPlace.tailscale, .tool(nil), .tool(link)] {

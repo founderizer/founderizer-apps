@@ -264,9 +264,7 @@ private func requesterStop(_ state: String, _ fields: [String: Any] = [:]) -> [S
     defer { try? FileManager.default.removeItem(at: folder) }
     let outbox = Outbox(file: folder.appendingPathComponent("pending.json"))
     let request = PendingRequest(hub: URL(string: "http://127.0.0.1")!, database: "db", client: "app", command: .steer(task: 8, attempt: 2), text: "fake-rejected-value")
-    let suite = "fleet-test-\(UUID().uuidString)"
-    let defaults = try #require(UserDefaults(suiteName: suite))
-    defer { defaults.removePersistentDomain(forName: suite) }
+    let defaults = TestDefaults("fleet-test")
     try outbox.save(request)
     _ = try outbox.rejectSecret(matching: request.requestID, drafts: defaults)
     let saved = try #require(try outbox.load())

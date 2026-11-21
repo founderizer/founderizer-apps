@@ -435,14 +435,20 @@ public enum SecretCommand {
             "fingerprints": items.map { ["kind": $0.kind, "hash": $0.hash, "len": $0.len] as [String: Any] }], options: [.sortedKeys])
     }
 
-    /// `POST /ui/team/logins`: the title of one reference, on the `team.json` that has this hash.
-    public static func title(requestID: UUID, database: String, sha256: String, login: String, title: String) throws -> Data {
+    /// `POST /ui/team/logins`: the title of one reference, on the `team.json` that has this hash. `note` (owner feature
+    /// `secret_notes`, API 1.249): the owner's own words for the secret's note, one line of at most the hub's 200 by its
+    /// count (`NeedSecret.noteLength`), or `""` to take the note away; nil sends no note, and the note stays as it is.
+    public static func title(requestID: UUID, database: String, sha256: String, login: String, title: String,
+                             note: String? = nil) throws -> Data {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = note?.trimmingCharacters(in: .whitespaces)
         guard LoginSecret.isReference(login), sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil,
-              (1...LoginSecret.maxLabel).contains(title.unicodeScalars.count), !title.contains(where: \.isNewline) else { throw HubError.invalidResponse }
-        return try JSONSerialization.data(withJSONObject: [
-            "request_id": requestID.uuidString.lowercased(), "db": database, "base_sha256": sha256, "login": login, "title": title],
-            options: [.sortedKeys])
+              (1...LoginSecret.maxLabel).contains(title.unicodeScalars.count), !title.contains(where: \.isNewline),
+              note.map({ NeedSecret.noteLength($0) <= NeedSecret.noteMost && !$0.contains(where: \.isNewline) }) ?? true
+        else { throw HubError.invalidResponse }
+        var body = ["request_id": requestID.uuidString.lowercased(), "db": database, "base_sha256": sha256, "login": login, "title": title]
+        body["note"] = note
+        return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
     }
 
     /// `POST /ui/team/logins` with `delete`: one reference leaves the catalog, on the `team.json` that has this hash. The

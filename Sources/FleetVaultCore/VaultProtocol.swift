@@ -43,6 +43,8 @@ public enum VaultFailure: String, Error, Sendable, CaseIterable {
     case signinUnknown = "The vault typed the login and cannot tell if the site took it. Look at the tab."
     case signinRefused = "The site asked for the password again. Look at the tab: the saved password can be wrong."
     case signinCode = "The site asks for a code that the vault cannot give. A person gives it, or the owner saves the authenticator seed."
+    // An identifier-first page (the spec, section B): the user name went, and no password page came in 15 seconds.
+    case signinChallenge = "After the user name, the site did not ask for the password. Look at the tab: a person can be needed."
     case socket = "The vault connection could not start."
     case unscopedCopy = "This sealed copy does not say where it comes from, so it is not used in a project."
     case relabelledCopy = "This sealed copy was made for another handover, so it is not used."

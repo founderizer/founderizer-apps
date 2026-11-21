@@ -476,7 +476,7 @@ public final class OwnerHub: @unchecked Sendable {
                 throw OwnerRefusal("The call to the hub at \(base) was lost: \(reason). The request can have arrived: "
                                    + "read the fleet before you send it again.")
             case .tooLarge:
-                throw OwnerRefusal("The hub's answer is larger than this server reads.")
+                throw OwnerRefusal(["GET", "HEAD"].contains(method) ? Self.larger : Self.largerSent)
             }
         }
         let kind = (sent.headers["content-type"] ?? "").split(separator: ";").first
@@ -640,6 +640,12 @@ public final class OwnerHub: @unchecked Sendable {
         }
         return answer.data
     }
+
+    /// An answer larger than this program reads, with what to do (`owner_mcp.py` LARGER, LARGER_SENT, LARGER_PAGE): a
+    /// command can have done its work, and a page can be read in smaller parts.
+    static let larger = "The hub's answer is larger than this server reads, so it was not read."
+    static let largerSent = larger + " The request can have arrived: read the fleet before you send it again."
+    static let largerPage = larger + " Read less at a time: one item by its id, or a page with a word that narrows it."
 
     /// `GET /ui/team`'s SHA-256 of `team.json`, which every command that moves it carries.
     func teamSHA256() throws -> JSONValue {

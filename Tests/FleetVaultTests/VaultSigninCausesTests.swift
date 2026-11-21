@@ -30,7 +30,8 @@ struct VaultSigninCausesTests {
     }
 
     /// Each answer of a page names its own cause; an answer that is no page's is Chrome's. A bug that folds two causes
-    /// into one sentence again, or calls a refused password unknown, fails here.
+    /// into one sentence again fails here (the looks' causes: `theFlowTypesThePasswordOnce`), and so does one that keeps
+    /// Chrome's own words for a timeout during a step, after which Chrome can still type.
     @Test func eachAnswerOfThePageNamesItsCause() {
         let fills: [(String, VaultFailure)] = [("no-tab", .signinNoTab), ("wrong-origin", .signinNoTab),
                                                ("no-form", .signinNoForm), ("wrong-action", .signinWrongAction),
@@ -38,7 +39,6 @@ struct VaultSigninCausesTests {
                                                ("not-sent", .signinUnknown), ("", .signinUnknown),
                                                ("something new", .signinUnknown)]
         for (answer, failure) in fills { #expect(VaultBrowser.fillFailure(answer) == failure, "\(answer)") }
-        #expect(VaultBrowser.lookFailure("form") == .signinRefused)
         // After the login went, a code page that the vault cannot fill wants a person; nothing asks for the page again.
         #expect(VaultBrowser.codeFailure("no-form") == .signinCode)
         for answer in ["no-tab", "wrong-origin", "bad-field", ""] { #expect(VaultBrowser.codeFailure(answer) == .signinUnknown, "\(answer)") }
@@ -50,10 +50,18 @@ struct VaultSigninCausesTests {
                              VaultFailure.signinNoForm, CancellationError()] {
             #expect(VaultBrowser.afterFillFailure(error) == .signinUnknown, "\(error)")
         }
-        for answer in ["no-tab", "loading", "wrong-origin"] { #expect(VaultBrowser.lookFailure(answer) == .signinUnknown, "\(answer)") }
+        // Before the password went, a timeout during a step is unknown: Chrome can still run the script after it, and
+        // type. Chrome's causes that ran nothing stay, and so does a timeout outside a step.
+        let timeout = VaultChromeError(number: -1712)
+        #expect(VaultBrowser.endFailure(timeout, typed: false, stepping: true) as? VaultFailure == .signinUnknown)
+        #expect(VaultBrowser.endFailure(timeout, typed: false, stepping: false) as? VaultChromeError == timeout)
+        #expect(VaultBrowser.endFailure(timeout, typed: true, stepping: false) as? VaultFailure == .signinUnknown)
+        for cause in [VaultFailure.chromeJavaScriptOff, .chromeRefused, .chromeNotRunning] {
+            #expect(VaultBrowser.endFailure(cause, typed: false, stepping: true) as? VaultFailure == cause, "\(cause)")
+        }
         // Each cause has words of its own.
-        let words = Set(fills.map(\.1.rawValue) + [VaultFailure.signinRefused.rawValue, VaultFailure.signinCode.rawValue])
-        #expect(words.count == 8)
+        let words = Set(fills.map(\.1.rawValue) + [VaultFailure.signinRefused, .signinCode, .signinChallenge].map(\.rawValue))
+        #expect(words.count == 9)
     }
 
     /// The Mac's reading looks at every Chrome window, not only the front one: a profile with no tick in any window is

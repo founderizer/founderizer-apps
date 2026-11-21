@@ -186,9 +186,55 @@
   "login",
   "after",
   "before",
-  "since",
   "limit"
  ],
+ "PAGE_TAKES": {
+  "agent_messages": [
+   "agent",
+   "after"
+  ],
+  "capacity": [
+   "expertise",
+   "needs",
+   "login"
+  ],
+  "conversation": [
+   "after"
+  ],
+  "conversations": [
+   "agent",
+   "person"
+  ],
+  "events": [
+   "after",
+   "limit"
+  ],
+  "homes": [
+   "agent"
+  ],
+  "hosts": [
+   "agent"
+  ],
+  "knowledge": [
+   "path"
+  ],
+  "responsibility": [
+   "before",
+   "limit"
+  ],
+  "skills": [
+   "agent"
+  ],
+  "standing": [
+   "agent",
+   "before",
+   "limit"
+  ],
+  "trigger": [
+   "before",
+   "limit"
+  ]
+ },
  "PAGE_WORDS": [
   "path",
   "agent",
@@ -3452,5 +3498,5 @@
    "name": "take_backup"
   }
  ],
- "version": "45408f38c95942b66ffbe3db63d4b61f2f3f367853a8b69e2dfb82ddeedec96e"
+ "version": "44e34b92a7c4f321b5153cc879b1ab49154ad88bc5723f5a154ccf18dbe83c0d"
 }

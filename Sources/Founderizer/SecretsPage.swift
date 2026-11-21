@@ -31,9 +31,9 @@ private struct LoginReading: Sendable {
             .compactMap { Range($0.range, in: text).map { text[$0].lowercased() } }
     }
 
-    /// The agents that have one secret: a grant, or a profile that lists it, in the hub's order.
+    /// The agents that have one secret: a grant, or a profile that lists it, in the hub's order (`SecretsList.holders`).
     func holders(_ reference: String, _ entry: TeamLogin, agents: [String]) -> [String] {
-        agents.filter { entry.grants?[$0] != nil || listed?[reference]?.contains($0) == true }
+        SecretsList.holders(of: reference, entry, agents: agents, listed: listed)
     }
 }
 
@@ -42,6 +42,27 @@ private enum SecretChoice: Hashable { case use, read, none }
 
 /// The secret whose detail shows over the page, by its reference.
 private struct ShownSecret: Identifiable { let id: String }
+
+/// **A change of several secrets that works now** (the bar of the fleet's Secrets page): what it does, how many calls
+/// it makes and how many are done, and the secrets that it still changes, whose rows show a spinner at their end.
+private struct BulkWork: Equatable {
+    let change: SecretsList.Change
+    /// The calls of the plan; 0 while the page reads the catalog once more before it makes the plan.
+    let total: Int
+    var done = 0
+    var open: Set<String>
+}
+
+/// **The bar of the fleet's Secrets page, kept by the store** as the page's readings are (`FleetStore.pageModel`): the
+/// ticks, the change that works now, the bar's orange line and a Delete's line over the list. A change goes on while
+/// he is on another page, and when he comes back the page shows its bar and waits for it; another hub or hub
+/// generation has a bar of its own, so a change of the old one never shows there.
+@MainActor @Observable final class SecretsBar {
+    var ticked: Set<String> = []
+    fileprivate var work: BulkWork?
+    var line: String?
+    var removed: String?
+}
 
 /// The secrets of the fleet (features `secrets` and `secret_grants`): one list of the logins and API keys, by name. A
 /// click on a row opens its detail over the page, which a click outside closes: each agent with its access and its
@@ -60,6 +81,14 @@ private struct ShownSecret: Identifiable { let id: String }
 /// November 2026); a secret is added in Settings › Secrets, and its detail, which the agent's row opens too, gives it to
 /// every agent. The fleet's central vault is not this agent's, so its rows are not
 /// there.
+///
+/// **The fleet's own list filters, shows each secret's holders, and changes several secrets at once** (the owner, 20
+/// November 2026, and "yes as drawn" to its picture; `SecretsList` decides each part): under the header, a filter by
+/// words (each secret's name and note, case and accents folded) and by agents (a menu of several ticks); each row with a
+/// tick at its start and the faces of the agents that hold it, overlapping, then their names; and with a tick, a bar at
+/// the bottom of the page that gives the ticked secrets to agents, takes them back, or deletes the ones that nobody
+/// holds, one call at a time, with its count and a spinner on each row that it still changes. An agent's own Secrets
+/// keeps its rows as they were.
 struct SecretsPage: View {
     @Bindable var store: FleetStore
     /// One agent's own: only the secrets it has. nil is the fleet's own list.
@@ -98,6 +127,19 @@ struct SecretsPage: View {
     @State private var note: (login: String, text: String, warning: Bool)?
     /// A removal's result, over the list.
     @State private var removed: String?
+    /// **The filter of the fleet's list**: its words (`SecretsList.matches`) and the agents ticked in its menu.
+    @State private var words = ""
+    @State private var filterAgents: Set<String> = []
+    @FocusState private var filterFocused: Bool
+    /// The bar, the store's (`SecretsBar`).
+    private var bar: SecretsBar { store.pageModel("secrets.bar") { SecretsBar() } }
+    /// The secrets ticked for the bar, by reference: only the ones that the list shows (`SecretsList.selected`).
+    private var ticked: Set<String> { get { bar.ticked } nonmutating set { bar.ticked = newValue } }
+    /// The change of several secrets that works now: every control of the page waits for it.
+    private var bulk: BulkWork? { bar.work }
+    /// The bar's one line: a refusal in the hub's words, a grant's warning, or the secrets that Delete kept, in orange.
+    private var bulkLine: String? { get { bar.line } nonmutating set { bar.line = newValue } }
+    @Environment(\.colorSchemeContrast) private var contrast
 
     private var offered: Bool { SecretEntryView.isOffered(by: store) }
 
@@ -113,7 +155,7 @@ struct SecretsPage: View {
         let profiles = try? await client.profiles(hub: hub, database: database)
         return LoginReading(team: team, profiles: profiles?.profiles)
     }
-    private var canChange: Bool { offered && store.writesNow && working == nil }
+    private var canChange: Bool { offered && store.writesNow && working == nil && bulk == nil }
     private var agents: [String] { store.state?.agents.map(\.name) ?? [] }
     /// The central vault of this hub (owner feature `central_vault`), which the store keeps in order by itself: this
     /// page shows only its rows that need the owner, and each secret's servers. A hub without it shows none of them.
@@ -122,6 +164,9 @@ struct SecretsPage: View {
     var body: some View {
         Group { if importing && offered { importPage } else if adding && offered { addPage } else { list } }
             .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(offered)") { await poll() }
+            // **What came of a change is said once**: when he leaves the page while no change works, the bar's line and
+            // a Delete's line over the list go. A line that a change sets while he is away waits for his return.
+            .onDisappear { if agent == nil, bar.work == nil { bar.line = nil; bar.removed = nil } }
     }
 
     // MARK: list
@@ -131,12 +176,13 @@ struct SecretsPage: View {
             VStack(alignment: .leading, spacing: FleetSpace.block) { listContent }
                 .fleetModal(item: $shown) { detail($0.id) }
         } else {
-            FleetPage("Secrets") { listContent } actions: {
+            // Every control of the page waits while a change of several secrets works; the page still scrolls.
+            FleetPage("Secrets") { listContent.disabled(bulk != nil) } actions: {
                 // The page's one group has no heading, so its old-reading line stands with the header's actions.
                 if reading != nil { lastReading }
                 if offered {
                     Button {
-                        note = nil; removed = nil
+                        note = nil; removed = nil; bar.removed = nil
                         // As for Add secret: what is new after the import comes from the reading.
                         Task {
                             if reading == nil { await read() }
@@ -144,9 +190,9 @@ struct SecretsPage: View {
                         }
                     } label: {
                         Label("Import", systemImage: "square.and.arrow.down")
-                    }.buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("secret-import")
+                    }.buttonStyle(FleetOutlineButtonStyle()).disabled(bulk != nil).accessibilityIdentifier("secret-import")
                     Button {
-                        note = nil; removed = nil
+                        note = nil; removed = nil; bar.removed = nil
                         // What is new after the form comes from the reading: a press that comes before the first one
                         // waits for it.
                         Task {
@@ -155,8 +201,13 @@ struct SecretsPage: View {
                         }
                     } label: {
                         Label("Add secret", systemImage: "plus")
-                    }.buttonStyle(FleetPrimaryButtonStyle()).accessibilityIdentifier("secret-add")
+                    }.buttonStyle(FleetPrimaryButtonStyle()).disabled(bulk != nil).accessibilityIdentifier("secret-add")
                 }
+            }
+            // **The bar, while a secret is ticked**, at the bottom of the page and over its scroll, in the cards' column.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                // Also while its line says what came of a change whose secrets the filter shows no more.
+                if let reading, !ticked.isEmpty || bulk != nil || bulkLine != nil { barView(reading) }
             }
             .fleetModal(item: $shown) { detail($0.id) }
         }
@@ -164,6 +215,10 @@ struct SecretsPage: View {
 
     @ViewBuilder private var listContent: some View {
         Group {
+            // The filter's row stands under the header, while the list has more than one secret to filter, and while a
+            // filter is on, so that it can always be cleared.
+            if agent == nil, offered, let reading, reading.hasCatalog,
+               reading.catalog.count > 1 || SecretsList.filters(words: words, agents: filterAgents) { filterRow(reading) }
             if agent == nil { CentralVaultSection(store: store, model: vault) }
             if !offered {
                 FormSection(grouped ? String(l10n: "Secrets") : nil) {
@@ -194,7 +249,7 @@ struct SecretsPage: View {
         let entries = reading.catalog.sorted { ($0.value.name.lowercased(), $0.key) < ($1.value.name.lowercased(), $1.key) }
             .filter { entry in agent.map { reading.holders(entry.key, entry.value, agents: agents).contains($0) } ?? true }
         let added = before.map { known in entries.filter { !known.contains($0.key) } } ?? []
-        if let removed {
+        if let removed = removed ?? (agent == nil ? bar.removed : nil) {
             Label(removed, systemImage: "checkmark.circle").font(FormMetrics.text).foregroundStyle(FleetStyle.text)
                 .accessibilityIdentifier("secret-removed")
         } else if !added.isEmpty {
@@ -208,6 +263,8 @@ struct SecretsPage: View {
         }
         if !reading.hasCatalog {
             FormSection { FormRow("The hub gave no list of secrets that Founderizer can read.", symbol: "exclamationmark.circle") }
+        } else if agent == nil {
+            fleetCatalog(reading, added: Set(added.map(\.key)))
         } else {
             // No line under the list about what a click does: the row's own ⓘ says it, as on Apps. As a group of an
             // agent's Can use, the empty card when the agent has none, and the + that gives it one more (the owner's
@@ -231,6 +288,194 @@ struct SecretsPage: View {
                     .accessibilityIdentifier("secret-group-note")
             }
         }
+    }
+
+    // MARK: the fleet's list
+
+    /// The fleet's secrets in the list's order, each with its holders, and the ones that the filter shows.
+    private func fleetItems(_ reading: LoginReading) -> (all: [SecretsList.Item], shown: [SecretsList.Item]) {
+        let all = reading.catalog.sorted { ($0.value.name.lowercased(), $0.key) < ($1.value.name.lowercased(), $1.key) }
+            .map { SecretsList.Item(reference: $0.key, entry: $0.value, holders: reading.holders($0.key, $0.value, agents: agents)) }
+        // An agent that left the fleet filters nothing.
+        return (all, SecretsList.shown(all, words: words, agents: filterAgents.intersection(agents)))
+    }
+
+    /// **The fleet's list**: the rows that the filter shows, each with its tick (`fleetRow`), and the card's empty state
+    /// when none shows. A tick that the filter hides goes, so the bar never acts on a secret that he cannot see.
+    @ViewBuilder private func fleetCatalog(_ reading: LoginReading, added: Set<String>) -> some View {
+        let (all, shown) = fleetItems(reading)
+        // A list that can hold hundreds of rows makes only the ones on the screen (UI-PATTERNS, `FormSection`).
+        FormSection(lazy: true) {
+            if all.isEmpty { FormEmpty("No secrets yet", symbol: "key") }
+            else if shown.isEmpty { FormEmpty("No secret matches the filter.", symbol: "magnifyingglass") }
+            ForEach(shown, id: \.reference) { fleetRow($0, isNew: added.contains($0.reference)) }
+        }
+        .onChange(of: shown.map(\.reference)) { _, now in ticked.formIntersection(now) }
+    }
+
+    /// **The row of the filter, under the header**: the words (each secret's name and note), the menu of the agents
+    /// with a tick each (a secret that at least one ticked agent holds), and, while a filter is on, "N of M" at its
+    /// right.
+    private func filterRow(_ reading: LoginReading) -> some View {
+        let (all, shown) = fleetItems(reading)
+        let chosen = agents.filter(filterAgents.contains)
+        return HStack(spacing: FleetSpace.actions) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").font(IconMetrics.symbol(12)).foregroundStyle(FleetStyle.muted)
+                    .accessibilityHidden(true)
+                TextField(text: $words, prompt: Text(verbatim: "")) { Text("Filter") }
+                    .focused($filterFocused)
+                    .fieldPlaceholder(String(l10n: "Filter"), shows: words.isEmpty)
+                    .accessibilityIdentifier("secrets-filter")
+            }
+            .modifier(FleetFieldBox(focused: filterFocused))
+            .onTapGesture { filterFocused = true }
+            .frame(width: 240)
+            FleetTicks(String(l10n: "Agents"), options: agents.map {
+                FleetOption($0, $0.agentLabel, mark: .agent($0, state: store.state, isFresh: store.isFresh))
+            }, ticked: filterAgents, changed: { filterAgents = $0 }) {
+                HStack(spacing: 7) {
+                    if !chosen.isEmpty { HolderFaces(names: SecretsList.faces(chosen).shown) }
+                    Text(SecretsList.agentsWords(chosen.count)).lineLimit(1)
+                    Image(systemName: "chevron.down").font(IconMetrics.symbol(8.5, weight: .bold)).foregroundStyle(FleetStyle.muted)
+                        .padding(.leading, 1).accessibilityHidden(true)
+                }
+            }
+            .buttonStyle(FleetOutlineButtonStyle())
+            .accessibilityValue(chosen.map(\.agentLabel).joined(separator: ", "))
+            .accessibilityIdentifier("secrets-agents")
+            Spacer(minLength: 12)
+            if let count = SecretsList.count(shown: shown.count, of: all.count, filtering: SecretsList.filters(words: words, agents: Set(chosen))) {
+                Text(count).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).monospacedDigit().lineLimit(1)
+                    .accessibilityIdentifier("secrets-count")
+            }
+        }
+        // The cards' measure from the column's left edge, so the count ends where the cards end.
+        .frame(maxWidth: FormMetrics.formWidth, alignment: .leading).frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// **One secret of the fleet's list** (the owner's "yes as drawn" of 20 November 2026): its tick at its start, always
+    /// there; its kind as a mark; its name; under it the faces of the agents that hold it, overlapping, then their names
+    /// (`SecretsList.holderWords`); and the ⓘ at its end, or a spinner while the bar's change still changes it. A click
+    /// opens its detail; the tick stands over the row, never inside its button, so its click is its own.
+    private func fleetRow(_ item: SecretsList.Item, isNew: Bool) -> some View {
+        let entry = item.entry, reference = item.reference
+        let kind = entry.isAPIKey ? String(l10n: "API key") : String(l10n: "Login")
+        let summary = SecretsList.holderWords(item.holders)
+        let faces = SecretsList.faces(item.holders).shown
+        return Button { note = nil; shown = ShownSecret(id: reference) } label: {
+            HStack(spacing: 12) {
+                // The tick's room: the box stands over it (`overlay`).
+                Color.clear.frame(width: 14, height: 14)
+                IconTile(symbol: entry.isAPIKey ? "key.horizontal" : "person.badge.key")
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 7) {
+                        // Cut in the middle: the names of one project share their start, and the end tells them apart.
+                        Text(entry.name).font(entry.isAPIKey ? FormMetrics.title.monospaced() : FormMetrics.title)
+                            .foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle)
+                        if isNew {
+                            Text("New").font(FormMetrics.detailTitle).padding(.horizontal, 6).padding(.vertical, 1.5)
+                                .background(Color.green.opacity(0.2), in: Capsule())
+                        }
+                    }
+                    HStack(spacing: 6) {
+                        if !faces.isEmpty { HolderFaces(names: faces) }
+                        Text(summary).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1)
+                    }
+                }.padding(.vertical, 10)
+                Spacer(minLength: 12)
+                // Who may give it, only where the fleet manager may: the same word as on MCPs and Apps.
+                if let level = managerLevel(reference) { ManagerGives(level: level) }
+                ZStack {
+                    if bulk?.open.contains(reference) == true {
+                        ProgressView().controlSize(.small).accessibilityLabel(String(l10n: "Changing"))
+                    } else {
+                        Image(systemName: "info.circle").font(IconMetrics.symbol(14)).foregroundStyle(FleetStyle.muted).accessibilityHidden(true)
+                    }
+                }.frame(width: 18)
+            }.padding(.horizontal, FormMetrics.rowInset).frame(minHeight: FormMetrics.twoLineRow)
+        }
+        .buttonStyle(FleetRowButtonStyle())
+        .help("\(kind): show which agents can use \(entry.name)")
+        .accessibilityLabel(([entry.name, kind, summary] + [managerLevel(reference).map { String(l10n: "Manager may give: \($0)") }]).compactMap { $0 }
+            .joined(separator: ", "))
+        .accessibilityHint("Shows its detail")
+        .accessibilityIdentifier("secret-\(reference)")
+        .overlay(alignment: .leading) {
+            Toggle(isOn: Binding { ticked.contains(reference) } set: { on in
+                if on { ticked.insert(reference) } else { ticked.remove(reference) }
+                bulkLine = nil; bar.removed = nil
+            }) { Text(entry.name) }
+            .toggleStyle(FleetCheckboxStyle()).labelsHidden()
+            .accessibilityLabel(String(l10n: "Select \(entry.name)"))
+            .accessibilityIdentifier("secret-tick-\(reference)")
+            // The box's 14 points in the room the row keeps for it, its 28-point reach around it.
+            .padding(.leading, FormMetrics.rowInset - (IconMetrics.side - 14) / 2)
+        }
+    }
+
+    /// **The bar of the ticked secrets**, at the bottom of the page in the cards' column: how many are ticked, or,
+    /// while a change works, its spinner and "Giving 4 of 6"; Give access and Take access (each a menu of agents with a
+    /// tick each and one white button), Delete, and the mark that clears the ticks; under them one orange line for a
+    /// refusal, in the hub's words, or for the secrets that Delete kept.
+    private func barView(_ reading: LoginReading) -> some View {
+        let selected = selectedNow
+        let takeable = SecretsList.takeable(selected, agents: agents)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: FleetSpace.actions) {
+                if let bulk {
+                    ProgressView().controlSize(.small)
+                    // While the catalog is read once more before the plan, its count of ticks.
+                    Text(bulk.total == 0 ? SecretsList.selectedWords(selected.count) : SecretsList.progress(bulk.change, done: bulk.done, of: bulk.total))
+                        .monospacedDigit().accessibilityIdentifier("secrets-bulk-progress")
+                } else {
+                    Text(SecretsList.selectedWords(selected.count)).monospacedDigit().accessibilityIdentifier("secrets-selected")
+                }
+                Spacer(minLength: 12)
+                access(.give, selected: selected, offered: agents)
+                access(.take, selected: selected, offered: takeable)
+                Button("Delete") { Task { await bulkDelete() } }
+                    .buttonStyle(FleetDangerButtonStyle()).disabled(!canChange || selected.isEmpty)
+                    .accessibilityIdentifier("secrets-bulk-delete")
+                IconButton(symbol: "xmark", words: String(l10n: "Clear the selection")) { ticked = []; bulkLine = nil; bar.removed = nil }
+                    .disabled(bulk != nil).accessibilityIdentifier("secrets-bulk-clear")
+            }
+            .font(FormMetrics.text).foregroundStyle(FleetStyle.text)
+            if let bulkLine {
+                Text(bulkLine).font(FormMetrics.detail).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    .accessibilityIdentifier("secrets-bulk-line")
+            }
+        }
+        .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 10)
+        .background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.radius))
+        .overlay(RoundedRectangle(cornerRadius: FormMetrics.radius)
+            .strokeBorder(FleetStyle.hairline(0.08), lineWidth: FleetStyle.edgeWidth(contrast)))
+        .environment(\.onCard, true)
+        .frame(maxWidth: FormMetrics.formWidth, alignment: .leading).frame(maxWidth: .infinity, alignment: .leading)
+        .fleetColumn()
+        // The rows that scroll under it do not show around it.
+        .padding(.top, FleetSpace.inside).padding(.bottom, FleetSpace.under)
+        .background(FleetStyle.canvas)
+    }
+
+    /// Give access or Take access: a menu of the agents (every agent, or the ones with a grant of a ticked secret), a
+    /// tick each, and one white button that names the change ("Give 4 secrets to 2 agents"), dimmed while it would
+    /// change nothing.
+    private func access(_ change: SecretsList.Change, selected: [SecretsList.Item], offered: [String]) -> some View {
+        let words = change == .give ? String(l10n: "Give access") : String(l10n: "Take access")
+        let agents = agents
+        return FleetTicks(words, options: offered.map {
+            FleetOption($0, $0.agentLabel, mark: .agent($0, state: store.state, isFresh: store.isFresh))
+        }, ticked: [], button: { chosen in
+            (SecretsList.buttonWords(change, secrets: selected.count, agents: chosen.count),
+             !SecretsList.pairs(change, secrets: selected, chosen: chosen, agents: agents).isEmpty)
+        }, press: { chosen in Task { await bulkGrant(change, chosen: chosen) } }) {
+            Text(words)
+        }
+        .buttonStyle(FleetOutlineButtonStyle())
+        .disabled(!canChange || selected.isEmpty || offered.isEmpty)
+        .accessibilityIdentifier(change == .give ? "secrets-bulk-give" : "secrets-bulk-take")
     }
 
     /// **The + of an agent's Secrets** (the owner's yes of 3 November 2026): the catalog's secrets that this agent does
@@ -364,14 +609,23 @@ struct SecretsPage: View {
                 Button("Done") { shown = nil }.buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("secret-done")
             }
-            // **Its note, only where it has one** (owner feature `secret_notes`; the owner, 19 November 2026: "only use
-            // when adding valuable context, otherwise leave empty"): the words that the agents read beside its name,
-            // and who wrote them under the pointer. A secret with no note has no line here.
-            if let words = entry?.note, !words.isEmpty {
-                Text(words).font(FormMetrics.text).foregroundStyle(FleetStyle.text)
-                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-                    .help(entry?.note_by == "owner" ? String(l10n: "Your note") : String(l10n: "An agent wrote this note"))
-                    .accessibilityIdentifier("secret-note-words")
+            // **Its note, as a field that he edits** (owner feature `secret_notes`; the owner, 19 November 2026: "only use
+            // when adding valuable context, otherwise leave empty", and 20 November 2026, to the note in the detail: "yes
+            // - I also want the agents to be able to edit it!"): the words that the agents read beside its name, with
+            // the mark of who wrote them, and his own words saved as he leaves the field. An agent writes it with its
+            // own tools. A hub without notes shows the note's words, where it has one.
+            if let entry {
+                if store.state?.ui_features?.contains("secret_notes") == true {
+                    SecretNoteField(note: entry.note ?? "", by: entry.note_by, canChange: offered && store.writesNow && bulk == nil) {
+                        await saveNote($0, base: $1, reference: reference)
+                    }
+                    .id(reference)
+                } else if let words = entry.note, !words.isEmpty {
+                    Text(words).font(FormMetrics.text).foregroundStyle(FleetStyle.text)
+                        .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                        .help(entry.note_by == "owner" ? String(l10n: "Your note") : String(l10n: "An agent wrote this note"))
+                        .accessibilityIdentifier("secret-note-words")
+                }
             }
             if let entry, let reading {
                 let holders = reading.holders(reference, entry, agents: agents)
@@ -596,6 +850,118 @@ struct SecretsPage: View {
         } catch { note = (reference, String(l10n: "Founderizer could not remove it. \(Self.text(error))"), true) }
     }
 
+    /// **His words for a secret's note** (`POST /ui/team/logins` with `note`, UI-API 1.249), with its title as it is,
+    /// against the team.json of the last reading; then a new reading, whose note the field shows (`SecretsRun.note`:
+    /// the hub makes a note plain). A version that moved meanwhile is read again once: when the note itself changed
+    /// there, the field shows that note and his words do not go; else they go again. `base`: the note that the field
+    /// started from.
+    private func saveNote(_ words: String, base: String, reference: String) async -> SecretsRun.NoteSave {
+        guard offered, store.writesNow, let database = store.state?.db else { return .failed(String(l10n: "The hub did not answer.")) }
+        guard reading?.catalog[reference] != nil else { return .gone }
+        let hub = store.hub, client = store.installation
+        return await SecretsRun.note(words, base: base, send: {
+            guard let current = reading, let entry = current.catalog[reference] else { throw HubError.invalidResponse }
+            _ = try await HubClient().saveLoginTitle(hub: hub, database: database, client: client, sha256: current.sha256,
+                                                     login: reference, title: entry.title, note: words)
+        }, reread: {
+            guard await read() else { return .unread }
+            return reading?.catalog[reference].map { .note($0.note ?? "") } ?? .gone
+        }, reason: { HubError.said($0) ?? Self.text($0) })
+    }
+
+    // MARK: changes of several secrets
+
+    /// The ticked secrets that the list shows now, in its order: what the bar acts on (`SecretsList.selected`).
+    private var selectedNow: [SecretsList.Item] {
+        reading.map { SecretsList.selected(fleetItems($0).all, ticked: ticked, words: words, agents: filterAgents.intersection(agents)) } ?? []
+    }
+
+    /// The hub's own sentence for a change that failed, with the secret and the agent it was for.
+    private static func refusal(_ error: Error, secret: String, agent: String?) -> String {
+        let words = HubError.said(error) ?? text(error)
+        return agent.map { String(l10n: "\(secret) for \($0.agentLabel): \(words)") } ?? String(l10n: "\(secret): \(words)")
+    }
+
+    /// **Give access or Take access to the ticked secrets**: the catalog read once more (a give never lowers a read
+    /// that came after the last reading), the plan made from it (`SecretsList.pairs`), then one call for each pair, one
+    /// at a time, each as one click of the detail makes it (`SecretsRun.grants`: `GrantSigning` before a give and after
+    /// a take-back, `SecretsClient.grant`), and one reading at the end. The run is the store's bar's (`SecretsBar`), so
+    /// it goes on and shows on another visit of the page. A refusal is the bar's one line, in the hub's words, and the
+    /// run stops there; a grant whose agent cannot use the secret yet is said there at the end, in the detail's words.
+    private func bulkGrant(_ change: SecretsList.Change, chosen: Set<String>) async {
+        guard change != .delete, canChange, let database = store.state?.db else { return }
+        let bar = bar, hub = store.hub, client = store.installation
+        bar.line = nil; bar.removed = nil; note = nil; removed = nil
+        bar.work = BulkWork(change: change, total: 0, open: [])
+        await read()
+        guard store.hub == hub, store.state?.db == database else { bar.work = nil; return }
+        let selected = selectedNow
+        let pairs = SecretsList.pairs(change, secrets: selected, chosen: chosen, agents: agents)
+        guard !pairs.isEmpty else { bar.work = nil; return }
+        let entries = Dictionary(selected.map { ($0.reference, $0.entry) }, uniquingKeysWith: { first, _ in first })
+        let store = store
+        let run = await SecretsRun.grants(change, pairs: pairs, sign: { pair, level in
+            try await GrantSigning.grant(level, login: pair.reference, agent: pair.agent, store: store, hub: hub, database: database)
+        }, call: { pair, level in
+            let receipt = try await SecretsClient().grant(hub: hub, database: database, client: client, login: pair.reference,
+                                                          agent: pair.agent, grant: level)
+            guard let entry = entries[pair.reference], let said = Self.note(receipt, entry: entry), said.warning else { return nil }
+            return said.text
+        }, progress: { done, open in
+            bar.work = BulkWork(change: change, total: pairs.count, done: done, open: open)
+        })
+        await read()
+        bar.work = nil
+        if let failed = run.failed {
+            bar.line = Self.refusal(failed.error, secret: entries[failed.pair.reference]?.name ?? failed.pair.reference, agent: failed.pair.agent)
+        } else {
+            bar.line = run.warning
+        }
+    }
+
+    /// **Delete the ticked secrets that nobody holds** (`SecretsList.removal`, after one more reading of the catalog),
+    /// as the detail's own removal does, one at a time (`SecretsRun.removals`): each against the version of team.json
+    /// that the one before left, once more after a version that moved meanwhile while nobody holds the secret, and one
+    /// reading at the end. A ticked secret that is still held stays ticked, and the bar's line says so; the removed ones
+    /// are said in the line over the list.
+    private func bulkDelete() async {
+        guard canChange, let database = store.state?.db else { return }
+        let bar = bar, hub = store.hub, client = store.installation
+        bar.line = nil; bar.removed = nil; note = nil; removed = nil
+        bar.work = BulkWork(change: .delete, total: 0, open: [])
+        await read()
+        guard store.hub == hub, store.state?.db == database, let sha256 = reading?.sha256 else { bar.work = nil; return }
+        let selected = selectedNow
+        let plan = SecretsList.removal(selected)
+        let names = Dictionary(selected.map { ($0.reference, $0.entry.name) }, uniquingKeysWith: { first, _ in first })
+        var run = SecretsRun.Removals()
+        if !plan.removes.isEmpty {
+            run = await SecretsRun.removals(plan.removes, sha256: sha256, remove: { reference, version in
+                try await HubClient().removeLogin(hub: hub, database: database, client: client, sha256: version, login: reference).sha256
+            }, reread: { reference in
+                await read()
+                guard let fresh = reading, let entry = fresh.catalog[reference] else { return nil }
+                return (fresh.sha256, !fresh.holders(reference, entry, agents: agents).isEmpty)
+            }, progress: { done, open in
+                bar.work = BulkWork(change: .delete, total: plan.removes.count, done: done, open: open)
+            })
+            before = nil
+            await read()
+        }
+        bar.work = nil
+        bar.ticked.subtract(run.gone)
+        if run.gone.count == 1, let name = names[run.gone[0]] {
+            bar.removed = String(l10n: "Removed “\(name)” from Founderizer. Its value stays in the vaults.")
+        } else if run.gone.count > 1 {
+            bar.removed = String(l10n: "Removed \(run.gone.count) secrets from Founderizer. Their values stay in the vaults.")
+        }
+        if let failed = run.failed {
+            bar.line = Self.refusal(failed.error, secret: names[failed.reference] ?? failed.reference, agent: nil)
+        } else if !plan.held.isEmpty {
+            bar.line = SecretsList.heldWords(plan.held.count)
+        }
+    }
+
     // MARK: reading
 
     /// Reads the catalog every 15 seconds while the page shows, and again after 3 seconds when a read failed. Another
@@ -630,8 +996,116 @@ struct SecretsPage: View {
         if first, let start { await store.settle(since: start) }
         guard store.hub == hub, store.state?.db == database else { return false }
         reading = LoginReading(team: team, profiles: profiles?.profiles); failedSince = nil
+        // A tick of a secret that left the catalog goes, so the bar never counts one that is no longer there.
+        if agent == nil { bar.ticked.formIntersection((team.logins ?? [:]).keys) }
         store.keep(team, as: "team.snapshot")
         if let standings { resources = standings }
         return true
+    }
+}
+
+/// **The faces of the agents that hold a secret**, as a group shows its members: each agent's glyph at the size beside
+/// a name, on a ring of the card's colour, each one over the next and 6 points over it, with no status dot (the
+/// owner's "yes as drawn" of 20 November 2026). Their names stand after them, in words that VoiceOver reads.
+private struct HolderFaces: View {
+    let names: [String]
+    @Environment(\.cardFill) private var cardFill
+    /// The ring of the card's colour around each glyph, which parts it from the one under it.
+    private static let ring: CGFloat = 1.5
+
+    var body: some View {
+        HStack(spacing: -(6 + 2 * Self.ring)) {
+            ForEach(Array(names.enumerated()), id: \.element) { index, name in
+                AgentGlyph(name: name, size: GlyphSize.inline, dot: false)
+                    .padding(Self.ring)
+                    .background(cardFill, in: Circle())
+                    .zIndex(Double(names.count - index))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// **A secret's note in its detail** (owner feature `secret_notes`): one line of at most the hub's 200 characters, the
+/// mark of who wrote what stands there (him, or an agent; the word on hover), and his own words saved as he leaves the
+/// field, presses Return or closes the card, with the save's mark beside it (`SaveMark`). After a save the field shows
+/// the note as the hub keeps it (`SecretsRun.NoteSave`). Empty words take the note away. Words that look like a key do
+/// not go: a note is never a key.
+private struct SecretNoteField: View {
+    /// The note as the hub gives it now, and who wrote it (`owner` or `agent`).
+    let note: String
+    let by: String?
+    let canChange: Bool
+    /// His words and the note that the field started from.
+    let save: (_ words: String, _ base: String) async -> SecretsRun.NoteSave
+    @State private var text: String
+    @State private var state: SaveState?
+    @FocusState private var focused: Bool
+
+    init(note: String, by: String?, canChange: Bool, save: @escaping (_ words: String, _ base: String) async -> SecretsRun.NoteSave) {
+        self.note = note; self.by = by; self.canChange = canChange; self.save = save
+        _text = State(initialValue: note)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                if !note.isEmpty {
+                    let owner = by == "owner"
+                    Image(systemName: owner ? "person" : "sparkles").font(IconMetrics.symbol(13)).foregroundStyle(FleetStyle.muted)
+                        .frame(width: 18).help(owner ? String(l10n: "You") : String(l10n: "An agent"))
+                        .accessibilityLabel(owner ? String(l10n: "You") : String(l10n: "An agent"))
+                        .accessibilityIdentifier("secret-note-by")
+                }
+                TextField(text: $text, prompt: Text(verbatim: "")) { Text("Note") }
+                    .fieldPlaceholder(String(l10n: "Note"), shows: text.isEmpty)
+                    .fleetField(focus: $focused)
+                    .disabled(!canChange || state == .saving)
+                    .onSubmit { Task { await send() } }
+                    .accessibilityIdentifier("secret-note")
+                SaveMark(state: state) { Task { await send(again: true) } }
+            }
+            if let failure = state?.failure {
+                Text(failure).font(FormMetrics.detail).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            }
+        }
+        .animation(SaveState.lineMotion, value: state?.failure)
+        // The field holds no more than the hub keeps, counted as the hub counts (`NeedSecret.noteLength`).
+        .onChange(of: text) { _, now in
+            if NeedSecret.noteLength(now) > NeedSecret.noteMost { text = NeedSecret.cut(now, most: NeedSecret.noteMost, note: true) }
+        }
+        .onChange(of: focused) { _, now in if !now { Task { await send() } } }
+        // **Done, Esc or a click outside closes the card with the cursor still in the field: his words go then.** They
+        // are taken here, while the field still stands, and the save is the page's, so it ends after the card has gone.
+        .onDisappear {
+            let words = NeedSecret.oneLine(text, most: NeedSecret.noteMost)
+            guard canChange, state != .saving, words != note, !KeyInText.contains(words) else { return }
+            let save = save, base = note
+            Task { _ = await save(words, base) }
+        }
+        // A note that changed at the hub shows, unless he is writing his own.
+        .onChange(of: note) { _, now in if !focused && state != .saving { text = now } }
+    }
+
+    /// His words, when they are not the note that stands: one plain line, as the hub keeps it.
+    private func send(again: Bool = false) async {
+        let words = NeedSecret.oneLine(text, most: NeedSecret.noteMost)
+        guard canChange, state != .saving, again || words != note else { return }
+        guard words != note else { state = nil; text = note; return }
+        if KeyInText.contains(words) { state = .failed(SecretEntryView.keyInNote); return }
+        state = .saving
+        switch await save(words, note) {
+        case .saved(let now):
+            text = now; state = .saved
+            try? await Task.sleep(for: .seconds(3))
+            if state == .saved { state = nil }
+        case .changedElsewhere(let now):
+            text = now; state = .changedElsewhere
+        case .gone:
+            state = .failed(String(l10n: "This secret is no longer in the list."))
+        case .failed(let reason):
+            state = .failed(reason)
+        }
     }
 }
