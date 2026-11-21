@@ -241,9 +241,9 @@ private struct MovingGlyph: NSViewRepresentable {
 
 /// **The layers of a moving glyph, in four parts, one in the other**: the holder, which moves and squeezes along the
 /// screen's axes; the figure in it, which turns with its colour (the gradient under the outline as a mask); the orbit,
-/// which turns the inner mark about the glyph's centre; and the inner mark, which turns and changes its size about its
-/// own centre. Each kind moves in its own way (`GlyphMotion`, the owner's "A · Own character" of 20 November 2026), and
-/// a squeeze stands on the holder because a squeeze on a figure that has turned goes askew.
+/// which turns the inner mark about the glyph's centre; and the inner mark, which moves, turns and changes its size
+/// about its own centre. Each kind moves in its own way, smooth and without a stop (`GlyphMotion`, the owner's "Smooth"
+/// of 21 November 2026), and a squeeze stands on the holder because a squeeze on a figure that has turned goes askew.
 private final class GlyphLayerView: NSView {
     private let holder = CALayer(), figure = CALayer(), gradient = CAGradientLayer(), outline = CAShapeLayer()
     private let orbit = CALayer(), core = CAShapeLayer()
@@ -257,18 +257,15 @@ private final class GlyphLayerView: NSView {
     /// The number of the way back to rest that runs now: the end of a way back that work cut short tells nothing, also
     /// when work ended again before that end came.
     private var settles = 0
-    /// When each track of the motion began its loops, its loop at the glyph's own pace, and where its tween into the
-    /// loop started: for the way back to rest.
+    /// When each track of the motion began, its loop at the glyph's own pace, and where its way in started: for the way
+    /// back to rest.
     private var loops: [(track: GlyphMotion.Track, begin: CFTimeInterval, seconds: Double, from: Double)] = []
     /// The way back to rest while it runs: each value from where it was to rest, from when and for how long. Work that
     /// starts again in it goes on from where each part stands, with no jump.
     private var ways: [(part: GlyphMotion.Part, channel: GlyphMotion.Channel, from: Double, to: Double,
                         begin: CFTimeInterval, seconds: Double)] = []
-    /// CA's ease-out, to know where a part stands on its way back.
-    private static let easeOut = GlyphCurve(0, 0, 0.58, 1)
-    /// The tween into a loop from rest, or from where a part stands on its way back, and the way back to rest at the
-    /// end of work.
-    private static let tween: CFTimeInterval = 0.25
+    /// The way back to rest at the end of work, at its shortest.
+    private static let wayBack: CFTimeInterval = 0.25
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -349,24 +346,26 @@ private final class GlyphLayerView: NSView {
         case .scale: "transform.scale"
         case .scaleX: "transform.scale.x"
         case .scaleY: "transform.scale.y"
+        case .side: "transform.translation.x"
         case .lift: "transform.translation.y"
         }
     }
 
-    /// A track's value as its layer takes it: a turn in radians, a lift in points of this glyph.
+    /// A track's value as its layer takes it: a turn in radians, a move in points of this glyph.
     private func shown(_ value: Double, _ channel: GlyphMotion.Channel) -> Double {
         switch channel {
         case .turn: value * .pi / 180
+        case .side: value * Double(bounds.width) / 100
         case .lift: value * Double(bounds.height) / 100
         case .scale, .scaleX, .scaleY: value
         }
     }
 
     /// **The motion of its kind, without an end, from the glyph at rest or from where each part stands on its way back
-    /// to rest (`ways`)**, so work starts without a jump: each track loops from its first key, a track that does not
-    /// start where its part stands first eases there (`tween`), and the loops of a kind start together, so its parts
-    /// keep in step. Each glyph keeps its own pace, within 10% of its kind's (`GlyphLook.phase`), so two glyphs at work
-    /// do not move in step.
+    /// to rest (`ways`)**, so work starts without a jump: for its first 0.4 s each value grows from where its part stands
+    /// into its loop, which runs from its start meanwhile (`GlyphMotion.Track.value(after:from:loop:)`), and then the
+    /// loop alone goes on. The tracks of a kind start together, so its parts keep in step. Each glyph keeps its own pace,
+    /// within 10% of its kind's (`GlyphLook.phase`), so two glyphs at work do not move in step.
     ///
     /// **Work is plain to see at the sidebar's 28 points** (the owner, 13 November 2026: "the agent icon should animate
     /// more to make it more obvious that is working"), and the motion is the one sign of work now that work has no dot
@@ -374,7 +373,8 @@ private final class GlyphLayerView: NSView {
     private func move(_ look: GlyphLook) {
         rested = nil
         loops = []
-        let pace = 0.9 + 0.2 * look.phase / (2 * .pi), now = CACurrentMediaTime(), tracks = look.kind.workMotion.tracks
+        let motion = look.kind.workMotion, now = CACurrentMediaTime()
+        let seconds = motion.loop * (0.9 + 0.2 * look.phase / (2 * .pi))
         // Where each part stands on a way back to rest that runs now; at rest otherwise.
         func standing(_ track: GlyphMotion.Track) -> Double {
             guard let way = ways.first(where: { $0.part == track.part && $0.channel == track.channel }) else {
@@ -382,26 +382,15 @@ private final class GlyphLayerView: NSView {
             }
             let done = min(max((now - way.begin) / way.seconds, 0), 1)
             // A turn on its way back stands a whole turn from rest at most: its loop starts at no turn.
-            let value = way.from + (way.to - way.from) * Self.easeOut(done)
+            let value = way.from + (way.to - way.from) * GlyphCurve.easeOut(done)
             return way.channel == .turn ? value - way.to : value
         }
-        let from = tracks.map(standing)
+        let from = motion.tracks.map(standing)
         ways = []
         for part in [holder, figure, orbit, core] as [CALayer] { part.removeAllAnimations() }
-        // The loops of a kind start together, so its parts keep in step: after the tween when one of them needs it.
-        let begin = now + (zip(tracks, from).contains { abs($0.value(at: 0) - $1) > 1e-9 } ? Self.tween : 0)
-        for (index, track) in tracks.enumerated() {
-            let layer = layer(of: track.part), keyPath = Self.keyPath(track.channel), seconds = track.loop * pace
-            let start = track.value(at: 0)
-            if abs(start - from[index]) > 1e-9 {
-                let tween = CABasicAnimation(keyPath: keyPath)
-                tween.fromValue = shown(from[index], track.channel)
-                tween.toValue = shown(start, track.channel)
-                tween.duration = Self.tween
-                tween.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                tween.beginTime = layer.convertTime(now, from: nil)
-                layer.add(tween, forKey: "rest.\(index)")
-            }
+        for (index, track) in motion.tracks.enumerated() {
+            let layer = layer(of: track.part), keyPath = Self.keyPath(track.channel)
+            // The loop from the end of the way in, where it stands then: it runs from its start with the way in.
             let points = track.samples(over: seconds)
             let loop = CAKeyframeAnimation(keyPath: keyPath)
             loop.values = points.map { NSNumber(value: shown($0.value, track.channel)) }
@@ -409,10 +398,22 @@ private final class GlyphLayerView: NSView {
             loop.calculationMode = .linear
             loop.duration = seconds
             loop.repeatCount = .infinity
-            loop.beginTime = layer.convertTime(begin, from: nil)
+            loop.beginTime = layer.convertTime(now + GlyphMotion.wayIn, from: nil)
+            loop.timeOffset = GlyphMotion.wayIn
             loop.isRemovedOnCompletion = false
             layer.add(loop, forKey: "loop.\(index)")
-            loops.append((track, begin, seconds, from[index]))
+            let entry = track.wayInSamples(from: from[index], loop: seconds)
+            let way = CAKeyframeAnimation(keyPath: keyPath)
+            way.values = entry.map { NSNumber(value: shown($0.value, track.channel)) }
+            way.keyTimes = entry.map { NSNumber(value: $0.at) }
+            way.calculationMode = .linear
+            way.duration = GlyphMotion.wayIn
+            way.beginTime = layer.convertTime(now, from: nil)
+            // Kept after its end, where it shows nothing: Core Animation drops a removable motion of a layer that is not
+            // in a window yet when a transaction commits, and the part would stand at rest until its loop.
+            way.isRemovedOnCompletion = false
+            layer.add(way, forKey: "in.\(index)")
+            loops.append((track, now, seconds, from[index]))
         }
     }
 
@@ -428,14 +429,8 @@ private final class GlyphLayerView: NSView {
         typealias Way = (part: GlyphMotion.Part, channel: GlyphMotion.Channel, from: Double, to: Double)
         let ways = loops.map { loop -> Way in
             let track = loop.track
-            let value: Double
-            if now < loop.begin {
-                // Still on its tween into its loop, from rest or from where a way back stood: CA's ease-in-out.
-                let done = min(max(1 - (loop.begin - now) / Self.tween, 0), 1)
-                value = loop.from + (track.value(at: 0) - loop.from) * GlyphCurve.swing(done)
-            } else {
-                value = track.value(at: ((now - loop.begin) / loop.seconds).truncatingRemainder(dividingBy: 1))
-            }
+            // On its way in or in its loop, as the layer shows it now.
+            let value = track.value(after: now - loop.begin, from: loop.from, loop: loop.seconds)
             let whole = track.part == .core ? 360 / symmetry : 360
             let to = track.channel == .turn ? (value / whole).rounded() * whole : track.rest
             return (track.part, track.channel, value, to)
@@ -452,7 +447,7 @@ private final class GlyphLayerView: NSView {
         loops = []
         self.ways = []
         for (index, way) in ways.enumerated() where eased && abs(way.from - way.to) > 1e-6 {
-            let seconds = Self.tween + (way.channel == .turn ? 0.35 * min(abs(way.from - way.to), 180) / 180 : 0)
+            let seconds = Self.wayBack + (way.channel == .turn ? 0.35 * min(abs(way.from - way.to), 180) / 180 : 0)
             let back = CABasicAnimation(keyPath: Self.keyPath(way.channel))
             back.fromValue = shown(way.from, way.channel)
             back.toValue = shown(way.to, way.channel)

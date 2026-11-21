@@ -14,9 +14,10 @@ struct AgentPage: View {
     @ScaledMetric(relativeTo: .title) private var scaledMark: CGFloat = 64
     private var markSize: CGFloat { min(scaledMark, 96) }
     /// **The room over the mark for its motion**: a row of an inset grouped list cuts what passes its edge, and a mark
-    /// at work goes up to a quarter of its side over its place (the drop's bounce, 23 units of 100, under the bound of
-    /// `GlyphMotionTests`). The row's 8 points cut the drop's tip at the top of each bounce.
-    private var markRoom: CGFloat { max(8, markSize / 4) }
+    /// at work goes up to 0.3 of its side over its place (the drop's highest bounce, long at its top: 27.4 units of 100
+    /// in the smooth motion of 21 November 2026, under the bound of `GlyphMotionTests`). The row's 8 points cut the
+    /// drop's tip at the top of each bounce, and a quarter of the side cut it at its highest.
+    private var markRoom: CGFloat { max(8, markSize * 0.3) }
 
     private var entry: MobileAgent? { store.agent(agent) }
     private var state: AgentState {

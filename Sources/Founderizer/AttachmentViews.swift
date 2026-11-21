@@ -590,13 +590,20 @@ private struct SaveFileIcon: View {
 /// column's width** (fix round 2): its fixed 373 points made the whole chat wider than its column at a 960-point
 /// window, so his bubbles and the request cards ran under the panel. A picture that did not come is the approved tile
 /// in that plate (`plate`).
-private struct PictureTile: View {
+struct PictureTile: View {
     let store: FleetStore
     let file: MessageAttachment
     /// The message's side: his own on the right, an agent's on the left.
     let side: HorizontalAlignment
     /// The save icon at the picture's top right, while the pointer is on an agent's picture; nil otherwise.
     var save: (() -> Void)? = nil
+    /// **A square as wide as it is given, the picture whole in it** (owner feature `need_pictures`: a picture over an
+    /// option of a request, `NeedAnswerBox`), on the plate's fill and in a hairline, in the place of the chat's box. Its
+    /// states are the chat's own: the plate, "Reading…", and "Not loaded" with ↻.
+    var square = false
+    /// The tile reads its picture when it comes and when the hub answers again; false where a view reads its pictures
+    /// one after another (`NeedAnswerBox.pictureOptions`). Its ↻ reads it in both.
+    var readsItself = true
     @State private var slow = false
     /// The picture did not come and its tile said so: from then on the plate keeps the file's name until the picture
     /// comes, also while it is read again (fix round 3, items 4 and 15).
@@ -627,7 +634,7 @@ private struct PictureTile: View {
                 // Whole, at its own proportions, as large as the place allows: the place's height, and its width, which
                 // is the column's where the column is narrower.
                 Image(decorative: picture, scale: 1).resizable().aspectRatio(ratio, contentMode: .fit)
-                    .frame(maxWidth: min(Self.widest, Self.height * ratio))
+                    .frame(maxWidth: square ? .infinity : min(Self.widest, Self.height * ratio))
                     .clipShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                     .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                     .overlay(alignment: .topTrailing) {
@@ -640,19 +647,37 @@ private struct PictureTile: View {
                 plate(data: data, failed: failed)
             }
         }
-        // The picture at the top of its place, on the message's side; the plate fills the place. The place takes the room
-        // it is given up to its own width, and never more.
-        .frame(maxWidth: Self.place.width, minHeight: Self.place.height, maxHeight: Self.place.height,
-               alignment: Alignment(horizontal: side, vertical: .top))
+        .modifier(Place(square: square, side: side))
         // Read again when the hub answers again, so a picture that did not come while it was away comes by itself; after
         // a change of hub or database, which empties the store's files; and when this tile's number names another file.
-        .task(id: "\(store.isFresh) \(store.filesGeneration) \(file.sha256)") { if store.isFresh { await read() } }
+        .task(id: "\(store.isFresh) \(store.filesGeneration) \(file.sha256)") { if store.isFresh, readsItself { await read() } }
         .task {
             do { try await Task.sleep(for: LoadingLine.quiet) } catch { return }
             slow = true
         }
         .onChange(of: failed, initial: true) { _, now in if now { tiled = true } }
         .onChange(of: data != nil) { _, now in if now { tiled = false } }
+    }
+
+    /// Where the tile stands. **In a chat**: the picture at the top of its place, on the message's side; the plate fills
+    /// the place. The place takes the room it is given up to its own width, and never more. **Square**: the picture in
+    /// the middle of a square of the plate's fill, in a hairline, so a picture that is not square stands whole in it.
+    private struct Place: ViewModifier {
+        let square: Bool
+        let side: HorizontalAlignment
+
+        @ViewBuilder func body(content: Content) -> some View {
+            if square {
+                content.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(FleetStyle.bubble, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+                    .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(FleetStyle.hairline(0.10), lineWidth: 1))
+                    .aspectRatio(1, contentMode: .fit)
+                    .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
+            } else {
+                content.frame(maxWidth: PictureTile.place.width, minHeight: PictureTile.place.height,
+                              maxHeight: PictureTile.place.height, alignment: Alignment(horizontal: side, vertical: .top))
+            }
+        }
     }
 
     /// "Reading…" came: it is on the screen a frame later (`LoadingLine.shownAt`).

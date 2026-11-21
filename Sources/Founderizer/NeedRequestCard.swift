@@ -183,6 +183,15 @@ struct NeedAnswerBox: View {
     private static let recommendedWords = -2
     /// The room at the end of a row of options that combine, after its tick.
     private var tickInset: CGFloat { onStep ? 10 : 6 }
+    /// Owner feature `need_pictures` (API 1.285): the pictures of the options, one over each option's words, or nil
+    /// (`OwnerNeed.optionPictures`).
+    private var pictures: [MessageAttachment]? { need.optionPictures(features: store.state?.ui_features) }
+    /// The picture that the preview window shows now; nil while it is closed.
+    @State private var previewed: URL?
+    /// The pictures in one row, and a second row for the rest: three, as drawn, and **two in the card's own window**
+    /// (`NeedWindows`), which is 420 points wide and 340 at least: three there were squares of about 100 points, and the
+    /// iPhone's card, of about that width, draws two.
+    private var picturesInARow: Int { cardWindow == nil ? 3 : 2 }
 
     /// Three answers that fit almost every request. **A press sends it at once, as his words** (the owner, 18 November
     /// 2026: "If I click done, I want to send it directly! not paste it into the text input!"): it only filled the box,
@@ -230,6 +239,148 @@ struct NeedAnswerBox: View {
         .frame(minHeight: onStep ? FormMetrics.row : nil)
     }
 
+    /// One option of an item whose options combine: its words, and its tick at the right, which a press anywhere on the
+    /// row turns. `fills`: as high as it is given, as the words under the pictures of one row are.
+    private func tickRow(_ index: Int, option: String, marks: Bool, fills: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            Text(option).font(words).foregroundStyle(FleetStyle.text)
+                .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, marks ? RecommendedBadge.wordsRoom : 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle("", isOn: Binding(get: { ticked.contains(index) }, set: { on in
+                if on { ticked.insert(index) } else { ticked.remove(index) }
+            })).labelsHidden().toggleStyle(FleetCheckboxStyle()).accessibilityLabel(option)
+                .accessibilityHint(marks ? "Recommended" : "")
+        }
+        .padding(.leading, onStep ? 14 : 12).padding(.trailing, tickInset).padding(.vertical, 4)
+        .frame(minHeight: onStep ? FormMetrics.row : nil, maxHeight: fills ? .infinity : nil)
+        .background(RoundedRectangle(cornerRadius: FormMetrics.inner).fill(Color.white.opacity(0.05)))
+        .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
+        .onTapGesture { if ticked.contains(index) { ticked.remove(index) } else { ticked.insert(index) } }
+        .accessibilityIdentifier("need-tick-\(need.id)-\(index)")
+        // its badge ends before the tick's column, which stays clear
+        .recommendedBadge(by: marks ? need.by : nil, ground: ground, inset: tickInset + IconMetrics.side)
+    }
+
+    /// Send, with how many options he ticked, under options that combine.
+    private var sendTicked: some View {
+        HStack {
+            Spacer()
+            Button("Send \(ticked.count)") {
+                guard !(onStep && SecondClick.isNow) else { return }
+                let chosen = Array(ticked)
+                answered?(false, 0)
+                Task { await store.answer(need, choices: chosen) }
+            }.buttonStyle(FleetPrimaryButtonStyle()).disabled(ticked.isEmpty || !store.canWrite)
+                .accessibilityIdentifier("need-send-ticked-\(need.id)")
+            // On a step it stands in the middle, as a step's one button does.
+            if onStep { Spacer() }
+        }
+    }
+
+    /// **The options as pictures** (owner feature `need_pictures`; the owner's "Yes, as drawn" of 21 November 2026 to
+    /// the drawings of Needs you and of a chat's card): three in a row, and a second row for a fourth to a sixth, each
+    /// picture over its option's words (two in a row in the card's own window, `picturesInARow`). **A press on a
+    /// picture opens it whole in the preview window, and answers nothing**: he looks at it before he chooses. A press
+    /// on the words answers at once, as an option's row does, and
+    /// the number keys mark or tick them as they do the rows (`key`). Where the options combine, the words have their
+    /// tick, and Send stands under the pictures. The badge of the answer that the agent recommends stands on the top
+    /// edge of its picture, the top of its option.
+    private func pictureOptions(_ pictures: [MessageAttachment], recommended: NeedRecommended.Row?) -> some View {
+        let waiting = AnswerWaits.shared.press(of: need)
+        let inARow = picturesInARow
+        let rows = stride(from: 0, to: pictures.count, by: inARow).map {
+            Array($0..<min($0 + inARow, pictures.count))
+        }
+        return VStack(alignment: .leading, spacing: onStep ? 12 : 10) {
+            ForEach(rows, id: \.self) { row in
+                HStack(alignment: .top, spacing: onStep ? 12 : 10) {
+                    ForEach(0..<inARow, id: \.self) { column in
+                        if column < row.count {
+                            pictureOption(row[column], picture: pictures[row[column]],
+                                          marks: recommended == .option(row[column]), waiting: waiting)
+                        } else {
+                            // the place of an option that the row does not have, so each picture keeps its width
+                            Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
+                        }
+                    }
+                }
+                // each option's words as high as the highest in its row
+                .fixedSize(horizontal: false, vertical: true)
+                // the room over a row for the badge's upper half, for each of its pictures, so they stand at one height
+                .padding(.top, row.contains { recommended == .option($0) } ? RecommendedBadge.room : 0)
+            }
+            if need.combines { sendTicked }
+        }
+        // **The pictures are read one after another, in the order of the options** (as the iPhone's card does): six
+        // large pictures read at once can each end "Not loaded" on a slow link. A picture whose bytes are here costs
+        // nothing; a change of hub or generation, and the hub's answer after a break, read again what did not come.
+        .task(id: "\(store.isFresh) \(store.filesGeneration) \(pictures.map(\.sha256))") {
+            guard store.isFresh else { return }
+            for file in pictures where store.heldBytes(of: file) == nil {
+                if Task.isCancelled { return }
+                await store.load(file)
+            }
+        }
+    }
+
+    /// One option of `pictureOptions`: its picture, which opens, and under it its words, which answer or tick.
+    private func pictureOption(_ index: Int, picture: MessageAttachment, marks: Bool,
+                               waiting: WaitingPresses.Press?) -> some View {
+        let option = need.choices[index]
+        let sending = waiting?.choice == index
+        return VStack(spacing: 8) {
+            Button { preview(picture) } label: {
+                PictureTile(store: store, file: picture, side: .center, square: true, readsItself: false)
+            }
+                .buttonStyle(.plain)
+                .help(String(l10n: "Open the picture of \(option)"))
+                .accessibilityLabel(String(l10n: "The picture of \(option)"))
+                .accessibilityIdentifier("need-picture-\(need.id)-\(index)")
+                // the picture takes its whole square first; the words take the rest of the row's height
+                .layoutPriority(1)
+            // What did not happen when he opened it, under the picture, as under a chat's file.
+            if let problem = store.fileProblems[picture.id] {
+                Text(problem).font(FormMetrics.detail).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if need.combines {
+                tickRow(index, option: option, marks: false, fills: true)
+            } else {
+                Button {
+                    guard !(onStep && SecondClick.isNow) else { return }
+                    marked = nil
+                    answered?(false, tops[index] ?? 0)
+                    AnswerWaits.shared.press(need, choice: index, store: store)
+                } label: {
+                    row(option, sendingSince: sending ? waiting?.since : nil).frame(maxHeight: .infinity)
+                }
+                    .buttonStyle(NeedOptionButtonStyle(marked: marked == index))
+                    .stands(in: Self.space, on: onStep) { tops[index] = $0 }
+                    .accessibilityValue(sending ? "Sending" : marks ? "Recommended" : "")
+                    .accessibilityIdentifier("need-option-\(need.id)-\(index)")
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .recommendedBadge(by: marks ? need.by : nil, ground: ground, makesRoom: false)
+    }
+
+    /// The picture whole, in the preview window, as a chat's file opens (`ChatFileCopy`): its bytes from the hub, checked,
+    /// written where only this user can read them.
+    private func preview(_ file: MessageAttachment) {
+        Task {
+            guard let data = await store.bytes(of: file) else { return }
+            let result = await Task.detached(priority: .userInitiated) { Result { try ChatFileCopy.written(data, of: file) } }.value
+            switch result {
+            case .success(let place):
+                previewed = place
+                store.setFileProblem(nil, for: file.id)
+            case .failure:
+                store.setFileProblem(String(l10n: "This file did not open on this Mac."), for: file.id)
+            }
+        }
+    }
+
     var body: some View {
         // owner feature need_recommended: the row that has the badge of the answer that the agent recommends
         let recommended = recommendation
@@ -270,43 +421,17 @@ struct NeedAnswerBox: View {
                             .recommendedBadge(by: marks ? need.by : nil, ground: ground)
                     }
                 }
+            } else if let pictures {
+                // owner feature need_pictures: the options as pictures, over their words
+                pictureOptions(pictures, recommended: recommended)
             } else if need.combines {
                 // **Options that combine** (the owner's yes of 9 November 2026): a tick at the right of each row, and one
                 // Send with how many he ticked; it stays off while none is ticked.
                 VStack(alignment: .leading, spacing: onStep ? 8 : 7) {
                     ForEach(Array(need.choices.enumerated()), id: \.offset) { index, option in
-                        let marks = recommended == .option(index)
-                        HStack(spacing: 8) {
-                            Text(option).font(words).foregroundStyle(FleetStyle.text)
-                                .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                                .padding(.vertical, marks ? RecommendedBadge.wordsRoom : 0)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Toggle("", isOn: Binding(get: { ticked.contains(index) }, set: { on in
-                                if on { ticked.insert(index) } else { ticked.remove(index) }
-                            })).labelsHidden().toggleStyle(FleetCheckboxStyle()).accessibilityLabel(option)
-                                .accessibilityHint(marks ? "Recommended" : "")
-                        }
-                        .padding(.leading, onStep ? 14 : 12).padding(.trailing, tickInset).padding(.vertical, 4)
-                        .frame(minHeight: onStep ? FormMetrics.row : nil)
-                        .background(RoundedRectangle(cornerRadius: FormMetrics.inner).fill(Color.white.opacity(0.05)))
-                        .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
-                        .onTapGesture { if ticked.contains(index) { ticked.remove(index) } else { ticked.insert(index) } }
-                        .accessibilityIdentifier("need-tick-\(need.id)-\(index)")
-                        // its badge ends before the tick's column, which stays clear
-                        .recommendedBadge(by: marks ? need.by : nil, ground: ground, inset: tickInset + IconMetrics.side)
+                        tickRow(index, option: option, marks: recommended == .option(index))
                     }
-                    HStack {
-                        Spacer()
-                        Button("Send \(ticked.count)") {
-                            guard !(onStep && SecondClick.isNow) else { return }
-                            let chosen = Array(ticked)
-                            answered?(false, 0)
-                            Task { await store.answer(need, choices: chosen) }
-                        }.buttonStyle(FleetPrimaryButtonStyle()).disabled(ticked.isEmpty || !store.canWrite)
-                            .accessibilityIdentifier("need-send-ticked-\(need.id)")
-                        // On a step it stands in the middle, as a step's one button does.
-                        if onStep { Spacer() }
-                    }
+                    sendTicked
                 }
             } else {
                 let waiting = AnswerWaits.shared.press(of: need)
@@ -410,6 +535,7 @@ struct NeedAnswerBox: View {
             }
         }
         .coordinateSpace(.named(Self.space))
+        .quickLookPreview($previewed)
         // The keys of the request at hand, through the page's one watch; a card in a chat has none.
         .background { if let keys { StepKeysBox(keys: keys, need: need.id, take: key) } }
         .task { if takesCursor { focused = true } }
@@ -1428,8 +1554,10 @@ private extension View {
 
     /// The badge of the answer that `agent` recommends on this row (`RecommendedBadge`), when it is not nil: its middle
     /// on the row's top edge and its end `inset` from the row's, with room over the row for its upper half. The row is
-    /// one view with or without it, so a reading that brings the badge keeps the row's own state.
-    func recommendedBadge(by agent: String?, ground: Color, inset: CGFloat = RecommendedBadge.inset) -> some View {
+    /// one view with or without it, so a reading that brings the badge keeps the row's own state. `makesRoom` false:
+    /// the row's line makes that room for each of its options (`pictureOptions`), so they stand at one height.
+    func recommendedBadge(by agent: String?, ground: Color, inset: CGFloat = RecommendedBadge.inset,
+                          makesRoom: Bool = true) -> some View {
         overlay(alignment: .topTrailing) {
             // The guide stands on a view that is always there: on the badge inside the `if`, the overlay did not read
             // it, and the badge hung inside the row.
@@ -1439,6 +1567,6 @@ private extension View {
             .alignmentGuide(.top) { $0[VerticalAlignment.center] }
             .padding(.trailing, inset)
         }
-        .padding(.top, agent == nil ? 0 : RecommendedBadge.room)
+        .padding(.top, agent == nil || !makesRoom ? 0 : RecommendedBadge.room)
     }
 }

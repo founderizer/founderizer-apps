@@ -1,86 +1,105 @@
 import SwiftUI
 
-/// **How a glyph moves while its agent works or thinks: a motion of its own for each of the eleven kinds** (the owner,
-/// 20 November 2026: "also I want you to design more movement for the "thinking" status of every agent icon, so there
-/// is more variety", and "A · Own character" to the moving mock-up of
-/// `founderizer-plans/agent-icon-thinking-2026-11-20`, whose function `own` is the reference for every number here).
-/// The sparkle twinkles in quarter turns, the clover tumbles, the flower closes and opens, the burst ticks as a gear,
-/// the squircle is jelly, the hexagon turns as a nut, the diamond flips with a hop, the triangle jumps onto its next
-/// side, the circle's dot runs round, the moon swings as a cradle and the drop bounces.
+/// **How a glyph moves while its agent works or thinks: smooth and without a stop, in a way of its own for each of the
+/// eleven kinds** (the owner, 21 November 2026: "can we make the movements continuous and smooth? with a bit more
+/// variety and lively", then "Smooth" to the moving mock-up `mock-smooth-2026-11-21.html` of
+/// `founderizer-plans/agent-icon-thinking-2026-11-20`, whose table `FLOW` is the reference for every formula here; it
+/// replaces the eleven motions of keys of 20 November). The sparkle turns and pulses; the clover turns and sways; the
+/// flower turns while it closes and opens; the burst spins with a pulsing ring; the squircle is jelly on its base while
+/// its dot goes round; the hexagon and its core turn against each other; the diamond turns about its upright axis as a
+/// gem and floats; the triangle hops and rolls a side further with each hop; the circle's dot runs round and pulls the
+/// circle after it; the moon swings wider and narrower while its star twinkles; the drop bounces at changing heights,
+/// leans, and its dot sloshes.
 ///
 /// A glyph has four parts, one in the other: the **holder**, which moves and squeezes along the screen's axes; the
 /// **figure**, which turns with its gradient; the **orbit**, which turns the inner mark about the centre; and the
-/// **core**, the inner mark itself, which turns and changes its size about its own place (`GlyphKind.coreAnchor`). Each
-/// track is one value of one part over one loop, as the keyframes of an animation of the web: its keys at their shares
-/// of the loop, each eased to the next by its curve (linear with none). Turns are in degrees, clockwise on the screen;
-/// a lift is in units of the glyph's square (100 is its side), up negative. The Mac app and the iPhone app play the
-/// tracks in their own layers (`GlyphLayerView`, `MarkLayerView`), each glyph at its own pace (`GlyphLook.phase`), from
-/// the glyph at rest. The Windows app keeps the three earlier moves (`GlyphKind.motion`).
+/// **core**, the inner mark itself, which moves, turns and changes its size about its own place (`GlyphKind.coreAnchor`).
+/// Each track is one value of one part, **a smooth function of the loop's share** (0 to 1): no value holds still, no
+/// value goes too far and comes back, and a turn never stops or goes backward, its speed only goes up and down. The
+/// tracks of one part move at different rhythms in one loop of 6 to 9.6 s, so a glyph repeats itself only after that.
+/// Turns are in degrees, clockwise on the screen; a move is in units of the glyph's square (100 is its side), to the
+/// right and down (up is negative). The Mac app and the iPhone app play the tracks in their own layers
+/// (`GlyphLayerView`, `MarkLayerView`), each glyph at its own pace (`GlyphLook.phase`), from the glyph at rest
+/// (`value(after:from:loop:)`). The Windows app keeps the three earlier moves (`GlyphKind.motion`).
 public struct GlyphMotion: Sendable {
     public enum Part: Sendable, CaseIterable { case holder, figure, orbit, core }
-    public enum Channel: Sendable { case turn, scale, scaleX, scaleY, lift }
-
-    public struct Key: Sendable {
-        /// The key's share of the loop, from 0 to 1.
-        public let at: Double
-        public let value: Double
-        /// From this key to the next; nil: linear.
-        public let curve: GlyphCurve?
-    }
+    /// A turn; a size on both axes or on one; a move to the side (`side`, to the right) or up and down (`lift`, down).
+    public enum Channel: Sendable, CaseIterable { case turn, scale, scaleX, scaleY, side, lift }
 
     public struct Track: Sendable {
         public let part: Part
         public let channel: Channel
-        /// The length of one loop in seconds, at the kind's own pace.
-        public let loop: Double
-        /// From the first key at 0 to the last at 1.
-        public let keys: [Key]
+        /// The value at a share of the loop: the same at 1 as at 0, and a turn a whole number of its part's own steps
+        /// further.
+        public let formula: @Sendable (Double) -> Double
 
-        /// The value at a share of the loop: its keys mixed by their curves.
-        public func value(at share: Double) -> Double {
-            let share = min(max(share, 0), 1)
-            guard let next = keys.firstIndex(where: { $0.at > share }) else { return keys[keys.count - 1].value }
-            guard next > 0 else { return keys[0].value }
-            let from = keys[next - 1], to = keys[next], gap = to.at - from.at
-            let progress = gap > 0 ? (share - from.at) / gap : 1
-            return from.value + (to.value - from.value) * (from.curve?(progress) ?? progress)
+        public init(part: Part, channel: Channel, formula: @escaping @Sendable (Double) -> Double) {
+            self.part = part; self.channel = channel; self.formula = formula
         }
 
-        /// **The loop as points for an animation that mixes its points in straight lines**: each key, and in each
-        /// part with a curve a point for each 120th of a second (at a loop of `seconds`), so a curve that goes a little
-        /// too far keeps its shape. Shares of the loop, from 0 to 1.
+        /// The value at a share of the loop, from 0 to 1.
+        public func value(at share: Double) -> Double { formula(share) }
+
+        /// **The loop as points for an animation that mixes its points in straight lines**: a point for each 60th of a
+        /// second at a loop of `seconds`, at even shares of the loop from 0 to 1, so the line between two points stays
+        /// within a small part of a degree or a unit of the function.
         public func samples(over seconds: Double) -> [(at: Double, value: Double)] {
-            var points: [(at: Double, value: Double)] = []
-            for (one, two) in zip(keys, keys.dropFirst()) {
-                points.append((one.at, one.value))
-                guard let curve = one.curve, two.at > one.at else { continue }
-                let count = max(4, Int(((two.at - one.at) * seconds * 120).rounded(.up)))
-                for step in 1..<count {
-                    let part = Double(step) / Double(count)
-                    let value = one.value + (two.value - one.value) * curve(part)
-                    points.append((one.at + (two.at - one.at) * part, value))
-                }
+            let count = max(8, Int((seconds * GlyphMotion.pointsPerSecond).rounded(.up)))
+            return (0...count).map { step in
+                let share = Double(step) / Double(count)
+                return (share, value(at: share))
             }
-            if let last = keys.last { points.append((last.at, last.value)) }
-            return points
         }
 
-        /// The value of the part at rest: no turn, the whole size, no lift.
+        /// The value of the part at rest: no turn, the whole size, no move.
         public var rest: Double {
             switch channel {
-            case .turn, .lift: 0
+            case .turn, .side, .lift: 0
             case .scale, .scaleX, .scaleY: 1
+            }
+        }
+
+        /// **The value `time` seconds after the motion began, with its way in**: the part stood at `from` (at rest, or
+        /// where a way back to rest had brought it), and its loop takes `seconds` at the glyph's own pace. For the first
+        /// `GlyphMotion.wayIn` seconds the value mixes from `from` to the loop, which runs from its start meanwhile, so
+        /// the motion grows from the glyph as it stood, with no jump and no sudden speed at either end of the way in;
+        /// after it, the loop alone.
+        public func value(after time: Double, from: Double, loop seconds: Double) -> Double {
+            let time = max(time, 0), looped = value(at: (time / seconds).truncatingRemainder(dividingBy: 1))
+            guard time < GlyphMotion.wayIn else { return looped }
+            let done = time / GlyphMotion.wayIn, grown = done * done * (3 - 2 * done)
+            return from + (looped - from) * grown
+        }
+
+        /// The way in as points for an animation that mixes its points in straight lines, at shares of
+        /// `GlyphMotion.wayIn`, from 0 (the part at `from`) to 1 (the loop at its own place).
+        public func wayInSamples(from: Double, loop seconds: Double) -> [(at: Double, value: Double)] {
+            let count = Int((GlyphMotion.wayIn * 2 * GlyphMotion.pointsPerSecond).rounded(.up))
+            return (0...count).map { step in
+                let share = Double(step) / Double(count)
+                return (share, value(after: share * GlyphMotion.wayIn, from: from, loop: seconds))
             }
         }
     }
 
+    /// The length of one loop in seconds, at the kind's own pace: each track of the kind repeats in it.
+    public let loop: Double
     public let tracks: [Track]
     /// The point that the holder squeezes about, and the point that the figure turns about, in the glyph's square.
     public let holderAnchor: UnitPoint
     public let figureAnchor: UnitPoint
+
+    /// **The strength of every motion**: the mock-up's "Smooth" (1.4 was "Smooth, livelier", which he did not choose).
+    public static let strength = 1.1
+    /// **The way in from the glyph at rest, in seconds** (`Track.value(after:from:loop:)`): at the loop's start several
+    /// values are not at rest (the flower is smaller, the drop is squeezed, the triangle's dot is large).
+    public static let wayIn = 0.4
+    /// The points of a loop for each second of it, for the apps' layers (`Track.samples(over:)`).
+    public static let pointsPerSecond = 60.0
 }
 
-/// A curve of the web's `cubic-bezier`: the eased share at a share of the time.
+/// A curve of the web's `cubic-bezier`: the eased share at a share of the time. The apps' layers use it to know where
+/// a part stands on Core Animation's own curve (`easeOut`).
 public struct GlyphCurve: Sendable, Equatable {
     public let x1: Double, y1: Double, x2: Double, y2: Double
 
@@ -88,14 +107,8 @@ public struct GlyphCurve: Sendable, Equatable {
         self.x1 = x1; self.y1 = y1; self.x2 = x2; self.y2 = y2
     }
 
-    /// The mock-up's four curves, and the web's `ease-in-out` of a swing that goes and comes back.
-    public static let inOut = GlyphCurve(0.45, 0, 0.55, 1)
-    public static let over = GlyphCurve(0.3, 1.5, 0.5, 1)
-    public static let out = GlyphCurve(0.2, 0.7, 0.3, 1)
-    public static let into = GlyphCurve(0.6, 0, 0.9, 0.4)
-    public static let swing = GlyphCurve(0.42, 0, 0.58, 1)
-    /// The circle's ring: slow at its start point, fast between.
-    public static let orbit = GlyphCurve(0.65, 0, 0.35, 1)
+    /// Core Animation's ease-out, of the way back to rest.
+    public static let easeOut = GlyphCurve(0, 0, 0.58, 1)
 
     private func at(_ t: Double, _ a: Double, _ b: Double) -> Double {
         let u = 1 - t
@@ -116,34 +129,20 @@ public struct GlyphCurve: Sendable, Equatable {
 
 // MARK: - The eleven motions
 
-private typealias K = GlyphMotion.Key
+/// The mock-up's words for its formulas: a whole wave at each whole share (`S`, `C`), the share in the current wave
+/// (`fr`), and a hop from 0 up to 1 and back to 0 in one wave, softer at its ends for a larger `k` (`arc`).
+private func S(_ x: Double) -> Double { sin(2 * .pi * x) }
+private func C(_ x: Double) -> Double { cos(2 * .pi * x) }
+private func fr(_ x: Double) -> Double { x - x.rounded(.down) }
+private func arc(_ p: Double, _ k: Double) -> Double { pow(sin(.pi * p), 2 * k) }
 
-/// A loop of keys `(share, value, curve)`, with a key at 0 that holds the first value when the first key comes later.
-private func track(_ part: GlyphMotion.Part, _ channel: GlyphMotion.Channel, _ loop: Double,
-                   _ keys: [(Double, Double, GlyphCurve?)]) -> GlyphMotion.Track {
-    var made = keys.map { K(at: $0.0, value: $0.1, curve: $0.2) }
-    if let first = made.first, first.at > 0 { made.insert(K(at: 0, value: first.value, curve: nil), at: 0) }
-    return GlyphMotion.Track(part: part, channel: channel, loop: loop, keys: made)
+private func track(_ part: GlyphMotion.Part, _ channel: GlyphMotion.Channel,
+                   _ formula: @escaping @Sendable (Double) -> Double) -> GlyphMotion.Track {
+    GlyphMotion.Track(part: part, channel: channel, formula: formula)
 }
 
-/// `steps` turns of `degrees` each over `steps` times `step` seconds: each starts at `from` and ends at `to` of its own
-/// step (shares of it) on its curve, and the part rests between them. The loop ends a whole number of turns round.
-private func steps(_ part: GlyphMotion.Part, _ steps: Int, _ degrees: Double, _ step: Double, from: Double, to: Double,
-                   _ curve: GlyphCurve) -> GlyphMotion.Track {
-    var keys: [(Double, Double, GlyphCurve?)] = []
-    for index in 0..<steps {
-        keys.append(((Double(index) + from) / Double(steps), Double(index) * degrees, curve))
-        keys.append(((Double(index) + to) / Double(steps), Double(index + 1) * degrees, nil))
-    }
-    keys.append((1, Double(steps) * degrees, nil))
-    return track(part, .turn, Double(steps) * step, keys)
-}
-
-/// A squeeze along both axes: two tracks with the same keys, `(share, x, y, curve)`.
-private func squeeze(_ loop: Double, _ keys: [(Double, Double, Double, GlyphCurve?)]) -> [GlyphMotion.Track] {
-    [track(.holder, .scaleX, loop, keys.map { ($0.0, $0.1, $0.3) }),
-     track(.holder, .scaleY, loop, keys.map { ($0.0, $0.2, $0.3) })]
-}
+/// The square's units of a point of it, from its top-left corner (100 is its side).
+private func point(_ x: Double, _ y: Double) -> UnitPoint { UnitPoint(x: x / 100, y: y / 100) }
 
 extension GlyphKind {
     /// **The turns after which the inner mark looks the same**: four for the stars of the sparkle and the moon and for
@@ -157,94 +156,115 @@ extension GlyphKind {
         }
     }
 
-    /// **The motion of this kind while its agent works or thinks** (`GlyphMotion`).
+    /// **The motion of this kind while its agent works or thinks** (`GlyphMotion`): the mock-up's `FLOW`, with `u` the
+    /// share of the loop and `e` the strength.
     public var workMotion: GlyphMotion {
-        let io = GlyphCurve.inOut, over = GlyphCurve.over, out = GlyphCurve.out, into = GlyphCurve.into
-        let centre = UnitPoint.center
+        let e = GlyphMotion.strength, centre = UnitPoint.center
         switch self {
         case .sparkle:
-            // Twinkle: a quarter turn that goes a little too far, while the glyph grows and the core turns back.
-            return GlyphMotion(tracks: [
-                steps(.figure, 4, 90, 1.2, from: 0, to: 0.4, over),
-                track(.holder, .scale, 1.2, [(0, 1, nil), (0.2, 1.2, nil), (0.4, 1, nil), (1, 1, nil)]),
-                steps(.core, 4, -180, 1.2, from: 0, to: 0.5, io),
-                track(.core, .scale, 1.2, [(0, 1, nil), (0.25, 1.7, nil), (0.5, 1, nil), (1, 1, nil)]),
+            // It turns and pulses, its core turns back twice as fast and beats with it, and it floats a little.
+            return GlyphMotion(loop: 9.6, tracks: [
+                track(.figure, .turn) { u in 720 * u + 11 * e * S(8 * u) },
+                track(.holder, .scale) { u in 1 + 0.13 * e * (0.7 + 0.3 * S(u)) * S(8 * u + 0.25) },
+                track(.holder, .lift) { u in -3 * e * S(2 * u) },
+                track(.core, .turn) { u in -1440 * u },
+                track(.core, .scale) { u in 1 + 0.4 * e * S(8 * u + 0.75) + 0.1 * S(3 * u) },
             ], holderAnchor: centre, figureAnchor: centre)
         case .clover:
-            // Tumble: a quarter turn with a squeeze, and the core swells after it.
-            return GlyphMotion(tracks: [
-                steps(.figure, 4, 90, 1.4, from: 0.1, to: 0.5, over),
-                track(.holder, .scale, 1.4, [(0, 0.9, nil), (0.25, 1.08, nil), (0.5, 1, nil), (0.88, 1, nil),
-                                             (1, 0.9, nil)]),
-                track(.core, .scale, 1.4, [(0, 1, nil), (0.45, 1, nil), (0.58, 1.6, nil), (0.78, 1, nil), (1, 1, nil)]),
+            // It turns, sways from side to side with a small hop at each quarter, and squeezes as it lands.
+            return GlyphMotion(loop: 8.4, tracks: [
+                track(.figure, .turn) { u in 720 * u + 20 * e * S(4 * u) },
+                track(.holder, .side) { u in 7 * e * S(2 * u) },
+                track(.holder, .lift) { u in -5 * e * arc(fr(4 * u), 1) },
+                track(.holder, .scaleX) { u in 1 + 0.07 * e * C(4 * u) },
+                track(.holder, .scaleY) { u in 1 - 0.07 * e * C(4 * u) },
+                track(.core, .scale) { u in 1 + 0.4 * e * S(4 * u + 0.3) },
             ], holderAnchor: centre, figureAnchor: centre)
         case .flower:
-            // Bloom: it closes, opens a little too far with a sixth of a turn, and its core answers.
-            return GlyphMotion(tracks: [
-                track(.holder, .scale, 2.6, [(0, 1, io), (0.35, 0.72, over), (0.62, 1.08, io), (0.78, 1, nil),
-                                             (1, 1, nil)]),
-                steps(.figure, 6, 60, 2.6, from: 0.35, to: 0.7, io),
-                track(.core, .scale, 2.6, [(0, 1, io), (0.35, 1.55, io), (0.62, 0.8, io), (0.8, 1, nil), (1, 1, nil)]),
+            // It turns while it closes and opens, and its core opens as it closes.
+            return GlyphMotion(loop: 7.8, tracks: [
+                track(.figure, .turn) { u in 360 * u + 14 * e * S(3 * u) },
+                track(.holder, .scale) { u in 0.94 + 0.12 * e * S(3 * u) + 0.03 * S(6 * u + 0.3) },
+                track(.holder, .side) { u in 3 * e * S(u) },
+                track(.core, .scale) { u in 1 - 0.4 * e * S(3 * u) },
             ], holderAnchor: centre, figureAnchor: centre)
         case .burst:
-            // Gear: an eighth of a turn at each tick.
-            return GlyphMotion(tracks: [
-                steps(.figure, 8, 45, 0.62, from: 0, to: 0.38, over),
-                track(.core, .scale, 0.62, [(0, 1, nil), (0.2, 1.3, nil), (0.5, 1, nil), (1, 1, nil)]),
-                track(.holder, .scale, 0.62, [(0, 1, nil), (0.2, 0.93, nil), (0.45, 1, nil), (1, 1, nil)]),
+            // It spins with a ripple in its speed, and its ring pulses.
+            return GlyphMotion(loop: 6, tracks: [
+                track(.figure, .turn) { u in 720 * u + 5 * e * S(16 * u) },
+                track(.holder, .scale) { u in 1 + 0.06 * e * S(8 * u) },
+                track(.holder, .lift) { u in -2 * e * S(2 * u) },
+                track(.core, .scale) { u in 1 + 0.2 * e * S(4 * u) + 0.08 * e * S(16 * u + 0.3) },
             ], holderAnchor: centre, figureAnchor: centre)
         case .squircle:
-            // Jelly: it squeezes one way and the other while its dot goes from corner to corner.
-            return GlyphMotion(tracks: squeeze(1.6, [(0, 1, 1, io), (0.25, 1.16, 0.86, io), (0.5, 1, 1, io),
-                                                     (0.75, 0.86, 1.16, io), (1, 1, 1, nil)])
-                                   + [steps(.orbit, 4, 90, 0.8, from: 0, to: 0.5, io)],
-                               holderAnchor: centre, figureAnchor: centre)
+            // Jelly on its base, wider and narrower, and it leans a little while its dot goes round.
+            let jelly: @Sendable (Double) -> Double = { u in 0.14 * e * (0.75 + 0.25 * S(u)) * S(5 * u) }
+            return GlyphMotion(loop: 8, tracks: [
+                track(.holder, .scaleX) { u in 1 + jelly(u) },
+                track(.holder, .scaleY) { u in 1 - jelly(u) },
+                track(.figure, .turn) { u in 9 * e * S(2 * u) },
+                track(.orbit, .turn) { u in 720 * u + 18 * e * S(4 * u) },
+                track(.holder, .side) { u in 3 * e * S(u + 0.2) },
+            ], holderAnchor: point(50, 94), figureAnchor: centre)
         case .hexagon:
-            // Nut: a sixth of a turn, and its core turns back.
-            return GlyphMotion(tracks: [
-                steps(.figure, 6, 60, 2, from: 0, to: 0.3, io),
-                steps(.core, 6, -120, 2, from: 0.45, to: 0.78, io),
-                track(.holder, .scale, 2, [(0, 1, nil), (0.15, 0.88, nil), (0.3, 1, nil), (1, 1, nil)]),
+            // It turns one way and its core the other, faster, while it beats and floats.
+            return GlyphMotion(loop: 9, tracks: [
+                track(.figure, .turn) { u in 360 * u + 12 * e * S(3 * u) },
+                track(.core, .turn) { u in -1080 * u + 10 * e * S(6 * u) },
+                track(.holder, .scale) { u in 1 + 0.08 * e * S(6 * u) },
+                track(.core, .scale) { u in 1 + 0.28 * e * S(3 * u + 0.4) },
+                track(.holder, .lift) { u in -4 * e * S(2 * u) },
             ], holderAnchor: centre, figureAnchor: centre)
         case .diamond:
-            // Flip: about its upright axis with a small hop, there and back.
-            return GlyphMotion(tracks: [
-                track(.holder, .scaleX, 2.4, [(0, 1, io), (0.21, -1, nil), (0.5, -1, io), (0.71, 1, nil), (1, 1, nil)]),
-                track(.holder, .lift, 2.4, [(0, 0, out), (0.105, -11, into), (0.21, 0, nil), (0.5, 0, out),
-                                            (0.605, -11, into), (0.71, 0, nil), (1, 0, nil)]),
-                steps(.core, 4, 90, 1.2, from: 0, to: 0.42, io),
+            // A gem that turns about its upright axis (never thinner than 0.14 of itself, never mirrored) and floats.
+            return GlyphMotion(loop: 7.2, tracks: [
+                track(.holder, .scaleX) { u in
+                    let c = C(3 * u + 0.06 * S(2 * u))
+                    return (0.02 + 0.98 * c * c).squareRoot()
+                },
+                track(.holder, .lift) { u in -5 * e * (0.5 + 0.5 * S(2 * u - 0.25)) },
+                track(.figure, .turn) { u in 5 * e * S(u) },
+                track(.core, .turn) { u in 720 * u },
+                track(.core, .scale) { u in 1 + 0.25 * e * S(6 * u) },
             ], holderAnchor: centre, figureAnchor: centre)
         case .triangle:
-            // Jump: it squeezes on its base, jumps and lands on its next side.
-            let jump = track(.holder, .lift, 1.6, [(0, 0, io), (0.15, 3, out), (0.42, -16, into), (0.66, 0, nil),
-                                                   (1, 0, nil)])
-            let land = squeeze(1.6, [(0, 1, 1, io), (0.15, 1.12, 0.86, out), (0.3, 0.92, 1.1, io),
-                                     (0.6, 0.95, 1.06, into), (0.66, 1.14, 0.84, out), (0.82, 1, 1, nil),
-                                     (1, 1, 1, nil)])
-            let swell = track(.core, .scale, 1.6, [(0, 1, nil), (0.66, 1, nil), (0.75, 1.6, nil), (0.92, 1, nil),
-                                                   (1, 1, nil)])
-            return GlyphMotion(tracks: [jump] + land + [steps(.figure, 3, 120, 1.6, from: 0.15, to: 0.66, io), swell],
-                               holderAnchor: UnitPoint(x: 0.5, y: 0.92), figureAnchor: UnitPoint(x: 0.5, y: 0.57))
+            // It hops on its base, higher and lower, and rolls a side further with each hop; its dot swells as it lands.
+            return GlyphMotion(loop: 6.4, tracks: [
+                track(.holder, .lift) { u in -(12 + 4 * S(2 * u)) * e * arc(fr(6 * u), 0.8) },
+                track(.figure, .turn) { u in 120 * (6 * u - 0.11 * S(6 * u)) },
+                track(.holder, .scaleX) { u in 1 + 0.08 * e * C(6 * u) },
+                track(.holder, .scaleY) { u in 1 - 0.1 * e * C(6 * u) },
+                track(.core, .scale) { u in 1 + 0.35 * e * pow(0.5 + 0.5 * C(6 * u), 2) },
+            ], holderAnchor: point(50, 92), figureAnchor: point(50, 57))
         case .circle:
-            // Orbit: the ring with its dot runs round, slow at its start point; the glyph beats at each round.
-            return GlyphMotion(tracks: [
-                track(.orbit, .turn, 1.5, [(0, 0, .orbit), (1, 360, nil)]),
-                track(.holder, .scale, 1.5, [(0, 1.08, io), (0.22, 1, nil), (0.78, 1, io), (1, 1.08, nil)]),
+            // Its dot runs round, faster and slower, and pulls the circle a little after it.
+            let orbit: @Sendable (Double) -> Double = { u in 1440 * u + 30 * e * S(4 * u) + 10 * S(u) }
+            return GlyphMotion(loop: 8, tracks: [
+                track(.orbit, .turn, orbit),
+                track(.core, .scale) { u in 1 + 0.15 * e * S(3 * u) },
+                track(.holder, .scale) { u in 1 + 0.05 * e * S(4 * u + 0.3) },
+                // Towards the dot, which stands 40 degrees before the orbit's turn.
+                track(.holder, .side) { u in 2.5 * e * cos((orbit(u) - 40) * .pi / 180) },
+                track(.holder, .lift) { u in 2.5 * e * sin((orbit(u) - 40) * .pi / 180) - 2 * e * S(2 * u) },
             ], holderAnchor: centre, figureAnchor: centre)
         case .moon:
-            // Cradle: it swings from a point at its top while its star twinkles.
-            return GlyphMotion(tracks: [
-                track(.figure, .turn, 2.4, [(0, -20, .swing), (0.5, 20, .swing), (1, -20, nil)]),
-                track(.core, .scale, 1.2, [(0, 1, io), (0.25, 0.4, io), (0.5, 1.45, io), (0.75, 0.7, io), (1, 1, nil)]),
-                track(.core, .turn, 1.2, [(0, 0, nil), (1, 90, nil)]),
-            ], holderAnchor: centre, figureAnchor: UnitPoint(x: 0.5, y: 0.02))
+            // It swings from a point at its top, wider and narrower, while its star turns and twinkles.
+            return GlyphMotion(loop: 9.6, tracks: [
+                track(.figure, .turn) { u in (13 + 4 * S(u)) * e * S(4 * u) },
+                track(.holder, .lift) { u in -3 * e * S(2 * u + 0.3) },
+                track(.core, .turn) { u in 720 * u },
+                track(.core, .scale) { u in 1 + 0.4 * e * (0.6 + 0.4 * S(3 * u)) * S(8 * u) },
+            ], holderAnchor: centre, figureAnchor: point(50, 2))
         case .drop:
-            // Bounce: it squeezes on the ground, goes up and comes down, and its dot goes with it.
-            return GlyphMotion(tracks: [track(.holder, .lift, 1.1, [(0, 0, out), (0.45, -14, into), (1, 0, nil)])]
-                                   + squeeze(1.1, [(0, 1.16, 0.84, out), (0.2, 0.9, 1.12, io), (0.45, 1, 1, io),
-                                                   (0.8, 0.94, 1.08, into), (1, 1.16, 0.84, nil)])
-                                   + [track(.core, .lift, 1.1, [(0, 3, out), (0.45, -4, into), (1, 3, nil)])],
-                               holderAnchor: UnitPoint(x: 0.5, y: 0.98), figureAnchor: centre)
+            // It bounces at changing heights, squeezed on the ground and long in the air, leans, and its dot sloshes.
+            return GlyphMotion(loop: 6.6, tracks: [
+                track(.holder, .lift) { u in -(12 + 5 * S(u) + 2 * S(2 * u + 0.3)) * e * arc(fr(6 * u), 0.75) },
+                track(.holder, .scaleX) { u in 1 + 0.1 * e * C(6 * u) },
+                track(.holder, .scaleY) { u in 1 - 0.11 * e * C(6 * u) },
+                track(.figure, .turn) { u in 7 * e * S(3 * u) },
+                track(.core, .side) { u in 2.5 * e * S(3 * u + 0.1) },
+                track(.core, .lift) { u in 3.5 * e * C(6 * u) },
+            ], holderAnchor: point(50, 98), figureAnchor: point(50, 96))
         }
     }
 }

@@ -296,12 +296,15 @@ public final class HubClient: Sendable {
     /// such word and gives every task, with no `older_tasks`. **And for the window of the rest** (owner API 1.258,
     /// `rest=window`): the items that are open and the items, reports and messages of the newest keys, with
     /// `older_rows` (`olderRows`, `olderRowsBlock`); a hub from before that gives every row, with no `older_rows`.
+    /// **Each read says what this build draws** (`AppDraws`), which a hub before owner API 1.285 ignores.
     public func stateReading(at hub: URL, present: Bool = false) async throws -> (state: HubState, data: Data) {
         var parts = URLComponents(url: hub.appendingPathComponent("ui/state"), resolvingAgainstBaseURL: false)!
         parts.queryItems = [.init(name: "tasks", value: "window"), .init(name: "rest", value: "window")]
         var request = URLRequest(url: parts.url!)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if present { request.setValue(OwnerPresence.value, forHTTPHeaderField: OwnerPresence.header) }
+        // owner API 1.285: what this build draws, on each read, so the hub's word repairs itself at the next one
+        request.setValue(AppDraws.value, forHTTPHeaderField: AppDraws.header)
         let data = try await perform(request)
         return (try HubState.decode(data), data)
     }

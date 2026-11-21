@@ -18,12 +18,17 @@ struct ChatsPage: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The headline's scale at this text size, which sizes a row's mark (`AgentAvatar.side`).
     @ScaledMetric(relativeTo: .headline) private var markScale: CGFloat = 1
-    /// **Room over a row's mark for its motion, as the mark grows with the text**: a mark at work goes up to a quarter
-    /// of its side over its place (the drop's bounce). At the ordinary text size it stays in its own row; at the larger
-    /// sizes it passes the row's top edge, by up to 6 points, and a row that a scroll put back over it (its cell came
-    /// last) covers it with its own ground. So a row takes 0.35 of each point that its mark grows over its top; a
-    /// mark that the smaller text sizes make smaller takes none, and its row is as at the ordinary size.
-    private var markRoom: CGFloat { max(0, (AgentAvatar.side(base: 40, scale: markScale) - 40) * 0.35) }
+    /// **Room over a row's mark for its motion, as the mark grows with the text**: a mark at work goes up to 0.3 of its
+    /// side over its place (the drop's highest bounce). A row that a scroll put back over it (its cell came last)
+    /// covers what passes the row's top edge with its own ground. The row's own room was measured for the motion of 20
+    /// November 2026, whose drop went 23.2 units of 100 over its place: at the ordinary text size its tip touched the
+    /// row's top edge, and at the larger sizes it passed it by up to 6 points. The smooth motion of 21 November goes
+    /// 27.4 units: 4.2 more, so a row takes 5% of its mark's side more, and 0.35 of each point that its mark grows
+    /// over its top; a mark that the smaller text sizes make smaller takes less, down to none.
+    private var markRoom: CGFloat {
+        let side = AgentAvatar.side(base: 40, scale: markScale)
+        return max(0, side * 0.05 + (side - 40) * 0.35)
+    }
     /// What the owner typed in the search field.
     @State private var search = ""
     /// The search field has the cursor: a tap anywhere on its capsule gives it.

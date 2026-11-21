@@ -15030,6 +15030,16 @@
         }
       }
     },
+    "Open the picture of %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir la imagen de %@"
+          }
+        }
+      }
+    },
     "Open the request" : {
       "localizations" : {
         "es" : {
@@ -23086,6 +23096,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El teléfono no puede usar esa parte del hub. Esa configuración se hace en la app del Mac."
+          }
+        }
+      }
+    },
+    "The picture of %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La imagen de %@"
           }
         }
       }
