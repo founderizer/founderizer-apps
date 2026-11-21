@@ -25,10 +25,13 @@ struct ChatAskLine: View {
     /// What the pointer and VoiceOver read under the title.
     private var words: String { row.until == nil ? row.words : line }
 
+    /// The row's press: the task's page, for a mouse and for an assistive app alike.
+    private func open() {
+        if let task = row.task { store.show(.task(task)) }
+    }
+
     var body: some View {
-        Button {
-            if let task = row.task { store.show(.task(task)) }
-        } label: {
+        Button(action: open) {
             HStack(spacing: 11) {
                 mark.frame(width: 16).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
@@ -56,6 +59,9 @@ struct ChatAskLine: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([row.title, words].filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityAddTraits(.isButton)
+        // The element above is the row's words, no button's own, so it has no press of its own: VoiceOver's press
+        // (AXPress) did nothing until 21 November 2026. The row's own action is its default action, which runs once.
+        .accessibilityAction(.default, open)
         .accessibilityIdentifier("chat-ask-\(row.id)")
     }
 
@@ -78,11 +84,14 @@ struct ChatAskHead: View {
     let row: ChatAskRow
     @Environment(\.colorSchemeContrast) private var contrast
 
+    /// The head's press: the task's page, for a mouse and for an assistive app alike.
+    private func open() {
+        if let task = row.task { store.show(.task(task)) }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            Button {
-                if let task = row.task { store.show(.task(task)) }
-            } label: {
+            Button(action: open) {
                 HStack(spacing: 9) {
                     Image(systemName: row.symbol).font(IconMetrics.symbol(13)).foregroundStyle(row.tint.color)
                         .frame(width: 16).accessibilityHidden(true)
@@ -107,6 +116,7 @@ struct ChatAskHead: View {
             .accessibilityLabel(row.title)
             .accessibilityHint(Text("Opens the task"))
             .accessibilityAddTraits(.isButton)
+            .accessibilityAction(.default, open)       // its press for VoiceOver, as the row's above
             .accessibilityIdentifier("chat-ask-head-\(row.id)")
             // The card's own edge, which Increase Contrast raises.
             Rectangle().fill(FleetStyle.hairline(0.08)).frame(height: FleetStyle.edgeWidth(contrast)).accessibilityHidden(true)
