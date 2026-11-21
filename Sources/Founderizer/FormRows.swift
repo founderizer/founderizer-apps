@@ -36,7 +36,9 @@ enum FormMetrics {
     /// A row's words, a value, a field's words.
     static let text = Font.system(size: 13)
     /// A detail, a footer, a time, a T-number, a table's small words, a count.
-    static let detail = Font.system(size: 12)
+    static let detail = Font.system(size: detailSize)
+    /// The size of `detail`, where a text needs it as a number: the room of a badge in its words (`CardBadgeText`).
+    static let detailSize: CGFloat = 12
     /// A section's heading over its card: a row title's size (it was 13.5, a size of its own).
     static let heading = Font.system(size: 13, weight: .medium)
     /// The head of a few details ("Subtasks", "What it needs from you"), and the word of a small mark ("New").
@@ -1039,6 +1041,10 @@ struct FleetOutlineButtonStyle: ButtonStyle {
 /// A list row that opens its detail (Secrets, Integrations): the whole row is the button. It is not a capsule: under
 /// the pointer the row has a soft fill, and while pressed a stronger one.
 struct FleetRowButtonStyle: ButtonStyle {
+    /// The soft fill of a row that opens, under the pointer and while pressed: white at these opacities. A folded
+    /// request card, which is one such press, takes them too (`CardFoldStyle`).
+    static let hoverFill = 0.035, pressFill = 0.06
+
     func makeBody(configuration: Configuration) -> some View { RowButton(configuration: configuration) }
 
     private struct RowButton: View {
@@ -1049,7 +1055,8 @@ struct FleetRowButtonStyle: ButtonStyle {
         var body: some View {
             configuration.label
                 .background(RoundedRectangle(cornerRadius: FormMetrics.inner)
-                    .fill(Color.white.opacity(configuration.isPressed ? 0.06 : hovered && isEnabled ? 0.035 : 0))
+                    .fill(Color.white.opacity(configuration.isPressed ? FleetRowButtonStyle.pressFill
+                                              : hovered && isEnabled ? FleetRowButtonStyle.hoverFill : 0))
                     .padding(.horizontal, 6).padding(.vertical, 3))
                 .contentShape(Rectangle())
                 .onHover { hovered = $0 }

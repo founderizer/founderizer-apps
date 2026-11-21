@@ -142,4 +142,22 @@ struct NeedsLaneTests {
         #expect(NeedsLane.waitWords(["leo", "mia", "ivy"])
             == "\("leo".agentLabel), \("mia".agentLabel) and \("ivy".agentLabel) wait for this")
     }
+
+    /// Owner API 1.274 (the owner, 20 November 2026, of a folded card that said "Replaced by manager with a new item:
+    /// …" over the new item's card): the field decides, never the hub's words, and his own answer on its way or refused
+    /// keeps the card, whose words need its place.
+    @Test("A request that a new item replaced is no card and no row, and the restore counts it once")
+    func aReplacedRequestIsNoCard() throws {
+        var replaced = row(1, answered: Self.at(10, 16), answer: "Replaced by manager with a new item: Need 2")
+        replaced["replaced_by"] = 2
+        let rows = [replaced, row(2), row(3, answered: Self.at(10, 17))]
+        let needs = try rows.map { try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: $0)) }
+        #expect(needs.drawn().map(\.id) == [2, 3] && needs.drawn(holding: 1).map(\.id) == [1, 2, 3])
+        let lane = NeedsLane(needs, now: Self.now, calendar: Self.utc)
+        #expect(lane.endedCount == 1 && lane.ended.flatMap(\.needs).map(\.id) == [3])
+        #expect(NeedsLane(needs, sent: [1], now: Self.now, calendar: Self.utc).endedCount == 2)
+        #expect(try hub(tasks: [], needs: rows).needCount == 2)
+        // a request whose answer only says so, from a hub before the field, is a card as before
+        #expect(try [need(4, answered: Self.at(10, 16), answer: "Replaced by manager with a new item: Need 2")].drawn().count == 1)
+    }
 }

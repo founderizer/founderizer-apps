@@ -14,29 +14,25 @@ struct NeedOptionButtonStyle: ButtonStyle {
     /// 2026 to its mockup): the press that gives it, which is the card's one main action, so it is white, as the main
     /// action of a page is (`FleetPrimaryButtonStyle`), with dark words (`NeedAnswerBox.row`).
     var gives = false
-    /// **The answer that the agent recommends** (owner feature `need_recommended`; the owner's pick "B: badge on the
-    /// edge" of 20 November 2026): its row's edge in that agent's own colour, under its badge (`RecommendedBadge`); nil
-    /// on every other row. The violet edge of a number key's mark stands over it.
-    var recommended: Color? = nil
 
     func makeBody(configuration: Configuration) -> some View {
-        OptionRow(configuration: configuration, marked: marked, gives: gives, recommended: recommended)
+        OptionRow(configuration: configuration, marked: marked, gives: gives)
     }
 
     private struct OptionRow: View {
         let configuration: ButtonStyleConfiguration
         let marked: Bool
         let gives: Bool
-        let recommended: Color?
         @Environment(\.isEnabled) private var isEnabled
         @Environment(\.colorSchemeContrast) private var contrast
         @State private var hovered = false
 
         private var lit: Bool { (hovered || marked) && isEnabled }
-        /// The violet of a number key's mark, the agent's colour of the answer that it recommends, or the hairline.
+        /// The violet of a number key's mark, or the hairline. **The answer that the agent recommends has its badge and
+        /// no edge of its own** (the owner, 20 November 2026: "the recommended options should only have the badge, not
+        /// the border over the option, otherwise it looks alraedy selected"): its edge was the agent's colour.
         private var edge: Color {
             if marked && isEnabled { return FleetStyle.accent }
-            if let recommended { return recommended.opacity(RecommendedBadge.edge(lit: lit, contrast: contrast)) }
             return FleetStyle.hairline(lit ? 0.18 : 0.10)
         }
 
@@ -45,8 +41,7 @@ struct NeedOptionButtonStyle: ButtonStyle {
                 .background(RoundedRectangle(cornerRadius: FormMetrics.inner)
                     .fill(Color.white.opacity(gives ? (configuration.isPressed ? 0.78 : lit ? 1 : 0.94) : lit ? 0.09 : 0.05))
                     .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner)
-                        .strokeBorder(edge, lineWidth: (marked && isEnabled) || recommended != nil
-                                      ? 1 : FleetStyle.edgeWidth(contrast))))
+                        .strokeBorder(edge, lineWidth: marked && isEnabled ? 1 : FleetStyle.edgeWidth(contrast))))
                 .opacity(configuration.isPressed ? 0.8 : isEnabled ? 1 : 0.55)
                 .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                 .onHover { hovered = $0 }
@@ -59,9 +54,10 @@ struct NeedOptionButtonStyle: ButtonStyle {
 /// something, not that thumb icon"): a capsule on the top edge of that answer's row, at its trailing side and half over
 /// the edge, with the glyph of the agent that raised the request, at rest and with no dot, and the word Recommended, in
 /// that agent's own colour (`AgentTint`, the colour of a control that speaks to the agent): a dark tint of it fills the
-/// capsule, it is the capsule's edge, and a light tint of the glyph's light step is the word. The row's own edge takes
-/// the colour too (`NeedOptionButtonStyle.recommended`). VoiceOver reads the word on the row (its value or hint), so the
-/// badge itself is hidden from it.
+/// capsule, it is the capsule's edge, and a light tint of the glyph's light step is the word. **The row keeps the look
+/// of every other option** (the owner, 20 November 2026: "the recommended options should only have the badge, not the
+/// border over the option, otherwise it looks alraedy selected"): its edge took the colour too. VoiceOver reads the
+/// word on the row (its value or hint), so the badge itself is hidden from it.
 struct RecommendedBadge: View {
     let agent: String
     /// What the badge stands on, which its fill covers, so the row's edge does not show through it: the canvas under the
@@ -83,11 +79,6 @@ struct RecommendedBadge: View {
 
     /// The agent's own colour, as a control that speaks to it wears it (`AgentTint`): the middle of its glyph's gradient.
     @MainActor static func colour(of agent: String, team: [String]) -> Color { AgentTint(agent: agent, team: team).fill }
-
-    /// How much of that colour the row's edge takes: all of it under the pointer and with Increase Contrast.
-    @MainActor static func edge(lit: Bool, contrast: ColorSchemeContrast) -> Double {
-        lit || contrast == .increased || NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0.75
-    }
 
     var body: some View {
         let colour = Self.colour(of: agent, team: team)
@@ -169,15 +160,11 @@ struct NeedAnswerBox: View {
     /// the answer that he gave moves from there to the top as the others go (`NeedStep`).
     @State private var tops: [Int: CGFloat] = [:]
     private static let space = "need-answer-box"
-    /// The names of the hub's agents, for the colour of the answer that an agent recommends (`RecommendedBadge`).
-    @Environment(\.glyphTeam) private var team
     /// Owner feature `need_recommended` (API 1.269): the row of the answer that the agent recommends, or nil
     /// (`OwnerNeed.recommendedRow`).
     private var recommendation: NeedRecommended.Row? {
         need.recommendedRow(features: store.state?.ui_features, replies: Self.quickReplies)
     }
-    /// The agent's own colour on the edge of that row.
-    private var tint: Color { RecommendedBadge.colour(of: need.by, team: team) }
     /// What the badge stands on, which its fill covers: the canvas under the request at hand, a card in a chat.
     private var ground: Color { onStep ? FleetStyle.canvas : FleetStyle.surface }
     /// The place in `tops` of the row of the agent's own words (`NeedRecommended.Row.words`), beside the options' indexes
@@ -251,7 +238,7 @@ struct NeedAnswerBox: View {
                             guard !(onStep && SecondClick.isNow) else { return }
                             sendQuickReply(words, from: Self.recommendedWords)
                         } label: { row(words) }
-                            .buttonStyle(NeedOptionButtonStyle(recommended: tint))
+                            .buttonStyle(NeedOptionButtonStyle())
                             .stands(in: Self.space, on: onStep) { tops[Self.recommendedWords] = $0 }
                             .accessibilityValue("Recommended")
                             .accessibilityIdentifier("need-recommended-\(need.id)")
@@ -265,7 +252,7 @@ struct NeedAnswerBox: View {
                             guard !(onStep && SecondClick.isNow) else { return }
                             sendQuickReply(reply, from: index)
                         } label: { row(reply) }
-                            .buttonStyle(NeedOptionButtonStyle(recommended: marks ? tint : nil))
+                            .buttonStyle(NeedOptionButtonStyle())
                             .stands(in: Self.space, on: onStep) { tops[index] = $0 }
                             .accessibilityValue(marks ? "Recommended" : "")
                             .accessibilityIdentifier("quick-\(reply.lowercased())-\(need.id)")
@@ -291,14 +278,6 @@ struct NeedAnswerBox: View {
                         .padding(.leading, onStep ? 14 : 12).padding(.trailing, tickInset).padding(.vertical, 4)
                         .frame(minHeight: onStep ? FormMetrics.row : nil)
                         .background(RoundedRectangle(cornerRadius: FormMetrics.inner).fill(Color.white.opacity(0.05)))
-                        // owner feature need_recommended: the edge of the answer that the agent recommends
-                        .overlay {
-                            if marks {
-                                RoundedRectangle(cornerRadius: FormMetrics.inner)
-                                    .strokeBorder(tint.opacity(RecommendedBadge.edge(lit: false, contrast: contrast)),
-                                                  lineWidth: 1)
-                            }
-                        }
                         .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                         .onTapGesture { if ticked.contains(index) { ticked.remove(index) } else { ticked.insert(index) } }
                         .accessibilityIdentifier("need-tick-\(need.id)-\(index)")
@@ -338,8 +317,7 @@ struct NeedAnswerBox: View {
                         } label: {
                             row(option, sendingSince: sending ? waiting?.since : nil, gives: gives)
                         }
-                            .buttonStyle(NeedOptionButtonStyle(marked: marked == index, gives: gives,
-                                                               recommended: marks ? tint : nil))
+                            .buttonStyle(NeedOptionButtonStyle(marked: marked == index, gives: gives))
                             .stands(in: Self.space, on: onStep) { tops[index] = $0 }
                             .accessibilityValue(sending ? "Sending" : marks ? "Recommended" : "")
                             .accessibilityIdentifier("need-option-\(need.id)-\(index)")
@@ -796,11 +774,15 @@ struct NeedAnswerGiven: View {
             }
         } else if !answer.isEmpty || !files.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                if answer.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Your answer").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                } else {
-                    DetailField(title: String(l10n: "Your answer"), value: answer)
-                }
+                    // **His answer whole, as the card's words are drawn** (the owner, 20 November 2026: "ok but use
+                    // always the agent badges and icons!!"): the chat's look, and each name that the card links as its
+                    // badge (`CardNames`), where it was plain text of 12 points
+                    if !answer.isEmpty {
+                        MessageText(text: answer, chat: true, card: true, names: store.cardNames(for: need))
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
                 if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .leading) }
             }
         }
@@ -884,8 +866,11 @@ struct NeedRequestCard: View {
     private var answerWords: String {
         if let ran = ranAnswer { return ran.spoken }        // a press of Run, in this Mac's words (VoiceOver too)
         if need.answeredWithKey { return String(l10n: "Saved") }     // the word behind the check of a saved key
-        let answer = (onItsWay?.text ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return answer.isEmpty ? String(l10n: "Answered") : answer
+        return givenWords.isEmpty ? String(l10n: "Answered") : givenWords
+    }
+    /// The words of his answer, on their way or as the reading has them, or "" for an answer of files alone.
+    private var givenWords: String {
+        (onItsWay?.text ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
     /// He answered in his own words, on their way or as the reading has them: no option that he pressed or ticked.
     private var inWords: Bool { onItsWay?.answersInWords ?? need.answeredInWords }
@@ -903,7 +888,11 @@ struct NeedRequestCard: View {
                     Button { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.12)) { expanded = true } } label: {
                         folded.padding(FormMetrics.rowInset).padding(.bottom, files.isEmpty ? 0 : 8 - FormMetrics.rowInset)
                             .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                    }.buttonStyle(.plain)
+                    }
+                        // **The whole folded card is the press, and shows it** (the area of Needs-you, 20 November
+                        // 2026, from the owner: "if I click on it it expands magically because there is no hint at
+                        // all"): the hand, a soft fill and its chevron in the words' colour under the pointer
+                        .buttonStyle(CardFoldStyle(fill: files.isEmpty ? .whole : .top))
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(Text("\(need.shownTitle), answered: \(answerWords)"))
                         .accessibilityHint("Shows the whole request")
@@ -982,28 +971,39 @@ struct NeedRequestCard: View {
     /// What a press of Run answered (owner feature `need_run`), or nil.
     private var ranAnswer: NeedRunAnswer? { NeedRunAnswer.of(need, onItsWay: onItsWay) }
 
-    /// The two lines of an answered request: its title, medium (`titleFont`), and what he answered, 12 points muted:
-    /// the option that he pressed with a check, on one line, and words that he wrote with none, whole: the card is
-    /// where the chat says them. **A request that a saved key answered is one line**: its title and the check at its
-    /// end, where the check of his save drew itself (`keyHead`).
+    /// The folded card of an answered request: its title, medium (`titleFont`), with the down chevron at the end of its
+    /// line, and what he answered under it. **Words that he wrote take the chat's look, 8 points under the title, and a
+    /// long answer folds to six lines** (`FoldedWords`; the area of Needs-you, 20 November 2026, from the owner: "that
+    /// wall of small text is unreadable"): they stood whole at 12 points muted. The option that he pressed keeps its
+    /// check and its line of 12 points muted, and a press of Run its mark. Each name in his answer is its badge (his
+    /// "use always the agent badges and icons!!"). **A request that a saved key answered is one line**: its title, the
+    /// check where the check of his save drew itself (`keyHead`), and the chevron.
     @ViewBuilder private var folded: some View {
         if need.answeredWithKey {
-            keyHead(saved: true, draws: false)
+            keyHead(saved: true, draws: false, folded: true)
         } else {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(heading).font(titleFont).foregroundStyle(FleetStyle.text).lineLimit(1)
+            let written = ranAnswer == nil && inWords ? givenWords : ""
+            VStack(alignment: .leading, spacing: written.isEmpty ? 4 : 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(heading).font(titleFont).foregroundStyle(FleetStyle.text).lineLimit(1)
+                    Spacer(minLength: 0)
+                    FoldChevron(opens: true)
+                }
                 if let ran = ranAnswer {
                     // a press of Run: its mark says how the command ended, "Ran on <Mac>" where it ran
                     HStack(spacing: 5) {
                         Image(systemName: ran.symbol).font(IconMetrics.symbol(10, weight: .semibold)).accessibilityHidden(true)
                         Text(ran.words).lineLimit(1)
                     }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                } else if !written.isEmpty {
+                    FoldedWords(words: written, names: names)
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         if !inWords { Image(systemName: "checkmark").font(IconMetrics.symbol(10, weight: .semibold)) }
-                        Text(answerWords).lineLimit(inWords ? nil : 1).multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
+                        CardBadgeText.text(MessageBlock.inline(answerWords), names: names, size: FormMetrics.detailSize)
+                            .lineLimit(1).tint(FleetStyle.link)
                     }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                        .cardBadges()
                 }
             }
         }
@@ -1011,12 +1011,15 @@ struct NeedRequestCard: View {
 
     /// **A key request's card while his save runs, and folded once a saved key answered it**: its title and the mark at
     /// its end (`KeySaveMark`), with no words. The two stand alike to the point, so the folded card takes the place of
-    /// the card whose check has drawn itself with no change on the screen.
-    private func keyHead(saved: Bool, draws: Bool) -> some View {
+    /// the card whose check has drawn itself with no change on the screen. **The folded card's chevron stands after the
+    /// check** (`FoldChevron`), at the end of the line as on every folded card; while his save runs its room is there
+    /// and empty, so the check does not move when the folded card takes the card's place.
+    private func keyHead(saved: Bool, draws: Bool, folded: Bool = false) -> some View {
         HStack(alignment: .center, spacing: 8) {
             Text(heading).font(titleFont).foregroundStyle(FleetStyle.text).lineLimit(1)
             Spacer(minLength: 8)
             KeySaveMark(saved: saved, draws: draws)
+            FoldChevron(opens: true).opacity(folded ? 1 : 0)
         }
         .accessibilityElement(children: .combine)
     }
@@ -1067,11 +1070,18 @@ struct NeedRequestCard: View {
                     HStack(alignment: .firstTextBaseline) {
                         Text(heading).font(titleFont).multilineTextAlignment(.leading)
                         Spacer(minLength: 8)
-                        // No orange "Needs you" on a request that waits (D-2): every open request needs him. "Answered"
-                        // stays, on one opened again.
-                        if !need.isOpen { Text("Answered").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
+                        // No orange "Needs you" on a request that waits (D-2): every open request needs him. **One
+                        // opened again has the up chevron where the folded card has its down one** (the owner, 20
+                        // November 2026: "To collapse it, only when I click on Answered... again no hint"): the word
+                        // "Answered" stood there, and VoiceOver still says it
+                        if !need.isOpen { FoldChevron(opens: false) }
                     }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
-                }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach)
+                }
+                    // the hand on the title's row, which folds the card or opens its long part, before the padding
+                    // that gives its reach back to the layout
+                    .buttonStyle(CardFoldStyle())
+                    .accessibilityValue(need.isOpen ? "" : String(l10n: "Answered"))
+                    .padding(.vertical, -IconMetrics.reach)
                 // owner feature need_takeover (the owner's "Yes, as drawn"): Take over at the right of the title, beside
                 // the title's own button and not in it, so that each press does one thing
                 if let way = takeOverWay {
@@ -1163,6 +1173,107 @@ struct NeedRequestCard: View {
         }
     }
 
+}
+
+extension EnvironmentValues {
+    /// The pointer is over the press that opens or folds a request card (`CardFoldStyle`): its chevron takes the words'
+    /// colour (`FoldChevron`).
+    @Entry var cardFoldHovered = false
+}
+
+/// **The press that opens a folded request card, or folds an opened one** (the area of Needs-you, 20 November 2026,
+/// from the owner: "if I click on it it expands magically because there is no hint at all"): the hand under the
+/// pointer, and the chevron of the card's title line in the words' colour while the pointer is over the press
+/// (`FoldChevron`). The folded card is the press whole, with the soft fill of a row that opens (`FleetRowButtonStyle`)
+/// in the card's own corners: only its top ones where the files of his answer stand under it, in the card. The title's
+/// row of an opened card takes no fill.
+struct CardFoldStyle: ButtonStyle {
+    enum Fill { case off, whole, top }
+    var fill = Fill.off
+
+    func makeBody(configuration: Configuration) -> some View { Press(configuration: configuration, fill: fill) }
+
+    private struct Press: View {
+        let configuration: ButtonStyleConfiguration
+        let fill: Fill
+        @State private var hovered = false
+
+        var body: some View {
+            configuration.label
+                .environment(\.cardFoldHovered, hovered)
+                .background {
+                    if fill != .off {
+                        let corner = FormMetrics.radius, under = fill == .whole ? corner : 0
+                        UnevenRoundedRectangle(topLeadingRadius: corner, bottomLeadingRadius: under,
+                                               bottomTrailingRadius: under, topTrailingRadius: corner)
+                            .fill(Color.white.opacity(configuration.isPressed ? FleetRowButtonStyle.pressFill
+                                                      : hovered ? FleetRowButtonStyle.hoverFill : 0))
+                    }
+                }
+                .contentShape(Rectangle())
+                .onHover { hovered = $0 }
+                .pointerStyle(.link)
+        }
+    }
+}
+
+/// **The chevron at the end of a request card's title line**: down on a folded card, which opens in place, and up on
+/// an opened one, which folds (the owner, 20 November 2026, of a chevron that pointed right: "taht chevron looks like
+/// gooing to a different page, not Expand"). Muted, in the words' colour under the pointer (`CardFoldStyle`).
+private struct FoldChevron: View {
+    /// The folded card opens: down. An opened one folds: up.
+    let opens: Bool
+    @Environment(\.cardFoldHovered) private var hovered
+
+    var body: some View {
+        Image(systemName: opens ? "chevron.down" : "chevron.up")
+            .font(IconMetrics.symbol(11, weight: .semibold))
+            .foregroundStyle(hovered ? FleetStyle.text : FleetStyle.muted)
+            .accessibilityHidden(true)
+    }
+}
+
+/// **His own words on a folded request card** (the area of Needs-you, 20 November 2026, from the owner: "that wall of
+/// small text is unreadable"): the chat's look (14 points in the words' colour, with its line spacing), each name that
+/// the card links as its badge (`CardBadgeText`; his "use always the agent badges and icons!!"), and a long answer
+/// folds to six lines whose last fades, as a long message of his does (`OwnerBubble`). A click opens the card, which
+/// shows the words whole under "Your answer". **The six lines are a limit of the text, not a frame over it**: a frame
+/// would keep the press of a badge under the fold, over the chat's next rows, because a badge's press stands on every
+/// line of the text's layout (`CardBadge.parts`).
+private struct FoldedWords: View {
+    let words: String
+    let names: CardNames?
+    /// The height of the words whole, and of the lines that show: the last line fades only where words are cut.
+    @State private var whole: CGFloat = 0
+    @State private var shown: CGFloat = 0
+    static let lines = 6
+
+    var body: some View {
+        let text = CardBadgeText.text(MessageBlock.inline(words), names: names, size: ChatStyle.size)
+        let cut = whole > shown + 1
+        look(text).lineLimit(Self.lines)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shown = $0 }
+            .cardBadges()
+            .mask {
+                VStack(spacing: 0) {
+                    Color.black
+                    if cut {
+                        LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: ChatStyle.line)
+                    }
+                }
+            }
+            // the words whole and unseen, for their height alone: their layout reaches no badge and no link
+            .background(alignment: .top) {
+                look(text).lineLimit(nil).hidden()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { whole = $0 }
+                    .transformPreference(Text.LayoutKey.self) { $0 = [] }
+            }
+    }
+
+    private func look(_ text: Text) -> some View {
+        text.font(ChatStyle.font).lineSpacing(ChatStyle.lineSpacing).foregroundStyle(FleetStyle.text).tint(FleetStyle.link)
+            .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+    }
 }
 
 private extension View {

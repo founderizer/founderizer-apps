@@ -30,7 +30,9 @@ public struct NeedsLane: Sendable {
     public init(_ needs: [OwnerNeed], sent: Set<Int> = [], held: Set<Int> = [], now: Double, calendar: Calendar = .current) {
         let waits: (OwnerNeed) -> Bool = { held.contains($0.id) || ($0.isOpen && !sent.contains($0.id)) }
         open = needs.filter(waits).sorted { $0.id > $1.id }
-        let done = needs.filter { !waits($0) }
+        // owner API 1.274: a request that a new item replaced is no row of the ones that ended (`drawn`), unless his
+        // answer to it is on its way
+        let done = needs.filter { !waits($0) && ($0.replaced_by == nil || sent.contains($0.id)) }
             .map { (need: $0, at: $0.answered ?? ($0.isOpen ? now : $0.raised)) }
             .sorted { ($0.at, $0.need.id) > ($1.at, $1.need.id) }
         var days: [Day] = []

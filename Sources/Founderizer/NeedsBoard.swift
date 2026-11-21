@@ -889,10 +889,20 @@ private struct NeedAnswered: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 if !inWords { check }
-                Text(answer.isEmpty ? "Answered" : answer).font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text)
-                    .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                if answer.isEmpty {
+                    Text("Answered").font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text)
+                } else {
+                    // **His answer's names as their badges** (the owner, 20 November 2026: "ok but use always the
+                    // agent badges and icons!!"), as on the card of his answer in a chat (`NeedAnswerGiven`)
+                    CardBadgeText.text(MessageBlock.inline(answer), names: store.cardNames(for: need), size: SetupMetrics.text)
+                        .font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text).tint(FleetStyle.link)
+                        .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                        .cardBadges()
+                }
             }
-            .accessibilityElement(children: .combine).accessibilityLabel("Answered: \(answer.isEmpty ? "Answered" : answer)")
+            // the table's words, also for an answer of files alone, which says "Answered" once
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(answer.isEmpty ? Text("Answered") : Text("Answered: \(answer)"))
             if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .leading) }
         }
         .padding(.horizontal, 14).padding(.vertical, 11).frame(maxWidth: .infinity, minHeight: FormMetrics.row, alignment: .leading)

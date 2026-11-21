@@ -136,7 +136,12 @@ struct ManagerView: View {
     /// with the agent's reply under it ("When I reply to a card, the conversation should follow!"): an option that he
     /// pressed or words that he wrote, neither as a bubble of its own. The hub writes every answer as his message to
     /// the agent that asked (`kind` "answer"), and the card takes that message's place.
-    private var mine: [OwnerNeed] { (store.state?.needs ?? []).filter { $0.by == agent } }
+    /// **No card for a request that a new item replaced** (owner API 1.274, `drawn`): the new item's card stands in the
+    /// chat, and the old one with the hub's words went. One whose answer of his is on its way or was refused keeps its
+    /// card while the outbox holds it, so that the refusal has its place.
+    private var mine: [OwnerNeed] {
+        (store.state?.needs ?? []).filter { $0.by == agent }.drawn(holding: store.pending?.needID)
+    }
 
     /// **What he asked this agent for in this chat, each as a row of its own** (the owner, 16 November 2026: "this
     /// tasks should also show inside the conversation!! like in codex or claude code!"; `ChatAskPlaces`): under the

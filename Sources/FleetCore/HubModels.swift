@@ -42,8 +42,9 @@ public struct HubState: Decodable, Sendable {
     /// Every task of the fleet, by this read: its own, and the ones that it leaves out.
     public var taskCount: Int { tasks.count + (older_tasks?.tasks ?? 0) }
     /// Every Needs-you item and every report of the fleet, by this read: its own, and the ones that it leaves out
-    /// (owner API 1.258).
-    public var needCount: Int { needs.count + (older_rows?.needs?.rows ?? 0) }
+    /// (owner API 1.258). An item that a new item replaced is one question with that item, as he sees it (`drawn`,
+    /// owner API 1.274), so its own items count it once; the hub's count of the older rows is the hub's.
+    public var needCount: Int { needs.drawn().count + (older_rows?.needs?.rows ?? 0) }
     public var reportCount: Int { reports.count + (older_rows?.reports?.rows ?? 0) }
     /// Owner feature `chat_apps`: Pause all, and the accounts that are not connected or not linked.
     public let chat_apps: ChatAppsSummary?
@@ -673,6 +674,10 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// His talk with the manager under the card, oldest first: his messages and its replies (`NeedMessage`); nil or
     /// empty for an item with none.
     public let talk: [NeedMessage]?
+    /// Owner API 1.274: the id of the item that took this one's place (the manager raised it again with `replaces`, or
+    /// a new plan of team changes replaced it), whose answer is the hub's own words; nil on every other item and from a
+    /// hub before that version. No page draws a card for it (`drawn`). Not in `signsTheSame`, as `recommended`.
+    public let replaced_by: Int?
     /// **The options that only Founderizer on a Mac or a PC can press, by their index in `choices`** (the lane "Give on
     /// the iPhone": the owner's "Line to the Mac" of 19 November 2026 to the phone's picture, and his "Yes, add it" of
     /// the same day for the door's card). The hub refuses them from a phone: Give, the first option of an item that
