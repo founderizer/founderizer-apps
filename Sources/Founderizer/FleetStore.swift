@@ -570,6 +570,8 @@ final class FleetStore {
             // press of the owner's, but these, which keep it: a page that only takes another name or shows as another
             // page (`stepping`: Back, Forward, a server's new name, `standIn`; `keepsDetail`: the manager's new name).
             if !stepping, !keepsDetail, detail != nil { detail = nil }
+            // A secret's card over the page goes with the page that it stood over (`secretCard`).
+            if destination != oldValue, secretCard != nil { secretCard = nil }
             // A chat that `setup_show` just opened keeps its mark; every other change of page ends it (`ShownPage`).
             if shown.chat != nil { shown.went(to: destination.agentTab == .chat ? destination.agentName : nil) }
             markRepliesSeen()
@@ -849,6 +851,10 @@ final class FleetStore {
     /// Add secret over the window, from a chat's key button or from the guard of a pasted key: memory only, because a
     /// pasted key is in it until the form takes it.
     var secretForm: SecretPreset?
+    /// **A secret's own card over the page where he is** (`showSecret(named:)`, `SecretsPage(card:)`): the key badge of
+    /// a request's card opens it. Memory only. A change of page closes it (`destination`), and nothing else moves: Done,
+    /// Esc and a click outside leave him on the page that he was on.
+    var secretCard: SecretCard?
     /// The question of the guard of a pasted or typed key, for one composer.
     var heldKey: HeldKey?
     var editingMessage: OwnerMessage?

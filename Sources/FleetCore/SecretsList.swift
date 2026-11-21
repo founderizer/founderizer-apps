@@ -187,4 +187,26 @@ public enum SecretsList {
         count == 1 ? String(l10n: "1 secret stays, because an agent has it.")
             : String(l10n: "\(count) secrets stay, because agents have them.")
     }
+
+    // MARK: a card's badge
+
+    /// **The secret that a card's badge of this name opens** (the owner, 21 November 2026, of a request that named a
+    /// key of the vault: "a badge for specific Credentials, like we have for agents! ideally a modal of that key should
+    /// open"): the reference of the one secret of the list that has this name (`TeamLogin.name`: an API key by its
+    /// variable name, a login by its title). None for a name that the list does not have, and none for a name that two
+    /// secrets have (two keys from before the list refused a second one, two logins of one title): the badge cannot know
+    /// which one he means, and the card of the other one would take his new value.
+    public static func reference(named name: String, in catalog: [String: TeamLogin]) -> String? {
+        let found = catalog.filter { $0.value.name == name }
+        return found.count == 1 ? found.first?.key : nil
+    }
+
+    /// The names that a card's badges take, with the kind of each (true: an API key, which has the key's mark; else a
+    /// login), in the list's order: each name that exactly one secret has (`reference(named:in:)`).
+    public static func badges(_ catalog: [String: TeamLogin]) -> [(name: String, key: Bool)] {
+        let counts = catalog.values.reduce(into: [String: Int]()) { $0[$1.name, default: 0] += 1 }
+        return catalog.values.filter { counts[$0.name] == 1 }
+            .sorted { ($0.name.lowercased(), $0.name) < ($1.name.lowercased(), $1.name) }
+            .map { ($0.name, $0.isAPIKey) }
+    }
 }

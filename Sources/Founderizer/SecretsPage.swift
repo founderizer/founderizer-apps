@@ -2,8 +2,9 @@ import FleetCore
 import SwiftUI
 
 /// One reading of the catalog (`GET /ui/team`, feature `secrets`) and of its use: which agents list each reference in
-/// their profile (the older grant).
-private struct LoginReading: Sendable {
+/// their profile (the older grant). The store keeps the fleet's as "secrets.logins.fleet", which a card's badge reads
+/// too (`FleetStore.showSecret(named:)`).
+struct LoginReading: Sendable {
     let catalog: [String: TeamLogin]
     /// False: the hub's answer had no catalog that Fleet can read.
     let hasCatalog: Bool
@@ -40,8 +41,9 @@ private struct LoginReading: Sendable {
 /// What an agent's control of an API key offers.
 private enum SecretChoice: Hashable { case use, read, none }
 
-/// The secret whose detail shows over the page, by its reference.
-private struct ShownSecret: Identifiable { let id: String }
+/// **The secret whose detail shows over the page, by its reference**: a row's of this page, and over any page the card
+/// that a request's badge opens (`FleetStore.secretCard`, `showSecret(named:)`).
+struct SecretCard: Identifiable, Equatable { let id: String }
 
 /// **A change of several secrets that works now** (the bar of the fleet's Secrets page): what it does, how many calls
 /// it makes and how many are done, and the secrets that it still changes, whose rows show a spinner at their end.
@@ -96,6 +98,10 @@ struct SecretsPage: View {
     /// A group of the agent's Can use: the heading with its + (`giveMenu`), and the rows, each with its −, or the empty
     /// card when the agent has none.
     var grouped = false
+    /// **The detail of this one secret alone, over any page** (`FleetStore.secretCard`): the card that a request's badge
+    /// opens in a chat, on Needs you or over a job's card. It reads as the page does, and Done, Esc and a click outside
+    /// close it with nothing else changed: he stays where he was. nil: the page.
+    var card: SecretCard? = nil
     /// The readings are the store's (`FleetStore.reading`), the fleet's and each agent's under its own name: the list he
     /// saw last shows in the first frame when he comes back, and the read that starts then changes only what changed.
     /// The team it is made from is kept for the other pages that draw it too ("team.snapshot").
@@ -120,7 +126,7 @@ struct SecretsPage: View {
     /// The catalog's references when Add secret opened. A reference that comes later is the result of that visit.
     @State private var before: Set<String>?
     @State private var copied: String?
-    @State private var shown: ShownSecret?
+    @State private var shown: SecretCard?
     /// The change that the hub works on now: "reference agent" for a grant, the reference for a removal.
     @State private var working: String?
     /// The result or the problem of the last change, in its secret's detail.
@@ -162,11 +168,20 @@ struct SecretsPage: View {
     private var vault: CentralVaultModel { store.vaultModel() }
 
     var body: some View {
-        Group { if importing && offered { importPage } else if adding && offered { addPage } else { list } }
+        Group {
+            if let card { detail(card.id) }
+            else if importing && offered { importPage } else if adding && offered { addPage } else { list }
+        }
             .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(offered)") { await poll() }
             // **What came of a change is said once**: when he leaves the page while no change works, the bar's line and
-            // a Delete's line over the list go. A line that a change sets while he is away waits for his return.
-            .onDisappear { if agent == nil, bar.work == nil { bar.line = nil; bar.removed = nil } }
+            // a Delete's line over the list go. A line that a change sets while he is away waits for his return. The
+            // card over another page is not the page: its close leaves the page's lines.
+            .onDisappear { if card == nil, agent == nil, bar.work == nil { bar.line = nil; bar.removed = nil } }
+    }
+
+    /// The detail goes: the card over any page (`FleetStore.secretCard`), or the page's own.
+    private func close() {
+        if card != nil { store.secretCard = nil } else { shown = nil }
     }
 
     // MARK: list
@@ -363,7 +378,7 @@ struct SecretsPage: View {
         let kind = entry.isAPIKey ? String(l10n: "API key") : String(l10n: "Login")
         let summary = SecretsList.holderWords(item.holders)
         let faces = SecretsList.faces(item.holders).shown
-        return Button { note = nil; shown = ShownSecret(id: reference) } label: {
+        return Button { note = nil; shown = SecretCard(id: reference) } label: {
             HStack(spacing: 12) {
                 // The tick's room: the box stands over it (`overlay`).
                 Color.clear.frame(width: 14, height: 14)
@@ -532,7 +547,7 @@ struct SecretsPage: View {
         let holders = reading.holders(reference, entry, agents: agents)
         let others = agent.map { mine in holders.filter { $0 != mine } } ?? holders
         let summary: String? = agent != nil && others.isEmpty ? nil : agentWords(others)
-        return Button { note = nil; shown = ShownSecret(id: reference) } label: {
+        return Button { note = nil; shown = SecretCard(id: reference) } label: {
             HStack(spacing: 12) {
                 IconTile(symbol: entry.isAPIKey ? "key.horizontal" : "person.badge.key")
                 VStack(alignment: .leading, spacing: 3) {
@@ -606,7 +621,7 @@ struct SecretsPage: View {
                     }
                 }
                 Spacer(minLength: 12)
-                Button("Done") { shown = nil }.buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.cancelAction)
+                Button("Done") { close() }.buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("secret-done")
             }
             // **Its note, as a field that he edits** (owner feature `secret_notes`; the owner, 19 November 2026: "only use
@@ -844,7 +859,7 @@ struct SecretsPage: View {
         defer { working = nil }
         do {
             _ = try await HubClient().removeLogin(hub: hub, database: database, client: client, sha256: sha256, login: reference)
-            shown = nil; before = nil
+            close(); before = nil
             removed = String(l10n: "Removed “\(entry.name)” from Founderizer. Its value stays in the vaults.")
             await read()
         } catch { note = (reference, String(l10n: "Founderizer could not remove it. \(Self.text(error))"), true) }
@@ -1001,6 +1016,30 @@ struct SecretsPage: View {
         store.keep(team, as: "team.snapshot")
         if let standings { resources = standings }
         return true
+    }
+}
+
+extension FleetStore {
+    /// **The card of the secret of this name, over the page where he is** (the owner, 21 November 2026: "task cards in
+    /// both agents chat and needs you sohuld also have a badge for specific Credentials, like we have for agents! ideally
+    /// a modal of that key should open so it can be edited right there after clicking it", and "Yes, both" to its
+    /// drawing): the key badge of a request's card calls it, and the card shows over the chat, Needs you or a job's
+    /// card (`secretCard`), never on Settings › Secrets. True when the kept reading of the fleet's secrets has exactly
+    /// one secret of that name (`SecretsList.reference(named:in:)`); else nothing opens.
+    @discardableResult func showSecret(named name: String) -> Bool {
+        guard SecretEntryView.isOffered(by: self), let kept: LoginReading = reading("secrets.logins.fleet"),
+              let reference = SecretsList.reference(named: name, in: kept.catalog) else { return false }
+        secretCard = SecretCard(id: reference)
+        return true
+    }
+
+    /// **The names that a card's badges take** (`CardNames`), with the kind of each for its mark (true: an API key's
+    /// `key.horizontal`, else a login's `person.badge.key`): each name that one secret of the kept reading has, so a
+    /// badge always opens a card (`showSecret(named:)`). Empty on a hub without Add secret and its grants
+    /// (`SecretEntryView.isOffered`), and before the first reading.
+    var cardSecrets: [(name: String, key: Bool)] {
+        guard SecretEntryView.isOffered(by: self), let kept: LoginReading = reading("secrets.logins.fleet") else { return [] }
+        return SecretsList.badges(kept.catalog)
     }
 }
 

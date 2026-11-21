@@ -211,6 +211,14 @@ struct FleetView: View {
                 // view of a task's desktop runs (`DesktopView`).
                 .environment(\.scenePhase, scenePhase)
         }
+        // **A secret's own card over the page where he is** (`FleetStore.secretCard`): the key badge of a request's card
+        // opens it in a chat, on Needs you, or over a job's card, whose window it then stands over. Done, Esc and a click
+        // outside close it; nothing writes the page, so he is where he was.
+        .fleetModal(item: $store.secretCard) { card in
+            SecretsPage(store: store, card: card)
+                .environment(\.glyphTeam, store.state?.agents.map(\.name) ?? [])
+                .environment(\.glyphPresence, glyphPresences)
+        }
     }
 
     /// **Adding a server or an agent fills the window** (`FleetStore.fillsWindow`): the wizard alone, as the first run

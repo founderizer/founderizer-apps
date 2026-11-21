@@ -133,4 +133,25 @@ struct SecretsListTests {
         #expect(SecretsList.selectedWords(1) == "1 selected" && SecretsList.selectedWords(4) == "4 selected")
         #expect(SecretsList.agentsWords(0) == "All agents" && SecretsList.agentsWords(1) == "1 agent" && SecretsList.agentsWords(3) == "3 agents")
     }
+
+    /// **A card's badge opens the one secret of its name, and a name of two secrets is no badge.** The bug: the badge of
+    /// a name that two keys from before have opens one of them, and his new value goes into the key that the request did
+    /// not mean.
+    @Test func aNameOfTwoSecretsGivesNoBadgeAndNoCard() {
+        let one = "bws://11111111-2222-4333-8444-555555555551", two = "bws://11111111-2222-4333-8444-555555555552"
+        let three = "bws://11111111-2222-4333-8444-555555555553", shop = "bws://11111111-2222-4333-8444-555555555554"
+        // an older key whose title he changed is still known by its variable name
+        let renamed = TeamLogin(title: "The old shop key", protected: true, kind: "api_key", env: "SHOP_API_KEY")
+        let login = TeamLogin(title: "shop.example.test · admin@example.test", protected: true)
+        let catalog = [one: key("SHOP_API_KEY"), two: renamed, three: key("MAIL_API_KEY"), shop: login]
+        #expect(SecretsList.reference(named: "SHOP_API_KEY", in: catalog) == nil)
+        #expect(SecretsList.reference(named: "MAIL_API_KEY", in: catalog) == three)
+        #expect(SecretsList.reference(named: "shop.example.test · admin@example.test", in: catalog) == shop)
+        #expect(SecretsList.reference(named: "OTHER_API_KEY", in: catalog) == nil)
+        let badges = SecretsList.badges(catalog)
+        #expect(badges.map(\.name) == ["MAIL_API_KEY", "shop.example.test · admin@example.test"])
+        #expect(badges.map(\.key) == [true, false])
+        // the same key alone is a badge again
+        #expect(SecretsList.reference(named: "SHOP_API_KEY", in: [one: key("SHOP_API_KEY"), three: key("MAIL_API_KEY")]) == one)
+    }
 }
