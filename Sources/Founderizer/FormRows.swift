@@ -1016,6 +1016,11 @@ private struct FleetModalAnchor: NSViewRepresentable {
             // **The card stays while another app is in front** (a panel hides by default): he follows a task's thread
             // while he works in another app, as he followed its page (`FleetMenu` keeps its menus the same way).
             made.hidesOnDeactivate = false
+            // **The card draws in the app's dark look, also on a Mac in Light mode** (a customer's Mac, 21 November
+            // 2026: the words of the dropdowns of an account's card were black on the dark card). A window takes the
+            // Mac's look unless it sets its own, and the main window's `.preferredColorScheme(.dark)` sets only that
+            // window's: this one drew the words that follow the system (a dropdown's selected value, a switch) black.
+            made.appearance = NSAppearance(named: .darkAqua)
             made.contentView = made.content
             panel = made
             return made

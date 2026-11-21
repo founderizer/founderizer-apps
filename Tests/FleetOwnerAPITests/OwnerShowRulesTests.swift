@@ -1096,7 +1096,7 @@ struct OwnerShowRulesTests {
             // an answered mark's hover tag goes: it only draws, so it asks nothing, and a dropped click takes it too
             "AnsweredMarkView.swift: [.scrollWheel, .leftMouseDown, .rightMouseDown, .keyDown]",
             "AttachmentViews.swift: .keyDown",                      // Command and V with a file: asks `holdsKeys`
-            "ChatSelection.swift: [.leftMouseDown, .rightMouseDown, .otherMouseDown]",   // a chat's pressed row: asks `reaches`
+            "ChatSelection.swift: [.leftMouseDown, .rightMouseDown, .otherMouseDown]",   // a chat's pressed row: asks `reaches` and its window
             "FleetMenu.swift: kinds",                               // the app's menu while it is open (four, below)
             "FleetMenu.swift: [.rightMouseDown, .leftMouseDown]",   // a right click opens the app's menu: asks `reaches`
             "FleetView.swift: .keyDown",                            // ⌘1 to 9, the steps, ⌥⇧↓, typing: asks `holdsKeys`
@@ -1134,11 +1134,12 @@ struct OwnerShowRulesTests {
         }
 
         // ---- **A press in an agent's chat keeps the words of the row that he pressed selectable** (`ChatSelection`):
-        // the watch asks the hold first, and a click that the hold drops moves no row.
+        // the watch asks the hold first, and a click that the hold drops moves no row; nor does a press in another
+        // window of the app, such as a request card's own window over the chat (`OwnWindow`).
         let chat = try Self.source("Sources/Founderizer/ChatSelection.swift")
         let watches = try Self.body(of: "func start() {", in: chat)
-        let asksHold = try #require(watches.range(of: "guard AppFront.reaches(event) else { return }"))
-        let presses = try #require(watches.range(of: "self?.change { $0.press(onWords: Self.onWords(event)) }"))
+        let asksHold = try #require(watches.range(of: "guard AppFront.reaches(event), let self, self.own.takes(event) else { return }"))
+        let presses = try #require(watches.range(of: "self.change { $0.press(onWords: Self.onWords(event)) }"))
         #expect(asksHold.upperBound < presses.lowerBound)
         #expect(watches.contains("return event"))
 

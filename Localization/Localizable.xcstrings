@@ -225,16 +225,6 @@
         }
       }
     },
-    "%@ and %@: %@" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ y %@: %@"
-          }
-        }
-      }
-    },
     "%@ and %lld Macs" : {
       "localizations" : {
         "es" : {
@@ -4116,6 +4106,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Añadir un servidor MCP"
+          }
+        }
+      }
+    },
+    "Add an agent first. The fleet manager cannot use it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añade primero un agente. El gestor del equipo no puede usarlo."
           }
         }
       }
@@ -8140,16 +8140,6 @@
         }
       }
     },
-    "Every agent: %@." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Todos los agentes: %@."
-          }
-        }
-      }
-    },
     "Every check again, to say where the server stands after its restart." : {
       "localizations" : {
         "es" : {
@@ -9970,16 +9960,6 @@
         }
       }
     },
-    "Gives every agent %@." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Da %@ a todos los agentes."
-          }
-        }
-      }
-    },
     "Gives tasks to the agents that report to it" : {
       "localizations" : {
         "es" : {
@@ -10166,26 +10146,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gestionado"
-          }
-        }
-      }
-    },
-    "Has it at %@" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lo tiene con nivel %@"
-          }
-        }
-      }
-    },
-    "Has it: %@" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lo tiene: %@"
           }
         }
       }
@@ -14560,16 +14520,6 @@
         }
       }
     },
-    "Only you give it. The fleet manager must ask you for it with a Needs-you item." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Solo tú lo das. El gestor del equipo debe pedírtelo con un elemento de Te necesita."
-          }
-        }
-      }
-    },
     "Open" : {
       "localizations" : {
         "es" : {
@@ -16096,16 +16046,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Límite de hoy alcanzado"
-          }
-        }
-      }
-    },
-    "Reaches other people, as you, without asking." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contacta con otras personas en tu nombre, sin preguntar."
           }
         }
       }
@@ -22910,36 +22850,6 @@
         }
       }
     },
-    "The manager asks you for it." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El gestor te lo pide."
-          }
-        }
-      }
-    },
-    "The manager may give this level and the ones under it." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El gestor puede dar este nivel y los inferiores."
-          }
-        }
-      }
-    },
-    "The manager may hand it out, up to a level you set." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El gestor puede repartirlo, hasta el nivel que elijas."
-          }
-        }
-      }
-    },
     "The manager needs attention: %@ since %@." : {
       "localizations" : {
         "es" : {
@@ -24896,16 +24806,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este equipo ya tiene %lld personas."
-          }
-        }
-      }
-    },
-    "This fleet has no agent yet." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este equipo aún no tiene ningún agente."
           }
         }
       }
@@ -27680,16 +27580,6 @@
         }
       }
     },
-    "Write shared" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Escritura compartida"
-          }
-        }
-      }
-    },
     "Write the address as http:// or https://, then the host, and a port and a path if it has them." : {
       "localizations" : {
         "es" : {
@@ -27796,6 +27686,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Escribe lo que se le dice al agente sobre una persona así."
+          }
+        }
+      }
+    },
+    "Write, shared files too" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escritura, también archivos compartidos"
           }
         }
       }
@@ -29936,6 +29836,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "semana sin informar"
+          }
+        }
+      }
+    },
+    "write, shared files too" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "escritura, también archivos compartidos"
           }
         }
       }

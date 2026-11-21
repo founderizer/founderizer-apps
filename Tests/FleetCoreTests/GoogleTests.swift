@@ -145,9 +145,8 @@ struct GoogleTests {
         #expect(GoogleService.allCases.map(\.scope) == ["gmail.modify", "drive"])
         #expect(GoogleService.drive.levels == [.read, .write, .writeShared])
         #expect(GoogleService.gmail.levels == [.read, .write, .send])
-        #expect(GoogleLevel.allCases.map(\.title) == ["Read", "Write", "Write shared", "Send"])
+        #expect(GoogleLevel.allCases.map(\.title) == ["Read", "Write", "Write, shared files too", "Send"])
         #expect(GoogleLevel.allCases.map(\.rawValue) == ["read", "write", "write_shared", "send"])
-        #expect(GoogleLevel.allCases.filter(\.reachesOthers) == [.writeShared, .send])
         #expect(GoogleService.drive.words(.read) == "Searches and reads the files")
         #expect(GoogleService.drive.words(.write) == "Also makes and changes files that nobody else sees")
         #expect(GoogleService.drive.words(.writeShared) == "Also changes shared files and folders")
@@ -155,7 +154,6 @@ struct GoogleTests {
         #expect(GoogleService.gmail.words(.write) == "Also drafts, labels, archives and trashes")
         #expect(GoogleService.gmail.words(.send) == "Also sends email from this account")
         #expect(GoogleService.drive.words(nil) == "No access" && GoogleService.gmail.words(nil) == "No access")
-        #expect(Google.reachesOthers == "Reaches other people, as you, without asking.")
         let texts = GoogleService.allCases.flatMap { service in [service.title] + service.levels.map { service.words($0) } }
             + [GoogleConnectError.wrongState, .timeLimit, .denied("access_denied")].compactMap(\.errorDescription)
             + ["GET /?state=a&code=c HTTP/1.1", "GET /?state=a&error=x HTTP/1.1", "GET /?state=b&code=c HTTP/1.1"].map { GoogleAnswer.to($0, state: "a").page }

@@ -22,6 +22,9 @@ import SwiftUI
     private var placeUnderPointer: String?
     /// Where the pointer stood last in that text; nil while it is not over the text.
     private var lastPoint: CGPoint?
+    /// The window of the chat's scroll view (`OwnWindow`): a press in another window of the app, such as a request
+    /// card's own window over the chat (`NeedWindows`), moves no row of this chat.
+    let own = OwnWindow()
 
     /// The flag of `row`, which only that row reads.
     func flag(_ row: String) -> Flag {
@@ -67,8 +70,8 @@ import SwiftUI
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
             MainActor.assumeIsolated {
                 // A click that the hold drops reaches no control of the app, and moves no row (`AppFront.reaches`).
-                guard AppFront.reaches(event) else { return }
-                self?.change { $0.press(onWords: Self.onWords(event)) }
+                guard AppFront.reaches(event), let self, self.own.takes(event) else { return }
+                self.change { $0.press(onWords: Self.onWords(event)) }
             }
             return event
         }
@@ -120,6 +123,7 @@ extension View {
             selection.scroll(moving: phase.isScrolling)
             store?.scroll(ObjectIdentifier(selection), moving: phase.isScrolling)
         }
+        .ownWindow(selection.own)
         .onAppear { selection.start() }
         .onDisappear {
             selection.stop()

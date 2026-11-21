@@ -141,6 +141,7 @@ extension AnsweredMarkView {
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = true          // the app goes to the background, and its tag with it
+        panel.appearance = NSAppearance(named: .darkAqua)   // the app's dark look, also on a Mac in Light mode
         panel.contentView = host
         window.addChildWindow(panel, ordered: .above)
         self.panel = panel

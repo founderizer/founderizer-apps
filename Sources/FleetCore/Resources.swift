@@ -52,9 +52,11 @@ public struct ResourceGrantRecord: Decodable, Identifiable, Equatable, Sendable 
     /// The line the owner reads: "Manager gave dev write" or "You took it back from dev".
     public var words: String {
         let you = by == "owner", who = by.agentLabel, to = agent.agentLabel
-        guard let level else {
+        guard let raw = level else {
             return you ? String(l10n: "You took it back from \(to)") : String(l10n: "\(who) took it back from \(to)")
         }
+        // Drive's top level in words, not its raw "write_shared", which a customer could not read (21 November 2026).
+        let level = raw == GoogleLevel.writeShared.rawValue ? String(l10n: "write, shared files too") : raw
         return you ? String(l10n: "You gave \(to) \(level)") : String(l10n: "\(who) gave \(to) \(level)")
     }
 }

@@ -469,13 +469,23 @@ struct AccessSettings: View {
     private func who(_ resource: FleetResource) -> String? { who(holders: resource.holders) }
 
     private func who(holders held: [ResourceHolder]) -> String? {
-        let all = (store.state?.agents.map(\.name) ?? []).sorted()
+        let all = givable.sorted()
         let holders = held.map(\.agent).sorted()
         if holders.isEmpty { return String(l10n: "No agent") }
         if !all.isEmpty && Set(all) == Set(holders) { return String(l10n: "All agents") }
         let others = holders.filter { $0 != agent }
         return others.isEmpty ? nil : agentWords(others)
     }
+
+    /// **The agents that can hold an item: the workers and the leads.** The hub gives a resource to no other role
+    /// (`grant_fits`), so a level chosen for the fleet manager was refused, and its row went back to No access (a
+    /// customer, 21 November 2026, whose one agent was the manager).
+    private var givable: [String] {
+        (store.state?.agents ?? []).filter { ["worker", "lead"].contains($0.role) }.map(\.name)
+    }
+
+    /// The key of `note` for a write of the card's agents, which stands under them, apart from Who may give it.
+    private static func agentsNote(_ id: String) -> String { "agents \(id)" }
 
     // MARK: detail
 
@@ -494,14 +504,12 @@ struct AccessSettings: View {
         return VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
                 IconTile(symbol: Self.symbol(resource?.kind ?? "secret"))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(resource?.title ?? id)
-                        .font(Self.isCode(resource?.kind ?? "") ? FormMetrics.title.monospaced()
-                              : FormMetrics.title)
-                        .lineLimit(1).truncationMode(.middle).textSelection(.enabled).accessibilityAddTraits(.isHeader)
-                    Text(reading?.kind(of: resource ?? .placeholder)?.word ?? "").font(FormMetrics.detail)
-                        .foregroundStyle(FleetStyle.muted)
-                }
+                // No line of the kind under the title (the owner, 21 November 2026: "remove unnecessary explanations
+                // and subtitles!! Make it simple!"): the mark says it.
+                Text(resource?.title ?? id)
+                    .font(Self.isCode(resource?.kind ?? "") ? FormMetrics.title.monospaced()
+                          : FormMetrics.title)
+                    .lineLimit(1).truncationMode(.middle).textSelection(.enabled).accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 12)
                 Button("Done") { shown = nil }.buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("resource-done")
@@ -541,15 +549,13 @@ struct AccessSettings: View {
     /// write of the team file, which `give` has always made correctly. So every kind is now granted from both
     /// ends, which is what the fleet's own model says it is: one item, many agents.
     @ViewBuilder private func agentsSection(_ resource: FleetResource, kind: ResourceKind, reading: ResourceList) -> some View {
-        let agents = store.state?.agents.map(\.name) ?? []
-        FormSection("Which agents may use it", footer: Self.levelsFooter(kind)) {
-            if let level = kind.levels.last {
-                // The row names the level it gives. "All agents" is one click and the highest level of the kind,
-                // which for a mail account is Send — what it hands out belongs where it is handed out, not in a
-                // footer under it.
-                FormRow("All agents", symbol: "person.3",
-                        detail: resource.kind == "secret" ? String(l10n: "Every agent: \(Self.levelName(level, kind: resource.kind)).")
-                            : String(l10n: "Gives every agent \(Self.levelName(level, kind: resource.kind)).")) {
+        let agents = givable
+        // **No line of explanation here** (the owner, 21 November 2026: "Make it simple!"): no footer, no detail under
+        // All agents, and no "Has it at …" under an agent, whose control says its level.
+        FormSection("Which agents may use it") {
+            if let level = kind.levels.last, !agents.isEmpty {
+                // "All agents" is one click and the highest level of the kind; each agent's control then shows it.
+                FormRow("All agents", symbol: "person.3") {
                     if working == "\(resource.id) all" { ProgressView().controlSize(.small) }
                     else {
                         Toggle("All agents", isOn: Binding(
@@ -560,16 +566,14 @@ struct AccessSettings: View {
                     }
                 }
             }
-            if agents.isEmpty { FormEmpty("This fleet has no agent yet.", symbol: "person.slash") }
+            if agents.isEmpty { FormEmpty("Add an agent first. The fleet manager cannot use it.", symbol: "person.slash") }
             ForEach(agents, id: \.self) { agent in
                 let level = resource.holders.first { $0.agent == agent }?.level
                 let busy = working == "\(resource.id) \(agent)"
                 // **The agent's glyph, with its dot, before its name** (the owner, 30 October 2026: "Marks on every agent
                 // row"; margins row 15), as a secret's card has it: one agent row in every card, its name at the edge
                 // of "All agents".
-                FormRow(agent.agentLabel, mark: AgentGlyph(name: agent, size: GlyphSize.inline),
-                        detail: level.map { resource.kind == "secret" ? String(l10n: "Has it: \(Self.levelName($0, kind: resource.kind))")
-                            : String(l10n: "Has it at \(Self.levelName($0, kind: resource.kind))") }) {
+                FormRow(agent.agentLabel, mark: AgentGlyph(name: agent, size: GlyphSize.inline)) {
                     if busy { ProgressView().controlSize(.small) } else {
                         FleetSelect("What \(agent.agentLabel) may do with \(resource.title)",
                                     options: [FleetOption("", "No access")]
@@ -580,6 +584,10 @@ struct AccessSettings: View {
                             .disabled(!canChange).accessibilityIdentifier("access-agent-\(agent)")
                     }
                 }
+            }
+            // A refused or done write of an agent's level stands at the agents, not under Who may give it.
+            if let note, note.resource == Self.agentsNote(resource.id) {
+                FormRow(note.text, symbol: note.warning ? "exclamationmark.triangle" : "checkmark.circle") { EmptyView() }
             }
         }
     }
@@ -595,6 +603,9 @@ struct AccessSettings: View {
             default: break
             }
         }
+        // A Drive or Gmail level by its own title, in the app's language ("Write, shared files too", not the raw
+        // "Write shared" that a customer asked about on 21 November 2026).
+        if kind == "drive" || kind == "gmail", let google = GoogleLevel(rawValue: level) { return google.title }
         return levelWords(level)
     }
 
@@ -602,16 +613,6 @@ struct AccessSettings: View {
     static func levelWords(_ level: String) -> String {
         let words = level.replacingOccurrences(of: "_", with: " ")
         return words.prefix(1).uppercased() + words.dropFirst()
-    }
-
-    /// The one thing worth saying under the agents of this kind: that its top level acts as the owner towards
-    /// other people. Every other kind says nothing, because a level that reaches nobody needs no warning.
-    private static func levelsFooter(_ kind: ResourceKind) -> String? {
-        let reaching = kind.levels.compactMap(GoogleLevel.init(rawValue:)).filter(\.reachesOthers)
-        guard !reaching.isEmpty else { return nil }
-        let titles = reaching.map(\.title)
-        if titles.count == 2 { return String(l10n: "\(titles[0]) and \(titles[1]): \(Google.reachesOthers)") }
-        return "\(titles.joined(separator: " and ")): \(Google.reachesOthers)"
     }
 
     /// Gives every agent this item at one level, or takes it from all of them: the one control for "everyone".
@@ -635,11 +636,12 @@ struct AccessSettings: View {
         note = nil
         defer { working = nil }
         if let refused = await Self.write(resource, to: agent, level: level, sha256: reading.sha256, store: store, database: database) {
-            note = (resource.id, refused, true)
+            note = (Self.agentsNote(resource.id), refused, true)
             return
         }
-        note = (resource.id, level == nil ? String(l10n: "\(agent.agentLabel) no longer has \(resource.title).")
-                : String(l10n: "\(agent.agentLabel) has \(resource.title) at \(level ?? "")."), false)
+        note = (Self.agentsNote(resource.id), level.map {
+            String(l10n: "\(agent.agentLabel) has \(resource.title) at \(Self.levelName($0, kind: resource.kind)).")
+        } ?? String(l10n: "\(agent.agentLabel) no longer has \(resource.title)."), false)
         await read()
     }
 
@@ -883,13 +885,12 @@ struct AccessSettings: View {
     @ViewBuilder private func folderAgents(_ resource: FleetResource, folder: DriveFolder, key: String,
                                            kind: ResourceKind) -> some View {
         // Workers and leads: the hub gives a folder to no other role, and a write that named one would be refused whole.
-        let agents = (store.state?.agents ?? []).filter { ["worker", "lead"].contains($0.role) }.map(\.name)
+        let agents = givable
         // A sharing that the hub has not read yet offers what a shared folder offers: Write could give nothing there.
         let shared = folder.shared != false
-        FormSection("Which agents may use it", footer: Self.levelsFooter(kind)) {
-            if let top = GoogleService.drive.levels.filter({ shared ? $0 != .write : true }).last {
-                FormRow("All agents", symbol: "person.3",
-                        detail: String(l10n: "Gives every agent \(Self.levelName(top.rawValue, kind: resource.kind)).")) {
+        FormSection("Which agents may use it") {
+            if let top = GoogleService.drive.levels.filter({ shared ? $0 != .write : true }).last, !agents.isEmpty {
+                FormRow("All agents", symbol: "person.3") {
                     if working == "\(key) all" { ProgressView().controlSize(.small) }
                     else {
                         Toggle("All agents", isOn: Binding(
@@ -901,12 +902,11 @@ struct AccessSettings: View {
                     }
                 }
             }
-            if agents.isEmpty { FormEmpty("This fleet has no agent yet.", symbol: "person.slash") }
+            if agents.isEmpty { FormEmpty("Add an agent first. The fleet manager cannot use it.", symbol: "person.slash") }
             ForEach(agents, id: \.self) { agent in
                 let level = folder.holders.first { $0.agent == agent }?.level
                 let options = resource.folderLevels(for: agent, shared: shared)
-                FormRow(agent.agentLabel, mark: AgentGlyph(name: agent, size: GlyphSize.inline),
-                        detail: level.map { String(l10n: "Has it at \(Self.levelName($0, kind: resource.kind))") }) {
+                FormRow(agent.agentLabel, mark: AgentGlyph(name: agent, size: GlyphSize.inline)) {
                     if working == "\(key) \(agent)" { ProgressView().controlSize(.small) } else {
                         FleetSelect("What \(agent.agentLabel) may do with \(folder.title)",
                                     options: [FleetOption("", "No access")]
@@ -935,7 +935,7 @@ struct AccessSettings: View {
         defer { working = nil }
         let said = await Self.writeFolder(resource, folder: folder.id, access: folder.access(giving: agent, level: level),
                                           sha256: reading.sha256, store: store, database: database)
-        let done = level.map { String(l10n: "\(agent.agentLabel) has \(folder.title) at \($0.rawValue).") }
+        let done = level.map { String(l10n: "\(agent.agentLabel) has \(folder.title) at \($0.title).") }
             ?? String(l10n: "\(agent.agentLabel) no longer has \(folder.title).")
         note = (key, said.refused ?? said.tookPlaceOf ?? done, said.refused != nil)
         await read()
@@ -1040,7 +1040,7 @@ struct AccessSettings: View {
             }
             await read()
             if receipt.changed, case .grantable(let max, let to) = standing, let reading {
-                note = (resource.id, String(l10n: "The fleet manager may give \(resource.title) to \(reading.audienceWords(to)), at most \(max)."), false)
+                note = (resource.id, String(l10n: "The fleet manager may give \(resource.title) to \(reading.audienceWords(to)), at most \(AccessSettings.levelName(max, kind: resource.kind))."), false)
             }
         } catch {
             await read()
@@ -1151,12 +1151,6 @@ struct AccessGive: View {
     }
 }
 
-extension FleetResource {
-    /// A stand-in for a detail whose resource left the list between the click and the reading.
-    static let placeholder = FleetResource(id: "secret:", kind: "secret", what: "", title: "", needs: "", levels: [],
-                                           uses: [], credential: "none", connected: true, grant: nil, holders: [])
-}
-
 /// **"Manager may give: Reads it", whose level is never cut** (fix round 3, item 6): at 960 the rows of Apps, Secrets
 /// and Can use cut it to "Manager may give:…". The words before the level give way first.
 struct ManagerGives: View {
@@ -1203,8 +1197,7 @@ struct StandingRows: View {
             }
         }
         if case .grantable(let max, let to) = standing {
-            FormRow("At most", symbol: "arrow.up.to.line",
-                    detail: String(l10n: "The manager may give this level and the ones under it.")) {
+            FormRow("At most", symbol: "arrow.up.to.line") {
                 if levels.count < 2 {
                     // **One level is a value, not a choice** (fix round 3c): an MCP server's "Use" stood as a grey select.
                     Text(AccessSettings.levelName(max, kind: kind)).foregroundStyle(FleetStyle.muted)
@@ -1229,8 +1222,8 @@ struct StandingRows: View {
                                                                                footer: String?) {
         switch standing {
         case .ownerOnly:
-            return (String(l10n: "You alone"), String(l10n: "You give it"), "person.fill", FleetStyle.muted,
-                    String(l10n: "Only you give it. The fleet manager must ask you for it with a Needs-you item."))
+            // No footer (the owner, 21 November 2026: "Make it simple!"): the choice's own words say it.
+            return (String(l10n: "You alone"), String(l10n: "You give it"), "person.fill", FleetStyle.muted, nil)
         case .grantable(let max, _):
             // No footer of 35 words on what the manager may do (D-2): the two rows above it say it.
             // The row's words (fix round 2): what the manager may give, by the level's one name.
@@ -1241,12 +1234,9 @@ struct StandingRows: View {
 
     /// The rows of the first dropdown: you, or you and the manager.
     fileprivate static func choices(levels: [String]) -> [FleetOption<StandingChoice>] {
-        var rows = [FleetOption(StandingChoice.owner, "You alone", subtitle: String(l10n: "The manager asks you for it."),
-                                mark: .symbol("person.fill"))]
+        var rows = [FleetOption(StandingChoice.owner, "You alone", mark: .symbol("person.fill"))]
         if !levels.isEmpty {
-            rows.append(FleetOption(StandingChoice.manager, "You and the fleet manager",
-                                    subtitle: String(l10n: "The manager may hand it out, up to a level you set."),
-                                    mark: .symbol("person.2.fill")))
+            rows.append(FleetOption(StandingChoice.manager, "You and the fleet manager", mark: .symbol("person.2.fill")))
         }
         return rows
     }

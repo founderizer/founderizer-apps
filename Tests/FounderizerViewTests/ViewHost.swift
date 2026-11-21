@@ -73,10 +73,12 @@ import Vision
         return store
     }
 
-    /// The app's main window for one test, drawn and laid out.
+    /// The app's main window for one test, drawn and laid out, in the dark look that the app's window takes
+    /// (`FounderizerApp`), whatever the Mac's look.
     static func window(_ store: FleetStore, size: NSSize = NSSize(width: 1180, height: 900)) -> NSWindow {
         _ = ready
         let host = NSHostingView(rootView: FleetView(store: store)
+            .preferredColorScheme(.dark)
             .environment(\.glyphTeam, store.state?.agents.map(\.name) ?? [])
             .frame(width: size.width, height: size.height))
         host.sizingOptions = []

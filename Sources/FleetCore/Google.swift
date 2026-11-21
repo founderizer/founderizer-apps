@@ -152,12 +152,12 @@ public enum GoogleLevel: String, Codable, CaseIterable, Sendable {
         switch self {
         case .read: String(l10n: "Read")
         case .write: String(l10n: "Write")
-        case .writeShared: String(l10n: "Write shared")
+        // A name that says what it allows (a customer, 21 November 2026: "what is even Write Shared??"), as the
+        // hub says it ("write, shared files too", GRANT_LEVEL_WORDS).
+        case .writeShared: String(l10n: "Write, shared files too")
         case .send: String(localized: "Send (a Google level)", defaultValue: "Send", bundle: Localized.bundle, locale: Localized.digits)
         }
     }
-    /// Write shared and Send reach other people as the owner, without asking.
-    public var reachesOthers: Bool { self == .writeShared || self == .send }
 }
 
 /// One service of one agent: the account that it comes from, and the level.
@@ -176,7 +176,6 @@ public struct GoogleChange: Equatable, Sendable {
 
 public enum Google {
     public static let feature = "google"
-    public static let reachesOthers = String(l10n: "Reaches other people, as you, without asking.")
     /// **What the Disconnect of a Google account does, in the place of its button after a press** (the owner's "Yes,
     /// both as drawn" of 16 November 2026). Google's revoke "removes all OAuth 2.0 scopes previously granted to a
     /// project" and ends the tokens "for all clients registered under that project": both services of the account end,
