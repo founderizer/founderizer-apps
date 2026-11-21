@@ -3460,18 +3460,6 @@
       },
       {
         "holds_sudo_password" : false,
-        "job" : "hub",
-        "name" : "a small hub",
-        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nmemory_mb=640",
-        "ssh_port" : 22,
-        "tailnet" : null,
-        "verdict" : {
-          "kind" : "stop",
-          "says" : "This server has 640 MB of memory, and the hub needs about 1 GB. Choose a plan with more memory."
-        }
-      },
-      {
-        "holds_sudo_password" : false,
         "job" : "join",
         "name" : "a small server for agents",
         "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nmemory_mb=950",
@@ -3486,13 +3474,13 @@
         "holds_sudo_password" : false,
         "job" : "hub",
         "name" : "enough for a hub",
-        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nmemory_mb=950",
+        "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nmemory_mb=1910",
         "ssh_port" : 22,
         "tailnet" : null,
         "verdict" : {
           "changes" : "SSH moves to Tailscale. Port 443 stays open.",
           "kind" : "ready",
-          "summary" : "Ubuntu 24.04 · 1 GB · x86"
+          "summary" : "Ubuntu 24.04 · 2 GB · x86"
         }
       },
       {
@@ -3761,14 +3749,13 @@
       {
         "holds_sudo_password" : false,
         "job" : "hub",
-        "name" : "a plan sold as 1 GB",
+        "name" : "a hub on a plan sold as 1 GB",
         "output" : "user=root\nuid=0\nsudo=root\nos_id=ubuntu\nos_version=24.04\nos_name=Ubuntu\narch=x86_64\ndisk_free_mb=70000\nsystemd=yes\nipv4_route=yes\nreach=github.com yes\nreach=tailscale.com yes\nreach=claude.ai yes\nreach=chatgpt.com yes\ncloud_init=done\ndpkg_lock=no\nlisten=tcp/22/sshd\nlisten=tcp/443/caddy\nufw=inactive\ntailscale=none\nend=yes\nmemory_mb=957",
         "ssh_port" : 22,
         "tailnet" : null,
         "verdict" : {
-          "changes" : "SSH moves to Tailscale. Port 443 stays open.",
-          "kind" : "ready",
-          "summary" : "Ubuntu 24.04 · 1 GB · x86"
+          "kind" : "stop",
+          "says" : "This server has 957 MB of memory, and the hub needs about 2 GB. Choose a plan with more memory."
         }
       }
     ],

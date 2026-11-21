@@ -75,6 +75,32 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+
+            <!-- The copy icon of a value's chip on a request's card (Pages/ValueChips.cs): no fill of its own, because the
+                 whole chip lightens under the pointer, and the system's focus frame for the keyboard. -->
+            <Style x:Key="ChipKeyStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="3" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="FocusVisualMargin" Value="0" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Grid Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+                                <ContentPresenter
+                                    Content="{TemplateBinding Content}"
+                                    Padding="{TemplateBinding Padding}"
+                                    HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

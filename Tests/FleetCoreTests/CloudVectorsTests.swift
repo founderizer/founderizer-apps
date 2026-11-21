@@ -70,7 +70,9 @@ struct CloudVectorsTests {
         + "{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},"
         + "{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},"
         + "{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},"
-        + "{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}"
+        + "{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},"
+        + "{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},"
+        + "{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}"
 
     static let hetznerServer = "{\"server\":{\"id\":1001,\"name\":\"hub-1\",\"status\":\"initializing\",\"public_net\":"
         + "{\"ipv4\":{\"id\":5,\"ip\":\"203.0.113.10\"},\"ipv6\":null}},"

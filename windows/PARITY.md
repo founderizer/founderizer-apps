@@ -159,7 +159,18 @@ Mac, and a device route is all that the PC reaches.
 - **A request card in a window of its own** (the Mac's `NeedWindows`, 21 November 2026): not planned: it is the
   Mac's alone, an AppKit panel over every app, also over a full-screen one.
 - **A request card's one badge for a name beside its role, and a chip with a copy icon on each value** (the Mac's
-  `CardJoin` and `CardValueText`, 21 November 2026; the owner's "Yes, as drawn"): waits. A Windows card and the
-  iPhone's card owe both: an agent's name with its own role beside it ("Nova (Customer Support Lead)") is one badge
-  with the role, and each value that the agent put in inline code (`CardValues`, FleetCore) is a chip whose press
-  copies it exactly.
+  `CardJoin` and `CardValueText`, 21 November 2026; the owner's "Yes, as drawn"). The iPhone's card owes both.
+  Windows: **the chip is built.** Each value that the agent put in inline code (`CardValues` in `Founderizer.Core`,
+  FleetCore's rule with no names; `RequestBody.WhyValues`, `TaskValues`, `DetailsValues`, `TodoBehindValues`, none
+  in a door's script) is a chip in the reason, the task, the steps and the details of a request's card in a chat and
+  of the request at hand in Needs you (`Pages/ValueChips.cs`, `Blocks.FillValues`), never in the folded start of a
+  reason, his answer or a chat's message: inline code's fill, a copy icon (Fluent's copy) after the value, muted,
+  in the words' colour and the chip a little lighter under the pointer, the hand, a press anywhere on the chip
+  copies the value exactly to the system's clipboard and the icon is a check for 1.5 s; Tab reaches the icon, Enter
+  or Space copies, and an assistive app reads "Copy <value>". No character is added (the icon's room is the spacing
+  after the value's last character), and a value that wraps has its icon on its last line. The library reads a code
+  span as CommonMark and the Mac do (`InlineMarks`: one space from each end only when both have one, a line's end as
+  a space, a backslash and an entity in code as written, a whole run of backticks), so that a copy holds the Mac's
+  characters (`CardValuesTests`). The proofs' sample state `values` shows such a card. **The one badge waits:**
+  Windows draws no name as a badge in a card's words (no `CardNames` yet), so there is nothing to join; and so a
+  knowledge file's path in inline code is a value on Windows, where the Mac draws its badge.

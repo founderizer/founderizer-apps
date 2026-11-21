@@ -373,7 +373,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -434,21 +434,6 @@
       ],
       "result" : [
         {
-          "choice" : "CPX02 · 2 cores · 1 GB · Nuremberg",
-          "cores" : 2,
-          "currency" : "EUR",
-          "dedicated" : false,
-          "disk_gb" : 20,
-          "key" : "cpx02@nbg1",
-          "kind" : "cpx02",
-          "location" : "nbg1",
-          "memory_gb" : 1,
-          "place" : "Nuremberg, Germany",
-          "price" : "6.585",
-          "size" : "CPX02 · 2 vCPU · 1 GB · 20 GB",
-          "type" : "cpx02"
-        },
-        {
           "choice" : "CPX12 · 2 cores · 2 GB · Nuremberg",
           "cores" : 2,
           "currency" : "EUR",
@@ -459,7 +444,7 @@
           "location" : "nbg1",
           "memory_gb" : 2,
           "place" : "Nuremberg, Germany",
-          "price" : "12.085",
+          "price" : "12.5848",
           "size" : "CPX12 · 2 vCPU · 2 GB · 40 GB",
           "type" : "cpx12"
         },
@@ -474,7 +459,7 @@
           "location" : "fsn1",
           "memory_gb" : 4,
           "place" : "Falkenstein, Germany",
-          "price" : "20.085",
+          "price" : "20.5848",
           "size" : "CPX22 · 2 vCPU · 4 GB · 40 GB",
           "type" : "cpx22"
         },
@@ -489,7 +474,7 @@
           "location" : "nbg1",
           "memory_gb" : 8,
           "place" : "Nuremberg, Germany",
-          "price" : "37.085",
+          "price" : "37.5848",
           "size" : "CCX13 · 2 vCPU · 8 GB · 40 GB",
           "type" : "ccx13"
         }
@@ -507,7 +492,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -626,7 +611,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -702,7 +687,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -826,7 +811,7 @@
           "url" : "https://api.hetzner.cloud/v1/firewalls"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -879,7 +864,7 @@
         "ipv4" : "203.0.113.10",
         "location" : "fsn1",
         "name" : "hub-1",
-        "price" : "4.7481",
+        "price" : "5.2479",
         "type" : "cx23"
       }
     },
@@ -895,7 +880,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -1098,7 +1083,7 @@
     {
       "answers" : [
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -1268,7 +1253,7 @@
           "url" : "https://api.hetzner.cloud/v1/firewalls"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -1321,7 +1306,7 @@
         "ipv4" : "203.0.113.10",
         "location" : "fsn1",
         "name" : "hub-1",
-        "price" : "4.7481",
+        "price" : "5.2479",
         "type" : "cx23"
       }
     },
@@ -1337,7 +1322,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -1443,7 +1428,7 @@
           "url" : "https://api.hetzner.cloud/v1/firewalls"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -1453,7 +1438,7 @@
           "url" : "https://api.hetzner.cloud/v1/servers"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"nbg1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"nbg1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -1479,7 +1464,7 @@
         "ipv4" : "203.0.113.10",
         "location" : "nbg1",
         "name" : "hub-1",
-        "price" : "4.7481",
+        "price" : "5.2479",
         "type" : "cx23"
       }
     },
@@ -1495,7 +1480,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -1632,7 +1617,7 @@
           "url" : "https://api.hetzner.cloud/v1/firewalls"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -1701,7 +1686,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -1801,7 +1786,7 @@
           "url" : "https://api.hetzner.cloud/v1/firewalls"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -1811,7 +1796,7 @@
           "url" : "https://api.hetzner.cloud/v1/servers"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"nbg1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"nbg1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -1821,7 +1806,7 @@
           "url" : "https://api.hetzner.cloud/v1/servers"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cax11\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cax11\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -1854,7 +1839,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -1954,7 +1939,7 @@
           "url" : "https://api.hetzner.cloud/v1/firewalls"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -1987,7 +1972,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -2110,7 +2095,7 @@
           "url" : "https://api.hetzner.cloud/v1/firewalls"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -2242,7 +2227,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -2351,7 +2336,7 @@
           "url" : "https://api.hetzner.cloud/v1/firewalls"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"nbg1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":77}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"nbg1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cx23\",\"ssh_keys\":[42],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -2384,7 +2369,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -4055,7 +4040,7 @@
           "status" : 200
         },
         {
-          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}]}}",
+          "body" : "{\"pricing\":{\"currency\":\"EUR\",\"primary_ips\":[{\"type\":\"ipv4\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.6100\"}}]},{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"nbg1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}},{\"location\":\"hel1\",\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.5100\"}}]}]}}",
           "headers" : {
 
           },
@@ -4152,7 +4137,7 @@
           "url" : "https://api.hetzner.cloud/v1/firewalls"
         },
         {
-          "body" : "{\"firewalls\":[{\"firewall\":4294967373}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":false},\"server_type\":\"cx23\",\"ssh_keys\":[3000000042],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"firewalls\":[{\"firewall\":4294967373}],\"image\":\"ubuntu-24.04\",\"labels\":{\"founderizer\":\"hub\"},\"location\":\"fsn1\",\"name\":\"hub-1\",\"public_net\":{\"enable_ipv4\":true,\"enable_ipv6\":true},\"server_type\":\"cx23\",\"ssh_keys\":[3000000042],\"start_after_create\":true,\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -4178,7 +4163,7 @@
         "ipv4" : "203.0.113.10",
         "location" : "fsn1",
         "name" : "hub-1",
-        "price" : "4.7481",
+        "price" : "5.2479",
         "type" : "cx23"
       }
     },
@@ -4623,21 +4608,6 @@
       ],
       "result" : [
         {
-          "choice" : "1 core · 1 GB · Frankfurt",
-          "cores" : 1,
-          "currency" : "USD",
-          "dedicated" : false,
-          "disk_gb" : 25,
-          "key" : "s-1vcpu-1gb@fra1",
-          "kind" : "1 1.0 false",
-          "location" : "fra1",
-          "memory_gb" : 1,
-          "place" : "Frankfurt, Germany",
-          "price" : "6",
-          "size" : "1 vCPU · 1 GB · 25 GB",
-          "type" : "s-1vcpu-1gb"
-        },
-        {
           "choice" : "1 core · 2 GB · Amsterdam",
           "cores" : 1,
           "currency" : "USD",
@@ -4864,7 +4834,7 @@
           "url" : "https://api.digitalocean.com/v2/sizes?per_page=200"
         },
         {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"fra1\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"ams3\",\"size\":\"s-1vcpu-2gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -4907,10 +4877,10 @@
         "firewall_id" : "bb4b2611-3d72-467b-8602-280330ecd65c",
         "id" : "3164444",
         "ipv4" : "198.51.100.7",
-        "location" : "fra1",
+        "location" : "ams3",
         "name" : "hub-1",
-        "price" : "6",
-        "type" : "s-1vcpu-1gb"
+        "price" : "12",
+        "type" : "s-1vcpu-2gb"
       }
     },
     {
@@ -5166,76 +5136,6 @@
           "url" : "https://api.digitalocean.com/v2/sizes?per_page=200"
         },
         {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"fra1\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
-          "headers" : {
-            "Accept" : "application/json",
-            "Authorization" : "Bearer {token}",
-            "Content-Type" : "application/json"
-          },
-          "method" : "POST",
-          "url" : "https://api.digitalocean.com/v2/droplets"
-        },
-        {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"ams3\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
-          "headers" : {
-            "Accept" : "application/json",
-            "Authorization" : "Bearer {token}",
-            "Content-Type" : "application/json"
-          },
-          "method" : "POST",
-          "url" : "https://api.digitalocean.com/v2/droplets"
-        },
-        {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"lon1\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
-          "headers" : {
-            "Accept" : "application/json",
-            "Authorization" : "Bearer {token}",
-            "Content-Type" : "application/json"
-          },
-          "method" : "POST",
-          "url" : "https://api.digitalocean.com/v2/droplets"
-        },
-        {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"nyc3\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
-          "headers" : {
-            "Accept" : "application/json",
-            "Authorization" : "Bearer {token}",
-            "Content-Type" : "application/json"
-          },
-          "method" : "POST",
-          "url" : "https://api.digitalocean.com/v2/droplets"
-        },
-        {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"sgp1\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
-          "headers" : {
-            "Accept" : "application/json",
-            "Authorization" : "Bearer {token}",
-            "Content-Type" : "application/json"
-          },
-          "method" : "POST",
-          "url" : "https://api.digitalocean.com/v2/droplets"
-        },
-        {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"sfo3\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
-          "headers" : {
-            "Accept" : "application/json",
-            "Authorization" : "Bearer {token}",
-            "Content-Type" : "application/json"
-          },
-          "method" : "POST",
-          "url" : "https://api.digitalocean.com/v2/droplets"
-        },
-        {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"fra1\",\"size\":\"s-1vcpu-1gb-amd\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
-          "headers" : {
-            "Accept" : "application/json",
-            "Authorization" : "Bearer {token}",
-            "Content-Type" : "application/json"
-          },
-          "method" : "POST",
-          "url" : "https://api.digitalocean.com/v2/droplets"
-        },
-        {
           "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"ams3\",\"size\":\"s-1vcpu-2gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
@@ -5370,16 +5270,6 @@
           },
           "method" : "GET",
           "url" : "https://api.digitalocean.com/v2/sizes?per_page=200"
-        },
-        {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"fra1\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
-          "headers" : {
-            "Accept" : "application/json",
-            "Authorization" : "Bearer {token}",
-            "Content-Type" : "application/json"
-          },
-          "method" : "POST",
-          "url" : "https://api.digitalocean.com/v2/droplets"
         }
       ],
       "result" : null
@@ -5469,7 +5359,7 @@
           "url" : "https://api.digitalocean.com/v2/sizes?per_page=200"
         },
         {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"fra1\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"ams3\",\"size\":\"s-1vcpu-2gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -5585,7 +5475,7 @@
           "url" : "https://api.digitalocean.com/v2/sizes?per_page=200"
         },
         {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"fra1\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"ams3\",\"size\":\"s-1vcpu-2gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -5737,7 +5627,7 @@
           "url" : "https://api.digitalocean.com/v2/sizes?per_page=200"
         },
         {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"fra1\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"ams3\",\"size\":\"s-1vcpu-2gb\",\"ssh_keys\":[512190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -7107,7 +6997,7 @@
           "url" : "https://api.digitalocean.com/v2/sizes?per_page=200"
         },
         {
-          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"fra1\",\"size\":\"s-1vcpu-1gb\",\"ssh_keys\":[3000000190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
+          "body" : "{\"image\":\"ubuntu-24-04-x64\",\"name\":\"hub-1\",\"region\":\"ams3\",\"size\":\"s-1vcpu-2gb\",\"ssh_keys\":[3000000190],\"user_data\":\"#!\\/bin\\/sh\\nfor try in 1 2 3; do DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1200 -q install <\\/dev\\/null >\\/dev\\/null 2>&1; curl -fsSL https:\\/\\/tailscale.com\\/install.sh | sh && command -v tailscale >\\/dev\\/null && break; sleep 20; done\\ntailscale up --auth-key={auth key} --hostname=hub-1 --accept-dns=false\\n\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -7141,10 +7031,10 @@
         "firewall_id" : "bb4b2611-3d72-467b-8602-280330ecd65c",
         "id" : "4294967396",
         "ipv4" : "198.51.100.7",
-        "location" : "fra1",
+        "location" : "ams3",
         "name" : "hub-1",
-        "price" : "6",
-        "type" : "s-1vcpu-1gb"
+        "price" : "12",
+        "type" : "s-1vcpu-2gb"
       }
     },
     {
@@ -7468,21 +7358,6 @@
         }
       ],
       "result" : [
-        {
-          "choice" : "1 core · 1 GB · Frankfurt",
-          "cores" : 1,
-          "currency" : "USD",
-          "dedicated" : false,
-          "disk_gb" : 25,
-          "key" : "vc2-1c-1gb@fra",
-          "kind" : "1 1.0 false",
-          "location" : "fra",
-          "memory_gb" : 1,
-          "place" : "Frankfurt, Germany",
-          "price" : "5",
-          "size" : "1 vCPU · 1 GB · 25 GB",
-          "type" : "vc2-1c-1gb"
-        },
         {
           "choice" : "1 core · 2 GB · Amsterdam",
           "cores" : 1,
@@ -7933,7 +7808,7 @@
           "url" : "https://api.vultr.com/v2/firewalls"
         },
         {
-          "body" : "{\"activation_email\":false,\"backups\":\"disabled\",\"enable_ipv6\":true,\"firewall_group_id\":\"1234abcd-5678-4ef0-9abc-def012345678\",\"hostname\":\"hub-1\",\"label\":\"hub-1\",\"os_id\":2284,\"plan\":\"vc2-1c-1gb\",\"region\":\"fra\",\"sshkey_id\":[\"k-app\"],\"tags\":[\"founderizer-hub\"],\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"}",
+          "body" : "{\"activation_email\":false,\"backups\":\"disabled\",\"enable_ipv6\":true,\"firewall_group_id\":\"1234abcd-5678-4ef0-9abc-def012345678\",\"hostname\":\"hub-1\",\"label\":\"hub-1\",\"os_id\":2284,\"plan\":\"vc2-1c-2gb\",\"region\":\"ams\",\"sshkey_id\":[\"k-app\"],\"tags\":[\"founderizer-hub\"],\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -7966,10 +7841,10 @@
         "firewall_id" : "1234abcd-5678-4ef0-9abc-def012345678",
         "id" : "cb676a46-66fd-4dfb-b839-443f2e6c0b60",
         "ipv4" : "192.0.2.44",
-        "location" : "fra",
+        "location" : "ams",
         "name" : "hub-1",
-        "price" : "5",
-        "type" : "vc2-1c-1gb"
+        "price" : "10",
+        "type" : "vc2-1c-2gb"
       }
     },
     {
@@ -8212,7 +8087,7 @@
           "url" : "https://api.vultr.com/v2/firewalls"
         },
         {
-          "body" : "{\"activation_email\":false,\"backups\":\"disabled\",\"enable_ipv6\":true,\"firewall_group_id\":\"1234abcd-5678-4ef0-9abc-def012345678\",\"hostname\":\"hub-1\",\"label\":\"hub-1\",\"os_id\":2284,\"plan\":\"vc2-1c-1gb\",\"region\":\"fra\",\"sshkey_id\":[\"k-app\"],\"tags\":[\"founderizer-hub\"],\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"}",
+          "body" : "{\"activation_email\":false,\"backups\":\"disabled\",\"enable_ipv6\":true,\"firewall_group_id\":\"1234abcd-5678-4ef0-9abc-def012345678\",\"hostname\":\"hub-1\",\"label\":\"hub-1\",\"os_id\":2284,\"plan\":\"vc2-1c-2gb\",\"region\":\"ams\",\"sshkey_id\":[\"k-app\"],\"tags\":[\"founderizer-hub\"],\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -8499,7 +8374,7 @@
           "url" : "https://api.vultr.com/v2/firewalls"
         },
         {
-          "body" : "{\"activation_email\":false,\"backups\":\"disabled\",\"enable_ipv6\":true,\"firewall_group_id\":\"1234abcd-5678-4ef0-9abc-def012345678\",\"hostname\":\"hub-1\",\"label\":\"hub-1\",\"os_id\":2284,\"plan\":\"vc2-1c-1gb\",\"region\":\"fra\",\"sshkey_id\":[\"k-app\"],\"tags\":[\"founderizer-hub\"],\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"}",
+          "body" : "{\"activation_email\":false,\"backups\":\"disabled\",\"enable_ipv6\":true,\"firewall_group_id\":\"1234abcd-5678-4ef0-9abc-def012345678\",\"hostname\":\"hub-1\",\"label\":\"hub-1\",\"os_id\":2284,\"plan\":\"vc2-1c-2gb\",\"region\":\"ams\",\"sshkey_id\":[\"k-app\"],\"tags\":[\"founderizer-hub\"],\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -10108,21 +9983,6 @@
       ],
       "result" : [
         {
-          "choice" : "1 core · 1 GB · Frankfurt",
-          "cores" : 1,
-          "currency" : "USD",
-          "dedicated" : false,
-          "disk_gb" : 25,
-          "key" : "g6-nanode-1@eu-central",
-          "kind" : "1 1.0 false",
-          "location" : "eu-central",
-          "memory_gb" : 1,
-          "place" : "Frankfurt, Germany",
-          "price" : "5",
-          "size" : "1 vCPU · 1 GB · 25 GB",
-          "type" : "g6-nanode-1"
-        },
-        {
           "choice" : "1 core · 2 GB · Amsterdam",
           "cores" : 1,
           "currency" : "USD",
@@ -10490,7 +10350,7 @@
           "url" : "https://api.linode.com/v4/networking/firewalls"
         },
         {
-          "body" : "{\"authorized_keys\":[\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAo\\/DN+NoNbdAzU3DYGLTD7ne5vXT9bm+oEyoiacxwWg founderizer-test\"],\"backups_enabled\":false,\"booted\":true,\"firewall_id\":88712,\"image\":\"linode\\/ubuntu24.04\",\"interface_generation\":\"legacy_config\",\"label\":\"hub-1\",\"metadata\":{\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"},\"private_ip\":false,\"region\":\"eu-central\",\"root_pass\":\"{root password}\",\"tags\":[\"founderizer-hub\"],\"type\":\"g6-nanode-1\"}",
+          "body" : "{\"authorized_keys\":[\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAo\\/DN+NoNbdAzU3DYGLTD7ne5vXT9bm+oEyoiacxwWg founderizer-test\"],\"backups_enabled\":false,\"booted\":true,\"firewall_id\":88712,\"image\":\"linode\\/ubuntu24.04\",\"interface_generation\":\"legacy_config\",\"label\":\"hub-1\",\"metadata\":{\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"},\"private_ip\":false,\"region\":\"nl-ams\",\"root_pass\":\"{root password}\",\"tags\":[\"founderizer-hub\"],\"type\":\"g6-standard-1\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -10523,10 +10383,10 @@
         "firewall_id" : "88712",
         "id" : "54748754",
         "ipv4" : "198.51.100.88",
-        "location" : "eu-central",
+        "location" : "nl-ams",
         "name" : "hub-1",
-        "price" : "5",
-        "type" : "g6-nanode-1"
+        "price" : "16.8",
+        "type" : "g6-standard-1"
       }
     },
     {
@@ -10714,7 +10574,7 @@
           "url" : "https://api.linode.com/v4/networking/firewalls"
         },
         {
-          "body" : "{\"authorized_keys\":[\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAo\\/DN+NoNbdAzU3DYGLTD7ne5vXT9bm+oEyoiacxwWg founderizer-test\"],\"backups_enabled\":false,\"booted\":true,\"firewall_id\":88712,\"image\":\"linode\\/ubuntu24.04\",\"interface_generation\":\"legacy_config\",\"label\":\"hub-1\",\"metadata\":{\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"},\"private_ip\":false,\"region\":\"eu-central\",\"root_pass\":\"{root password}\",\"tags\":[\"founderizer-hub\"],\"type\":\"g6-nanode-1\"}",
+          "body" : "{\"authorized_keys\":[\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAo\\/DN+NoNbdAzU3DYGLTD7ne5vXT9bm+oEyoiacxwWg founderizer-test\"],\"backups_enabled\":false,\"booted\":true,\"firewall_id\":88712,\"image\":\"linode\\/ubuntu24.04\",\"interface_generation\":\"legacy_config\",\"label\":\"hub-1\",\"metadata\":{\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"},\"private_ip\":false,\"region\":\"nl-ams\",\"root_pass\":\"{root password}\",\"tags\":[\"founderizer-hub\"],\"type\":\"g6-standard-1\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -11160,7 +11020,7 @@
           "url" : "https://api.linode.com/v4/networking/firewalls"
         },
         {
-          "body" : "{\"authorized_keys\":[\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAo\\/DN+NoNbdAzU3DYGLTD7ne5vXT9bm+oEyoiacxwWg founderizer-test\"],\"backups_enabled\":false,\"booted\":true,\"firewall_id\":3000000001,\"image\":\"linode\\/ubuntu24.04\",\"interface_generation\":\"legacy_config\",\"label\":\"hub-1\",\"metadata\":{\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"},\"private_ip\":false,\"region\":\"eu-central\",\"root_pass\":\"{root password}\",\"tags\":[\"founderizer-hub\"],\"type\":\"g6-nanode-1\"}",
+          "body" : "{\"authorized_keys\":[\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAo\\/DN+NoNbdAzU3DYGLTD7ne5vXT9bm+oEyoiacxwWg founderizer-test\"],\"backups_enabled\":false,\"booted\":true,\"firewall_id\":3000000001,\"image\":\"linode\\/ubuntu24.04\",\"interface_generation\":\"legacy_config\",\"label\":\"hub-1\",\"metadata\":{\"user_data\":\"IyEvYmluL3NoCmZvciB0cnkgaW4gMSAyIDM7IGRvIERFQklBTl9GUk9OVEVORD1ub25pbnRlcmFjdGl2ZSBhcHQtZ2V0IC1vIERQa2c6OkxvY2s6OlRpbWVvdXQ9MTIwMCAtcSBpbnN0YWxsIDwvZGV2L251bGwgPi9kZXYvbnVsbCAyPiYxOyBjdXJsIC1mc1NMIGh0dHBzOi8vdGFpbHNjYWxlLmNvbS9pbnN0YWxsLnNoIHwgc2ggJiYgY29tbWFuZCAtdiB0YWlsc2NhbGUgPi9kZXYvbnVsbCAmJiBicmVhazsgc2xlZXAgMjA7IGRvbmUKdGFpbHNjYWxlIHVwIC0tYXV0aC1rZXk9dHNrZXktYXV0aC1rQVVUSDEyMzRDTlRSTC1ub3RhcmVhbGtleSAtLWhvc3RuYW1lPWh1Yi0xIC0tYWNjZXB0LWRucz1mYWxzZQo=\"},\"private_ip\":false,\"region\":\"nl-ams\",\"root_pass\":\"{root password}\",\"tags\":[\"founderizer-hub\"],\"type\":\"g6-standard-1\"}",
           "headers" : {
             "Accept" : "application/json",
             "Authorization" : "Bearer {token}",
@@ -11184,10 +11044,10 @@
         "firewall_id" : "3000000001",
         "id" : "3000000002",
         "ipv4" : "198.51.100.88",
-        "location" : "eu-central",
+        "location" : "nl-ams",
         "name" : "hub-1",
-        "price" : "5",
-        "type" : "g6-nanode-1"
+        "price" : "16.8",
+        "type" : "g6-standard-1"
       }
     },
     {
@@ -11266,7 +11126,7 @@
     "constants" : {
       "agent_memory_mb" : 1800,
       "apt_lock_wait" : 1200,
-      "hub_memory_mb" : 900,
+      "hub_memory_mb" : 1800,
       "join_key_life" : 3600,
       "remove_reads" : 10,
       "ubuntu" : "24.04",
@@ -12355,7 +12215,7 @@
     ],
     "sizes" : {
       "agent" : "s-1vcpu-2gb",
-      "hub" : "s-1vcpu-1gb"
+      "hub" : "s-1vcpu-2gb"
     },
     "stops" : [
       {

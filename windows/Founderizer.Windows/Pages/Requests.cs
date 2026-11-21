@@ -920,7 +920,7 @@ internal sealed class RequestCardView : Grid
         {
             shownWhy = b.Why;
             shownWhole = whole;
-            if (b.Short || whole) why.Content = Blocks.Of(b.WhyBlocks, b.Why, card: true, copies: true);
+            if (b.Short || whole) why.Content = Blocks.Of(b.WhyBlocks, b.Why, card: true, copies: true, values: b.WhyValues);
             else
             {
                 // The start of a long reason, with its inline marks, in three lines, until Show all.
@@ -933,7 +933,7 @@ internal sealed class RequestCardView : Grid
         why.Visibility = folded ? Visibility.Collapsed : Visibility.Visible;
         bool taskShows = !folded && b.Task is not null;
         task.Visibility = taskShows ? Visibility.Visible : Visibility.Collapsed;
-        if (taskShows && b.Task != shownTask) { shownTask = b.Task!; task.Content = Blocks.Of(b.TaskBlocks, b.Task!, card: true, copies: true); }
+        if (taskShows && b.Task != shownTask) { shownTask = b.Task!; task.Content = Blocks.Of(b.TaskBlocks, b.Task!, card: true, copies: true, values: b.TaskValues); }
         // Behind the link: the details (a door's script is one fenced block from the hub already, door_script_details),
         // then a task that stays behind it (a door call, a conversation's item), under its label.
         bool detailsShow = !folded && whole && b.Details is not null;
@@ -941,12 +941,12 @@ internal sealed class RequestCardView : Grid
         if (detailsShow && b.Details != shownDetails)
         {
             shownDetails = b.Details!;
-            details.Content = Blocks.Of(b.DetailsBlocks, b.Details!, script: b.DetailsIsScript, card: true, copies: true);
+            details.Content = Blocks.Of(b.DetailsBlocks, b.Details!, script: b.DetailsIsScript, card: true, copies: true, values: b.DetailsValues);
         }
         bool todoShows = !folded && whole && b.TodoBehind is not null;
         todoLabel.Text = b.TodoLabel;
         todoLabel.Visibility = todo.Visibility = todoShows ? Visibility.Visible : Visibility.Collapsed;
-        if (todoShows && b.TodoBehind != shownTodo) { shownTodo = b.TodoBehind!; todo.Content = Blocks.Of(b.TodoBehindBlocks, b.TodoBehind!, card: true, copies: true); }
+        if (todoShows && b.TodoBehind != shownTodo) { shownTodo = b.TodoBehind!; todo.Content = Blocks.Of(b.TodoBehindBlocks, b.TodoBehind!, card: true, copies: true, values: b.TodoBehindValues); }
         more.Text = (whole ? b.MoreOpen : b.MoreClosed) ?? "";
         moreChevron.Content = Icons.Of(whole ? Icons.ChevronDown : Icons.ChevronRight, Look.Link, 12);
         moreChevron.Visibility = b.MoreChevron ? Visibility.Visible : Visibility.Collapsed;
@@ -1067,7 +1067,7 @@ internal sealed class RequestStepView : StackPanel
         if (whyKey != shownWhy)
         {
             shownWhy = whyKey;
-            if (b.Short || open) why.Content = Blocks.Of(b.WhyBlocks, b.Why, measure: Blocks.Measure.Step, copies: true, centred: centred);
+            if (b.Short || open) why.Content = Blocks.Of(b.WhyBlocks, b.Why, measure: Blocks.Measure.Step, copies: true, centred: centred, values: b.WhyValues);
             else
             {
                 // The start of a long reason, with its inline marks, in three lines, until Show all.
@@ -1083,7 +1083,7 @@ internal sealed class RequestStepView : StackPanel
         if (b.Task is { } words && taskKey != shownTask)
         {
             shownTask = taskKey;
-            task.Content = Blocks.Of(b.TaskBlocks, words, measure: Blocks.Measure.Step, copies: true, centred: centred);
+            task.Content = Blocks.Of(b.TaskBlocks, words, measure: Blocks.Measure.Step, copies: true, centred: centred, values: b.TaskValues);
         }
         detailsWords.Text = (open ? b.MoreOpen ?? b.MoreClosed : b.MoreClosed) ?? "";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(details, detailsWords.Text);
@@ -1095,11 +1095,11 @@ internal sealed class RequestStepView : StackPanel
         {
             // Behind the link, from the leading edge: the details (a door's script wraps), then a task that stays there.
             if (b.Details is { } text)
-                more.Children.Add(Blocks.Of(b.DetailsBlocks, text, script: b.DetailsIsScript, measure: Blocks.Measure.Step, copies: true));
+                more.Children.Add(Blocks.Of(b.DetailsBlocks, text, script: b.DetailsIsScript, measure: Blocks.Measure.Step, copies: true, values: b.DetailsValues));
             if (b.TodoBehind is { } behind)
             {
                 more.Children.Add(Look.Words(b.TodoLabel, 15, 23, Look.Muted, semibold: true));
-                more.Children.Add(Blocks.Of(b.TodoBehindBlocks, behind, measure: Blocks.Measure.Step, copies: true));
+                more.Children.Add(Blocks.Of(b.TodoBehindBlocks, behind, measure: Blocks.Measure.Step, copies: true, values: b.TodoBehindValues));
             }
         }
         more.Visibility = more.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;

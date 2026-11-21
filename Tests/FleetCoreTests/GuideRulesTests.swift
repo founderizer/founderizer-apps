@@ -635,9 +635,8 @@ struct GuideRulesTests {
         // The door covers Ubuntu 24.04 and 26.04: a Debian server takes no apps.
         #expect(roles(Self.reading(system: "debian", version: "13")) == [.hub, .agents, .out])
         #expect(roles(Self.reading(version: "26.04")) == [.hub, .agents, .apps, .out])
-        // A server with about 1 GB takes the hub and no agents.
-        #expect(roles(Self.reading(memory: 950)) == [.hub, .apps, .out])
-        #expect(roles(Self.reading(memory: 500)) == [.apps, .out])
+        // A server with about 1 GB takes neither the hub nor agents: both need about 2 GB.
+        #expect(roles(Self.reading(memory: 950)) == [.apps, .out])
         #expect(roles(Self.reading(system: "rocky", version: "9")) == [.out])
         #expect(roles(Self.reading(sudo: .none)) == [.out])
         let small = try #require(GuideRules.server(name: "s", address: "203.0.113.50", reading: Self.reading(system: "rocky", version: "9")))
@@ -690,8 +689,9 @@ struct GuideRulesTests {
             case .ready, .needsPassword: #expect(stop == nil)
             }
         }
-        // The two jobs differ where the check's own rules do: the memory, and the AI's sites.
-        #expect(GuideRules.stop(Self.reading(memory: 950), job: .hub) == nil)
+        // The two jobs differ where the check's own rules do: the AI's sites. Both need about 2 GB of memory, so a server
+        // of 1 GB takes no hub either.
+        #expect(GuideRules.stop(Self.reading(memory: 950), job: .hub) == .memory)
         #expect(GuideRules.stop(Self.reading(memory: 950), job: .join) == .memory)
         let noAI = Self.reading(reach: ["github.com": .yes, "tailscale.com": .yes, "claude.ai": .no, "chatgpt.com": .no])
         #expect(GuideRules.stop(noAI, job: .hub) == nil)

@@ -91,8 +91,9 @@ public static partial class CloudProviders
     internal static string FirewallPath(this CloudProvider provider, string id) =>
         provider == CloudProvider.Akamai ? "networking/firewalls/" + id : "firewalls/" + id;
 
-    /// <summary>DigitalOcean's droplet for each use: its smallest that the server check takes.</summary>
-    public static string DigitalOceanSize(CloudServerUse use) => use == CloudServerUse.Hub ? "s-1vcpu-1gb" : "s-1vcpu-2gb";
+    /// <summary>DigitalOcean's droplet for each use: its smallest that the server check takes, 2 GB for both since 21
+    /// November 2026.</summary>
+    public static string DigitalOceanSize(CloudServerUse use) => "s-1vcpu-2gb";
 
     /// <summary>The locations this app makes servers in, each with the standard offset of its time zone from UTC, in
     /// hours, in the order this app prefers them when two are as near.</summary>

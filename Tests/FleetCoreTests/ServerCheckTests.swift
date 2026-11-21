@@ -242,9 +242,10 @@ struct ServerCheckTests {
         #expect(ServerCheck.notRoot("deploy") == InstallError.notRoot("deploy").errorDescription)
         #expect(try Self.verdict(["memory_mb=1500"]) == .stop("This server has 1\(decimal)5 GB of memory, and a server "
                                                               + "for agents needs about 2 GB. Choose a plan with more memory."))
-        if case .ready = try Self.verdict(["memory_mb=960"], job: .hub) {} else { Issue.record("the hub's 1 GB VPS was stopped") }
-        #expect(try Self.verdict(["memory_mb=480"], job: .hub)
-                == .stop("This server has 480 MB of memory, and the hub needs about 1 GB. Choose a plan with more memory."))
+        // The hub needs about 2 GB too: a release runs its checks beside the live hub, and 1 GB had no room for them.
+        if case .ready = try Self.verdict(["memory_mb=1910"], job: .hub) {} else { Issue.record("the hub's 2 GB VPS was stopped") }
+        #expect(try Self.verdict(["memory_mb=960"], job: .hub)
+                == .stop("This server has 960 MB of memory, and the hub needs about 2 GB. Choose a plan with more memory."))
         #expect(try Self.verdict(["disk_free_mb=6348"]) == .stop("This server has 6\(decimal)2 GB of free disk, and the install "
                                                                  + "needs about 10 GB. Free some space, or choose a bigger disk."))
         #expect(try Self.verdict(["ipv4_route=no"]) == .stop("This server has no IPv4 route now, and GitHub answers over IPv4 only. "

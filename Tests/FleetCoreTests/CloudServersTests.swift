@@ -49,7 +49,7 @@ struct CloudServersTests {
         #expect(CloudServers.ubuntu == "24.04")
         #expect(CloudProvider.hetzner.image == "ubuntu-24.04")
         #expect(CloudProvider.digitalOcean.image == "ubuntu-24-04-x64")
-        #expect(CloudProvider.digitalOceanSize(for: .hub) == "s-1vcpu-1gb")
+        #expect(CloudProvider.digitalOceanSize(for: .hub) == "s-1vcpu-2gb")
         #expect(CloudProvider.digitalOceanSize(for: .agent) == "s-1vcpu-2gb")
         #expect(CloudProvider.hetzner.keychain.item.service == "com.founderizer.cloud.hetzner")
         #expect(CloudProvider.digitalOcean.keychain.item.service == "com.founderizer.cloud.digitalocean")
@@ -316,8 +316,11 @@ struct CloudServersTests {
         + "\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"nbg1\",\"price_hourly\":{\"net\":\"0.0008\","
         + "\"gross\":\"0.0010\"},\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}},{\"location\":\"hel1\","
         + "\"price_hourly\":{\"net\":\"0.0008\",\"gross\":\"0.0010\"},\"price_monthly\":{\"net\":\"0.5000\",\"gross\":\"0.5950\"}}]},"
-        + "{\"type\":\"ipv6\",\"prices\":[{\"location\":\"fsn1\",\"price_hourly\":{\"net\":\"0.0006\",\"gross\":\"0.0007\"},"
-        + "\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}]}],\"server_types\":[]}}"
+        // An IPv6 address costs the same at each place, so it moves no hub to another place.
+        + "{\"type\":\"ipv6\",\"prices\":[" + ["fsn1", "nbg1", "hel1"].map {
+            "{\"location\":\"\($0)\",\"price_hourly\":{\"net\":\"0.0006\",\"gross\":\"0.0007\"},"
+                + "\"price_monthly\":{\"net\":\"0.4200\",\"gross\":\"0.4998\"}}"
+        }.joined(separator: ",") + "]}],\"server_types\":[]}}"
 
     private static let hetznerServer = "{\"server\":{\"id\":1001,\"name\":\"hub-1\",\"status\":\"initializing\",\"public_net\":"
         + "{\"ipv4\":{\"id\":5,\"ip\":\"203.0.113.10\",\"blocked\":false,\"dns_ptr\":\"static.example\"},\"ipv6\":null,"
@@ -358,9 +361,10 @@ struct CloudServersTests {
         hetzner.answer("GET", "/v1/actions/501", 429, "{\"error\":{\"code\":\"rate_limit_exceeded\",\"message\":\"limit\"}}")
         hetzner.answer("GET", "/v1/actions/501", 200, "{\"action\":{\"id\":501,\"status\":\"success\",\"error\":null}}")
         let server = try await Self.make(.hetzner, hetzner)
-        // The provider's id, the address, and what it costs a month: the type and its one public IPv4 address, with tax.
+        // The provider's id, the address, and what it costs a month: the type and its public IPv4 and IPv6 addresses,
+        // with tax.
         #expect(server == CloudServer(provider: .hetzner, id: "1001", name: "hub-1", ipv4: "203.0.113.10", type: "cx23",
-                                      location: "fsn1", monthlyPrice: Decimal(string: "4.7481")!, currency: "EUR",
+                                      location: "fsn1", monthlyPrice: Decimal(string: "5.2479")!, currency: "EUR",
                                       firewallID: "77"))
         // The key is found by its fingerprint and not registered again.
         #expect(hetzner.call("GET", "/v1/ssh_keys")?.query == "fingerprint=\(Self.fingerprint)")
@@ -377,13 +381,20 @@ struct CloudServersTests {
         #expect(made["image"] as? String == "ubuntu-24.04")
         #expect(made["ssh_keys"] as? [Int] == [42])
         #expect((made["firewalls"] as? [[String: Int]]) == [["firewall": 77]])
-        // One public address, IPv4: the account's primary IPs are limited, and an IPv6 one is priced too.
-        #expect((made["public_net"] as? [String: Bool]) == ["enable_ipv4": true, "enable_ipv6": false])
+        // The hub's server has IPv6 too, so that one failed lease of its IPv4 address does not take the fleet off the
+        // network.
+        #expect((made["public_net"] as? [String: Bool]) == ["enable_ipv4": true, "enable_ipv6": true])
         #expect(made["user_data"] as? String == CloudServers.userData(authKey: Self.authKey, hostname: "hub-1"))
         // Its creation is read until it ends, and nothing is taken back.
         #expect(hetzner.calls("GET", "/v1/actions/501").count == 4)
         #expect(!hetzner.calls.contains { $0.method == "DELETE" })
         #expect(hetzner.calls.allSatisfy { $0.url.scheme == "https" && $0.url.host == "api.hetzner.cloud" })
+        // A server for agents has one public address, IPv4: the account's primary IPs are limited, and an IPv6 one is
+        // priced too.
+        let agents = Self.hetzner()
+        #expect(try await Self.make(.hetzner, agents, use: .agent).monthlyPrice == Decimal(string: "4.7481")!)
+        #expect((agents.call("POST", "/v1/servers")?.object?["public_net"] as? [String: Bool])
+                == ["enable_ipv4": true, "enable_ipv6": false])
     }
 
     @Test func thisAppsKeyIsRegisteredOnceAtHetzner() async throws {
@@ -440,20 +451,22 @@ struct CloudServersTests {
             Self.hetznerType("other", free: ["fsn1"], architecture: "riscv", monthly: "3.0000"),
             Self.hetznerType("ccx13", free: ["nbg1"], memory: 8, monthly: "36.4900", cpuType: "dedicated")))
         let servers = Self.servers(.hetzner, hetzner)
-        // A hub takes 1 GB: the cheapest type with that much, and at one price the nearest place (Nuremberg for Berlin).
+        // A hub takes 2 GB: the cheapest type with that much, and at one price the nearest place (Nuremberg for Berlin).
+        // Not the cheaper type of 1 GB, on which a release's checks beside the live hub do not fit. Its price has the
+        // type, its IPv4 address and its IPv6 address.
         let hub = try await servers.offer(use: .hub)
-        #expect(hub.type == "cpx02" && hub.location == "nbg1" && hub.monthlyPrice == Decimal(string: "6.5850")!)
-        // A server for agents takes 2 GB.
+        #expect(hub.type == "cpx12" && hub.location == "nbg1" && hub.monthlyPrice == Decimal(string: "12.5848")!)
+        // A server for agents takes 2 GB too, and has no IPv6 address.
         let agent = try await servers.offer(use: .agent)
         #expect(agent.type == "cpx12" && agent.location == "nbg1" && agent.monthlyPrice == Decimal(string: "12.0850")!)
         // **The list under a server on "Your fleet"** (slice 2b): each type that fits once, at its cheapest and then
         // nearest place, the cheapest type first, its first the offer above; a dedicated type says so.
         let list = try await servers.offers(use: .hub)
-        #expect(list.map(\.key) == ["cpx02@nbg1", "cpx12@nbg1", "cpx22@fsn1", "ccx13@nbg1"] && list.first == hub)
-        #expect(list.map(\.dedicated) == [false, false, false, true])
+        #expect(list.map(\.key) == ["cpx12@nbg1", "cpx22@fsn1", "ccx13@nbg1"] && list.first == hub)
+        #expect(list.map(\.dedicated) == [false, false, true])
         // A place that was taken gives its type's next place, and every other type stays.
-        let again = try await servers.offers(use: .hub, except: ["cpx02@nbg1"])
-        #expect(again.map(\.key) == ["cpx02@hel1", "cpx12@nbg1", "cpx22@fsn1", "ccx13@nbg1"])
+        let again = try await servers.offers(use: .hub, except: ["cpx12@nbg1"])
+        #expect(again.map(\.key) == ["cpx12@hel1", "cpx22@fsn1", "ccx13@nbg1"])
     }
 
     @Test func aHetznerServerThatFailsIsTakenBackAndTheKeyStays() async throws {
@@ -518,7 +531,9 @@ struct CloudServersTests {
                      + "{\"slug\":\"s-1vcpu-1gb\",\"memory\":1024,\"vcpus\":1,\"disk\":25,\"price_monthly\":6,\"price_hourly\":0.00893,"
                      + "\"regions\":[\"ams3\",\"fra1\",\"lon1\",\"nyc3\",\"sfo3\",\"sgp1\"],\"available\":true},"
                      + "{\"slug\":\"s-1vcpu-2gb\",\"memory\":2048,\"vcpus\":1,\"disk\":50,\"price_monthly\":12,\"price_hourly\":0.01786,"
-                     + "\"regions\":[\"ams3\",\"lon1\"],\"available\":true}],\"links\":{},\"meta\":{\"total\":2}}")
+                     + "\"regions\":[\"ams3\",\"lon1\"],\"available\":true},"
+                     + "{\"slug\":\"s-2vcpu-4gb\",\"memory\":4096,\"vcpus\":2,\"disk\":80,\"price_monthly\":24,\"price_hourly\":0.03571,"
+                     + "\"regions\":[\"fra1\"],\"available\":true}],\"links\":{},\"meta\":{\"total\":3}}")
         ocean.answer("POST", "/v2/droplets", 202, "{\"droplet\":{\"id\":3164444,\"name\":\"hub-1\",\"status\":\"new\","
                      + "\"networks\":{\"v4\":[],\"v6\":[]}},\"links\":{\"actions\":[{\"id\":7,\"rel\":\"create\"}]}}")
         ocean.answer("POST", "/v2/firewalls", 202, "{\"firewall\":{\"id\":\"\(oceanFirewall)\",\"status\":\"waiting\"}}")
@@ -535,8 +550,9 @@ struct CloudServersTests {
     @Test func aDigitalOceanServerIsMadeNearTheMacBehindAFirewallThatLetsNothingIn() async throws {
         let ocean = Self.digitalOcean()
         let server = try await Self.make(.digitalOcean, ocean)
+        // A hub takes 2 GB: not the size of 1 GB in Frankfurt, the one of 2 GB in the nearest region that has it.
         #expect(server == CloudServer(provider: .digitalOcean, id: "3164444", name: "hub-1", ipv4: "198.51.100.7",
-                                      type: "s-1vcpu-1gb", location: "fra1", monthlyPrice: 6, currency: "USD",
+                                      type: "s-1vcpu-2gb", location: "ams3", monthlyPrice: 12, currency: "USD",
                                       firewallID: Self.oceanFirewall))
         // Not found by its fingerprint, so registered once.
         let registered = try #require(ocean.call("POST", "/v2/account/keys")?.object)
@@ -545,8 +561,8 @@ struct CloudServersTests {
         #expect(ocean.call("GET", "/v2/sizes")?.query == "per_page=200")
         let made = try #require(ocean.call("POST", "/v2/droplets")?.object)
         #expect(made["name"] as? String == "hub-1")
-        #expect(made["region"] as? String == "fra1")
-        #expect(made["size"] as? String == "s-1vcpu-1gb")
+        #expect(made["region"] as? String == "ams3")
+        #expect(made["size"] as? String == "s-1vcpu-2gb")
         #expect(made["image"] as? String == "ubuntu-24-04-x64")
         #expect(made["ssh_keys"] as? [Int] == [512190])
         #expect(made["user_data"] as? String == CloudServers.userData(authKey: Self.authKey, hostname: "hub-1"))
@@ -577,10 +593,10 @@ struct CloudServersTests {
         busy.answer("POST", "/v2/droplets", 422, "{\"id\":\"unprocessable_entity\",\"message\":\"Size is not available in this region.\"}")
         busy.answer("POST", "/v2/droplets", 202, "{\"droplet\":{\"id\":3164444,\"status\":\"new\"}}")
         let second = try await Self.make(.digitalOcean, busy)
-        #expect(second.location == "ams3")
+        #expect(second.location == "lon1")
         #expect(busy.calls("POST", "/v2/account/keys").isEmpty)
         #expect(busy.calls("POST", "/v2/droplets").compactMap { $0.object?["ssh_keys"] as? [Int] } == [[512189], [512189]])
-        // When no region can, DigitalOcean's own words say why: the six regions of the smallest size, then the two of
+        // When no region can, DigitalOcean's own words say why: the two regions of the smallest size, then the one of
         // the next size up.
         let none = Self.digitalOcean()
         none.clear("POST", "/v2/droplets")
@@ -588,7 +604,7 @@ struct CloudServersTests {
         await #expect(throws: CloudError.refused(.digitalOcean, "Size is not available in this region.")) {
             try await Self.make(.digitalOcean, none)
         }
-        #expect(none.calls("POST", "/v2/droplets").count == 8)
+        #expect(none.calls("POST", "/v2/droplets").count == 3)
         #expect(!none.calls.contains { $0.method == "DELETE" })
     }
 
@@ -599,7 +615,7 @@ struct CloudServersTests {
         ocean.answer("GET", "/v2/sizes", 200, "{\"sizes\":["
                      + "{\"slug\":\"s-1vcpu-512mb-10gb\",\"memory\":512,\"vcpus\":1,\"disk\":10,\"price_monthly\":4,"
                      + "\"regions\":[\"fra1\"],\"available\":true},"
-                     + "{\"slug\":\"s-1vcpu-1gb\",\"memory\":1024,\"vcpus\":1,\"disk\":25,\"price_monthly\":6,"
+                     + "{\"slug\":\"s-1vcpu-2gb-intel\",\"memory\":2048,\"vcpus\":1,\"disk\":50,\"price_monthly\":10,"
                      + "\"regions\":[\"fra1\"],\"available\":false},"
                      + "{\"slug\":\"gpu-h100x1-80gb\",\"memory\":245760,\"vcpus\":20,\"disk\":720,\"price_monthly\":2000,"
                      + "\"regions\":[\"fra1\"],\"available\":true},"
@@ -636,8 +652,8 @@ struct CloudServersTests {
     /// The size that the owner said yes to, which its region cannot take now: nothing is made, and the page reads the
     /// next free one (`CloudError.taken`). Another refusal keeps DigitalOcean's own words.
     @Test func aDropletSizeTakenMeanwhileIsSaidSoAndMakesNothing() async throws {
-        let chosen = CloudOffer(provider: .digitalOcean, type: "s-1vcpu-1gb", location: "fra1", cores: 1, memoryGB: 1,
-                                diskGB: 25, monthlyPrice: 6, currency: "USD")
+        let chosen = CloudOffer(provider: .digitalOcean, type: "s-1vcpu-2gb", location: "ams3", cores: 1, memoryGB: 2,
+                                diskGB: 50, monthlyPrice: 12, currency: "USD")
         let busy = Self.digitalOcean()
         busy.clear("POST", "/v2/droplets")
         busy.answer("POST", "/v2/droplets", 422, "{\"id\":\"unprocessable_entity\",\"message\":\"Size is not available in this region.\"}")
@@ -770,7 +786,7 @@ extension CloudServersTests {
         let hetzner = Self.hetzner()
         let offer = try await Self.servers(.hetzner, hetzner).offer(use: .hub)
         #expect(offer == CloudOffer(provider: .hetzner, type: "cx23", location: "fsn1", cores: 2, memoryGB: 4, diskGB: 40,
-                                    monthlyPrice: Decimal(string: "4.7481")!, currency: "EUR"))
+                                    monthlyPrice: Decimal(string: "5.2479")!, currency: "EUR"))
         #expect(offer.place == "Falkenstein, Germany")
         #expect(hetzner.calls.allSatisfy { $0.method == "GET" }, "reading what would be made makes nothing")
         let none = ProviderStandIn()
@@ -957,7 +973,7 @@ extension CloudServersTests {
         let vultr = Self.vultr()
         let server = try await Self.make(.vultr, vultr)
         #expect(server == CloudServer(provider: .vultr, id: Self.vultrInstance, name: "hub-1", ipv4: "192.0.2.44",
-                                      type: "vc2-1c-1gb", location: "fra", monthlyPrice: 5, currency: "USD",
+                                      type: "vc2-1c-2gb", location: "ams", monthlyPrice: 10, currency: "USD",
                                       firewallID: Self.vultrFirewall))
         // The key is not among the account's, so it is registered once.
         let registered = try #require(vultr.call("POST", "/v2/ssh-keys")?.object)
@@ -968,8 +984,8 @@ extension CloudServersTests {
         #expect((firewall["description"] as? String)?.hasPrefix("founderizer-hub-1-") == true)
         #expect(!vultr.calls.contains { $0.path.hasPrefix("/v2/firewalls/") && $0.method == "POST" })
         let made = try #require(vultr.call("POST", "/v2/instances")?.object)
-        #expect(made["region"] as? String == "fra")
-        #expect(made["plan"] as? String == "vc2-1c-1gb")
+        #expect(made["region"] as? String == "ams")
+        #expect(made["plan"] as? String == "vc2-1c-2gb")
         #expect(made["os_id"] as? Int == 2284)
         #expect(made["label"] as? String == "hub-1" && made["hostname"] as? String == "hub-1")
         #expect(made["sshkey_id"] as? [String] == ["k-app"])
@@ -1073,7 +1089,7 @@ extension CloudServersTests {
         let akamai = Self.akamai()
         let server = try await Self.make(.akamai, akamai)
         #expect(server == CloudServer(provider: .akamai, id: String(Self.linode), name: "hub-1", ipv4: "198.51.100.88",
-                                      type: "g6-nanode-1", location: "eu-central", monthlyPrice: 5, currency: "USD",
+                                      type: "g6-standard-1", location: "nl-ams", monthlyPrice: 12, currency: "USD",
                                       firewallID: String(Self.akamaiFirewall)))
         let firewall = try #require(akamai.call("POST", "/v4/networking/firewalls")?.object)
         let label = try #require(firewall["label"] as? String)
@@ -1083,8 +1099,8 @@ extension CloudServersTests {
         #expect((rules["inbound"] as? [Any])?.isEmpty == true && (rules["outbound"] as? [Any])?.isEmpty == true)
         let made = try #require(akamai.call("POST", "/v4/linode/instances")?.object)
         #expect(made["label"] as? String == "hub-1")
-        #expect(made["region"] as? String == "eu-central")
-        #expect(made["type"] as? String == "g6-nanode-1")
+        #expect(made["region"] as? String == "nl-ams")
+        #expect(made["type"] as? String == "g6-standard-1")
         #expect(made["image"] as? String == "linode/ubuntu24.04")
         #expect(made["authorized_keys"] as? [String] == [Self.publicKey])
         // The kind of interface that the firewall stands in front of, named, so no account's default can leave it out.
@@ -1114,21 +1130,19 @@ extension CloudServersTests {
 
     @Test func vultrAndAkamaiOfferTheirCheapestPlanThatFitsWhereItIsFree() async throws {
         let vultr = Self.vultr()
-        #expect(try await Self.servers(.vultr, vultr).offer(use: .hub)
-                == CloudOffer(provider: .vultr, type: "vc2-1c-1gb", location: "fra", cores: 1, memoryGB: 1, diskGB: 25,
-                              monthlyPrice: 5, currency: "USD"))
-        // The 2 GB plan is not free in Frankfurt now: the nearest place that has it.
-        let agent = try await Self.servers(.vultr, vultr).offer(use: .agent)
-        #expect(agent == CloudOffer(provider: .vultr, type: "vc2-1c-2gb", location: "ams", cores: 1, memoryGB: 2, diskGB: 55,
-                                    monthlyPrice: 10, currency: "USD"))
-        #expect(agent.place == "Amsterdam, Netherlands")
+        // A hub takes 2 GB, as a server for agents does: the 1 GB plan, free in Frankfurt, is no offer for either. The
+        // 2 GB plan is not free in Frankfurt now: the nearest place that has it.
+        let hub = try await Self.servers(.vultr, vultr).offer(use: .hub)
+        #expect(hub == CloudOffer(provider: .vultr, type: "vc2-1c-2gb", location: "ams", cores: 1, memoryGB: 2, diskGB: 55,
+                                  monthlyPrice: 10, currency: "USD"))
+        #expect(hub.place == "Amsterdam, Netherlands")
+        #expect(try await Self.servers(.vultr, vultr).offer(use: .agent) == hub)
         #expect(vultr.calls.allSatisfy { $0.method == "GET" }, "reading what would be made makes nothing")
         let akamai = Self.akamai()
-        #expect(try await Self.servers(.akamai, akamai).offer(use: .hub)
-                == CloudOffer(provider: .akamai, type: "g6-nanode-1", location: "eu-central", cores: 1, memoryGB: 1, diskGB: 25,
-                              monthlyPrice: 5, currency: "USD"))
-        let linode = try await Self.servers(.akamai, akamai).offer(use: .agent)
+        // At Akamai too: not the Nanode of 1 GB, the 2 GB Linode where it is free.
+        let linode = try await Self.servers(.akamai, akamai).offer(use: .hub)
         #expect(linode.type == "g6-standard-1" && linode.location == "nl-ams" && linode.monthlyPrice == 12 && linode.diskGB == 50)
+        #expect(try await Self.servers(.akamai, akamai).offer(use: .agent) == linode)
         #expect(akamai.calls.allSatisfy { $0.method == "GET" })
         // A place's own price stands where the provider has one.
         let standard: [String: Any] = ["price": ["monthly": 12.0], "region_prices": [["id": "br-gru", "monthly": 16.8]]]

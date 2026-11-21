@@ -37,17 +37,22 @@ internal static class Blocks
     /// request's card, whose fill is the code block's: the block is a well in the canvas's colour there (the Mac's
     /// MessageText.card). <paramref name="copies"/>: a code block shows a copy icon at its top right under the pointer
     /// (the Mac's CodeBlock.copies), never over a wrapped script. <paramref name="centred"/>: a paragraph stands in the
-    /// middle, as a step's line does.</summary>
+    /// middle, as a step's line does. <paramref name="values"/>: the values of a request's words, block by block (the
+    /// library's <see cref="RequestBody"/>): each is a chip with a copy icon (<see cref="ValueChips"/>); never in a door's
+    /// script, and no other text has them.</summary>
     public static StackPanel Of(IReadOnlyList<MessageBlock> blocks, string text, bool script = false, Measure? measure = null,
-                                bool card = false, bool copies = false, bool centred = false)
+                                bool card = false, bool copies = false, bool centred = false,
+                                IReadOnlyList<ValueList<CardValue>>? values = null)
     {
         var m = measure ?? Measure.Chat;
         var panel = new StackPanel();
         if (blocks.Count == 0) blocks = [new MessageBlock(MessageBlock.Kinds.Paragraph, text)];
         MessageBlock? before = null;
-        foreach (var block in blocks)
+        for (int index = 0; index < blocks.Count; index++)
         {
-            var view = Block(block, script, m, card, copies && !script, centred);
+            var block = blocks[index];
+            var chips = values is not null && !script && index < values.Count ? values[index] : null;
+            var view = Block(block, script, m, card, copies && !script, centred, chips);
             double top = before is null ? 0
                 : before.Kind == MessageBlock.Kinds.Item && block.Kind == MessageBlock.Kinds.Item ? m.ItemGap
                 : block.Kind == MessageBlock.Kinds.Table ? m.BlockGap + 2 : m.BlockGap;
@@ -59,15 +64,16 @@ internal static class Blocks
         return panel;
     }
 
-    private static FrameworkElement Block(MessageBlock block, bool script, Measure m, bool card, bool copies, bool centred)
+    private static FrameworkElement Block(MessageBlock block, bool script, Measure m, bool card, bool copies, bool centred,
+                                          IReadOnlyList<CardValue>? values)
     {
         switch (block.Kind)
         {
             case MessageBlock.Kinds.Heading:
             {
-                var heading = Marked(block.Text, semibold: true, size: m.Heading, lineHeight: m.Line, codeSize: m.Code);
-                if (m == Measure.Chat) heading.FontFamily = Look.Display;
-                return heading;
+                var heading = Valued(block.Text, values, m, semibold: true, size: m.Heading);
+                if (m == Measure.Chat) heading.Words.FontFamily = Look.Display;
+                return heading.View;
             }
             case MessageBlock.Kinds.Item:
             {
@@ -76,7 +82,7 @@ internal static class Blocks
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 var marker = Look.Words(block.Marker.Length > 0 ? block.Marker : "•", m.Size, m.Line, wrap: false);
                 marker.HorizontalAlignment = HorizontalAlignment.Right;
-                var words = Marked(block.Text, size: m.Size, lineHeight: m.Line, codeSize: m.Code);
+                var words = Valued(block.Text, values, m).View;
                 Grid.SetColumn(words, 1);
                 grid.Children.Add(marker);
                 grid.Children.Add(words);
@@ -84,7 +90,7 @@ internal static class Blocks
             }
             case MessageBlock.Kinds.Quote:
             {
-                var words = Marked(block.Text, Look.Muted, size: m.Size, lineHeight: m.Line, codeSize: m.Code);
+                var words = Valued(block.Text, values, m, Look.Muted).View;
                 words.Margin = new Thickness(12, 0, 0, 0);
                 return new Grid
                 {
@@ -126,11 +132,26 @@ internal static class Blocks
                 return Table(block);
             default:
             {
-                var words = Marked(block.Text, size: m.Size, lineHeight: m.Line, codeSize: m.Code);
-                if (centred) words.TextAlignment = TextAlignment.Center;
-                return words;
+                var words = Valued(block.Text, values, m);
+                if (centred) words.Words.TextAlignment = TextAlignment.Center;
+                return words.View;
             }
         }
+    }
+
+    /// <summary>A block's words with their inline marks, and a chip for each of their values (<see cref="ValueChips"/>)
+    /// where they have some; else the text block alone, as before.</summary>
+    private static (TextBlock Words, FrameworkElement View) Valued(string text, IReadOnlyList<CardValue>? values, Measure m,
+                                                                   Brush? brush = null, bool semibold = false, double? size = null)
+    {
+        var words = Selectable("", brush, semibold, size ?? m.Size, m.Line);
+        if (values is not { Count: > 0 })
+        {
+            Fill(words, text, brush, m.Code);
+            return (words, words);
+        }
+        var found = FillValues(words, text, brush, m.Code, values, ValueChips.Room * (size ?? m.Size));
+        return (words, new ValueChips(words, found, size ?? m.Size));
     }
 
     /// <summary>A code block with the Mac's copy icon (CodeBlock.copies): a quiet button of 28 at its top right, 6 in from
@@ -219,36 +240,76 @@ internal static class Blocks
     }
 
     /// <summary>A text block's words, again, with their inline marks (a reply's one paragraph reuses its block).</summary>
-    public static void Fill(TextBlock block, string text, Brush? brush = null, double codeSize = 12.5)
+    public static void Fill(TextBlock block, string text, Brush? brush = null, double codeSize = 12.5) =>
+        FillValues(block, text, brush, codeSize, null, 0);
+
+    /// <summary>A text block's words with their inline marks, and each of <paramref name="values"/> (the library's
+    /// <see cref="CardValue"/>, in the same plain words) with a highlighter of its own in inline code's fill and
+    /// <paramref name="room"/> pixels after its last character, as the spacing of a run that holds that character alone:
+    /// the room of its copy icon (<see cref="ValueChips"/>), with no character added. Gives each value's words.</summary>
+    internal static List<ValueChips.Words> FillValues(TextBlock block, string text, Brush? brush, double codeSize,
+                                                      IReadOnlyList<CardValue>? values, double room)
     {
         block.Inlines.Clear();
         block.TextHighlighters.Clear();
         var code = new TextHighlighter { Background = CodeGround, Foreground = brush ?? Look.Text };
+        var chips = new List<ValueChips.Words>();
+        foreach (var value in values ?? [])
+            chips.Add(new ValueChips.Words(value, new TextHighlighter { Background = ValueChips.Fill, Foreground = brush ?? Look.Text }));
         int at = 0;
         foreach (var run in InlineMarks.Runs(text))
         {
-            var words = new Run { Text = run.Text };
-            if (run.Bold) words.FontWeight = FontWeights.SemiBold;
-            if (run.Italic) words.FontStyle = global::Windows.UI.Text.FontStyle.Italic;
-            if (run.Struck) words.TextDecorations = global::Windows.UI.Text.TextDecorations.Strikethrough;
-            if (run.Code)
+            var chip = run.Code && run.Link is null
+                ? chips.Find(c => c.Value.Start <= at && at + run.Text.Length <= c.Value.Start + c.Value.Length) : null;
+            // the value's last character in a run of its own, whose spacing after it is the icon's room
+            int cut = chip is not null && at + run.Text.Length == chip.Value.Start + chip.Value.Length ? LastElement(run.Text) : -1;
+            string[] pieces = cut <= 0 ? [run.Text] : [run.Text[..cut], run.Text[cut..]];
+            for (int p = 0; p < pieces.Length; p++)
             {
-                words.FontFamily = Mono;
-                words.FontSize = codeSize;
-                code.Ranges.Add(new TextRange { StartIndex = at, Length = run.Text.Length });
+                var words = new Run { Text = pieces[p] };
+                if (run.Bold) words.FontWeight = FontWeights.SemiBold;
+                if (run.Italic) words.FontStyle = global::Windows.UI.Text.FontStyle.Italic;
+                if (run.Struck) words.TextDecorations = global::Windows.UI.Text.TextDecorations.Strikethrough;
+                if (run.Code)
+                {
+                    words.FontFamily = Mono;
+                    words.FontSize = codeSize;
+                }
+                if (cut >= 0 && p == pieces.Length - 1) words.CharacterSpacing = (int)Math.Round(room / codeSize * 1000);
+                chip?.Runs.Add(words);
+                if (run.Link is { } link && Uri.TryCreate(link, UriKind.Absolute, out var address))
+                {
+                    // The link colour, with no underline, as the Mac's tint; a press opens the PC's browser (or mail).
+                    var made = new Hyperlink { Foreground = Look.Link, UnderlineStyle = UnderlineStyle.None };
+                    made.Inlines.Add(words);
+                    made.Click += (_, _) => _ = global::Windows.System.Launcher.LaunchUriAsync(address);
+                    block.Inlines.Add(made);
+                }
+                else block.Inlines.Add(words);
             }
-            if (run.Link is { } link && Uri.TryCreate(link, UriKind.Absolute, out var address))
-            {
-                // The link colour, with no underline, as the Mac's tint; a press opens the PC's browser (or mail).
-                var hyperlink = new Hyperlink { Foreground = Look.Link, UnderlineStyle = UnderlineStyle.None };
-                hyperlink.Inlines.Add(words);
-                hyperlink.Click += (_, _) => _ = global::Windows.System.Launcher.LaunchUriAsync(address);
-                block.Inlines.Add(hyperlink);
-            }
-            else block.Inlines.Add(words);
+            if (run.Code && chip is null) code.Ranges.Add(new TextRange { StartIndex = at, Length = run.Text.Length });
             at += run.Text.Length;
         }
         if (code.Ranges.Count > 0) block.TextHighlighters.Add(code);
+        foreach (var chip in chips)
+        {
+            chip.Fill.Ranges.Add(new TextRange { StartIndex = chip.Value.Start, Length = chip.Value.Length });
+            block.TextHighlighters.Add(chip.Fill);
+        }
+        return chips;
+    }
+
+    /// <summary>Where the last character of <paramref name="words"/> starts, as a person sees one (a text element: a
+    /// letter with its marks, an emoji of two code units).</summary>
+    private static int LastElement(string words)
+    {
+        int at = 0, last = 0;
+        while (at < words.Length)
+        {
+            last = at;
+            at += System.Globalization.StringInfo.GetNextTextElementLength(words, at);
+        }
+        return last;
     }
 
     /// <summary>Words he can select and copy, as on the Mac.</summary>

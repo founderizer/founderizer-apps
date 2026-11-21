@@ -1551,14 +1551,14 @@ struct MachineInstallTests {
         await #expect(throws: InstallError.checkStopped(says)) { try await join(standIn) }
         #expect(standIn.programs == ["/bin/sh -s"])
         #expect(InstallError.checkStopped(says).plain(host: "198.51.100.7") == says)
-        // The hub's own VPS needs about 1 GB.
-        let hub = try StandInSSH("case \"$program\" in \(Self.checked(["memory_mb=960"])) *) exit 1 ;; esac")
+        // The hub's own VPS needs about 2 GB, which a plan sold as 2 GB reports as some 1,900 MB.
+        let hub = try StandInSSH("case \"$program\" in \(Self.checked(["memory_mb=1910"])) *) exit 1 ;; esac")
         let plan = InstallPlan.hub(target: InstallTarget(host: "198.51.100.7"), source: InstallPlan.defaultSource,
                                    authKey: "tskey-auth-secret-00")
         await #expect(throws: InstallError.self) {
             _ = try await MachineInstaller(plan: plan, authKey: "tskey-auth-secret-00", ssh: hub.path) { _, _ in }.run { _ in }
         }
-        #expect(hub.programs.count == 2, "the hub's check let 960 MB through, and the next step ran")
+        #expect(hub.programs.count == 2, "the hub's check let 1910 MB through, and the next step ran")
     }
 
     // MARK: a sudo that asks for a password

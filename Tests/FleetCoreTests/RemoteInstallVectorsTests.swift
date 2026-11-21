@@ -443,9 +443,8 @@ struct RemoteInstallVectorsTests {
             .init(name: "Arm", changes: ["arch=aarch64", "memory_mb=7900"], job: .join, port: 22, holds: false, tailnet: nil),
             .init(name: "no systemd", changes: ["systemd=no"], job: .join, port: 22, holds: false, tailnet: nil),
             .init(name: "a user with no sudo", changes: ["user=ada", "uid=1000", "sudo=none"], job: .join, port: 22, holds: false, tailnet: nil),
-            .init(name: "a small hub", changes: ["memory_mb=640"], job: .hub, port: 22, holds: false, tailnet: nil),
             .init(name: "a small server for agents", changes: ["memory_mb=950"], job: .join, port: 22, holds: false, tailnet: nil),
-            .init(name: "enough for a hub", changes: ["memory_mb=950"], job: .hub, port: 22, holds: false, tailnet: nil),
+            .init(name: "enough for a hub", changes: ["memory_mb=1910"], job: .hub, port: 22, holds: false, tailnet: nil),
             .init(name: "a small disk", changes: ["disk_free_mb=900"], job: .join, port: 22, holds: false, tailnet: nil),
             .init(name: "no IPv4 route", changes: ["ipv4_route=no"], job: .join, port: 22, holds: false, tailnet: nil),
             .init(name: "no GitHub", changes: ["reach=github.com no"], job: .hub, port: 22, holds: false, tailnet: nil),
@@ -467,7 +466,7 @@ struct RemoteInstallVectorsTests {
             .init(name: "SSH on another port", changes: ["listen=tcp/2222/-"], job: .join, port: 2222, holds: false, tailnet: nil),
             .init(name: "no port but SSH", changes: ["listen=tcp/22/sshd"], job: .join, port: 22, holds: false, tailnet: nil),
             .init(name: "memory not read", changes: ["memory_mb="], job: .join, port: 22, holds: false, tailnet: nil),
-            .init(name: "a plan sold as 1 GB", changes: ["memory_mb=957"], job: .hub, port: 22, holds: false, tailnet: nil),
+            .init(name: "a hub on a plan sold as 1 GB", changes: ["memory_mb=957"], job: .hub, port: 22, holds: false, tailnet: nil),
         ]
         let judged: [[String: Any]] = verdicts.map { v in
             let output = with(v.changes)

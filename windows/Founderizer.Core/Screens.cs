@@ -781,22 +781,31 @@ public static partial class Screens
             MessageBlock.Parse(text) is var blocks && (blocks.Count == 0 || blocks is [{ Kind: MessageBlock.Kinds.Paragraph }]);
         var taskOne = OneParagraph(task);
         var whyOne = Characters(need.Why) <= NeedTalkWhy && OneParagraph(need.Why);
+        var whyBlocks = MessageBlock.Parse(need.Why);
+        var taskBlocks = MessageBlock.Parse(task);
+        var detailsBlocks = MessageBlock.Parse(need.Details ?? "");
+        var behindBlocks = MessageBlock.Parse(behind);
         return new RequestBody
         {
             Why = need.Why,
-            WhyBlocks = ValueList.Of(MessageBlock.Parse(need.Why)),
+            WhyBlocks = ValueList.Of(whyBlocks),
+            WhyValues = CardValues.OfBlocks(whyBlocks),
             Short = isShort,
             FoldedWhy = string.Join(' ', need.Why.ReplaceLineEndings("\n").Split('\n')),
             Task = task.Length > 0 ? task : null,
-            TaskBlocks = ValueList.Of(MessageBlock.Parse(task)),
+            TaskBlocks = ValueList.Of(taskBlocks),
+            TaskValues = CardValues.OfBlocks(taskBlocks),
             MoreClosed = closed,
             MoreOpen = open,
             MoreChevron = hasMore && (step ? isShort : need.Details is not null),
             Details = need.Details,
-            DetailsBlocks = ValueList.Of(MessageBlock.Parse(need.Details ?? "")),
+            DetailsBlocks = ValueList.Of(detailsBlocks),
+            // a door's script: the Mac's MessageText(values: need.door_script == nil)
+            DetailsValues = need.DoorScript is not null ? ValueList<ValueList<CardValue>>.Empty : CardValues.OfBlocks(detailsBlocks),
             DetailsIsScript = need.DoorScript is not null,
             TodoBehind = behind.Length > 0 ? behind : null,
-            TodoBehindBlocks = ValueList.Of(MessageBlock.Parse(behind)),
+            TodoBehindBlocks = ValueList.Of(behindBlocks),
+            TodoBehindValues = CardValues.OfBlocks(behindBlocks),
             CentredClosed = step && taskOne && (!isShort || whyOne),
             CentredOpen = step && taskOne && whyOne,
         };
@@ -1768,6 +1777,14 @@ public sealed record RequestBody
     /// call, or with a kind (a conversation's item).</summary>
     public string? TodoBehind { get; init; }
     public ValueList<MessageBlock> TodoBehindBlocks { get; init; } = ValueList<MessageBlock>.Empty;
+    /// <summary>**Each value that the agent put in inline code is a chip with a copy icon** (<see cref="CardValues"/>; the
+    /// owner's "Yes, as drawn" of 21 November 2026): the values of the reason, the task, the details and the task behind
+    /// the link, block by block, as their blocks are. None in a door's script (<see cref="DetailsIsScript"/>), and none
+    /// in the folded start of a long reason (<see cref="FoldedWhy"/>), which has no list here.</summary>
+    public ValueList<ValueList<CardValue>> WhyValues { get; init; } = ValueList<ValueList<CardValue>>.Empty;
+    public ValueList<ValueList<CardValue>> TaskValues { get; init; } = ValueList<ValueList<CardValue>>.Empty;
+    public ValueList<ValueList<CardValue>> DetailsValues { get; init; } = ValueList<ValueList<CardValue>>.Empty;
+    public ValueList<ValueList<CardValue>> TodoBehindValues { get; init; } = ValueList<ValueList<CardValue>>.Empty;
     public string TodoLabel => "What it needs from you";
     /// <summary>The request at hand only: the reason and the task stand in the middle, as a step's line does, while the
     /// link is closed and while it is open. Both read from the leading edge when the task is more than one paragraph (a

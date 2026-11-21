@@ -27,8 +27,9 @@ struct CloudChoiceTests {
         #expect(server(running: false).unfit(for: .hub, fleet: []) == "Off")
         #expect(server(ipv4: nil).unfit(for: .hub, fleet: []) == "No IPv4 address")
         #expect(server(memory: 1024).unfit(for: .join, fleet: []) == "1 GB: too small")
-        #expect(server(memory: 1024).unfit(for: .hub, fleet: []) == nil, "the hub needs about 1 GB")
-        #expect(server(memory: 512).unfit(for: .hub, fleet: []) == "512 MB: too small")
+        // The hub needs about 2 GB too: a server of 1 GB is no choice for it.
+        #expect(server(memory: 960).unfit(for: .hub, fleet: []) == "960 MB: too small")
+        #expect(server(memory: 2048).unfit(for: .hub, fleet: []) == nil, "the hub needs about 2 GB")
         // Both installers take Ubuntu 26.04 and Debian 13 (InstallPlan.joinTakes).
         #expect(server(version: "26.04").unfit(for: .hub, fleet: []) == nil)
         #expect(server(version: "26.04").unfit(for: .join, fleet: []) == nil)

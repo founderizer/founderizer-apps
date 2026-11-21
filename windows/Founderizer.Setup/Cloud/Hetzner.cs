@@ -45,9 +45,11 @@ internal sealed class Hetzner(HttpMessageHandler handler, ISecretBox box, TimeSp
                     ["labels"] = new JsonObject { ["founderizer"] = Use(order.Use) },
                     ["location"] = offer.Location,
                     ["name"] = made.Name,
-                    // One public address, IPv4, for what the server reaches out to: each address takes one of the
-                    // account's primary IPs, which Hetzner limits. The fleet reaches the server over Tailscale.
-                    ["public_net"] = new JsonObject { ["enable_ipv4"] = true, ["enable_ipv6"] = false },
+                    // Each public address takes one of the account's primary IPs, which Hetzner limits, so a server
+                    // for agents has one: IPv4. The hub's server has IPv6 too, so that one failed lease of its IPv4
+                    // address does not take the whole fleet off the network. The fleet reaches each server over
+                    // Tailscale.
+                    ["public_net"] = new JsonObject { ["enable_ipv4"] = true, ["enable_ipv6"] = order.Use == CloudServerUse.Hub },
                     ["server_type"] = offer.Type,
                     ["ssh_keys"] = new JsonArray(keyId),
                     ["start_after_create"] = true,
@@ -99,14 +101,15 @@ internal sealed class Hetzner(HttpMessageHandler handler, ISecretBox box, TimeSp
 
     /// <summary>Each of Hetzner's types that fits what the server is for, in each location where Hetzner has it free and
     /// not on its way out, cheapest first and, at one price, nearest first, with what it costs there a month: the type,
-    /// and the one public IPv4 address it comes with, which Hetzner prices on its own. Hetzner's own list, because its
-    /// types change.</summary>
+    /// and the public addresses it comes with, which Hetzner prices on their own (IPv4, and IPv6 for the hub's server).
+    /// Hetzner's own list, because its types change.</summary>
     private protected override async Task<List<Offer>> OffersAsync(CloudServerUse use, CloudCall call, CancellationToken cancel)
     {
         var pricing = Json.At(await call.SendAsync("GET", "pricing", null, null, cancel).ConfigureAwait(false), "pricing") as JsonObject;
         if (pricing is null || Json.String(Json.At(pricing, "currency")) is not { Length: > 0 } currency)
             throw new CloudException(CloudFailure.NotUnderstood, Provider);
-        var addresses = (AllObjects(Json.At(pricing, "primary_ips")) ?? []).Where(p => Json.String(Json.At(p, "type")) == "ipv4")
+        string[] kinds = use == CloudServerUse.Hub ? ["ipv4", "ipv6"] : ["ipv4"];
+        var addresses = (AllObjects(Json.At(pricing, "primary_ips")) ?? []).Where(p => Json.String(Json.At(p, "type")) is { } kind && kinds.Contains(kind))
             .Select(p => AllObjects(Json.At(p, "prices")) ?? []).ToList();
         var near = Provider.Near(Zone);
         var listed = await call.SendAsync("GET", "server_types", [("per_page", "50")], null, cancel).ConfigureAwait(false);

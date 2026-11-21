@@ -33,7 +33,7 @@ public abstract partial class CloudServers : ICloud
     internal const int RemoveReads = 10;
     /// <summary>The memory that the server check asks of a hub's server and of a server for agents (the Mac's
     /// <c>ServerCheck.hubMemory</c> and <c>agentMemory</c>, held equal to them by the vectors).</summary>
-    internal const int HubMemoryMb = 900, AgentMemoryMb = 1800;
+    internal const int HubMemoryMb = 1800, AgentMemoryMb = 1800;
     /// <summary>How long a first boot waits for apt's lock before each try of Tailscale's installer, in seconds (the
     /// Mac's <c>InstallPlan.aptLockWait</c>, held equal by the vectors).</summary>
     internal const int AptLockWait = 1200;

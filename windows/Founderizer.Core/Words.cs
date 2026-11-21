@@ -350,14 +350,16 @@ public static partial class InlineMarks
 {
     public static string Plain(string text)
     {
-        // Escapes first: a backslash before ASCII punctuation is the punctuation, which no later rule reads.
-        var protectedText = Escape().Replace(text, m => "\uE000" + (int)m.Groups[1].Value[0] + "\uE001");
+        // Code spans first, as CommonMark reads them: their words are literal, a backslash and an entity in them too
+        // (`\\server\share`, `C:\fz\`), and they come back last. Then the escapes: a backslash before ASCII punctuation
+        // is the punctuation, which no later rule reads.
         var codes = new List<string>();
-        protectedText = Code().Replace(protectedText, m =>
+        var protectedText = Code().Replace(text, m =>
         {
-            codes.Add(m.Groups[2].Value);
+            codes.Add(CodeWords(m.Groups[2].Value));
             return "\uE002" + (codes.Count - 1) + "\uE003";
         });
+        protectedText = Escape().Replace(protectedText, m => "\uE000" + (int)m.Groups[1].Value[0] + "\uE001");
         protectedText = Image().Replace(protectedText, "$1");
         // A link's words hold no bare address: they are marked while the addresses are read, and no longer after that.
         protectedText = Link().Replace(protectedText, "$1");
@@ -374,11 +376,10 @@ public static partial class InlineMarks
             protectedText = StarEmphasis().Replace(protectedText, "$1");
             protectedText = UnderscoreEmphasis().Replace(protectedText, "$1$2");
         } while (protectedText != before);
-        protectedText = Coded().Replace(protectedText, m => codes[int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)]);
         protectedText = Escaped().Replace(protectedText,
                                          m => ((char)int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)).ToString());
         protectedText = System.Net.WebUtility.HtmlDecode(protectedText.Replace("&<", "&\uE004<")).Replace("&\uE004<", "&<");
-        return Restored(protectedText, bare);
+        return Coded().Replace(Restored(protectedText, bare), m => codes[int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)]);
     }
 
     /// <summary>The text's runs, each with its marks (the Mac's MessageText draws MessageBlock.inline's runs): bold,
@@ -387,13 +388,13 @@ public static partial class InlineMarks
     /// rare text where a mark changes what a later step reads, the text is one run with no mark.</summary>
     public static IReadOnlyList<InlineRun> Runs(string text)
     {
-        var marked = Escape().Replace(text, m => "\uE000" + (int)m.Groups[1].Value[0] + "\uE001");
         var codes = new List<string>();
-        marked = Code().Replace(marked, m =>
+        var marked = Code().Replace(text, m =>
         {
-            codes.Add(m.Groups[2].Value);
+            codes.Add(CodeWords(m.Groups[2].Value));
             return "\uE002" + (codes.Count - 1) + "\uE003";
         });
+        marked = Escape().Replace(marked, m => "\uE000" + (int)m.Groups[1].Value[0] + "\uE001");
         var links = new List<string>();
         string LinkTo(string address, string words)
         {
@@ -416,10 +417,11 @@ public static partial class InlineMarks
         } while (marked != before);
         // An email address is read after the emphasis, in the words that are left (the reader's own order).
         marked = EmailAddresses(marked, LinkTo);
-        marked = Coded().Replace(marked, m => "\uE016" + codes[int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)] + "\uE017");
         marked = Escaped().Replace(marked, m => ((char)int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)).ToString());
         marked = System.Net.WebUtility.HtmlDecode(marked.Replace("&<", "&\uE004<")).Replace("&\uE004<", "&<");
         marked = Restored(marked, bare);
+        // The code spans' words last, as they were written (no escape and no entity is read in them).
+        marked = Coded().Replace(marked, m => "\uE016" + codes[int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)] + "\uE017");
 
         var runs = new List<InlineRun>();
         var words = new StringBuilder();
@@ -694,8 +696,20 @@ public static partial class InlineMarks
     [GeneratedRegex(@"\uE000(\d+)\uE001")]
     private static partial Regex Escaped();
 
-    [GeneratedRegex(@"(`+)(.+?)\1")]
+    /// <summary>A code span as CommonMark reads it, and so the Mac (Foundation's AttributedString, measured on a Mac on 21
+    /// November 2026): a whole run of backticks that no backslash escapes opens it, only a whole run of as many closes it,
+    /// and it goes on over a line's end. "a `x``" holds no code, and "\`x\`" none.</summary>
+    [GeneratedRegex(@"(?<!(?<!\\)(?:\\\\)*\\)(?:(?<!`)|(?<=(?<!\\)(?:\\\\)*\\`))(`+)(?!`)(.+?)(?<!`)\1(?!`)", RegexOptions.Singleline)]
     private static partial Regex Code();
+
+    /// <summary>The words of a code span as CommonMark gives them, and so the Mac: each line's end is a space, and one
+    /// space goes from each end when both ends have one and the words are not all spaces ("` ls `" is "ls", "`ls `" stays
+    /// "ls "). A value's copy holds exactly these characters (<see cref="CardValues"/>).</summary>
+    private static string CodeWords(string words)
+    {
+        words = words.Replace("\r\n", " ").Replace('\r', ' ').Replace('\n', ' ');
+        return words.Length >= 2 && words[0] == ' ' && words[^1] == ' ' && words.Any(c => c != ' ') ? words[1..^1] : words;
+    }
 
     [GeneratedRegex(@"\uE002(\d+)\uE003")]
     private static partial Regex Coded();

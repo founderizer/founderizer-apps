@@ -164,7 +164,10 @@ renamed or removed without a word to the screens lane.
     Apple's reader on the Mac makes one (the autolinks of GitHub's Markdown, measured on 15 November 2026): an http,
     https or ftp address, a `www.` address (to http) and an email address (to mailto), without a final `.`, `,`,
     `_` or other mark that ends a sentence, with its balanced parentheses, and never in inline code or in a link's
-    words. The cases are in `swift-words.json` (`inline`).
+    words. The cases are in `swift-words.json` (`inline`). A code span is CommonMark's, as the Mac reads it (measured
+    on 21 November 2026, `CardValuesTests`): a whole run of backticks that no backslash escapes, closed by one as long,
+    also over a line's end (a space); one space goes from each end only when both have one; a backslash and an entity
+    in it stay as written.
 - **The picked files** (the iPhone's StagedFile): `state.Staged[composer]` holds each `StagedFile` (`RequestId`, `Name`,
   `Mime`, `Size`, `File` once the hub holds it, `Failure`, `IsOnHub`), in the order he picked them, between starts;
   `state.Uploading` the ones that go up now. While a file of a composer waits, its Send is off (`ComposerModel.CanSend`,
@@ -276,6 +279,11 @@ renamed or removed without a word to the screens lane.
     `TodoBehindBlocks` under `TodoLabel`. The door's script (`DetailsIsScript`) is the one code block of the hub's own
     details: it wraps and has no copy icon, and its text has its own fence, so give it no second one.
   - The request at hand stands in the middle by `CentredClosed` and `CentredOpen`; a card reads from its edge.
+  - Each value that the agent put in inline code is a chip with a copy icon (the owner's "Yes, as drawn" of 21
+    November 2026): `WhyValues`, `TaskValues`, `DetailsValues` and `TodoBehindValues`, one list of `CardValue`s
+    (`Start` in the block's plain words, `Text` to copy) for each block of `WhyBlocks`, `TaskBlocks`, `DetailsBlocks`
+    and `TodoBehindBlocks` (`CardValues.OfBlocks`); none in a code block, a table or a door's script, and none for
+    `FoldedWhy`. A chat's message has none.
   - `ChatRow.AgeWords` ("5 min ago", or the state of his message on its way), and its hover `AgeHover` (the exact date
     and time of a reply, or the present `TimeHover` of his message). While `AgeMoves` is true, read the words again
     when the footer shows, with `Screens.MessageAge(row.Time, now, context)`.

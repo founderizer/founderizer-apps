@@ -24,8 +24,10 @@ public static class ServerCheck
     /// <summary>What the server must reach over HTTPS and IPv4.</summary>
     public static readonly IReadOnlyList<string> Hosts = ["github.com", "tailscale.com", "claude.ai", "chatgpt.com"];
 
-    internal const int HubMemoryMegabytes = 900, AgentMemoryMegabytes = 1800, FreeDiskMegabytes = 10 * 1024;
-    internal const string HubMemoryWords = "1 GB", AgentMemoryWords = "2 GB", FreeDiskWords = "10 GB";
+    /// <summary>The floors of the Mac's <c>ServerCheck</c>: about 2 GB for the hub and for a server for agents (the hub
+    /// had 1 GB until 21 November 2026), and 10 GB of free disk. A plan sold as 2 GB reports some 1,900 MB.</summary>
+    internal const int HubMemoryMegabytes = 1800, AgentMemoryMegabytes = 1800, FreeDiskMegabytes = 10 * 1024;
+    internal const string HubMemoryWords = "2 GB", AgentMemoryWords = "2 GB", FreeDiskWords = "10 GB";
 
     /// <summary>While a server is busy with its first start, the install's own check reads it again this often, and
     /// this long.</summary>

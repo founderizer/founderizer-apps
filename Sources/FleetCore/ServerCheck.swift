@@ -17,10 +17,13 @@ public enum ServerCheck {
     /// runtimes and sign-ins.
     public static let hosts = ["github.com", "tailscale.com", "claude.ai", "chatgpt.com"]
 
-    /// **First estimates**, to be set by what real servers do: about 1 GB of memory for the fleet's own VPS (the hub),
-    /// about 2 GB for a server that runs agents, and 10 GB of free disk for the code, the runtimes and their updates. A
-    /// plan sold as 1 GB reports some 950 MB to its system, so each floor sits a little under its round number.
-    static let hubMemory = (megabytes: 900, words: "1 GB")
+    /// **First estimates**, to be set by what real servers do: about 2 GB of memory for the fleet's own VPS (the hub)
+    /// and for a server that runs agents, and 10 GB of free disk for the code, the runtimes and their updates. A plan
+    /// sold as 2 GB reports some 1,900 MB to its system, so each floor sits a little under its round number. The hub
+    /// had 1 GB until 21 November 2026: each release runs its checks beside the live hub, and on a hub of 1 GB that
+    /// load left no room for the system's own updates (the reliability plan, W3, and the owner's "Yes, 2 GB" of that
+    /// day). A hub that has 1 GB keeps working: only a new install is checked.
+    static let hubMemory = (megabytes: 1800, words: "2 GB")
     static let agentMemory = (megabytes: 1800, words: "2 GB")
     static let freeDisk = (megabytes: 10 * 1024, words: "10 GB")
 

@@ -408,10 +408,12 @@ public struct CloudServers: Sendable {
                     "name": made.name, "server_type": offer.type, "location": offer.location, "image": provider.image,
                     "ssh_keys": [keyID], "user_data": userData, "firewalls": [["firewall": firewallID]],
                     "labels": ["founderizer": use.rawValue], "start_after_create": true,
-                    // One public address, IPv4, for what the server reaches out to: each address takes one of the
-                    // account's primary IPs, which Hetzner limits for each customer across all its projects. The fleet
-                    // reaches the server over Tailscale.
-                    "public_net": ["enable_ipv4": true, "enable_ipv6": false]])
+                    // Each public address takes one of the account's primary IPs, which Hetzner limits for each customer
+                    // across all its projects, so a server for agents has one: IPv4, for what it reaches out to. The
+                    // hub's server has IPv6 too, so that one failed lease of its IPv4 address does not take the whole
+                    // fleet off the network (the owner's yes of 21 November 2026). The fleet reaches each server over
+                    // Tailscale.
+                    "public_net": ["enable_ipv4": true, "enable_ipv6": use == .hub]])
                 // None free there after all, since the offers were read: the next offer.
                 if answer.code == "resource_unavailable" || answer.code == "placement_error" { continue }
                 guard answer.ok else { throw call.failure(answer) }
@@ -451,13 +453,15 @@ public struct CloudServers: Sendable {
 
     /// Each of Hetzner's types that fits what the server is for, in each location where Hetzner has it free and not on its
     /// way out, cheapest first and, at one price, nearest first, with what it costs there a month: the type, and the
-    /// one public IPv4 address it comes with, which Hetzner prices on its own. Hetzner's own list, not one of this app's,
-    /// because its types change: on 5 November 2026 it had no CX or CAX type free anywhere, and new CPX types.
+    /// public addresses it comes with, which Hetzner prices on their own (IPv4, and IPv6 for the hub's server). Hetzner's
+    /// own list, not one of this app's, because its types change: on 5 November 2026 it had no CX or CAX type free
+    /// anywhere, and new CPX types.
     private func hetznerOffers(_ use: CloudServerUse, _ call: CloudCall) async throws -> [Offer] {
         guard let pricing = try await call.send("GET", "pricing")["pricing"] as? [String: Any],
               let currency = pricing["currency"] as? String, !currency.isEmpty else { throw CloudError.notUnderstood(provider) }
+        let kinds = use == .hub ? ["ipv4", "ipv6"] : ["ipv4"]
         let addresses = ((pricing["primary_ips"] as? [[String: Any]]) ?? [])
-            .filter { $0["type"] as? String == "ipv4" }
+            .filter { kinds.contains($0["type"] as? String ?? "") }
             .map { ($0["prices"] as? [[String: Any]]) ?? [] }
         let near = provider.near(zone)
         let listed = try await call.send("GET", "server_types", query: [URLQueryItem(name: "per_page", value: "50")])
@@ -1273,9 +1277,9 @@ public enum CloudProvider: String, CaseIterable, Codable, Sendable {
 
     func firewallPath(_ id: String) -> String { self == .akamai ? "networking/firewalls/\(id)" : "firewalls/\(id)" }
 
-    /// DigitalOcean's droplet for each use: its smallest that the server check takes. Hetzner's type comes from Hetzner's
-    /// own list (`CloudServers.fits`).
-    static func digitalOceanSize(for use: CloudServerUse) -> String { use == .hub ? "s-1vcpu-1gb" : "s-1vcpu-2gb" }
+    /// DigitalOcean's droplet for each use: its smallest that the server check takes, 2 GB for both since 21 November
+    /// 2026. Hetzner's type comes from Hetzner's own list (`CloudServers.fits`).
+    static func digitalOceanSize(for use: CloudServerUse) -> String { "s-1vcpu-2gb" }
 
     /// The locations this app makes servers in, each with the standard offset of its time zone from UTC, in hours, in
     /// the order this app prefers them when two are as near.

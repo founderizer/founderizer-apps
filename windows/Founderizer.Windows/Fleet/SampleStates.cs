@@ -228,6 +228,21 @@ public sealed partial class SampleSource
                 });
                 break;
             }
+            case "values":
+            {
+                // Each value in inline code is a chip with a copy icon (the owner's "Yes, as drawn" of 21 November 2026):
+                // the one open request, with a short value in its reason and a long one in its task, which wraps.
+                var needs = mobile["needs"]!.AsArray();
+                needs.Clear();
+                needs.Add(new JsonObject
+                {
+                    ["id"] = 8, ["by"] = "manager", ["title"] = "Turn the backups of the example shop on again?",
+                    ["why"] = "The nightly backups of the example shop stopped on `web-1` 3 days ago, when its timers were turned off.",
+                    ["todo"] = "When the server is up again, run `sudo systemctl enable --now example-backup.timer example-backup-check.timer` on it, then press **Done**.",
+                    ["raised"] = now - 120, ["options"] = new JsonArray("Done", "Not now"), ["multi"] = false, ["talk"] = new JsonArray(),
+                });
+                break;
+            }
             case "pictures":
             {
                 // Pictures as the options of a request (owner feature need_pictures; w4-windows-chat.png and
