@@ -122,6 +122,7 @@ Mac, and a device route is all that the PC reaches.
 | `web_hosts` | waits (2.2) | |
 | `hub_shared` | waits (2.1) | the hub's own server that takes agents (owner API 1.168): the hub install's word `FLEET_HUB_SERVER=shared` and `hub_shared` of `GET /ui/servers`, which is no device route; no app turns it on yet |
 | `chat_waits` | built | `MobileAgent.WaitsSince` |
+| `chat_waits_answers` | built | `ChatWaiting.WaitsOnAnswers`: the manager's chat line and its row wait on his answer to a request too (`Screens.WaitingLine`, `StoreState.Thinks`), only from a hub that names it |
 | `diagnostics` | waits | `GET /ui/diagnostics`, the hub's own faults and refused calls (UI-API.md 1.167), for the Mac's Report a problem; the Windows app has no Report a problem yet (lane "Bug reports") |
 | `error_reports` | waits | `GET` and `POST /ui/error-reports`, the owner's switch of Settings › Help › Help improve Founderizer (UI-API.md 1.204; a group of General until 16 November 2026), and the Mac's own crashes; the Windows app has no such switch yet (lane "Error reports") |
 | `owner_key` | waits (2.1) | the owner's computer sends its own key with its address (owner API 1.169); a PC at the device level calls with its device key, which the hub's device rule takes as before, so step 1 needs nothing; the key file, the claim's header and `POST /ui/owner/key` are the first run of an owner with only Windows |

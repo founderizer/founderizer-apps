@@ -1541,10 +1541,13 @@ final class MobileStore {
     /// (`ChatPage.pending`), and a line that came since (a reply) is not in them.
     func thinks(_ name: String) -> Bool {
         guard showsCurrent, let entry = agent(name), let snapshot else { return false }
-        return Self.thinks(entry, items: items(for: name), time: snapshot.time, hubSays: features.contains("chat_waits"))
+        return Self.thinks(entry, items: items(for: name), time: snapshot.time, hubSays: features.contains("chat_waits"),
+                           answers: ChatPage.answersWait(entry, features: features))
     }
 
-    static func thinks(_ entry: MobileAgent, items: [MobileChatItem], time: Double, hubSays: Bool) -> Bool {
+    /// `answers`: the chat's line waits on his answer to a request too (`ChatPage.answersWait`).
+    static func thinks(_ entry: MobileAgent, items: [MobileChatItem], time: Double, hubSays: Bool,
+                       answers: Bool = false) -> Bool {
         // nor while his message does not arrive, which the hub says of a server that answers (`chat_undelivered`)
         guard entry.active != false, entry.limit == nil, entry.helperIsRecent(serverTime: time),
               entry.chat_undelivered != true else { return false }
@@ -1553,7 +1556,7 @@ final class MobileStore {
             return !ChatWaiting.turnIsOver(sent: sent, turnEndedAfter: entry.turn_ended_after)
         }
         guard let last = entry.last, let newest = items.map(\.ts).max(), newest >= last.ts - 0.001 else { return false }
-        return ChatPage.pending(in: items, turnEndedAfter: entry.turn_ended_after) == .waiting
+        return ChatPage.pending(in: items, turnEndedAfter: entry.turn_ended_after, answers: answers) == .waiting
     }
 
     /// A reply came in this agent's chat after the owner last had that chat open.

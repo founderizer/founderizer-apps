@@ -127,6 +127,55 @@ public sealed class ScreensTests
         StringAssert.Contains(still.Detail, "Your message is kept");
     }
 
+    /// <summary>The manager's chat waits under his answer to one of its cards, and a worker's chat does not (hub 1.283,
+    /// FleetCore's ChatWaiting.waitsOnAnswers; the owner, 21 November 2026, after three answers in the manager's chat:
+    /// "nothing moved on the left sidebar and the cards just remained with a check"). The manager works on the answer
+    /// in a turn of its chat, so "Thinking" moves until that turn ends; a worker's answer goes to the task that asked,
+    /// and nothing of its chat would end a wait on it. Only on a hub that names chat_waits_answers: an older hub's turn
+    /// end never counts an answer.</summary>
+    [TestMethod]
+    public void TheManagersChatWaitsUnderHisAnswerToItsCardAndAWorkersDoesNot()
+    {
+        void Answered(JsonObject x, string by, bool counts = true)
+        {
+            if (counts) x["ui_features"]!.AsArray().Add((JsonNode?)ChatWaiting.AnswersFeature);
+            var one = SampleFleet.Need(1, "Refund an order from 45 days ago?", "A customer asks.", by, SampleFleet.Now - 2400,
+                                       "Refund it", "Offer a 20% voucher");
+            one["answer"] = "Refund it";
+            one["answered"] = SampleFleet.Now - 30;
+            x["needs"] = new JsonArray();
+            x["answered_needs"] = new JsonArray(one);
+        }
+        var answer = SampleFleet.Message("0b5f6c8e-1111-4222-8333-aaaabbbbcccc", SampleFleet.Now - 30, "Refund it", answerTo: 1);
+        var asked = SampleFleet.Message("0b5f6c8e-1111-4222-8333-444455556666", SampleFleet.Now - 540, "Can we start the spring sale on Monday?");
+        var reply = SampleFleet.Report(5, SampleFleet.Now - 480, "Yes. Marketing has the email ready.");
+        var manager = WithChat(Sample(x => Answered(x, "manager")), "manager", asked, reply, answer);
+        var line = Screens.Chat(manager, "manager", Now, Utc).Waiting!.Line;
+        Assert.AreEqual((ChatWaiting.Working, true), (line.Says, line.Moving));
+        // The row's rule with a hub from before chat_waits reads the same items.
+        Assert.IsTrue(ChatWaiting.Thinks(manager.Agent("manager")!, manager.Items("manager"), SampleFleet.Now, false, true,
+                                         answers: true));
+        // An older hub, with no chat_waits_answers: no line under the answer, whose turn end that hub never counts.
+        var older = WithChat(Sample(x => Answered(x, "manager", counts: false)), "manager", asked, reply, answer);
+        Assert.IsNull(Screens.Chat(older, "manager", Now, Utc).Waiting);
+        // The turn that read the answer has ended: nothing waits.
+        var over = WithChat(Sample(x =>
+        {
+            Answered(x, "manager");
+            x["agents"]![0]!["turn_ended_after"] = SampleFleet.Now - 30;
+        }), "manager", asked, reply, answer);
+        Assert.IsNull(Screens.Chat(over, "manager", Now, Utc).Waiting);
+        // A worker's reply names his message, and his answer to a card of the worker's after it waits for nothing.
+        var mine = "0b5f6c8e-1111-4222-8333-777788889999";
+        var worker = WithChat(Sample(x => Answered(x, "wren")), "wren",
+            SampleFleet.Message(mine, SampleFleet.Now - 120, "Which order is it?"),
+            SampleFleet.Report(6, SampleFleet.Now - 90, "Order 4417. Shall I refund it?", inReplyTo: mine), answer);
+        Assert.IsNull(Screens.Chat(worker, "wren", Now, Utc).Waiting);
+        Assert.IsFalse(ChatWaiting.Thinks(worker.Agent("wren")!, worker.Items("wren"), SampleFleet.Now, false, true,
+                                          answers: ChatWaiting.WaitsOnAnswers("worker", true)));
+        Assert.IsFalse(ChatWaiting.WaitsOnAnswers("lead", true));
+    }
+
     [TestMethod]
     public void HisMessageOnItsWayStandsAtTheEndWithItsState()
     {

@@ -373,13 +373,18 @@ struct ChatPage: View {
     /// 74): it shows at the receipt, in the room it had, so his bubble does not move when it comes. **So does an old
     /// reading that is being read again** (D-1 rule 2; fix round 3d): its words go, since an old reading cannot say
     /// that the agent works now, and come back when a read answers; nothing moves. A failed read has no line.
-    private var waitingLine: (waiting: ChatWaiting, shows: Bool)? {
+    private var waitingLine: (waiting: ChatWaiting, shows: Bool)? { waitingLine(answers: true) }
+
+    /// The waiting line; `answers` false leaves his answers to requests out, as the rows of his asks wait
+    /// (`asksWaitOn`).
+    private func waitingLine(answers counted: Bool) -> (waiting: ChatWaiting, shows: Bool)? {
         let current = store.showsCurrent
         guard current || store.readsAgain, let entry = store.agent(agent), let snapshot = store.snapshot else {
             return nil
         }
         let pending: ChatWaiting.Pending
         var shows = current
+        let answers = counted && Self.answersWait(entry, features: store.features)
         if let waiting {
             // A message the hub took and the chat's read has not brought yet is his newest message.
             if store.delivered?.requestID == waiting.requestID {
@@ -387,13 +392,15 @@ struct ChatPage: View {
             } else if waiting.refusal == nil, store.sending {
                 pending = .waiting
                 // A line that already showed for his message before this one stays; else it waits for the receipt.
-                shows = shows && Self.pending(in: items, turnEndedAfter: entry.turn_ended_after) == .waiting
+                shows = shows && Self.pending(in: items, turnEndedAfter: entry.turn_ended_after,
+                                              answers: answers) == .waiting
             } else {
                 return nil
             }
         } else {
             // a word of the agent with no link does not end the wait of a message that the hub calls late
-            pending = Self.pending(in: items, turnEndedAfter: entry.turn_ended_after).late(entry.chat_undelivered)
+            pending = Self.pending(in: items, turnEndedAfter: entry.turn_ended_after, answers: answers)
+                .late(entry.chat_undelivered)
         }
         guard let line = ChatWaiting.of(agent: agent, pending: pending, sending: false, limit: entry.limit,
                                         // also when its server answers and his message does not arrive
@@ -416,15 +423,32 @@ struct ChatPage: View {
         return (true, isLast ? line : nil)
     }
 
+    /// **Whether this chat's line waits on his answer to a request too** (`ChatWaiting.waitsOnAnswers`, hub 1.283): the
+    /// manager's chat, on a hub whose `turn_ended_after` counts such answers (`chat_waits_answers`). An older hub's
+    /// turn end never counts one, and "Thinking" would stand under the card until the manager's next word.
+    static func answersWait(_ entry: MobileAgent, features: Set<String>) -> Bool {
+        ChatWaiting.waitsOnAnswers(role: entry.role, hubSays: features.contains(ChatWaiting.answersFeature))
+    }
+
+    /// **The message of his whose reply holds the row of his ask while that message is worked on**, as on the Mac
+    /// (`ChatWaiting.asksWaitOn`): his newest message, never his answer to a request, whose card stands in no turn.
+    /// `moving`: the line moves with his answers left out, so a message whose turn is over holds no row.
+    static func asksWaitOn(_ lines: [MobileChatItem], moving: Bool) -> String? {
+        moving ? lines.last { $0.kind == .message && $0.answer_to == nil }?.key : nil
+    }
+
     /// What the hub shows about his newest message in this chat, by the Mac's rule (`FleetAgent.pendingChat`): only a
     /// reply that names that message answers it; a report since then that names none says nothing either way; a
     /// report the agent wrote first is no reply. **His answer to a request is no message that waits** (item 103), as on
-    /// the Mac, whose rule reads the messages of kind "message" only: "Thinking" stood under the folded card.
+    /// the Mac: "Thinking" stood under the folded card. **But in the manager's chat it is** (`answers`:
+    /// `answersWait`, hub 1.283): the manager works on it in a turn of that chat, which ends the wait.
     /// **A message that the agent read in a turn that has ended is not worked on** (hub 1.110; the agent's
     /// `turn_ended_after`, as on the Mac): the manager wrote no reply to three messages that asked for none, and
     /// "Thinking" turned under them for more than an hour (10 November 2026).
-    static func pending(in items: [MobileChatItem], turnEndedAfter: Double? = nil) -> ChatWaiting.Pending {
-        guard let message = items.last(where: { $0.kind == .message && $0.answer_to == nil }) else { return .none }
+    static func pending(in items: [MobileChatItem], turnEndedAfter: Double? = nil,
+                        answers: Bool = false) -> ChatWaiting.Pending {
+        guard let message = items.last(where: { $0.kind == .message && (answers || $0.answer_to == nil) })
+        else { return .none }
         let replies = items.filter { $0.kind == .report && !$0.isPushed }
         if replies.contains(where: { $0.in_reply_to?.caseInsensitiveCompare(message.key) == .orderedSame }) {
             return .none
@@ -706,8 +730,7 @@ struct ChatPage: View {
     /// of what the chat waits for, not at each key that he types.
     private func askRows(_ lines: [MobileChatItem], places: ChatRequestPlaces) -> [String: [ChatAskRow]] {
         guard store.asksHere(lines) else { return [:] }
-        let waitsOn = waitingLine?.waiting.moving == true
-            ? lines.last { $0.kind == .message && $0.answer_to == nil }?.key : nil
+        let waitsOn = Self.asksWaitOn(lines, moving: waitingLine(answers: false)?.waiting.moving == true)
         let made = [store.snapshot.map { "\($0.db) \($0.time)" } ?? "", "\(lines.count)", lines.first?.id ?? "",
                     lines.last?.id ?? "", waitsOn ?? "", places.hidden.sorted().joined(separator: ","),
                     written.sorted().joined(separator: ",")]

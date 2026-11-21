@@ -479,7 +479,8 @@ public sealed record StoreState
     /// <summary>The agent works on his newest chat message now (MobileStore.thinks).</summary>
     public bool Thinks(string agent, DateTimeOffset now) =>
         Fleet is not null && Agent(agent) is { } entry &&
-        ChatWaiting.Thinks(entry, Items(agent), Fleet.Time, Offers("chat_waits"), ShowsCurrent(now));
+        ChatWaiting.Thinks(entry, Items(agent), Fleet.Time, Offers("chat_waits"), ShowsCurrent(now),
+                           ChatWaiting.WaitsOnAnswers(entry.Role, Offers(ChatWaiting.AnswersFeature)));
 
     /// <summary>The agent's state as its row, its pill and its panel show it.</summary>
     public AgentStatus StatusOf(string agent, DateTimeOffset now) =>

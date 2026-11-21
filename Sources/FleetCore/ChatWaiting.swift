@@ -65,6 +65,35 @@ public struct ChatWaiting: Equatable, Sendable {
         public func late(_ late: Bool?) -> Pending { late == true && self == .spokenSince ? .waiting : self }
     }
 
+    /// The feature name of a hub whose `turn_ended_after` and `waits_since` count the manager's answers to its
+    /// Needs-you items (hub 1.283, `chat_waits_answers`).
+    public static let answersFeature = "chat_waits_answers"
+
+    /// **Whether the chat of an agent with this role waits on his answer to one of its Needs-you items too** (hub
+    /// 1.283): only the manager's, and only on a hub that names `answersFeature`. The manager reads such an answer in
+    /// its own chat session and works on it there, in a turn whose end the hub knows (`turnIsOver`). The owner, 21
+    /// November 2026, after he answered three of its cards in its chat: "shouldn't we show somehow that they are being
+    /// done? nothing moved on the left sidebar and the cards just remained with a check". A worker's or a lead's
+    /// answer goes to the task that asked, where no turn of its chat follows it, so a wait on it would never end. An
+    /// older hub's turn end never counts an answer, so there the wait would stand until the manager's next word.
+    /// `hubSays`: the hub names `answersFeature`. Each app's own chat rule asks this one question.
+    public static func waitsOnAnswers(role: String, hubSays: Bool) -> Bool { hubSays && role == "manager" }
+
+    /// **The message of his whose reply holds the row of his ask while that message is worked on**
+    /// (`ChatAskPlaces.rows`, `waitsOn`): his newest chat message (`kind` "message"), never his answer to a request. In
+    /// the manager's chat the line waits on such an answer too (`waitsOnAnswers`), but the answer's card stands in no
+    /// turn: a row that it held stood under his message and then moved under the reply a reading later (review of 21
+    /// November 2026). `moving`: the line moves by the rule that leaves his answers out (`answers: false` of
+    /// `FleetAgent.chatWaiting`), so a message whose turn is over holds no row while the line moves for an answer.
+    /// nil: nothing holds a row.
+    public static func asksWaitOn(_ entries: [ChatEntry], moving: Bool) -> String? {
+        guard moving else { return nil }
+        for entry in entries.reversed() {
+            if case .message(let message) = entry, message.kind == "message" { return message.request_id }
+        }
+        return nil
+    }
+
     /// **Whether the turn that took his message is over** (hub 1.110, `agents[].turn_ended_after`): the hub says when
     /// he sent the newest message that the agent had read at its last turn end, so a message sent at or before that
     /// time was read in a turn that has ended. nil, from an agent whose turns the hub does not know (every agent but
@@ -109,10 +138,14 @@ extension FleetAgent {
     /// `turn_ended_after`): the manager did what three messages of 10 November 2026 asked in turns of 20 seconds and,
     /// as they told it, wrote no reply, and "Thinking" turned under them for more than an hour. The hub knows the
     /// turns of the manager's session only; for every other agent this is a fact about the message, not a claim that
-    /// the agent works.
-    public func pendingChat(in state: HubState) -> PendingChat? {
-        guard let message = state.messages.filter({ $0.kind == "message" && $0.chatRecipient == name }).max(by: { $0.created < $1.created })
-        else { return nil }
+    /// the agent works. **For the manager, his answer to one of its Needs-you items is such a message too**, on a hub
+    /// that counts it (`chatWaits(on:in:)`, hub 1.283).
+    /// `answers`: false leaves his answers out for every agent (`ChatWaiting.asksWaitOn`).
+    public func pendingChat(in state: HubState, answers: Bool = true) -> PendingChat? {
+        let waited = state.messages.filter {
+            $0.chatRecipient == name && (answers ? chatWaits(on: $0, in: state) : $0.kind == "message")
+        }
+        guard let message = waited.max(by: { $0.created < $1.created }) else { return nil }
         let reports = state.reports.filter { $0.chatAgent == name && !$0.isPushed }
         if reports.contains(where: { $0.in_reply_to == message.request_id }) { return nil }
         if reports.contains(where: { $0.in_reply_to == nil && $0.created >= message.created }) { return PendingChat(state: .unlinked, sent: message.created) }
@@ -120,12 +153,23 @@ extension FleetAgent {
         return PendingChat(state: message.read_at == nil ? .unread : .read, sent: message.created)
     }
 
+    /// **Whether this agent's chat line can wait on this message of his**: a chat message, and for the manager his
+    /// answer to one of its Needs-you items too, on a hub that counts such answers (`ChatWaiting.waitsOnAnswers`). The
+    /// rows of his asks wait on his chat messages only (`ChatWaiting.asksWaitOn`).
+    public func chatWaits(on message: OwnerMessage, in state: HubState) -> Bool {
+        message.kind == "message" || (message.kind == "answer" && ChatWaiting.waitsOnAnswers(
+            role: role, hubSays: state.ui_features?.contains(ChatWaiting.answersFeature) == true))
+    }
+
     /// **What this agent's chat waits for** (`ChatWaiting.of`), from the hub's state alone, so the chat's line and
     /// every other sign of the same wait read one rule: the agent's row of the sidebar moves while this says
     /// "Thinking" (`thinks`). `sending`: this device has the owner's message to this agent on its way. `fresh`: the
-    /// state is a current reading; an old one cannot say that the agent's server is quiet.
-    public func chatWaiting(in state: HubState, sending: Bool, fresh: Bool, until: (Double) -> String) -> ChatWaiting? {
-        ChatWaiting.of(agent: name, pending: (pendingChat(in: state)?.waits ?? .none).late(chat_undelivered),
+    /// state is a current reading; an old one cannot say that the agent's server is quiet. `answers`: false leaves his
+    /// answers to requests out, as the rows of his asks wait (`ChatWaiting.asksWaitOn`).
+    public func chatWaiting(in state: HubState, sending: Bool, fresh: Bool, until: (Double) -> String,
+                            answers: Bool = true) -> ChatWaiting? {
+        ChatWaiting.of(agent: name,
+                       pending: (pendingChat(in: state, answers: answers)?.waits ?? .none).late(chat_undelivered),
                        sending: sending, limit: limit,
                        // also when its server answers and his message does not arrive (hub 1.144, `chat_undelivered`)
                        offline: fresh && (!helperIsRecent(serverTime: state.time) || chat_undelivered == true),

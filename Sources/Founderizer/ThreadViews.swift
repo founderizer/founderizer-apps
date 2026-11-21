@@ -147,14 +147,13 @@ struct ManagerView: View {
     /// tasks should also show inside the conversation!! like in codex or claude code!"; `ChatAskPlaces`): under the
     /// agent's reply of the turn in which the work began, where it stays when the work ends.
     private var asks: [Ask] { store.asks.filter { $0.agent == agent } }
-    /// The message of his whose reply the chat's moving "Thinking" waits for: his newest message, not an answer to a
-    /// request (`ChatWaiting`'s own rule). A usage limit or a quiet machine waits for nothing that comes soon.
+    /// The message of his whose reply holds the row of his ask while that message is worked on: his newest message,
+    /// not an answer to a request, and only while the line would move with his answers left out
+    /// (`ChatWaiting.asksWaitOn`): in the manager's chat the line moves for an answer too, and a message whose turn
+    /// is over holds no row then. A usage limit or a quiet machine waits for nothing that comes soon.
     private func waitsOn(_ entries: [ChatEntry]) -> String? {
-        guard waiting?.moving == true else { return nil }
-        for entry in entries.reversed() {
-            if case .message(let message) = entry, message.kind == "message" { return message.request_id }
-        }
-        return nil
+        ChatWaiting.asksWaitOn(entries, moving: store.chatWaiting(for: agent, onItsWay: requestOnItsWay != nil,
+                                                                  answers: false)?.moving == true)
     }
 
     /// What this chat is waiting for, or nil. Every part of it is already read: the hub's own answer about the
@@ -451,10 +450,11 @@ extension FleetStore {
     /// sidebar (`FleetAgent.chatWaiting`). Every part of it is already read: the hub's own answer about his last
     /// message, this Mac's own request on its way (`onItsWay`), and the two things that stop the agent running at all,
     /// its usage limit and its server going quiet.
-    func chatWaiting(for agent: String, onItsWay: Bool) -> ChatWaiting? {
+    /// `answers`: false leaves his answers to requests out (`FleetAgent.chatWaiting`), as the rows of his asks wait.
+    func chatWaiting(for agent: String, onItsWay: Bool, answers: Bool = true) -> ChatWaiting? {
         guard let state, let entry = state.agents.first(where: { $0.name == agent }) else { return nil }
         return entry.chatWaiting(in: state, sending: sending && onItsWay, fresh: isFresh,
-                                 until: { fleetComingTime($0, now: state.time) })
+                                 until: { fleetComingTime($0, now: state.time) }, answers: answers)
     }
 
     /// **Whether an agent works on his newest chat message now**: its chat says "Thinking". Its glyph then moves and

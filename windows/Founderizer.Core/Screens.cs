@@ -415,17 +415,19 @@ public static partial class Screens
         var shows = current;
         ChatPending pending;
         var items = s.Items(agent);
+        var answers = ChatWaiting.WaitsOnAnswers(entry.Role, s.Offers(ChatWaiting.AnswersFeature));
         if (waiting is not null)
         {
             if (s.Delivered?.RequestId == waiting.RequestId) pending = ChatPending.Waiting;
             else if (waiting.Refusal is null && s.Sending)
             {
                 pending = ChatPending.Waiting;
-                shows = shows && ChatWaiting.Pending(items, entry.TurnEndedAfter) == ChatPending.Waiting;
+                shows = shows && ChatWaiting.Pending(items, entry.TurnEndedAfter, answers) == ChatPending.Waiting;
             }
             else return null;
         }
-        else pending = ChatWaiting.Late(ChatWaiting.Pending(items, entry.TurnEndedAfter), entry.ChatUndelivered);
+        else pending = ChatWaiting.Late(ChatWaiting.Pending(items, entry.TurnEndedAfter, answers),
+                                        entry.ChatUndelivered);
         var hubNow = s.HubNow(now);
         var line = ChatWaiting.Of(agent, pending, false, entry.Limit,
                                   !entry.HelperIsRecent(fleet.Time) || entry.ChatUndelivered == true, s.Names,

@@ -549,6 +549,10 @@ struct MobileChatTests {
         // His answer to a request is no message that waits, as on the Mac.
         let answer = try item(#"{"kind": "message", "ts": 14, "id": "GHI-3", "text": "Yes", "client": "founderizer-ios/1/x", "answer_to": 3}"#)
         #expect(ChatPage.pending(in: [message, reply, answer]) == .none)
+        // But in the manager's chat it is (hub 1.283, `ChatPage.answersWait`): the manager works on it in a turn
+        // of that chat, and the end of that turn ends the wait.
+        #expect(ChatPage.pending(in: [message, reply, answer], answers: true) == .waiting)
+        #expect(ChatPage.pending(in: [message, reply, answer], turnEndedAfter: 14, answers: true) == .turnOver)
         // A message that the agent read in a turn that has ended with no reply is not worked on (hub 1.110): the
         // hub says when he sent the newest message that the agent's last ended turn had read.
         #expect(ChatPage.pending(in: [message], turnEndedAfter: 10) == .turnOver)
@@ -568,8 +572,9 @@ struct MobileChatTests {
     @Test("An agent's row moves for its chat's Thinking: by the hub's word, or with an older hub by the chat the phone read")
     func anAgentThinks() throws {
         func agent(last ts: Double, side: String, seen: Double = 995, limited: Bool = false,
-                   ended: Double? = nil, waits: Double? = nil, late: Bool = false) throws -> MobileAgent {
-            var fields: [String: Any] = ["name": "studio", "role": "worker", "runtime": "claude", "active": true,
+                   ended: Double? = nil, waits: Double? = nil, late: Bool = false,
+                   role: String = "worker") throws -> MobileAgent {
+            var fields: [String: Any] = ["name": "studio", "role": role, "runtime": "claude", "active": true,
                                          "open_tasks": 0, "usage": [[String: Any]](), "last_seen": seen,
                                          "last": ["ts": ts, "side": side, "preview": "Is it live?"]]
             if limited { fields["limit"] = ["since": 900.0, "until": 2000.0, "reset_known": true] }
@@ -605,6 +610,19 @@ struct MobileChatTests {
         #expect(!MobileStore.thinks(try agent(last: 10, side: "owner", limited: true), items: [message], time: 1000, hubSays: false))
         #expect(!MobileStore.thinks(try agent(last: 10, side: "owner", seen: 100), items: [message], time: 1000, hubSays: false))
         #expect(!MobileStore.thinks(try agent(last: 10, side: "owner", ended: 10), items: [message], time: 1000, hubSays: false))
+
+        // The manager's answer to its card (hub 1.283): its chat waits on it only on a hub that counts such answers
+        // (`chat_waits_answers`), and a worker's chat never does.
+        let answer = try item(#"{"kind": "message", "ts": 12, "id": "GHI-3", "text": "Yes", "client": "founderizer-ios/1/x", "answer_to": 3}"#)
+        let manager = try agent(last: 12, side: "owner", role: "manager")
+        #expect(MobileStore.thinks(manager, items: [message, reply, answer], time: 1000, hubSays: false, answers: true))
+        #expect(!MobileStore.thinks(manager, items: [message, reply, answer], time: 1000, hubSays: false))
+        #expect(ChatPage.answersWait(manager, features: [ChatWaiting.answersFeature]))
+        #expect(!ChatPage.answersWait(manager, features: ["chat_waits"]))
+        #expect(!ChatPage.answersWait(try agent(last: 12, side: "owner"), features: [ChatWaiting.answersFeature]))
+        // The row of his ask waits on his newest message, never on his answer, whose card stands in no turn.
+        #expect(ChatPage.asksWaitOn([message, reply, answer], moving: true) == message.key)
+        #expect(ChatPage.asksWaitOn([message, reply, answer], moving: false) == nil)
     }
 
     @Test("A reply that came while the chat was open fades in, and at the end it takes the waiting line's place")

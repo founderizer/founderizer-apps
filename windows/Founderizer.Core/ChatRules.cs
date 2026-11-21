@@ -188,12 +188,25 @@ public sealed record ChatWaiting(string Says, bool Moving, string? Detail = null
     /// gives was read in a turn that ended.</summary>
     public static bool TurnIsOver(double sent, double? turnEndedAfter) => turnEndedAfter is { } ended && sent <= ended;
 
+    /// <summary>The feature name of a hub whose `turn_ended_after` and `waits_since` count the manager's answers to its
+    /// requests (hub 1.283; FleetCore's ChatWaiting.answersFeature).</summary>
+    public const string AnswersFeature = "chat_waits_answers";
+
+    /// <summary>Whether the chat of an agent with this role waits on his answer to one of its requests too
+    /// (ChatWaiting.waitsOnAnswers, hub 1.283): only the manager's, which works on the answer in a turn of its chat,
+    /// whose end the hub knows, and only on a hub that names <see cref="AnswersFeature"/> (<paramref name="offered"/>):
+    /// an older hub's turn end never counts an answer. A worker's or a lead's answer goes to the task that asked, and
+    /// no turn of its chat follows it.</summary>
+    public static bool WaitsOnAnswers(string role, bool offered) => offered && role == "manager";
+
     /// <summary>His newest message, as the chat's items say it (ChatPage.pending): only a reply that names it answers it;
     /// a report since that names none says nothing either way; a report the agent wrote first is no reply; his answer to
-    /// a request is no message that waits; and a message read in a turn that ended is not worked on.</summary>
-    public static ChatPending Pending(IReadOnlyList<MobileChatItem> items, double? turnEndedAfter = null)
+    /// a request is no message that waits, but in the manager's chat it is (<paramref name="answers"/>:
+    /// WaitsOnAnswers); and a message read in a turn that ended is not worked on.</summary>
+    public static ChatPending Pending(IReadOnlyList<MobileChatItem> items, double? turnEndedAfter = null,
+                                      bool answers = false)
     {
-        var message = items.LastOrDefault(i => i.Kind == "message" && i.AnswerTo is null);
+        var message = items.LastOrDefault(i => i.Kind == "message" && (answers || i.AnswerTo is null));
         if (message is null) return ChatPending.None;
         var replies = items.Where(i => i.Kind == "report" && !i.IsPushed).ToList();
         if (replies.Any(r => string.Equals(r.InReplyTo, message.Key, StringComparison.OrdinalIgnoreCase))) return ChatPending.None;
@@ -227,8 +240,11 @@ public sealed record ChatWaiting(string Says, bool Moving, string? Detail = null
     /// <summary>Whether an agent works on his newest chat message now (MobileStore.thinks): its mark moves, and its row's
     /// line moves, as for a task in work. Never while it is in setup, at its usage limit, with a server that does not
     /// answer, while his message is late, or from a reading that is not current. With the hub's word (`chat_waits`), from
-    /// `waits_since`; with an older hub, only for a chat that this device read up to its newest line.</summary>
-    public static bool Thinks(MobileAgent agent, IReadOnlyList<MobileChatItem> items, double time, bool hubSays, bool current)
+    /// `waits_since`; with an older hub, only for a chat that this device read up to its newest line.
+    /// <paramref name="answers"/>: the chat waits on his answer to a request too (<see cref="WaitsOnAnswers"/>).
+    /// </summary>
+    public static bool Thinks(MobileAgent agent, IReadOnlyList<MobileChatItem> items, double time, bool hubSays,
+                              bool current, bool answers = false)
     {
         if (!current || agent.Active == false || agent.Limit is not null || !agent.HelperIsRecent(time) ||
             agent.ChatUndelivered == true)
@@ -236,6 +252,6 @@ public sealed record ChatWaiting(string Says, bool Moving, string? Detail = null
         if (hubSays)
             return agent.WaitsSince is { } sent && !TurnIsOver(sent, agent.TurnEndedAfter);
         if (agent.Last is not { } last || items.Count == 0 || items.Max(i => i.Ts) < last.Ts - 0.001) return false;
-        return Pending(items, agent.TurnEndedAfter) == ChatPending.Waiting;
+        return Pending(items, agent.TurnEndedAfter, answers) == ChatPending.Waiting;
     }
 }

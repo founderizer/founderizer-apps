@@ -176,22 +176,29 @@ struct ChatWaitingTests {
         #expect(!ChatWaiting.turnIsOver(sent: 100, turnEndedAfter: nil))
     }
 
+    /// One message of his as the hub's state gives it, read two seconds after he sent it. An answer to a request
+    /// (`kind` "answer") names the request.
+    private func message(_ id: String, _ created: Double, to recipient: String? = nil, kind: String = "message",
+                         read: Bool = true) -> [String: Any] {
+        ["request_id": id, "recipient": recipient.map { $0 as Any } ?? NSNull(), "kind": kind,
+         "need_id": kind == "answer" ? 7 as Any : NSNull(),
+         "text": "No answer to the owner is necessary.", "event_id": Int(created), "created": created,
+         "read_at": read ? created + 2 : NSNull() as Any, "client": "founderizer-mcp/1/x"]
+    }
+
     /// The hub's state of that day, in small: his three messages to the manager, each read, and no report after them.
-    private func state(turnEndedAfter: Double?, reports: [[String: Any]] = [], field: Bool = true) throws -> HubState {
-        func message(_ id: String, _ created: Double, to recipient: String? = nil, kind: String = "message",
-                     read: Bool = true) -> [String: Any] {
-            ["request_id": id, "recipient": recipient.map { $0 as Any } ?? NSNull(), "kind": kind, "need_id": NSNull(),
-             "text": "No answer to the owner is necessary.", "event_id": Int(created), "created": created,
-             "read_at": read ? created + 2 : NSNull() as Any, "client": "founderizer-mcp/1/x"]
-        }
+    /// `later`: messages of his after them. `features`: the hub's `ui_features`.
+    private func state(turnEndedAfter: Double?, reports: [[String: Any]] = [], field: Bool = true,
+                       later: [[String: Any]] = [],
+                       features: [String] = [ChatWaiting.answersFeature]) throws -> HubState {
         var manager: [String: Any] = ["name": "manager", "role": "manager", "runtime": "claude", "active": true, "can": []]
         if field { manager["turn_ended_after"] = turnEndedAfter.map { $0 as Any } ?? NSNull() }
         return try HubState.decode(JSONSerialization.data(withJSONObject: [
-            "schema_version": 1, "db": "db", "time": 5_000,
+            "schema_version": 1, "db": "db", "time": 5_000, "ui_features": features,
             "agents": [manager, ["name": "leo", "role": "worker", "runtime": "claude", "active": true, "can": []]],
             "tasks": [], "notes": [], "needs": [], "permissions": [],
             "messages": [message("m-1", 1_000), message("m-2", 2_000), message("m-3", 3_000),
-                         message("l-1", 3_500, to: "leo")],
+                         message("l-1", 3_500, to: "leo")] + later,
             "reports": reports,
         ] as [String: Any]))
     }
@@ -217,6 +224,42 @@ struct ChatWaitingTests {
         #expect(waits(try state(turnEndedAfter: 3_000, reports: [unlinked])) == .spokenSince)
         // Another agent's chat reports no turns: the manager's turn says nothing of it.
         #expect(waits(try state(turnEndedAfter: 3_000), "leo") == .waiting)
+    }
+
+    /// **The manager's chat waits on his answer to one of its cards, and a worker's chat does not** (hub 1.283; the
+    /// owner, 21 November 2026, after he answered three cards in the manager's chat: "shouldn't we show somehow that
+    /// they are being done? nothing moved on the left sidebar and the cards just remained with a check"). The manager
+    /// works on the answer in a turn of its chat, so its chat says "Thinking" and its row moves until that turn ends or
+    /// it writes. A worker's answer goes to the task that asked, where nothing of its chat would end a wait on it. An
+    /// older hub's turn end never counts an answer, so the chat waits under one only on a hub that says it does.
+    @Test func theManagersAnswerToItsCardIsWaitedOnAndAWorkersIsNot() throws {
+        // The turn that read his newest message has ended; then he answered a card, and a turn that runs read it.
+        let answered = [message("a-1", 4_000, to: "manager", kind: "answer")]
+        let runs = try state(turnEndedAfter: 3_000, later: answered)
+        #expect(waits(runs) == .waiting)
+        let manager = try #require(runs.agents.first { $0.name == "manager" })
+        #expect(manager.thinks(in: runs, sending: false, fresh: false))
+        #expect(manager.chatWaiting(in: runs, sending: false, fresh: false, until: { _ in "" })?.says
+                == ChatWaiting.working)
+        // The turn that read it ends, or the manager writes a word that names no message: the wait is over.
+        #expect(waits(try state(turnEndedAfter: 4_000, later: answered)) == .turnOver)
+        let word: [String: Any] = ["id": 1, "text": "Done.", "about": "", "created": 4_010, "agent": "manager",
+                                   "in_reply_to": NSNull(), "pushed": false]
+        #expect(waits(try state(turnEndedAfter: 3_000, reports: [word], later: answered)) == .spokenSince)
+        // A worker's reply names his message, and his answer to a card of the worker's after it waits for nothing.
+        let reply: [String: Any] = ["id": 2, "text": "Yes.", "about": "", "created": 3_600, "agent": "leo",
+                                    "in_reply_to": "l-1", "pushed": false]
+        let worker = try state(turnEndedAfter: nil, reports: [reply],
+                               later: [message("la-1", 3_700, to: "leo", kind: "answer")])
+        #expect(waits(worker, "leo") == nil)
+        // An older hub, with no chat_waits_answers: its turn end, which read the answer, never counts it, so the chat
+        // waits under it for nothing, and the manager's turn that read his newest message is over.
+        #expect(waits(try state(turnEndedAfter: 3_000, later: answered, features: [])) == .turnOver)
+        // The one question that each app's chat asks.
+        #expect(ChatWaiting.waitsOnAnswers(role: "manager", hubSays: true))
+        #expect(!ChatWaiting.waitsOnAnswers(role: "manager", hubSays: false))
+        #expect(!ChatWaiting.waitsOnAnswers(role: "worker", hubSays: true))
+        #expect(!ChatWaiting.waitsOnAnswers(role: "lead", hubSays: true))
     }
 
     /// **The agent's row of the sidebar moves exactly while its chat says "Thinking"** (the owner, 13 November 2026:

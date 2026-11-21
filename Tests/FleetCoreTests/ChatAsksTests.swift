@@ -44,13 +44,19 @@ struct ChatAsksTests {
          "chosen": answered == nil ? NSNull() : 0, "ask": ask ?? NSNull()]
     }
 
+    /// `managerEnded`: the manager's `turn_ended_after`. The hub counts the manager's answers (`chat_waits_answers`).
     private func hub(_ tasks: [[String: Any]], messages: [[String: Any]] = [], reports: [[String: Any]] = [],
-                     needs: [[String: Any]] = [], holds: [[String: Any]] = []) throws -> HubState {
+                     needs: [[String: Any]] = [], holds: [[String: Any]] = [],
+                     managerEnded: Double? = nil) throws -> HubState {
         let agents: [[String: Any]] = ["manager", "dev", "ops"].map {
-            ["name": $0, "role": $0 == "manager" ? "manager" : "worker", "runtime": "codex", "can": []]
+            var agent: [String: Any] = ["name": $0, "role": $0 == "manager" ? "manager" : "worker", "runtime": "codex",
+                                        "can": []]
+            if $0 == "manager", let managerEnded { agent["turn_ended_after"] = managerEnded }
+            return agent
         }
         return try HubState.decode(JSONSerialization.data(withJSONObject: [
-            "schema_version": 1, "db": "test-db", "time": Self.now, "agents": agents, "tasks": tasks, "holds": holds,
+            "schema_version": 1, "db": "test-db", "time": Self.now, "ui_features": [ChatWaiting.answersFeature],
+            "agents": agents, "tasks": tasks, "holds": holds,
             "outcomes": [], "notes": [], "needs": needs, "permissions": [], "messages": messages, "reports": reports]))
     }
 
@@ -184,6 +190,38 @@ struct ChatAsksTests {
         let replied = try hub([task(1, "working", ask: "a")], messages: [message("a", at: Self.now - 30)],
                               reports: [report(1, at: Self.now - 20, replyingTo: "a")])
         #expect(chat(replied, waitsOn: "a") == ["message-a", "report-1", "ask-a"])
+    }
+
+    /// **His answer to a card holds no row, and neither does a message whose turn is over** (two reviews of 21
+    /// November 2026). In the manager's chat the line moves for his answer too (hub 1.283), but the answer's card
+    /// stands in no turn: held by the answer, the row of his ask stood under his message and then moved under the reply
+    /// a reading later. And when the manager opened the task of his message with no words and its turn ended, the row
+    /// stood under his message: the line that moves for his answer later must not hide it for a turn. So the row waits
+    /// only on his newest message, while that message itself is worked on (`ChatWaiting.asksWaitOn` with the line's
+    /// rule without his answers, as the Mac's `waitsOn` reads it).
+    @Test func onlyHisMessageThatIsWorkedOnHoldsTheRowOfItsAsk() throws {
+        let messages = [message("a", at: Self.now - 60, to: "manager"),
+                        message("x", at: Self.now - 30, to: "manager", kind: "answer", need: 7)]
+        let needs = [need(7, by: "manager", raised: Self.now - 50, answered: Self.now - 30)]
+        func drawn(ended: Double?) throws -> (moves: Bool, rows: [String]) {
+            let state = try hub([task(1, "working", ask: "a", owner: "manager")], messages: messages, needs: needs,
+                                managerEnded: ended)
+            let manager = try #require(state.agents.first { $0.name == "manager" })
+            var timeline = ChatTimeline()
+            _ = timeline.update(messages: state.messages, reports: state.reports)
+            let entries = timeline.entries(for: "manager", limit: .max)
+            let line = manager.chatWaiting(in: state, sending: false, fresh: false, until: { _ in "" }, answers: false)
+            let held = ChatWaiting.asksWaitOn(entries, moving: line?.moving == true)
+            // The Mac's chat, with the card at his answer.
+            let places = ChatRequestPlaces.inTime(needs: state.needs, in: entries, whole: true, answered: .atItsAnswer)
+            let rows = ChatAskPlaces.rows(places.rows(of: entries), asks: state.asks.filter { $0.agent == "manager" },
+                                          open: [], waitsOn: held).rows.map(\.id)
+            return (manager.thinks(in: state, sending: false, fresh: false), rows)
+        }
+        // His message is still worked on: the row comes with the reply of its turn, and not under "a" first.
+        #expect(try drawn(ended: nil) == (true, ["message-a", "need-7"]))
+        // Its turn ended with no words, then he answered the card: the line moves for the answer, and the row stays.
+        #expect(try drawn(ended: Self.now - 60) == (true, ["message-a", "ask-a", "need-7"]))
     }
 
     @Test func workThatNoMessageOfThisChatBeganHasNoRow() throws {
