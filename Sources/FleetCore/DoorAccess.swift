@@ -1134,11 +1134,14 @@ public struct DoorSetupClient: Sendable {
     /// nothing while only such an app reads). held, also when empty (API 1.234): a read with no `held` is an app before
     /// that word, for which the hub takes two reads after a grant as the door having it, so this read would end a
     /// restart's wait while the door's file may not have the grant yet. early=1: this build starts a round at once for
-    /// a new grant (`roundDue`), so a session's start may wait for that round (hub.py `door_round_wait`).
+    /// a new grant (`roundDue`), so a session's start may wait for that round (hub.py `door_round_wait`). long=1: this
+    /// build signs a door card of `DoorCall.scriptCharacters` and `scriptLines`, with the rules of `DoorCall.dense`, so
+    /// the hub takes such a card (hub.py `door_script_bounds`); a read without it keeps the hub to the short bounds.
     public static func viewURL(hub: URL, database: String, held: String) -> URL {
         var parts = URLComponents(url: hub.appendingPathComponent("ui/door"), resolvingAgainstBaseURL: false)!
         parts.queryItems = [.init(name: "db", value: database), .init(name: "renew", value: "form"),
-                            .init(name: "held", value: held), .init(name: "early", value: "1")]
+                            .init(name: "held", value: held), .init(name: "early", value: "1"),
+                            .init(name: "long", value: "1")]
         return parts.url!
     }
 

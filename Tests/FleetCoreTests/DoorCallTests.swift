@@ -167,16 +167,53 @@ struct DoorCallTests {
         #expect(result("id\n\n\n\nrm -rf /srv/app\n") == .failure(.padded))                  // three blank lines
         #expect(result("id\n \n   \n  \nrm -rf /srv/app\n") == .failure(.padded))           // blank lines of spaces
         #expect(result("\n\n\nid\n") == .failure(.padded))
-        #expect(result(String(repeating: "#", count: 4000) + "\n") == .failure(.padded))    // 4001 characters
+        let longest = String(repeating: "echo " + String(repeating: "y", count: 44) + " "
+                             + String(repeating: "y", count: 49) + "\n", count: 160)
+        #expect(longest.count == 16_000)
+        #expect(result(longest + "x") == .failure(.padded))                                   // 16,001 characters
         #expect(result(String(repeating: "# a comment line\n", count: 12_001)) == .failure(.padded))
-        #expect(result("id\n" + String(repeating: "#\n", count: 200)) == .failure(.padded))        // 201 lines
+        #expect(result("id\n" + String(repeating: "#\n", count: 600)) == .failure(.padded))        // 601 lines
         #expect(result(String(repeating: "x\n\n\n", count: 1000)) == .failure(.padded))
-        // what stays: two blank lines, an indent, a gap of 32 spaces, a long line with no gap, 4000 characters, 200 lines
+        // a text that he cannot read (hub.door_script_dense): a line of 201 characters, a run of 121 with no space
+        // (base64, hex), 2001 characters on lines with no space, 2001 in runs of more than 64 with no space (a blob
+        // cut into chunks with a space between them), and a line that ends in a space, after which a heredoc's end
+        // line ends nothing
+        let x100 = String(repeating: "x", count: 100), y94 = String(repeating: "y", count: 94)
+        let blob = String(repeating: String(repeating: "abcdefghij", count: 10) + "\n", count: 20)
+        let chunks = String(repeating: String(repeating: "A", count: 99) + " " + String(repeating: "B", count: 99) + "\n",
+                            count: 11)
+        let runs = String(repeating: "echo " + x100 + "\n", count: 20)
+        let hex = String(repeating: "0123456789abcdef", count: 4)
+        let hexChunks = String(repeating: [hex, hex, hex].joined(separator: " ") + "\n", count: 11)
+        let base64 = String(repeating: "x " + Array(repeating: "aB3xaB3xaB3xaB3x", count: 11).joined(separator: " ") + "\n",
+                            count: 12)
+        let prefixed = String(repeating: "printf %s " + Array(repeating: "0x" + String(repeating: "deadbeef", count: 7),
+                                                              count: 3).joined(separator: " ") + "\n", count: 12)
+        let base32 = String(repeating: "x " + Array(repeating: String(repeating: "a2b3", count: 15), count: 3)
+                                .joined(separator: " ") + "\n", count: 12)
+        for bad in ["echo " + x100 + " " + y94 + "y\n", "echo " + String(repeating: "A", count: 121) + "\n",
+                    "echo " + String(repeating: "A", count: 400) + "\n", blob + "z\n", chunks,
+                    "echo " + String(repeating: "x", count: 65) + "\n" + runs, hexChunks, base64, prefixed, base32,
+                    String(repeating: "x " + Array(repeating: String(repeating: "deadbeef", count: 7), count: 3)
+                        .joined(separator: " ") + "\n", count: 12),
+                    "cat > /etc/acme.conf <<EOF\nkey=value\nEOF \nrm -rf /srv/acme\nEOF\n", "id \n", "id \\ \nid\n"] {
+            #expect(DoorCall.dense(bad), "\(bad.prefix(40))")
+            #expect(result(bad) == .failure(.padded), "\(bad.prefix(40))")
+        }
+        // what stays: two blank lines, an indent, a gap of 32 spaces, 16,000 characters, 600 lines, a line of 200
+        // characters, a run of 120 with no space, 2000 characters on lines with no space, 2000 in runs of more than
+        // 64 with no space, and any number of runs of 64
         for ok in ["id\n\n\nrm -rf /srv/app/cache\n", "if true; then\n        id\nfi\n",
-                   "id" + String(repeating: " ", count: 32) + "# why\n", "echo " + String(repeating: "x", count: 900) + "\n",
-                   String(repeating: "#", count: 3999) + "\n", "id\n\n", String(repeating: "id\n", count: 200),
-                   String(repeating: "id\n", count: 199) + "id"] {
+                   "id" + String(repeating: " ", count: 32) + "# why\n", longest, "id\n\n",
+                   String(repeating: "id\n", count: 600), String(repeating: "id\n", count: 599) + "id",
+                   "echo " + x100 + " " + y94 + "\n", "echo " + String(repeating: "A", count: 120) + "\n", blob, runs,
+                   String(repeating: String(repeating: "x", count: 64) + " " + String(repeating: "y", count: 64) + "\n",
+                          count: 30),
+                   String(repeating: "echo " + hex + "  /root/job.sh | sha256sum -c\n", count: 30),
+                   String(repeating: "cp /usr/local/share/acme/templates/default.conf /etc/acme/conf.d/default.conf\n",
+                          count: 40)] {
             let call = DoorCall.hash(target: "web-1", action: "run", arguments: [], content: Data(ok.utf8))
+            #expect(!DoorCall.dense(ok), "\(ok.prefix(40))")
             #expect(result(ok) == .success(call), "\(ok.prefix(40))")
         }
         #expect(DoorCall.padded("id" + String(repeating: " ", count: 33) + "x") && !DoorCall.padded("a        b"))

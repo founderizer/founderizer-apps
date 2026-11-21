@@ -11,7 +11,8 @@ import Foundation
 ///
 /// 1. the card's title and answers name the server of the hash,
 /// 2. what the card draws under Script is exactly that script, by the same parser that draws it (`MessageBlock`),
-/// 3. the script is printable ASCII with line feeds, short enough to show whole and not padded with blanks,
+/// 3. the script is printable ASCII with line feeds, short enough to show whole, not padded with blanks, and in lines
+///    that he can read (`dense`),
 /// 4. the card's other words hold no code that would stand beside the script as a second one, and
 /// 5. the hash that this Mac computes from that server and that script is the hash that the hub gave.
 ///
@@ -64,9 +65,24 @@ public enum DoorCall {
         "```\n" + script + (script.hasSuffix("\n") ? "" : "\n") + "```"
     }
 
-    /// The most characters and lines of a script that a card shows whole (`hub.DOOR_SCRIPT_CHARS`, `DOOR_SCRIPT_LINES`).
-    public static let scriptCharacters = 4000
-    public static let scriptLines = 200
+    /// The most characters and lines of a script that a card shows whole (`hub.DOOR_SCRIPT_CHARS_LONG`,
+    /// `DOOR_SCRIPT_LINES_LONG`). The hub takes these from this build on, which says so with `long=1` on its reads of
+    /// `GET /ui/door` (`DoorSetupClient.viewURL`): one job on one server is one card, and a longer job is not cut into
+    /// several cards that show him the same text in several presses.
+    public static let scriptCharacters = 16000
+    public static let scriptLines = 600
+    /// A text that nobody reads on a card (`dense`): a line of more than `lineCharacters`, a run of more than
+    /// `runCharacters` with no space (base64, hex), and more than `denseCharacters` in all on lines with no space (a
+    /// blob cut into short lines) (`hub.DOOR_SCRIPT_LINE`, `DOOR_SCRIPT_RUN`, `DOOR_SCRIPT_DENSE`).
+    public static let lineCharacters = 200
+    public static let runCharacters = 120
+    public static let denseCharacters = 2000
+    /// A run with no space longer than a SHA-256: on a line with spaces, such runs count to `denseCharacters` too (a blob
+    /// cut into chunks with a space between them) (`hub.DOOR_SCRIPT_BLOB`).
+    public static let blobCharacters = 64
+    /// A part of a shorter run in base64's letters, of this length or more, that reads as encoded text (a digit and a
+    /// letter, or hex for four fifths or more) counts to `denseCharacters` too (`hub.DOOR_SCRIPT_CODED`).
+    public static let codedCharacters = 16
     /// The widest run of spaces in a script, and the most blank lines in a row: more of either moves a command away
     /// from the words before it (`hub.DOOR_SCRIPT_GAP`, `DOOR_SCRIPT_BLANK`).
     public static let gapSpaces = 32
@@ -110,6 +126,59 @@ public enum DoorCall {
         return false
     }
 
+    /// True when a script is a text that he cannot read, or can read wrong: a line of more than `lineCharacters`, a
+    /// run of more than `runCharacters` with no space, more than `denseCharacters` in all on lines with no space and, on
+    /// the other lines, in what of a run reads as encoded text (`coded`), or a line that ends in a space, which can
+    /// change what runs and not what he reads (a heredoc's end line with a space after it ends nothing, and a backslash
+    /// before it joins no line) (`hub.door_script_dense`).
+    public static func dense(_ script: String) -> Bool {
+        var total = 0
+        for line in lines(of: script) {
+            var run: [Unicode.Scalar] = [], count = 0, spaced = false, blob = 0
+            for scalar in line.unicodeScalars {
+                count += 1
+                if scalar == " " {
+                    blob += coded(run)
+                    run = []
+                    spaced = true
+                } else {
+                    run.append(scalar)
+                }
+                if run.count > runCharacters { return true }
+            }
+            blob += coded(run)
+            if count > lineCharacters || line.unicodeScalars.last == " " { return true }
+            total += spaced ? blob : count
+        }
+        return total > denseCharacters
+    }
+
+    /// The characters of a run with no space that read as encoded text (`hub.door_script_coded`): all of a run of more
+    /// than `blobCharacters`, and of a shorter one each part of `codedCharacters` or more of base64's letters (A-Z, a-z,
+    /// 0-9, +, /, =) that holds a digit and a letter, or that is hex for four fifths or more.
+    static func coded(_ run: [Unicode.Scalar]) -> Int {
+        if run.count > blobCharacters { return run.count }
+        func digit(_ v: UInt32) -> Bool { (48...57).contains(v) }
+        func upper(_ v: UInt32) -> Bool { (65...90).contains(v) }
+        func lower(_ v: UInt32) -> Bool { (97...122).contains(v) }
+        var total = 0, part: [UInt32] = []
+        func close() {
+            if part.count >= codedCharacters {
+                let hex = part.filter { digit($0) || (65...70).contains($0) || (97...102).contains($0) }.count
+                if part.contains(where: digit) && part.contains(where: { upper($0) || lower($0) }) || hex * 5 >= part.count * 4 {
+                    total += part.count
+                }
+            }
+            part = []
+        }
+        for scalar in run {
+            let v = scalar.value
+            if digit(v) || upper(v) || lower(v) || v == 43 || v == 47 || v == 61 { part.append(v) } else { close() }
+        }
+        close()
+        return total
+    }
+
     /// A server's name as the door's access file has it (`hub.SERVER_HOST`): lower-case letters, digits, dots and
     /// hyphens, at most 63, and a letter or a digit first. A name with another letter can look like another server.
     public static func isHost(_ host: String) -> Bool {
@@ -144,7 +213,7 @@ public enum DoorCall {
         case otherServer
         /// The script holds a character that is not printable ASCII or a line feed.
         case hidden(String)
-        /// The script is longer than a card shows whole, or padded with blanks.
+        /// The script is longer than a card shows whole, padded with blanks, or a text that he cannot read (`dense`).
         case padded
         /// The card's own words hold code, which would stand beside the script as a second script.
         case decoy
@@ -190,7 +259,7 @@ public enum DoorCall {
         guard names(host: host, title: title, answers: given) else { return .failure(.otherServer) }
         if let code = hidden(in: script) { return .failure(.hidden(code)) }
         guard script.unicodeScalars.count <= scriptCharacters, lines(of: script).count <= scriptLines,
-              !padded(script) else { return .failure(.padded) }
+              !padded(script), !dense(script) else { return .failure(.padded) }
         guard words.allSatisfy({ !$0.unicodeScalars.contains("`") }) else { return .failure(.decoy) }
         // What the view draws is the block's text; the script's last line feed ends the block's last line.
         let body = script.hasSuffix("\n") ? String(script.dropLast()) : script

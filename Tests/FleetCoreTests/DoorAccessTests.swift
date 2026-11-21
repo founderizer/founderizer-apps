@@ -399,6 +399,8 @@ struct DoorAccessTests {
     /// the hub takes two reads after a grant as the door having it: a read that loses the word ends a restart's wait
     /// while the door's file may not have the grant yet, and the new session has no token. `early` says that this build
     /// starts a round at once for a new grant, for which the hub lets a session's start wait (`door_round_wait`).
+    /// `long` says that this build signs a door card of `DoorCall.scriptCharacters`: a read without it keeps the hub
+    /// to the short bounds, and a job that does not fit them goes to the owner as Full access or a file.
     @Test func eachReadOfTheHubsViewSaysWhatTheDoorsFileHolds() throws {
         func items(_ held: String) throws -> [String: String] {
             let url = DoorSetupClient.viewURL(hub: URL(string: "http://100.64.0.2:8765")!, database: "g", held: held)
@@ -406,8 +408,9 @@ struct DoorAccessTests {
             let parts = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
             return Dictionary(parts.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
         }
-        #expect(try items("0123456789abcdef0123456789abcdef") == ["db": "g", "renew": "form", "held": "0123456789abcdef0123456789abcdef", "early": "1"])
-        #expect(try items("") == ["db": "g", "renew": "form", "held": "", "early": "1"])
+        let mark = "0123456789abcdef0123456789abcdef"
+        #expect(try items(mark) == ["db": "g", "renew": "form", "held": mark, "early": "1", "long": "1"])
+        #expect(try items("") == ["db": "g", "renew": "form", "held": "", "early": "1", "long": "1"])
     }
 
     /// The Support session's case (plan v50): the hub, or the file, can call an agent a business's DevOps agent, and
