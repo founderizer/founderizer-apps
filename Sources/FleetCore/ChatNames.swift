@@ -114,7 +114,8 @@ public struct ChatNames: Equatable, Sendable {
         case .agent: agentWords.contains(words)
         case .server, .repository: written.contains(words)
         case .knowledge: true
-        case .page: false
+        // the chat's book has no secrets yet: the badge of a secret in a chat's message is the area Chat and files'
+        case .page, .secret: false
         }
     }
 }

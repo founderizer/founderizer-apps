@@ -199,6 +199,8 @@ enum CardBadgeIcon: Hashable {
         case .server(let name): .symbol(servers[name] ?? "server.rack")
         case .repository: .github
         case .knowledge: .symbol("book.closed")     // one file; the Knowledge page's own mark is books.vertical
+        // the marks of the secret's own detail (`SecretsPage.detail`): an API key, or a login
+        case .secret(_, let key): .symbol(key ? "key.horizontal" : "person.badge.key")
         case .page(let page):
             switch FleetStore.cardPage(page) {
             case .settings(let tab): .symbol(tab.symbol)

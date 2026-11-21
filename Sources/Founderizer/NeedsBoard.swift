@@ -635,8 +635,6 @@ private struct NeedStep: View {
     /// Where the answer that he gave stood under the top of the answers: his answer moves from there to the top, as
     /// the other answers go.
     @State private var answerTop: CGFloat = 0
-    /// owner feature need_takeover: he pressed Take over on this step, so its error line may show
-    @State private var pressedTakeOver = false
 
     private var expanded: Bool { memory.expanded }
 
@@ -678,13 +676,11 @@ private struct NeedStep: View {
                 .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                 .accessibilityAddTraits(.isHeader).padding(.top, 14)
             // owner feature need_takeover: Take over under the title, where a take-over has no reason (its title is its
-            // step), and its error line after a press here
+            // step); its press opens the take-over card, which says itself what goes wrong (`TakeOverCard`)
             if let way = takeOverWay {
                 NeedTakeOverButton(need: need.id, connection: way) {
-                    // its error line shows once this press tried to open the screen, not an older error before it
-                    Task { await store.takeOver(need); pressedTakeOver = true }
+                    Task { await store.takeOver(need) }
                 }.padding(.top, 14)
-                if pressedTakeOver { NeedTakeOverLine(connection: way, pressed: true).padding(.top, 6) }
             }
             if !need.why.isEmpty { why.padding(.top, 12) }
             if !task.isEmpty {

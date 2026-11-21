@@ -36,15 +36,22 @@ extension FleetStore {
         let files = (state?.knowledge ?? []).map(\.path)
             + (state?.readsInternalKnowledge == true ? (state?.internalKnowledge ?? []).map(\.path) : [])
         let symbols = (servers?.servers ?? []).map { [$0.name, $0.symbol] }
+        // the names of the fleet's secrets (`cardSecrets`), read as the rest is read on this path
+        let secrets: [(name: String, key: Bool)] = {
+            guard SecretEntryView.isOffered(by: self) else { return [] }
+            let kept: LoginReading? = quiet ? quietReading("secrets.logins.fleet") : reading("secrets.logins.fleet")
+            return kept.map { SecretsList.badges($0.catalog) } ?? []
+        }()
         var hasher = Hasher()
         for agent in agents { hasher.combine(agent.name); hasher.combine(agent.role) }
         hasher.combine(repos)
         hasher.combine(names)
         hasher.combine(files)
         hasher.combine(symbols)
+        for secret in secrets { hasher.combine(secret.name); hasher.combine(secret.key) }
         let key = hasher.finalize()
         if let kept = cardBook, kept.key == key { return (kept.book, kept.chat, kept.symbols) }
-        let book = CardNames(agents: agents, repositories: repos, servers: names, knowledge: files)
+        let book = CardNames(agents: agents, repositories: repos, servers: names, knowledge: files, secrets: secrets)
         // a new book with the same names keeps what the old one read (`ChatNames.keeping`)
         let chat = ChatNames(agents: agents, repositories: repos, servers: names, knowledge: files).keeping(cardBook?.chat)
         let byName = Dictionary(symbols.map { ($0[0], $0[1]) }, uniquingKeysWith: { first, _ in first })
@@ -85,6 +92,9 @@ extension FleetStore {
             knowledgeRead = path                // Settings › Knowledge opens it when it shows, as for the eye of a
             destination = .settings(.knowledge) // file's card on an agent's Can use (`KnowledgePage.poll`)
         case .repository: return .systemAction
+        // **a secret's card over the page where he is** (`showSecret(named:)`); `.handled` brings the main window to
+        // the front from a card's own window
+        case .secret(let name, _): return showSecret(named: name) ? .handled : .discarded
         }
         return .handled
     }

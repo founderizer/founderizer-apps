@@ -3,10 +3,10 @@ import SwiftUI
 
 /// **Take over** (owner feature `need_takeover`, API 1.217; the owner's "Yes, as drawn" of 16 November 2026 to the
 /// pictures of `superbot-ideas/02-take-over-design.md`): the button of an agent's request for one step on its own
-/// screen, at the right of the title of its card and under the title of its step on Needs you. Its press opens that
-/// agent's machine in Screen Sharing through this Mac's SSH tunnel, as the machine's page does
-/// (`MachineAccessButtons`), and it shows a spinner while it connects. It looks as Run does on a command
-/// (`NeedRunViews`): one kind of action on a card, one look.
+/// screen, at the right of the title of its card and under the title of its step on Needs you. **Its press opens the
+/// take-over card over the window** (`TakeOverCard`; the owner's "Yes, build it" of 21 November 2026 to
+/// `superbot-ideas/09-take-over-modal-design.md`): the agent's screen, through this Mac's SSH tunnel, with ✓ Done. It
+/// looks as Run does on a command (`NeedRunViews`): one kind of action on a card, one look.
 struct NeedTakeOverButton: View {
     let need: Int
     let connection: ScreenSharingConnection
@@ -34,19 +34,6 @@ struct NeedTakeOverButton: View {
         .disabled(busy)
         .accessibilityLabel(Text("Take over"))
         .accessibilityIdentifier("need-takeover-\(need)")
-    }
-}
-
-/// What went wrong with a press of Take over on this view, in the orange line of a card's small size and the words of
-/// the machine's page. Only after a press here: an error of the same machine from another press is that place's.
-struct NeedTakeOverLine: View {
-    let connection: ScreenSharingConnection
-    let pressed: Bool
-
-    var body: some View {
-        if pressed, let detail = ScreenSharingSession.shared.errors[connection] {
-            Text(detail).font(FormMetrics.detail).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-        }
     }
 }
 
@@ -110,26 +97,50 @@ extension FleetStore {
         return .linux(target: target, port: port, agent: agent)
     }
 
-    /// His press of Take over: the machines' readings again, so the press uses the address of now, then Screen Sharing
-    /// of the asking agent's machine, while the item is still open. A tunnel that a press of Take over opened is
-    /// closed when its items are answered (`closeAnsweredTakeOvers`); one that he opened before, from the machine's
-    /// page, stays as he opened it.
-    func takeOver(_ need: OwnerNeed) async {
+    /// His press of Take over: the machines' readings again, so the press uses the address of now, then the take-over
+    /// card over the main window, while the item is still open (`TakeOverCard`). From the request's own window, the
+    /// main window comes to the front and that window steps aside until the card closes; from a task's or a job's card
+    /// over the window, the take-over card takes its place, and that card comes back at its close.
+    func takeOver(_ need: OwnerNeed, from window: NeedWindowLink? = nil) async {
         await readRunMachines(now: true)
         await readTakeOverServers()     // the server and its address of now, as the machines' (S6)
         guard let now = state?.needs.first(where: { $0.id == need.id }), let way = now.takeOverWay(in: self) else {
             return          // answered meanwhile, or its machine has no way in now
         }
+        if let card = takeOverCard, card.id == need.id, card.hub == hub, card.database == state?.db { return }
+        if takeOverCard != nil { takeOverCard = nil }
+        let under = detail, page = destination
+        if let window {
+            window.showMainWindow()
+            window.stepAside()
+        }
+        let item = TakeOverItem(id: need.id, hub: hub, database: state?.db, agent: now.by, title: now.title, way: way,
+                                window: window, detailUnder: under, page: page)
+        let screen = TakeOverScreen(item: item, store: self)
+        takeOverScreen = screen
+        takeOverCard = item
+        // after the card, so the chat under the covered card is not marked read while the take-over card covers it
+        if under != nil { detail = nil }
+        screen.start()
+    }
+
+    /// **The tunnel of the take-over card**: the local port of the SSH tunnel to the agent's screen and, for a Linux
+    /// agent, the one-time password that the hub had its server make for this card (`takeover_linux`); the words of
+    /// what went wrong otherwise. A tunnel that a take-over opened closes when its request is answered
+    /// (`closeAnsweredTakeOvers`) or its card closes (`takeOverCard`); one that he opened before, from the machine's
+    /// page, stays as he opened it.
+    func openTakeOverScreen(_ item: TakeOverItem) async -> Result<(port: Int, password: String?), TakeOverRefusal> {
+        let way = item.way
         let screen = ScreenSharingSession.shared
         let ours = !screen.opened.contains(way) || takeOvers.values.contains(way)
         // A Linux agent's screen (S6): the hub has its server share it with a new one-time password at each press, for
         // this agent and this port only.
         var secret: (@MainActor () async throws -> String)?
         if let agent = way.agent, let database = state?.db {
-            let hub = hub, installation = installation
+            let hub = hub, installation = installation, need = item.id
             let server = takeOverServers?.first(where: { $0.agents.contains(agent) })?.name
             secret = { @MainActor in
-                let opened = try await TakeOverClient().takeOverScreen(hub: hub, database: database, need: need.id,
+                let opened = try await TakeOverClient().takeOverScreen(hub: hub, database: database, need: need,
                                                                        client: installation)
                 // the screen that the hub opened is the one that this tunnel reaches: its agent, its server, its port
                 guard opened.opens(agent: agent, server: server, port: way.remotePort) else {
@@ -138,8 +149,68 @@ extension FleetStore {
                 return opened.password
             }
         }
-        await screen.open(way, secret: secret)
-        if ours, screen.opened.contains(way) { takeOvers[need.id] = way }
+        guard let tunnel = await screen.openTunnel(way, secret: secret) else {
+            return .failure(TakeOverRefusal(text: screen.errors[way] ?? String(l10n: "The agent's screen cannot be reached.")))
+        }
+        if ours, screen.opened.contains(way) { takeOvers[item.id] = way }
+        guard takeOverCard?.id == item.id, hub == item.hub, state?.db == item.database else {
+            closeTakeOverTunnel(of: item.id)                     // the card closed while the tunnel opened
+            return .failure(TakeOverRefusal(text: ""))
+        }
+        return .success(tunnel)
+    }
+
+    /// ✓ Done of the take-over card: the request's quick reply "Done", by the path of every answer (the outbox, its
+    /// receipt and its retry), as the card's own quick reply sends it (`NeedAnswerBox.sendQuickReply`): words that he
+    /// wrote in the request's box give way to it, and a press that comes while the hub cannot take it waits until it
+    /// can, or until the request leaves (`waiting` tells the card at once that it waits). Nil once the hub has the
+    /// answer, or once the request left meanwhile (its card then closes by the reading); otherwise the words of the
+    /// card's line.
+    func answerTakeOver(_ id: Int, waiting: () -> Void) async -> String? {
+        if filesAreWaiting(for: Self.stageKey(need: id)) {
+            return String(l10n: "A file waits in the request's answer box: answer it there.")
+        }
+        let before = answers[String(id)]
+        answers[String(id)] = "Done"
+        let hub = hub, database = state?.db
+        if !canWrite { waiting() }
+        while !canWrite {
+            if let storageError { answers[String(id)] = before; return storageError }
+            guard self.hub == hub, state?.db == database, openNeeds.contains(where: { $0.id == id }) else { return nil }
+            do { try await Task.sleep(for: .milliseconds(300)) } catch {
+                if answers[String(id)] == "Done" { answers[String(id)] = before }          // his words come back
+                return nil
+            }
+        }
+        guard self.hub == hub, state?.db == database else { return nil }
+        guard answers[String(id)] == "Done" else { return String(l10n: "The answer did not reach the hub.") }
+        await send(needID: id)
+        if pending == nil, sendError == nil, storageError == nil { return nil }
+        return sendError ?? storageError ?? String(l10n: "The answer did not reach the hub.")
+    }
+
+    /// Closes the card of this request, and no other.
+    func closeTakeOverCard(_ id: Int) { if takeOverCard?.id == id { takeOverCard = nil } }
+
+    /// The card closed (`takeOverCard`): its tunnel closes, unless another open take-over of the same machine uses it;
+    /// the request's own window comes back while the request is open; a task's or a job's card that it covered comes
+    /// back.
+    func takeOverCardClosed(_ item: TakeOverItem) {
+        if let screen = takeOverScreen, screen.item.id == item.id, screen.item.hub == item.hub {
+            screen.stop()
+            takeOverScreen = nil
+        }
+        closeTakeOverTunnel(of: item.id)
+        let here = hub == item.hub && state?.db == item.database
+        if here, let window = item.window, openNeeds.contains(where: { $0.id == item.id }) { window.comeBack() }
+        if here, let under = item.detailUnder, detail == nil, destination == item.page, state?.has(under.shown) == true {
+            detail = under
+        }
+    }
+
+    private func closeTakeOverTunnel(of id: Int) {
+        guard let way = takeOvers.removeValue(forKey: id), !takeOvers.values.contains(way) else { return }
+        Task { await ScreenSharingSession.shared.close(way) }
     }
 
     /// The tunnels that a press of Take over opened, for items that the reading shows answered or gone (the design's
@@ -148,6 +219,11 @@ extension FleetStore {
     /// that a tunnel he opened again from the machine's page stays; and a tunnel that another open take-over of the
     /// same machine still uses stays until that one is answered too.
     func closeAnsweredTakeOvers() {
+        // answered in a card, on the iPhone or in a chat app; or the app reads another hub or fleet now
+        if let card = takeOverCard, card.hub != hub || card.database != state?.db
+            || state?.needs.first(where: { $0.id == card.id })?.isOpen != true {
+            takeOverCard = nil
+        }
         guard !takeOvers.isEmpty, let needs = state?.needs else { return }
         let screen = ScreenSharingSession.shared
         takeOvers = takeOvers.filter { screen.opened.contains($0.value) }
@@ -157,4 +233,9 @@ extension FleetStore {
             Task { await screen.close(way) }
         }
     }
+}
+
+/// Why the take-over card's screen did not open, in the words of its orange line.
+struct TakeOverRefusal: Error {
+    let text: String
 }

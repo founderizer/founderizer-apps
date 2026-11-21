@@ -219,6 +219,18 @@ struct FleetView: View {
                 .environment(\.glyphTeam, store.state?.agents.map(\.name) ?? [])
                 .environment(\.glyphPresence, glyphPresences)
         }
+        // **The take-over card** (`TakeOverCard`; the owner's "Yes, build it" of 21 November 2026): as large as the
+        // window allows, so the agent's screen is as large as it can be. Esc and a click on the dimmed window close it
+        // and answer nothing; ✓ Done answers.
+        .fleetModal(item: $store.takeOverCard, sized: { _ in CGSize(width: 100_000, height: 100_000) }, escape: nil,
+                    name: SetupChannel.takeOverWindow) { item in
+            if let screen = store.takeOverScreen, screen.item.id == item.id {
+                // one view for each card: a second card never keeps the first one's state
+                TakeOverCard(store: store, screen: screen).id(item.id)
+                    .environment(\.glyphTeam, store.state?.agents.map(\.name) ?? [])
+                    .environment(\.glyphPresence, glyphPresences)
+            }
+        }
     }
 
     /// **Adding a server or an agent fills the window** (`FleetStore.fillsWindow`): the wizard alone, as the first run

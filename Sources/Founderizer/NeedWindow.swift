@@ -123,6 +123,13 @@ import SwiftUI
     /// it, the store's run of its command, and the card's key save. Asked after each reading that changes the request or
     /// its run, and after the card's word of its key save. The close comes later, on the main queue: the window's own
     /// drawing asks it.
+    static func stepAside(_ key: Key) { shown[key]?.panel.orderOut(nil) }
+
+    static func comeBack(_ key: Key) {
+        guard let open = shown[key], !open.closing else { return }
+        open.panel.orderFront(nil)
+    }
+
     fileprivate static func check(_ key: Key) {
         guard let open = shown[key], !open.closing, let store = open.link.store else { return }
         guard NeedWindowEnd.closes(reading: key.reading(in: store), runs: store.needRuns[key.id]?.busy == true,
@@ -391,6 +398,11 @@ private final class NeedHosting: NSHostingView<NeedWindowRoot> {
         showMainWindow()
         return result
     }
+
+    /// **The take-over card stands over the main window** (`TakeOverCard`): this window steps aside, so that it covers
+    /// no part of the agent's screen, and comes back when the card closes with the request still open.
+    func stepAside() { NeedWindows.stepAside(key) }
+    func comeBack() { NeedWindows.comeBack(key) }
 
     /// The main window comes to the front with the app, also once he closed it: after a press in the card that opens a
     /// page of the app there. The card's window stays over it.

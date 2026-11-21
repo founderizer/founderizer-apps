@@ -3400,6 +3400,16 @@
         }
       }
     },
+    "A file waits in the request's answer box: answer it there." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un archivo espera en la casilla de respuesta de la solicitud: responde allí."
+          }
+        }
+      }
+    },
     "A hub serves the owner's own address only. Claim it from this Mac, or add this Mac to the same private network." : {
       "localizations" : {
         "es" : {
@@ -20600,6 +20610,16 @@
         }
       }
     },
+    "That password does not open this Mac's screen." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esa contraseña no abre la pantalla de este Mac."
+          }
+        }
+      }
+    },
     "That picture did not open." : {
       "localizations" : {
         "es" : {
@@ -20880,6 +20900,36 @@
         }
       }
     },
+    "The agent's screen" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La pantalla del agente"
+          }
+        }
+      }
+    },
+    "The agent's screen cannot be reached." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede llegar a la pantalla del agente."
+          }
+        }
+      }
+    },
+    "The agent's screen refused the sign-in." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La pantalla del agente rechazó el inicio de sesión."
+          }
+        }
+      }
+    },
     "The agent's tools" : {
       "localizations" : {
         "es" : {
@@ -20896,6 +20946,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Los agentes de este servidor se ejecutan como %@, así que el equipo puede acceder a él como root o como %@. Con otro usuario, el servidor quedaría registrado con uno que Founderizer no puede usar."
+          }
+        }
+      }
+    },
+    "The answer did not reach the hub." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La respuesta no llegó al hub."
+          }
+        }
+      }
+    },
+    "The answer waits until the hub can take it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La respuesta espera hasta que el hub pueda recibirla."
           }
         }
       }
@@ -21266,6 +21336,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El ayudante de conexión no confirmó la desconexión. Sal de Founderizer para cerrar sus conexiones."
+          }
+        }
+      }
+    },
+    "The connection to the agent's screen ended." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La conexión con la pantalla del agente terminó."
           }
         }
       }

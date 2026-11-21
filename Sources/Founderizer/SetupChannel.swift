@@ -535,6 +535,8 @@ final class SetupChannel {
     static let fleetWindow = "fleet"
     /// The window of the detail card over the fleet's window (`FleetView`'s `fleetModal` of `FleetStore.detail`).
     static let detailWindow = "detail-card"
+    /// The take-over card's window (`TakeOverCard`).
+    static let takeOverWindow = "take-over-card"
     private static let overLog = Logger(subsystem: "com.founderizer.app", category: "over")
     private var overLogged: String?
     private var watchesWindows = false

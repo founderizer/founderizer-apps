@@ -18,6 +18,11 @@ import Foundation
 /// - a server: its name, in any case, when it has a digit or a hyphen ("app-1");
 /// - a knowledge file of the owner's: its path, word for word ("knowledge/owner/brand.md"), also as the whole of an
 ///   inline code, which is how agents write a path;
+/// - a secret of the fleet's (an API key or a login): its name, word for word, when it has a character that is no
+///   letter and no space ("DOOR_BACKBLAZE_AMURA_KEY", "acme-login"), also as the whole of an inline code; a name of
+///   words of letters only ("Stripe", "Google Drive") only as the whole of an inline code, because it is a product's
+///   words too (the owner, 21 November 2026:
+///   "task cards in both agents chat and needs you sohuld also have a badge for specific Credentials", and "Yes, both");
 /// - a page of the app: its words as the app writes them (`pages`), with their capitals, only in a sentence that names
 ///   Founderizer before them, because other products have pages of the same names; and a path that starts with
 ///   Settings neither after a word with a capital ("System Settings > General") nor before another step of a path
@@ -34,8 +39,19 @@ public struct CardNames: Equatable, Sendable {
         /// A knowledge file by its path (`knowledge/owner/<name>.md`), which the Knowledge page opens (the owner, 20
         /// November 2026: "referencing knowledge files would be very nice too", and "Yes, as drawn").
         case knowledge(String)
+        /// A secret by its name, which opens its card over the page (`FleetStore.showSecret(named:)`); `key`: an API
+        /// key, with the key's mark, else a login.
+        case secret(String, key: Bool)
 
         static let scheme = "founderizer-card"
+
+        /// A name that can stand as the whole of an inline code, which its badge draws with no code look.
+        var fromCode: Bool {
+            switch self {
+            case .knowledge, .secret: true
+            default: false
+            }
+        }
 
         /// The link of the name: the GitHub page of a repository, and one of the app's own for the rest, which the
         /// card opens itself (`init(url:)`).
@@ -46,6 +62,7 @@ public struct CardNames: Equatable, Sendable {
             case .server(let name): Self.own("server", name)
             case .page(let page): Self.own("page", page)
             case .knowledge(let path): Self.own("knowledge", path)
+            case .secret(let name, let key): Self.own(key ? "key" : "login", name)
             }
         }
 
@@ -63,6 +80,8 @@ public struct CardNames: Equatable, Sendable {
             case "server": self = .server(value)
             case "page": self = .page(value)
             case "knowledge": self = .knowledge(value)
+            case "key": self = .secret(value, key: true)
+            case "login": self = .secret(value, key: false)
             default: return nil
             }
         }
@@ -134,9 +153,10 @@ public struct CardNames: Equatable, Sendable {
     }
 
     /// agents: each agent's name and role (nil for none); repositories: owner/name; servers: their names; knowledge:
-    /// the paths of the owner's knowledge files.
+    /// the paths of the owner's knowledge files; secrets: each secret's name that one secret has, and whether it is an
+    /// API key (`FleetStore.cardSecrets`).
     public init(agents: [(name: String, role: String?)], repositories: [String] = [], servers: [String] = [],
-                knowledge: [String] = []) {
+                knowledge: [String] = [], secrets: [(name: String, key: Bool)] = []) {
         var names: [Name] = []
         func add(_ words: String, anyCase: Bool, _ target: Target, _ rule: Rule) {
             if !words.isEmpty {
@@ -173,6 +193,9 @@ public struct CardNames: Equatable, Sendable {
         }
         for (words, page) in Self.pages { add(words, anyCase: false, .page(page), .inFounderizer) }
         for path in Set(knowledge) where path.hasPrefix("knowledge/") { add(path, anyCase: false, .knowledge(path), .exact) }
+        for secret in secrets where !secret.name.trimmingCharacters(in: .whitespaces).isEmpty {
+            add(secret.name, anyCase: false, .secret(secret.name, key: secret.key), .exact)
+        }
         // the longest first, so that "Customer Support Lead" wins over "Customer Support" where both begin
         self.names = Dictionary(grouping: names, by: { Self.first($0.words) }).mapValues { names in
             Dictionary(grouping: names, by: \.length).sorted { $0.key > $1.key }
@@ -281,7 +304,8 @@ public struct CardNames: Equatable, Sendable {
     }
 
     /// The names of `text` that its words show, each with its range in `text`'s characters: none in the words of a link
-    /// of its own, and none in inline code but a knowledge file's path that is the whole of one (`wholeCode`).
+    /// of its own, and none in inline code but a knowledge file's path or a secret's name that is the whole of one
+    /// (`wholeCode`); a secret's name of letters only shows only there (`distinct`).
     private func shown(in text: AttributedString) -> [(Found, Range<AttributedString.Index>)] {
         let plain = String(text.characters)
         return find(in: plain).compactMap { found in
@@ -290,13 +314,22 @@ public struct CardNames: Equatable, Sendable {
             let start = text.characters.index(text.startIndex, offsetBy: lower)
             let range = start..<text.characters.index(start, offsetBy: count)
             if text[range].runs.contains(where: { $0.link != nil }) { return nil }
-            guard text[range].runs.contains(where: { Self.isCode($0.inlinePresentationIntent) }) else { return (found, range) }
-            if case .knowledge = found.target, Self.wholeCode(text, range) { return (found, range) }
-            return nil
+            guard text[range].runs.contains(where: { Self.isCode($0.inlinePresentationIntent) }) else {
+                if case .secret(let name, _) = found.target, !Self.distinct(name) { return nil }
+                return (found, range)
+            }
+            switch found.target {
+            case .knowledge, .secret: return Self.wholeCode(text, range) ? (found, range) : nil
+            default: return nil
+            }
         }
     }
 
     private static func isCode(_ intent: InlinePresentationIntent?) -> Bool { intent?.contains(.code) == true }
+
+    /// A secret's name that cannot be plain words: it has a character that is no letter and no space (an underscore, a
+    /// digit, a hyphen, a point). "Google Drive" is a product's words (review).
+    private static func distinct(_ name: String) -> Bool { name.contains { !$0.isLetter && !$0.isWhitespace } }
 
     /// The characters of `range` are one inline code and nothing more: code on each of them, and none just before or
     /// just after them ("`knowledge/owner/brand.md`", but not "`cat knowledge/owner/brand.md`").
@@ -333,7 +366,7 @@ public struct CardNames: Equatable, Sendable {
                 pieces.append(Piece(words: AttributedString(text[start..<range.lowerBound]), badge: nil))
             }
             var words = AttributedString(text[range])
-            if case .knowledge = found.target {       // a path from inline code: the badge's look, not code's
+            if found.target.fromCode {                // a path or a name from inline code: the badge's look, not code's
                 let coded = words.runs.filter { Self.isCode($0.inlinePresentationIntent) }
                     .map { ($0.range, $0.inlinePresentationIntent?.subtracting(.code)) }
                 for (part, rest) in coded { words[part].inlinePresentationIntent = rest?.isEmpty == true ? nil : rest }

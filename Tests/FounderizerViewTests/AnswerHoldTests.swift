@@ -283,11 +283,11 @@ import Testing
             Task { await store.refresh() }
             ViewHost.turn(10) { store.state?.holds?.isEmpty == false && !Self.actions(card, in: window).contains("Pause") }
             let whileHeld = Self.actions(card, in: window)
-            // the helper confirmed his pause: the gray pause mark, which opens the task too
-            let paused: [String: Any] = ["id": 1, "task": 41, "kind": "pause", "state": "paused", "attempt": 1]
+            // the helper confirmed his pause (the hub's state "stopped"): the gray pause mark, which opens the task too
+            let paused: [String: Any] = ["id": 1, "task": 41, "kind": "pause", "state": "stopped", "attempt": 1]
             hub.give(try Self.reading(needs: [answered], tasks: [task], holds: [paused]))
             Task { await store.refresh() }
-            ViewHost.turn(10) { store.state?.holds?.first?.state == "paused" }
+            ViewHost.turn(10) { store.state?.holds?.first?.state == "stopped" }
             ViewHost.turn(1)
             let whilePaused = Self.actions(card, in: window)
             Self.perform(String(l10n: "Open the task"), on: card, in: window)

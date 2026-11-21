@@ -242,3 +242,25 @@ private let chat = ChatNames(
     let other = ChatNames(agents: [("nova", "Customer Support Lead")], servers: ["app-1"]).keeping(old)
     #expect(other.read !== old.read)
 }
+
+/// **A secret of the fleet's is its name** (the owner, 21 November 2026: "task cards in both agents chat and needs you
+/// sohuld also have a badge for specific Credentials", and "Yes, both"): a key's variable name in words or as the whole
+/// of an inline code, with its kind for its mark and its own link. A name of words of letters only ("Stripe", "Google
+/// Drive") is a product's words too, so it is a badge only as the whole of an inline code; a name that the list does
+/// not have stays words.
+@Test func aSecretIsItsNameWhereItCannotBeAWord() throws {
+    let book = CardNames(agents: [], secrets: [(name: "DOOR_BACKBLAZE_AMURA_KEY", key: true), (name: "Stripe", key: false),
+                                               (name: "Google Drive", key: false)])
+    var code = AttributedString("Stripe")
+    code.inlinePresentationIntent = .code
+    let text = AttributedString("Open DOOR_BACKBLAZE_AMURA_KEY and the Stripe dashboard in Google Drive, then check ") + code
+        + AttributedString(" and DOOR_BACKBLAZE_OTHER_KEY.")
+    let pieces = book.pieces(text)
+    #expect(pieces.compactMap(\.badge) == [.secret("DOOR_BACKBLAZE_AMURA_KEY", key: true), .secret("Stripe", key: false)])
+    #expect(pieces.map { String($0.words.characters) }.joined() == String(text.characters))
+    let login = try #require(pieces.first { $0.badge == .secret("Stripe", key: false) })
+    #expect(login.words.runs.allSatisfy { $0.inlinePresentationIntent?.contains(.code) != true })
+    #expect(CardNames.Target(url: try #require(login.words.link)) == .secret("Stripe", key: false))
+    let key = try #require(pieces.first { $0.badge == .secret("DOOR_BACKBLAZE_AMURA_KEY", key: true) })
+    #expect(CardNames.Target(url: try #require(key.words.link)) == .secret("DOOR_BACKBLAZE_AMURA_KEY", key: true))
+}

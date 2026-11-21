@@ -108,11 +108,19 @@ struct NeedMarksTests {
         let (waits, inWait) = try reading(answered, tasks: [task(41, "working", waitingOn: "manager")])
         let wait = try mark(inWait)
         #expect(waits.answeredMark(in: inWait) == .attention(symbol: wait.symbol, words: wait.words))
-        // his own pause is gray on its row: its own gray mark (his "Gray pause, as the row")
-        let paused: [String: Any] = ["id": 1, "task": 41, "kind": "pause", "state": "paused", "attempt": 1]
+        // his own pause, confirmed (the hub's state "stopped"), is gray on its row: its own gray mark (his "Gray pause,
+        // as the row"); a pause that the hub has not confirmed yet ("requested") is still the check
+        let paused: [String: Any] = ["id": 1, "task": 41, "kind": "pause", "state": "stopped", "attempt": 1]
         let (rests, inPause) = try reading(answered, tasks: [task(41, "working")], holds: [paused])
         let rest = try mark(inPause)
         #expect(rests.answeredMark(in: inPause) == .paused(symbol: rest.symbol, words: rest.words))
+        let requested: [String: Any] = ["id": 1, "task": 41, "kind": "pause", "state": "requested", "attempt": 1]
+        let (asked, inAsk) = try reading(answered, tasks: [task(41, "working")], holds: [requested])
+        #expect(asked.answeredMark(in: inAsk) == .done(words: try mark(inAsk).words))
+        // his Stop, confirmed, is no pause: the check with its word
+        let stopped: [String: Any] = ["id": 1, "task": 41, "kind": "stop", "state": "stopped", "attempt": 1]
+        let (ended, inStop) = try reading(answered, tasks: [task(41, "working")], holds: [stopped])
+        #expect(ended.answeredMark(in: inStop) == .done(words: try mark(inStop).words))
         // a sign-in that the task waits for: orange, as its row
         let (signs, inSign) = try reading(answered, tasks: [task(41, "auth-required")])
         let sign = try mark(inSign)

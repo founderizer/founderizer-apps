@@ -34,7 +34,26 @@ final class ScreenSharingSession {
     /// and gives its one-time password, which goes into Screen Sharing's address and nowhere else; the words of its
     /// refusal are this connection's error, as the card's line shows them.
     func open(_ request: ScreenSharingConnection, secret: (@MainActor () async throws -> String)? = nil) async {
-        guard request.isValid, !busy.contains(request), let data = try? JSONEncoder().encode(request) else { return }
+        guard let tunnel = await openTunnel(request, secret: secret) else { return }
+        // An agent's screen on a Linux server opens with its one-time password in the address (build plan 04, S6); a
+        // Mac's own screen as that machine's own user (screenSharingAddress), so that no sign-in saved for 127.0.0.1
+        // is tried.
+        let address = tunnel.password.map { request.viewerAddress(localPort: tunnel.port, password: $0) }
+            ?? request.screenSharingAddress(localPort: tunnel.port)
+        guard let address, NSWorkspace.shared.open(address) else {
+            if let data = try? JSONEncoder().encode(request), await closeConnection(data) { opened.remove(request) }
+            errors[request] = String(l10n: "The Screen Sharing app could not open.")
+            return
+        }
+    }
+
+    /// **The tunnel alone** (the take-over card, the owner's "Yes, build it" of 21 November 2026): the local port of
+    /// the tunnel to the screen, and a Linux agent's one-time password, with no app opened; nil with this
+    /// connection's error in `errors`. The card speaks to the screen itself (`RFBSession`), so neither the picture nor
+    /// his input passes through the hub.
+    func openTunnel(_ request: ScreenSharingConnection,
+                    secret: (@MainActor () async throws -> String)? = nil) async -> (port: Int, password: String?)? {
+        guard request.isValid, !busy.contains(request), let data = try? JSONEncoder().encode(request) else { return nil }
         busy.insert(request); errors[request] = nil
         defer { busy.remove(request) }
         var password: String?
@@ -42,9 +61,9 @@ final class ScreenSharingSession {
             do {
                 password = try await secret()
             } catch HubError.refusal(let refusal) {
-                errors[request] = refusal.words; return
+                errors[request] = refusal.words; return nil
             } catch {
-                errors[request] = String(l10n: "Screen Sharing could not connect."); return
+                errors[request] = String(l10n: "Screen Sharing could not connect."); return nil
             }
         }
         let result: (Int, String) = await withCheckedContinuation { continuation in
@@ -57,19 +76,10 @@ final class ScreenSharingSession {
         guard (1024...65535).contains(result.0) else {
             opened.remove(request)
             errors[request] = request.failureWords(result.1)
-            return
+            return nil
         }
         opened.insert(request)
-        // An agent's screen on a Linux server opens with its one-time password in the address (build plan 04, S6); a
-        // Mac's own screen as that machine's own user (screenSharingAddress), so that no sign-in saved for 127.0.0.1
-        // is tried.
-        let address = password.map { request.viewerAddress(localPort: result.0, password: $0) }
-            ?? request.screenSharingAddress(localPort: result.0)
-        guard let address, NSWorkspace.shared.open(address) else {
-            if await closeConnection(data) { opened.remove(request) }
-            errors[request] = String(l10n: "The Screen Sharing app could not open.")
-            return
-        }
+        return (result.0, password)
     }
 
     func close(_ request: ScreenSharingConnection) async {

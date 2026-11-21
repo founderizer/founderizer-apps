@@ -1094,8 +1094,6 @@ struct NeedRequestCard: View {
         get { opened ?? (cardWindow != nil) }
         nonmutating set { opened = newValue }
     }
-    /// owner feature need_takeover: he pressed Take over on this card, so its error line may show
-    @State private var pressedTakeOver = false
     /// His answer as the outbox saved it, kept from the frame it went until the reading says the request is answered
     /// (`WordsOnTheirWay`): the store lets the request go with its receipt, a round trip before that reading.
     @State private var sent: PendingRequest?
@@ -1420,8 +1418,15 @@ struct NeedRequestCard: View {
             if need.asksForSecret ? keySave.showsForm(open: need.isOpen) : need.isOpen {
                 Group {
                     if need.asksForSecret {
-                        SecretRequestForm(store: store, need: need, onLook: { took($0) }) {
-                            withAnimation(reduceMotion ? nil : FleetMotion.keySave) { keySave.end() }
+                        VStack(alignment: .leading, spacing: 8) {
+                            // owner feature need_clarify: **his talk with the manager over the key's form**, as the answer
+                            // box draws it over its answers (`NeedAnswerBox`), and as Needs you draws it over every
+                            // request's answers: a key request that took another's place carries his question
+                            let talk = need.isOpen ? need.shownTalk(features: store.state?.ui_features) : []
+                            if !talk.isEmpty { NeedTalkLines(talk: talk, font: FormMetrics.text).padding(.bottom, 2) }
+                            SecretRequestForm(store: store, need: need, onLook: { took($0) }) {
+                                withAnimation(reduceMotion ? nil : FleetMotion.keySave) { keySave.end() }
+                            }
                         }
                     } else {
                         NeedAnswerBox(store: store, need: need)
@@ -1457,8 +1462,8 @@ struct NeedRequestCard: View {
                 // the title's own button and not in it, so that each press does one thing
                 if let way = takeOverWay {
                     NeedTakeOverButton(need: need.id, connection: way) {
-                        // its error line shows once this press tried to open the screen, not an older error before it
-                        Task { await store.takeOver(need); pressedTakeOver = true }
+                        // the take-over card over the main window, also from the request's own window
+                        Task { await store.takeOver(need, from: cardWindow) }
                     }
                 }
                 // **Open in its own window** (the owner's "Yes, as drawn" of 21 November 2026): on an open card whose
@@ -1472,7 +1477,6 @@ struct NeedRequestCard: View {
                         .accessibilityIdentifier("need-window-\(need.id)")
                 }
             }
-            if let way = takeOverWay { NeedTakeOverLine(connection: way, pressed: pressedTakeOver) }
 
             // The reason and the task are two parts of one message: a message's room between them. A take-over has
             // neither: its title is its step.

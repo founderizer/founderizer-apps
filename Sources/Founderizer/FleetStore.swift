@@ -540,6 +540,20 @@ final class FleetStore {
     /// owner feature need_takeover: the Screen Sharing tunnel that a press of Take over opened, by its item, which
     /// `closeAnsweredTakeOvers` closes once a reading shows that item answered or gone.
     @ObservationIgnored var takeOvers: [Int: ScreenSharingConnection] = [:]
+    /// **The take-over card over the window, or nil** (`TakeOverCard`; the owner's "Yes, build it" of 21 November 2026):
+    /// Take over opens it (`takeOver`); Done, Esc, a click on the dimmed window and the request's answer anywhere close
+    /// it, and its close ends its tunnel and brings back what it covered (`takeOverCardClosed`).
+    var takeOverCard: TakeOverItem? {
+        didSet {
+            guard let old = oldValue else { return }
+            let same = takeOverCard.map { $0.id == old.id && $0.hub == old.hub && $0.database == old.database } ?? false
+            guard !same else { return }
+            takeOverCardClosed(old)
+            if detail == nil { markRepliesSeen() }          // the chat that the card covered shows again
+        }
+    }
+    /// What the open take-over card does (`TakeOverScreen`): made and started with the card, stopped at its close.
+    var takeOverScreen: TakeOverScreen?
     /// The lane "Give on a card": the names that requests' words link, with the key of what they were made of
     /// (`cardNames(for:)`), the same names by a chat's rules (`chatNames`), and the servers' symbols for its badges.
     @ObservationIgnored var cardBook: (key: Int, book: CardNames, chat: ChatNames, symbols: [String: String])?
@@ -2877,6 +2891,7 @@ final class FleetStore {
     /// that reply as new when the block comes (a restore, a first connect). Until then no chat shows a new reply. A read
     /// of the lists of older rows that failed ends the wait: then the marks take the reading as it is.
     private func markRepliesSeen() {
+        guard takeOverCard == nil else { return }       // the take-over card covers the chat: not read yet
         guard let state else { return }
         let context = "\(hub.absoluteString)\n\(state.db)"
         if seenContext != context, let window = lastWindow, window.db == state.db, rowsReadFailed != state.db,

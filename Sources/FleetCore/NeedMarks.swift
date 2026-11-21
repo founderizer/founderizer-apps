@@ -70,8 +70,10 @@ extension OwnerNeed {
         if mark.inWork {
             return .working(words: "\(found.owner.agentLabel) · \(found.title)", agent: found.owner, title: found.title)
         }
-        // his own pause, which the hub confirmed: the row's mark of it, gray
-        if state.holds?.contains(where: { $0.task == found.id && $0.kind == "pause" && $0.state == "paused" }) == true {
+        // his own pause, which the hub confirmed: the row's mark of it, gray. The hub writes a hold "requested", then
+        // "stopped" once its stop is confirmed (or "not_confirmed", orange), then "released"; "paused" is only its word
+        // in a message (App shell, 21 November 2026: the mark never showed on a real hub)
+        if state.holds?.contains(where: { $0.task == found.id && $0.kind == "pause" && $0.state == "stopped" }) == true {
             return .paused(symbol: mark.symbol, words: mark.words)
         }
         return .done(words: mark.words)
