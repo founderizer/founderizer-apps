@@ -212,6 +212,14 @@ public static class Activity
         return snapshot.Needs.Count(n => n.IsOpen) + AllTasks(snapshot, ended).Count(t => owner.Contains(t.Id));
     }
 
+    /// <summary>The requests that a page draws a card for (FleetCore's drawn, owner API 1.274; the owner, 20 November 2026,
+    /// of a chat where a folded card said "Replaced by manager with a new item: …" over the card of the new item): none
+    /// that a new item replaced (<see cref="OwnerNeed.ReplacedBy"/>), apart from <paramref name="holding"/>, the request
+    /// whose answer of his is on its way or was refused (the outbox's request): its words need the card's place. The
+    /// field decides, never the hub's words of the answer.</summary>
+    public static IEnumerable<OwnerNeed> Drawn(this IEnumerable<OwnerNeed> needs, long? holding = null) =>
+        needs.Where(n => n.ReplacedBy is null || n.Id == holding);
+
     /// <summary>The tasks of the board for one agent (null: all) and one period, newest activity first in each lane, and in
     /// Waiting the tasks that wait for the owner before the others (HubState.activity). A task that waits for the owner
     /// shows whatever the period.</summary>
@@ -353,7 +361,10 @@ public sealed record NeedsLane
         var all = needs.ToList();
         bool Waits(OwnerNeed n) => held.Contains(n.Id) || (n.IsOpen && !sent.Contains(n.Id));
         Open = all.Where(Waits).OrderByDescending(n => n.Id).ToList();
-        var done = all.Where(n => !Waits(n)).Select(n => (Need: n, At: n.Answered ?? (n.IsOpen ? now : n.Raised)))
+        // Owner API 1.274: a request that a new item replaced is no row of the ones that ended, and no count of them
+        // (Activity.Drawn), unless his answer to it is on its way.
+        var done = all.Where(n => !Waits(n) && (n.ReplacedBy is null || sent.Contains(n.Id)))
+            .Select(n => (Need: n, At: n.Answered ?? (n.IsOpen ? now : n.Raised)))
             .OrderByDescending(e => e.At).ThenByDescending(e => e.Need.Id).ToList();
         var days = new List<Day>();
         foreach (var (need, at) in done)

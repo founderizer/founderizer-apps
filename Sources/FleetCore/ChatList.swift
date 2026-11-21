@@ -113,7 +113,7 @@ public enum ChatList {
             return line
         }
         let joined = lines.joined(separator: " ")
-        let words = (try? AttributedString(markdown: joined,
+        let words = (try? AttributedString(markdown: MessageBlock.keepingTildes(joined),
                                            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             .map { String($0.characters) } ?? joined
         let line = words.split(whereSeparator: \.isWhitespace).joined(separator: " ")

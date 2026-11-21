@@ -16,6 +16,14 @@ struct ChatsPage: View {
     let store: MobileStore
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The headline's scale at this text size, which sizes a row's mark (`AgentAvatar.side`).
+    @ScaledMetric(relativeTo: .headline) private var markScale: CGFloat = 1
+    /// **Room over a row's mark for its motion, as the mark grows with the text**: a mark at work goes up to a quarter
+    /// of its side over its place (the drop's bounce). At the ordinary text size it stays in its own row; at the larger
+    /// sizes it passes the row's top edge, by up to 6 points, and a row that a scroll put back over it (its cell came
+    /// last) covers it with its own ground. So a row takes 0.35 of each point that its mark grows over its top; a
+    /// mark that the smaller text sizes make smaller takes none, and its row is as at the ordinary size.
+    private var markRoom: CGFloat { max(0, (AgentAvatar.side(base: 40, scale: markScale) - 40) * 0.35) }
     /// What the owner typed in the search field.
     @State private var search = ""
     /// The search field has the cursor: a tap anywhere on its capsule gives it.
@@ -256,7 +264,8 @@ struct ChatsPage: View {
                     }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.top, 4 + markRoom)
+        .padding(.bottom, 4)
         // **The whole row takes the tap** (fix round 2, item 53): a plain button takes it on its words only, so the
         // right of a row with a short line ("Noted, thanks.") opened nothing.
         .contentShape(Rectangle())

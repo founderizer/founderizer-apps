@@ -166,6 +166,36 @@ public sealed class ScreensTests
         Assert.IsTrue(Screens.Needs(Sample(x => x["needs"] = new JsonArray()), null, null, Now, Utc).Empty);
     }
 
+    /// <summary>Owner API 1.274 (the owner, 20 November 2026, of a folded card that said "Replaced by manager with a new
+    /// item: …" over the card of the new item): a request that a new item replaced is no card in its chat, and no row
+    /// and no count of the answered ones on Needs you. The field decides, never the hub's words, and his answer to it on
+    /// its way, or refused, keeps its card, whose words need its place.</summary>
+    [TestMethod]
+    public void ARequestThatANewItemReplacedIsNoCardAndIsNotCounted()
+    {
+        StoreState Reading(bool replacedBy) => WithChat(Sample(x =>
+        {
+            var need = SampleFleet.Need(3, "Send the spring sale email?", "Marketing finished the email.", "manager", SampleFleet.Now - 1800);
+            need["answer"] = "Replaced by manager with a new item: Send the spring sale email on Monday?";
+            need["answered"] = SampleFleet.Now - 1500;
+            if (replacedBy) need["replaced_by"] = 2;
+            x["answered_needs"] = new JsonArray(need);
+        }), "manager", SampleFleet.Message("0b5f6c8e-1111-4222-8333-444455556666", SampleFleet.Now - 540, "Can we start the spring sale on Monday?"));
+        long[] Cards(StoreState s) =>
+            Screens.Chat(s, "manager", Now, Utc).Rows.Where(r => r.Kind == ChatRowKind.Request).Select(r => r.Request!.Id).ToArray();
+        var replaced = Reading(replacedBy: true);
+        CollectionAssert.AreEqual(new long[] { 1, 2 }, Cards(replaced), "the new item's card stands in the chat, and the old one is gone");
+        var needs = Screens.Needs(replaced, null, null, Now, Utc);
+        Assert.AreEqual((0, 0), (needs.EndedCount, needs.Ended.Count), "no row and no count among the answered ones");
+        var answer = PendingRequest.New(replaced.Hub!, "gen1", "founderizer-windows/1", "Not now", needId: 3) with { CreatedAt = Now };
+        CollectionAssert.AreEqual(new long[] { 1, 3, 2 }, Cards(replaced with { Pending = answer with { Refusal = "Not sent: No." } }));
+        Assert.AreEqual(1, Screens.Needs(replaced with { Pending = answer }, null, null, Now, Utc).EndedCount);
+        // From a hub before the field, the same words are a card and a row, as before.
+        var before = Reading(replacedBy: false);
+        CollectionAssert.AreEqual(new long[] { 1, 3, 2 }, Cards(before));
+        Assert.AreEqual(1, Screens.Needs(before, null, null, Now, Utc).EndedCount);
+    }
+
     [TestMethod]
     public void TheOptionsOfARequestAreItsOwnTicksOrTheAppsQuickReplies()
     {

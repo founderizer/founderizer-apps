@@ -247,7 +247,10 @@ public enum FileSymbol { Picture, Pdf, Zip, Text }
 
 
 /// <summary>One Needs-you item (FleetCore's OwnerNeed). `secret` is read leniently, as Swift's NeedSecret reads it: see
-/// <see cref="NeedSecret.From"/>.</summary>
+/// <see cref="NeedSecret.From"/>. `replaced_by` (owner API 1.274) is the id of the item that took this one's place (the
+/// manager raised it again with `replaces`, or a new plan of team changes replaced it), whose answer is the hub's own
+/// words; null on every other item and from a hub before that version. No page draws a card for it
+/// (<see cref="Activity.Drawn"/>).</summary>
 public sealed record OwnerNeed(
     long Id,
     string Title,
@@ -271,7 +274,8 @@ public sealed record OwnerNeed(
     long? AddDevice = null,
     string? Details = null,
     bool? Multi = null,
-    IReadOnlyList<long>? Chose = null)
+    IReadOnlyList<long>? Chose = null,
+    long? ReplacedBy = null)
 {
     [JsonIgnore] public bool IsOpen => Answered is null && Answer is null;
     [JsonIgnore] public NeedSecret? Secret => NeedSecret.From(RawSecret);

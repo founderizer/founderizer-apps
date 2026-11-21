@@ -543,7 +543,9 @@ struct SetupSteps: View {
     /// opens nothing on its click), and the text-style selector keeps the arrow from turning into an emoji.
     static func words(_ step: String) -> AttributedString {
         let markdown = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        let parsed = (try? AttributedString(markdown: step, options: markdown)) ?? AttributedString(step)
+        // a single "~" is no strikethrough mark (MessageBlock.keepingTildes): a step can name "~/" twice
+        let parsed = (try? AttributedString(markdown: MessageBlock.keepingTildes(step), options: markdown))
+            ?? AttributedString(step)
         var words = AttributedString()
         for run in parsed.runs {
             var part = AttributedString(parsed[run.range])

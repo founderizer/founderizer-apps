@@ -52,7 +52,7 @@ struct AgentMark: View {
     var moves = true
     @Environment(\.markTeam) private var team
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The breathing layers stay until their motion is back at rest, so work never ends with a snap.
+    /// The moving layers stay until their motion is back at rest, so work never ends with a snap.
     @State private var layered = false
 
     /// The grey of an agent that is not there, the Mac's two steps (`AgentGlyph.absentLight`, `absentDeep`).
@@ -62,19 +62,19 @@ struct AgentMark: View {
     var body: some View {
         let look = MarkTeam.look(of: name, in: team)
         Group {
-            if breathes || layered {
-                BreathingMark(look: look, breathing: breathes, eased: !reduceMotion) { layered = false }
+            if moving || layered {
+                MovingMark(look: look, moving: moving, eased: !reduceMotion) { layered = false }
             } else {
                 figure(look)
             }
         }
         .frame(width: size, height: size)
-        .onChange(of: breathes, initial: true) { _, now in if now { layered = true } }
+        .onChange(of: moving, initial: true) { _, now in if now { layered = true } }
         .accessibilityHidden(true)
     }
 
     /// An agent at work moves, only while its page is on screen. Reduce Motion stops it.
-    private var breathes: Bool { moves && state == .working && !reduceMotion }
+    private var moving: Bool { moves && state == .working && !reduceMotion }
 
     @ViewBuilder private func figure(_ look: GlyphLook) -> some View {
         if state.base == .setup {
@@ -109,60 +109,90 @@ private struct GlyphUnion: Shape {
 
 /// The mark of an agent at work, as Core Animation layers with the same paths as the mark at rest: the figure moves
 /// on the render server, and the page draws once.
-private struct BreathingMark: UIViewRepresentable {
+private struct MovingMark: UIViewRepresentable {
     let look: GlyphLook
     /// At work now; false while the layers go back to rest.
-    let breathing: Bool
+    let moving: Bool
     /// The way back to rest is a motion too, which Reduce Motion leaves out.
     let eased: Bool
     /// The layers are at rest, and the mark at rest can take their place.
     let rested: () -> Void
 
-    func makeUIView(context: Context) -> BreathingMarkView { BreathingMarkView() }
-    func updateUIView(_ view: BreathingMarkView, context: Context) {
-        view.show(look, breathing: breathing, eased: eased, rested: rested)
+    func makeUIView(context: Context) -> MarkLayerView { MarkLayerView() }
+    func updateUIView(_ view: MarkLayerView, context: Context) {
+        view.show(look, moving: moving, eased: eased, rested: rested)
     }
 }
 
-/// The layers of a moving mark, as the Mac's (`GlyphLayerView`): the figure (it turns, breathes or rocks), its colour
-/// under the outline as a mask, and the inner mark, which turns about the mark's centre (`orbit`) and changes its size
-/// about its own centre.
+/// **The layers of a moving mark, as the Mac's glyph (`GlyphLayerView`), in four parts, one in the other**: the
+/// holder, which moves and squeezes along the screen's axes; the figure in it, which turns with its colour (the
+/// gradient under the outline as a mask); the orbit, which turns the inner mark about the mark's centre; and the inner
+/// mark, which turns and changes its size about its own centre. Each kind moves in its own way (`GlyphMotion`, the
+/// owner's "A · Own character" of 20 November 2026, and of the phone: "Yes, iPhone too"), and a squeeze stands on the
+/// holder because a squeeze on a figure that has turned goes askew.
 ///
-/// **Work is plain to see** (the owner, 13 November 2026, of the Mac's sidebar: "the agent icon should animate more to
-/// make it more obvious that is working", and of the phone: "Yes, iPhone too"): the motion is the Mac's, value for
-/// value (`GlyphLayerView.move`), and it is the one sign of work now that work has no dot. Until that day the figure
-/// only grew by 6 % and back, 1.3 seconds each way.
-final class BreathingMarkView: UIView {
-    private let figure = CALayer(), gradient = CAGradientLayer(), outline = CAShapeLayer(), orbit = CALayer(), core = CAShapeLayer()
+/// **The motion is the Mac's, value for value**: `move` and `settle` are `GlyphLayerView`'s, so a change to one of
+/// them goes to the other. Work is plain to see (the owner, 13 November 2026, of the Mac's sidebar: "the agent icon
+/// should animate more to make it more obvious that is working"), and the motion is the one sign of work now that work
+/// has no dot.
+final class MarkLayerView: UIView {
+    private let holder = CALayer(), figure = CALayer(), gradient = CAGradientLayer(), outline = CAShapeLayer()
+    private let orbit = CALayer(), core = CAShapeLayer()
     private var look: GlyphLook?
     /// The kind, the colour and the size that the layers show now.
     private var drawn: (kind: GlyphKind, tone: Int, size: CGSize)?
-    private var breathing = true
+    /// The layers move; false from the moment work ends, while they go back to rest.
+    private var moving = true
     /// What to tell once the layers are back at rest, while they go there.
     private var rested: (() -> Void)?
-    /// The tween into a swing and back to rest at the end of work.
+    /// The number of the way back to rest that runs now: the end of a way back that work cut short tells nothing, also
+    /// when work ended again before that end came.
+    private var settles = 0
+    /// When each track of the motion began its loops, its loop at the mark's own pace, and where its tween into the
+    /// loop started: for the way back to rest.
+    private var loops: [(track: GlyphMotion.Track, begin: CFTimeInterval, seconds: Double, from: Double)] = []
+    /// The way back to rest while it runs: each value from where it was to rest, from when and for how long. Work that
+    /// starts again in it goes on from where each part stands, with no jump.
+    private var ways: [(part: GlyphMotion.Part, channel: GlyphMotion.Channel, from: Double, to: Double,
+                        begin: CFTimeInterval, seconds: Double)] = []
+    /// CA's ease-out, to know where a part stands on its way back.
+    private static let easeOut = GlyphCurve(0, 0, 0.58, 1)
+    /// The tween into a loop from rest, or from where a part stands on its way back, and the way back to rest at the
+    /// end of work.
     private static let tween: CFTimeInterval = 0.25
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
         isAccessibilityElement = false
-        layer.addSublayer(figure)
+        layer.addSublayer(holder)
+        holder.addSublayer(figure)
         figure.addSublayer(gradient)
         gradient.mask = outline
         figure.addSublayer(orbit)
         orbit.addSublayer(core)
         gradient.startPoint = .zero
         gradient.endPoint = CGPoint(x: 1, y: 1)
+        // A view that is laid out before it is in a window does not know its screen's scale yet: its layers take the
+        // scale when it comes, as the Mac's take a new backing scale.
+        registerForTraitChanges([UITraitDisplayScale.self]) { (view: MarkLayerView, _: UITraitCollection) in
+            view.scaleLayers()
+        }
     }
 
     required init?(coder: NSCoder) { nil }
 
-    func show(_ look: GlyphLook, breathing: Bool, eased: Bool, rested: @escaping () -> Void) {
+    /// The layers' pixels at the screen's scale.
+    private func scaleLayers() {
+        let scale = max(traitCollection.displayScale, 1)
+        for part in [gradient, outline, core] as [CALayer] { part.contentsScale = scale }
+    }
+
+    func show(_ look: GlyphLook, moving: Bool, eased: Bool, rested: @escaping () -> Void) {
         self.look = look
-        if breathing != self.breathing {
-            self.breathing = breathing
-            if !breathing { settle(eased: eased, then: rested) } else if drawn != nil { breathe() }
+        if moving != self.moving {
+            self.moving = moving
+            if !moving { settle(eased: eased, then: rested) } else if drawn != nil { move(look) }
         }
         setNeedsLayout()
     }
@@ -171,124 +201,190 @@ final class BreathingMarkView: UIView {
         super.layoutSubviews()
         guard let look, bounds.width > 0, bounds.height > 0 else { return }
         if let drawn, drawn.kind == look.kind, drawn.tone == look.tone, drawn.size == bounds.size { return }
+        // The same look at a new size (every place sizes its mark with the text size) goes on with its motion where it
+        // is; a new look starts its own motion.
+        let resized = drawn.map { $0.kind == look.kind && $0.tone == look.tone } ?? false
         drawn = (look.kind, look.tone, bounds.size)
-        let scale = max(traitCollection.displayScale, 1)
+        let motion = look.kind.workMotion
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        // The figure moves, so it takes its place by its bounds and position, never by a frame.
-        figure.bounds = bounds
-        figure.position = CGPoint(x: bounds.midX, y: bounds.midY)
-        orbit.bounds = bounds
-        orbit.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        // Each part moves, so it takes its place by its bounds and position, never by a frame, and turns and squeezes
+        // about a point of its own: the triangle squeezes on its base and turns about its middle, the drop squeezes on
+        // its bottom, the moon swings from its top, the inner mark about its own centre.
+        func place(_ part: CALayer, about anchor: UnitPoint) {
+            part.bounds = bounds
+            part.anchorPoint = CGPoint(x: anchor.x, y: anchor.y)
+            part.position = CGPoint(x: bounds.width * anchor.x, y: bounds.height * anchor.y)
+        }
+        place(holder, about: motion.holderAnchor)
+        place(figure, about: motion.figureAnchor)
+        place(orbit, about: .center)
+        place(core, about: look.kind.coreAnchor)
         for part in [gradient, outline] as [CALayer] { part.frame = bounds }
-        // The inner mark changes its size about its own centre, which is not the mark's for a moon, a drop or a triangle.
-        let anchor = look.kind.coreAnchor
-        core.bounds = bounds
-        core.anchorPoint = CGPoint(x: anchor.x, y: anchor.y)
-        core.position = CGPoint(x: bounds.width * anchor.x, y: bounds.height * anchor.y)
-        for part in [gradient, outline, core] as [CALayer] { part.contentsScale = scale }
+        scaleLayers()
         gradient.colors = [UIColor(look.light).cgColor, UIColor(look.deep).cgColor]
         outline.path = GlyphOutline(kind: look.kind).path(in: bounds).cgPath
         core.path = GlyphCore(kind: look.kind).path(in: bounds).cgPath
         core.fillColor = look.kind == .moon ? UIColor(look.light).cgColor
             : UIColor.white.withAlphaComponent(GlyphLook.coreOpacity).cgColor
         CATransaction.commit()
-        // New paths or a new kind: its own motion, from rest.
-        if breathing { breathe(again: true) }
+        if moving { if resized, looping { lift() } else { move(look) } }
     }
 
-    /// A layer that left the window lost its motion.
+    /// A layer that left the window can lose its motion; one that kept it goes on as it is.
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window != nil, breathing, drawn != nil { breathe() }
+        guard window != nil, moving, let look, drawn != nil, !looping else { return }
+        move(look)
     }
 
-    /// **The motion of each kind, without an end, and from the mark at rest**, so work starts without a jump: a turn
-    /// starts at 0°, a breath at its full size, and a swing with rest in its middle first reaches its end in a tween.
-    /// Every kind breathes, so every mark at work has one common beat. Each mark keeps its own pace, within 10% of
-    /// its kind's (`GlyphLook.phase`), so two marks at work do not move in step. The Mac's values (`GlyphLayerView.move`).
-    private func breathe(again: Bool = false) {
+    /// Every loop of the motion still runs on its layer: a layer out of a window can lose them, and a mark that lost
+    /// one starts its whole motion again, not with a part of it.
+    private var looping: Bool {
+        !loops.isEmpty && loops.indices.allSatisfy {
+            layer(of: loops[$0].track.part).animation(forKey: "loop.\($0)") != nil
+        }
+    }
+
+    private func layer(of part: GlyphMotion.Part) -> CALayer {
+        switch part {
+        case .holder: holder
+        case .figure: figure
+        case .orbit: orbit
+        case .core: core
+        }
+    }
+
+    private static func keyPath(_ channel: GlyphMotion.Channel) -> String {
+        switch channel {
+        case .turn: "transform.rotation.z"
+        case .scale: "transform.scale"
+        case .scaleX: "transform.scale.x"
+        case .scaleY: "transform.scale.y"
+        case .lift: "transform.translation.y"
+        }
+    }
+
+    /// A track's value as its layer takes it: a turn in radians, a lift in points of this mark.
+    private func shown(_ value: Double, _ channel: GlyphMotion.Channel) -> Double {
+        switch channel {
+        case .turn: value * .pi / 180
+        case .lift: value * Double(bounds.height) / 100
+        case .scale, .scaleX, .scaleY: value
+        }
+    }
+
+    /// **The motion of its kind, without an end, from the mark at rest or from where each part stands on its way back
+    /// to rest (`ways`)**, so work starts without a jump: each track loops from its first key, a track that does not
+    /// start where its part stands first eases there (`tween`), and the loops of a kind start together, so its parts
+    /// keep in step. Each mark keeps its own pace, within 10% of its kind's (`GlyphLook.phase`), so two marks at work
+    /// do not move in step.
+    private func move(_ look: GlyphLook) {
         rested = nil
-        // Every kind's figure breathes: while that breath runs, a second call leaves the motion as it is.
-        guard let look, again || figure.animation(forKey: Self.breath) == nil else { return }
-        for part in [figure, orbit, core] as [CALayer] { part.removeAllAnimations() }
-        let pace = 0.9 + 0.2 * look.phase / (2 * .pi), now = CACurrentMediaTime()
-        switch look.kind.motion {
-        case .turn:
-            turn(figure, to: 2 * .pi, seconds: 6 * pace, now)
-            swing(figure, "transform.scale", 0.86, 1, rest: 1, seconds: 0.95 * pace, now)
-            turn(orbit, to: -2 * .pi, seconds: 3 * pace, now)
-            swing(core, "transform.scale", 0.75, 1.25, rest: 1, seconds: 0.8 * pace, now)
-        case .breathe:
-            swing(figure, "transform.scale", 0.8, 1, rest: 1, seconds: 0.85 * pace, now)
-            if look.kind == .drop { swing(core, "transform.scale", 0.6, 1.4, rest: 1, seconds: 0.7 * pace, now) }
-            else { turn(orbit, to: 2 * .pi, seconds: 2.2 * pace, now) }
-        case .rock:
-            swing(figure, "transform.rotation.z", -0.3, 0.3, rest: 0, seconds: 0.95 * pace, now)
-            swing(figure, "transform.scale", 0.88, 1, rest: 1, seconds: 0.95 * pace, now)
-            swing(core, "transform.scale", 0.7, 1.3, rest: 1, seconds: 0.7 * pace, now)
+        loops = []
+        let pace = 0.9 + 0.2 * look.phase / (2 * .pi), now = CACurrentMediaTime(), tracks = look.kind.workMotion.tracks
+        // Where each part stands on a way back to rest that runs now; at rest otherwise.
+        func standing(_ track: GlyphMotion.Track) -> Double {
+            guard let way = ways.first(where: { $0.part == track.part && $0.channel == track.channel }) else {
+                return track.rest
+            }
+            let done = min(max((now - way.begin) / way.seconds, 0), 1)
+            // A turn on its way back stands a whole turn from rest at most: its loop starts at no turn.
+            let value = way.from + (way.to - way.from) * Self.easeOut(done)
+            return way.channel == .turn ? value - way.to : value
+        }
+        let from = tracks.map(standing)
+        ways = []
+        for part in [holder, figure, orbit, core] as [CALayer] { part.removeAllAnimations() }
+        // The loops of a kind start together, so its parts keep in step: after the tween when one of them needs it.
+        let begin = now + (zip(tracks, from).contains { abs($0.value(at: 0) - $1) > 1e-9 } ? Self.tween : 0)
+        for (index, track) in tracks.enumerated() {
+            let layer = layer(of: track.part), keyPath = Self.keyPath(track.channel), seconds = track.loop * pace
+            let start = track.value(at: 0)
+            if abs(start - from[index]) > 1e-9 {
+                let tween = CABasicAnimation(keyPath: keyPath)
+                tween.fromValue = shown(from[index], track.channel)
+                tween.toValue = shown(start, track.channel)
+                tween.duration = Self.tween
+                tween.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                tween.beginTime = layer.convertTime(now, from: nil)
+                layer.add(tween, forKey: "rest.\(index)")
+            }
+            layer.add(loop(track, seconds: seconds, from: begin, on: layer), forKey: "loop.\(index)")
+            loops.append((track, begin, seconds, from[index]))
         }
     }
 
-    /// The key of the figure's breath, which every kind has (`swing` keys a motion by its key path).
-    private static let breath = "transform.scale"
-
-    /// A turn without an end, from 0.
-    private func turn(_ layer: CALayer, to angle: Double, seconds: Double, _ now: CFTimeInterval) {
-        let motion = CABasicAnimation(keyPath: "transform.rotation.z")
-        motion.fromValue = 0; motion.toValue = angle; motion.duration = seconds
-        motion.repeatCount = .infinity
-        motion.timingFunction = CAMediaTimingFunction(name: .linear)
-        motion.beginTime = layer.convertTime(now, from: nil)
-        motion.isRemovedOnCompletion = false
-        layer.add(motion, forKey: "turn")
+    /// A track's loop without an end, from `begin`, in its layer's values at the mark's size now.
+    private func loop(_ track: GlyphMotion.Track, seconds: Double, from begin: CFTimeInterval,
+                      on layer: CALayer) -> CAKeyframeAnimation {
+        let points = track.samples(over: seconds)
+        let loop = CAKeyframeAnimation(keyPath: Self.keyPath(track.channel))
+        loop.values = points.map { NSNumber(value: shown($0.value, track.channel)) }
+        loop.keyTimes = points.map { NSNumber(value: $0.at) }
+        loop.calculationMode = .linear
+        loop.duration = seconds
+        loop.repeatCount = .infinity
+        loop.beginTime = layer.convertTime(begin, from: nil)
+        loop.isRemovedOnCompletion = false
+        return loop
     }
 
-    /// A swing between two values without an end. Where rest is one of its ends it starts there; where rest is in its
-    /// middle, a tween takes the part from rest to the end the swing starts from.
-    private func swing(_ layer: CALayer, _ key: String, _ low: Double, _ high: Double, rest: Double, seconds: Double,
-                       _ now: CFTimeInterval) {
-        let start = rest == low ? low : high, other = start == low ? high : low
-        var begin = now
-        if rest != start {
-            let tween = CABasicAnimation(keyPath: key)
-            tween.fromValue = rest; tween.toValue = start; tween.duration = Self.tween
-            tween.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            tween.beginTime = layer.convertTime(now, from: nil)
-            layer.add(tween, forKey: key + ".from-rest")
-            begin = now + Self.tween
+    /// **The lifts again at a new size, in step with the loops that run**: a lift is in points of the mark and no
+    /// other value is, so the motion goes on where it is (`move` again would send each part to rest first). A lift on
+    /// its tween into its loop ends that tween at its old size, within 0.25 s. The Mac's glyph keeps its size.
+    private func lift() {
+        for (index, loop) in loops.enumerated() where loop.track.channel == .lift {
+            let layer = layer(of: loop.track.part)
+            layer.add(self.loop(loop.track, seconds: loop.seconds, from: loop.begin, on: layer),
+                      forKey: "loop.\(index)")
         }
-        let motion = CABasicAnimation(keyPath: key)
-        motion.fromValue = start; motion.toValue = other; motion.duration = seconds
-        motion.autoreverses = true; motion.repeatCount = .infinity
-        motion.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        motion.beginTime = layer.convertTime(begin, from: nil)
-        motion.isRemovedOnCompletion = false
-        layer.add(motion, forKey: key)
     }
 
-    /// **Work ends on the mark at rest, not with a snap**: each part goes back from where it is shown now to rest in
-    /// 250 ms, easing out, and only then does the mark at rest take the layers' place.
+    /// **Work ends on the mark at rest, not with a snap and not on a frozen frame**: each value goes back from where it
+    /// is shown now to rest, easing out, and only then does the mark at rest take the layers' place. **A turn goes to
+    /// the nearest whole turn, back or on**, because the gradient turns with the figure and only a whole turn looks as
+    /// the mark at rest does; an inner mark, which has no gradient, to the nearest turn of its own symmetry
+    /// (`GlyphKind.coreSymmetry`). A long way back takes a little longer.
     private func settle(eased: Bool, then rested: @escaping () -> Void) {
         self.rested = rested
+        settles += 1
+        let settle = settles, now = CACurrentMediaTime(), symmetry = Double(look?.kind.coreSymmetry ?? 1)
+        typealias Way = (part: GlyphMotion.Part, channel: GlyphMotion.Channel, from: Double, to: Double)
+        let ways = loops.map { loop -> Way in
+            let track = loop.track
+            let value: Double
+            if now < loop.begin {
+                // Still on its tween into its loop, from rest or from where a way back stood: CA's ease-in-out.
+                let done = min(max(1 - (loop.begin - now) / Self.tween, 0), 1)
+                value = loop.from + (track.value(at: 0) - loop.from) * GlyphCurve.swing(done)
+            } else {
+                value = track.value(at: ((now - loop.begin) / loop.seconds).truncatingRemainder(dividingBy: 1))
+            }
+            let whole = track.part == .core ? 360 / symmetry : 360
+            let to = track.channel == .turn ? (value / whole).rounded() * whole : track.rest
+            return (track.part, track.channel, value, to)
+        }
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, !self.breathing, let rested = self.rested else { return }
+                guard let self, !self.moving, self.settles == settle, let rested = self.rested else { return }
                 self.rested = nil
                 rested()
             }
         }
-        for part in [figure, orbit, core] as [CALayer] {
-            let shown = part.presentation()?.transform ?? part.transform
-            part.removeAllAnimations()
-            guard eased, !CATransform3DIsIdentity(shown) else { continue }
-            let back = CABasicAnimation(keyPath: "transform")
-            back.fromValue = NSValue(caTransform3D: shown)
-            back.toValue = NSValue(caTransform3D: CATransform3DIdentity)
-            back.duration = Self.tween
+        for part in [holder, figure, orbit, core] as [CALayer] { part.removeAllAnimations() }
+        loops = []
+        self.ways = []
+        for (index, way) in ways.enumerated() where eased && abs(way.from - way.to) > 1e-6 {
+            let seconds = Self.tween + (way.channel == .turn ? 0.35 * min(abs(way.from - way.to), 180) / 180 : 0)
+            let back = CABasicAnimation(keyPath: Self.keyPath(way.channel))
+            back.fromValue = shown(way.from, way.channel)
+            back.toValue = shown(way.to, way.channel)
+            back.duration = seconds
             back.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            part.add(back, forKey: "rest")
+            layer(of: way.part).add(back, forKey: "rest.\(index)")
+            self.ways.append((way.part, way.channel, way.from, way.to, now, seconds))
         }
         CATransaction.commit()
     }
@@ -314,7 +410,7 @@ struct AgentAvatar: View {
     let state: AgentState
     /// Its size at the ordinary text size.
     var base: CGFloat = 40
-    /// Whether the mark breathes while its agent works: where it stands for the agent itself (a row of Chats), and not
+    /// Whether the mark moves while its agent works: where it stands for the agent itself (a row of Chats), and not
     /// where a list names it.
     var moves = true
     /// What the badge's ring is cut from: the page under the mark.
@@ -322,8 +418,11 @@ struct AgentAvatar: View {
     @Environment(\.markTeam) private var team
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .headline) private var scale: CGFloat = 1
-    /// It grows with the text, but only by half: past that the row has no width left for the words.
-    private var size: CGFloat { base * min(scale, 1.5) }
+    private var size: CGFloat { Self.side(base: base, scale: scale) }
+
+    /// The side of a mark of `base` points at the ordinary text size, where the headline's scale is `scale`: it grows
+    /// with the text, but only by half, because past that the row has no width left for the words.
+    static func side(base: CGFloat, scale: CGFloat) -> CGFloat { base * min(scale, 1.5) }
 
     var body: some View {
         AgentMark(name: name, state: state, size: size, moves: moves)

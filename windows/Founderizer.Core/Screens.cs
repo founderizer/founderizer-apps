@@ -144,7 +144,11 @@ public static partial class Screens
         var waiting = OnItsWayTo(s, agent);
         var open = (fleet?.Needs ?? []).Where(n => n.By == agent).OrderBy(n => n.Raised).ToList();
         var ids = open.Select(n => n.Id).ToHashSet();
-        var requests = open.Concat((fleet?.AnsweredNeeds ?? []).Where(n => n.By == agent && !ids.Contains(n.Id))).ToList();
+        // No card for a request that a new item replaced (owner API 1.274, Activity.Drawn), left out before the cards take
+        // their places in time, so that no gap stands for it: the new item's card stands in the chat. One whose answer of
+        // his is on its way or was refused keeps its card while the outbox holds it, so that the refusal has its place.
+        var requests = open.Concat((fleet?.AnsweredNeeds ?? []).Where(n => n.By == agent && !ids.Contains(n.Id)))
+            .Drawn(holding: s.Pending?.NeedId).ToList();
         var lines = items.ToList();
         if (waiting is not null && !OwnerStore.Holds(waiting, items)) lines.Add(OnItsWay(waiting));
         // His answer in his own words on its way is his message in the chat from the moment it goes (WordsOnTheirWay.

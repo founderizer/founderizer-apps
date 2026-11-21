@@ -10,28 +10,6 @@ using Founderizer.Setup.Install;
 
 namespace Founderizer.Setup.Tests;
 
-/// <summary>The committed vector files of app/vectors, copied beside the tests.</summary>
-internal static class Vectors
-{
-    public static JsonElement Read(string name)
-    {
-        using var document = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "vectors", name)));
-        return document.RootElement.Clone();
-    }
-
-    public static string? Text(this JsonElement value) => value.ValueKind == JsonValueKind.Null ? null : value.GetString();
-
-    public static string? Text(this JsonElement value, string name) => value.GetProperty(name).Text();
-
-    public static List<string> Texts(this JsonElement value) => value.EnumerateArray().Select(v => v.GetString()!).ToList();
-
-    /// <summary>**A sentence of the Mac with the PC's word** (windows-app-plan-v2.md, rule 14): where it says "Mac" for
-    /// the owner's computer, the PC says "PC".</summary>
-    public static string Pc(string mac) =>
-        mac.Replace("This Mac's", "This PC's", StringComparison.Ordinal).Replace("this Mac's", "this PC's", StringComparison.Ordinal)
-           .Replace("This Mac", "This PC", StringComparison.Ordinal).Replace("this Mac", "this PC", StringComparison.Ordinal);
-}
-
 /// <summary>A server that answers each call with what the test says, and keeps each call and a copy of its input (the
 /// installer clears its own copy of an input that holds a password after the call).</summary>
 internal sealed class StandInRemote(Func<RemoteCall, byte[]?, RemoteResult> answer) : IRemote

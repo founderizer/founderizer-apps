@@ -484,6 +484,21 @@ struct MobileReadTests {
         #expect(SharedPlace.keep(next, account: account))
         #expect(SharedPlace.roster(account: account) == next)
     }
+
+    /// **Needs you draws the reading's copy of a card that stays open** (review B of 20 November 2026): the page kept
+    /// its copy of each card until a card came or went, so his message under an open card and the agent's reply there
+    /// (Needs clarification) never showed on Needs you, where the chat showed them; a card that folds away keeps the
+    /// copy that the page kept.
+    @Test func needsYouDrawsTheReadingsCopyOfAnOpenCard() throws {
+        func card(_ id: Int, talk: String) throws -> OwnerNeed {
+            try JSONDecoder().decode(OwnerNeed.self, from: Data(#"{"id": \#(id), "by": "manager", "title": "Refund it?", "why": "", "todo": "", "raised": 20, "answer": null, "answered": null, "clarify": true, "talk": \#(talk)}"#.utf8))
+        }
+        let kept = [try card(7, talk: "[]"), try card(8, talk: "[]")]
+        let read = [try card(7, talk: #"[{"who": "manager", "text": "Yes, the same customer.", "ts": 30}]"#)]
+        let drawn = NeedsPage.drawn(kept, open: read)
+        #expect(drawn.map(\.id) == [7, 8])
+        #expect(drawn.map { $0.talk?.map(\.text) ?? [] } == [["Yes, the same customer."], []])
+    }
 }
 
 /// What a chat draws from what it read: the waiting line's state, Send's arrow and a chat app's mark.

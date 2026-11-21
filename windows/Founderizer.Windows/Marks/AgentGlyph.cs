@@ -16,7 +16,8 @@ namespace Founderizer.Windows.Marks;
 /// <summary>An agent's glyph as the library's <see cref="MarkLook"/> says: FleetMark's outline in its gradient from the
 /// top left to the bottom right and its inner mark (GlyphPaths, a square of 100 scaled to the side), grey for an agent
 /// that is not there, a dashed outline in setup. While <see cref="MarkLook.Moves"/>, it moves by the library's moves
-/// (GlyphLook.Moves: turn, breathe or rock, at the look's own pace), as the Mac and the iPhone run them. The compositor
+/// (GlyphLook.Moves: turn, breathe or rock, at the look's own pace), as the Mac and the iPhone ran them until they gave
+/// each kind a motion of its own (FleetMark's GlyphMotion, 20 November 2026). The compositor
 /// runs the motion, so the app does no work for a frame; nothing moves at rest, and nothing moves where Windows'
 /// animation effects are off.</summary>
 public sealed class AgentGlyph : Grid

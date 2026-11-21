@@ -46,7 +46,7 @@ struct NeedsPage: View {
                     LoadingLine(String(l10n: "Reading the hub…"))
                         .padding(.horizontal, 16).padding(.vertical, 12)
                 }
-                ForEach(shown ?? store.openNeeds) { need in
+                ForEach(Self.drawn(shown ?? store.openNeeds, open: store.openNeeds)) { need in
                     let folds = folding.contains(need.id)
                     // **An answered item folds away** (items 76 and 95): its height goes to nothing over 250 ms, easing
                     // out, its content clipped to what is left of it and fading, and the items under it rise into the
@@ -87,6 +87,12 @@ struct NeedsPage: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .onAppear { if shown == nil { shown = store.openNeeds } }
+        // **The copies that the page keeps follow each reading** (review B, round 2): a card that closes is drawn from
+        // the last reading that had it open, with its talk, and not from the copy of the last time a card came or
+        // went, whose talk went in the frame the hub closed the card, under his answer's check.
+        .onChange(of: store.snapshot?.time) { _, _ in
+            if let kept = shown { shown = Self.drawn(kept, open: store.openNeeds) }
+        }
         .onChange(of: store.openNeeds.map(\.id)) { _, ids in fold(to: ids) }
         .onChange(of: goingAnswers, initial: true) { before, going in
             for (id, answer) in going where given[id] == nil {
@@ -115,6 +121,15 @@ struct NeedsPage: View {
         .refreshable { await store.refresh() }
         .tabRootPage()
         .hubBanner(store)
+    }
+
+    /// **What the page draws for each item that it keeps: the reading's own copy while the item is open**, and the copy
+    /// that it kept of one that folds away. The page kept its copies until an item came or went, so a card that changed
+    /// while it stayed open stood as it was until then: his message under it and the agent's reply (Needs
+    /// clarification; review B of 20 November 2026), and its options or its words.
+    nonisolated static func drawn(_ kept: [OwnerNeed], open: [OwnerNeed]) -> [OwnerNeed] {
+        let current = Dictionary(open.map { ($0.id, $0) }) { first, _ in first }
+        return kept.map { current[$0.id] ?? $0 }
     }
 
     /// The page follows the hub's list: a new item comes in at once, in its place, and an item that left folds away
@@ -272,6 +287,12 @@ struct NeedCard: View {
     /// The card was open when it was last drawn, and how far its fold has gone (fix round 3, item 40).
     @State private var wasOpen = false
     @State private var foldShare: CGFloat = 0
+    /// The open card took his message under it (`OwnerNeed.clarify`): its link stays while it folds, since the hub's
+    /// answered item takes none, and the rows under the question would lose its height in the fold's first frame.
+    @State private var tookTalk = false
+    /// The field of Needs clarification stands on this card (`NeedClarify.stands`): the card keeps it, so the field
+    /// stays while the card folds, where the rows under the question are drawn again (review B of 20 November 2026).
+    @State private var clarifyStands = false
     /// Who asks and when, over the card: on Needs you.
     var header = false
     /// The files of the message that answered it, which its answer shows.
@@ -325,13 +346,18 @@ struct NeedCard: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("chat-need-\(need.id)")
-        .onAppear { wasOpen = need.isOpen }
+        .onAppear { wasOpen = need.isOpen; tookTalk = need.isOpen && need.clarify == true }
         .onChange(of: need.isOpen) { was, now in
-            if now { wasOpen = true; foldShare = 0; return }
+            if now { wasOpen = true; foldShare = 0; tookTalk = need.clarify == true; return }
             guard was else { return }
             withAnimation(.easeOut(duration: 0.25)) { foldShare = 1 } completion: { wasOpen = false }
         }
+        .onChange(of: need.clarify) { _, now in if need.isOpen { tookTalk = now == true } }
     }
+
+    /// **The card takes his message under it** (Needs clarification, owner feature `need_clarify`): on a hub that names
+    /// the feature, where the hub says so of the open item, and while the card folds where it said so when it was open.
+    private var takesTalk: Bool { store.supportsTalk && (need.isOpen ? need.clarify == true : tookTalk) }
 
     private var open: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -397,10 +423,16 @@ struct NeedCard: View {
                 FieldRow(title: String(l10n: "What it wants"), value: need.todo)
             }
             RowLine()
+            // owner feature need_clarify: his talk with the agent under the card, over its answers, also where the
+            // card takes no more of it: the talk is his record of the item, and it stays whole beside his answer
+            let talk = store.talk(of: need)
+            if !talk.isEmpty { NeedTalkLines(talk: talk) }
             if need.asksForSecret {
                 NeedSecretNote(need: need)
                 // Needs clarification, under the line about the Mac, for a hub that takes his words from a phone
-                if store.supportsClarify { NeedClarify(store: store, need: need, sent: answerGiven?.words) }
+                if store.supportsClarify {
+                    NeedClarify(store: store, need: need, sent: answerGiven?.words, stands: $clarifyStands)
+                }
             } else {
                 // the options, and on an item with none the row of the words that its agent recommends; each row dims
                 // by itself beside the answer that he gave
@@ -409,6 +441,14 @@ struct NeedCard: View {
                 }
                 NeedAnswerBox(store: store, need: need, sent: answerGiven?.words)
                     .opacity(answerGiven?.option != nil ? NeedOptions.dimmed : 1)
+                // owner feature need_clarify: the quiet link Needs clarification under his answer, which stays (the
+                // owner's "Keep Your answer too"), where the hub says that the card takes his message; once he gave an
+                // answer it dims with the rows, and takes no touch, VoiceOver's neither
+                if takesTalk {
+                    NeedClarify(store: store, need: need, stands: $clarifyStands)
+                        .opacity(answerGiven != nil ? NeedOptions.dimmed : 1)
+                        .disabled(answerGiven != nil)
+                }
             }
         }
         .animation(.easeOut(duration: 0.2), value: answerGiven)
@@ -581,6 +621,13 @@ private struct NeedAnswered: View {
                 RowLine()
                 FieldRow(title: String(l10n: "What it wants"), value: need.todo)
             }
+            // owner feature need_clarify: **an answered card keeps his talk with the agent, read only**, before his
+            // answer, as the Mac's card keeps it: no link and no field
+            let talk = store.talk(of: need)
+            if !talk.isEmpty {
+                RowLine()
+                NeedTalkLines(talk: talk)
+            }
             if !answer.isEmpty || !files.isEmpty {
                 RowLine()
                 if answer.isEmpty {
@@ -694,19 +741,10 @@ struct NeedOptions: View {
         return words
     }
 
-    @Environment(\.markTeam) private var team
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.colorSchemeContrast) private var contrast
     /// Over and under the words of the recommended row: a first line that wraps stands under the badge, and one line
     /// keeps the row's 44 points. It grows with the badge, which stops growing at the largest ordinary text size.
     @ScaledMetric(relativeTo: .caption) private var clearScaled: CGFloat = 11
     private var clear: CGFloat { min(clearScaled, RecommendedBadge.clearMost) }
-
-    /// The edge of the recommended row, in the colour of the agent that raised the item.
-    private var recommendedEdge: Color {
-        RecommendedBadge.colours(of: MarkTeam.look(of: need.by, in: team), dark: scheme == .dark,
-                                 increased: contrast == .increased).rowEdge
-    }
 
     var body: some View {
         let rows = need.phoneRows
@@ -729,8 +767,9 @@ struct NeedOptions: View {
         }
     }
 
-    /// One option to press: its press sends its own index. The answer that the agent recommends has that agent's colour
-    /// on its edge and its badge on the edge's top (`RecommendedBadge`).
+    /// One option to press: its press sends its own index. The answer that the agent recommends has its badge on the
+    /// row's top edge (`RecommendedBadge`), and **no edge of its own** (the owner, 20 November 2026: "the recommended
+    /// options should only have the badge, not the border over the option, otherwise it looks alraedy selected").
     private func option(_ index: Int, recommended marks: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         return Button { store.press(needID: need.id, choice: index) } label: {
@@ -745,7 +784,6 @@ struct NeedOptions: View {
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .padding(.horizontal, 14)
                 .background(Brand.bubble, in: shape)
-                .overlay { if marks { shape.strokeBorder(recommendedEdge, lineWidth: 1) } }
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
@@ -760,7 +798,8 @@ struct NeedOptions: View {
 
     /// **The words that the agent recommends, as one row over his own answer** (owner feature `need_recommended`): a
     /// press sends them as his answer in words, as if he had typed them, so they stand in the field while they go and
-    /// the hub knows them as the agent's words, not as an option.
+    /// the hub knows them as the agent's words, not as an option. Its badge stands on its top edge, with no edge of its
+    /// own, as an option's.
     private func recommendedWords(_ words: String) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         return Button { send(words) } label: {
@@ -772,7 +811,6 @@ struct NeedOptions: View {
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .padding(.horizontal, 14)
                 .background(Brand.bubble, in: shape)
-                .overlay(shape.strokeBorder(recommendedEdge, lineWidth: 1))
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
@@ -811,23 +849,20 @@ struct RecommendedBadge: View {
     static let roomMost: CGFloat = 13
     static let clearMost: CGFloat = 14
 
-    /// The colours of the badge and of its row's edge.
+    /// The colours of the badge.
     struct Colours {
-        /// A part of the agent's colour over the card, which hides the row's edge under the badge.
+        /// A part of the agent's colour over the card, which hides the row's top under the badge.
         let fill: Color
         let edge: Color
         let word: Color
-        /// The edge of the row that has the badge: all of the colour under Increase Contrast.
-        let rowEdge: Color
     }
 
     /// The Mac's colours on a dark card (a quarter of the colour, its light step half way to white for the word), and on
     /// the phone's white card a lighter fill and a word half way from the deep step to black.
-    static func colours(of look: GlyphLook, dark: Bool, increased: Bool = false) -> Colours {
+    static func colours(of look: GlyphLook, dark: Bool) -> Colours {
         let mid = look.mid
         return Colours(fill: mid.opacity(dark ? 0.25 : 0.15), edge: mid.opacity(0.8),
-                       word: dark ? mix(look.light, .white, 0.5) : mix(look.deep, .black, 0.5),
-                       rowEdge: mid.opacity(increased ? 1 : 0.75))
+                       word: dark ? mix(look.light, .white, 0.5) : mix(look.deep, .black, 0.5))
     }
 
     /// The colour `part` of the way from `one` to `two`, in sRGB, as `GlyphLook.mid` mixes its two steps.
@@ -1014,6 +1049,14 @@ struct NeedSecretNote: View {
 /// and goes to the agent that asked, which asks again; it is saved and sent as an answer is (`MobileStore.clarify`),
 /// so a failure sends the same request again and never a second one.
 ///
+/// **Every other card that takes his message has the same link, under his answer** (Needs clarification on every card,
+/// owner feature `need_clarify`, API 1.272; the owner, 20 November 2026: "a button link, that then shows the extra text
+/// input", and his pick "Keep Your answer too" to the picture of the card): at the card's edge under the answer's
+/// capsule, which stays and answers. His message there is no answer: it goes to the agent on its own route
+/// (`MobileStore.talk`), the card stays open, and once the hub has it the field goes back to its link and the message
+/// stands in the card's talk over the answers (`NeedTalkLines`). It is saved and sent once in the same way, and the
+/// lines of an answer stand under the card while it goes.
+///
 /// **Words that look like a key do not go** (`KeyInText`), and one line over the field says so: a key typed here
 /// would go out as words, into the agent's conversation. The field's words are the store's, in memory only
 /// (`MobileStore.clarifyDrafts`): nothing writes them to a file, and the store empties them when the hub refuses
@@ -1021,12 +1064,17 @@ struct NeedSecretNote: View {
 struct NeedClarify: View {
     let store: MobileStore
     let need: OwnerNeed
-    /// His words went: they stay in the field until the item folds, and Send goes, as in an answer's box.
+    /// A key card: his words went as its answer, and they stay in the field until the item folds, and Send goes, as in
+    /// an answer's box.
     var sent: String? = nil
+    /// His message under a card that is no key request: it keeps the card open (`MobileStore.talk`), where a key card's
+    /// words answer it.
+    private var talks: Bool { !need.asksForSecret }
     /// The field stands on this card: he tapped the link, or words that stand in the store opened it (they open it on
     /// each card of the request). It stays until the card goes: a field that went back to the link at the last
-    /// deleted character took the keyboard from under the cursor (review round 2).
-    @State private var stands = false
+    /// deleted character took the keyboard from under the cursor (review round 2). The card keeps it (`NeedCard`), so
+    /// it stays while the card folds. His message under a card that the hub took sends the field back to its link.
+    @Binding var stands: Bool
     /// The field takes the cursor once it stands: set in the tap that makes the field, the cursor could stay where it
     /// was (the chat's own composer), as the Mac's card found.
     @State private var takesCursor = false
@@ -1043,15 +1091,18 @@ struct NeedClarify: View {
     private static let capsule = RoundedRectangle(cornerRadius: 25, style: .continuous)
     /// The hub's most for those words, counted as the hub counts (`NeedSecret.length`). The field takes more, as an
     /// answer's box does: Send stops then, and the line under the card says the most (`NeedFooter`).
-    private static let most = NeedSecret.clarifyMost
+    private var most: Int { talks ? NeedTalk.most : NeedSecret.clarifyMost }
 
     var body: some View {
         let taken = store.answersTaken[need.id]
-        let typed = taken.flatMap { $0.request.choice == nil ? $0.request.text : nil }
+        // A key card's words that the hub took as its answer stay in the field until it folds; the answer of any other
+        // card is never his message under it.
+        let typed = talks ? nil : taken.flatMap { $0.request.choice == nil ? $0.request.text : nil }
         // The field's words are the store's (`MobileStore.clarifyDrafts`): no copy here outlives what the store empties.
         let draft = store.clarifyDraft(for: need.id)
         // His words that wait in the Outbox with no send (a send that failed, also before the app's last start): the
-        // field shows them, because the line under the card says "Not sent" and Try again sends those words.
+        // field shows them, because the line under the card says "Not sent" and Try again sends those words. His
+        // message under a card stands there while it goes too.
         let kept = store.clarifyKept(for: need.id)
         let shown = Binding(get: { sent ?? typed ?? store.clarifyKept(for: need.id) ?? store.clarifyDraft(for: need.id) }, set: { text in
             // Nothing changes the words that went, while the item folds, or the words that wait for Try again.
@@ -1060,9 +1111,9 @@ struct NeedClarify: View {
         })
         let trimmed = shown.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let canSend = sent == nil && taken == nil && kept == nil && store.canWrite && !trimmed.isEmpty
-            && NeedSecret.length(trimmed) <= Self.most
+            && NeedSecret.length(trimmed) <= most
         VStack(alignment: .leading, spacing: 8) {
-            if stands || !draft.isEmpty || sent != nil || taken != nil || kept != nil {
+            if stands || !draft.isEmpty || kept != nil || (!talks && (sent != nil || taken != nil)) {
                 // Over the field: under it, the keyboard stands on the line (the look check of 20 November 2026).
                 if looksLikeKey {
                     ComposerNote(words: String(l10n: "That looks like a key. Never send a key in a message."), isWarning: true)
@@ -1087,7 +1138,8 @@ struct NeedClarify: View {
                         if KeyInText.contains(trimmed) { looksLikeKey = true; return }
                         // The keyboard goes with the message, before the item folds, as with an answer.
                         focused = false
-                        await store.clarify(needID: need.id, words: trimmed)
+                        if talks { await store.talk(needID: need.id, words: trimmed) }
+                        else { await store.clarify(needID: need.id, words: trimmed) }
                     }
                     .accessibilityIdentifier("send-clarify-\(need.id)")
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -1104,16 +1156,23 @@ struct NeedClarify: View {
                     if takesCursor { focused = true; takesCursor = false }
                 }
             } else {
-                // The link, in the column of the words of the line over it, with a row's height for the finger.
+                // The link, with a row's height for the finger: on a key card in the column of the words of the line
+                // over it, and under an answer's capsule at the card's edge, where its rows begin.
                 TextAction(title: String(l10n: "Needs clarification"), font: .callout) { stands = true; takesCursor = true }
                     .foregroundStyle(Brand.accent)
-                    .padding(.leading, typeSize.isAccessibilitySize ? 0 : markWidth + 12)
+                    .padding(.leading, talks || typeSize.isAccessibilitySize ? 0 : markWidth + 12)
                     .frame(minHeight: 44)
                     .accessibilityIdentifier("clarify-link-\(need.id)")
             }
         }
         // The hub refused registered login text: the store emptied the words, and the line about a key goes with them.
         .onChange(of: store.secretRefusals) { _, _ in looksLikeKey = false }
+        // The hub took his message under the card, which now stands in its talk: the field goes back to its link.
+        .onChange(of: store.talkReceipts[need.id]) { _, _ in
+            stands = false
+            focused = false
+            looksLikeKey = false
+        }
     }
 
     /// The field's words changed: the line about a key goes once they hold none, and the store keeps them, in memory
@@ -1122,6 +1181,65 @@ struct NeedClarify: View {
     private func changed(_ text: String) {
         if looksLikeKey, !KeyInText.contains(text) { looksLikeKey = false }
         store.setClarifyDraft(text, for: need.id)
+    }
+}
+
+/// **His talk with the agent under a card** (Needs clarification on every card, owner feature `need_clarify`), as the
+/// Mac's card shows it (`NeedTalkLines` there), in the look of this phone's chat: his messages at the trailing side in
+/// his bubble, and the agent's replies at the leading side after its mark, at rest, oldest first. Each line keeps the
+/// other side's room free, so none takes the whole width of an answer's row. The words are plain text, as he and the
+/// agent wrote them. It stands over the answers of an open card, and read only before his answer on an answered one.
+struct NeedTalkLines: View {
+    let talk: [NeedMessage]
+    /// The agent's mark beside its reply's first line, at a request's head's size, growing by half at most.
+    @ScaledMetric(relativeTo: .body) private var mark: CGFloat = 20
+    /// Half the height of the words' capitals: the mark's centre stands this far over the first line's baseline.
+    @ScaledMetric(relativeTo: .body) private var capHalf: CGFloat = 6
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// The side that a line leaves free; at the accessibility sizes less, where the words need the width (review B of
+    /// 20 November 2026: a reply had 225 points at the largest size on a 375-point phone).
+    private var room: CGFloat { typeSize.isAccessibilitySize ? 16 : 48 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(talk.enumerated()), id: \.offset) { _, line in
+                if line.fromOwner { own(line) } else { reply(line) }
+            }
+        }
+    }
+
+    /// His message: the bubble of his messages in a chat.
+    private func own(_ line: NeedMessage) -> some View {
+        Text(verbatim: line.text)
+            .textSelection(.enabled)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .background(Brand.bubble, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(.leading, room)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("You: \(line.text)"))
+    }
+
+    /// The agent's reply: its words bare after its mark, as an agent's words stand in a chat; at the accessibility
+    /// sizes the mark stands over the words, as on a task's row.
+    private func reply(_ line: NeedMessage) -> some View {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+        return layout {
+            AgentMark(name: line.who, size: min(mark, 30), moves: false)
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + capHalf }
+            Text(verbatim: line.text)
+                .textSelection(.enabled)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.trailing, room)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: "\(agentName(line.who)): \(line.text)"))
     }
 }
 
@@ -1169,11 +1287,16 @@ struct NeedFooter: View {
     var body: some View {
         let composer = MobileStore.stageKey(need: need.id)
         // (a key request's words are the words about it, where its card takes them, counted as the hub counts them
-        // against their own most)
-        let trimmed = (need.asksForSecret ? store.clarifyDraft(for: need.id) : store.answerDraft(for: need.id))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let count = need.asksForSecret ? NeedSecret.length(trimmed) : trimmed.count
-        let most = need.asksForSecret ? NeedSecret.clarifyMost : MobileStore.textLimit
+        // against their own most. On another card his answer is counted, and his message under the card, counted so
+        // against its most, which is far under an answer's: the line is of the one that is over its most, else of the
+        // message once it nears its most, else of the answer; review B of 20 November 2026)
+        let message = NeedSecret.length(store.clarifyDraft(for: need.id).trimmingCharacters(in: .whitespacesAndNewlines))
+        let answer = store.answerDraft(for: need.id).trimmingCharacters(in: .whitespacesAndNewlines).count
+        let messageMost = need.asksForSecret ? NeedSecret.clarifyMost : NeedTalk.most
+        let counted = need.asksForSecret
+            || (answer <= MobileStore.textLimit && message > messageMost - 500)
+        let count = counted ? message : answer
+        let most = counted ? messageMost : MobileStore.textLimit
         let taken = store.answersTaken[need.id] != nil
         // A request for a key takes no answer here but his words about it (`NeedClarify`), and only from a hub that
         // takes them from a phone. Then the lines of an answer stand under it too: a send, one that did not go, and
@@ -1189,7 +1312,8 @@ struct NeedFooter: View {
             // room, one read before the fold.
             Held(comes: !taken) { ComposerNote(words: String(l10n: "Sending…")).padding(.top, Self.above) }
                 .accessibilityIdentifier("waiting-answer")
-        } else if let pending = store.pending, pending.needID == need.id {
+        } else if let pending = store.pending, pending.needID == need.id || store.talks(pending, under: need.id) {
+            // (his message under the card is the card's own request too: its lines are an answer's)
             stoppedLine(pending)
         } else if let note = note(count: count, most: most, files: store.filesAreWaiting(for: composer)) {
             ComposerNote(words: note.words, isWarning: note.isWarning,
@@ -1207,10 +1331,11 @@ struct NeedFooter: View {
         }
     }
 
-    /// This item's own answer goes now: a press that waits for the hub, or a send that waits for its receipt.
+    /// This item's own answer goes now: a press that waits for the hub, or a send that waits for its receipt; or his
+    /// message under the card, on its way.
     private var sends: Bool {
         if store.waitingPresses[need.id] != nil { return true }
-        guard let pending = store.pending, pending.needID == need.id else { return false }
+        guard let pending = store.pending, pending.needID == need.id || store.talks(pending, under: need.id) else { return false }
         return pending.refusal == nil && store.sending
     }
 

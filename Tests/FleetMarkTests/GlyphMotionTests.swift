@@ -106,7 +106,8 @@ struct GlyphMotionTests {
             }
             // The highest jump (the drop's, as the mock-up draws it) goes about 23 units over the square: the 28-pt
             // sidebar row has 11 pt over its glyph, 39 units; the 30-pt pill over a chat has 4 pt over its 22, 18,
-            // which the drop passes by 5, as the lane says: this limit is the sidebar's, not the pill's.
+            // which the drop passes by 5, as the lane says: this limit is the sidebar's, not the pill's. The iPhone's
+            // agent page gives its mark a quarter of its side over it (`AgentPage.markRoom`), as this limit says.
             #expect(reach < 25, "\(kind) reaches \(reach) units out of its square")
             // A squeeze on the ground presses down a little; no lift goes down more.
             #expect(sinks <= 3, "\(kind) sinks \(sinks) units under its place")

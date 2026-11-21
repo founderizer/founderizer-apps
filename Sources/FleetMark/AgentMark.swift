@@ -3,11 +3,11 @@ import SwiftUI
 // An agent's own mark: a shape and a colour that come from its name and from its place in the hub's list of agents,
 // so one agent looks the same on every page, in both apps and in every run.
 //
-// This module holds the whole definition — the hash, the hues and the paths — and draws nothing. Each app renders it
-// with its own views: the Mac app adds the Core Animation motion of a working agent (`AgentGlyph.swift`), the phone
-// a plain SwiftUI one (`ios/Sources/AgentMark.swift`). It imports SwiftUI for `Shape` and `Color` and nothing
-// else, which is why it is its own target rather than a part of `FleetCore`: the hub client and the models stay free
-// of a UI framework.
+// This module holds the whole definition — the hash, the hues, the paths and the motion of a working agent
+// (`GlyphMotion.swift`) — and draws nothing. Each app renders it with its own views: the Mac app and the phone play
+// the motion on Core Animation layers (`AgentGlyph.swift`, `ios/Sources/AgentMark.swift`). It imports SwiftUI for
+// `Shape` and `Color` and nothing else, which is why it is its own target rather than a part of `FleetCore`: the hub
+// client and the models stay free of a UI framework.
 //
 // Nothing here may change without changing both apps' pictures. `FleetMarkTests` holds the marks of the owner's
 // fleet, so a change to the hash or to the tables fails the build instead of quietly giving an agent a new face.
@@ -16,7 +16,9 @@ import SwiftUI
 public enum GlyphKind: String, CaseIterable, Sendable {
     case sparkle, clover, flower, burst, squircle, hexagon, diamond, triangle, circle, moon, drop
 
-    /// How a glyph moves while its agent works: a slow turn, a slow breath, or a small rock from side to side.
+    /// How a glyph moves while its agent works in the Windows app: a slow turn, a slow breath, or a small rock from
+    /// side to side (`app/vectors/agent-marks.json`). The Mac app and the iPhone app give each kind a motion of its
+    /// own (`workMotion`).
     public enum Motion: Sendable { case turn, breathe, rock }
     public var motion: Motion {
         switch self {

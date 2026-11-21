@@ -142,7 +142,8 @@ public struct MessageBlock: Sendable, Equatable {
     /// One block's inline marks read: bold, italic, inline code and links, as `AttributedString` carries them. A text
     /// whose marks do not read stays as it is.
     public static func inline(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+        (try? AttributedString(markdown: keepingTildes(text),
+                               options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             ?? AttributedString(text)
     }
 

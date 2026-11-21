@@ -254,6 +254,9 @@ private final class GlyphLayerView: NSView {
     private var moving = true
     /// What to tell once the layers are back at rest, while they go there.
     private var rested: (() -> Void)?
+    /// The number of the way back to rest that runs now: the end of a way back that work cut short tells nothing, also
+    /// when work ended again before that end came.
+    private var settles = 0
     /// When each track of the motion began its loops, its loop at the glyph's own pace, and where its tween into the
     /// loop started: for the way back to rest.
     private var loops: [(track: GlyphMotion.Track, begin: CFTimeInterval, seconds: Double, from: Double)] = []
@@ -420,7 +423,8 @@ private final class GlyphLayerView: NSView {
     /// (`GlyphKind.coreSymmetry`). A long way back takes a little longer.
     private func settle(eased: Bool, then rested: @escaping () -> Void) {
         self.rested = rested
-        let now = CACurrentMediaTime(), symmetry = Double(look?.kind.coreSymmetry ?? 1)
+        settles += 1
+        let settle = settles, now = CACurrentMediaTime(), symmetry = Double(look?.kind.coreSymmetry ?? 1)
         typealias Way = (part: GlyphMotion.Part, channel: GlyphMotion.Channel, from: Double, to: Double)
         let ways = loops.map { loop -> Way in
             let track = loop.track
@@ -439,7 +443,7 @@ private final class GlyphLayerView: NSView {
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, !self.moving, let rested = self.rested else { return }
+                guard let self, !self.moving, self.settles == settle, let rested = self.rested else { return }
                 self.rested = nil
                 rested()
             }

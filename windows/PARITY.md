@@ -113,7 +113,7 @@ Mac, and a device route is all that the PC reaches.
 | `door_setup` | waits (2.4) | |
 | `agent_remove` | waits (2.2) | |
 | `repo_picker` | waits (2.3) | |
-| `need_talk` | built | the short card, Details and options that combine (`RequestCard`, `RequestStep`, `OptionsModel`); no Discuss since owner API 1.158: the talk route answers 404, and an old outbox's question is dropped |
+| `need_talk` | built | the short card, Details and options that combine (`RequestCard`, `RequestStep`, `OptionsModel`), and an old outbox's question of Discuss (which left in owner API 1.158) is dropped; not built yet: the talk under a card, whose route is back since owner API 1.272 (`POST /ui/needs/<id>/talk`, also from a device; an item's `clarify` and `talk`; feature `need_clarify`, hub release 2026.11.718), and which the Mac draws as the talk over the answers and the link "Needs clarification" under "Your answer" (Founderizer 0.1.395) |
 | `person_scope` | waits (2.4) | |
 | `history_messages` | waits (step 2) | |
 | `secret_compare` | waits (2.3) | |

@@ -13,8 +13,9 @@ import SwiftUI
 /// **core**, the inner mark itself, which turns and changes its size about its own place (`GlyphKind.coreAnchor`). Each
 /// track is one value of one part over one loop, as the keyframes of an animation of the web: its keys at their shares
 /// of the loop, each eased to the next by its curve (linear with none). Turns are in degrees, clockwise on the screen;
-/// a lift is in units of the glyph's square (100 is its side), up negative. The Mac app plays the tracks in its own
-/// layers (`GlyphLayerView`), each glyph at its own pace (`GlyphLook.phase`), from the glyph at rest.
+/// a lift is in units of the glyph's square (100 is its side), up negative. The Mac app and the iPhone app play the
+/// tracks in their own layers (`GlyphLayerView`, `MarkLayerView`), each glyph at its own pace (`GlyphLook.phase`), from
+/// the glyph at rest. The Windows app keeps the three earlier moves (`GlyphKind.motion`).
 public struct GlyphMotion: Sendable {
     public enum Part: Sendable, CaseIterable { case holder, figure, orbit, core }
     public enum Channel: Sendable { case turn, scale, scaleX, scaleY, lift }

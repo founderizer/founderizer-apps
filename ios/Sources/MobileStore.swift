@@ -787,6 +787,7 @@ final class MobileStore {
             readError = nil
             readWasRefused = false
             authProblem = nil
+            replayTakenTalk()
             await preparePush()
         } catch is CancellationError {
             return
@@ -831,9 +832,17 @@ final class MobileStore {
         // The chats kept from the last launch belong to the generation they were read in.
         if (snapshot?.db ?? keptDatabase) != answer.snapshot.db { forgetGeneration(keepSnapshot: true) }
         snapshot = answer.snapshot
-        // The words about a key request that is no longer open go: nothing shows them again.
+        // The words about a key request that is no longer open go: nothing shows them again. So do the words of his
+        // message under a card that closed.
         let open = Set(answer.snapshot.needs.map(\.id))
         if clarifyDrafts.keys.contains(where: { !open.contains($0) }) { clarifyDrafts = clarifyDrafts.filter { open.contains($0.key) } }
+        // The receipt's talk of a card goes once the reading has as many lines, or the card is no longer open: an item
+        // that another took the place of keeps no talk, which went to the new one (review B of 20 November 2026).
+        if !talkTaken.isEmpty {
+            let read = Dictionary(answer.snapshot.needs.map { ($0.id, $0) }) { first, _ in first }
+            let still = talkTaken.filter { id, taken in read[id].map { ($0.talk ?? []).count < taken.count } ?? false }
+            if still.count != talkTaken.count { talkTaken = still }
+        }
         keptDatabase = answer.snapshot.db
         snapshotAt = Date()
         etag = answer.etag
@@ -1026,8 +1035,9 @@ final class MobileStore {
     /// phone looks for the request's number in that chat before it does anything else (RULES.md 9). An answer to a
     /// Needs-you item is confirmed by its own receipt or by Retry, which replays the same number.
     private func confirmPending(hub requested: URL, database: String) async throws {
+        // (his message under a card is no message of a chat: its own receipt or Try again confirms it)
         guard let request = pending, request.refusal == nil, request.hub == requested,
-              request.database == database, request.needID == nil, !sending else { return }
+              request.database == database, request.needID == nil, request.command == nil, !sending else { return }
         let agent = request.recipient ?? "manager"
         let page = try await client.chat(at: requested, key: key, database: database, agent: agent, since: nil)
         let found = Self.held(request, in: page.items)
@@ -1043,6 +1053,8 @@ final class MobileStore {
     /// stays, because it names its own hub and generation and Settings says so.
     private func forgetGeneration(keepSnapshot: Bool = false) {
         clarifyDrafts = [:]         // the words about a key request belong to the request of that generation
+        talkTaken = [:]             // and the talk under a card, which a new generation numbers anew
+        talkReceipts = [:]
         // The ended heads belong to the generation they were read in.
         endedAsks = [:]
         endedFailed = nil
@@ -1568,6 +1580,12 @@ final class MobileStore {
     /// the owner's "Yes, build it" of 20 November 2026 to the picture of the phone's card): the card of a request for a
     /// key or a login draws its link Needs clarification only then. A hub before it refuses those words from a phone.
     var supportsClarify: Bool { features.contains("secret_clarify_phone") }
+    /// **This hub takes his message under a card** (Needs clarification on every card, owner feature `need_clarify`,
+    /// API 1.272; the owner's "Keep Your answer too" of 20 November 2026 to the picture of the card): a card shows its
+    /// talk with the agent, and the link Needs clarification stands under his answer where the hub says that the card
+    /// takes a message (`OwnerNeed.clarifies`). The phone's key card has its own Needs clarification
+    /// (`supportsClarify`), whose words answer the request.
+    var supportsTalk: Bool { features.contains(FleetCore.NeedClarify.feature) }
     var supportsCorrections: Bool { features.contains("corrections") }
     /// **His correction on its way changes his message where it stands** (owner feature `edit_in_place`; review A2):
     /// the hub will change that message itself, so its bubble shows the new words, and no second bubble comes. Only
@@ -1595,16 +1613,20 @@ final class MobileStore {
     /// again, or his Discard of a refused one, moves it.
     func waitsUnsent(for need: Int) -> Bool {
         guard let pending, !sending else { return false }
-        return pending.needID == need && pending.hub == hub && pending.database == snapshot?.db
+        // his message under the card is its own request too (Needs clarification): a press behind it waited with no
+        // end, and the card said "Sending…" in place of its "Not sent"
+        return (pending.needID == need || pending.talkNeed == need) && pending.hub == hub
+            && pending.database == snapshot?.db
     }
 
     /// **His words about a key request that wait in the Outbox**, of this hub and generation, with no refusal: the
     /// card's field shows them and takes no change, because Try again sends those words and no others. The words that
     /// stand in the field are kept in memory only (`clarifyDrafts`), so after a start of the app the kept request is
     /// the one place that has them, and a field that showed the link alone let him write other words that never went.
+    /// **His message under any other card waits there the same way** (`talk(needID:words:)`), while it goes too.
     func clarifyKept(for need: Int) -> String? {
-        guard let pending, pending.clarifies, pending.needID == need, pending.refusal == nil, pending.hub == hub,
-              pending.database == snapshot?.db else { return nil }
+        guard let pending, (pending.clarifies && pending.needID == need) || pending.talkNeed == need,
+              pending.refusal == nil, pending.hub == hub, pending.database == snapshot?.db else { return nil }
         return pending.text
     }
 
@@ -1648,6 +1670,95 @@ final class MobileStore {
               !KeyInText.contains(words), NeedSecret.length(words.trimmingCharacters(in: .whitespacesAndNewlines)) <= NeedSecret.clarifyMost
         else { return }
         await write(words, needID: needID, recipient: need.by, clarifies: true)
+    }
+
+    // MARK: His message under a card (Needs clarification on every card)
+
+    /// **The talk of each card as the hub's receipt of his last message gave it**, by item, until a reading has as
+    /// many lines: his message stands in the card from the frame the hub took it, where it went from the field at the
+    /// receipt and came back one read later.
+    private(set) var talkTaken: [Int: [NeedMessage]] = [:]
+    /// **How many of his messages under each card the hub took on this phone**, by item: a card's field goes back to
+    /// its link at each one. It only grows while the generation lasts, so a read that drops `talkTaken` closes no
+    /// field that he opened again since.
+    private(set) var talkReceipts: [Int: Int] = [:]
+    /// The message under a card that a read sent again because its card's talk had it (`replayTakenTalk`): once.
+    @ObservationIgnored private var talkReplayed: UUID?
+    /// How many of his lines with a message's words its card showed when he sent it, by request: only a reading with
+    /// more of them has it (`replayTakenTalk`). A start of the app forgets it, and then only his Try again sends it.
+    @ObservationIgnored private var talkLinesAtSend: [UUID: Int] = [:]
+
+    /// His lines with these words in the talk of the card `need`, as the reading has it.
+    private func ownLines(_ words: String, under need: Int) -> Int {
+        let item = ((snapshot?.needs ?? []) + (snapshot?.answered_needs ?? [])).first { $0.id == need }
+        return (item?.talk ?? []).filter { $0.fromOwner && $0.text == words }.count
+    }
+
+    /// **His message under a card whose receipt never came, while the card's talk has it already** (review A of 20
+    /// November 2026): the hub took it and its answer was lost, so the card showed his message in its talk, the same
+    /// words in the field and "Not sent" under it, and every write of the phone waited behind it. The hub's talk names
+    /// no request, so the read cannot finish it as it finishes a chat's message by its number (`confirmPending`):
+    /// the same request goes again, once, as his Try again would send it, and the hub answers with its first result
+    /// (`command_run`), which confirms it. Only a talk with more of his lines with those words than it had at his
+    /// send has it: an older message of his with the same words is no sign (review A, round 2), and after a start of
+    /// the app, which forgets that number, only his Try again sends it. The read that a failed send makes at its end
+    /// is the first to see it, so the request goes once that send has ended.
+    private func replayTakenTalk() {
+        guard let request = pending, let needID = request.talkNeed, request.refusal == nil,
+              request.hub == hub, request.database == snapshot?.db, talkReplayed != request.requestID,
+              let before = talkLinesAtSend[request.requestID], ownLines(request.text, under: needID) > before
+        else { return }
+        talkReplayed = request.requestID
+        Task { [weak self] in
+            while self?.sending == true { try? await Task.sleep(for: .milliseconds(50)) }
+            guard let self, self.pending?.requestID == request.requestID else { return }
+            // never without this phone's key, which the move to the back locks (review B, round 2): the hub would
+            // refuse the phone itself, for good; a read after the key comes back sends it
+            guard !self.keyIsHeldBack else { self.talkReplayed = nil; return }
+            await self.retry()
+        }
+    }
+
+    /// The request is his message under the card `need` of this hub and generation: a request kept from another one
+    /// names another item by that number (review B of 20 November 2026).
+    func talks(_ request: PendingRequest, under need: Int) -> Bool {
+        request.talkNeed == need && request.hub == hub && request.database == snapshot?.db
+    }
+
+    /// **The talk under a card, as the card shows it** (`OwnerNeed.shownTalk`): his messages and the agent's replies,
+    /// oldest first, open or answered, on a hub that names the feature; the receipt's while the reading does not have
+    /// his last message yet (`talkTaken`).
+    func talk(of need: OwnerNeed) -> [NeedMessage] {
+        let read = need.shownTalk(features: Array(features))
+        guard supportsTalk, let taken = talkTaken[need.id], taken.count > read.count else { return read }
+        return taken
+    }
+
+    /// **His message under a card** (Needs clarification, owner feature `need_clarify`; the owner, 20 November 2026: "a
+    /// button link, that then shows the extra text input", and "Keep Your answer too"): it goes to the agent of the
+    /// card, and the item stays open for his answer. It is saved and sent as every write is, through the Outbox and
+    /// once, on its own route (`OwnerCommand.needTalk`), so a failure sends the same request again and never a second
+    /// one. Its words are the field's (`clarifyDrafts`, in memory only). Words that look like a key never go, and never
+    /// reach the saved request: the card holds them back first and says why, and this refuses them too, as it refuses
+    /// words over the hub's most and a card that takes no message (`OwnerNeed.clarifies`).
+    func talk(needID: Int, words: String) async {
+        let text = words.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canWrite, let snapshot, answersTaken[needID] == nil,
+              let need = snapshot.needs.first(where: { $0.id == needID }), need.clarifies(features: Array(features)),
+              !text.isEmpty, !KeyInText.contains(text), NeedSecret.length(text) <= NeedTalk.most else { return }
+        let request = PendingRequest(hub: hub, database: snapshot.db, client: installation,
+                                     command: .needTalk(need: needID), text: text)
+        // (of the talk that the card shows: a reading behind the last receipt has fewer of them; review A, round 3)
+        talkLinesAtSend = [request.requestID: talk(of: need).filter { $0.fromOwner && $0.text == text }.count]
+        do {
+            try outbox.save(request)
+            pending = request
+        } catch {
+            storageError = String(l10n: "Cannot save this request. Nothing was sent.")
+            storageErrorDetail = error.localizedDescription
+            return
+        }
+        await transmit(request)
     }
 
     func answerDraft(for need: Int) -> String { answers[String(need)] ?? "" }
@@ -2133,7 +2244,19 @@ final class MobileStore {
     /// A message that never went gives its words back to the field they came from, unless the owner has written
     /// there since. A 422 has already taken the words off the phone, so nothing comes back from one.
     private func giveBack(_ request: PendingRequest) {
-        guard request.needID == nil, !request.text.isEmpty else { return }
+        // His message under a card goes back to that card's field, never to a chat's: while the card is open on this
+        // hub and generation, and the field holds no words of his since (after a start of the app it holds none, and
+        // the words were gone with the Discard; review A of 20 November 2026).
+        if let needID = request.talkNeed {
+            // (only to a card that still takes a message, whose field shows them: review A, round 2)
+            if !request.text.isEmpty, request.hub == hub, request.database == snapshot?.db,
+               openNeeds.first(where: { $0.id == needID })?.clarifies(features: Array(features)) == true,
+               clarifyDraft(for: needID).isEmpty {
+                setClarifyDraft(request.text, for: needID)
+            }
+            return
+        }
+        guard request.needID == nil, request.command == nil, !request.text.isEmpty else { return }
         if let replaced = request.replacesRequestID {
             if correcting?.key == replaced, correctionText.isEmpty { correctionText = request.text }
         } else {
@@ -2147,9 +2270,15 @@ final class MobileStore {
         sendError = nil
         defer { sending = false }
         do {
-            let receipt = try await client.send(request, key: key)
-            try finish(request, editedInPlace: receipt.edited == true
-                ? receipt.message_request_id ?? request.replacesRequestID : nil)
+            if request.command != nil {
+                // his message under a card: a command, whose receipt carries the card's talk
+                let receipt = try await client.command(request, key: key)
+                try finish(request, talk: receipt.talk)
+            } else {
+                let receipt = try await client.send(request, key: key)
+                try finish(request, editedInPlace: receipt.edited == true
+                    ? receipt.message_request_id ?? request.replacesRequestID : nil)
+            }
         } catch {
             // A read in between may have found the hub's own event for this request already.
             guard pending?.requestID == request.requestID else { return }
@@ -2190,8 +2319,27 @@ final class MobileStore {
     /// The hub confirmed this request: it leaves the Outbox, and its draft or its correction ends. `editedInPlace`: the
     /// hub changed that message itself and wrote no message of its own (review A2), so its words change where it
     /// stands, in the chat the phone keeps, and no bubble waits at the end for a message that never comes.
-    private func finish(_ request: PendingRequest, editedInPlace original: String? = nil) throws {
+    private func finish(_ request: PendingRequest, editedInPlace original: String? = nil,
+                        talk: [NeedMessage]? = nil) throws {
         try outbox.clear(matching: request.requestID)
+        if let needID = request.talkNeed {
+            // **His message under a card**: it leaves its field, which goes back to its link (`talkReceipts`), and it
+            // stands in the card's talk from the receipt (`talkTaken`). It is no answer and no message of a chat: the
+            // card stays open, and no bubble waits for it anywhere. (A receipt that came after he moved to another hub
+            // or generation changes none of its cards: their numbers are others' items.)
+            if request.hub == hub, request.database == snapshot?.db {
+                if clarifyDraft(for: needID).trimmingCharacters(in: .whitespacesAndNewlines) == request.text {
+                    clarifyDrafts[needID] = nil
+                }
+                // (a late Try again gets the hub's first result, whose talk can be shorter than the reading's)
+                let read = ((snapshot?.needs ?? []) + (snapshot?.answered_needs ?? [])).first { $0.id == needID }?.talk
+                if let talk, talk.count > (read ?? []).count { talkTaken[needID] = talk }
+                talkReceipts[needID, default: 0] += 1
+            }
+            pending = nil
+            sendError = nil
+            return
+        }
         if let replaced = request.replacesRequestID {
             if correcting?.key == replaced { cancelCorrection() }
         } else if let needID = request.needID {
@@ -2242,6 +2390,13 @@ final class MobileStore {
     var pendingSummary: String {
         guard let pending else { return "" }
         if let need = pending.needID { return String(l10n: "Answer to item \(need)") }
+        // his message under a card goes to the agent that raised it, which only a reading of its own hub and
+        // generation names: another one's item of that number is another card
+        if let need = pending.talkNeed {
+            let by = pending.hub == hub && pending.database == snapshot?.db
+                ? snapshot?.needs.first { $0.id == need }?.by : nil
+            return String(l10n: "Message to \(agentName(by ?? "manager"))")
+        }
         let name = agentName(pending.recipient ?? "manager")
         return pending.replacesRequestID == nil ? String(l10n: "Message to \(name)") : String(l10n: "Correction to \(name)")
     }

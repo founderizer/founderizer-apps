@@ -13,6 +13,10 @@ struct AgentPage: View {
     let agent: String
     @ScaledMetric(relativeTo: .title) private var scaledMark: CGFloat = 64
     private var markSize: CGFloat { min(scaledMark, 96) }
+    /// **The room over the mark for its motion**: a row of an inset grouped list cuts what passes its edge, and a mark
+    /// at work goes up to a quarter of its side over its place (the drop's bounce, 23 units of 100, under the bound of
+    /// `GlyphMotionTests`). The row's 8 points cut the drop's tip at the top of each bounce.
+    private var markRoom: CGFloat { max(8, markSize / 4) }
 
     private var entry: MobileAgent? { store.agent(agent) }
     private var state: AgentState {
@@ -33,7 +37,7 @@ struct AgentPage: View {
         List {
             Section { head }
                 .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 0, trailing: 16))
+                .listRowInsets(EdgeInsets(top: markRoom, leading: 16, bottom: 0, trailing: 16))
             // The manager's own warning stood over the agents on Fleet: it is about this agent's session.
             if entry?.role == "manager", let warning = store.snapshot?.manager_warning {
                 Section {

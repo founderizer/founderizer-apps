@@ -61,7 +61,10 @@ struct ChatPage: View {
     /// confirms it or refuses it definitively, and a confirmed one until the chat's read brings the message itself.
     private var waiting: PendingRequest? {
         for request in [store.pending, store.delivered] {
-            if let request, request.needID == nil, (request.recipient ?? "manager") == agent { return request }
+            // (his message under a card is no message of the chat: its card shows it, with the lines under the card)
+            if let request, request.needID == nil, request.command == nil, (request.recipient ?? "manager") == agent {
+                return request
+            }
         }
         return nil
     }
@@ -321,7 +324,7 @@ struct ChatPage: View {
     }
 
     /// **The agent's mark and name in one glass pill over the conversation** (the owner's yes of 28 October 2026 to
-    /// D-6): the mark at 20 points, breathing while the agent works, grey while it is offline and dashed in setup. **The
+    /// D-6): the mark at 20 points, moving while the agent works, grey while it is offline and dashed in setup. **The
     /// name opens the agent's own page** (D-5), with the "›" that says so, as a chat app opens a contact from the name
     /// over the conversation.
     private var titlePill: some View {

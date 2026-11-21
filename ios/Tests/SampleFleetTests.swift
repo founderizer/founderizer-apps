@@ -244,23 +244,20 @@ struct SampleFleetTests {
     }
 }
 
-/// **A hub on this Mac's loopback for the Mac's code link** (`MobileStore.openLink`): it refuses a read with no key in
-/// the hub's words for an owner device, gives a key for the code, and answers a read that carries that key. It holds
-/// its answer to the enrolment until the check has looked at the phone, and it keeps every request, in order.
-private final class LinkHub: @unchecked Sendable {
-    static let key = "a-key-that-the-check-hub-gave"
-    /// Each request as it comes: its method, its route and, for a read, whether it carried the key.
+/// **A hub on this Mac's loopback**, for a check of the phone's own client: it listens on the loopback alone, takes each
+/// request once its head and its whole body are here, and answers it as its kind says (`answer`). Each answer closes its
+/// connection, and the hub keeps the requests that its kind notes, in order.
+private class LoopbackHub: @unchecked Sendable {
+    /// Each request that the hub notes, as it comes.
     let requests: AsyncStream<String>
     private let arrived: AsyncStream<String>.Continuation
-    private let queue = DispatchQueue(label: "founderizer.check.link-hub")
-    private let lock = NSLock()
+    private let queue: DispatchQueue
+    let lock = NSLock()
     private var listener: NWListener?
     private var seen: [String] = []
-    /// The enrolment's connection and its answer, until the check lets the answer go.
-    private var held: (connection: NWConnection, reply: Data)?
-    private var letGo = false
 
-    init() {
+    init(label: String) {
+        queue = DispatchQueue(label: label)
         let made = AsyncStream.makeStream(of: String.self)
         requests = made.stream
         arrived = made.continuation
@@ -287,24 +284,16 @@ private final class LinkHub: @unchecked Sendable {
     }
 
     func stop() {
-        let (listener, held) = lock.withLock { () -> (NWListener?, NWConnection?) in
-            defer { self.listener = nil; self.held = nil }
-            return (self.listener, self.held?.connection)
+        let listener = lock.withLock { () -> NWListener? in
+            defer { self.listener = nil }
+            return self.listener
         }
         listener?.cancel()
-        held?.cancel()
         arrived.finish()
     }
 
-    /// The answer to the enrolment goes.
-    func answerEnrolment() {
-        let held = lock.withLock { () -> (connection: NWConnection, reply: Data)? in
-            letGo = true
-            defer { self.held = nil }
-            return self.held
-        }
-        if let held { send(held.reply, on: held.connection) }
-    }
+    /// One whole request, which the hub's kind answers. A hub of no kind cuts it.
+    func answer(_ request: Request, on connection: NWConnection) { connection.cancel() }
 
     private func take(_ connection: NWConnection) {
         connection.start(queue: queue)
@@ -321,7 +310,81 @@ private final class LinkHub: @unchecked Sendable {
         }
     }
 
-    private func answer(_ request: Request, on connection: NWConnection) {
+    func note(_ request: String) {
+        lock.withLock { seen.append(request) }
+        arrived.yield(request)
+    }
+
+    func send(_ reply: Data, on connection: NWConnection) {
+        connection.send(content: reply, completion: .contentProcessed { _ in connection.cancel() })
+    }
+
+    static func reply(_ status: Int, _ body: String) -> Data {
+        let bytes = Data(body.utf8)
+        let head = "HTTP/1.1 \(status) \(status == 200 ? "OK" : "Refused")\r\nContent-Type: application/json\r\n"
+            + "Content-Length: \(bytes.count)\r\nConnection: close\r\n\r\n"
+        return Data(head.utf8) + bytes
+    }
+
+    /// One request, once its head and its whole body are here.
+    struct Request {
+        let method: String
+        let path: String
+        let headers: [String: String]
+        let body: Data
+
+        init?(_ bytes: Data) {
+            guard let end = bytes.range(of: Data("\r\n\r\n".utf8)) else { return nil }
+            let lines = String(decoding: bytes[..<end.lowerBound], as: UTF8.self).components(separatedBy: "\r\n")
+            let first = lines.first?.split(separator: " ") ?? []
+            guard first.count >= 2 else { return nil }
+            var headers: [String: String] = [:]
+            for line in lines.dropFirst() {
+                guard let colon = line.firstIndex(of: ":") else { continue }
+                headers[line[..<colon].lowercased()] = line[line.index(after: colon)...]
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            let length = Int(headers["content-length"] ?? "0") ?? 0
+            guard bytes.count - end.upperBound >= length else { return nil }
+            method = String(first[0])
+            path = String(first[1].split(separator: "?").first ?? "")
+            self.headers = headers
+            body = Data(bytes[end.upperBound...].prefix(length))
+        }
+    }
+}
+
+/// **A hub for the Mac's code link** (`MobileStore.openLink`): it refuses a read with no key in the hub's words for an
+/// owner device, gives a key for the code, and answers a read that carries that key. It holds its answer to the
+/// enrolment until the check has looked at the phone, and it keeps every request, in order.
+private final class LinkHub: LoopbackHub, @unchecked Sendable {
+    static let key = "a-key-that-the-check-hub-gave"
+    /// The enrolment's connection and its answer, until the check lets the answer go.
+    private var held: (connection: NWConnection, reply: Data)?
+    private var letGo = false
+
+    init() { super.init(label: "founderizer.check.link-hub") }
+
+    override func stop() {
+        let held = lock.withLock { () -> NWConnection? in
+            defer { self.held = nil }
+            return self.held?.connection
+        }
+        held?.cancel()
+        super.stop()
+    }
+
+    /// The answer to the enrolment goes.
+    func answerEnrolment() {
+        let held = lock.withLock { () -> (connection: NWConnection, reply: Data)? in
+            letGo = true
+            defer { self.held = nil }
+            return self.held
+        }
+        if let held { send(held.reply, on: held.connection) }
+    }
+
+    override func answer(_ request: Request, on connection: NWConnection) {
         let route = "\(request.method) \(request.path)"
         switch route {
         case "GET /ui/mobile":
@@ -345,48 +408,94 @@ private final class LinkHub: @unchecked Sendable {
         }
     }
 
-    private func note(_ request: String) {
-        lock.withLock { seen.append(request) }
-        arrived.yield(request)
-    }
-
-    private func send(_ reply: Data, on connection: NWConnection) {
-        connection.send(content: reply, completion: .contentProcessed { _ in connection.cancel() })
-    }
-
-    private static func reply(_ status: Int, _ body: String) -> Data {
-        let bytes = Data(body.utf8)
-        let head = "HTTP/1.1 \(status) \(status == 200 ? "OK" : "Refused")\r\nContent-Type: application/json\r\n"
-            + "Content-Length: \(bytes.count)\r\nConnection: close\r\n\r\n"
-        return Data(head.utf8) + bytes
-    }
-
     /// The hub's compact read of a fleet with nothing in it.
     private static let fleet = #"{"schema_version": 1, "db": "gen-link", "time": 1800000000, "ui_features": ["mobile"], "#
         + #""agents": [], "needs": [], "tasks": [], "recent": [], "holds": [], "outcomes": []}"#
+}
 
-    /// One request, once its head and its whole body are here.
-    private struct Request {
-        let method: String
-        let path: String
-        let headers: [String: String]
+/// **A hub with one card that takes his message under it** (Needs clarification on every card, owner feature
+/// `need_clarify`): it answers a read with that card, and his message under it as `mode` says: with the hub's receipt of
+/// the command, whose talk has the message; by a cut connection before it takes the message, as a hub that went away;
+/// by a cut connection after it took the message, as an answer that was lost on its way back; or with the hub's
+/// refusal. A repeat of a request that it took gets that request's first result, as the hub's own record answers it.
+/// Its read has the messages that it took only while `readsTalk` is set: else they have not reached that read yet.
+private final class TalkHub: LoopbackHub, @unchecked Sendable {
+    enum Mode { case answers, cutsBefore, cutsAfter, refuses }
+    private var answering = Mode.answers
+    private var reading = false
+    private var ids: [String] = []
+    /// The messages that it took, by request, in order.
+    private var taken: [(id: String, text: String)] = []
 
-        init?(_ bytes: Data) {
-            guard let end = bytes.range(of: Data("\r\n\r\n".utf8)) else { return nil }
-            let lines = String(decoding: bytes[..<end.lowerBound], as: UTF8.self).components(separatedBy: "\r\n")
-            let first = lines.first?.split(separator: " ") ?? []
-            guard first.count >= 2 else { return nil }
-            var headers: [String: String] = [:]
-            for line in lines.dropFirst() {
-                guard let colon = line.firstIndex(of: ":") else { continue }
-                headers[line[..<colon].lowercased()] = line[line.index(after: colon)...]
-                    .trimmingCharacters(in: .whitespaces)
+    init() { super.init(label: "founderizer.check.talk-hub") }
+
+    var mode: Mode {
+        get { lock.withLock { answering } }
+        set { lock.withLock { answering = newValue } }
+    }
+
+    var readsTalk: Bool {
+        get { lock.withLock { reading } }
+        set { lock.withLock { reading = newValue } }
+    }
+
+    /// The request number of each message that came, a cut one too, in order.
+    var messages: [String] { lock.withLock { ids } }
+
+    override func answer(_ request: Request, on connection: NWConnection) {
+        let route = "\(request.method) \(request.path)"
+        note(route)
+        switch route {
+        case "GET /ui/mobile":
+            send(Self.reply(200, fleet()), on: connection)
+        case "POST /ui/needs/7/talk":
+            let fields = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            guard let id = fields["request_id"] as? String, let text = fields["text"] as? String else {
+                return send(Self.reply(400, #"{"error": "request_id and text are required"}"#), on: connection)
             }
-            guard bytes.count - end.upperBound >= Int(headers["content-length"] ?? "0") ?? 0 else { return nil }
-            method = String(first[0])
-            path = String(first[1].split(separator: "?").first ?? "")
-            self.headers = headers
+            let (mode, lines) = lock.withLock { () -> (Mode, [(id: String, text: String)]) in
+                ids.append(id)
+                let known = taken.contains { $0.id == id }
+                if !known && (answering == .answers || answering == .cutsAfter) { taken.append((id, text)) }
+                return (known ? .answers : answering, taken)
+            }
+            switch mode {
+            case .cutsBefore, .cutsAfter:
+                connection.cancel()
+            case .refuses:
+                send(Self.reply(409, #"{"error": "this request takes no message now"}"#), on: connection)
+            case .answers:
+                let talk = Self.talk(lines.prefix { $0.id != id } + lines.filter { $0.id == id })
+                let receipt: [String: Any] = ["need": 7, "talk": talk, "ok": true, "request_id": id,
+                                              "client": request.headers["x-fleet-client"] ?? "", "replayed": false]
+                let body = (try? JSONSerialization.data(withJSONObject: receipt)).map { String(decoding: $0, as: UTF8.self) }
+                send(Self.reply(200, body ?? "{}"), on: connection)
+            }
+        default:
+            send(Self.reply(404, #"{"error": "not found"}"#), on: connection)
         }
+    }
+
+    /// The talk's lines of these messages, his, a minute apart.
+    private static func talk(_ lines: [(id: String, text: String)]) -> [[String: Any]] {
+        lines.enumerated().map { ["who": "owner", "text": $1.text, "ts": 1_800_000_060 + 60 * $0] }
+    }
+
+    /// The hub's compact read: one open card of the manager's, with three options, that takes his message under it.
+    private func fleet() -> String {
+        let talk = readsTalk ? lock.withLock { Self.talk(taken) } : []
+        let card: [String: Any] = [
+            "id": 7, "by": "manager", "title": "Refund an order from 45 days ago?",
+            "why": "A customer asks for a refund 15 days after the 30-day window.", "todo": "", "raised": 1_799_999_000,
+            "answer": NSNull(), "answered": NSNull(), "options": ["Refund it", "Offer a 20% voucher", "Say no, politely"],
+            "clarify": true, "talk": talk,
+        ]
+        let fleet: [String: Any] = [
+            "schema_version": 1, "db": "gen-talk", "time": 1_800_000_000,
+            "ui_features": ["mobile", "need_options", "need_clarify"], "agents": [], "needs": [card], "tasks": [],
+            "recent": [], "holds": [], "outcomes": [],
+        ]
+        return (try? JSONSerialization.data(withJSONObject: fleet)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
     }
 }
 
@@ -422,6 +531,108 @@ extension SampleFleetTests {
             #expect(store.pending == nil)
             try await Task.sleep(for: .milliseconds(800))
             #expect(store.pending == nil, "a press that waited went after the Discard")
+        }
+    }
+}
+
+extension SampleFleetTests {
+    /// **His message under a card goes once, as the hub's command** (Needs clarification on every card, owner feature
+    /// `need_clarify`): words that look like a key never reach the Outbox or the hub; a message whose send the hub cut
+    /// waits unsent with its words, and a press on the card's options behind it is dropped, as behind the card's own
+    /// answer; Try again sends the same request, whose receipt is a command's; the message stands in the card from that
+    /// receipt; a message whose receipt was lost is confirmed by the next read that has it in the card's talk, and an
+    /// older line of his with the same words sends nothing by itself; and the Discard of a refused message gives its
+    /// words back to the card's field, never to the manager's chat. Read as an answer's receipt, which has an event and
+    /// a time, every message that the hub took waited as "Not sent", and so did each Try again, with every later write
+    /// of the phone behind it; a press behind the message waited with no end, and the card said "Sending…" in place of
+    /// its "Not sent"; a lost receipt left his message in the talk and in the field at once, under "Not sent".
+    @MainActor @Test("a message under a card goes once as the hub's command, and a press does not wait behind it",
+                     .timeLimit(.minutes(1)))
+    func aMessageUnderACardGoesOnceAsTheHubsCommand() async throws {
+        try await Self.withoutHub {
+            try await Self.keepingReadings {
+                let hub = TalkHub()
+                defer { hub.stop() }
+                let address = try await hub.start()
+                // A key of the check's own, which holds none: the reads go with no key, and an enrolled phone's key is
+                // never touched.
+                let holder = DeviceKey(account: "device-key-talk-check")
+                try holder.remove()
+                defer { try? holder.remove() }
+                let store = MobileStore(deviceKey: holder)
+                try #require(store.pending == nil, "the simulator holds a request of its own")
+                // whatever this check leaves in the Outbox goes with it
+                defer {
+                    if let left = store.pending {
+                        try? Outbox(file: Self.support.appendingPathComponent("pending.json")).clear(matching: left.requestID)
+                    }
+                }
+                store.addressText = address
+                await store.connect()
+                let card = try #require(store.openNeeds.first)
+                try #require(store.canWrite && card.id == 7 && card.clarifies(features: Array(store.features)))
+                let chatDraft = store.draft(for: "manager")
+
+                // a key in his words: nothing is saved, and nothing goes
+                await store.talk(needID: 7, words: "Use this one: " + "sk-" + "ant-api03-" + String(repeating: "EXAMPLE", count: 4))
+                #expect(store.pending == nil && hub.messages.isEmpty)
+
+                // a send that the hub cut: the message waits unsent with its words, no read looks for it in a chat,
+                // and a press on the card is dropped
+                let first = "Is it the same customer as last month?"
+                store.setClarifyDraft(first, for: 7)
+                hub.mode = .cutsBefore
+                await store.talk(needID: 7, words: first)
+                try #require(store.pending?.talkNeed == 7 && store.pending?.refusal == nil && hub.messages.count == 1)
+                await store.refresh()
+                #expect(store.waitsUnsent(for: 7) && store.clarifyKept(for: 7) == first && store.readError == nil)
+                #expect(hub.log.allSatisfy { $0 == "GET /ui/mobile" || $0 == "POST /ui/needs/7/talk" })
+                store.press(needID: 7, choice: 1)
+                #expect(store.waitingPresses[7] == nil)
+
+                // Try again: the same request, which the hub's receipt confirms, and the card shows it from that
+                // receipt, before a read has it
+                hub.mode = .answers
+                await store.retry()
+                #expect(store.pending == nil && store.sendError == nil)
+                #expect(hub.messages.count == 2 && Set(hub.messages).count == 1)
+                let talk = store.talk(of: try #require(store.openNeeds.first))
+                #expect(talk.map(\.text) == [first] && talk.allSatisfy(\.fromOwner))
+                #expect(store.clarifyDraft(for: 7).isEmpty && store.talkReceipts[7] == 1)
+
+                // a receipt that was lost: the next read has the message in the card's talk, and that request goes
+                // once more, which the hub's first result confirms
+                hub.readsTalk = true
+                hub.mode = .cutsAfter
+                let second = "And the voucher, does it end this month?"
+                await store.talk(needID: 7, words: second)
+                for _ in 0..<60 where store.pending != nil { try await Task.sleep(for: .milliseconds(50)) }
+                #expect(store.pending == nil && store.talkReceipts[7] == 2)
+                #expect(hub.messages.count == 4 && Set(hub.messages).count == 2)
+                #expect(store.talk(of: try #require(store.openNeeds.first)).map(\.text) == [first, second])
+
+                // the same words again, cut before the hub took them: his older line with those words is no sign that
+                // the hub has them, so no read sends them by itself, and his Try again does
+                hub.mode = .cutsBefore
+                await store.talk(needID: 7, words: second)
+                await store.refresh()
+                try await Task.sleep(for: .milliseconds(500))
+                #expect(hub.messages.count == 5 && store.pending?.talkNeed == 7 && store.pending?.refusal == nil)
+                hub.mode = .answers
+                await store.retry()
+                #expect(store.pending == nil && hub.messages.count == 6)
+
+                // a refused message: its Discard gives its words back to the card's field, which a start of the app
+                // emptied, and never to the manager's chat
+                hub.mode = .refuses
+                let third = "Can you ask them first?"
+                await store.talk(needID: 7, words: third)
+                try #require(store.pending?.refusal != nil)
+                store.setClarifyDraft("", for: 7)
+                store.discardRefused()
+                #expect(store.pending == nil && store.clarifyDraft(for: 7) == third)
+                #expect(store.draft(for: "manager") == chatDraft)
+            }
         }
     }
 }
