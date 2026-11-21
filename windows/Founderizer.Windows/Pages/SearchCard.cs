@@ -181,8 +181,8 @@ internal sealed class SearchCard : Grid
         return Row(48, mark, names, index, agent.Label);
     }
 
-    /// <summary>The icon of a task's mark, as this card draws it: an answered card's orange mark takes the same one
-    /// (<see cref="AnswerMarkView"/>), so a task's row and the card never differ.</summary>
+    /// <summary>The icon of a task's mark, as this card draws it: an answered card's orange mark and its gray mark of his
+    /// own pause take the same one (<see cref="AnswerMarkView"/>), so a task's row and the card never differ.</summary>
     internal static Icon IconOf(TaskSymbol symbol) => symbol switch
     {
         TaskSymbol.Paused => Icons.PauseCircle,

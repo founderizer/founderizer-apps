@@ -335,22 +335,55 @@ struct BadgePress: NSViewRepresentable {
         var hover: (Bool) -> Void = { _ in }
         /// A press that began here, which a release here opens.
         private var pressed = false
+        /// The pointer is over this view by its last event: what a window that loses the keyboard ends (`hovers`).
+        private var hovering = false
+        private var resigned: NSObjectProtocol?
+
+        /// **The tracking of a window that stands over other apps works in any state.** A request card's own window
+        /// is a panel that does not take the app to the front (`NeedPanel`): it stands over another app, which has the
+        /// keyboard, so a tracking of the key window gave no hand and no lighter look until the press (a check in a
+        /// guest Mac, 21 November 2026). The app's other windows keep the key window's tracking.
+        private var tracksAlways: Bool { window?.styleMask.contains(.nonactivatingPanel) ?? false }
 
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
             for area in trackingAreas { removeTrackingArea(area) }
             addTrackingArea(NSTrackingArea(rect: .zero, options: [.cursorUpdate, .mouseEnteredAndExited, .mouseMoved,
-                                                                  .activeInKeyWindow, .inVisibleRect], owner: self))
+                                                                  tracksAlways ? .activeAlways : .activeInKeyWindow,
+                                                                  .inVisibleRect], owner: self))
+        }
+
+        /// **A window that loses the keyboard ends the hover of its presses**: the key window's tracking sends no
+        /// `mouseExited` then, so the lighter look of a badge or a chip stayed until the pointer came in and went out
+        /// again. A view that leaves its window ends it too, and its watch of the window goes with it.
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let resigned { NotificationCenter.default.removeObserver(resigned) }
+            resigned = nil
+            hovers(false)
+            updateTrackingAreas()
+            guard let window, !tracksAlways else { return }
+            // no queue: the window posts it on the main thread, and the block runs there at once
+            resigned = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window,
+                                                              queue: nil) { [weak self] _ in
+                MainActor.assumeIsolated { self?.hovers(false) }
+            }
+        }
+
+        private func hovers(_ inside: Bool) {
+            guard inside != hovering else { return }
+            hovering = inside
+            hover(inside)
         }
 
         override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
         override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
         override func mouseEntered(with event: NSEvent) {
             NSCursor.pointingHand.set()
-            hover(true)
+            hovers(true)
         }
         override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
-        override func mouseExited(with event: NSEvent) { hover(false) }
+        override func mouseExited(with event: NSEvent) { hovers(false) }
         /// A press in a window that is not in front opens the badge too, as the link under it did.
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
         /// A press on a badge never moves the window, whose content runs to its top edge.

@@ -29,8 +29,11 @@ struct RefusalWordsVectorsTests {
     /// hub's vector and to the catalog. A new code of the hub is named here until his yes to the Spanish of its slice.
     /// The five of a Drive folder waited from 20 November 2026 until his "Yes, ship them" of the same day.
     /// `card_words_from_tool` (an AI session's words to a card that has its own answers, 20 November 2026) waits too.
+    /// `teams_off` and `teams_part_missing` (a part of Founderizer for Teams on a fleet that does not have it, or whose hub
+    /// has not loaded it, 21 November 2026) wait for the owner's yes to their words and to their Spanish.
     private static let waiting: Set<String> = ["about_unreadable", "card_words_from_tool", "knowledge_unread",
-                                               "profile_unread", "signature_unchecked"]
+                                               "profile_unread", "signature_unchecked", "teams_off",
+                                               "teams_part_missing"]
 
     /// The codes that have a case: every code of the hub's table that is not waiting.
     private static func known(_ table: RefusalVectors.Table) -> [String] {

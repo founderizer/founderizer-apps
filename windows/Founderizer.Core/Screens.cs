@@ -1612,8 +1612,8 @@ public sealed record RequestCard
     /// <summary>The check before the answer's words: only for an option that he pressed or ticked.</summary>
     public bool ShowsCheck => !AnsweredInWords;
     /// <summary>What stands in the check's place (owner API 1.280, <see cref="Screens.AnsweredMark"/>): the check, the
-    /// turning green mark of work, the red mark of work that ended with no success, or the orange mark of a task that
-    /// needs him (its row's symbol); its <see cref="AnswerMark.Hover"/> under the pointer (for the work of a task, its
+    /// turning green mark of work, the red mark of work that ended with no success, the orange mark of a task that
+    /// needs him, or the gray mark of his own pause (each of the last two with its row's symbol); its <see cref="AnswerMark.Hover"/> under the pointer (for the work of a task, its
     /// agent's <see cref="AnswerMark.Badge"/> and the task's title), and its <see cref="AnswerMark.Words"/> for an
     /// assistive app.</summary>
     public AnswerMark AnswerMark { get; init; } = AnswerMark.Plain;

@@ -459,9 +459,10 @@ internal sealed class AnswerParts
 /// as drawn" of 21 November 2026, and "Yes, same marks there" for the request at hand in Needs you), at the check's 12
 /// pixels: the muted check; the search card's mark of work (circle_hint in the green of work), which turns once in three
 /// seconds as the Mac's WorkMark does and rests, green, on a last reading and where Windows' animation effects are off;
-/// the search card's red mark of a result that is no success; or, where the task's row needs him (his "Orange mark" of
+/// the search card's red mark of a result that is no success; where the task's row needs him (his "Orange mark" of
 /// the same day), the search card's icon of the task's own mark (<see cref="AnswerMark.Row"/>, <see cref="SearchCard.IconOf"/>)
-/// in its orange. Its <see cref="AnswerMark.Hover"/> shows under the pointer as the system's tooltip (none for the plain
+/// in its orange; or, where his own pause holds the task (his "Gray pause, as the row" of the same day), that icon of
+/// the row's pause mark in the muted gray of the row. Its <see cref="AnswerMark.Hover"/> shows under the pointer as the system's tooltip (none for the plain
 /// check); the work of a task shows its tag under the mark instead (<see cref="WorkTag"/>). An assistive app reads its
 /// <see cref="AnswerMark.Words"/> as its name (the Mac's value of the folded card). The compositor turns it, so the app
 /// does no work for a frame.</summary>
@@ -479,7 +480,7 @@ internal sealed class AnswerMarkView : Grid
     /// <summary>The rest of the pointer on the mark before its tag shows (the Mac's AnsweredMarkView: 350 ms).</summary>
     private static readonly TimeSpan TagRest = TimeSpan.FromMilliseconds(350);
     private FrameworkElement? icon;
-    /// <summary>The look drawn now: the mark's symbol, and for the orange mark the task's own symbol.</summary>
+    /// <summary>The look drawn now: the mark's symbol, and for the orange and the gray mark the task's own symbol.</summary>
     private (AnswerSymbol, TaskSymbol?)? shown;
     /// <summary>The badge and the title of the tag that the mark has now: a reading with the same ones keeps its tooltip.</summary>
     private (AgentBadge, string)? tagged;
@@ -583,6 +584,7 @@ internal sealed class AnswerMarkView : Grid
                 AnswerSymbol.Working => Icons.Of(Icons.Hint, Look.Green, 12),
                 AnswerSymbol.Failed => Icons.Of(Icons.Dismiss16, FailedTint, 12),
                 AnswerSymbol.Attention => Icons.Of(SearchCard.IconOf(mark.Row ?? TaskSymbol.Alert), Look.Orange, 12),
+                AnswerSymbol.Paused => Icons.Of(SearchCard.IconOf(mark.Row ?? TaskSymbol.Paused), Look.Muted, 12),
                 _ => Icons.Of(Icons.Check, Look.Muted, 12),
             };
             Children.Insert(0, icon);

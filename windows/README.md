@@ -145,7 +145,10 @@ renamed or removed without a word to the screens lane.
     once in three seconds while `MarkMoves`, at rest on a last reading and where Windows' animation effects are off),
     the search card's red mark, or, where the task's row needs him, the orange mark (`AnswerSymbol.Attention`): the
     row's own symbol (`Row`, drawn with the search card's icon for it, `SearchCard.IconOf`, in its orange) and the row's
-    words, for example "Outcome not known: check it". `Hover` shows under the pointer as the system's tooltip, and
+    words, for example "Outcome not known: check it", or, where his own pause that the hub confirmed holds the task (a
+    hold of kind "pause" in the hub's state "stopped"), the gray pause mark (`AnswerSymbol.Paused`): the row's
+    `TaskSymbol.Paused` in `Row`, drawn with the search card's pause icon in its muted gray, and the row's words,
+    "Paused". A pause that waits for its helper's report and a stop stay the check. `Hover` shows under the pointer as the system's tooltip, and
     `Words` are its automation name. The work of a task has `Badge` (`AgentBadge.Of`: the agent's role and its mark at
     rest, grey where the agent is not there) and `Title` in place of `Hover`: its tooltip is the Mac's tag (the
     owner's "Yes, badge as drawn", 21 November 2026; `AnswerMarkView.WorkTag`), the badge then " · " and the title,

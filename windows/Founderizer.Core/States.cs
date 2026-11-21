@@ -121,11 +121,14 @@ public sealed record TaskMark(TaskSymbol Symbol, string Words, bool Attention, b
 /// hub knows, the turning green mark of work while a record proves that work runs, the red mark of work that ended with
 /// no success, and the orange mark of a task that needs him (his "Orange mark" of the same day: "The same orange mark as
 /// the task's own row"), with the row's own symbol (<see cref="Row"/>) and words, so that the row and the card never
-/// disagree. A task whose row is muted (queued, at rest, his own pause, a result that waits for its check) is the check
-/// with its state word. <see cref="Words"/> are what an assistive app reads for the mark, and <see cref="Hover"/> what
-/// shows under the pointer; for the work of a task, <see cref="Badge"/> and <see cref="Title"/> show there. <see cref="Plain"/>
-/// is the check with no words, where no mark of his answer stands: a written answer, a request that a saved key answered,
-/// an answer on its way, and an open card. <see cref="Row"/> is null for the other three looks.</summary>
+/// disagree. **His own pause, which the hub confirmed, is the row's pause mark in gray** (his "Gray pause, as the row" of
+/// 21 November 2026; the Mac's AnsweredMark.paused), with the row's symbol (<see cref="Row"/>) and words. A task whose
+/// row is muted for another cause (queued, at rest, a pause or a stop that waits for its helper's report, his confirmed
+/// stop, a result that waits for its check) is the check with its state word. <see cref="Words"/> are what an assistive
+/// app reads for the mark, and <see cref="Hover"/> what shows under the pointer; for the work of a task,
+/// <see cref="Badge"/> and <see cref="Title"/> show there. <see cref="Plain"/> is the check with no words, where no mark
+/// of his answer stands: a written answer, a request that a saved key answered, an answer on its way, and an open card.
+/// <see cref="Row"/> is null for the check, the work mark and the red mark.</summary>
 public sealed record AnswerMark(AnswerSymbol Symbol, string? Words = null, string? Agent = null, string? Title = null,
                                 TaskSymbol? Row = null)
 {
@@ -153,13 +156,14 @@ public sealed record AnswerMark(AnswerSymbol Symbol, string? Words = null, strin
     /// word ("Failed", "Rejected", "Canceled", "Not accepted"), the check with "Done" for a checked result, the orange mark
     /// where the task's row needs someone (<see cref="TaskMark.Attention"/>: an outcome that is not known, a hold of his
     /// that is not confirmed, a usage limit, a stall, a lost session, a question, a sign-in, a wait), with the row's symbol
-    /// and words, work while it is in work now (its agent and its title), and else the check with its state word
-    /// ("Queued", "Working" at rest, "Paused", "Awaiting check"). <see cref="TaskMark.Of"/> reads an outcome that is not
-    /// known first and the owner's hold before a result and before work, so a task that failed and is held wears its
-    /// hold's mark (orange for a hold that is not confirmed, the check with "Paused" for his own pause), and a held task is
-    /// never work now. Else, from a hub before the feature, and for a task that the reading does not hold, the check, and
-    /// the agent that raised it has his answer. The caller leaves out the cards that keep no mark
-    /// (<see cref="Screens.AnsweredMark"/>).</summary>
+    /// and words, work while it is in work now (its agent and its title), the gray pause mark for his own pause that the
+    /// hub confirmed (a hold of kind "pause" in the hub's state "stopped"), with the row's symbol and words ("Paused"),
+    /// and else the check with its state word ("Queued", "Working" at rest, "Stopping…", "Stopped", "Awaiting check").
+    /// <see cref="TaskMark.Of"/> reads an outcome that is not known first and the owner's hold before a result and before
+    /// work, so a task that failed and is held wears its hold's mark (orange for a hold that is not confirmed, the gray
+    /// pause for his own pause), and a held task is never work now. Else, from a hub before the feature, and for a task
+    /// that the reading does not hold, the check, and the agent that raised it has his answer. The caller leaves out the
+    /// cards that keep no mark (<see cref="Screens.AnsweredMark"/>).</summary>
     public static AnswerMark Of(OwnerNeed need, MobileSnapshot? fleet, IReadOnlyList<MobileTaskHead> tasks, AgentBook names)
     {
         var received = new AnswerMark(AnswerSymbol.Check, $"{names.Label(need.By)} has your answer");
@@ -180,6 +184,9 @@ public sealed record AnswerMark(AnswerSymbol Symbol, string? Words = null, strin
         if (mark.Symbol == TaskSymbol.Checked) return new(AnswerSymbol.Check, "Done");
         if (mark.Attention) return new(AnswerSymbol.Attention, mark.Words, Row: mark.Symbol);
         if (mark.InWork) return new(AnswerSymbol.Working, $"{names.Label(task.Owner)} · {task.Title}", task.Owner, task.Title);
+        // His own pause, which the hub confirmed (settle_hold writes "stopped" for a confirmed hold): the row's mark, gray.
+        if (fleet.Holds.Any(h => h.Task == task.Id && h.Kind == "pause" && h.State == "stopped"))
+            return new(AnswerSymbol.Paused, mark.Words, Row: mark.Symbol);
         return new(AnswerSymbol.Check, mark.Words);
     }
 }
@@ -197,11 +204,12 @@ public sealed record AgentBadge(string Label, MarkLook Mark)
     }
 }
 
-/// <summary>The four looks of an answered card's mark: the check, the turning green mark of work (as the search card's
+/// <summary>The five looks of an answered card's mark: the check, the turning green mark of work (as the search card's
 /// <see cref="TaskSymbol.Working"/>), the red mark of a result that is no success (its <see cref="TaskSymbol.Failed"/>),
-/// and the orange mark of a task that needs him: the task's own symbol (<see cref="AnswerMark.Row"/>) with the search
-/// card's icon for it, in the search card's orange.</summary>
-public enum AnswerSymbol { Check, Working, Failed, Attention }
+/// the orange mark of a task that needs him, and the gray mark of his own pause that the hub confirmed: for the last two,
+/// the task's own symbol (<see cref="AnswerMark.Row"/>) with the search card's icon for it, in the search card's orange,
+/// or in its muted gray as the row of a paused task.</summary>
+public enum AnswerSymbol { Check, Working, Failed, Attention, Paused }
 
 /// <summary>The meaning of a task's mark. The Mac and the iPhone draw them as SF Symbols: Unknown questionmark.circle,
 /// Alert exclamationmark.circle, Paused pause.circle, Checked checkmark.circle.fill, Failed exclamationmark.circle.fill,

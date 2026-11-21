@@ -7,9 +7,11 @@ import Testing
 /// and a stalled task, and "Waiting on juno" on its list where its page said "Queued"; "Waiting for an answer" named
 /// nobody in four words.
 struct TaskWordsTests {
+    /// A hold's states are the hub's (settle_hold): `requested`, then `stopped` or `not_confirmed`, then `released`; a
+    /// pause is a hold of kind `pause`, and the hub writes no state "paused".
     @Test func theOwnersHoldComesFirst() {
         #expect(TaskWords.state("working", accepted: nil, requester: "manager",
-                                hold: .init(kind: "pause", state: "paused")) == "Paused")
+                                hold: .init(kind: "pause", state: "stopped")) == "Paused")
         #expect(TaskWords.state("working", accepted: nil, requester: "manager",
                                 hold: .init(kind: "stop", state: "stopped")) == "Stopped")
         #expect(TaskWords.state("working", accepted: nil, requester: "manager",
@@ -73,7 +75,7 @@ struct TaskWordsTests {
          "stop_sent": 0}
         """.utf8))
         let hold = try JSONDecoder().decode(TaskHold.self, from: Data("""
-        {"id": 1, "task": 437, "kind": "pause", "state": "paused", "attempt": 1}
+        {"id": 1, "task": 437, "kind": "pause", "state": "stopped", "attempt": 1}
         """.utf8))
         let other = try JSONDecoder().decode(TaskHold.self, from: Data("""
         {"id": 2, "task": 9, "kind": "stop", "state": "stopped", "attempt": 1}

@@ -140,7 +140,7 @@ struct ActivityTests {
             task(11, "working", started: start, last: start + 8, waitingOn: "its screen", parked: Self.now + 600),
             task(13, "working", owner: "manager", started: start, last: start + 9, works: false),    // waits for 14
             task(14, "working", started: start, last: start + 9, parent: 13, works: true),
-        ], holds: [["id": 1, "task": 5, "kind": "pause", "state": "paused", "attempt": 1],
+        ], holds: [["id": 1, "task": 5, "kind": "pause", "state": "stopped", "attempt": 1],
                    ["id": 2, "task": 2, "kind": "pause", "state": "released", "attempt": 1],
                    ["id": 3, "task": 9, "kind": "stop", "state": "stopped", "attempt": 1]], limited: ["studio"],
            outcomes: [["id": 1, "task": 9, "attempt": 1, "title": "Send the note", "kind": "send", "state": "unknown"]])
@@ -179,7 +179,7 @@ struct ActivityTests {
     /// A hold, a question, a reminder and an unknown outcome keep their own column and words over the wait for subtasks.
     @Test func aTaskThatWaitsForSubtasksKeepsWhatHoldsItFirst() throws {
         let start = Self.now - 600
-        let holds: [[String: Any]] = [["id": 1, "task": 1, "kind": "pause", "state": "paused", "attempt": 1]]
+        let holds: [[String: Any]] = [["id": 1, "task": 1, "kind": "pause", "state": "stopped", "attempt": 1]]
         let board = try hub([
             task(1, "working", owner: "manager", started: start, last: start, works: false),             // paused
             task(2, "working", owner: "vps", started: start, last: start, parent: 1),

@@ -268,16 +268,20 @@ public sealed class RequestCardAsTheMacTests
     /// <summary>His "Orange mark" (21 November 2026: "The same orange mark as the task's own row"), as the Mac's
     /// NeedMarksTests.whereTheTasksRowIsOrangeTheCardIsOrange: where the task's row needs someone (a stall, a hold of his
     /// that is not confirmed, an outcome that is not known, a wait on another agent, a sign-in), the card wears the
-    /// orange mark with the row's own symbol and words, under the pointer too; his own pause is muted on its row, so the
-    /// card is the check with its state word. In the Mac's order (FleetTask.tint): an outcome that is not known and the
-    /// owner's hold come before a red result and before work. Breaks if the card keeps the check where the row is
-    /// orange, takes another symbol or other words than the row, is red for a failed task that a hold or an outcome of
-    /// his holds, or turns for a held task.</summary>
+    /// orange mark with the row's own symbol and words, under the pointer too. His own pause that the hub confirmed (a
+    /// hold of kind "pause" in the hub's state "stopped") is gray on its row, so the card is the row's pause mark in gray,
+    /// with the row's words (his "Gray pause, as the row", 21 November 2026; the Mac's AnsweredMark.paused); a pause that
+    /// waits for its helper's report and his stop stay the check with the row's words. In the Mac's order
+    /// (FleetTask.tint, then OwnerNeed.answeredMark): an outcome that is not known and the owner's hold come before a red
+    /// result and before work, so a failed task that his pause holds is the gray pause, not red. Breaks if the card keeps
+    /// the check where the row is orange or where his confirmed pause holds the task, takes another symbol or other words
+    /// than the row, is red for a failed task that a hold or an outcome of his holds, turns for a held task, or draws the
+    /// gray pause for a hold that is not confirmed, for a pause that waits, or for a stop.</summary>
     [TestMethod]
     public void WhereTheTasksRowIsOrangeTheCardIsOrange()
     {
-        static JsonObject Hold(long id, long task, string state) =>
-            new() { ["id"] = id, ["task"] = task, ["kind"] = "pause", ["state"] = state, ["attempt"] = 1 };
+        static JsonObject Hold(long id, long task, string state, string kind = "pause") =>
+            new() { ["id"] = id, ["task"] = task, ["kind"] = kind, ["state"] = state, ["attempt"] = 1 };
         static JsonObject Unknown(long id, long task) => new()
         {
             ["id"] = id, ["task"] = task, ["attempt"] = 1, ["title"] = "Charge the card", ["kind"] = "payment", ["state"] = "unknown",
@@ -302,22 +306,28 @@ public sealed class RequestCardAsTheMacTests
         ended.Add(Head(77, "Close the old shop", "pax", "failed", Now - 300));
         ended.Add(Head(78, "Renew the domain", "pax", "failed", Now - 200));
         ended.Add(Head(79, "Refund the order", "pax", "failed", Now - 100));
+        open.Add(Head(80, "Send the price mail", "pax", "working", Now - 90, works: true));
+        open.Add(Head(90, "Sync the stock", "pax", "working", Now - 80, works: true));
         snapshot["holds"] = new JsonArray(Hold(1, 72, "not_confirmed"), Hold(2, 75, "stopped"), Hold(3, 77, "not_confirmed"),
-                                          Hold(4, 78, "stopped"));
+                                          Hold(4, 78, "stopped"), Hold(5, 80, "requested"), Hold(6, 90, "stopped", kind: "stop"));
         snapshot["outcomes"] = new JsonArray(Unknown(1, 73), Unknown(2, 79));
-        var ids = new long[] { 71, 72, 73, 74, 75, 76, 77, 78, 79 };
+        var ids = new long[] { 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 90 };
         snapshot["answered_needs"] = new JsonArray(ids.Select((task, i) => (JsonNode?)Pressed(81 + i, Marks(task: task))).ToArray());
         var s = State(Decode(snapshot), Clock);
         var rows = Screens.Search(s, "", 0, Clock).Tasks.ToDictionary(t => t.Id, t => t.Mark);
         var marks = s.Fleet!.AnsweredNeeds!.Select(n => Screens.Card(s, n, [], Clock, Utc).AnswerMark).ToArray();
         AnswerMark Orange(long task) => new(AnswerSymbol.Attention, rows[task].Words, Row: rows[task].Symbol);
+        AnswerMark Gray(long task) => new(AnswerSymbol.Paused, rows[task].Words, Row: rows[task].Symbol);
 
         CollectionAssert.AreEqual(new[]
         {
-            Orange(71), Orange(72), Orange(73), Orange(74), Done(rows[75].Words), Orange(76), Orange(77), Done(rows[78].Words),
-            Orange(79),
+            Orange(71), Orange(72), Orange(73), Orange(74), Gray(75), Orange(76), Orange(77), Gray(78), Orange(79),
+            Done(rows[80].Words), Done(rows[90].Words),
         }, marks, "stalled, held and not confirmed, outcome not known, waiting, paused, sign-in, failed and held, failed " +
-                  "and paused, failed with an outcome not known");
+                  "and paused, failed with an outcome not known, a pause that waits, a stop");
+        Assert.AreEqual((TaskSymbol.Paused, "Paused", "Paused"), (marks[4].Row, marks[4].Words, marks[4].Hover),
+                        "his own pause: the row's pause mark, with the row's words under the pointer too");
+        Assert.AreEqual(("Stopping…", "Stopped"), (rows[80].Words, rows[90].Words), "the rows of a pause that waits and of a stop");
         CollectionAssert.AreEqual(new[]
         {
             TaskSymbol.Alert, TaskSymbol.Alert, TaskSymbol.Unknown, TaskSymbol.Limit, TaskSymbol.SignIn, TaskSymbol.Alert,

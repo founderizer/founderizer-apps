@@ -81,7 +81,9 @@
     "takeover_no_browser": "{agent}'s browser does not run now, so there is no screen to take over",
     "takeover_provider": "{agent}'s browser shows an AI provider's site, which is never taken over",
     "takeover_screen_failed": "{agent}'s server could not share its screen: press Take over again",
-    "about_unreadable": "{agent} cannot read this work in its chat, so it cannot get a message about it"
+    "about_unreadable": "{agent} cannot read this work in its chat, so it cannot get a message about it",
+    "teams_off": "This needs Founderizer for Teams, which this fleet does not have.",
+    "teams_part_missing": "This fleet has Founderizer for Teams, but its hub has not loaded this part of it."
   },
   "holes": {
     "profile_unread": [

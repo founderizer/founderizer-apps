@@ -109,7 +109,13 @@ public sealed class NeedPicturesTests
         }
         finally
         {
-            Directory.Delete(folder, recursive: true);
+            // The store can still end a write in its folder while the folder goes ("Directory not empty" once, in a
+            // whole run on a busy Mac): try again for a second, then leave the temp folder to the system.
+            for (var i = 0; i < 10; i++)
+            {
+                try { Directory.Delete(folder, recursive: true); break; }
+                catch (IOException) { await Task.Delay(100); }
+            }
         }
     }
 
