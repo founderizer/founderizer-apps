@@ -27,8 +27,9 @@ struct NeedsPage: View {
     /// with a check that draws itself, takes no more touch, and folds 0.78 s after it at the earliest, so that he sees
     /// his answer taken. **Words that he wrote have no check** (the owner, 14 November 2026: "when I typed a custom
     /// answer instead of choosign one of the suggested ones, do not show the CHECK animation because it is
-    /// misleading"): they stay in the field and Send goes. The store forgets the answer at the reading that folds the
-    /// item; the page keeps it until the fold ends.
+    /// misleading"). The store forgets the answer at the reading that folds the item; the page keeps it until the fold
+    /// ends. **Before that, his answer waits 5 seconds on its folded card, with Undo** (`MobileStore.hold`; his "Yes,
+    /// Undo there too" of 21 November 2026): the item stays, and the check draws itself on its line when it goes.
     @State private var given: [Int: MobileStore.GivenAnswer] = [:]
     @State private var givenAt: [Int: ContinuousClock.Instant] = [:]
     /// An answer of his folded the items that went last: the mark of "Nothing needs you" then draws itself.
@@ -287,6 +288,10 @@ struct NeedCard: View {
     /// The card was open when it was last drawn, and how far its fold has gone (fix round 3, item 40).
     @State private var wasOpen = false
     @State private var foldShare: CGFloat = 0
+    /// How far his answer has folded the open card (`goingNow`), and the last answer that folded it, which its line
+    /// keeps while Undo opens the card again.
+    @State private var answerShare: CGFloat = 0
+    @State private var going: Going?
     /// The open card took his message under it (`OwnerNeed.clarify`): its link stays while it folds, since the hub's
     /// answered item takes none, and the rows under the question would lose its height in the fold's first frame.
     @State private var tookTalk = false
@@ -312,19 +317,21 @@ struct NeedCard: View {
     static let head: CGFloat = 10
 
     var body: some View {
+        let goes = goingNow
         VStack(alignment: .leading, spacing: 0) {
             if header { NeedHead(store: store, need: need, took: answerGiven != nil) }
             Group {
                 // **An answered card folds to its two lines frame by frame, over 250 ms, easing out** (fix round 3, item
                 // 40): the open rows' height goes as the two lines' comes, so the chat's height and its place change in
-                // each frame. It changed in one step, and the conversation dropped 348 points in one frame.
-                if wasOpen && !need.isOpen {
-                    folding(foldShare)
+                // each frame. It changed in one step, and the conversation dropped 348 points in one frame. **His answer
+                // folds the open card in the same way, from his press** (`goingNow`), and Undo opens it again.
+                if (wasOpen && !need.isOpen) || (need.isOpen && (goes != nil || answerShare > 0)) {
+                    folding(need.isOpen ? answerShare : max(foldShare, answerShare))
                 // An answered card pads itself, inside its button, so its whole card takes the tap (fix round 3, HIG).
                 } else if need.isOpen {
                     open.padding(16)
                 } else {
-                    NeedAnswered(store: store, need: need, files: answerFiles, spoken: spoken)
+                    NeedAnswered(store: store, need: need, files: answerFiles, spoken: spoken, onPage: header)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -342,17 +349,54 @@ struct NeedCard: View {
                 // Cut to its height only while it folds: a "Try again" in it keeps its 44-point touch.
                 .clipShape(Rectangle().inset(by: foldShare > 0 ? 0 : -24))
                 .opacity(1 - foldShare)
+            } else if let task = need.task, let state = store.pauseState(of: task) {
+                // his Pause of the answered card's task that did not go: its own line, where an open card's lines stand
+                NeedPauseLine(store: store, need: need, task: task, state: state)
+                    .padding(.horizontal, 16)
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("chat-need-\(need.id)")
-        .onAppear { wasOpen = need.isOpen; tookTalk = need.isOpen && need.clarify == true }
+        .onAppear {
+            wasOpen = need.isOpen
+            tookTalk = need.isOpen && need.clarify == true
+            going = goes
+            answerShare = need.isOpen && goes != nil ? 1 : 0
+        }
         .onChange(of: need.isOpen) { was, now in
-            if now { wasOpen = true; foldShare = 0; tookTalk = need.clarify == true; return }
+            if now {
+                wasOpen = true; foldShare = 0; tookTalk = need.clarify == true
+                answerShare = goingNow != nil ? 1 : 0
+                return
+            }
             guard was else { return }
-            withAnimation(.easeOut(duration: 0.25)) { foldShare = 1 } completion: { wasOpen = false }
+            withAnimation(.easeOut(duration: 0.25)) { foldShare = 1 } completion: { wasOpen = false; answerShare = 0 }
         }
         .onChange(of: need.clarify) { _, now in if need.isOpen { tookTalk = now == true } }
+        // his answer comes or goes: the open card folds, or opens again, over the same 250 ms
+        .onChange(of: goes) { before, now in
+            if let now { going = now }
+            guard need.isOpen, (before == nil) != (now == nil) else { return }
+            withAnimation(.easeOut(duration: 0.25)) { answerShare = now == nil ? 0 : 1 }
+        }
+    }
+
+    /// **His answer as the folded open card shows it**: the answer, and whether it waits with Undo.
+    struct Going: Equatable {
+        let answer: MobileStore.GivenAnswer
+        let waits: Bool
+    }
+
+    /// **His answer folds the open card, from his press until the hub's reading folds it as an answered card** (his "Yes,
+    /// 5 seconds (Recommended)" of 21 November 2026: "The folded card shows Undo at the end of its answer line... After
+    /// that the card shows its mark as now"; the Mac's `NeedRequestCard.onItsWay`): while it waits with Undo, while it
+    /// waits for the hub and this phone's key, and on its way. An answer that did not go opens the card again, with its
+    /// line under it ("Not sent", Try again). The key card keeps its own form.
+    private var goingNow: Going? {
+        guard need.isOpen, !need.asksForSecret else { return nil }
+        if let held = store.heldAnswer(to: need.id) { return Going(answer: held.shown, waits: true) }
+        let shown = answerGiven ?? store.waitingPresses[need.id].map(MobileStore.GivenAnswer.init)
+        return shown.map { Going(answer: $0, waits: false) }
     }
 
     /// **The card takes his message under it** (Needs clarification, owner feature `need_clarify`): on a hub that names
@@ -396,7 +440,9 @@ struct NeedCard: View {
             CrossFold(shown: share) {
                 openRows.padding(.top, 12)
                     .opacity(1 - share).allowsHitTesting(false).accessibilityHidden(true)
-                if NeedAnswered.saysAnswer(need, spoken: spoken) {
+                if need.isOpen, let line = goingNow ?? going {
+                    goingLine(line).padding(.top, 4).opacity(share)
+                } else if NeedAnswered.saysAnswer(need, spoken: spoken) {
                     NeedAnswered.answerLine(need, mark: NeedAnswered.mark(of: need, store: store))
                         .padding(.top, 4).opacity(share)
                 } else {
@@ -406,6 +452,36 @@ struct NeedCard: View {
             .clipped()
         }
         .padding(16)
+    }
+
+    /// **His answer on the open card that it folds** (`goingNow`): while it waits, his answer with Undo at the end of its
+    /// line, and no check, no words beside Undo and no count (his "Yes, 5 seconds": "the answer line "Tide" with "Undo"
+    /// at its end, and no check mark"); after it, an option that he pressed with its check, which draws itself, and his
+    /// words with none (the owner, 14 November 2026), until the hub's reading draws what came of it.
+    private func goingLine(_ line: Going) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            if !line.waits, line.answer.words == nil {
+                DrawnMark(symbol: "checkmark").font(.caption.weight(.semibold))
+            }
+            Text(verbatim: Self.words(of: line.answer, in: need)).lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if line.waits {
+                TextAction(title: String(l10n: "Undo"), font: .caption) { store.undo(needID: need.id) }
+                    .accessibilityIdentifier("need-undo-\(need.id)")
+            }
+        }
+        .font(.caption).foregroundStyle(Brand.muted)
+    }
+
+    /// The words of his answer on its line: the option's own words, the ticked ones joined as the hub joins them, or
+    /// his words; "Answered" for an answer of files alone.
+    nonisolated static func words(of answer: MobileStore.GivenAnswer, in need: OwnerNeed) -> String {
+        let words = switch answer {
+        case .option(let index): need.choices.indices.contains(index) ? need.choices[index] : ""
+        case .options(let indexes): indexes.filter(need.choices.indices.contains).map { need.choices[$0] }.joined(separator: "; ")
+        case .words(let text): text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return words.isEmpty ? String(l10n: "Answered") : words
     }
 
     /// What the open card holds under its question.
@@ -484,6 +560,15 @@ extension MobileStore {
     /// ticked (a card of pictures whose options combine, `NeedPictures`), or his words.
     enum GivenAnswer: Equatable, Sendable {
         case option(Int), options([Int]), words(String)
+
+        /// A press that waits, or that waits with Undo, as the card shows it meanwhile.
+        init(_ press: WaitingPress) {
+            switch press {
+            case .option(let index): self = .option(index)
+            case .ticked(let indexes): self = .options(indexes)
+            case .words(let words, _): self = .words(words)
+            }
+        }
 
         var option: Int? { if case .option(let index) = self { index } else { nil } }
         var options: [Int]? { if case .options(let indexes) = self { indexes } else { nil } }
@@ -575,6 +660,8 @@ private struct NeedAnswered: View {
     let files: [MessageAttachment]
     /// His answer stands in the chat as his own message: the folded card does not say it a second time.
     var spoken = false
+    /// The card is on Needs you: a task that its mark opens opens in Tasks (`open`).
+    var onPage = false
     @State private var expanded = false
 
     private var answer: String { need.answer?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" }
@@ -611,19 +698,40 @@ private struct NeedAnswered: View {
     }
 
     /// The folded card's second line: what he answered, an option that he pressed with a check ("✓ Correos"), or the
-    /// mark of what came of it (`mark`), and words that he wrote with none.
-    static func answerLine(_ need: OwnerNeed, mark: AnsweredMark?) -> some View {
+    /// mark of what came of it (`mark`), and words that he wrote with none. **`opens`: a press of the mark opens its
+    /// task** (`MobileStore.taskOpened`); **`pause`: the task's Pause at the end of the line** (`MobileStore.pausable`).
+    static func answerLine(_ need: OwnerNeed, mark: AnsweredMark?, opens: (() -> Void)? = nil,
+                           pause: (() -> Void)? = nil, pauseGoes: Bool = true) -> some View {
         HStack(spacing: 5) {
             // a cross for a command that he ran on the Mac and that ended with another exit status than 0
             if !need.answeredInWords {
-                Group {
+                let drawn = Group {
                     if let mark { AnsweredMarkView(mark: mark) }
                     else { Image(systemName: (need.run_status ?? 0) == 0 ? "checkmark" : "xmark") }
                 }
                 .font(.caption.weight(.semibold))
                 .accessibilityHidden(true)
+                if let opens {
+                    LinePress(action: opens, leading: true) { drawn }
+                        .accessibilityIdentifier("need-mark-opens-\(need.id)")
+                } else {
+                    drawn
+                }
             }
             Text(verbatim: words(of: need)).lineLimit(1)
+            if let pause {
+                Spacer(minLength: 8)
+                // the task panel's Pause, in the colour of the words, at the size of the line, so the card keeps its
+                // height when it comes and goes. **Gray while it cannot go, and its press then does nothing**: a
+                // disabled button lets the touch through to the card's own tap, which opened the whole request (the
+                // review of 21 November 2026)
+                LinePress(action: { if pauseGoes { pause() } }, leading: false) {
+                    Image(systemName: "pause").font(.caption.weight(.semibold))
+                        .foregroundStyle(pauseGoes ? Color.primary : Color.secondary)
+                }
+                .accessibilityLabel(Text("Pause"))
+                .accessibilityIdentifier("need-pause-\(need.id)")
+            }
         }
         .font(.caption).foregroundStyle(Brand.muted)
         // VoiceOver: a run that failed says its exit status, which the cross alone does not say
@@ -686,18 +794,27 @@ private struct NeedAnswered: View {
         }
     }
 
+    /// **The folded card: a tap shows the whole request; a tap on the mark of a task opens that task, and Pause pauses it
+    /// while it works** (his "Both (Recommended)", "Yes, open task" and "Gray pause, as the row" of 21 November 2026; the
+    /// Mac's folded card). The mark and Pause are presses of their own inside the card's tap, which takes the rest.
     private var folded: some View {
-        let mark = Self.saysAnswer(need, spoken: spoken) ? Self.mark(of: need, store: store) : nil
-        return Button { expanded = true } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Self.titleLine(need)
-                if Self.saysAnswer(need, spoken: spoken) { Self.answerLine(need, mark: mark) }
+        let says = Self.saysAnswer(need, spoken: spoken)
+        let mark = says ? Self.mark(of: need, store: store) : nil
+        let opens = MobileStore.taskOpened(by: mark, of: need)
+        // (on the line of what he answered: not on the Run card's, nor on a key's, which keep their own)
+        let pauses = says && !Self.ran(need) && !need.answeredWithKey ? store.pausable(need) : nil
+        return VStack(alignment: .leading, spacing: 4) {
+            Self.titleLine(need)
+            if says {
+                Self.answerLine(need, mark: mark, opens: opens.map { task in { open(task) } },
+                                pause: pauses.map { task in { pause(task) } },
+                                pauseGoes: pauses.map(store.canPause) ?? false)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { expanded = true }
         .foregroundStyle(Color.primary)
         .accessibilityElement(children: .ignore)
         // Words that stand in the chat as his own message are read there, not here a second time.
@@ -710,7 +827,50 @@ private struct NeedAnswered: View {
         // the press of the element that VoiceOver reads: it had none of its own, so a press there was the system's tap
         // at its middle, which a check cannot give
         .accessibilityAction { expanded = true }
+        // the mark's press and Pause, which the element's one press cannot give
+        .accessibilityActions {
+            if let pauses, store.canPause(pauses) { Button("Pause") { pause(pauses) } }
+            if let opens { Button("Open the task") { open(opens) } }
+        }
         .accessibilityIdentifier("need-folded-\(need.id)")
+    }
+
+    /// **The task opens as a task opens from the page that the card is on**: in a chat over it, as a task that he asked
+    /// for there opens, and from Needs you in Tasks, as a task that only he can move opens.
+    private func open(_ task: Int) {
+        if onPage {
+            store.taskRoute = [task]
+            store.tab = .tasks
+        } else {
+            store.chatRoute.append(.task(task))
+        }
+    }
+
+    /// The task's Pause, as its panel on the Mac sends it (`MobileStore.pause(task:)`).
+    private func pause(_ task: Int) {
+        Task { await store.pause(task: task) }
+    }
+}
+
+/// **A press inside the folded card's line**: the mark that opens its task, or Pause. Its touch reaches past the line's
+/// small type, into the card's edge at its side and its foot, and 4 points over it, so it takes nothing of the title's
+/// line over it; the card's own tap takes the rest.
+private struct LinePress<Content: View>: View {
+    let action: () -> Void
+    /// The press stands at the line's start (the mark), else at its end (Pause).
+    let leading: Bool
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        Button(action: action) {
+            content
+                .padding(.leading, leading ? 14 : 10).padding(.trailing, leading ? 10 : 14)
+                .padding(.top, 4).padding(.bottom, 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, leading ? -14 : -10).padding(.trailing, leading ? -10 : -14)
+        .padding(.top, -4).padding(.bottom, -14)
     }
 }
 
@@ -723,9 +883,9 @@ private struct NeedAnswered: View {
 /// is the red filled exclamation of a failed task. Its words are VoiceOver's, as the folded card's value.
 ///
 /// **Not on Needs you** (the owner's "Yes, same marks there", 21 November 2026, for the Mac's answered step): the
-/// phone's page keeps no answered step. An item that he answers there shows the check on his option while the answer
-/// is on its way, and folds away 0.78 s after his press, or at once when the reading that closes it comes later, so a
-/// mark could only stand there for the fold's quarter second.
+/// phone's page keeps no answered step. An item that he answers there shows the check on its folded line while the
+/// answer is on its way, and folds away 0.78 s after the answer went, or at once when the reading that closes it comes
+/// later, so a mark could only stand there for the fold's quarter second.
 struct AnsweredMarkView: View {
     let mark: AnsweredMark
 
@@ -863,7 +1023,8 @@ struct NeedOptions: View {
     /// options should only have the badge, not the border over the option, otherwise it looks alraedy selected").
     private func option(_ index: Int, recommended marks: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        return Button { store.press(needID: need.id, choice: index) } label: {
+        // his press waits 5 seconds with Undo, then goes (`MobileStore.hold`)
+        return Button { store.hold(needID: need.id, choice: index) } label: {
             // The agent's words, drawn as a plain label: they are data, never markup.
             HStack(spacing: 10) {
                 if given == .option(index) { DrawnMark(symbol: "checkmark").fontWeight(.semibold) }
@@ -913,10 +1074,11 @@ struct NeedOptions: View {
     }
 
     /// His answer in the words that the agent recommends (`MobileStore.press(needID:words:)`): they stand in the field
-    /// and go as his words go, and a press that waits for the hub says "Sending…", as a press on an option does.
+    /// and go as his words go, and a press that waits for the hub says "Sending…", as a press on an option does. It
+    /// waits 5 seconds with Undo first (`MobileStore.hold(needID:words:)`), which gives the field its words back.
     private func send(_ words: String) {
         guard given == nil else { return }
-        store.press(needID: need.id, words: words)
+        store.hold(needID: need.id, words: words)
     }
 }
 
@@ -985,6 +1147,11 @@ struct NeedPictures: View {
             if need.combines { sendTicked }
         }
         .quickLookPreview($opened)
+        // the options that he had ticked, on a card whose answer he took back (`MobileStore.undo`)
+        .onAppear {
+            let back = store.restoredTicks(of: need.id)
+            if !back.isEmpty { ticked = Set(back) }
+        }
         // **The card reads its pictures one after another, in the order of its options**: each read has the client's
         // limit of 15 seconds, and six large pictures read at once could each end "Not loaded" on a slow link. A read
         // that a press of a picture started, or that a new hub or generation must make again, is part of the same
@@ -1074,7 +1241,7 @@ struct NeedPictures: View {
         let can = given == nil && went == nil && !ticked.isEmpty
         return HStack {
             Spacer(minLength: 0)
-            Button { store.press(needID: need.id, choices: ticked.sorted()) } label: {
+            Button { store.hold(needID: need.id, choices: ticked.sorted()) } label: {
                 Text("Send \(went?.count ?? ticked.count)")
                     .font(.body.weight(.semibold))
                     .padding(.horizontal, 18)
@@ -1091,7 +1258,7 @@ struct NeedPictures: View {
 
     /// A press of the words: the answer with that option, or, where options combine, its tick, until his answer went.
     private func press(_ index: Int) {
-        guard need.combines else { return store.press(needID: need.id, choice: index) }
+        guard need.combines else { return store.hold(needID: need.id, choice: index) }
         guard given == nil, waitingTicks == nil else { return }
         if ticked.contains(index) { ticked.remove(index) } else { ticked.insert(index) }
     }
@@ -1291,9 +1458,10 @@ struct NeedAnswerBox: View {
                 .padding(.trailing, 6)
                 .accessibilityIdentifier("answer-\(need.id)")
                 // The keyboard goes with the answer, before the item folds (item 95): it does not carry the page.
+                // his words wait 5 seconds with Undo, then go (`MobileStore.holdSend`)
                 SendButton(enabled: canSend, label: String(l10n: "Send answer"), side: 36) {
                     focused = false
-                    await store.send(needID: need.id)
+                    store.holdSend(needID: need.id)
                 }
                 .accessibilityIdentifier("send-answer-\(need.id)")
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -1594,6 +1762,39 @@ struct NeedComputerNote: View {
     }
 }
 
+/// **His Pause of an answered card's task that did not go** (`MobileStore.pauseState`; the review of 21 November 2026),
+/// under the card, as an answer's lines stand under an open card (`NeedFooter`), whatever the card's mark is now: "Not
+/// sent" with Try again, which sends the same request, while every later write of the phone waits behind it; or the
+/// hub's refusal in the phone's words of a refused write, with Discard, which gives the card its Pause back where its
+/// task works. The refused Pause left the Outbox already, so nothing waits behind it.
+private struct NeedPauseLine: View {
+    let store: MobileStore
+    let need: OwnerNeed
+    let task: Int
+    let state: MobileStore.PauseState
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            switch state {
+            case .notSent:
+                ComposerNote(words: String(l10n: "Not sent"), isWarning: true)
+                    .accessibilityIdentifier("need-pause-words-\(need.id)")
+                // only while it can act, never gray (review B2i), as an answer's Try again
+                if store.canRetry {
+                    TextAction(title: String(l10n: "Try again"), font: .caption) { Task { await store.retry() } }
+                        .accessibilityIdentifier("need-pause-retry-\(need.id)")
+                }
+            case .refused(let words):
+                ComposerNote(words: words, isWarning: true)
+                    .accessibilityIdentifier("need-pause-words-\(need.id)")
+                TextAction(title: String(l10n: "Discard"), font: .caption) { store.discardPauseRefusal(task) }
+                    .accessibilityIdentifier("need-pause-discard-\(need.id)")
+            }
+        }
+        .padding(.top, NeedFooter.above)
+    }
+}
+
 /// Under the item: where its answer stands, or the one line that says why nothing can go now.
 ///
 /// **A line brings its room with it** (polish pass): the 6 points over the line are the line's own, so a wait whose
@@ -1626,6 +1827,9 @@ struct NeedFooter: View {
         // why nothing can go now (a file that cannot be saved, another request on its way). A card whose Send went
         // dead with no line was the fault of the first build.
         if need.asksForSecret && !store.supportsClarify {
+            EmptyView()
+        } else if store.heldAnswer(to: need.id) != nil {
+            // his answer waits with Undo: nothing goes, and nothing waits for it
             EmptyView()
         } else if taken || sends {
             // **This answer on its way is one line, from the press to the fold** (polish pass: the receipt's jump): a

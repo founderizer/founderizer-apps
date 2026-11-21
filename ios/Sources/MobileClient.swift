@@ -476,12 +476,16 @@ final class MobileClient: Sendable {
         return receipt
     }
 
-    /// **His message under a card** (Needs clarification, owner feature `need_clarify`), the one owner command of this
-    /// phone: it goes as the Mac sends it, and its receipt is a command's, which names the item and carries its talk
-    /// with his message in it (`ControlReceipt.matches`). An answer's receipt has an event and a time, which a command's
-    /// has not: read as one, every message that the hub took would wait as "Not sent", and its Try again too.
+    /// **His message under a card** (Needs clarification, owner feature `need_clarify`) and **a task's Pause from an
+    /// answered card** (`MobileStore.pause(task:)`), the two owner commands of this phone: each goes as the Mac sends it,
+    /// and its receipt is a command's, which names the item and carries its talk with his message in it, or names the
+    /// task's hold (`ControlReceipt.matches`). An answer's receipt has an event and a time, which a command's has not:
+    /// read as one, every message that the hub took would wait as "Not sent", and its Try again too.
     func command(_ pending: PendingRequest, key: String?) async throws -> ControlReceipt {
-        guard case .needTalk = pending.command else { throw MobileError.invalidResponse }
+        switch pending.command {
+        case .needTalk?, .control(_, .pause)?: break
+        default: throw MobileError.invalidResponse
+        }
         var request = Self.request(pending.route, hub: pending.hub, key: key, method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(pending.client, forHTTPHeaderField: "X-Fleet-Client")

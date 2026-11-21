@@ -19,7 +19,13 @@ struct FleetMobileApp: App {
                 // `.inactive` is not leaving the app: the Face ID sheet, Control Centre and the app switcher
                 // all raise it. Only `.background` drops this phone's key and stops the reads.
                 .task { push.store = store; store.setForeground(phase != .background) }
-                .onChange(of: phase) { _, now in store.setForeground(now != .background) }
+                .onChange(of: phase) { _, now in
+                    // **His answer that waits with Undo goes as soon as the app is not in use** (`MobileStore.hold`):
+                    // the app switcher raises `.inactive`, and an app closed there gets no `.background`, so an answer
+                    // that only waited in memory would be lost.
+                    if now != .active { store.releaseHeldAnswers() }
+                    store.setForeground(now != .background)
+                }
                 // The Mac's picture of a code, opened by the phone's camera: the phone joins with nothing typed.
                 .onOpenURL { url in Task { await store.openLink(url) } }
         }

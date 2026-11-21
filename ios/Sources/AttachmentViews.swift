@@ -45,7 +45,8 @@ struct AttachmentButton: View {
             }
         }
         .padding(bare ? 0 : -(max(44, size) - size) / 2)
-        .disabled(room == 0 || store.storageError != nil)
+        // (and while this phone's key is not in hand: a file then waits for it, as every write does)
+        .disabled(room == 0 || store.storageError != nil || store.keyIsHeldBack)
         // **Every part of it named for VoiceOver** (fix round 2, item 56): the system's menu put a second, unnamed
         // button inside "Add a file" on every composer and answer box. VoiceOver reads the same menu, by its words.
         // **One name** (fix round 3, HIG): the menu read "Add a file, Photos". The button is "Add a file", and its two

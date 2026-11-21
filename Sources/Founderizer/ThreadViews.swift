@@ -63,12 +63,10 @@ struct ManagerView: View {
     private static let entrySpacing: CGFloat = 28, footer = AgentReply.footer(compact: false)
 
     /// **The room under one of his messages, so a reply stands 28–30 points from it** (T-20, fix round): the chat's gap,
-    /// less the row under a file where he keeps it (`KeepFileRow`, which a message with files already has, and which
-    /// put a reply 52.5 points under his picture), and 3 points less over a reply, whose first line carries its own
-    /// leading over its words (31–32.5 points under his bubble, 28.5 over his next one).
-    static func gap(under message: OwnerMessage, before next: ChatEntry?, keepsFiles: Bool) -> CGFloat {
+    /// and 3 points less over a reply, whose first line carries its own leading over its words (31–32.5 points under his
+    /// bubble, 28.5 over his next one). His files have nothing under them (`OwnFileMenu` is on the file itself).
+    static func gap(under message: OwnerMessage, before next: ChatEntry?) -> CGFloat {
         var gap = footer
-        if keepsFiles, !(message.attachments ?? []).isEmpty { gap -= KeepFileRow.height + 1 }
         if case .report = next { gap -= 3 }
         return gap
     }
@@ -237,8 +235,7 @@ struct ManagerView: View {
                             }
                         case .entry(.message(let message)):
                             // The room under his message is counted to the row under it: a reply, or a card.
-                            messageRow(message, names: book).padding(.bottom, Self.gap(under: message, before: Self.entry(after: index, in: rows),
-                                                                          keepsFiles: store.supportsKeptFiles))
+                            messageRow(message, names: book).padding(.bottom, Self.gap(under: message, before: Self.entry(after: index, in: rows)))
                                 // **His message comes up from the composer** (`AnyTransition.sentMessage`): only the
                                 // one that he sends now, in the frame it goes, never a message of the reading.
                                 .transition(!reduceMotion && comesFromComposer(message) ? .sentMessage : .identity)

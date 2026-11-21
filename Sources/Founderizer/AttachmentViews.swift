@@ -141,65 +141,75 @@ struct StagedFilesStrip: View {
     }
 }
 
-/// What the owner presses beside one file he attached (owner feature `attachment_knowledge`, UI-API.md 1.30 and
-/// 1.31). The hub lets a file go ninety days after the message that carried it, so this is how he says "keep this
-/// one": the file itself, which is the only way for a picture, a mockup, a zip or a PDF, or -- for one of the four
-/// text types -- its words as one of his own knowledge files, with the original kept beside them. The first press
-/// is also the way back, because a kept file stays in the hub's folder for ever otherwise and that folder is in no
-/// copy of the fleet.
-///
-/// A kept file says so without being hovered, because that is a fact about the file; the presses show under the
-/// pointer, as a message's own footer does, and the row keeps its space so hover never moves the chat.
-struct KeepFileRow: View {
+/// **The "…" of one of his own files** (owner feature `attachment_knowledge`, UI-API.md 1.30 and 1.31; the owner, 21
+/// November 2026, of the row of presses under his file: "dont show these 2 there, add like a three dots icon that you
+/// click and see the 2 options you mentioned - since there is no download icon"): at the end of his file's row, where
+/// an agent's file has its save icon, and at the top right of his picture while the pointer is on it, where an agent's
+/// picture has it. Its menu (`FleetSelect`) has what that row had. The hub lets a file go ninety days after the message
+/// that carried it, so Keep is how he says "keep this one": the file itself, which is the only way for a picture, a
+/// mockup, a zip or a PDF. Stop keeping, in its place for a kept file, is the way back, because a kept file stays in the
+/// hub's folder for ever otherwise and that folder is in no copy of the fleet. Keep as knowledge, for one of the four
+/// text types, keeps its words as one of his own knowledge files, with the original kept beside them. VoiceOver has the
+/// same choices as the actions of the file itself (`MessageFilesView`), as an agent's file has Save to Downloads.
+struct OwnFileMenu: View {
     @Bindable var store: FleetStore
     let file: MessageAttachment
-    let hovered: Bool
-    /// The row's height, kept whether it shows or not; with the 1 point over it, what it adds under a file.
-    static let height: CGFloat = 20
+    /// Over a picture: the text's colour in a round field of the page's surface, as the save icon of an agent's picture.
+    /// In a file's row: as the eye beside it.
+    var onPicture = false
 
-    private var shows: Bool { file.isKept || hovered }
+    enum Choice: Hashable { case keep, stopKeeping, knowledge }
 
-    var body: some View {
-        if store.supportsKeptFiles {
-            HStack(spacing: 5) {
-                if file.isKept {
-                    Text(file.keptAs == nil ? "Kept" : "Kept as knowledge").font(ChatStyle.detail)
-                }
-                MessageAction(symbol: file.isKept ? "bookmark.fill" : "bookmark",
-                              label: file.isKept ? String(l10n: "Stop keeping \(file.name)") : String(l10n: "Keep \(file.name)"),
-                              help: keepHelp) {
-                    Task { await store.keep(file, !file.isKept) }
-                }
-                .disabled(store.keeping.contains(file.id))
-                .accessibilityIdentifier("keep-file-\(file.id)")
-                // Only a file that is not kept yet, because the hub refuses this one for a file it already keeps
-                // (409), and only a type whose words can be text that search_knowledge reads (415 otherwise).
-                if !file.isKept, file.canBecomeKnowledge {
-                    MessageAction(symbol: "text.book.closed", label: String(l10n: "Keep \(file.name) as knowledge"),
-                                  help: String(l10n: "Keep the words of \(file.name) as one of your own knowledge files, with the file itself beside them. Your manager reads them.")) {
-                        Task { await store.keepAsKnowledge(file) }
-                    }
-                    .disabled(store.keeping.contains(file.id))
-                    .accessibilityIdentifier("keep-knowledge-\(file.id)")
-                }
-            }
-            // Kept is a state, so it is muted as the rest (D-8: a state is never violet); its filled mark and "Kept"
-            // say it.
-            .foregroundStyle(FleetStyle.muted)
-            .frame(height: Self.height)
-            .opacity(shows ? 1 : 0).allowsHitTesting(hovered)
-            .accessibilityHidden(!shows)
+    /// What the menu offers for this file, in its order.
+    static func choices(_ file: MessageAttachment) -> [Choice] {
+        var choices: [Choice] = [file.isKept ? .stopKeeping : .keep]
+        // Only a file that is not kept yet, because the hub refuses this one for a file it already keeps (409), and only
+        // a type whose words can be text that search_knowledge reads (415 otherwise).
+        if !file.isKept, file.canBecomeKnowledge { choices.append(.knowledge) }
+        return choices
+    }
+
+    static func title(_ choice: Choice) -> String {
+        switch choice {
+        case .keep: String(l10n: "Keep")
+        case .stopKeeping: String(l10n: "Stop keeping")
+        case .knowledge: String(l10n: "Keep as knowledge")
         }
     }
 
-    private var keepHelp: String {
-        if let path = file.keptAs {
-            return String(l10n: "Stop keeping the original of \(file.name) on the hub. \(path) stays in your knowledge.")
+    /// One choice, as the row's press did it: once at a time for one file (`FleetStore.keepingWork`).
+    static func act(_ choice: Choice, on file: MessageAttachment, store: FleetStore) {
+        switch choice {
+        case .keep: Task { await store.keep(file, true) }
+        case .stopKeeping: Task { await store.keep(file, false) }
+        case .knowledge: Task { await store.keepAsKnowledge(file) }
         }
-        if file.isKept {
-            return String(l10n: "Stop keeping \(file.name). The hub lets it go with its message again, as it does every file.")
+    }
+
+    private static func symbol(_ choice: Choice) -> String {
+        switch choice {
+        case .keep: "bookmark"
+        case .stopKeeping: "bookmark.slash"
+        case .knowledge: "text.book.closed"
         }
-        return String(l10n: "Keep \(file.name) on the hub. Without this the hub lets it go ninety days after its message, and it is in no copy of your fleet.")
+    }
+
+    var body: some View {
+        let title = String(l10n: "More \(file.name) actions")
+        FleetSelect(title, options: Self.choices(file).map { FleetOption($0, Self.title($0), mark: .symbol(Self.symbol($0))) },
+                    onSelect: { Self.act($0, on: file, store: store) }) {
+            Image(systemName: "ellipsis").font(IconMetrics.symbol(12))
+                .foregroundStyle(onPicture ? FleetStyle.text : FleetStyle.muted)
+        }
+        // the app's icon button, as the eye: its circle at rest, lighter under the pointer, darker while pressed
+        .buttonStyle(FleetIconButtonStyle(side: onPicture ? IconMetrics.side : IconMetrics.small, rest: true))
+        .background(onPicture ? FleetStyle.surface : .clear, in: Circle())
+        .environment(\.onCard, onPicture)
+        // the hand, as on the file's row, also over a picture
+        .pointerStyle(.link)
+        .disabled(store.keeping.contains(file.id))
+        .help(title)
+        .accessibilityIdentifier("file-menu-\(file.id)")
     }
 }
 
@@ -207,21 +217,21 @@ struct KeepFileRow: View {
 /// its size. **A click opens it in the Mac's preview window over the app** (Quick Look: every page of a PDF, the
 /// picture at its size, with the window's own Open with Preview and Share; Esc closes it; the owner's yes of 18
 /// November 2026, which replaced the open in the Preview app outside Founderizer), from bytes whose SHA-256 the app
-/// checked. Under each of his own files, what the owner presses to keep it past the ninety days (`KeepFileRow`);
-/// **an agent's file has a save icon** (the same yes): at the end of a file's row at rest, beside the eye that every
-/// file's row has (`FileRowLook`, the owner's "I need a download icon/button too!" of 20 November 2026), and at the top
-/// right of a picture while the pointer is on it. It writes the file into Downloads, never over a file that is there,
-/// and "Saved to Downloads" shows under it. **An agent's file also drags out of the chat** (the same yes) to Finder, or to any other
+/// checked. **An agent's file has a save icon** (the same yes): at the end of a file's row at rest, beside the eye that
+/// every file's row has (`FileRowLook`, the owner's "I need a download icon/button too!" of 20 November 2026), and at the
+/// top right of a picture while the pointer is on it. It writes the file into Downloads, never over a file that is
+/// there, and "Saved to Downloads" shows under it. **His own file has a "…" in the same place** (`OwnFileMenu`), whose
+/// menu keeps it past the ninety days, and nothing under it. **An agent's file also drags out of the chat** (the same yes) to Finder, or to any other
 /// app outside Founderizer, as the file itself (`ChatFileDrag`), and no place inside the app takes it.
 struct MessageFilesView: View {
     @Bindable var store: FleetStore
     let files: [MessageAttachment]
     var alignment: HorizontalAlignment = .trailing
-    /// The keep presses under each file, for his own files. An agent's file (CHAT-APPS.md 20) has no keep presses,
-    /// and has the save icon in their place: `keeps` is false for an agent's files only.
+    /// The "…" of his own files (`OwnFileMenu`). An agent's file (CHAT-APPS.md 20) has none, and has the save icon in
+    /// its place: `keeps` is false for an agent's files only.
     var keeps = true
-    /// A guidance's files in a task's thread: neither the keep presses nor the save icon, as the owner's pictures of
-    /// them showed (his "Yes, build it" of 19 November 2026).
+    /// A guidance's files in a task's thread: neither the "…" nor the save icon, as the owner's pictures of them showed
+    /// (his "Yes, build it" of 19 November 2026).
     var plain = false
     @State private var hovered: Int?
     /// The file that the preview window shows now; nil when it is closed.
@@ -232,6 +242,8 @@ struct MessageFilesView: View {
     @State private var saving: Set<Int> = []
 
     private var saves: Bool { !keeps && !plain }
+    /// His own files, on a hub that keeps a file past the ninety days.
+    private var menus: Bool { keeps && !plain && store.supportsKeptFiles }
 
     var body: some View {
         VStack(alignment: alignment, spacing: 8) {
@@ -244,6 +256,12 @@ struct MessageFilesView: View {
                         .accessibilityIdentifier("file-\(file.id)")
                         .accessibilityActions {
                             if saves { Button("Save to Downloads") { save(file) } }
+                            // the choices of the file's "…", which VoiceOver does not reach
+                            if menus {
+                                ForEach(OwnFileMenu.choices(file), id: \.self) { choice in
+                                    Button(OwnFileMenu.title(choice)) { OwnFileMenu.act(choice, on: file, store: store) }
+                                }
+                            }
                         }
                     // What he did to this file and did not happen, under the file itself and in no composer.
                     if let problem = store.fileProblems[file.id] {
@@ -252,7 +270,6 @@ struct MessageFilesView: View {
                         Text("Saved to Downloads").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
                             .padding(.vertical, 2)
                     }
-                    if keeps && !plain { KeepFileRow(store: store, file: file, hovered: hovered == file.id) }
                 }
                 .contentShape(Rectangle())
                 .onHover { over in
@@ -270,14 +287,16 @@ struct MessageFilesView: View {
     @ViewBuilder private func item(_ file: MessageAttachment) -> some View {
         if file.isImage {
             PictureTile(store: store, file: file, side: alignment,
-                        save: saves && hovered == file.id ? { save(file) } : nil)
+                        save: saves && hovered == file.id ? { save(file) } : nil,
+                        menu: menus ? OwnFileMenu(store: store, file: file, onPicture: true) : nil, menuShows: hovered == file.id)
         } else {
             // "Not loaded" as a picture's tile says it (fix round 3, item 4): orange while the hub answers.
             let unloaded = store.unloadedFiles.contains(file.id)
             FileRowLook(name: file.name, symbol: file.symbol, detail: unloaded ? String(l10n: "Not loaded") : file.sizeWords,
                         late: unloaded && store.isFresh, hovered: hovered == file.id,
                         open: { open(file) }, save: saves ? { save(file) } : nil, saveWords: String(l10n: "Save \(file.name) to Downloads"),
-                        openWords: String(l10n: "Open \(file.name) (\(file.sizeWords))"), saveID: "save-file-\(file.id)")
+                        openWords: String(l10n: "Open \(file.name) (\(file.sizeWords))"), saveID: "save-file-\(file.id)",
+                        menu: menus ? OwnFileMenu(store: store, file: file) : nil)
                 .task(id: store.isFresh) { if store.isFresh { await store.load(file) } }
         }
     }
@@ -506,7 +525,8 @@ private struct DragsOut: ViewModifier {
 /// too!"): its kind's symbol in a tile, its name in the chat's size with its size under it, 12 points of room all round,
 /// up to 380 points wide so the name keeps its room beside the buttons; under the pointer the hand and a lighter fill,
 /// as a row that opens its detail. At its end, at rest, the eye, which opens the preview as a press on the row does,
-/// and for an agent's file the save to Downloads: the app's icon buttons, muted on their rest fill, their words on hover.
+/// and for an agent's file the save to Downloads, for his own file the "…" of its menu (`OwnFileMenu`): the app's icon
+/// buttons, muted on their rest fill, their words on hover.
 struct FileRowLook: View {
     let name: String
     let symbol: String
@@ -522,6 +542,8 @@ struct FileRowLook: View {
     var openWords = ""
     /// The save icon's accessibility identifier.
     var saveID = ""
+    /// The "…" of his own file; nil for an agent's files and a guidance's.
+    var menu: OwnFileMenu? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -534,13 +556,15 @@ struct FileRowLook: View {
             }
             Spacer(minLength: 8)
             HStack(spacing: 4) {
-                // Hidden from VoiceOver: the row's own press opens the file, and its Save to Downloads action saves it.
+                // Hidden from VoiceOver: the row's own press opens the file, its Save to Downloads action saves it, and
+                // its actions are the choices of the "…".
                 IconButton(symbol: "eye", words: openWords, size: 12, side: IconMetrics.small, action: open)
                     .accessibilityHidden(true)
                 if let save {
                     SaveFileIcon(words: saveWords, side: IconMetrics.small, onPicture: false, action: save)
                         .accessibilityIdentifier(saveID).accessibilityHidden(true)
                 }
+                if let menu { menu.accessibilityHidden(true) }
             }
         }
         .padding(12)
@@ -597,6 +621,9 @@ struct PictureTile: View {
     let side: HorizontalAlignment
     /// The save icon at the picture's top right, while the pointer is on an agent's picture; nil otherwise.
     var save: (() -> Void)? = nil
+    /// The "…" of his own picture at its top right (`OwnFileMenu`), shown while the pointer is on it (`menuShows`).
+    var menu: OwnFileMenu? = nil
+    var menuShows = false
     /// **A square as wide as it is given, the picture whole in it** (owner feature `need_pictures`: a picture over an
     /// option of a request, `NeedAnswerBox`), on the plate's fill and in a hairline, in the place of the chat's box. Its
     /// states are the chat's own: the plate, "Reading…", and "Not loaded" with ↻.
@@ -641,6 +668,11 @@ struct PictureTile: View {
                         if let save {
                             SaveFileIcon(words: String(l10n: "Save \(file.name) to Downloads"), action: save)
                                 .accessibilityIdentifier("save-file-\(file.id)").padding(6)
+                        } else if let menu {
+                            // In the view while the pointer is elsewhere, only not drawn: the menu that it opened stays
+                            // open while the pointer is on the menu. VoiceOver has its choices on the file itself.
+                            menu.padding(6).opacity(menuShows ? 1 : 0).allowsHitTesting(menuShows)
+                                .accessibilityHidden(true)
                         }
                     }
             } else {

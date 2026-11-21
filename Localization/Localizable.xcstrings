@@ -11550,32 +11550,12 @@
         }
       }
     },
-    "Keep %@" : {
+    "Keep" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Guardar %@"
-          }
-        }
-      }
-    },
-    "Keep %@ as knowledge" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guardar %@ como conocimiento"
-          }
-        }
-      }
-    },
-    "Keep %@ on the hub. Without this the hub lets it go ninety days after its message, and it is in no copy of your fleet." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guarda %@ en el hub. Sin esto, el hub lo elimina noventa días después de su mensaje, y no está en ninguna copia de tu equipo."
+            "value" : "Conservar"
           }
         }
       }
@@ -11590,6 +11570,16 @@
         }
       }
     },
+    "Keep as knowledge" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conservar como conocimiento"
+          }
+        }
+      }
+    },
     "Keep it" : {
       "localizations" : {
         "es" : {
@@ -11600,42 +11590,12 @@
         }
       }
     },
-    "Keep the words of %@ as one of your own knowledge files, with the file itself beside them. Your manager reads them." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guarda las palabras de %@ como uno de tus propios archivos de conocimiento, con el propio archivo a su lado. Tu gestor las lee."
-          }
-        }
-      }
-    },
     "Keep this fleet" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Conservar este equipo"
-          }
-        }
-      }
-    },
-    "Kept" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guardado"
-          }
-        }
-      }
-    },
-    "Kept as knowledge" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guardado como conocimiento"
           }
         }
       }
@@ -19780,32 +19740,12 @@
         }
       }
     },
-    "Stop keeping %@" : {
+    "Stop keeping" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dejar de guardar %@"
-          }
-        }
-      }
-    },
-    "Stop keeping %@. The hub lets it go with its message again, as it does every file." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deja de guardar %@. El hub vuelve a eliminarlo junto con su mensaje, como hace con todos los archivos."
-          }
-        }
-      }
-    },
-    "Stop keeping the original of %@ on the hub. %@ stays in your knowledge." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deja de guardar el original de %@ en el hub. %@ se queda en tu conocimiento."
+            "value" : "Dejar de conservar"
           }
         }
       }

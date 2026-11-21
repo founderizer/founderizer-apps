@@ -156,6 +156,12 @@ Mac, and a device route is all that the PC reaches.
   (`BuildDownload`). The publisher check, the unpack, the launcher and the swap wait for the screens; the release job
   and the website wait (`~/dev/founderizer-plans/windows-app-release-design.md`).
 - **Pings while the app is closed**: not planned in step 1 (decision D4).
+- **An answer that waits 5 seconds with Undo, Pause on an answered card while its task works, and a press of its mark
+  that opens the task** (the Mac's `AnswerHolds` and `NeedRequestCard.lineEnd`, 21 November 2026; the owner's "Yes, 5
+  seconds (Recommended)", "Both (Recommended)", "Yes, open task", "Gray pause, as the row" and "Yes, Undo there
+  too"): waits. A Windows card owes all three. The iPhone's card has them (`MobileStore.hold`, `pausable` and
+  `taskOpened` in `ios/Sources/MobileStore.swift`), its Pause through `POST /ui/tasks/<id>/control`, which a device
+  may use.
 - **A request card in a window of its own** (the Mac's `NeedWindows`, 21 November 2026): not planned: it is the
   Mac's alone, an AppKit panel over every app, also over a full-screen one.
 - **An answer waits 5 seconds with Undo, Pause stands on its card while its task works, and the mark opens the task**
