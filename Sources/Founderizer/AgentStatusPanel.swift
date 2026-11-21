@@ -338,10 +338,11 @@ struct AgentStatusPanel: View {
     private func askedRow(_ row: AskedCard.Row) -> some View {
         let line = row.until.map { fleetResumes($0, now: time) } ?? row.line
         let words = row.until == nil ? row.words : line
-        return Button {
+        let open = {
             if let request = row.request { store.selectedNeed = request; store.destination = .needs }
             else if let task = row.task { store.show(.task(task)) }
-        } label: {
+        }
+        return Button(action: open) {
             HStack(spacing: 0) {
                 RowMark {
                     switch row.mark {
@@ -377,6 +378,8 @@ struct AgentStatusPanel: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([row.title, words].filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityAddTraits(.isButton)
+        // The element of its words is no button's own: VoiceOver's press (AXPress) did nothing while a click opened it
+        .accessibilityAction(.default, open)
         .accessibilityIdentifier("panel-asked-\(row.id)")
     }
 
@@ -452,6 +455,7 @@ struct AgentStatusPanel: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([title, line].filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default, open)        // VoiceOver's press opens it, as a click does
         .accessibilityIdentifier("panel-work-\(id)")
     }
 

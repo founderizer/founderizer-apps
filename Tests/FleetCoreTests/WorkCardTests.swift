@@ -225,4 +225,24 @@ struct WorkCardTests {
         #expect(state.ownerWaits(of: mine) == state.ownerWaits.filter { key, _ in mine.contains { $0.id == key } })
         #expect(state.ownerWaits(of: mine)[3]?.statusWords == "Sign-in needed")
     }
+
+    @Test func aTaskOfWhatHeAskedThatFollowsAThingIsAskedsAndTheThingKeepsItsOwnEnd() throws {
+        // Feedback on a task (owner API 1.279): the task that answers it follows the task and has his ask. While it
+        // works, and once it ended, it is a row of Asked only; the thing that it follows keeps its own end and result
+        // in Work, and never takes the asked task's (the card's rule: no task is in both cards).
+        let messages: [[String: Any]] = [["request_id": "a", "recipient": "dev", "kind": "message", "text": "Words of a",
+                                          "event_id": 1, "created": Self.now - 600, "client": "test", "asked": "Thing a"]]
+        for (next, delivered) in [("working", nil), ("completed", Self.now - 60)] as [(String, Double?)] {
+            let state = try hub([
+                task(1, "completed", title: "Fix the export", delivered: Self.now - 3 * Self.hour, accepted: 1),
+                task(2, next, title: "Fix the export again", works: next == "working", doing: "Reads it",
+                     delivered: delivered, accepted: delivered == nil ? nil : 1, ask: "a", follows: 1),
+            ], messages: messages)
+            let work = card(state)
+            #expect(work.working.isEmpty, "\(next)")
+            #expect(work.ended.map(\.id) == [.task(1)], "\(next)")
+            #expect(work.ended.first?.endedAt == Self.now - 3 * Self.hour, "\(next)")
+            #expect(AskedCard(state.asks, agent: "dev", after: Self.now - 3600).rows.map(\.task) == [2], "\(next)")
+        }
+    }
 }

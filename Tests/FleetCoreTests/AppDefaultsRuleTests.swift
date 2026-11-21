@@ -14,8 +14,12 @@ struct AppDefaultsRuleTests {
         let standard = "stan" + "dard"
         let allowed = ["UserDefaults." + standard + ".volatileDomain(forName: UserDefaults.argumentDomain)",
                        "time: ." + standard]
-        let refused = try Regex(["\\." + standard + "\\b", "UserDefaults\\(\\)", "UserDefaults\\(suite" + "Name",
-                                 "UserDefaults\\.init\\(", "applicationSupportDirectory"].joined(separator: "|"))
+        // Not "\\b": Swift's word boundary is the Unicode one, where a "." between letters breaks no word, so a
+        // set or a read called on the standard defaults passed it (the session "Founderizer UX improvements",
+        // 21 November 2026).
+        let refused = try Regex(["\\." + standard + "(?![A-Za-z0-9_])", "UserDefaults\\(\\)",
+                                 "UserDefaults\\(suite" + "Name", "UserDefaults\\.init\\(",
+                                 "applicationSupportDirectory"].joined(separator: "|"))
         let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
         var read = 0, found: [String] = []

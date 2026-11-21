@@ -255,6 +255,8 @@ struct JobCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([task.title, task.owner.agentLabel, waits ? String(l10n: "Waits for you") : mark.words, when].joined(separator: ", "))
         .accessibilityAddTraits(.isButton)
+        // The element of its words is no button's own: VoiceOver's press (AXPress) did nothing while a click opened it
+        .accessibilityAction(.default) { store.show(.task(task.id)) }
         .accessibilityIdentifier("job-task-\(task.id)")
     }
 

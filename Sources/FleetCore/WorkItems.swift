@@ -241,8 +241,10 @@ extension HubState {
     }
 
     /// One thing of the work from its tasks and its case.
-    func workItem(_ key: WorkItem.Key, in reading: WorkReading) -> WorkItem {
-        let own = (reading.members[key] ?? []).sorted { $0.id < $1.id }
+    /// leaving: tasks that are no part of the thing here (the card Work leaves out the tasks of what the owner asked,
+    /// which are the card Asked's): its end and its result are those of its other tasks.
+    func workItem(_ key: WorkItem.Key, in reading: WorkReading, leaving: Set<Int> = []) -> WorkItem {
+        let own = (reading.members[key] ?? []).filter { !leaving.contains($0.id) }.sorted { $0.id < $1.id }
         let lastMove = own.map { max($0.activityTime, $0.delivered ?? 0, $0.checked_at ?? 0) }.max()
         let allOver = own.allSatisfy(\.isTerminal)
         // The page: its own tasks, every subtask under them, and the task that opened a case of it.
@@ -300,6 +302,10 @@ extension HubState {
             let key = WorkItem.Key.dutyCase(responsibilities?.thing[id] ?? id)
             if seen.insert(key).inserted { mine.append(key) }
         }
-        return mine.map { workItem($0, in: reading) }
+        // A task of what he asked that follows one of these (feedback on a task, owner API 1.279) is Asked's: the thing
+        // here ends and reads as its own tasks did, and never again as the asked task ends (no task in both cards). The
+        // card that a row opens (`detail(of:)`, `workItem(_:)`) is the whole thing, the asked task too, on purpose: the
+        // row is Work's part of the thing, and the card is where he sees what came after it.
+        return mine.map { workItem($0, in: reading, leaving: asked) }
     }
 }
