@@ -257,7 +257,7 @@ public enum ServerCheck {
             return .stop(String(l10n: "This server has \(size(free)) of free disk, and the install needs about \(freeDisk.words). Free some space, or choose a bigger disk."))
         }
         guard reading.ipv4Route else {
-            return .stop(String(l10n: "This server has no IPv4 route, and GitHub answers over IPv4 only. Give it a public IPv4 address at your provider."))
+            return .stop(String(l10n: "This server has no IPv4 route now, and GitHub answers over IPv4 only. Restart the server. If it still has no route, give it a public IPv4 address at your provider."))
         }
         // The fleet's own VPS runs no agent, so it needs neither AI's site. A server for agents needs the site of the
         // AI its agents run, which each agent's own page chooses later, so either one of the two is enough here.

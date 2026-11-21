@@ -247,8 +247,9 @@ struct ServerCheckTests {
                 == .stop("This server has 480 MB of memory, and the hub needs about 1 GB. Choose a plan with more memory."))
         #expect(try Self.verdict(["disk_free_mb=6348"]) == .stop("This server has 6\(decimal)2 GB of free disk, and the install "
                                                                  + "needs about 10 GB. Free some space, or choose a bigger disk."))
-        #expect(try Self.verdict(["ipv4_route=no"]) == .stop("This server has no IPv4 route, and GitHub answers over IPv4 only. "
-                                                            + "Give it a public IPv4 address at your provider."))
+        #expect(try Self.verdict(["ipv4_route=no"]) == .stop("This server has no IPv4 route now, and GitHub answers over IPv4 only. "
+                                                            + "Restart the server. If it still has no route, give it a "
+                                                            + "public IPv4 address at your provider."))
         #expect(try Self.verdict(["reach=tailscale.com no"])
                 == .stop("This server cannot reach tailscale.com over HTTPS. Let it make outgoing HTTPS connections."))
         // One AI's site is enough for a server for agents, and the fleet's own VPS needs neither.

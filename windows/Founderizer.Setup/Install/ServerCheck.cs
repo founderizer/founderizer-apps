@@ -251,7 +251,7 @@ public static class ServerCheck
         if (reading.DiskFreeMB is { } free && free < FreeDiskMegabytes)
             return new Verdict.Stop($"This server has {Size(free)} of free disk, and the install needs about {FreeDiskWords}. Free some space, or choose a bigger disk.");
         if (!reading.Ipv4Route)
-            return new Verdict.Stop("This server has no IPv4 route, and GitHub answers over IPv4 only. Give it a public IPv4 address at your provider.");
+            return new Verdict.Stop("This server has no IPv4 route now, and GitHub answers over IPv4 only. Restart the server. If it still has no route, give it a public IPv4 address at your provider.");
         string[] ai = ["claude.ai", "chatgpt.com"];
         bool No(string host) => reading.Reaches.TryGetValue(host, out var said) && said == Reach.No;
         var unreached = Hosts.Where(h => !ai.Contains(h) && No(h)).ToList();

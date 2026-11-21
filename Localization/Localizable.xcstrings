@@ -25430,12 +25430,12 @@
         }
       }
     },
-    "This server has no IPv4 route, and GitHub answers over IPv4 only. Give it a public IPv4 address at your provider." : {
+    "This server has no IPv4 route now, and GitHub answers over IPv4 only. Restart the server. If it still has no route, give it a public IPv4 address at your provider." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este servidor no tiene ruta IPv4, y GitHub solo responde por IPv4. Dale una dirección IPv4 pública en tu proveedor."
+            "value" : "Este servidor no tiene ruta IPv4 ahora, y GitHub solo responde por IPv4. Reinicia el servidor. Si sigue sin ruta, dale una dirección IPv4 pública en tu proveedor."
           }
         }
       }
