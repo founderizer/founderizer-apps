@@ -232,6 +232,8 @@ public enum DoorAccess {
         public var github_app: GitHubApp? = nil
         /// The hub gets every GitHub token from the door.
         public var linked: Bool? = nil
+        /// The hub's file of the door's two secrets is there (API 1.298), read or not: nil from a hub before that.
+        public var door_secrets: Bool? = nil
         /// {account in lower case: App ID} of the Apps that this app made with GitHub's manifest flow, whose keys the
         /// door holds (API 1.94). nil from a hub before that.
         public var github_apps: [String: String]? = nil
@@ -855,6 +857,46 @@ public enum DoorAccess {
         }.sorted { $0.owner < $1.owner }
     }
 
+    /// **What a round does for the hub's GitHub tokens** (plan 13, item 4): nothing while the hub is linked; `move`
+    /// the hub's own App key to the door while the door's file names no key of that App; else `link` the hub to the
+    /// door's key of the App. A hub that holds no App key of its own and is not linked is linked to the first App
+    /// that the door's file names, only when the hub says that it is not linked and has no file of the door's secrets
+    /// at all: a hub put back from a backup has no `~/.fleet/door.json` and no key of its own (it gave its key to the
+    /// door), and without the link it gets no GitHub token at all (a round that needed the hub's own key never linked it
+    /// again, 21 November 2026). A linked hub whose file it could not read for a moment, and a hub that does not say,
+    /// get nothing: a new link makes new secrets and stops the old ones; so does a hub at another address than the
+    /// door's file names (`hub`: this Mac's hub's address). A hub with neither gets nothing.
+    public enum GitHubStep: Equatable, Sendable {
+        case move(HubDoor.GitHubApp)
+        case link(login: String, appID: String)
+    }
+
+    public static func gitHubStep(_ view: HubDoor, current: [String: Any], hub: String?, port: Int? = nil)
+        -> GitHubStep? {
+        guard view.linked != true else { return nil }
+        let apps = gitHubApps(current)
+        if let app = view.github_app {
+            guard let held = apps.first(where: { $0.appID == app.app_id }) else { return .move(app) }
+            // a hub that says that its file of the door's secrets is there is linked already, read or not
+            guard view.door_secrets != true, namesHub(current, hub: hub, port: port) else { return nil }
+            return .link(login: held.login, appID: app.app_id)
+        }
+        guard view.linked == false, view.door_secrets == false, namesHub(current, hub: hub, port: port) else { return nil }
+        // the App that the hub moved, rather than one that this app made with GitHub's manifest flow
+        let made = Set((view.github_apps ?? [:]).values)
+        return (apps.first { !made.contains($0.appID) } ?? apps.first).map { .link(login: $0.login, appID: $0.appID) }
+    }
+
+    /// A link only for the hub that the door's file names, by its address and its port (8765 when the file names
+    /// none), which alone the door answers: a copy of the hub beside it, as a test of a restore, or a second hub on
+    /// the same server, would stop the secrets of the hub that runs (the reviews of 22 November 2026).
+    public static func namesHub(_ current: [String: Any], hub: String?, port: Int?) -> Bool {
+        guard let hub, let entry = current["hub"] as? [String: Any], entry["address"] as? String == hub else {
+            return false
+        }
+        return (entry["port"] as? Int ?? 8765) == (port ?? 8765)
+    }
+
     /// True when the door's file names another key of this App: a key that works. It stays the App's key in the file
     /// until the door holds the new one, because the door makes no token with a key that it does not hold yet, and
     /// its copy comes at its next minute (`door.py` `fetch_sealed`).
@@ -970,7 +1012,7 @@ public enum DoorAccess {
 
     /// Whether the host of an entry for a device's name is that device: its address on the private network, its name
     /// in Tailscale, or that name with the domain of the private network (`<name>.<tailnet>.ts.net`).
-    static func names(_ hostname: String, device: String, address: String) -> Bool {
+    public static func names(_ hostname: String, device: String, address: String) -> Bool {
         var host = hostname.lowercased()
         if host.hasSuffix(".") { host.removeLast() }
         return host == address.lowercased() || host == device.lowercased()

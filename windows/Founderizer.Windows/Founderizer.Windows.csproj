@@ -26,8 +26,13 @@
   </PropertyGroup>
 
   <!-- The one switch of the proofs in the build VM (Proofs.cs): only a build with -p:FounderizerProofs=true reads their
-       variables; a release build has no such switch. -->
-  <PropertyGroup Condition="'$(FounderizerProofs)' == 'true'">
+       variables and has their stand-ins; a release build has no such switch. As for the welcome page below, MSBuild
+       would also fill the property from an environment variable of that name: a build with such a variable has no
+       proofs' parts, so only the command line turns them on. -->
+  <PropertyGroup>
+    <FounderizerProofsOn Condition="'$(FounderizerProofs)' == 'true' And '$([System.Environment]::GetEnvironmentVariable(`FounderizerProofs`))' == ''">true</FounderizerProofsOn>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(FounderizerProofsOn)' == 'true'">
     <DefineConstants>$(DefineConstants);PROOFS</DefineConstants>
   </PropertyGroup>
 
@@ -46,7 +51,7 @@
   </ItemGroup>
 
   <!-- The files of the sample's picture 4 (the second set), only in the proofs' build. -->
-  <ItemGroup Condition="'$(FounderizerProofs)' == 'true'">
+  <ItemGroup Condition="'$(FounderizerProofsOn)' == 'true'">
     <EmbeddedResource Include="Sample/*.png" LogicalName="Founderizer.Windows.Sample.%(Filename)%(Extension)" />
   </ItemGroup>
 

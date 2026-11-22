@@ -45,14 +45,19 @@ internal sealed class FirstRunHost : Grid
     private bool open;
 
     private readonly Action<string> named;
+    /// <summary>For the proofs only: a state that the page shows in place of the store's (<c>SetupStandIn.Sample</c>).</summary>
+    private readonly Func<SetupState?>? sample;
 
     /// <summary><paramref name="named"/> gets the title of each page that opens: the window's name of its page, for
-    /// assistive apps.</summary>
+    /// assistive apps. <paramref name="sample"/>: a proofs' build only, a state of the first run to show in place of the
+    /// store's.</summary>
     public FirstRunHost(SetupStore store, PcTailscale pc, TailscaleSetup tailscale, Action addThisPc, DispatcherQueue queue, Action<string> named,
-                        IntPtr window = default, Func<Founderizer.Setup.Cloud.CloudProvider, bool>? holds = null)
+                        IntPtr window = default, Func<Founderizer.Setup.Cloud.CloudProvider, bool>? holds = null,
+                        Func<SetupState?>? sample = null)
     {
         this.store = store;
         this.named = named;
+        this.sample = sample;
         host = new StepHost
         {
             Store = store,
@@ -144,8 +149,11 @@ internal sealed class FirstRunHost : Grid
     private void Show()
     {
         if (!open) return;
-        var state = store.State;
-        var screen = SetupScreens.Of(state, store.Runs, store.ShowsBuild);
+        var sampled = sample?.Invoke();
+        var state = sampled ?? store.State;
+        // A sample has no store of its own: an install of it runs while its state says so.
+        var runs = sampled is null ? store.Runs : sampled.Install.Running || sampled.ManagerInstall.Running;
+        var screen = sampled is null ? SetupScreens.Of(state, store.Runs, store.ShowsBuild) : SetupScreens.Of(state, runs);
         if (state.Page != shown)
         {
             view?.Left();
@@ -167,7 +175,7 @@ internal sealed class FirstRunHost : Grid
             namedAs = screen.Title;
             named(screen.Title);
         }
-        back.Visibility = screen.Back && !store.Runs ? Visibility.Visible : Visibility.Collapsed;
+        back.Visibility = screen.Back && !runs ? Visibility.Visible : Visibility.Collapsed;
         progress.Show(screen.Progress);
         // With the steps, the step's room starts under their names (set 8's 56 more over the step).
         room.Padding = new Thickness(0, screen.Progress is null ? 0 : 56, 0, 0);

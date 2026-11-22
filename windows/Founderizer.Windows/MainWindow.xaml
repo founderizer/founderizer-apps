@@ -105,7 +105,7 @@
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="local:AgentRowView">
                             <Button Height="52" Style="{StaticResource QuietButtonStyle}" Click="Agent_Click" Tag="{x:Bind Name}"
-                                    AutomationProperties.Name="{x:Bind Label, Mode=OneWay}">
+                                    AutomationProperties.Name="{x:Bind Spoken, Mode=OneWay}">
                                 <Grid>
                                     <Border Background="{StaticResource SelectedFillBrush}" CornerRadius="4" Visibility="{x:Bind SelectedVisibility, Mode=OneWay}" />
                                     <Rectangle Width="3" Height="16" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource BarBrush}"
@@ -125,8 +125,10 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{x:Bind Label, Mode=OneWay}" FontSize="14" LineHeight="20" LineStackingStrategy="BlockLineHeight"
-                                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Foreground="{StaticResource TextBrush}" />
+                                        <!-- The name line of the Mac's AgentNameLine (set 8, picture 21): the name, then " · " and
+                                             the role muted; the role alone where the role says the name. -->
+                                        <TextBlock FontSize="14" LineHeight="20" LineStackingStrategy="BlockLineHeight"
+                                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Foreground="{StaticResource TextBrush}"><Run Text="{x:Bind Lead, Mode=OneWay}" /><Run Text="{x:Bind Trail, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /></TextBlock>
                                         <TextBlock Grid.Column="1" Text="{x:Bind Time, Mode=OneWay}" FontSize="12" LineHeight="20"
                                                    LineStackingStrategy="BlockLineHeight" Margin="0,1,0,0" Foreground="{StaticResource MutedBrush}" />
                                     </Grid>

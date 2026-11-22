@@ -464,13 +464,27 @@ final class DoorSyncModel {
     /// Then, once the door holds its sealed copy, the hub's two secrets, which the door makes and the hub keeps only
     /// when the door mints for every owner: the hub then removes its own copy. Gives the door's file with the key in it,
     /// when this round put the key there. A round that failed after the hub step tries again under the same reference
-    /// (`DoorKeyReference`) until the door's file names the App, so a failed round leaves no second catalog entry.
+    /// (`DoorKeyReference`) until the door's file names the App, so a failed round leaves no second catalog entry. A
+    /// hub that holds no App key and is not linked, as a hub put back from a backup, is linked to the door's App again
+    /// (`DoorAccess.gitHubStep`).
     private func moveGitHub(_ store: FleetStore, view: DoorAccess.HubDoor, current: [String: Any], devices: [DoorAccess.Device],
                             door: DoorAccess.Device, doorAddress: String, database: String,
                             said: inout [String]) async -> [String: Any]? {
-        guard let app = view.github_app, view.linked != true else { return nil }
-        let held = DoorAccess.gitHubApps(current).filter { $0.appID == app.app_id }
-        guard let first = held.first else {
+        // the hub's address on the private network, also where this Mac reaches it by its name in Tailscale
+        let hubAddress = hub.host.map { host in
+            devices.first { device in
+                device.address.map { DoorAccess.names(host, device: device.name, address: $0) } ?? false
+            }?.address ?? host
+        }
+        guard let step = DoorAccess.gitHubStep(view, current: current, hub: hubAddress, port: hub.port) else {
+            if view.linked == false, !DoorAccess.gitHubApps(current).isEmpty,
+               !DoorAccess.namesHub(current, hub: hubAddress, port: hub.port) {
+                Self.log.notice("The hub is not linked to the door, and the door's file names another address or port for the hub: it is linked once the door's file names this one.")
+            }
+            return nil
+        }
+        guard case .link(let login, let appID) = step else {
+            guard case .move(let app) = step else { return nil }
             guard let host = hub.host, app.path.range(of: "^/[A-Za-z0-9._/-]{1,200}$", options: .regularExpression) != nil else {
                 return nil
             }
@@ -502,8 +516,8 @@ final class DoorSyncModel {
                 return nil
             }
         }
-        DoorKeyReference.done(hub: hub, database: database, app: app.app_id)
-        guard let program = DoorAccess.heldProgram(login: first.login),
+        DoorKeyReference.done(hub: hub, database: database, app: appID)
+        guard let program = DoorAccess.heldProgram(login: login),
               let answer = await ssh(door, address: doorAddress, program), answer.output.contains("held=yes") else {
             said.append("The door does not hold the GitHub App key yet: the hub links after it does.")
             return nil
@@ -515,7 +529,8 @@ final class DoorSyncModel {
             return nil
         }
         do {
-            try await DoorSetupClient().link(hub: hub, database: database, client: store.installation, token: token, record: record)
+            try await DoorSetupClient().link(hub: hub, database: database, client: store.installation, token: token,
+                                             record: record)
             Self.log.notice("The hub gets every GitHub token from the door now, and it holds no App key of its own.")
         } catch {
             said.append("The hub did not take the door's two secrets: \(Self.words(error))")

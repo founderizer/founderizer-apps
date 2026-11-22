@@ -18,6 +18,19 @@ public sealed class AgentRowView : INotifyPropertyChanged
     private string label = "";
     public string Label { get => label; private set => Set(ref label, value); }
 
+    /// <summary>The name line in two parts (the Mac's <c>AgentNameLine</c>; set 8, picture 21): the agent's own name, then
+    /// " · " and its role in the muted colour; the role alone for an agent whose role says its name, or that has none.</summary>
+    private string lead = "";
+    public string Lead { get => lead; private set => Set(ref lead, value); }
+
+    private string trail = "";
+    public string Trail { get => trail; private set => Set(ref trail, value); }
+
+    /// <summary>What an assistive app reads for the row: "Juno, Fleet Manager" where the name stands before the role (the
+    /// Mac's <c>AgentNameLine</c> label), else the role alone.</summary>
+    private string spoken = "";
+    public string Spoken { get => spoken; private set => Set(ref spoken, value); }
+
     private string line = "";
     public string Line { get => line; private set => Set(ref line, value); }
 
@@ -79,6 +92,9 @@ public sealed class AgentRowView : INotifyPropertyChanged
     public void Show(AgentRow row)
     {
         Label = row.Label;
+        Lead = row.Under ?? row.Label;
+        Trail = row.Under is null ? "" : " · " + row.Label;
+        Spoken = row.Under is null ? row.Label : row.Under + ", " + row.Label;
         // The line in two parts where the model cuts it: the words, cut with "…", and their count, whole.
         Line = row.LineText ?? row.Line ?? "";
         LineCount = row.LineText is null ? "" : row.LineCount ?? "";

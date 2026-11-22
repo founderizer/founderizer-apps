@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Founderizer.Setup.Cloud;
@@ -19,7 +20,10 @@ namespace Founderizer.Windows.Pages.FirstRun;
 /// stopped in plain words, and Try again, which runs the same install again;</item>
 /// <item>a stop for the network's key (the Mac's <c>MachineInstallRun.network</c>; no picture of set 8): the row of why,
 /// Tailscale's steps and the field of the access token, then Install again once a key is made;</item>
-/// <item>checks that did not pass (the Mac's <c>VerifyChecklistView</c>; no picture of set 8);</item>
+/// <item>checks that did not pass (the Mac's <c>VerifyChecklistView</c>; no picture of set 8), under "Your hub is
+/// installed" with "Open Founderizer" and its line once the hub answers this PC (piece U3, the Mac's <c>afterInstall</c>);</item>
+/// <item>an install that waits for the owner's yes at Tailscale: the join of the manager's own server, whose link the build
+/// page has no place for (piece U3, the Mac's <c>MachineInstallRun.approve</c>; no picture of set 8);</item>
 /// <item>"Connecting to your hub" in moving words until the window goes to the manager's setup by itself.</item>
 /// </list>
 /// The install's own page stands from the top of the window (picture 17: 104 under the title bar), as a form that can be
@@ -34,6 +38,8 @@ internal sealed class InstallPage : IStepView
     private readonly TextBlock warning = StepControls.Warning("");
     private PasteField? paste;
     private Button? again;
+    /// <summary>The way on of checks that did not pass (Open Founderizer) or of Tailscale's link (Open link), for Enter.</summary>
+    private Action? onwards;
     private string? mode, drawn;
     private CloudProvider? markOf;
     private bool quietMark;
@@ -56,6 +62,7 @@ internal sealed class InstallPage : IStepView
             : showsBuild ? "build"
             : stopped && install.NeedsNetworkKey ? "network"
             : stopped ? "stop"
+            : (install.NetworkSignIn ?? state.ManagerInstall.NetworkSignIn) is not null ? "approve"
             : checkedDone && !install.Passed ? "checks"
             : "wait";
         if (next == "managers-token")
@@ -66,12 +73,13 @@ internal sealed class InstallPage : IStepView
         else if (!quietMark) { column.Mark = SetupParts.QuietMark(); quietMark = true; markOf = null; }
         column.Width = next == "build" ? BuildView.Width : StepLook.Width;
         // The install's own page stands from the top (picture 17); the others in the middle of the room.
-        var top = next is "stop" or "network" or "checks";
+        var top = next is "stop" or "network" or "checks" or "approve";
         column.VerticalAlignment = top ? VerticalAlignment.Top : VerticalAlignment.Center;
         column.Margin = new Thickness(0, top ? 104 : 0, 0, top ? 40 : 0);
         column.Show(screen.Title, next == "build" ? build.Waits(state) : screen.Waits, screen.Detail, host.ReduceMotion());
         var key = next + "|" + install.Failure + "|" + install.Steps.Count + "|" + string.Join(",", install.Steps.Select(s => s.Step + s.State)) +
-                  "|" + state.Key.Made + "|" + state.Key.Busy + "|" + (install.Checklist?.Checks.Count ?? -1);
+                  "|" + state.Key.Made + "|" + state.Key.Busy + "|" + (install.Checklist?.Checks.Count ?? -1) +
+                  "|" + string.Join(",", screen.Controls.Select(c => c.Id + c.Words));
         if (next != mode)
         {
             if (mode == "build") build.Tick(false);
@@ -103,6 +111,7 @@ internal sealed class InstallPage : IStepView
         column.Controls.Children.Clear();
         paste = null;
         again = null;
+        onwards = null;
         switch (mode)
         {
             case "managers-token":
@@ -121,6 +130,12 @@ internal sealed class InstallPage : IStepView
                 break;
             case "checks":
                 column.Controls.Children.Add(Checks(state.Install.Checklist!));
+                if (screen.Controls.FirstOrDefault(c => c.Id == "first-run-open") is { } open)
+                    column.Controls.Children.Add(OpenApp(open, screen.Controls.FirstOrDefault(c => c.Id == "first-run-open-line")));
+                column.Controls.Children.Add(warning);
+                break;
+            case "approve":
+                column.Controls.Children.Add(Approve(screen));
                 column.Controls.Children.Add(warning);
                 break;
             default:
@@ -222,11 +237,51 @@ internal sealed class InstallPage : IStepView
             var glyph = check.Failed ? SetupParts.FailedGlyph : check.Warned ? SetupParts.WarningGlyph : SetupParts.DoneGlyph;
             return new SetupParts.Row(glyph, check.Title, check.Says, check.Passed ? null : check.Fix, value, Tall: true, DetailSize: 12, Id: "verify-" + check.Check);
         })));
-        var footer = Look.Words(SetupViewWords.ChecksFooter, 12, 16, Look.Muted);
-        footer.Margin = new Thickness(2, 8, 0, 0);
-        form.Children.Add(footer);
+        // The Mac's footer under the checks sends the owner to the server's own page ("check this server again from its
+        // page"), which this PC has only with the servers' pages (piece U7): until then the page leaves that line out,
+        // rather than say a way that is not there (plan v2, U3 and section 13).
         return form;
     }
+
+    /// <summary>**"Open Founderizer" under checks that did not pass** (the Mac's <c>afterInstall</c> in its
+    /// <c>SetupAction</c>): step 1's white button in the middle, and under it the muted line that says where the hub serves
+    /// its pages, in the middle at 15. Its press goes on to the manager's setup (<see cref="SetupStore.OpenApp"/>).</summary>
+    private StackPanel OpenApp(SetupControl open, SetupControl? line)
+    {
+        var way = new StackPanel { Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) };
+        var press = StepControls.Primary(open.Words, open.Id);
+        // A press only: the Mac's Open Founderizer is no default action of its page, so the page's Enter does not press
+        // it (a keyboard focus on it still does: PARITY.md).
+        press.Click += (_, _) => host.Store.OpenApp();
+        way.Children.Add(press);
+        if (line is not null) way.Children.Add(SetupParts.Quiet(line.Words, line.Id));
+        return way;
+    }
+
+    /// <summary>**An install that waits for the owner's yes at Tailscale** (the Mac's <c>MachineInstallRun.approve</c>):
+    /// one card of two rows, "Your server is not on your private network" with the warning's mark, then "Approve
+    /// &lt;server&gt; in Tailscale" with the network's mark and Open link at its right. The press opens only the link that
+    /// the model reads at the press, which is Tailscale's own sign-in page (<c>NetworkSignIn.Found</c>), in the default
+    /// browser, so that a link that Tailscale gave again is the one that opens; the install goes on by itself once he
+    /// approved it. Enter presses it (the Mac's <c>.defaultAction</c>).</summary>
+    private Border Approve(SetupScreen screen)
+    {
+        var rows = screen.Controls.Where(c => c.Kind == SetupControlKind.Row).ToList();
+        var press = StepControls.Primary(rows.Last().Lines?.FirstOrDefault() ?? SetupScreens.OpenLink, "install-network-sign-in-open");
+        onwards = () =>
+        {
+            var now = host.Store.State;
+            if ((now.Install.NetworkSignIn ?? now.ManagerInstall.NetworkSignIn)?.Url is { } link)
+                _ = global::Windows.System.Launcher.LaunchUriAsync(link);
+        };
+        press.Click += (_, _) => onwards?.Invoke();
+        return SetupParts.Card(rows.Select((row, at) => at == 0
+            ? new SetupParts.Row(SetupParts.WarningGlyph, row.Words, Id: row.Id)
+            : new SetupParts.Row(NetworkGlyph, row.Words, Accessory: press, MinHeight: 56, Id: row.Id)));
+    }
+
+    /// <summary>Segoe Fluent Icons' Globe, the Mac's <c>network</c> symbol of the row.</summary>
+    private static readonly string NetworkGlyph = char.ConvertFromUtf32(0xE774);
 
     public bool Enter()
     {
@@ -235,6 +290,11 @@ internal sealed class InstallPage : IStepView
             case "build": return build.Enter();
             case "stop" or "network" when again is not null:
                 host.Store.InstallAgain();
+                return true;
+            // Enter presses Open link (the Mac's `.defaultAction` of that row); the Mac's Open Founderizer has none, so Enter
+            // does not press it.
+            case "approve" when onwards is not null:
+                onwards();
                 return true;
             default: return paste?.Enter() ?? false;
         }

@@ -197,6 +197,8 @@ the variables below, for the proofs in this VM only; the release build (`C:\fz\o
 | `FOUNDERIZER_DEBUG_LOG` | a file for an exception that nothing caught |
 | `FOUNDERIZER_TAILSCALE_STATUS` | a file whose text stands for this PC's `tailscale status --json` in the store's search and in the first run (`Fleet/TailscaleSetup.cs`, `PcTailscale`), read again at each read; `none` is a PC with no Tailscale. With it the app runs no program of Tailscale's (no `tailscale up`), so the first run's pages are proved without the VM's own network, which is the owner's (plan v2, 8.15); Connect still downloads, checks and starts Tailscale's real installer, whose administrator's question the proof answers No |
 | `FOUNDERIZER_THREAD_TRACE` | `1`: each measure of a chat's or a task's view, its rests, its changes (inertial or not) and his hand, into the debug log (how the end of a long thread was measured on 14 November 2026) |
+| `FOUNDERIZER_SETUP_READINGS` | a folder: the manager's first setup (piece U3) reads its `servers.json`, `machines.json` and `fleet.json` at each read, in place of the hub's owner routes, and logs each write by its route alone to `writes.log` there (see "The manager's setup against a stand-in") |
+| `FOUNDERIZER_SETUP_SAMPLE` | `checks` or `approve`: the first run's page shows that state of the hub's install (checks that did not pass, with Open Founderizer; the join of the manager's server waiting at Tailscale's link), which no stand-in of U2 reaches |
 
 The argument `-openPage needs|tasks|activity|settings|agent.<name>|task.<id>` opens that page first, as the Mac app's
 does.
@@ -281,6 +283,25 @@ a PowerShell on the VM's own screen took it back).
   a named pipe of the desktop session that types Windows' Unicode keys: the words come on SSH's standard input, never in
   a command line, a file, a log or a picture. Windows' picker takes the file's name as keys of the VM's keyboard
   (QEMU's `send-key`, as `vm.sh type` sends them).
+
+### The manager's setup against a stand-in (step 2, piece U3)
+
+A proofs' build with the welcome page, started on the manager's page with `-openPage agent.juno` and
+`FOUNDERIZER_SETUP_READINGS`, shows the manager's first setup over the files of that folder. Each state is a folder of
+four files (`servers.json`, `machines.json`, `fleet.json`, `team.json`) that `setup_states.py` writes (the install of
+picture 18, the sign-ins of pictures 19 and 20, the session's start, a manager with no server yet, the manager that
+runs); a proof copies one into the readings folder,
+and the next read of the setup (2 to 5 seconds) shows it. `fleet.json` holds the manager's row (`runtime`, `alive`,
+`title`) and the mark that a hand-over would have kept (`provider`, `joined`), which the setup reads once, at its start.
+The data are set 8's examples (`worker-2`, `KDRT-7QXP`); a code typed into Claude Code's field goes nowhere but the
+setup's write, which `writes.log` names by its route. A press on a provider's card asks for the sign-in, so the sign-in
+page that follows opens its link in the default browser by itself (the Mac's rule): Edge opens in the VM, and the proof
+closes it. Nothing reaches a hub, a provider or a tailnet.
+
+```
+app/windows/vm/vm.sh desktop '$env:FOUNDERIZER_SETUP_READINGS = "C:\fz\u3\readings"; Start-Process C:\fz\u3\out\Founderizer.App.exe -ArgumentList "-openPage", "agent.juno"'
+python3 -I app/windows/vm/pictures/elements.py app/windows/vm/pictures/set8-elements.json 19-sign-in-claude-code page.tsv
+```
 
 ### The store against a scratch hub
 

@@ -1,5 +1,5 @@
 {
-  "about": "Picture set 8 (the first run, pictures 1 to 17 with 13d and 14b) as elements: each picture's words of the table in ~/dev/founderizer-plans/windows-app-pictures-8/windows-app-pictures-8.md, and each control's measures in effective pixels of the 1440 by 900 window, from that table and the set's source (make.py: .back, .prog, .st, .cho, .pc, .fld, .pri, .sld, .ssteps, .grid3, .boxes, .combo, .form, .row, .btn, .bl). x and cx are the left edge and the middle; tol is how far a measure may be from it. A word is the whole name of a text, a button, a link or a field; a line with a link is listed whole, and its link as an element of its own. The steps on Back's line stand 92 to 96 apart: 96 is set 8's number, and 92 the Mac's rule (a step as wide as its longest name and 16, at least 92) with Windows' font (plan v2, 9.1). Words in braces are the picture's example data (data, below), which a proof's stand-in gives otherwise: elements.py takes the proof's as name=value. elements.py checks a dump of elements.ps1 against one picture. gaps: the room from the lower edge of one element to the upper edge of the next, in their UI Automation rectangles: set 8's 24 from a title to the first control and 18 between two controls (.st .cn), less 2.5 under a title (Look.TitleNudge: WinUI sets a title's line 2.5 higher than the pictures), and with the inset of an element in its control: a field's text box stands 7 within its frame of 34, a row's title 12 within a row of 44 and 7 within a row of 56 (two lines of 20 and 2), under the card's edge of 1.",
+  "about": "Picture set 8 (the first run, pictures 1 to 20 with 13d and 14b) as elements: each picture's words of the table in ~/dev/founderizer-plans/windows-app-pictures-8/windows-app-pictures-8.md, and each control's measures in effective pixels of the 1440 by 900 window, from that table and the set's source (make.py: .back, .prog, .st, .cho, .pc, .fld, .pri, .sld, .ssteps, .grid3, .boxes, .combo, .form, .row, .btn, .bl). x and cx are the left edge and the middle; tol is how far a measure may be from it. A word is the whole name of a text, a button, a link or a field; a line with a link is listed whole, and its link as an element of its own. The steps on Back's line stand 92 to 96 apart: 96 is set 8's number, and 92 the Mac's rule (a step as wide as its longest name and 16, at least 92) with Windows' font (plan v2, 9.1). Words in braces are the picture's example data (data, below), which a proof's stand-in gives otherwise: elements.py takes the proof's as name=value. elements.py checks a dump of elements.ps1 against one picture. gaps: the room from the lower edge of one element to the upper edge of the next, in their UI Automation rectangles: set 8's 24 from a title to the first control and 18 between two controls (.st .cn), less 2.5 under a title (Look.TitleNudge: WinUI sets a title's line 2.5 higher than the pictures), and with the inset of an element in its control: a field's text box stands 7 within its frame of 34, a row's title 12 within a row of 44 and 7 within a row of 56 (two lines of 20 and 2), under the card's edge of 1. Set 8 drew a field with a placeholder 18 lower than these gaps, and the line under it 10 lower (pictures 8, 10, 12, 14, 14b and 13d): a rule of its source for another element, .ph (make.py:281, margin 18 over and 10 under), also takes the field (.fld.ph), so those drawn places are not the measures here. Pictures 18 to 20 are the manager's own setup (piece U3): its four steps on Back's line (step_names), no Back, and the provider's logo over the step, which is no element of UI Automation; the field of picture 19 has the gaps of the set's rule, as the fields of pictures 8 to 14 have.",
   "common": {
     "steps": {"names": ["Manager", "AI provider", "Servers", "Network", "VPS", "Build"], "top": 99, "step": [92, 96], "tol": 3},
     "back": {"match": {"id": "setup-back"}, "text": {"name": "Back", "x": 47, "y": 72, "h": 20, "tol": 3}}
@@ -15,7 +15,9 @@
     "why": "Hetzner has no server free now.",
     "nextpick": "Hetzner · CPX22 · €7.99 a month",
     "failedstep": "Finish the install",
-    "stop": "Finish the install took too long. The server is still working, or it cannot be reached."
+    "stop": "Finish the install took too long. The server is still working, or it cannot be reached.",
+    "server": "worker-2",
+    "code": "KDRT-7QXP"
   },
   "pictures": {
     "01-welcome": {
@@ -229,6 +231,44 @@
       "until": "Report a problem stands beside Try again from piece U11 (the report form) on; until then the stop has Try again alone, as the Mac's row where it has no report form.",
       "gaps": [
         {"above": {"type": "Text", "name": "Your hub did not install"}, "below": {"type": "Text", "name": "Your hub"}, "gap": 21.5}
+      ]
+    },
+    "18-managers-server": {
+      "at": 2, "step_names": ["Manager", "AI provider", "Servers", "Sign in"], "back": false,
+      "words": ["Installing Claude Code on {server}"],
+      "boxes": [
+        {"match": {"id": "agent-setup-bar"}, "x": 600, "y": 559, "w": 240, "h": 4, "tol": 1.5}
+      ],
+      "gaps": [
+        {"above": {"type": "Text", "name": "Installing Claude Code on {server}"}, "below": {"id": "agent-setup-bar"}, "gap": 21.5}
+      ]
+    },
+    "19-sign-in-claude-code": {
+      "at": 3, "step_names": ["Manager", "AI provider", "Servers", "Sign in"], "back": false,
+      "words": ["Sign in to Claude Code", "Open the sign-in page ↗", {"name": "the sign-in page", "type": "Hyperlink"},
+                "Sign in, then copy the code it shows", {"name": "Paste the code", "type": "Edit"}],
+      "boxes": [
+        {"match": {"type": "Text", "name": "Sign in, then copy the code it shows"}, "x": 550, "w": 360, "tol": 1.5},
+        {"match": {"id": "agent-setup-paste", "type": "Edit"}, "x": 541, "w": 358, "tol": 2}
+      ],
+      "absent": [{"id": "agent-setup-code"}],
+      "gaps": [
+        {"above": {"type": "Text", "name": "Sign in to Claude Code"}, "below": {"type": "Text", "name": "Open the sign-in page ↗"}, "gap": 21.5},
+        {"above": {"type": "Text", "name": "Sign in, then copy the code it shows"}, "below": {"id": "agent-setup-paste", "type": "Edit"}, "gap": 25}
+      ]
+    },
+    "20-sign-in-codex": {
+      "at": 3, "step_names": ["Manager", "AI provider", "Servers", "Sign in"], "back": false,
+      "words": ["Sign in to Codex", "Open the sign-in page ↗", {"name": "the sign-in page", "type": "Hyperlink"}, "Sign in, then enter this code",
+                "{code}", {"name": "Copy", "type": "Button"}],
+      "boxes": [
+        {"match": {"id": "agent-setup-code"}, "x": 549, "h": 28, "tol": 1.5},
+        {"match": {"id": "agent-setup-code-copy", "type": "Button"}, "x": 839.5, "y": 579, "w": 57, "h": 32, "tol": 2}
+      ],
+      "absent": [{"id": "agent-setup-paste"}],
+      "gaps": [
+        {"above": {"type": "Text", "name": "Sign in to Codex"}, "below": {"type": "Text", "name": "Open the sign-in page ↗"}, "gap": 21.5},
+        {"above": {"type": "Text", "name": "Sign in, then enter this code"}, "below": {"id": "agent-setup-code"}, "gap": 33}
       ]
     }
   }

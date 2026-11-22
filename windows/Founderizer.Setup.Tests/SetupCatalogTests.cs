@@ -47,6 +47,11 @@ public sealed partial class SetupCatalogTests
             yield return (field.Name, (string)field.GetValue(null)!);
         foreach (var field in typeof(SetupStore).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral))
             yield return (field.Name, (string)field.GetValue(null)!);
+        foreach (var field in typeof(ManagerSetupScreens).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral))
+            yield return (field.Name, (string)field.GetValue(null)!);
+        yield return ("SignInPage.CodePlaceholder", SignInPage.CodePlaceholder);
+        yield return ("ManagerSetupScreens.SettingUp", ManagerSetupScreens.SettingUp("%@"));
+        yield return ("SetupScreens.ApproveServer", SetupScreens.ApproveServer("%@"));
         yield return ("PasswordOnce.SudoRefused", PasswordOnce.SudoRefused("%@"));
         yield return ("PasswordOnce.CannotAdd", PasswordOnce.CannotAdd("%@", "%@"));
         yield return ("PasswordOnce.StillAsks", PasswordOnce.StillAsks("%@", "%@"));

@@ -118,7 +118,9 @@ public sealed class SetupKeyTests
     /// <summary>**Try again of an address that is not one says its sentence again, and calls nothing** (Check 1 of U2).
     /// The address's own sentence shows at once; its stop's one press is Try again, and Enter presses it too. The bug: Try
     /// again sent the call that no server may get, the SSH client refused it with an exception, and the title stood at
-    /// "Checking &lt;address&gt;" for ever. The rig's remote refuses such a call as RemoteRules.Check does.</summary>
+    /// "Checking &lt;address&gt;" for ever. The rig's remote refuses such a call as RemoteRules.Check does, and counts each
+    /// call that a model asked for before it refuses it (<see cref="StandInRemote.Tries"/>): a model that sends the call
+    /// and then says the address's sentence from the refusal still sent a call that no server may get.</summary>
     [TestMethod]
     public async Task Try_again_of_an_address_that_is_not_one_says_its_sentence_again()
     {
@@ -132,33 +134,79 @@ public sealed class SetupKeyTests
             await rig.Store.CheckVpsAsync(typed);
             Assert.AreEqual((VpsPhase.Stopped, says), (rig.Store.State.Vps.Phase, rig.Store.State.Vps.Why), typed);
             await rig.Store.VpsAgainAsync();
+            Assert.AreEqual(0, rig.Remote.Tries, typed + ": no call asked for, also none that the client refused");
             Assert.AreEqual((VpsPhase.Stopped, says), (rig.Store.State.Vps.Phase, rig.Store.State.Vps.Why), typed + ", Try again");
-            Assert.AreEqual(0, rig.Remote.Calls.Count, typed + ": no call");
         }
     }
 
-    /// <summary>**A call of Other VPS that throws ends in a stop, and the owner's key goes** (Check 1 of U2; the Mac's
-    /// <c>ServerCheck.run</c> turns each error into the stop of a server not reached). The bug: an exception that is not
-    /// a cancel (a box that does not open, a call that the SSH client refuses) leaves the title at "Checking" with no
-    /// end, and the owner's key and its passphrase in memory until Back.</summary>
+    /// <summary>**Each way in of Other VPS ends a thrown error in a stop, and the owner's key goes** (Checks 1 and 2 of
+    /// U2; the Mac's <c>ServerCheck.run</c> turns each error into the stop of a server not reached): the check, a key with
+    /// no passphrase, the password, Try again and a passphrase, each by its own catch. The bug: an exception that is not a
+    /// cancel (a box that does not open, a call that the SSH client refuses) leaves the title at "Checking" with no end,
+    /// and the owner's key, its passphrase or the password in memory until Back.</summary>
     [TestMethod]
     public async Task A_call_that_throws_ends_in_a_stop_and_the_owners_key_goes()
     {
+        var unreached = (VpsPhase.Stopped, ServerCheck.Unreached(Server));
+
+        // A key with no passphrase.
         var (file, _) = Key();
         var server = new KeyServer(keyCall: (_, _) => throw new IOException("the network went away in the middle"));
-        await using var rig = await AtTheKeysOnlyStop(server);
-        await rig.Store.ChooseKey(file, "id_ed25519");
-        var s = rig.Store.State;
-        Assert.AreEqual((VpsPhase.Stopped, ServerCheck.Unreached(Server)), (s.Vps.Phase, s.Vps.Why));
-        Assert.IsFalse(rig.Store.HoldsOwnerKey, "no byte of the owner's key and no passphrase stays");
-        Assert.IsNull(s.Vps.KeyName);
+        await using (var rig = await AtTheKeysOnlyStop(server))
+        {
+            await rig.Store.ChooseKey(file, "id_ed25519");
+            var s = rig.Store.State;
+            Assert.AreEqual(unreached, (s.Vps.Phase, s.Vps.Why), "the key");
+            Assert.IsFalse(rig.Store.HoldsOwnerKey, "no byte of the owner's key and no passphrase stays");
+            Assert.IsNull(s.Vps.KeyName);
+        }
 
         // The check itself: a remote that throws at the check is a stop in the same words, not a title with no end.
-        await using var other = new SetupRig(call => call.Program == "/bin/sh -s" ? throw new IOException("no answer") : (RemoteResult?)null);
-        other.ThroughTheFirstPages(ServersStep.One);
-        other.Store.ChooseOtherVps();
-        await other.Store.CheckVpsAsync(Server);
-        Assert.AreEqual((VpsPhase.Stopped, ServerCheck.Unreached(Server)), (other.Store.State.Vps.Phase, other.Store.State.Vps.Why));
+        await using (var other = new SetupRig(call => call.Program == "/bin/sh -s" ? throw new IOException("no answer") : (RemoteResult?)null))
+        {
+            other.ThroughTheFirstPages(ServersStep.One);
+            other.Store.ChooseOtherVps();
+            await other.Store.CheckVpsAsync(Server);
+            Assert.AreEqual(unreached, (other.Store.State.Vps.Phase, other.Store.State.Vps.Why), "the check");
+        }
+
+        // A key with a passphrase: the passphrase opens the key, and the call with it throws.
+        const string phrase = "phrase-of-the-test";
+        var (locked, _) = Key(phrase);
+        await using (var rig = await AtTheKeysOnlyStop(new KeyServer(keyCall: (_, _) => throw new IOException("the network went away"))))
+        {
+            await rig.Store.ChooseKey(locked, "id_ed25519");
+            Assert.IsTrue(rig.Store.State.Vps.KeyAsksPassphrase);
+            var given = phrase.ToCharArray();
+            await rig.Store.GiveKeyPassphrase(given);
+            var s = rig.Store.State;
+            Assert.AreEqual(unreached, (s.Vps.Phase, s.Vps.Why), "the passphrase");
+            Assert.IsTrue(given.All(c => c == '\0'), "the passphrase is cleared");
+            Assert.IsFalse(rig.Store.HoldsOwnerKey);
+            Assert.IsNull(s.Vps.KeyName);
+        }
+
+        // The password: the call that carries it throws.
+        var passwordServer = new KeyServer { Ways = ["publickey", "password"] };
+        await using (var rig = new SetupRig(call => call.Login is RemoteLogin.PasswordOnce ? throw new IOException("reset") : passwordServer.Answer(call, call.Input)))
+        {
+            rig.ThroughTheFirstPages(ServersStep.One);
+            rig.Store.ChooseOtherVps();
+            await rig.Store.CheckVpsAsync(Server);
+            Assert.AreEqual(VpsPhase.Password, rig.Store.State.Vps.Phase);
+            var password = "password-of-the-test".ToCharArray();
+            await rig.Store.GivePasswordAsync(password);
+            Assert.AreEqual(unreached, (rig.Store.State.Vps.Phase, rig.Store.State.Vps.Why), "the password");
+            Assert.IsTrue(password.All(c => c == '\0'), "the password is cleared");
+        }
+
+        // Try again: the box's key of the app does not open (a value of the wrong size), so the check cannot start.
+        await using (var rig = await AtTheKeysOnlyStop(new KeyServer()))
+        {
+            rig.Box.Write(Founderizer.Remote.AppSshKey.BoxName, [1, 2, 3]);
+            await rig.Store.VpsAgainAsync();
+            Assert.AreEqual(unreached, (rig.Store.State.Vps.Phase, rig.Store.State.Vps.Why), "Try again");
+        }
     }
 
     /// <summary>**A server that names a password way, or names none, shows the password and the key on one page, and a key

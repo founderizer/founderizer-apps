@@ -91,6 +91,7 @@ public static partial class Screens
             {
                 Name = agent.Name,
                 Label = s.Names.Label(agent.Name),
+                Under = s.Names.Under(agent.Name),
                 Line = line,
                 LineText = more is { Success: true } ? line![..more.Index] : line,
                 LineCount = more is { Success: true } ? more.Value : null,
@@ -1403,6 +1404,11 @@ public sealed record AgentRow
     public string Key => Name;
     public string Name { get; init; } = "";
     public string Label { get; init; } = "";
+    /// <summary>**The agent's own name before its role** (the Mac's <c>AgentNameLine</c> since Founderizer 0.1.380; set 8,
+    /// picture 21: "Juno · Fleet Manager"): its name with capitals, then a middle dot and the role in the muted colour;
+    /// null for an agent with no role and for a role that says the name already (<see cref="AgentBook.Under"/>), whose
+    /// row shows <see cref="Label"/> alone.</summary>
+    public string? Under { get; init; }
     /// <summary>The line under the name, or null: the row shows the name alone.</summary>
     public string? Line { get; init; }
     /// <summary>The line without its " · +N" count, which a narrow row cuts with "…" (the Mac's splitCount).</summary>

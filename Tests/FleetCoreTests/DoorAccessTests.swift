@@ -371,6 +371,60 @@ struct DoorAccessTests {
         #expect(DoorAccess.tokensProbe.contains("tokens_only"))
     }
 
+    /// A hub put back from a backup has no `~/.fleet/door.json` and no App key of its own, because it gave its key to
+    /// the door: the round links it to the door's App again, or it gets no GitHub token at all (a round that needed the
+    /// hub's own key never linked it, 21 November 2026). A linked hub, and a hub and door with no App, get no step.
+    @Test func aHubPutBackFromABackupIsLinkedToTheDoorsAppAgain() throws {
+        let login = "bws://00000005-0000-4000-8000-000000000000"
+        var access = DoorAccess.withGitHubApp(Self.access, owner: "One-Org", login: login, appID: "42")
+        access["hub"] = ["address": "100.64.0.2", "port": 8765]
+        let hubAt = "100.64.0.2"
+        let own = try JSONDecoder().decode(DoorAccess.HubDoor.GitHubApp.self,
+                                           from: Data(#"{"app_id": "42", "path": "/home/fleet/.fleet/github-app.pem"}"#.utf8))
+        var view = Self.hubDoor()
+        view.linked = false
+        view.door_secrets = false
+        #expect(DoorAccess.gitHubStep(view, current: access, hub: hubAt) == .link(login: login, appID: "42"))
+        #expect(DoorAccess.gitHubStep(view, current: Self.access, hub: hubAt) == nil)
+        // with an App that this app made with GitHub's manifest flow beside it, the App that the hub moved
+        var both = DoorAccess.withGitHubApp(access, owner: "A-Org", login: "bws://00000007-0000-4000-8000-000000000000",
+                                            appID: "77")
+        both["hub"] = access["hub"]
+        var made = view
+        made.github_apps = ["a-org": "77"]
+        #expect(DoorAccess.gitHubStep(made, current: both, hub: hubAt) == .link(login: login, appID: "42"))
+        // the hub by its name in Tailscale, with the private network's domain, and never another domain
+        #expect(DoorAccess.names("hub.tail1234.ts.net", device: "hub", address: hubAt))
+        #expect(!DoorAccess.names("hub.local", device: "hub", address: hubAt))
+        // a copy of the hub at another address than the door's file names, and a Mac that knows no address of its
+        // hub: a new link would stop the secrets of the hub that the door answers (the review of 22 November 2026)
+        #expect(DoorAccess.gitHubStep(view, current: access, hub: "100.64.0.99") == nil)
+        #expect(DoorAccess.gitHubStep(view, current: access, hub: nil) == nil)
+        // a linked hub whose file of the door's secrets it could not read, and a hub that does not say: a new link
+        // would stop the secrets that it has (the review of 22 November 2026)
+        for (linked, file): (Bool?, Bool?) in [(false, true), (false, nil), (nil, false), (nil, nil)] {
+            var unsure = view
+            (unsure.linked, unsure.door_secrets) = (linked, file)
+            #expect(DoorAccess.gitHubStep(unsure, current: access, hub: hubAt) == nil)
+        }
+        view.github_app = own           // the move: the hub's own key, then the link once the door names it
+        #expect(DoorAccess.gitHubStep(view, current: Self.access, hub: hubAt) == .move(own))
+        #expect(DoorAccess.gitHubStep(view, current: access, hub: hubAt) == .link(login: login, appID: "42"))
+        let other = DoorAccess.withGitHubApp(Self.access, owner: "One-Org", login: login, appID: "43")
+        #expect(DoorAccess.gitHubStep(view, current: other, hub: hubAt) == .move(own))
+        // a copy of a hub from before the move, with its own key, at another address or port: no link either
+        #expect(DoorAccess.gitHubStep(view, current: access, hub: "100.64.0.99") == nil)
+        #expect(DoorAccess.gitHubStep(view, current: access, hub: hubAt, port: 8766) == nil)
+        // a hub with its own key that says that its file of the door's secrets is there is linked already
+        var filed = view
+        filed.door_secrets = true
+        #expect(DoorAccess.gitHubStep(filed, current: access, hub: hubAt) == nil)
+        view.linked = true
+        #expect(DoorAccess.gitHubStep(view, current: access, hub: hubAt) == nil)
+        view.github_app = nil
+        #expect(DoorAccess.gitHubStep(view, current: access, hub: hubAt) == nil)
+    }
+
     /// DevOps plan 13, item 2: a door with no follow timer yet takes the hub's release once, through its own root
     /// command; the hub's address comes from the door's file and goes into a shell line only when it is an address.
     @Test func aDoorWithNoFollowTimerTakesTheHubsReleaseOnce() {

@@ -60,17 +60,52 @@ public sealed class AgentSetupModel(OwnerReads.ICalls calls, string agent)
 
     public AgentReading? Reading { get; private set; }
 
-    /// <summary>Reads the servers and the machines, with the agent's row of the fleet that the store holds.</summary>
+    /// <summary>Reads the servers and the machines, with the agent's row of the fleet that the store holds. Each read
+    /// stands alone, as the Mac's <c>try?</c> of each (<c>AgentSetupWizard.read</c>): one that fails, or that is of
+    /// another generation, keeps its last answer of this generation, and the other still comes.</summary>
     public async Task<AgentReading> ReadAsync(MobileSnapshot fleet, CancellationToken cancel = default)
     {
         var features = fleet.UiFeatures ?? [];
-        ServerList? servers = null;
-        MachineList? machines = null;
-        if (features.Contains("servers")) servers = (await OwnerReads.ServersAsync(calls, cancel).ConfigureAwait(false)).Value;
-        if (features.Contains("machines")) machines = (await OwnerReads.MachinesAsync(calls, cancel).ConfigureAwait(false)).Value;
+        var servers = Reading?.Servers is { } lastServers && lastServers.Db == fleet.Db ? lastServers : null;
+        var machines = Reading?.Machines is { } lastMachines && lastMachines.Db == fleet.Db ? lastMachines : null;
+        if (features.Contains("servers"))
+            try { servers = (await OwnerReads.ServersAsync(calls, cancel).ConfigureAwait(false)).Value ?? servers; }
+            catch (Exception e) when (e is HubException or InvalidOperationException or System.Text.Json.JsonException) { }
+        if (features.Contains("machines"))
+            try { machines = (await OwnerReads.MachinesAsync(calls, cancel).ConfigureAwait(false)).Value ?? machines; }
+            catch (Exception e) when (e is HubException or InvalidOperationException or System.Text.Json.JsonException) { }
         var row = fleet.Agents.FirstOrDefault(a => a.Name == Agent);
         Reading = new AgentReading(row is null ? null : SetupAgent.Of(row, servers, machines), features, fleet.Time, servers, machines);
         return Reading;
+    }
+
+    /// <summary>**Another page of the setup shows** (the Mac's <c>.onChange(of: page)</c>): the provider's page is not
+    /// open on it, no code is on its way, and the sign-in that a press asked for stands only through the pages that end in
+    /// it (the install, a switch, the sign-in).</summary>
+    public void PageChanged(AgentPage now)
+    {
+        Opened = false;
+        SentFrom = null;
+        if (now.Kind is not (AgentSetupPage.Installing or AgentSetupPage.Switching or AgentSetupPage.SignIn)) AskedSignIn = false;
+    }
+
+    /// <summary>**A new visit of the setup's page** (the Mac's view, whose states start again): no refusal, no command
+    /// refused, no code on its way, no sign-in asked or opened.</summary>
+    public void NewVisit()
+    {
+        Refusal = null;
+        PlaceRefused = false;
+        SentFrom = null;
+        Opened = false;
+        AskedSignIn = false;
+    }
+
+    /// <summary>**The provider's own page is open** (the Mac's <c>openSignIn</c>): by itself once, or by the press on the
+    /// first step's link; a press asks for nothing more after it.</summary>
+    public void OpenedSignIn()
+    {
+        Opened = true;
+        AskedSignIn = false;
     }
 
     /// <summary>**The server that joined for the agent, when it can still take it**: one that left the fleet, or that
@@ -135,9 +170,15 @@ public sealed class AgentSetupModel(OwnerReads.ICalls calls, string agent)
                 if (moved.Value is not null) return;
             }
             catch (HubException refused) when (refused is { Status: 409, Code: "team_changed" } && attempt == 0) { }
-            catch (HubException refused)
+            catch (HubException refused) when (refused.Kind == HubErrorKind.Refusal)
             {
                 Refusal = refused.HubWords ?? refused.Message;
+                return;
+            }
+            // No answer, or one that is not of this request (the Mac's `catch`): the next read says where it stands.
+            catch (Exception e) when (e is HubException or InvalidOperationException or ArgumentException or System.Text.Json.JsonException)
+            {
+                Refusal = NoAnswer;
                 return;
             }
         }
@@ -164,7 +205,8 @@ public sealed class AgentSetupModel(OwnerReads.ICalls calls, string agent)
         {
             case AgentSetupFlow.Start.SignIn:
                 try { await OwnerReads.SignInAsync(calls, Agent, provider, cancel: cancel).ConfigureAwait(false); }
-                catch (HubException refused) { Refusal = refused.HubWords ?? refused.Message; }
+                catch (HubException refused) when (refused.Kind == HubErrorKind.Refusal) { Refusal = refused.HubWords ?? refused.Message; }
+                catch (Exception e) when (e is HubException or InvalidOperationException or ArgumentException or System.Text.Json.JsonException) { Refusal = NoAnswer; }
                 break;
             case AgentSetupFlow.Start.InstallAgain when Placing(reading) && reading.Server(Agent) is { } server:
                 await PlaceAsync(server.Name, provider, cancel).ConfigureAwait(false);
@@ -191,10 +233,10 @@ public sealed class AgentSetupModel(OwnerReads.ICalls calls, string agent)
             await OwnerReads.SignInCodeAsync(calls, Agent, code, cancel: cancel).ConfigureAwait(false);
             return true;
         }
-        catch (HubException refused)
+        catch (Exception e) when (e is HubException or InvalidOperationException or ArgumentException or System.Text.Json.JsonException)
         {
             SentFrom = null;
-            Refusal = refused.HubWords ?? CodeLost;
+            Refusal = (e as HubException) is { Kind: HubErrorKind.Refusal } refused ? refused.HubWords ?? CodeLost : CodeLost;
             return false;
         }
     }

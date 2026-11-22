@@ -61,10 +61,19 @@ internal sealed class StandInCalls : OwnerReads.ICalls
     /// <summary>The server that the hub lists the manager on, or null for a manager with no server.</summary>
     public string? ManagerOn { get; set; }
     public List<string> Posts { get; } = [];
+    /// <summary>The join line that the hub gives for a new server.</summary>
+    public string JoinLine { get; set; } = "curl -fsS http://100.64.0.9:8765/join | FLEET_JOIN=7KMQ2PRJ4TVW sh";
+    /// <summary>The next reads of GET /ui/servers that the hub does not answer.</summary>
+    public int ServersFails { get; set; }
 
     public Task<Founderizer.Core.OwnerAnswer<T>> GetAsync<T>(string route, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type, int limit,
                                                              CancellationToken cancel) where T : class
     {
+        if (route == "ui/servers" && ServersFails > 0)
+        {
+            ServersFails--;
+            throw Founderizer.Core.HubException.NoAnswer();
+        }
         var agents = ManagerOn is null ? "[]" : "[\"juno\"]";
         var json = route == "ui/servers"
             ? $"{{\"db\": \"db-1\", \"time\": 1763700100, \"servers\": [{{\"name\": \"{ManagerOn ?? "worker-1"}\", \"hub\": true, \"joined\": true, \"agents\": {agents}, \"available\": false, \"why\": []}}]}}"
@@ -79,7 +88,7 @@ internal sealed class StandInCalls : OwnerReads.ICalls
         lock (Posts) Posts.Add(route);
         var id = requestId!.Value.ToString("D");
         var json = route == "ui/servers/join"
-            ? $"{{\"ok\": true, \"request_id\": \"{id}\", \"name\": \"\", \"kind\": \"linux\", \"expires_at\": 1763703600, \"code\": \"7KMQ2PRJ4TVW\", \"line\": \"curl -fsS http://100.64.0.9:8765/join | FLEET_JOIN=7KMQ2PRJ4TVW sh\"}}"
+            ? $"{{\"ok\": true, \"request_id\": \"{id}\", \"name\": \"\", \"kind\": \"linux\", \"expires_at\": 1763703600, \"code\": \"7KMQ2PRJ4TVW\", \"line\": \"{System.Text.Json.JsonEncodedText.Encode(JoinLine)}\"}}"
             : route == "ui/error-reports" ? $"{{\"ok\": true, \"request_id\": \"{id}\", \"send\": true}}"
             : $"{{\"ok\": true, \"request_id\": \"{id}\"}}";
         return Task.FromResult(new Founderizer.Core.OwnerAnswer<TAnswer>(System.Text.Json.JsonSerializer.Deserialize(json, answerType)));
@@ -253,7 +262,7 @@ internal sealed class SetupRig : IAsyncDisposable
             ConnectOwner = hub => { lock (Connected) Connected.Add(hub); return Task.CompletedTask; },
             ForgetHub = (hub, deleted) => { lock (Forgotten) Forgotten.Add((hub, deleted)); },
             Calls = Calls, Fleet = () => Fleet,
-            JoinReads = 2, JoinReadEvery = TimeSpan.FromMilliseconds(1),
+            JoinReads = 2, JoinReadEvery = TimeSpan.FromMilliseconds(1), JoinClock = new StandInClock(),
         });
     }
 

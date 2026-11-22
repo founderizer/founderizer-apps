@@ -31,7 +31,8 @@
 #   FZ_VM_SCREEN    the size of the VM's screen, as the display driver offers it (2880x1800: 1440 x 900 at 200%,
 #                   the size of the approved pictures of the Windows app)
 #   FZ_VM_WINDOWS_ISO, FZ_VM_TOOLS_ISO           the downloads that create uses
-#   FZ_VM_USER      who takes the VM with hold, until release: a session's name (unknown)
+#   FZ_VM_USER      who takes the VM with hold, until release: a session's name (no default: hold and release
+#                   refuse with none)
 set -euo pipefail
 # Every file, folder and socket that vm.sh or QEMU makes is the user's alone.
 umask 077
@@ -405,20 +406,21 @@ create_vm() {
 # Who uses the VM, since when: one line in the VM's folder on the Mac, which hold writes and release removes. A second
 # user's hold reads it and refuses, so that two sessions do not run builds or pictures in the VM at once. Both take
 # FZ_VM_USER and refuse with none, and a release frees only the hold of its own user: a release under another name took
-# Windows' update pause off under that session's run (U2, 22 November 2026).
+# Windows' update pause off under that session's run (U2, 22 November 2026). A release restores Windows first and frees
+# the VM after: a restore that fails keeps the hold, so that no other session takes a VM whose updates stay paused.
 in_use="$dir/in-use"
 vm_user() {
     [ -n "${FZ_VM_USER:-}" ] || die "say who holds the VM: FZ_VM_USER=<your session's name> vm.sh $1"
     printf '%s' "$FZ_VM_USER"
 }
-give_vm() {
+# The hold is FZ_VM_USER's own, or the release stops here and changes nothing.
+own_vm() {
     local who
     who="$(vm_user release)" || exit 1
     [ -f "$in_use" ] || die "no session holds the VM; nothing is released"
     if [ "$(cut -f1 "$in_use")" != "$who" ]; then
         die "the VM is held by $(cut -f1 "$in_use") since $(cut -f2 "$in_use"), not by $who; only that session releases it"
     fi
-    rm -f "$in_use"
 }
 take_vm() {
     local who
@@ -456,8 +458,14 @@ PS
 )"
 }
 release_updates() {
-    give_vm
+    own_vm
+    # A restore that fails stops the script (an error of Set-ItemProperty alone does not stop PowerShell), so the hold
+    # stays with the pause still on; and a VM that is off cannot be restored: it is started first.
+    if ! running; then
+        die "the VM is off, so Windows' updates and active hours cannot be restored; the VM stays held by $FZ_VM_USER: start the VM (vm.sh start), then release again"
+    fi
     vm_ps "$(cat <<'PS'
+$ErrorActionPreference = 'Stop'
 $ux = 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings'
 $mark = 'HKLM:\SOFTWARE\Founderizer\UpdateHold'
 foreach ($name in 'PauseUpdatesStartTime', 'PauseFeatureUpdatesStartTime', 'PauseQualityUpdatesStartTime',
@@ -471,7 +479,8 @@ foreach ($name in 'ActiveHoursStart', 'ActiveHoursEnd') {
 Remove-Item $mark -ErrorAction SilentlyContinue
 'updates and active hours as before the hold'
 PS
-)"
+)" || die "Windows' updates and active hours were not restored; the VM stays held by $FZ_VM_USER: start the VM if it is off (vm.sh start), then release again"
+    rm -f "$in_use"
 }
 
 command="${1:-}"

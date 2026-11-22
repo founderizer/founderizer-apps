@@ -41,5 +41,7 @@ internal static class SetupViewWords
 
     /// <summary>The checks of a server that did not pass (the Mac's <c>VerifyChecklistView</c>).</summary>
     public const string Checks = "Checks", Ready = "Ready", NotReady = "Not ready", NotChecked = "Not checked", Warning = "Warning";
+    /// <summary>The footer under checks that did not pass: no page draws it until the server's own page is there (piece
+    /// U7), which it sends the owner to; U7 takes it. It stays held to the Mac's catalog meanwhile.</summary>
     public const string ChecksFooter = "Each failed check carries its own fix. Put it right, then check this server again from its page.";
 }

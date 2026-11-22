@@ -609,9 +609,12 @@ FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`
   `MakeFleet()` (the one press: false when a build runs already), `MakeManagersServerAgain()`; `CheckVpsAsync(address)`,
   `GivePasswordAsync(char[])` (the array is cleared, unless the server's sudo asks for it: then the install takes it and
   clears it), `VpsAgainAsync`, `InstallVps`; `ChooseKey(bytes, name)`, `GiveKeyPassphrase(char[])` and `ForgetKey()` (below);
-  `InstallAgain()` (Try again of a stopped install, and Install again after a new key of the network); `Back()` (nothing
-  while `Runs`). The network page goes on by itself when
-  `ReadPc` sees the PC on its tailnet; the key's page when the key is made.
+  `InstallAgain()` (Try again of a stopped install, and Install again after a new key of the network); `OpenApp()` ("Open
+  Founderizer" under checks that did not pass, piece U3: only once `State.HubAnswers`; the hand-over then comes as after
+  checks that passed); `Back()` (nothing while `Runs`). The network page goes on by itself when
+  `ReadPc` sees the PC on its tailnet; the key's page when the key is made. While an install waits on Tailscale's link
+  (`InstallView.NetworkSignIn`: the join of the manager's own server, when the fleet's key cannot give the join line's
+  tags) the build page gives way to the install's own page, with the Mac's two rows and Open link (piece U3).
 - **The pages**: `SetupScreens.Of(state, store.Runs, store.ShowsBuild)` gives a `SetupScreen`: its name, title (which moves
   while `Waits`), its muted line, its controls (`SetupControl`: a card, a button, a link, a field, a paste field, a secret
   field, steps whose link is written `[words](address)`), its orange line, and whether it has Back. The words are its
@@ -665,6 +668,15 @@ FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`
   agent)` for the manager's first setup: `ReadAsync(fleet)`, `Page`, `PlaceChosenAsync` (its server and its provider in
   one move, read again once after a changed team), `ChooseAsync`, `SendCodeAsync`, `OpensByItself`. A link that the
   window opens is only ever `SignInPage.Link`, which is a link of the provider's own hosts.
+- **The manager's first setup in the window** (piece U3, `Agents/ManagerSetup.cs`): `ManagerSetupMark` (what this PC
+  keeps of it in the first run's kept answers, `ISetupChoices`: the hub's address, its generation, the manager, the chosen
+  provider and the server that joined; the hand-over writes it, the manager's run and Start again take it away),
+  `ManagerSetup(new ManagerSetupSettings { Calls, Fleet, Choices, Refresh }, mark)` with `View` (a `ManagerSetupView`),
+  `Changed`, `RunAsync(cancel)` (a read every 2 s while something goes on, else every 5, and what runs by itself after
+  each read, until `View.Ended`), the presses `ChooseAsync(provider)` and `SendCodeAsync(code)`, and `TakeOpening()` and
+  `Opened()` for the provider's page; `ManagerSetupScreens.Of(view)` gives each page as a `ManagerSetupScreen` (with
+  `SetupControlKind.Bar` for the job's steps and `Code` for Codex's code; `Drawn` false for a page of wave B or C, whose
+  frame alone shows). `View.Shows` is the Mac's `fillsWindow` (`AgentSetupFlow.FillsWindow`).
 - **The reads**: `OwnerReads.ServersAsync`, `MachinesAsync`, `TeamAsync` (the Mac's caps and checks), and the writes
   `JoinCodeAsync`, `MoveAsync`, `SignInAsync`, `SignInCodeAsync`, through `OwnerReads.Of(store)`. The text of a
   `SignInPage`, a `JobPrompt`, a `MachineLogin` and a `JoinCode` names no link, no code and no command. A field that the Mac reads
@@ -729,6 +741,20 @@ How the window draws the library's first run, for the window pieces after it (U2
 - **A proofs' build** (`-p:FounderizerProofs=true`) with `FOUNDERIZER_PROVIDERS=http://10.0.2.2:<port>` sends every
   request to a provider's own API to `vm/provider_standin.py` on the Mac (`Fleet/ProviderStandIn.cs`); a build without
   the switch has no such class.
+- **The manager's setup (piece U3, `Pages/Agents/Setup/ManagerSetupPage.cs`)**: once the first run hands over, the
+  window goes to the manager's page (`MainWindow.HandedOver`), where the setup stands in place of its chat and fills the
+  window while `StoreSource.ManagerSetup()` gives one whose view shows (the mark of this hub and generation, the
+  manager in the reading), also after a new start of the app; when the manager runs, its chat takes the page. The page
+  draws pictures 18 to 20 and the Mac's other pages of that setup (the provider's cards, "Setting up <Manager>"): the
+  manager's four steps on Back's line, no Back, the provider's logo at 48 or the manager's mark (96 while it waits for
+  the session), the job's steps as a bar (`StepsBar`), Claude Code's field (`PasteField`, a code of `MachineLogin.CodeOf`'s
+  shape) and Codex's code with Copy (`CodeBox`). The first step's link opens the model's link only (`SetupParts.Steps`
+  with `open`), and puts Codex's code on the clipboard. The install's page has "Open Founderizer" under checks that did
+  not pass, and Tailscale's link of a join with Open link; the checks' footer, which sends the owner to the server's own
+  page, waits for that page (piece U7).
+- **A proofs' build** with `FOUNDERIZER_SETUP_READINGS=<folder>` gives the manager's setup the readings of that folder in
+  place of the hub's owner routes, and with `FOUNDERIZER_SETUP_SAMPLE=checks|approve` the first run's page shows that state
+  of the hub's install (`Fleet/SetupStandIn.cs`; `vm/README.md`, "The manager's setup against a stand-in").
 
 ## Build and test
 

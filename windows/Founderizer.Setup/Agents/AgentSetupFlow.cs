@@ -86,6 +86,12 @@ public static class AgentSetupFlow
     public static bool Places(SetupAgent agent, IReadOnlyList<string> features, bool placing) =>
         features.Contains(ServerFeature) && (!agent.Placed || (placing && !Runs(agent)));
 
+    /// <summary>**Its setup fills the window, drawn alone, as the first run is** (the Mac's <c>fillsWindow</c> of an agent
+    /// that Add agent did not add on this computer: the PC has no Add agent yet): the setup of the manager of a new fleet,
+    /// from its server's page to its first session. An agent that ran before keeps its setup in its page (wave C).</summary>
+    public static bool FillsWindow(SetupAgent? agent, IReadOnlyList<string> features, bool placing) =>
+        agent is not null && Shows(agent, features, placing) && Places(agent, features, placing);
+
     /// <summary>**The end of its first setup**: signed in on its own server, with its standing session listed.</summary>
     public static bool Runs(SetupAgent agent) =>
         agent.Placed && agent.SignedIn == true && (agent.Alive ?? "").Split(',').Contains("manager");

@@ -58,10 +58,12 @@ internal sealed class ProviderPage : IStepView
 
     private static readonly Dictionary<string, ImageSource?> Logos = new();
 
-    /// <summary>The provider's own logo at 28 with a corner of 7 (Assets/*.png, the Mac's own bytes).</summary>
-    private static FrameworkElement Logo(string provider)
+    /// <summary>The provider's own logo at 28 with a corner of 7 (Assets/*.png, the Mac's own bytes); at 48 with a corner of
+    /// 12 over a page of the manager's setup (set 8's <c>.plogo</c>, the Mac's <c>ProviderIcon</c> at a step's mark).</summary>
+    internal static FrameworkElement Logo(string provider, double side = 28, double corner = 7)
     {
-        if (!Logos.TryGetValue(provider, out var image))
+        var key = provider + "@" + side.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (!Logos.TryGetValue(key, out var image))
         {
             using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"Founderizer.Windows.Assets.{provider}.png");
             if (stream is not null)
@@ -69,17 +71,18 @@ internal sealed class ProviderPage : IStepView
                 var memory = new MemoryStream();
                 stream.CopyTo(memory);
                 memory.Position = 0;
-                var bitmap = new BitmapImage { DecodePixelWidth = 56 };
+                // The screen's own pixels at the pictures' scale of 2.
+                var bitmap = new BitmapImage { DecodePixelWidth = (int)(side * 2) };
                 bitmap.SetSource(memory.AsRandomAccessStream());
                 image = bitmap;
             }
-            Logos[provider] = image;
+            Logos[key] = image;
         }
         return new Border
         {
-            Width = 28,
-            Height = 28,
-            CornerRadius = new CornerRadius(7),
+            Width = side,
+            Height = side,
+            CornerRadius = new CornerRadius(corner),
             Background = image is null ? null : new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill },
         };
     }

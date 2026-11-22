@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Founderizer.Core;
+using Founderizer.Setup.Agents;
 using Founderizer.Setup.FirstRun;
 using Founderizer.Windows.Fleet;
 using Founderizer.Windows.Marks;
 using Founderizer.Windows.Navigation;
 using Founderizer.Windows.Pages;
+using Founderizer.Windows.Pages.Agents.Setup;
 using Founderizer.Windows.Pages.FirstRun;
 using Microsoft.UI;
 using Microsoft.UI.Input;
@@ -281,6 +283,8 @@ public sealed partial class MainWindow : Window
         notices.Prune(next);
         if (taskbar is not null) _ = taskbar.Show(Screens.TaskbarCount(next), Screens.TaskbarWords(next));
         if (WaitingPage(next) != waitingPage) ShowPage();
+        // The manager's first setup comes with the reading that says that this PC owns its hub, and goes when it ends.
+        else if ((SetupOf(history.Current) is not null) != (PageHost.Content is ManagerSetupPage)) ShowPage();
         ShowLine();
         page?.Show(next, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
         var now = pane;
@@ -380,6 +384,23 @@ public sealed partial class MainWindow : Window
             ShowPane();
             return;
         }
+        if (SetupOf(current) is { } managerSetup)
+        {
+            Fill(true);
+            source.OpenChat(null);
+            source.OpenTask(null);
+            page = null;
+            band = null;
+            bar = null;
+            if (setupPage?.Setup != managerSetup)
+            {
+                setupPage?.Close();
+                setupPage = new ManagerSetupPage(managerSetup, DispatcherQueue, title => AutomationProperties.SetName(PageHost, title), SetupChanged);
+            }
+            PageHost.Content = setupPage;
+            ShowPane();
+            return;
+        }
         Fill(false);
         source.OpenChat(current.Kind == PageKind.Chat ? current.Agent : null);
         source.OpenTask(current.Kind == PageKind.Task ? current.Task : null);
@@ -425,9 +446,46 @@ public sealed partial class MainWindow : Window
     {
         if (source is not StoreSource store || store.FirstRun() is not { } setup || store.Tailscale is not { } pc) return null;
         tailscaleSetup ??= new TailscaleSetup(pc);
+        if (firstRun is null)
+        {
+            // **From "Connecting to your hub" to the manager's setup** (piece U3): the first run hands the window over by
+            // itself, at the manager's page, where its setup shows while it gets its server and its sign-in.
+            setup.Changed += (_, s) => { if (s.HandedOver) DispatcherQueue.TryEnqueue(HandedOver); };
+        }
+        Func<SetupState?>? sample = null;
+#if PROOFS
+        sample = SetupStandIn.Sample() is null ? null : SetupStandIn.Sample;
+#endif
         return firstRun ??= new FirstRunHost(setup, pc, tailscaleSetup, () => Go(Page.AddThisPc), DispatcherQueue,
                                              title => AutomationProperties.SetName(PageHost, title),
-                                             WinRT.Interop.WindowNative.GetWindowHandle(this), store.HoldsToken);
+                                             WinRT.Interop.WindowNative.GetWindowHandle(this), store.HoldsToken, sample);
+    }
+
+    /// <summary>The first run handed the window over: the manager's page, with no way back to the first run (the Mac's
+    /// <c>leave(to:)</c>).</summary>
+    private void HandedOver()
+    {
+        if (history.Current.Kind != PageKind.Welcome || (source as StoreSource)?.FirstRun()?.State is not { HandedOver: true, HandedTo: { } manager })
+            return;
+        homeChosen = true;
+        history.Start(Page.Chat(manager));
+    }
+
+    private ManagerSetupPage? setupPage;
+
+    /// <summary>**The manager's first setup, in place of its chat and filling the window** (piece U3; the Mac's
+    /// <c>fillsWindow</c>): while this PC keeps its mark for the hub that it owns and the setup shows, until the manager
+    /// runs. Null for any other agent's page.</summary>
+    private ManagerSetup? SetupOf(Page page)
+    {
+        if (page.Kind != PageKind.Chat || (source as StoreSource)?.ManagerSetup() is not { } setup || setup.Mark.Agent != page.Agent) return null;
+        return setup.View is { Shows: true, Ended: false } ? setup : null;
+    }
+
+    /// <summary>The setup's own change: once it ends or no longer shows, the manager's chat takes its page.</summary>
+    private void SetupChanged()
+    {
+        if ((SetupOf(history.Current) is not null) != (PageHost.Content is ManagerSetupPage)) ShowPage();
     }
 
     /// <summary>**The first run fills the window** (set 8; the Mac's <c>fillsWindow</c>): no pane, no Back, Forward or

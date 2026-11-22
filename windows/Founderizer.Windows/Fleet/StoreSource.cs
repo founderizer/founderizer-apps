@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Founderizer.Core;
 using Founderizer.Remote;
+using Founderizer.Setup.Agents;
 using Founderizer.Setup.Cloud;
 using Founderizer.Setup.FirstRun;
 using Founderizer.Setup.Network;
@@ -75,9 +77,45 @@ public sealed class StoreSource : IFleetSource
             Tailscale = new FleetNet(new TailscaleApi(Providers(), secrets)),
             Cloud = clouds,
             Status = cancel => pc.ReadAsync(cancel),
-            Choices = new FileChoices(System.IO.Path.Combine(AppFolders.Setup, "choices.json")),
+            Choices = Choices(),
         });
         return firstRun;
+    }
+
+    private FileChoices? choices;
+
+    /// <summary>The first run's kept answers, one file read by one instance: the first run and the manager's setup both
+    /// keep their marks there (the instance holds what it read, so a second one would not see the first one's writes).</summary>
+    private FileChoices Choices() => choices ??= new FileChoices(System.IO.Path.Combine(AppFolders.Setup, "choices.json"));
+
+    private ManagerSetup? managerSetup;
+
+    /// <summary>**The setup of the manager of a new fleet** (piece U3), while this PC keeps its mark for the hub that it
+    /// owns now, of this generation, with that manager in its reading: the first run's hand-over writes it, and the
+    /// manager's run takes it away. Null otherwise, and for a store that can be no owner's computer. Made once for a mark,
+    /// so that its readings stay while its page comes and goes. A build with the proofs' switch takes the stand-in of
+    /// FOUNDERIZER_SETUP_READINGS in its place (<see cref="SetupStandIn"/>).</summary>
+    internal ManagerSetup? ManagerSetup()
+    {
+#if PROOFS
+        if (SetupStandIn.Create() is { } standIn)
+        {
+            return managerSetup ??= new ManagerSetup(new ManagerSetupSettings { Calls = standIn, Fleet = standIn.Fleet, Choices = Choices() }, standIn.Mark());
+        }
+#endif
+        var s = store.State;
+        if (box is null || s.Role != HubRole.Owner || s.Fleet is not { } fleet || ManagerSetupMark.Read(Choices()) is not { } mark ||
+            !mark.IsOf(s.Hub, fleet.Db) || !fleet.Agents.Any(a => a.Name == mark.Agent))
+            return null;
+        if (managerSetup is { } kept && kept.Mark.IsOf(mark.Hub, mark.Db) && kept.Mark.Agent == mark.Agent) return kept;
+        return managerSetup = new ManagerSetup(new ManagerSetupSettings
+        {
+            Calls = Founderizer.Owner.Reads.OwnerReads.Of(store),
+            Fleet = () => store.State.Fleet,
+            Choices = Choices(),
+            Refresh = store.RefreshAsync,
+            Fresh = () => store.State.IsFresh(DateTimeOffset.UtcNow),
+        }, mark);
     }
 
     private Func<CloudProvider, ICloud>? clouds;

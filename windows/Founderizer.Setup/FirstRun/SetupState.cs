@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
 using Founderizer.Setup.Cloud;
 using Founderizer.Setup.Install;
@@ -79,6 +80,12 @@ public sealed record InstallView(bool Running, IReadOnlyList<InstallProgress> St
 
     /// <summary>The install's checks let the first run go on: none failed, or only the sign-in.</summary>
     public bool Passed => Checklist is { } list && (list.IsReady || list.OnlyNeedsSignIn);
+
+    /// <summary>**The Tailscale link that this install waits on, while it waits** (the Mac's
+    /// <c>MachineInstallModel.networkSignIn</c>): the link in the lines of the step that runs, only Tailscale's own
+    /// sign-in page (<see cref="Install.NetworkSignIn.Found"/>). The owner approves it, and the install goes on by itself.</summary>
+    public Install.NetworkSignIn? NetworkSignIn =>
+        Running && Steps.LastOrDefault(s => s.State == ProgressState.Running) is { } step ? Install.NetworkSignIn.Found(step.Lines) : null;
 }
 
 /// <summary>Connect Tailscale: the press was made (the title waits for Tailscale), and its words.</summary>
@@ -163,6 +170,11 @@ public sealed record SetupState
     public bool HubBuilt { get; init; }
     /// <summary>The window went to the manager's setup.</summary>
     public bool HandedOver { get; init; }
+    /// <summary>**The new hub answers this PC**: the owner's store holds its reading (the Mac's <c>store.state != nil</c>).</summary>
+    public bool HubAnswers { get; init; }
+    /// <summary>**The owner pressed "Open Founderizer" under checks that did not pass** (the Mac's <c>afterInstall</c>,
+    /// <c>openApp</c>): the window goes to the manager's setup as after checks that passed, once the hand-over can come.</summary>
+    public bool OpenAsked { get; init; }
     /// <summary>The manager that the hand-over went to, and the provider that its setup gets.</summary>
     public string? HandedTo { get; init; }
 

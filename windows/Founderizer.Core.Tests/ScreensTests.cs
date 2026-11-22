@@ -59,6 +59,10 @@ public sealed class ScreensTests
         Assert.AreEqual("2 items need you", pane.NeedsHover);
         CollectionAssert.AreEqual(new[] { "Fleet Manager", "Customer Support", "Developer", "DevOps", "Marketing" },
                                   pane.Agents.Select(a => a.Label).ToArray());
+        // Each row's name before its role, as the Mac's AgentNameLine (set 8, picture 21: "Juno · Fleet Manager"); none
+        // where the role says the name already ("Fleet Manager" of "manager"). The bug: a pane that names an agent by its
+        // role alone, which the Mac left with Founderizer 0.1.380, so two agents of one role read the same.
+        CollectionAssert.AreEqual(new[] { null, "Wren", "Theo", "Pax", "Orla" }, pane.Agents.Select(a => a.Under).ToArray());
         var manager = pane.Agents[0];
         Assert.AreEqual("Yes. Marketing has the email ready.", manager.Line);
         Assert.AreEqual("15:04", manager.Time);

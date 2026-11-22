@@ -40,7 +40,7 @@ Mac, and a device route is all that the PC reaches.
 | `vault_isolation` | not planned | the Mac app's row "Vault token" stood only in the old details of a server, which no hub since October 2026 showed; it went with them on 19 November 2026 |
 | `triggers` | waits (2.4) | wake-up rules. For that phase: a rule's check can have the form `read` (UI-API.md 1.191), and a last run in the state `joined` is no trouble (`TriggerRun.goodStates`) |
 | `trigger_checks` | waits (2.4) | |
-| `agent_setup` | waits (2.2) | `active` of an agent is read (built) |
+| `agent_setup` | waits (2.2) | `active` of an agent is read (built); the setup of the manager of a new fleet, from its install to its first session, is built (piece U3: `ManagerSetup`, `Pages/Agents/Setup/`); the server's page of a manager whose server did not join, and the check and the activation of another agent, wait (L4b, U5) |
 | `wakeups` | waits (2.4) | |
 | `screen_model` | waits (2.2) | |
 | `agent_auth` | waits (2.2) | |
@@ -73,7 +73,7 @@ Mac, and a device route is all that the PC reaches.
 | `secrets_import` | waits (step 2) | an import of secrets in one command, a setup page of the Mac; no device route |
 | `attachments` | built | `OwnerStore.AddFileAsync` keeps a picked file's bytes in the store's folder, then sends it up with its own number before its message (the iPhone's StagedFile: it stays between starts, `UploadAsync` sends one that did not go again, `RemoveFile` takes it out); `FileAsync` reads one back with its size and SHA-256 checked (the device routes since `afb3188de`); the twin's `files` test |
 | `resource_grants` | waits (2.3) | |
-| `machine_signin` | waits (2.2) | |
+| `machine_signin` | waits (2.2) | the manager's first sign-in is built (piece U3: its start from a provider's card, Claude Code's code, Codex's code, the provider's page by itself after a press); the sign-in of an agent that ran before (the Mac's `SignInWizard`, `MachineSignInSection`) waits (wave C) |
 | `releases` | waits (2.5) | the fleet's updates page; the line format of a fleet release is built (`FleetRelease`) |
 | `entitlement` | not planned | Founderizer has no subscription since 10 November 2026 |
 | `agent_signin` | waits (2.2) | |
@@ -109,7 +109,7 @@ Mac, and a device route is all that the PC reaches.
 | `door_mode_set` | waits (step 2) | |
 | `recovery_copy` | waits (D5) | needs the QR's `bind` value |
 | `server_ai_choice` | waits (2.1) | |
-| `manager_server` | waits (2.1) | |
+| `manager_server` | waits (2.1) | the first run's server that joined goes to the manager with the chosen provider by itself, and the setup fills the window until the manager runs (piece U3); Add server's pages for a manager with no server wait (L4b, U5) |
 | `knowledge_edit` | waits (step 2) | a write of the owner's knowledge stays on the Mac |
 | `door_setup` | waits (2.4) | |
 | `agent_remove` | waits (2.2) | |
@@ -168,6 +168,24 @@ Mac, and a device route is all that the PC reaches.
   has no press in `SetupStore`, and set 8 draws none. "Use this server" for a server of the account's list (the Mac's
   `useExisting`: the hub's install on a server that the account holds) has no press either: the window draws the
   account's servers grey, with the new server chosen and "Make the server". Each waits for a library piece of its own.
+- **The other provider's card on the provider page of a manager that has its server** (the Mac's `providers` in
+  `AgentSetupWizard`, found by piece U3 of step 2, 22 November 2026): a gap of the PC's model. The Mac draws both cards,
+  and a press on the other one starts its preparation and then the switch (`AgentSetupFlow.Start.prepare`,
+  `prepareServerRuntime`, `agentRuntime`). The PC's `AgentSetupModel.Cards` gives the manager's own provider alone,
+  because the PC has no write for the preparation and the switch yet: a second card would do nothing. That page shows
+  only after a failed install or a sign-in that stopped; a manager with no server still gets both cards. It waits for
+  the change of an agent's provider (wave C, the agent's page).
+- **The slider of "Your fleet's servers" in the manager's setup, with its root step on the hub's own server** (the Mac's
+  `fleetServers` with `HubShareModel`, found by piece U3): a manager with no server of a fleet whose first run did not
+  keep a step, or whose "1 server" needs that root step, shows the frame of its page alone (wave B, piece L6). Where the
+  wait for the hub's own server stops, the PC says the Mac's words over Try again, which waits again; the Mac shows its
+  slider there with Continue.
+- **Enter on the hub's checks that did not pass** (the Mac's `MachineInstallRun`, found by piece U3): the Mac's "Open
+  Founderizer" is no default action, so Return does not press it. The PC's page does not press it on Enter either, but
+  WinUI gives the first button of a page the keyboard focus when the window opens, and a focused button takes Enter
+  before the page does (measured in the VM on the welcome page): on a page that opens on these checks, Enter presses
+  "Open Founderizer" through its focus. A page that does not keep the first focus on that button closes the gap; it
+  touches the focus of every page of the first run, so it waits for its own piece.
 - **A request card in a window of its own** (the Mac's `NeedWindows`, 21 November 2026): not planned: it is the
   Mac's alone, an AppKit panel over every app, also over a full-screen one.
 - **An answer waits 5 seconds with Undo, Pause stands on its card while its task works, and the mark opens the task**

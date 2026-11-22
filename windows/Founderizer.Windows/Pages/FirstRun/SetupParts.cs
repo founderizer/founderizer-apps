@@ -46,8 +46,10 @@ internal static class SetupParts
 
     /// <summary>**The steps over a field** (the Mac's <c>SetupSteps</c>, set 8's <c>.ssteps</c>): a number, muted, right in a
     /// column of 10, then 10 to the words at 15 on 21; 8 between two steps; a link (<c>[words](address)</c>) in the link's
-    /// violet, underlined, with its arrow after it, which opens the page in the default browser.</summary>
-    public static StackPanel Steps(IReadOnlyList<string> lines, double width = StepLook.FieldWidth, string? id = null)
+    /// violet, underlined, with its arrow after it, which opens the page in the default browser. With
+    /// <paramref name="open"/>, a press on a link calls it in place of that: the page opens its model's own link, and
+    /// what goes with it (the manager's sign-in: Codex's code to the clipboard).</summary>
+    public static StackPanel Steps(IReadOnlyList<string> lines, double width = StepLook.FieldWidth, string? id = null, Action? open = null)
     {
         var panel = new StackPanel { Width = width, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
         for (int i = 0; i < lines.Count; i++)
@@ -65,7 +67,8 @@ internal static class SetupParts
             {
                 if (link.Index > at) words.Inlines.Add(new Run { Text = lines[i][at..link.Index] });
                 var hyperlink = new Hyperlink { Foreground = Look.Link };
-                if (Uri.TryCreate(link.Groups[2].Value, UriKind.Absolute, out var address) && address.Scheme == Uri.UriSchemeHttps)
+                if (open is not null) hyperlink.Click += (_, _) => open();
+                else if (Uri.TryCreate(link.Groups[2].Value, UriKind.Absolute, out var address) && address.Scheme == Uri.UriSchemeHttps)
                     hyperlink.NavigateUri = address;
                 hyperlink.Inlines.Add(new Run { Text = link.Groups[1].Value });
                 words.Inlines.Add(hyperlink);
@@ -270,19 +273,23 @@ internal static class SetupParts
 /// <summary>**The field that a key or a token is pasted into, which sends it by itself** (the Mac's <c>PasteField</c>):
 /// a paste that the field takes goes at once, and so does Enter; words that it does not take show in its orange edge.
 /// The words are the step's own, never in a console's type. The field is emptied the moment it sends, so it shows no
-/// character after the press.</summary>
+/// character after the press. With <c>ready</c>, words that the field takes stay in it while their step cannot take them
+/// (a code while another is on its way: the Mac's <c>send</c> returns before it clears its field), and Enter sends them
+/// later.</summary>
 internal sealed class PasteField
 {
     private readonly Func<string, bool> accepts;
     private readonly Action<string> send;
+    private readonly Func<bool>? ready;
     private int length;
 
     public StepField Field { get; }
 
-    public PasteField(string placeholder, string id, Func<string, bool> accepts, Action<string> send)
+    public PasteField(string placeholder, string id, Func<string, bool> accepts, Action<string> send, Func<bool>? ready = null)
     {
         this.accepts = accepts;
         this.send = send;
+        this.ready = ready;
         Field = new StepField(placeholder, id);
         Field.Box.TextChanged += (_, _) =>
         {
@@ -291,15 +298,15 @@ internal sealed class PasteField
             length = text.Length;
             var trimmed = text.Trim();
             Field.Wrong = trimmed.Length > 0 && !accepts(trimmed);
-            if (grew >= 8 && accepts(trimmed)) Send();
+            if (grew >= 8 && accepts(trimmed) && ready?.Invoke() != false) Send();
         };
         Field.Box.Loaded += (_, _) => Field.Box.Focus(FocusState.Programmatic);
     }
 
-    /// <summary>Enter: the words go when the field takes them.</summary>
+    /// <summary>Enter: the words go when the field takes them and their step can.</summary>
     public bool Enter()
     {
-        if (!accepts(Field.Box.Text.Trim())) return false;
+        if (!accepts(Field.Box.Text.Trim()) || ready?.Invoke() == false) return false;
         Send();
         return true;
     }

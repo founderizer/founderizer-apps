@@ -280,6 +280,129 @@ public sealed class SetupStoreTests
         Assert.IsTrue(rig.Store.HandedOver!.SignInAsked);
     }
 
+    /// <summary>A checklist of the server with one check that failed.</summary>
+    private const string FailedChecklist =
+        "[{\"check\": \"services\", \"state\": \"fail\", \"says\": \"The hub's service does not run.\", \"fix\": \"Restart the server.\"}]";
+
+    /// <summary>**Checks that did not pass offer "Open Founderizer" once the hub answers this PC, and its press goes on to
+    /// the manager's setup** (the Mac's <c>afterInstall</c> and <c>openApp</c>; U2's report: "There is no 'Open
+    /// Founderizer'"). Before the hub answers, the title moves at "Connecting to your hub" with no press; after the press it
+    /// moves again until the hand-over, which keeps the manager's first setup for this hub. The bugs: a first run whose
+    /// checks did not pass that stands on its page for good; a press offered before the hub answers, which leads nowhere.</summary>
+    [TestMethod]
+    public async Task Checks_that_did_not_pass_offer_Open_Founderizer_once_the_hub_answers_and_its_press_hands_over()
+    {
+        await using var rig = new SetupRig(call => call.Program.Contains("verify --json", StringComparison.Ordinal) ? StandInRemote.Said(FailedChecklist) : null);
+        await Built(rig, ServersStep.One);
+        var s = await rig.Until(x => x.Install.Checklist is not null, "the hub's install");
+        Assert.IsFalse(s.Install.Passed);
+        var screen = SetupScreens.Of(s);
+        Assert.AreEqual((SetupScreens.ConnectingToHub, true), (screen.Title, screen.Waits), "before the hub answers");
+        Assert.IsFalse(screen.Controls.Any(c => c.Kind == SetupControlKind.Button), "no press before the hub answers");
+        rig.Store.OpenApp();
+        Assert.IsFalse(rig.Store.State.OpenAsked, "a press that the page does not offer does nothing");
+
+        rig.Fleet = SetupRig.NewFleet();
+        rig.Store.OwnerChanged();
+        screen = SetupScreens.Of(rig.Store.State);
+        Assert.AreEqual((SetupScreens.HubInstalled, false), (screen.Title, screen.Waits));
+        CollectionAssert.AreEqual(new[] { (SetupControlKind.Button, SetupScreens.OpenFounderizer), (SetupControlKind.Muted, SetupScreens.ServesThisPc) },
+                                  screen.Controls.Select(c => (c.Kind, c.Words)).ToArray());
+        await Task.Delay(50);
+        Assert.IsFalse(rig.Store.State.HandedOver, "checks that did not pass hand nothing over by themselves");
+
+        rig.Store.OpenApp();
+        screen = SetupScreens.Of(rig.Store.State);
+        Assert.AreEqual((SetupScreens.ConnectingToHub, true, 0), (screen.Title, screen.Waits, screen.Controls.Count), "after the press");
+        await rig.Until(x => x.HandedOver, "the hand-over after the press");
+        var mark = Agents.ManagerSetupMark.Read(rig.Choices);
+        Assert.IsNotNull(mark, "the manager's first setup is kept for this hub");
+        Assert.AreEqual(("juno", "db-1", "claude"), (mark.Agent, mark.Db, mark.Provider));
+        Assert.IsTrue(mark.IsOf(new Uri(rig.Store.State.Install.ClaimedHub!), "db-1"));
+    }
+
+    /// <summary>**A join that waits for the owner's yes at Tailscale shows its link on the install's page, with its one
+    /// press** (the Mac's <c>MachineInstallRun.approve</c>): the fleet's key may not give the tags of the hub's join line,
+    /// so the manager's own server signs in by Tailscale's link. The build page has no place for it, so the install's page
+    /// shows it, and the build page comes back once the server is on the network. The bug: a join that waits sixteen
+    /// minutes on a link that no page shows, and a manager's server that never joins.</summary>
+    [TestMethod]
+    public async Task A_join_that_waits_for_Tailscale_shows_its_link_with_its_one_press()
+    {
+        const string link = "https://login.tailscale.com/a/0a1b2c3d4e5f";
+        using var approved = new ManualResetEventSlim();
+        var watched = 0;
+        await using var rig = new SetupRig(call =>
+        {
+            if (!call.Program.Contains("fleet-machine-name=", StringComparison.Ordinal)) return null;
+            if (Interlocked.Increment(ref watched) == 1) return StandInRemote.Said($"fleet-machine-name=worker-2\nTo authenticate, visit:\n{link}");
+            approved.Wait(TimeSpan.FromSeconds(10));
+            return StandInRemote.Said("fleet-machine-name=worker-2\nfleet-on-network\n100.64.0.12");
+        }) { Fleet = SetupRig.NewFleet() };
+        rig.Calls.JoinLine = "curl -fsS http://100.64.0.9:8765/join | FLEET_JOIN=7KMQ2PRJ4TVW sh -s -- --advertise-tags=tag:founderizer";
+        // The join asks for a key by the server's address; the provider's builds ask by the servers' names, and get theirs.
+        rig.Net.Refuses = name => System.Net.IPAddress.TryParse(name, out _) ? new FleetKeyException(FleetKeyFailure.RoleCannotWrite) : null;
+        await Built(rig);
+        // The hub's own install ended too: its title would be "Connecting to your hub" there.
+        var s = await rig.Until(x => x.ManagerInstall.NetworkSignIn is not null && x.Install.Checklist is not null, "the join's link");
+        Assert.AreEqual((link, "worker-2"), (s.ManagerInstall.NetworkSignIn!.Url.OriginalString, s.ManagerInstall.NetworkSignIn.Server));
+        Assert.IsFalse(rig.Store.ShowsBuild, "the install's own page, not the build page");
+        var screen = SetupScreens.Of(s, rig.Store.Runs, rig.Store.ShowsBuild);
+        Assert.AreEqual((SetupScreens.BuildingTitle, true), (screen.Title, screen.Waits), "the build's moving title over the install's form");
+        var rows = screen.Controls.Where(c => c.Kind == SetupControlKind.Row).ToList();
+        CollectionAssert.AreEqual(new[] { SetupScreens.NotOnNetwork, SetupScreens.ApproveServer("worker-2") }, rows.Select(r => r.Words).ToArray());
+        Assert.AreEqual(SetupScreens.OpenLink, rows[1].Lines!.Single());
+        Assert.IsFalse(rig.Store.State.HandedOver, "no hand-over while the join waits");
+
+        approved.Set();
+        await rig.Until(x => x.HandedOver, "the hand-over after the server joined");
+        Assert.IsNull(rig.Store.State.ManagerInstall.NetworkSignIn);
+        Assert.IsNotNull(rig.Store.HandedOver!.Joined, "the server that joined goes to the manager's setup");
+    }
+
+    /// <summary>**A read of the servers that does not answer at the hand-over keeps the chosen provider and the server
+    /// that joined in the manager's mark, and the setup then gives the manager both by itself.** The setup uses them only
+    /// while its own read says that the manager has no server. The bug: one read that fails at that moment, and the setup
+    /// asks for the AI provider again and then stands for ever at the frame of a server's page, for a server that did
+    /// join.</summary>
+    [TestMethod]
+    public async Task A_read_that_fails_at_the_hand_over_keeps_the_provider_and_the_joined_server()
+    {
+        await using var rig = new SetupRig { Fleet = SetupRig.NewFleet() };
+        rig.Calls.ServersFails = 1;
+        await Built(rig);
+        var s = await rig.Until(x => x.HandedOver, "the hand-over");
+        Assert.AreEqual(0, rig.Calls.ServersFails);
+        Assert.IsNull(rig.Store.HandedOver!.Joined, "the hand-over's own read of the servers did not answer");
+        var joined = s.ManagersServer!.Name;
+        var mark = Agents.ManagerSetupMark.Read(rig.Choices)!;
+        Assert.AreEqual(("claude", joined), (mark.Provider, mark.Joined));
+
+        var hub = new SetupHub { Servers = SetupHub.ServerList(managerOn: null, server: joined) };
+        var setup = new Agents.ManagerSetup(new Agents.ManagerSetupSettings { Calls = hub, Fleet = () => rig.Fleet, Choices = rig.Choices }, mark);
+        await setup.StepAsync();
+        var moves = hub.PostsTo("/move");
+        Assert.AreEqual(1, moves.Count, "the setup gives the manager the server that joined, by itself");
+        StringAssert.Contains(moves[0], $"\"server\":\"{joined}\"");
+        StringAssert.Contains(moves[0], "\"runtime\":\"claude\"");
+    }
+
+    /// <summary>**Start again ends its last step for a hub recorded with a path or a query**: the manager's mark of that hub
+    /// goes, and the PC forgets the hub. The bug: the mark's check of the hub's address throws for such an address, and
+    /// Start again stops in its last step with the hub, its records and the mark still on the PC.</summary>
+    [TestMethod]
+    public async Task Start_again_ends_for_a_hub_recorded_with_a_path()
+    {
+        await using var rig = new SetupRig();
+        new Agents.ManagerSetupMark(new Uri("http://100.64.0.9:8765/"), "db-1", "juno", "claude").Keep(rig.Choices);
+        const string recorded = "http://100.64.0.9:8765/claim?from=install";
+        var plan = await rig.Store.StartAgainPlanAsync(recorded);
+        var steps = await rig.Store.StartAgainRunAsync(plan);
+        Assert.IsTrue(steps.All(x => x.State == StartAgain.StepState.Done), string.Join("; ", steps.Select(x => $"{x.Title} {x.State} {x.Says}")));
+        Assert.IsNull(Agents.ManagerSetupMark.Read(rig.Choices), "the mark of that hub goes");
+        CollectionAssert.AreEqual(new[] { (new Uri(recorded), false) }, rig.Forgotten, "the PC forgets the hub");
+    }
+
     /// <summary>**Try again of a stopped install runs the same install again**, from its first step. The bug: a stop with a
     /// Try again that does nothing.</summary>
     [TestMethod]

@@ -116,8 +116,10 @@ def main():
 
     if page.get("steps", True) and "at" in page:
         steps = common["steps"]
-        n = len(steps["names"])
-        for i, name in enumerate(steps["names"]):
+        # The first run's six steps, or a page's own (the manager's setup: step_names).
+        names = page.get("step_names", steps["names"])
+        n = len(names)
+        for i, name in enumerate(names):
             found = [r for r in rows if r["type"] == "Text" and r["name"] == name and r["y"] < 130]
             if len(found) != 1:
                 say(False, f'the step "{name}": {len(found)} elements')

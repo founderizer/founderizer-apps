@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Founderizer.Core;
 using Founderizer.Owner.Reads;
 using Founderizer.Remote;
+using Founderizer.Setup.Agents;
 using Founderizer.Setup.Cloud;
 using Founderizer.Setup.Install;
 using Founderizer.Setup.Network;
@@ -50,6 +51,9 @@ public sealed class SetupSettings
     /// <summary>How many reads the manager's join waits for the new hub, and how long between two (the Mac's 60 and 10 s).</summary>
     public int JoinReads { get; init; } = 60;
     public TimeSpan JoinReadEvery { get; init; } = TimeSpan.FromSeconds(10);
+    /// <summary>The clock of the join's installer: its waits between two reads of a server (the system's, unless a test
+    /// gives one whose waits pass at once).</summary>
+    public InstallerClock? JoinClock { get; init; }
 }
 
 /// <summary>**The first run of a PC, as a model** (windows-app-plan-v2.md, piece L4; the Mac's <c>FirstRunModel</c>,
@@ -103,7 +107,7 @@ public sealed class SetupStore
             OpensManagersChoice();
             ManagersRefused();
         };
-        settings.Owner.Changed += (_, _) => HandOverIfDue();
+        settings.Owner.Changed += (_, _) => OwnerChanged();
         managersCloud.Changed += () =>
         {
             Set(s => s with { ManagersCloud = managersCloud.Now });
@@ -116,6 +120,15 @@ public sealed class SetupStore
 
     /// <summary>The cards of the page of the manager's AI provider, in their order.</summary>
     public static readonly IReadOnlyList<string> AiChoices = ["codex", "claude"];
+
+    /// <summary>**A reading of the owner's store**: whether the new hub answers this PC now (the page of checks that did not
+    /// pass offers "Open Founderizer" only then, as the Mac's <c>afterInstall</c> does), then the hand-over's ask.</summary>
+    internal void OwnerChanged()
+    {
+        var answers = FleetNow() is not null;
+        if (State.HubAnswers != answers) Set(s => s with { HubAnswers = answers });
+        else HandOverIfDue();
+    }
 
     private void Set(Func<SetupState, SetupState> change)
     {
@@ -840,6 +853,18 @@ public sealed class SetupStore
         StartInstall(target, null);
     }
 
+    /// <summary>**"Open Founderizer" under checks that did not pass** (the Mac's <c>afterInstall</c> and <c>openApp</c>,
+    /// which is its <c>finish</c>): the hub claimed itself from this PC and answers it, so the window goes on to the
+    /// manager's setup as after checks that passed. The hand-over then comes by its own rule: once the manager's own server
+    /// neither joins nor waits for the owner's choice. Nothing while the button does not show.</summary>
+    public void OpenApp()
+    {
+        var s = State;
+        if (s.Page != SetupPage.Installing || s.Install.Running || s.Install.Checklist is null || s.Install.Passed || !s.HubAnswers ||
+            s.HandedOver || s.OpenAsked) return;
+        Set(x => x with { OpenAsked = true });
+    }
+
     private Installer MakeInstaller(InstallPlan plan, string? authKey, char[]? sudo) =>
         settings.Installer?.Invoke(plan, authKey, sudo) ??
         Installer.For(plan, settings.Hub, settings.Box, authKey, sudo, firstRun: true, Policy());
@@ -860,7 +885,7 @@ public sealed class SetupStore
         }
         Set(s => s with
         {
-            ManagersRefusal = null, ManagersFull = new HashSet<CloudProvider>(), ManagersMoreShown = false,
+            ManagersRefusal = null, ManagersFull = new HashSet<CloudProvider>(), ManagersMoreShown = false, OpenAsked = false,
             Install = new InstallView(true, [], [], settings.Now(), null, null, null, false),
             ManagerInstall = s.ManagerInstall.Running ? s.ManagerInstall : InstallView.None,
         });
@@ -1052,7 +1077,7 @@ public sealed class SetupStore
             var plan = InstallPlan.Join(target, line, code, authKey);
             log.Hide(plan.Redactions);
             Set(s => s with { ManagerInstall = s.ManagerInstall with { Planned = plan.Steps.Select(p => p.Id).ToList() } });
-            var checklist = await Installer.RunAsync(plan, settings.Remote, progress =>
+            var checklist = await new Installer(plan, clock: settings.JoinClock).RunAsync(settings.Remote, progress =>
             {
                 if (log.Note(progress.Step, Recorded(progress.State), settings.Now())) Keep();
                 Set(s => s with { ManagerInstall = s.ManagerInstall with { Steps = Merge(s.ManagerInstall.Steps, progress), RunningSince = progress.State == ProgressState.Running ? settings.Now() : s.ManagerInstall.RunningSince } });
@@ -1100,7 +1125,7 @@ public sealed class SetupStore
     private void HandOverIfDue()
     {
         var s = State;
-        if (s.HandedOver || s.Page != SetupPage.Installing || s.Install.Running || s.Install.Checklist is null || !s.Install.Passed) return;
+        if (s.HandedOver || s.Page != SetupPage.Installing || s.Install.Running || s.Install.Checklist is null || !(s.Install.Passed || s.OpenAsked)) return;
         if (s.ManagerInstall.Running || JoinWorks || ManagersHolds || FleetNow() is null) return;
         if (Interlocked.Exchange(ref handing, 1) == 1) return;
         _ = Task.Run(async () =>
@@ -1145,7 +1170,20 @@ public sealed class SetupStore
             catch (Exception e) when (e is HubException or InvalidOperationException or ArgumentException) { }
         }
         var made = placed == false && joined is null && s.ManagersServer is { Address: not null } server ? server : null;
-        lock (gate) handover = new Handover(name, (decision as FirstRunHandover.Keep)?.Provider ?? s.ChosenAi, joined, asked, made);
+        var provider = (decision as FirstRunHandover.Keep)?.Provider ?? s.ChosenAi;
+        // **The manager's first setup is this PC's to show until the manager runs** (the Mac's `noteFirstSetup`,
+        // `noteJoined` and `noteProvider`, under the hub's address, its generation and the manager's name): kept, so that
+        // an app that starts again during its install or its sign-in opens on that page, and not on a chat that cannot
+        // answer yet. A manager with no server gets the chosen provider with the server that joined for it. They are kept
+        // also when the read of the servers did not answer here (`placed` null): the setup uses them only while its own
+        // read says that the manager has no server, and without them it would ask for the provider again and never give
+        // the manager the server that joined for it.
+        var markJoined = placed != true && s.ManagerInstall.Checklist is not null && s.ManagerInstall.JoinHub == s.Install.ClaimedHub
+            ? s.ManagerInstall.Server ?? s.ManagersServer?.Name
+            : null;
+        if (fleet is not null && s.Install.ClaimedHub is { } claimed && Uri.TryCreate(claimed, UriKind.Absolute, out var hubAddress))
+            new ManagerSetupMark(hubAddress, fleet.Db, name, placed != true ? provider : null, markJoined).Keep(settings.Choices);
+        lock (gate) handover = new Handover(name, provider, joined, asked, made);
         Set(x => x with { HandedOver = true, HandedTo = name });
     }
 
@@ -1171,7 +1209,9 @@ public sealed class SetupStore
         {
             var s = State;
             if (!s.Shaped || s.Page != SetupPage.Installing) return false;
-            var clear = s.Install.Failure is null && !s.Install.NeedsNetworkKey;
+            // Tailscale's link of an install that waits for the owner's yes is the install's own page (the Mac's
+            // `showsBuild`): the build page has no place for it.
+            var clear = s.Install.Failure is null && !s.Install.NeedsNetworkKey && s.Install.NetworkSignIn is null && s.ManagerInstall.NetworkSignIn is null;
             return clear && (s.Install.Running || (s.ManagerInstall.Running || ManagersHolds) && s.Install.Checklist is not null);
         }
     }
@@ -1213,7 +1253,7 @@ public sealed class SetupStore
                 {
                     Install = InstallView.None,
                     ManagerInstall = x.ManagerInstall.Running ? x.ManagerInstall : InstallView.None,
-                    ManagersToken = null, ManagersProvider = null, ManagersRefusal = null,
+                    ManagersToken = null, ManagersProvider = null, ManagersRefusal = null, OpenAsked = false,
                 });
                 if (managersCloud.Now is { Stage: CloudStep.Stage.Choosing, Stopped: CloudStep.Stage.Making }) managersCloud.Cancel();
                 ResetVps();
@@ -1302,6 +1342,9 @@ public sealed class SetupStore
             S.Records.Builds.Remove(r => r.Hub == hub);
             S.Records.Installs.Remove(r => r.Hub == hub);
             S.Choices.Set(SetupChoiceNames.ReportsWaiting, null);
+            // The manager's first setup of the hub that goes, which no window shows again.
+            if (Agents.ManagerSetupMark.Read(S.Choices) is { } mark && Uri.TryCreate(hub, UriKind.Absolute, out var gone) && mark.IsOf(gone))
+                Agents.ManagerSetupMark.Forget(S.Choices);
             // The run is over: the next first run of this app's run starts as a first one (the Mac's FirstRunWork.drop),
             // with no hand-over, no sign-in asked, no install to try again, no build or choice of a provider, no key.
             lock (store.gate) { store.handover = null; store.signsIn = false; store.installed = null; }

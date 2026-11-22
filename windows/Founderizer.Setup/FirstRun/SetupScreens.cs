@@ -33,6 +33,12 @@ public enum SetupControlKind
     Row,
     /// <summary>An orange line under the control before it.</summary>
     Warning,
+    /// <summary>**The steps of a server's job as a bar** (the Mac's <c>SetupStepsBar</c>): one part for each of
+    /// <c>Lines</c>, and <c>Line</c> the number of the part that runs from 0, or null while none runs.</summary>
+    Bar,
+    /// <summary>**A code to enter on a provider's page, in its box with Copy** (the Mac's <c>SetupCode</c>): <c>Words</c>
+    /// is the code.</summary>
+    Code,
 }
 
 /// <summary>One control of a page: its kind, its words, its id for the window, its line, whether it has the check mark.</summary>
@@ -90,6 +96,13 @@ public static class SetupScreens
     /// with "PC").</summary>
     public const string NotOnNetwork = "Your server is not on your private network";
     public const string ConnectThenInstall = "Connect your network, then install again. This PC makes the key: used once, worthless in fifteen minutes.";
+    /// <summary>**An install that waits for the owner's yes at Tailscale** (the Mac's <c>MachineInstallRun.approve</c>):
+    /// the row of the server by its own name, or none, and its one press.</summary>
+    public const string ApproveInTailscale = "Approve in Tailscale", OpenLink = "Open link";
+    public static string ApproveServer(string server) => $"Approve {server} in Tailscale";
+    /// <summary>**Checks that did not pass, and the hub answers this PC** (the Mac's <c>afterInstall</c>, with "PC"): the
+    /// way on, and its line.</summary>
+    public const string OpenFounderizer = "Open Founderizer", ServesThisPc = "Your hub serves its pages to this PC and to nothing else.";
 
     /// <summary>The steps of the fleet's Tailscale key (the Mac's <c>SetupSteps.tailscaleKey</c>).</summary>
     public static IReadOnlyList<string> KeySteps =>
@@ -344,8 +357,32 @@ public static class SetupScreens
             if (s.Key.Made) network.Add(new(SetupControlKind.Button, InstallAgainWords, "install-again-key"));
             return new SetupScreen("installing", HubDidNotInstall, s.Key.Busy, null, network, i.NetworkFailure ?? s.Key.Failure, !runs, null);
         }
-        var title = stopped ? HubDidNotInstall : checkedDone ? (s.HandedOver ? HubInstalled : ConnectingToHub) : BuildingTitle;
-        var controls = stopped ? new List<SetupControl> { new(SetupControlKind.Button, TryAgain, "first-run-install-again") } : [];
-        return new SetupScreen("installing", title, i.Running || checkedDone && !s.HandedOver, null, controls, i.Failure, !runs, null);
+        // **Checks that did not pass, under "Your hub is installed", with Open Founderizer** (the Mac's `machineHead` and
+        // `afterInstall`): once the hub answers this PC. Before that, and after the press until the window goes on by
+        // itself, the moving "Connecting to your hub".
+        var opens = checkedDone && !i.Passed && s.HubAnswers && !s.OpenAsked && !s.HandedOver;
+        // **An install that waits for the owner's yes at Tailscale** (the Mac's `MachineInstallRun.approve`, the install's
+        // own form, for the hub's install and for a join alike): the hub's, or the join of the manager's own server, whose
+        // link the build page has no place for. The page is the install's own, under the build's moving title (the Mac's
+        // `machineHead` while an install runs), and its press opens only Tailscale's own sign-in page
+        // (`InstallView.NetworkSignIn`); the install goes on by itself once he approved it.
+        var link = stopped ? null : i.NetworkSignIn ?? s.ManagerInstall.NetworkSignIn;
+        var title = stopped ? HubDidNotInstall : link is not null ? BuildingTitle : opens ? HubInstalled
+            : checkedDone ? (s.HandedOver ? HubInstalled : ConnectingToHub) : BuildingTitle;
+        var controls = new List<SetupControl>();
+        if (stopped) controls.Add(new(SetupControlKind.Button, TryAgain, "first-run-install-again"));
+        if (link is not null)
+        {
+            controls.Add(new(SetupControlKind.Row, NotOnNetwork, "install-network-row"));
+            controls.Add(new(SetupControlKind.Row, link.Server is { } server ? ApproveServer(server) : ApproveInTailscale, "install-network-sign-in",
+                             Lines: [OpenLink]));
+        }
+        else if (opens)
+        {
+            controls.Add(new(SetupControlKind.Button, OpenFounderizer, "first-run-open"));
+            controls.Add(new(SetupControlKind.Muted, ServesThisPc, "first-run-open-line"));
+        }
+        var waits = i.Running || link is not null || checkedDone && !s.HandedOver && !opens;
+        return new SetupScreen("installing", title, waits, null, controls, i.Failure, !runs, null);
     }
 }
